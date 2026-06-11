@@ -62,7 +62,19 @@ alwaysApply: true
 
 ---
 
+## Changelog rules:
+- never edit `CHANGELOG.md` in normal feature/fix PRs; release automation collects changelog fragments into it
+- add exactly one changelog fragment for user-facing `feat:` and `fix:` PRs; skip for `chore:`, `ci:`, `refactor:`, `test:`, `docs:` unless the change is user-facing
+- put normal release fragments in `changelog.d/next/` and hotfix fragments in `changelog.d/hotfix/`
+- name fragments `<issue-or-pr>.<category>.md`, where category is one of `added`, `changed`, `deprecated`, `removed`, `fixed`, or `security`
+- write the fragment as one polished user-facing sentence without a leading bullet and without a PR number
+- never add multiple changelog fragments for the same PR — summarize all changes in one concise fragment
+- release commits consume fragments with `scripts/collect-changelog.sh --target next|hotfix`, update `CHANGELOG.md`, and delete consumed fragment files
+- never modify released version sections manually
+
+---
+
 ## Rules for Android Unit tests and Instrumentation tests:
-- run unit tests for specific files like this: `./gradlew :app:testDevDebugUnitTest --tests "to.bitkit.repositories.LightningRepoTest"`
+- run unit tests for specific files like this: `just test file "to.bitkit.repositories.LightningRepoTest"`
 - write unit tests in the same style and using same libraries as: `CurrencyRepoTest`, `LightningRepoTest`, `WalletRepoTest`
 - in unit tests, use asserts from `kotlin.test` and mockito-kotlin for mocks

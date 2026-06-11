@@ -12,11 +12,15 @@ import io.ktor.client.plugins.defaultRequest
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.client.plugins.logging.LoggingConfig
+import io.ktor.client.request.head
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.UrlValidator
 import javax.inject.Singleton
 import io.ktor.client.plugins.logging.Logger as KtorLogger
 
@@ -39,6 +43,17 @@ object HttpModule {
             }
             defaultRequest {
                 contentType(ContentType.Application.Json)
+            }
+        }
+    }
+
+    @Provides
+    @Singleton
+    fun provideUrlValidator(httpClient: HttpClient) = UrlValidator { url ->
+        runCatching {
+            val response = httpClient.head(url)
+            if (!response.status.isSuccess()) {
+                throw AppError("Server returned '${response.status}'")
             }
         }
     }

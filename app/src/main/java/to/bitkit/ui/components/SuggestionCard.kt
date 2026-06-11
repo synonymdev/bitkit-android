@@ -12,7 +12,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -25,6 +26,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.ShapeDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -39,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.models.Suggestion
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 
@@ -54,7 +57,6 @@ fun SuggestionCard(
     description: String,
     @DrawableRes icon: Int,
     onClose: (() -> Unit)? = null,
-    size: Int = 152,
     disableGlow: Boolean = false,
     captionColor: Color = Colors.White64,
     onClick: () -> Unit,
@@ -75,7 +77,8 @@ fun SuggestionCard(
 
     Box(
         modifier = modifier
-            .size(size.dp)
+            .fillMaxWidth()
+            .aspectRatio(1f)
             .clip(ShapeDefaults.Large)
             .then(
                 if (isDismissible || disableGlow) {
@@ -108,12 +111,12 @@ fun SuggestionCard(
             .clickableAlpha { onClick() }
     ) {
         Column(
+            verticalArrangement = Arrangement.Bottom,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+                .padding(16.dp),
         ) {
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
@@ -121,29 +124,34 @@ fun SuggestionCard(
                 Image(
                     painter = painterResource(icon),
                     contentDescription = null,
-                    contentScale = ContentScale.FillHeight,
-                    modifier = Modifier.weight(1f)
+                    alignment = Alignment.TopStart,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .defaultMinSize(minHeight = 80.dp)
+                        .align(Alignment.BottomStart)
                 )
 
                 if (onClose != null) {
                     IconButton(
-                        onClick = onClose,
+                        onClick = rememberDebouncedClick(onClick = onClose),
                         modifier = Modifier
                             .size(16.dp)
+                            .align(Alignment.TopEnd)
                             .testTag("SuggestionDismiss")
                     ) {
                         Icon(
                             painter = painterResource(R.drawable.ic_x),
                             contentDescription = null,
-                            tint = Colors.White,
+                            tint = Colors.White64,
                         )
                     }
                 }
             }
 
             Headline20(
-                text = AnnotatedString(title),
+                text = AnnotatedString(title.uppercase()),
                 color = Colors.White,
+                modifier = Modifier.padding(top = 4.dp),
             )
 
             CaptionB(
@@ -173,7 +181,8 @@ private fun Modifier.gradientRadialBackground(
 @Composable
 private fun Preview() {
     LazyVerticalGrid(
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         columns = GridCells.Fixed(2),
         modifier = Modifier.fillMaxSize(),
     ) {

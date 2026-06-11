@@ -20,6 +20,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.sheets.BoostTransactionContent
 import to.bitkit.ui.sheets.BoostTransactionTestTags
 import to.bitkit.ui.sheets.BoostTransactionUiState
@@ -28,6 +29,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 
 @HiltAndroidTest
 @RunWith(AndroidJUnit4::class)
+@ComposeUi
 class BoostTransactionContentTest {
 
     @get:Rule

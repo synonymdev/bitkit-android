@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.wallets.receive
 
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
@@ -10,11 +11,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -45,16 +44,18 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
-import to.bitkit.ext.truncate
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletState
@@ -66,6 +67,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
+import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Tooltip
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -106,7 +108,7 @@ fun ReceiveQrScreen(
                 add(ReceiveTab.AUTO)
             }
             add(ReceiveTab.SPENDING)
-        }
+        }.toImmutableList()
     }
 
     val invoicesByTab = remember(
@@ -115,7 +117,7 @@ fun ReceiveQrScreen(
         walletState.bolt11,
         walletState.onchainAddress,
         cjitInvoice,
-        lightningState.nodeLifecycleState
+        lightningState.nodeLifecycleState,
     ) {
         visibleTabs.associateWith { tab ->
             getInvoiceForTab(
@@ -124,7 +126,7 @@ fun ReceiveQrScreen(
                 bolt11 = walletState.bolt11,
                 cjitInvoice = cjitInvoice,
                 isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
-                onchainAddress = walletState.onchainAddress
+                onchainAddress = walletState.onchainAddress,
             )
         }
     }
@@ -135,12 +137,18 @@ fun ReceiveQrScreen(
 
     val snapBehavior = rememberSnapFlingBehavior(
         lazyListState = lazyListState,
-        snapPosition = SnapPosition.Center
+        snapPosition = SnapPosition.Center,
     )
 
     // Calculate current tab based on scroll position for smooth indicator and color updates
     var selectedTab by remember {
         mutableStateOf(initialTab ?: ReceiveTab.SAVINGS)
+    }
+
+    LaunchedEffect(visibleTabs) {
+        if (selectedTab !in visibleTabs) {
+            selectedTab = visibleTabs.first()
+        }
     }
 
     LaunchedEffect(lazyListState, visibleTabs.size) {
@@ -191,17 +199,13 @@ fun ReceiveQrScreen(
     ) {
         SheetTopBar(stringResource(R.string.wallet__receive_bitcoin))
         Column {
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             // Tab row
             CustomTabRowWithSpacing(
                 tabs = visibleTabs,
                 currentTabIndex = visibleTabs.indexOf(selectedTab),
-                selectedColor = when (selectedTab) {
-                    ReceiveTab.SAVINGS -> Colors.Brand
-                    ReceiveTab.AUTO -> Colors.White
-                    ReceiveTab.SPENDING -> Colors.Purple
-                },
+                selectedColor = Colors.White,
                 onTabChange = { tab ->
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     val newIndex = visibleTabs.indexOf(tab)
@@ -213,7 +217,7 @@ fun ReceiveQrScreen(
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
 
-            Spacer(Modifier.height(24.dp))
+            VerticalSpacer(24.dp)
 
             // Content area (QR or Details) with LazyRow
             LazyRow(
@@ -255,9 +259,18 @@ fun ReceiveQrScreen(
 
                             else -> {
                                 val invoice = invoicesByTab[tab].orEmpty()
+                                val copyText = when (tab) {
+                                    ReceiveTab.SAVINGS -> getSavingsCopyText(
+                                        walletState.bip21,
+                                        walletState.onchainAddress,
+                                    )
+
+                                    else -> invoice
+                                }
 
                                 ReceiveQrView(
                                     uri = invoice,
+                                    copyText = copyText,
                                     qrLogoPainter = painterResource(getQrLogoResource(tab)),
                                     onClickEditInvoice = if (cjitInvoice.isNullOrEmpty()) {
                                         onClickEditInvoice
@@ -273,50 +286,69 @@ fun ReceiveQrScreen(
                 }
             }
 
-            Spacer(Modifier.height(24.dp))
+            VerticalSpacer(24.dp)
 
             AnimatedVisibility(visible = lightningState.nodeLifecycleState.isRunning()) {
                 val showCjitButton = showingCjitOnboarding && selectedTab == ReceiveTab.SPENDING
-                PrimaryButton(
-                    text = stringResource(
-                        when {
-                            showCjitButton -> R.string.wallet__receive__cjit
-                            showDetails -> R.string.wallet__receive_show_qr
-                            else -> R.string.wallet__receive_show_details
-                        }
-                    ),
-                    icon = {
-                        if (showCjitButton) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_lightning_alt),
-                                tint = Colors.Purple,
-                                contentDescription = null
-
-                            )
-                        }
-                    },
-                    onClick = {
-                        if (showCjitButton) {
-                            onClickReceiveCjit()
-                            showDetails = false
-                        } else {
-                            showDetails = !showDetails
-                        }
-                    },
-                    fullWidth = true,
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .testTag(
-                            if (showDetails) {
-                                "QRCode"
-                            } else {
-                                "ShowDetails"
-                            }
+                val buttonVariant = when {
+                    showCjitButton -> BottomButtonVariant.CJIT
+                    showDetails -> BottomButtonVariant.SHOW_QR
+                    else -> BottomButtonVariant.SHOW_DETAILS
+                }
+                Crossfade(
+                    targetState = buttonVariant,
+                    label = "ReceiveBottomButtonCrossfade",
+                ) { variant ->
+                    when (variant) {
+                        BottomButtonVariant.CJIT -> PrimaryButton(
+                            text = stringResource(R.string.wallet__receive__cjit),
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_lightning_alt),
+                                    tint = Colors.Purple,
+                                    contentDescription = null,
+                                )
+                            },
+                            onClick = {
+                                onClickReceiveCjit()
+                                showDetails = false
+                            },
+                            fullWidth = true,
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp)
+                                .testTag("ShowDetails")
                         )
-                )
+
+                        BottomButtonVariant.SHOW_QR -> PrimaryButton(
+                            text = stringResource(R.string.wallet__receive_show_qr),
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_qr_purple),
+                                    tint = Colors.White,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            onClick = { showDetails = false },
+                            fullWidth = true,
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp)
+                                .testTag("QRCode")
+                        )
+
+                        BottomButtonVariant.SHOW_DETAILS -> TertiaryButton(
+                            text = stringResource(R.string.wallet__receive_show_details),
+                            onClick = { showDetails = true },
+                            fullWidth = true,
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp)
+                                .testTag("ShowDetails")
+                        )
+                    }
+                }
             }
 
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }
@@ -325,6 +357,7 @@ fun ReceiveQrScreen(
 @Composable
 private fun ReceiveQrView(
     uri: String,
+    copyText: String,
     qrLogoPainter: Painter,
     onClickEditInvoice: () -> Unit,
     tab: ReceiveTab,
@@ -345,10 +378,11 @@ private fun ReceiveQrView(
             tipMessage = stringResource(R.string.wallet__receive_copied),
             onBitmapGenerated = { bitmap -> qrBitmap = bitmap },
             testTag = "QRCode",
+            copyContent = copyText,
             modifier = Modifier.weight(1f, fill = false)
         )
 
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.Top,
@@ -358,7 +392,6 @@ private fun ReceiveQrView(
                 size = ButtonSize.Small,
                 onClick = onClickEditInvoice,
                 fullWidth = false,
-                color = Colors.White10,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_pencil_simple),
@@ -374,17 +407,16 @@ private fun ReceiveQrView(
             Box(modifier = Modifier.weight(1f)) {
                 Tooltip(
                     text = stringResource(R.string.wallet__receive_copied),
-                    tooltipState = qrButtonTooltipState
+                    tooltipState = qrButtonTooltipState,
                 ) {
                     PrimaryButton(
                         text = stringResource(R.string.common__copy),
                         size = ButtonSize.Small,
                         onClick = {
-                            context.setClipboardText(uri)
+                            context.setClipboardText(copyText)
                             coroutineScope.launch { qrButtonTooltipState.show() }
                         },
                         fullWidth = true,
-                        color = Colors.White10,
                         icon = {
                             Icon(
                                 painter = painterResource(R.drawable.ic_copy),
@@ -403,11 +435,10 @@ private fun ReceiveQrView(
                 size = ButtonSize.Small,
                 onClick = {
                     qrBitmap?.let { bitmap ->
-                        shareQrCode(context, bitmap, uri)
-                    } ?: shareText(context, uri)
+                        shareQrCode(context, bitmap, copyText)
+                    } ?: shareText(context, copyText)
                 },
                 fullWidth = false,
-                color = Colors.White10,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_share),
@@ -419,18 +450,18 @@ private fun ReceiveQrView(
                 modifier = Modifier.weight(1f)
             )
         }
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
     }
 }
 
 @Composable
 fun CjitOnBoardingView(modifier: Modifier = Modifier) {
     Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier
             .clip(AppShapes.small)
             .background(color = Colors.Black)
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(32.dp)
     ) {
         Display(stringResource(R.string.wallet__receive_onboarding_title).withAccent(accentColor = Colors.Purple))
         VerticalSpacer(8.dp)
@@ -539,6 +570,8 @@ private fun ReceiveDetailsView(
     }
 }
 
+private enum class BottomButtonVariant { CJIT, SHOW_QR, SHOW_DETAILS }
+
 enum class CopyAddressType { ONCHAIN, LIGHTNING }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -562,12 +595,14 @@ private fun CopyAddressCard(
             .padding(24.dp)
     ) {
         Caption13Up(text = title, color = Colors.White64)
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
         BodyS(
-            text = (body ?: address).truncate(32).uppercase(),
+            text = (body ?: address).uppercase(),
+            maxLines = 1,
+            overflow = TextOverflow.MiddleEllipsis,
             modifier = testTag?.let { Modifier.testTag(it) } ?: Modifier
         )
-        Spacer(modifier = Modifier.height(16.dp))
+        VerticalSpacer(16.dp)
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -576,7 +611,6 @@ private fun CopyAddressCard(
                 size = ButtonSize.Small,
                 onClick = onClickEditInvoice,
                 fullWidth = false,
-                color = Colors.White10,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_pencil_simple),
@@ -602,7 +636,6 @@ private fun CopyAddressCard(
                             coroutineScope.launch { tooltipState.show() }
                         },
                         fullWidth = false,
-                        color = Colors.White10,
                         icon = {
                             Icon(
                                 painter = painterResource(R.drawable.ic_copy),
@@ -619,7 +652,6 @@ private fun CopyAddressCard(
                 size = ButtonSize.Small,
                 onClick = { shareText(context, address) },
                 fullWidth = false,
-                color = Colors.White10,
                 icon = {
                     Icon(
                         painter = painterResource(R.drawable.ic_share),
@@ -647,7 +679,7 @@ private fun PreviewSavingsMode() {
                 ),
                 lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Running,
-                    channels = emptyList()
+                    channels = persistentListOf()
                 ),
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
@@ -701,8 +733,8 @@ private fun PreviewAutoMode() {
             cltvExpiryDelta = 0u,
             maxDustHtlcExposure = org.lightningdevkit.ldknode.MaxDustHtlcExposure.FeeRateMultiplier(0uL),
             forceCloseAvoidanceMaxFeeSatoshis = 0uL,
-            acceptUnderpayingHtlcs = false
-        )
+            acceptUnderpayingHtlcs = false,
+        ),
     )
 
     AppThemeSurface {
@@ -719,7 +751,7 @@ private fun PreviewAutoMode() {
                 ),
                 lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Running,
-                    channels = listOf(mockChannel),
+                    channels = persistentListOf(mockChannel),
                 ),
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
@@ -772,8 +804,8 @@ private fun PreviewSpendingMode() {
             cltvExpiryDelta = 0u,
             maxDustHtlcExposure = org.lightningdevkit.ldknode.MaxDustHtlcExposure.FeeRateMultiplier(0uL),
             forceCloseAvoidanceMaxFeeSatoshis = 0uL,
-            acceptUnderpayingHtlcs = false
-        )
+            acceptUnderpayingHtlcs = false,
+        ),
     )
 
     AppThemeSurface {
@@ -786,7 +818,7 @@ private fun PreviewSpendingMode() {
                 ),
                 lightningState = LightningState(
                     nodeLifecycleState = NodeLifecycleState.Running,
-                    channels = listOf(mockChannel),
+                    channels = persistentListOf(mockChannel),
                 ),
                 onClickEditInvoice = {},
                 modifier = Modifier.sheetHeight(),
@@ -850,7 +882,8 @@ private fun PreviewDetailsMode() {
                 tab = ReceiveTab.AUTO,
                 walletState = WalletState(
                     onchainAddress = "bcrt1qfserxgtuesul4m9zva56wzk849yf9l8rk4qy0l",
-                    bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79...",
+                    bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
+                        "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
                 ),
                 cjitInvoice = null,
                 onClickEditInvoice = {},

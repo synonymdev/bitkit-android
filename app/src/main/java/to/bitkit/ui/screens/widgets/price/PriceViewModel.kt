@@ -3,6 +3,9 @@ package to.bitkit.ui.screens.widgets.price
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,11 +19,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
-import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.ui.screens.widgets.WidgetSizeDraft
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
@@ -48,13 +52,6 @@ class PriceViewModel @Inject constructor(
             initialValue = false
         )
 
-    val showWidgetTitles: StateFlow<Boolean> = widgetsRepo.showWidgetTitles
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
-            initialValue = true
-        )
-
     val currentPrice: StateFlow<PriceDTO?> = widgetsRepo.priceFlow
         .stateIn(
             scope = viewModelScope,
@@ -65,9 +62,12 @@ class PriceViewModel @Inject constructor(
     private val _customPreferences = MutableStateFlow(PricePreferences())
     val customPreferences: StateFlow<PricePreferences> = _customPreferences.asStateFlow()
 
-    private val _allPeriodsUsd = MutableStateFlow(listOf<PriceWidgetData>())
-    val allPeriodsUsd: StateFlow<List<PriceWidgetData>> = _allPeriodsUsd.asStateFlow()
-    private val _allPrices = MutableStateFlow(listOf<PriceDTO>())
+    private val sizeDraft = WidgetSizeDraft(viewModelScope, WidgetType.PRICE, widgetsRepo.widgetsDataFlow)
+    val draftSize: StateFlow<WidgetSize> = sizeDraft.size
+
+    fun setSize(size: WidgetSize) = sizeDraft.set(size)
+
+    private val _allPrices = MutableStateFlow<ImmutableList<PriceDTO>>(persistentListOf())
 
     private val _previewPrice: MutableStateFlow<PriceDTO?> = MutableStateFlow(null)
     val previewPrice = _previewPrice.asStateFlow()
@@ -91,18 +91,8 @@ class PriceViewModel @Inject constructor(
         _previewPrice.update { _allPrices.value.firstOrNull { it.widgets.firstOrNull()?.period == period } }
     }
 
-    fun toggleTradingPair(pair: TradingPair) {
-        if (pair in _customPreferences.value.enabledPairs) {
-            _customPreferences.update { it.copy(enabledPairs = it.enabledPairs - pair) }
-        } else {
-            _customPreferences.update { it.copy(enabledPairs = it.enabledPairs + pair) }
-        }
-    }
-
-    fun toggleShowSource() {
-        _customPreferences.update { preferences ->
-            preferences.copy(showSource = !preferences.showSource)
-        }
+    fun selectTradingPair(pair: TradingPair) {
+        _customPreferences.update { it.copy(enabledPairs = persistentListOf(pair)) }
     }
 
     fun resetCustomPreferences() {
@@ -116,7 +106,7 @@ class PriceViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.update { true }
             widgetsRepo.updatePricePreferences(_customPreferences.value)
-            widgetsRepo.addWidget(WidgetType.PRICE)
+            widgetsRepo.addWidget(WidgetType.PRICE, sizeDraft.current)
             widgetsRepo.refreshWidget(WidgetType.PRICE)
             _previewPrice.update { null }
             setPriceEffect(PriceEffect.NavigateHome)
@@ -124,9 +114,10 @@ class PriceViewModel @Inject constructor(
         }
     }
 
-    fun removeWidget() {
+    fun removeWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.deleteWidget(WidgetType.PRICE)
+            onComplete()
         }
     }
 
@@ -148,8 +139,7 @@ class PriceViewModel @Inject constructor(
         viewModelScope.launch {
             _isLoading.update { true }
             widgetsRepo.fetchAllPeriods().onSuccess { data ->
-                _allPrices.update { data }
-                _allPeriodsUsd.update { data.map { priceDTO -> priceDTO.widgets.first() } }
+                _allPrices.update { data.toImmutableList() }
                 _isLoading.update { false }
             }.onFailure {
                 Logger.warn("collectAllPeriodPrices error. Trying again in 1 second", context = TAG)

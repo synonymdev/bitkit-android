@@ -3,23 +3,31 @@ package to.bitkit.ui.screens.wallets.activity.components
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.ext.rawId
+import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.TertiaryButton
@@ -36,22 +44,31 @@ import java.util.Locale
 
 @Composable
 fun ActivityListGrouped(
-    items: List<Activity>?,
+    items: ImmutableList<Activity>?,
     onActivityItemClick: (String) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
     modifier: Modifier = Modifier,
+    listState: LazyListState = rememberLazyListState(),
     showFooter: Boolean = false,
     onAllActivityButtonClick: () -> Unit = {},
     contentPadding: PaddingValues = PaddingValues(top = 20.dp),
+    activityTestTagPrefix: String = "Activity",
+    showContactAvatar: Boolean = true,
+    titleProvider: @Composable (Activity) -> String? = { null },
 ) {
+    val contacts by activityListViewModel?.contacts?.collectAsStateWithLifecycle() ?: remember {
+        mutableStateOf(persistentListOf())
+    }
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.fillMaxSize()
     ) {
-        if (items != null && items.isNotEmpty()) {
+        if (!items.isNullOrEmpty()) {
             val groupedItems = groupActivityItems(items)
 
             LazyColumn(
+                state = listState,
                 horizontalAlignment = Alignment.CenterHorizontally,
                 contentPadding = contentPadding,
                 modifier = Modifier.fillMaxWidth()
@@ -65,6 +82,7 @@ fun ActivityListGrouped(
                                 is Activity.Lightning -> "lightning_${item.rawId()}"
                                 is Activity.Onchain -> "onchain_${item.rawId()}"
                             }
+
                             else -> "item_$index"
                         }
                     }
@@ -94,7 +112,13 @@ fun ActivityListGrouped(
                                         placementSpec = tween(durationMillis = 300)
                                     )
                             ) {
-                                ActivityRow(item, onActivityItemClick, testTag = "Activity-$index")
+                                ActivityRow(
+                                    item = item,
+                                    onClick = onActivityItemClick,
+                                    testTag = "$activityTestTagPrefix-$index",
+                                    title = titleProvider(item) ?: contactActivityTitle(item, contacts),
+                                    contact = if (showContactAvatar) contactForActivity(item, contacts) else null,
+                                )
                                 VerticalSpacer(16.dp)
                             }
                         }
@@ -112,7 +136,7 @@ fun ActivityListGrouped(
                     }
                 }
                 item {
-                    Spacer(modifier = Modifier.height(120.dp))
+                    VerticalSpacer(120.dp)
                 }
             }
         } else {
@@ -121,6 +145,93 @@ fun ActivityListGrouped(
                 EmptyActivityRow(onClick = onEmptyActivityRowClick)
             } else {
                 // On all activity screen when filtered list is empty
+                BodyM(
+                    text = stringResource(R.string.wallet__activity_no),
+                    color = Colors.White64,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = contentPadding.calculateTopPadding())
+                        .padding(16.dp)
+                )
+            }
+        }
+    }
+}
+
+@Suppress("LongMethod")
+fun LazyListScope.activityListGroupedItems(
+    items: ImmutableList<Activity>?,
+    onActivityItemClick: (String) -> Unit,
+    onEmptyActivityRowClick: () -> Unit,
+    showFooter: Boolean = false,
+    onAllActivityButtonClick: () -> Unit = {},
+) {
+    if (!items.isNullOrEmpty()) {
+        val groupedItems = groupActivityItems(items)
+        itemsIndexed(
+            items = groupedItems,
+            key = { index, item ->
+                when (item) {
+                    is String -> "header_$item"
+                    is Activity -> when (item) {
+                        is Activity.Lightning -> "lightning_${item.rawId()}"
+                        is Activity.Onchain -> "onchain_${item.rawId()}"
+                    }
+
+                    else -> "item_$index"
+                }
+            },
+        ) { index, item ->
+            when (item) {
+                is String -> {
+                    Caption13Up(
+                        text = item,
+                        color = Colors.White64,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 8.dp)
+                            .animateItem(
+                                fadeInSpec = tween(durationMillis = 300),
+                                fadeOutSpec = tween(durationMillis = 300),
+                                placementSpec = tween(durationMillis = 300),
+                            )
+                    )
+                }
+
+                is Activity -> {
+                    Column(
+                        modifier = Modifier
+                            .animateItem(
+                                fadeInSpec = tween(durationMillis = 300),
+                                fadeOutSpec = tween(durationMillis = 300),
+                                placementSpec = tween(durationMillis = 300),
+                            )
+                    ) {
+                        ActivityRow(item, onActivityItemClick, testTag = "Activity-$index")
+                        VerticalSpacer(16.dp)
+                    }
+                }
+            }
+        }
+        if (showFooter) {
+            item {
+                TertiaryButton(
+                    text = stringResource(R.string.wallet__activity_show_all),
+                    onClick = onAllActivityButtonClick,
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .padding(top = 8.dp)
+                )
+            }
+        }
+        item {
+            VerticalSpacer(120.dp)
+        }
+    } else {
+        if (showFooter) {
+            item { EmptyActivityRow(onClick = onEmptyActivityRowClick) }
+        } else {
+            item {
                 BodyM(
                     text = stringResource(R.string.wallet__activity_no),
                     color = Colors.White64,
@@ -217,7 +328,7 @@ private fun Preview() {
 private fun PreviewEmpty() {
     AppThemeSurface {
         ActivityListGrouped(
-            items = emptyList(),
+            items = persistentListOf(),
             onActivityItemClick = {},
             onEmptyActivityRowClick = {},
         )
@@ -229,7 +340,7 @@ private fun PreviewEmpty() {
 private fun PreviewEmptyWithFooter() {
     AppThemeSurface {
         ActivityListGrouped(
-            items = emptyList(),
+            items = persistentListOf(),
             onActivityItemClick = {},
             onEmptyActivityRowClick = {},
             showFooter = true,

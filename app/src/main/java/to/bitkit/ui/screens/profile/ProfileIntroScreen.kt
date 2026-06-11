@@ -2,12 +2,11 @@ package to.bitkit.ui.screens.profile
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -16,6 +15,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -28,9 +28,9 @@ fun ProfileIntroScreen(
     onContinue: () -> Unit,
     onBackClick: () -> Unit,
 ) {
-    ScreenColumn {
+    ScreenColumn(modifier = Modifier.testTag("ProfileIntro")) {
         AppTopBar(
-            titleText = stringResource(R.string.slashtags__profile),
+            titleText = stringResource(R.string.profile__nav_title),
             onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )
@@ -47,19 +47,18 @@ fun ProfileIntroScreen(
             )
 
             Display(
-                text = stringResource(
-                    R.string.slashtags__onboarding_profile1_header
-                ).withAccent(accentColor = Colors.Brand),
-                color = Colors.White
+                text = stringResource(R.string.profile__intro_title).withAccent(accentColor = Colors.PubkyGreen),
+                color = Colors.White,
             )
-            Spacer(Modifier.height(8.dp))
-            BodyM(text = stringResource(R.string.slashtags__onboarding_profile1_text), color = Colors.White64)
-            Spacer(Modifier.height(32.dp))
+            VerticalSpacer(8.dp)
+            BodyM(text = stringResource(R.string.profile__intro_description), color = Colors.White64)
+            VerticalSpacer(32.dp)
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
-                onClick = onContinue
+                onClick = onContinue,
+                modifier = Modifier.testTag("ProfileIntro-button")
             )
-            Spacer(Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

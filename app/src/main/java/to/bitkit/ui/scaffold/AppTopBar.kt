@@ -6,14 +6,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,7 +26,9 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.LocalDrawerState
 import to.bitkit.ui.components.Title
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,7 +68,7 @@ fun AppTopBar(
             containerColor = Color.Transparent,
             scrolledContainerColor = Color.Transparent,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -77,11 +78,11 @@ fun BackNavIcon(
     modifier: Modifier = Modifier,
 ) {
     IconButton(
-        onClick = onClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         modifier = modifier.testTag("NavigationBack")
     ) {
         Icon(
-            imageVector = Icons.AutoMirrored.Default.ArrowBack,
+            painter = painterResource(R.drawable.ic_arrow_left),
             contentDescription = stringResource(R.string.common__back),
             modifier = Modifier.size(24.dp)
         )
@@ -94,16 +95,18 @@ fun DrawerNavIcon(
 ) {
     val isPreview = LocalInspectionMode.current
     val drawerState = LocalDrawerState.current
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val scope = rememberCoroutineScope()
 
+    val debouncedClick = rememberDebouncedClick { scope.launch { drawerState?.open() } }
     if (drawerState != null || isPreview) {
         IconButton(
-            onClick = { scope.launch { drawerState?.open() } },
+            onClick = debouncedClick,
             modifier = modifier.testTag("HeaderMenu")
         ) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_list),
                 contentDescription = stringResource(R.string.settings__settings),
+                tint = Colors.White,
                 modifier = Modifier.size(24.dp)
             )
         }
@@ -116,7 +119,7 @@ fun ScanNavIcon(
     modifier: Modifier = Modifier,
 ) {
     IconButton(
-        onClick = onClick,
+        onClick = rememberDebouncedClick(onClick = onClick),
         modifier = modifier.testTag("NavigationAction")
     ) {
         Icon(

@@ -32,8 +32,10 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.androidServices.LightningNodeService
+import to.bitkit.androidServices.LightningNodeService.Companion.ACTION_START_SERVICE
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.IsOnlineTracker
 import to.bitkit.ui.components.ToastOverlay
@@ -63,6 +65,10 @@ import to.bitkit.viewmodels.WalletViewModel
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
+    private companion object {
+        const val KEY_CONSUMED_LAUNCH_INTENT = "consumed_launch_intent"
+    }
+
     private val appViewModel by viewModels<AppViewModel>()
     private val walletViewModel by viewModels<WalletViewModel>()
     private val blocktankViewModel by viewModels<BlocktankViewModel>()
@@ -72,7 +78,7 @@ class MainActivity : FragmentActivity() {
     private val settingsViewModel by viewModels<SettingsViewModel>()
     private val backupsViewModel by viewModels<BackupsViewModel>()
 
-    @Suppress("LongMethod")
+    @Suppress("LongMethod", "CyclomaticComplexMethod")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -83,7 +89,12 @@ class MainActivity : FragmentActivity() {
             desc = getString(R.string.notification__channel_node__body),
             importance = NotificationManager.IMPORTANCE_LOW
         )
-        appViewModel.handleDeeplinkIntent(intent)
+
+        val consumedLaunchIntent = savedInstanceState?.getString(KEY_CONSUMED_LAUNCH_INTENT)
+        val currentLaunchIntent = intent.launchKey()
+        if (currentLaunchIntent == null || currentLaunchIntent != consumedLaunchIntent) {
+            appViewModel.handleDeeplinkIntent(intent)
+        }
 
         installSplashScreen()
         enableAppEdgeToEdge()
@@ -201,6 +212,11 @@ class MainActivity : FragmentActivity() {
         appViewModel.handleDeeplinkIntent(intent)
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        intent.launchKey()?.let { outState.putString(KEY_CONSUMED_LAUNCH_INTENT, it) }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         if (!settingsViewModel.notificationsGranted.value) {
@@ -216,10 +232,24 @@ class MainActivity : FragmentActivity() {
     private fun tryStartForegroundService() {
         runCatching {
             Logger.debug("Attempting to start LightningNodeService", context = "MainActivity")
-            startForegroundService(Intent(this, LightningNodeService::class.java))
+            startForegroundService(
+                Intent(this, LightningNodeService::class.java).apply {
+                    action = ACTION_START_SERVICE
+                },
+            )
         }.onFailure { error ->
             Logger.error("Failed to start LightningNodeService", error, context = "MainActivity")
         }
+    }
+}
+
+internal fun Intent?.launchKey(): String? {
+    this ?: return null
+    return when (action) {
+        Intent.ACTION_VIEW -> data?.toString()?.let {
+            SamRockSetupRequest.sanitizedLaunchKey(it) ?: it
+        }
+        else -> null
     }
 }
 
@@ -237,17 +267,17 @@ private fun OnboardingNav(
         composable<StartupRoutes.Terms> {
             TermsOfUseScreen(
                 onNavigateToIntro = {
-                    startupNavController.navigate(StartupRoutes.Intro)
+                    startupNavController.navigateTo(StartupRoutes.Intro)
                 }
             )
         }
         composableWithDefaultTransitions<StartupRoutes.Intro> {
             IntroScreen(
                 onStartClick = {
-                    startupNavController.navigate(StartupRoutes.Slides())
+                    startupNavController.navigateTo(StartupRoutes.Slides())
                 },
                 onSkipClick = {
-                    startupNavController.navigate(StartupRoutes.Slides(StartupRoutes.LAST_SLIDE_INDEX))
+                    startupNavController.navigateTo(StartupRoutes.Slides(StartupRoutes.LAST_SLIDE_INDEX))
                 },
             )
         }
@@ -257,7 +287,7 @@ private fun OnboardingNav(
             OnboardingSlidesScreen(
                 currentTab = route.tab,
                 isGeoBlocked = isGeoBlocked,
-                onAdvancedSetupClick = { startupNavController.navigate(StartupRoutes.Advanced) },
+                onAdvancedSetupClick = { startupNavController.navigateTo(StartupRoutes.Advanced) },
                 onCreateClick = {
                     scope.launch {
                         runCatching {
@@ -270,7 +300,7 @@ private fun OnboardingNav(
                     }
                 },
                 onRestoreClick = {
-                    startupNavController.navigate(
+                    startupNavController.navigateTo(
                         StartupRoutes.WarningMultipleDevices
                     )
                 },
@@ -282,7 +312,7 @@ private fun OnboardingNav(
                     startupNavController.popBackStack()
                 },
                 onConfirmClick = {
-                    startupNavController.navigate(StartupRoutes.Restore)
+                    startupNavController.navigateTo(StartupRoutes.Restore)
                 }
             )
         }

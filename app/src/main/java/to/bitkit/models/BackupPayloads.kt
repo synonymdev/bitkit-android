@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.PreActivityMetadata
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.SettingsData
@@ -18,6 +19,22 @@ data class WalletBackupV1(
     val version: Int = 1,
     val createdAt: Long,
     val transfers: List<TransferEntity>,
+    val privatePaykitHighestReservedReceiveIndexByAddressType: Map<String, Int>? = null,
+    val privatePaykitContactLinks: Map<String, PrivatePaykitContactLinkBackupV1>? = null,
+)
+
+@Serializable
+data class PrivatePaykitContactLinkBackupV1(
+    val publicKey: String,
+    val linkSnapshotHex: String? = null,
+    val handshakeSnapshotHex: String? = null,
+    val remoteEndpoints: Map<String, String> = emptyMap(),
+    val linkCompletedAt: Long? = null,
+    val handshakeUpdatedAt: Long? = null,
+    val recoveryStartedAt: Long? = null,
+    val mainRecoveryAttemptId: String? = null,
+    val responderRecoveryAttemptId: String? = null,
+    val awaitingRecoveredRemoteEndpoints: Boolean = false,
 )
 
 @Serializable
@@ -26,7 +43,23 @@ data class MetadataBackupV1(
     val createdAt: Long,
     val tagMetadata: List<PreActivityMetadata>,
     val cache: AppCacheData,
+    val pubkySession: PubkySessionBackupV1? = null,
 )
+
+@Serializable
+data class PubkySessionBackupV1(
+    val kind: PubkySessionBackupKind,
+    val sessionSecret: String? = null,
+)
+
+@Serializable
+enum class PubkySessionBackupKind {
+    @SerialName("localSeed")
+    LocalSeed,
+
+    @SerialName("externalSession")
+    ExternalSession,
+}
 
 @Serializable
 data class BlocktankBackupV1(

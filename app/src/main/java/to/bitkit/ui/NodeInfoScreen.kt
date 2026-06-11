@@ -32,6 +32,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.synonym.bitkitcore.ILspNode
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BalanceSource
 import org.lightningdevkit.ldknode.BestBlock
@@ -52,6 +54,7 @@ import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.NodePeer
 import to.bitkit.models.alias
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.models.msatFloorOf
 import to.bitkit.repositories.LightningState
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
@@ -69,6 +72,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
@@ -86,10 +90,12 @@ fun NodeInfoScreen(
 
     val isRefreshing by wallet.isRefreshing.collectAsStateWithLifecycle()
     val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
+    val lightningBalances by viewModel.lightningBalances.collectAsStateWithLifecycle()
     val peers by viewModel.peers.collectAsStateWithLifecycle()
 
     Content(
         lightningState = lightningState,
+        lightningBalances = lightningBalances,
         peers = peers,
         isRefreshing = isRefreshing,
         onBack = navController::popBackStack,
@@ -103,8 +109,9 @@ fun NodeInfoScreen(
 @Composable
 private fun Content(
     lightningState: LightningState,
+    lightningBalances: ImmutableList<LightningBalance> = persistentListOf(),
     isRefreshing: Boolean = false,
-    peers: List<NodePeer> = emptyList(),
+    peers: ImmutableList<NodePeer> = persistentListOf(),
     onBack: () -> Unit = {},
     onRefresh: () -> Unit = {},
     onDisconnectPeer: (PeerDetails) -> Unit = {},
@@ -135,10 +142,9 @@ private fun Content(
                 )
                 lightningState.balances?.let { details ->
                     WalletBalancesSection(balanceDetails = details)
-
-                    if (details.lightningBalances.isNotEmpty()) {
-                        LightningBalancesSection(balances = details.lightningBalances)
-                    }
+                }
+                if (lightningBalances.isNotEmpty()) {
+                    LightningBalancesSection(balances = lightningBalances)
                 }
                 if (lightningState.channels.isNotEmpty()) {
                     ChannelsSection(
@@ -266,7 +272,7 @@ private fun WalletBalancesSection(balanceDetails: BalanceDetails) {
 }
 
 @Composable
-private fun LightningBalancesSection(balances: List<LightningBalance>) {
+private fun LightningBalancesSection(balances: ImmutableList<LightningBalance>) {
     Column(modifier = Modifier.fillMaxWidth()) {
         SectionHeader(stringResource(R.string.lightning__lightning_balances))
         balances.forEach { balance ->
@@ -306,7 +312,7 @@ private fun LightningBalancesSection(balances: List<LightningBalance>) {
 
 @Composable
 private fun ChannelsSection(
-    channels: List<ChannelDetails>,
+    channels: ImmutableList<ChannelDetails>,
     onCopy: (String) -> Unit = {},
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
@@ -331,8 +337,8 @@ private fun ChannelsSection(
                 }
                 LightningChannel(
                     capacity = (channel.channelValueSats).toLong(),
-                    localBalance = (channel.outboundCapacityMsat / 1000u).toLong(),
-                    remoteBalance = (channel.inboundCapacityMsat / 1000u).toLong(),
+                    localBalance = msatFloorOf(channel.outboundCapacityMsat).toLong(),
+                    remoteBalance = msatFloorOf(channel.inboundCapacityMsat).toLong(),
                     status = if (channel.isChannelReady) ChannelStatusUi.OPEN else ChannelStatusUi.PENDING,
                 )
                 VerticalSpacer(8.dp)
@@ -351,23 +357,25 @@ private fun ChannelsSection(
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.lightning__inbound_capacity),
-                    value = "₿ ${(channel.inboundCapacityMsat / 1000u).formatToModernDisplay()}",
+                    value = "₿ ${msatFloorOf(channel.inboundCapacityMsat).formatToModernDisplay()}",
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.lightning__inbound_htlc_max),
-                    value = "₿ ${(channel.inboundHtlcMaximumMsat?.div(1000u) ?: 0u).formatToModernDisplay()}",
+                    value = "₿ ${
+                        (channel.inboundHtlcMaximumMsat?.let { msatFloorOf(it) } ?: 0u).formatToModernDisplay()
+                    }",
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.lightning__inbound_htlc_min),
-                    value = "₿ ${(channel.inboundHtlcMinimumMsat / 1000u).formatToModernDisplay()}",
+                    value = "₿ ${msatFloorOf(channel.inboundHtlcMinimumMsat).formatToModernDisplay()}",
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.lightning__next_outbound_htlc_limit),
-                    value = "₿ ${(channel.nextOutboundHtlcLimitMsat / 1000u).formatToModernDisplay()}",
+                    value = "₿ ${msatFloorOf(channel.nextOutboundHtlcLimitMsat).formatToModernDisplay()}",
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.lightning__next_outbound_htlc_min),
-                    value = "₿ ${(channel.nextOutboundHtlcMinimumMsat / 1000u).formatToModernDisplay()}",
+                    value = "₿ ${msatFloorOf(channel.nextOutboundHtlcMinimumMsat).formatToModernDisplay()}",
                 )
                 ChannelDetailRow(
                     title = stringResource(R.string.common__confirmations),
@@ -383,7 +391,7 @@ private fun ChannelsSection(
 
 @Composable
 private fun PeersSection(
-    peers: List<NodePeer>,
+    peers: ImmutableList<NodePeer>,
     onDisconnectPeer: (PeerDetails) -> Unit = {},
     onCopy: (String) -> Unit = {},
 ) {
@@ -438,7 +446,7 @@ private fun PeerCard(
                 maxLines = 1,
             )
         }
-        IconButton(onClick = { onDisconnectPeer(peer.peerDetails) }) {
+        IconButton(onClick = rememberDebouncedClick { onDisconnectPeer(peer.peerDetails) }) {
             Icon(
                 imageVector = Icons.Default.RemoveCircleOutline,
                 contentDescription = stringResource(R.string.common__close),
@@ -466,7 +474,7 @@ private fun ChannelDetailRow(
     }
 }
 
-private fun previewPeers() = listOf(
+private fun previewPeers() = persistentListOf(
     NodePeer(
         peerDetails = Peers.stag,
         lspNode = ILspNode(
@@ -524,8 +532,8 @@ private fun Preview() {
                     latestPathfindingScoresSyncTimestamp = null,
                 ),
                 nodeId = "0348a2b7c2d3f4e5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9",
-                peers = listOf(Peers.stag),
-                channels = listOf(
+                peers = persistentListOf(Peers.stag),
+                channels = persistentListOf(
                     createChannelDetails().copy(
                         channelId = "abc123def456789012345678901234567890123456789012345678901234567890",
                         channelValueSats = 1000000UL,

@@ -52,6 +52,7 @@ import to.bitkit.utils.Logger
 import to.bitkit.utils.jsonLogOf
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -84,6 +85,9 @@ class BackupRepo @Inject constructor(
     private val widgetsStore: WidgetsStore,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
+    private val pubkyRepo: PubkyRepo,
+    private val privatePaykitRepo: Provider<PrivatePaykitRepo>,
+    private val privatePaykitAddressReservationRepo: Provider<PrivatePaykitAddressReservationRepo>,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val lightningService: LightningService,
     private val clock: Clock,
@@ -97,6 +101,7 @@ class BackupRepo @Inject constructor(
     private var periodicCheckJob: Job? = null
 
     private val runningBackups = ConcurrentHashMap.newKeySet<BackupCategory>() // Tracks active jobs since app start
+    private val failedBackupRequired = ConcurrentHashMap<BackupCategory, Long>()
 
     private var isObserving = false
     private var lastNotificationTime = 0L
@@ -115,7 +120,11 @@ class BackupRepo @Inject constructor(
     fun setWiping(isWiping: Boolean) = _isWiping.update { isWiping }
     private fun currentTimeMillis(): Long = nowMillis(clock)
     private fun shouldSkipBackup(): Boolean = _isRestoring.value || _isWiping.value
-    private fun BackupItemStatus.shouldBackup() = this.isRequired && !this.running && !shouldSkipBackup()
+    private fun BackupItemStatus.shouldBackup(category: BackupCategory) =
+        this.isRequired &&
+            !this.running &&
+            !shouldSkipBackup() &&
+            failedBackupRequired[category] != this.required
 
     fun startObservingBackups() {
         if (isObserving) return
@@ -193,11 +202,12 @@ class BackupRepo @Inject constructor(
                 cacheStore.backupStatuses
                     .map { statuses -> statuses[category] ?: BackupItemStatus() }
                     .distinctUntilChanged { old, new ->
-                        // restart scheduling when synced or required timestamps change
-                        old.synced == new.synced && old.required == new.required
+                        old.synced == new.synced &&
+                            old.required == new.required &&
+                            old.running == new.running
                     }
                     .collect { status ->
-                        if (status.shouldBackup()) {
+                        if (status.shouldBackup(category)) {
                             scheduleBackup(category)
                         }
                     }
@@ -268,6 +278,36 @@ class BackupRepo @Inject constructor(
         }
         dataListenerJobs.add(preActivityMetadataJob)
 
+        val pubkyStateJob = scope.launch {
+            pubkyRepo.backupStateVersion
+                .drop(1)
+                .collect {
+                    if (shouldSkipBackup()) return@collect
+                    markBackupRequired(BackupCategory.METADATA)
+                }
+        }
+        dataListenerJobs.add(pubkyStateJob)
+
+        val privatePaykitStateJob = scope.launch {
+            privatePaykitRepo.get().backupStateVersion
+                .drop(1)
+                .collect {
+                    if (shouldSkipBackup()) return@collect
+                    markBackupRequired(BackupCategory.WALLET)
+                }
+        }
+        dataListenerJobs.add(privatePaykitStateJob)
+
+        val privatePaykitReservationJob = scope.launch {
+            privatePaykitAddressReservationRepo.get().backupStateVersion
+                .drop(1)
+                .collect {
+                    if (shouldSkipBackup()) return@collect
+                    markBackupRequired(BackupCategory.WALLET)
+                }
+        }
+        dataListenerJobs.add(privatePaykitReservationJob)
+
         // BLOCKTANK - Observe blocktank state changes (orders, cjitEntries, info)
         val blocktankJob = scope.launch {
             blocktankRepo.blocktankState
@@ -321,6 +361,7 @@ class BackupRepo @Inject constructor(
 
     private fun markBackupRequired(category: BackupCategory) {
         scope.launch {
+            failedBackupRequired -= category
             cacheStore.updateBackupStatus(category) {
                 it.copy(required = currentTimeMillis())
             }
@@ -406,14 +447,17 @@ class BackupRepo @Inject constructor(
     suspend fun triggerBackup(category: BackupCategory) = withContext(ioDispatcher) {
         Logger.debug("Backup starting for: '$category'", context = TAG)
 
+        val backupRequired = currentTimeMillis()
         runningBackups += category
+        failedBackupRequired -= category
         cacheStore.updateBackupStatus(category) {
-            it.copy(running = true, required = currentTimeMillis())
+            it.copy(running = true, required = backupRequired)
         }
 
         vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category))
             .onSuccess {
                 runningBackups -= category
+                failedBackupRequired -= category
                 cacheStore.updateBackupStatus(category) {
                     it.copy(
                         running = false,
@@ -425,9 +469,14 @@ class BackupRepo @Inject constructor(
             .onFailure { e ->
                 runningBackups -= category
                 cacheStore.updateBackupStatus(category) {
+                    if (it.required == backupRequired) {
+                        failedBackupRequired[category] = backupRequired
+                    } else {
+                        failedBackupRequired -= category
+                    }
                     it.copy(running = false)
                 }
-                Logger.error("Backup failed for: '$category'", e = e, context = TAG)
+                Logger.error("Backup failed for: '$category'", e, context = TAG)
             }
     }
 
@@ -450,29 +499,9 @@ class BackupRepo @Inject constructor(
             json.encodeToString(payload).toByteArray()
         }
 
-        BackupCategory.WALLET -> {
-            val transfers = db.transferDao().getAll()
+        BackupCategory.WALLET -> getWalletBackupDataBytes()
 
-            val payload = WalletBackupV1(
-                createdAt = currentTimeMillis(),
-                transfers = transfers
-            )
-
-            json.encodeToString(payload).toByteArray()
-        }
-
-        BackupCategory.METADATA -> {
-            val preActivityMetadata = preActivityMetadataRepo.getAllPreActivityMetadata().getOrDefault(emptyList())
-            val cacheData = cacheStore.data.first()
-
-            val payload = MetadataBackupV1(
-                createdAt = currentTimeMillis(),
-                tagMetadata = preActivityMetadata,
-                cache = cacheData,
-            )
-
-            json.encodeToString(payload).toByteArray()
-        }
+        BackupCategory.METADATA -> getMetadataBackupDataBytes()
 
         BackupCategory.BLOCKTANK -> {
             val blocktankState = blocktankRepo.blocktankState.first()
@@ -505,6 +534,44 @@ class BackupRepo @Inject constructor(
         BackupCategory.LIGHTNING_CONNECTIONS -> throw NotImplementedError("LIGHTNING backup is managed by ldk-node")
     }
 
+    private suspend fun getMetadataBackupDataBytes(): ByteArray = withContext(ioDispatcher) {
+        val preActivityMetadata = preActivityMetadataRepo.getAllPreActivityMetadata().getOrDefault(emptyList())
+        val cacheData = cacheStore.data.first()
+        val pubkySession = pubkyRepo.snapshotSessionBackupState().getOrDefault(null)
+
+        val payload = MetadataBackupV1(
+            createdAt = currentTimeMillis(),
+            tagMetadata = preActivityMetadata,
+            cache = cacheData,
+            pubkySession = pubkySession,
+        )
+
+        json.encodeToString(payload).toByteArray()
+    }
+
+    private suspend fun getWalletBackupDataBytes(): ByteArray {
+        val transfers = db.transferDao().getAll()
+        val privateReservations = privatePaykitAddressReservationRepo.get().backupSnapshot()
+            .onFailure {
+                Logger.warn("Failed to snapshot private Paykit reservations", it, context = TAG)
+            }
+            .getOrThrow()
+        val privateLinks = privatePaykitRepo.get().backupSnapshot()
+            .onFailure {
+                Logger.warn("Failed to snapshot private Paykit contact links", it, context = TAG)
+            }
+            .getOrThrow()
+
+        val payload = WalletBackupV1(
+            createdAt = currentTimeMillis(),
+            transfers = transfers,
+            privatePaykitHighestReservedReceiveIndexByAddressType = privateReservations,
+            privatePaykitContactLinks = privateLinks,
+        )
+
+        return json.encodeToString(payload).toByteArray()
+    }
+
     suspend fun performFullRestoreFromLatestBackup(
         onCacheRestored: suspend () -> Unit = {},
     ): Result<Unit> = withContext(ioDispatcher) {
@@ -520,6 +587,10 @@ class BackupRepo @Inject constructor(
                 Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
                 onCacheRestored()
                 preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata).getOrNull()
+                pubkyRepo.restoreSessionBackupState(parsed.pubkySession)
+                    .onFailure {
+                        Logger.warn("Failed to restore pubky session backup state", it, context = TAG)
+                    }
                 Logger.debug("Restored ${parsed.tagMetadata.size} pre-activity metadata", TAG)
                 parsed.createdAt
             }
@@ -534,11 +605,8 @@ class BackupRepo @Inject constructor(
                 parsed.createdAt
             }
             performRestore(BackupCategory.WALLET) { dataBytes ->
-                val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
-                db.transferDao().upsert(parsed.transfers)
-                Logger.debug("Restored ${parsed.transfers.size} transfers", context = TAG)
-                parsed.createdAt
-            }
+                restoreWalletBackup(dataBytes)
+            }.getOrThrow()
             performRestore(BackupCategory.BLOCKTANK) { dataBytes ->
                 val parsed = json.decodeFromString<BlocktankBackupV1>(String(dataBytes))
                 blocktankRepo.restoreFromBackup(parsed)
@@ -554,12 +622,27 @@ class BackupRepo @Inject constructor(
         }.onSuccess {
             settingsStore.update { it.copy(backupVerified = true) }
         }.onFailure { e ->
-            Logger.warn("Full restore error", e = e, context = TAG)
+            Logger.warn("Full restore error", e, context = TAG)
         }
 
         _isRestoring.update { false }
 
         return@withContext result
+    }
+
+    private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
+        val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
+        db.transferDao().upsert(parsed.transfers)
+        if (!parsed.privatePaykitHighestReservedReceiveIndexByAddressType.isNullOrEmpty()) {
+            cacheStore.update { it.copy(onchainAddress = "", bip21 = "") }
+        }
+        val addressReservationRepo = privatePaykitAddressReservationRepo.get()
+        addressReservationRepo.restoreBackup(parsed.privatePaykitHighestReservedReceiveIndexByAddressType).getOrThrow()
+        val privateRepo = privatePaykitRepo.get()
+        privateRepo.restoreBackup(parsed.privatePaykitContactLinks).getOrThrow()
+        addressReservationRepo.reconcileReservedIndexesWithLdk().getOrThrow()
+        Logger.debug("Restored ${parsed.transfers.size} transfers", context = TAG)
+        return parsed.createdAt
     }
 
     suspend fun getLatestBackupTime(): ULong? = withContext(ioDispatcher) {

@@ -30,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.painter.Painter
@@ -37,6 +38,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Devices
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -48,7 +50,12 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import to.bitkit.R
+import to.bitkit.ext.contact
 import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.isSent
@@ -59,6 +66,8 @@ import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
 import to.bitkit.ext.totalValue
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
+import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
@@ -70,6 +79,7 @@ import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Title
 import to.bitkit.ui.scaffold.AppTopBar
@@ -82,7 +92,7 @@ import to.bitkit.ui.shared.animations.BalanceAnimations
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.sheets.BoostTransactionSheet
-import to.bitkit.ui.sheets.ComingSoonSheet
+import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
@@ -97,6 +107,7 @@ fun ActivityDetailScreen(
     detailViewModel: ActivityDetailViewModel = hiltViewModel(),
     route: Routes.ActivityDetail,
     onExploreClick: (String) -> Unit,
+    onAssignContactClick: (String) -> Unit,
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
     onChannelClick: ((String) -> Unit)? = null,
@@ -170,14 +181,15 @@ fun ActivityDetailScreen(
                 val app = appViewModel ?: return@Box
                 val settings = settingsViewModel ?: return@Box
                 val hideBalance by settings.hideBalance.collectAsStateWithLifecycle()
+                val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
                 val copyToastTitle = stringResource(R.string.common__copied)
 
                 val tags by detailViewModel.tags.collectAsStateWithLifecycle()
+                val contacts by listViewModel.contacts.collectAsStateWithLifecycle()
                 val boostSheetVisible by detailViewModel.boostSheetVisible.collectAsStateWithLifecycle()
                 var showAddTagSheet by remember { mutableStateOf(false) }
-                var showAssignSheet by remember { mutableStateOf(false) }
                 var isCpfpChild by remember { mutableStateOf(false) }
-                var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+                var boostTxDoesExist by remember { mutableStateOf<ImmutableMap<String, Boolean>>(persistentMapOf()) }
 
                 LaunchedEffect(item) {
                     if (item is Activity.Onchain) {
@@ -185,11 +197,11 @@ fun ActivityDetailScreen(
                         boostTxDoesExist = if (item.v1.boostTxIds.isNotEmpty()) {
                             detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
                         } else {
-                            emptyMap()
+                            persistentMapOf()
                         }
                     } else {
                         isCpfpChild = false
-                        boostTxDoesExist = emptyMap()
+                        boostTxDoesExist = persistentMapOf()
                     }
                 }
 
@@ -201,6 +213,7 @@ fun ActivityDetailScreen(
                 }
 
                 val context = LocalContext.current
+                val assignedContact = if (isPaykitEnabled) assignedContactProfile(item, contacts) else null
                 val blocktankInfo by blocktankViewModel?.info?.collectAsStateWithLifecycle() ?: remember {
                     mutableStateOf(null)
                 }
@@ -222,15 +235,18 @@ fun ActivityDetailScreen(
                     )
                     ActivityDetailContent(
                         item = item,
+                        assignedContact = assignedContact,
                         tags = tags,
                         onRemoveTag = { detailViewModel.removeTag(it) },
                         onAddTagClick = { showAddTagSheet = true },
-                        onAssignClick = { showAssignSheet = true },
+                        onAssignClick = { onAssignContactClick(item.rawId()) },
+                        onDetachClick = { detailViewModel.detachContact() },
                         onClickBoost = detailViewModel::onClickBoost,
                         onExploreClick = onExploreClick,
                         onChannelClick = onChannelClick,
                         detailViewModel = detailViewModel,
                         isCpfpChild = isCpfpChild,
+                        showContactActions = isPaykitEnabled,
                         boostTxDoesExist = boostTxDoesExist,
                         onCopy = { text ->
                             app.toast(
@@ -292,13 +308,6 @@ fun ActivityDetailScreen(
                         )
                     }
                 }
-
-                if (showAssignSheet) {
-                    ComingSoonSheet(
-                        onWalletOverviewClick = onCloseClick,
-                        onBack = { showAssignSheet = false },
-                    )
-                }
             }
         }
     }
@@ -308,16 +317,19 @@ fun ActivityDetailScreen(
 @Composable
 private fun ActivityDetailContent(
     item: Activity,
-    tags: List<String>,
+    assignedContact: PubkyProfile?,
+    tags: ImmutableList<String>,
     onRemoveTag: (String) -> Unit,
     onAddTagClick: () -> Unit,
     onAssignClick: () -> Unit,
+    onDetachClick: () -> Unit,
     onClickBoost: () -> Unit,
     onExploreClick: (String) -> Unit,
     onChannelClick: ((String) -> Unit)?,
     detailViewModel: ActivityDetailViewModel? = null,
     isCpfpChild: Boolean = false,
-    boostTxDoesExist: Map<String, Boolean> = emptyMap(),
+    showContactActions: Boolean = true,
+    boostTxDoesExist: ImmutableMap<String, Boolean> = persistentMapOf(),
     onCopy: (String) -> Unit,
     hideBalance: Boolean = false,
     feeRates: FeeRates? = null,
@@ -390,8 +402,8 @@ private fun ActivityDetailContent(
             ActivityIcon(
                 activity = item,
                 size = 48.dp,
-                isCpfpChild = isCpfpChild
-            ) // TODO Display the user avatar when selfSend
+                isCpfpChild = isCpfpChild,
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -532,31 +544,11 @@ private fun ActivityDetailContent(
             }
         }
 
-        // Tags section
-        if (tags.isNotEmpty()) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                Caption13Up(
-                    text = stringResource(R.string.wallet__tags),
-                    color = Colors.White64,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.testTag("ActivityTags")
-                ) {
-                    tags.forEach { tag ->
-                        TagButton(
-                            text = tag,
-                            displayIconClose = true,
-                            onClick = { onRemoveTag(tag) }
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(16.dp))
-                HorizontalDivider()
-            }
-        }
+        ContactTagsSection(
+            contact = assignedContact.takeIf { showContactActions },
+            tags = tags,
+            onRemoveTag = onRemoveTag,
+        )
 
         // Note section for Lightning payments with message
         if (item is Activity.Lightning && item.v1.message.isNotEmpty()) {
@@ -607,22 +599,31 @@ private fun ActivityDetailContent(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                @Suppress("ForbiddenComment")
-                PrimaryButton(
-                    text = stringResource(R.string.wallet__activity_assign),
-                    size = ButtonSize.Small,
-                    onClick = onAssignClick,
-                    enabled = !isSelfSend,
-                    icon = {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_user_plus),
-                            contentDescription = null,
-                            tint = accentColor,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    },
-                    modifier = Modifier.weight(1f)
-                )
+                if (showContactActions) {
+                    PrimaryButton(
+                        text = stringResource(
+                            if (assignedContact != null) {
+                                R.string.wallet__activity_detach
+                            } else {
+                                R.string.wallet__activity_assign
+                            }
+                        ),
+                        size = ButtonSize.Small,
+                        onClick = if (assignedContact != null) onDetachClick else onAssignClick,
+                        enabled = !isSelfSend,
+                        icon = {
+                            Icon(
+                                painter = painterResource(
+                                    if (assignedContact != null) R.drawable.ic_user_minus else R.drawable.ic_user_plus
+                                ),
+                                contentDescription = null,
+                                tint = accentColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
                 PrimaryButton(
                     text = stringResource(R.string.wallet__activity_tag),
                     size = ButtonSize.Small,
@@ -726,6 +727,101 @@ private fun ActivityDetailContent(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ContactTagsSection(
+    contact: PubkyProfile?,
+    tags: ImmutableList<String>,
+    onRemoveTag: (String) -> Unit,
+) {
+    if (contact == null && tags.isEmpty()) return
+
+    if (contact != null && tags.isNotEmpty()) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            ContactCell(contact = contact, modifier = Modifier.weight(1f))
+            TagsCell(tags = tags, onRemoveTag = onRemoveTag, modifier = Modifier.weight(1f))
+        }
+    } else if (contact != null) {
+        ContactCell(contact = contact, modifier = Modifier.fillMaxWidth())
+    } else {
+        TagsCell(tags = tags, onRemoveTag = onRemoveTag, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+@Composable
+private fun ContactCell(
+    contact: PubkyProfile,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Caption13Up(
+            text = stringResource(R.string.wallet__activity_contact),
+            color = Colors.White64,
+            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+        )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .padding(bottom = 16.dp)
+                .clip(AppShapes.small)
+                .background(Colors.Gray6)
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+                .testTag("ActivityAssignedContact")
+        ) {
+            PubkyContactAvatar(profile = contact, size = 24.dp)
+            BodySSB(
+                text = contact.name,
+                color = Colors.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+private fun assignedContactProfile(
+    item: Activity,
+    contacts: List<PubkyProfile>,
+): PubkyProfile? {
+    val contactKey = item.contact() ?: return null
+    return contacts.firstOrNull {
+        PubkyPublicKeyFormat.matches(it.publicKey, contactKey)
+    } ?: PubkyProfile.placeholder(PubkyPublicKeyFormat.normalized(contactKey) ?: contactKey)
+}
+
+@Composable
+private fun TagsCell(
+    tags: ImmutableList<String>,
+    onRemoveTag: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(modifier = modifier) {
+        Caption13Up(
+            text = stringResource(R.string.wallet__tags),
+            color = Colors.White64,
+            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.testTag("ActivityTags")
+        ) {
+            tags.forEach { tag ->
+                TagButton(
+                    text = tag,
+                    displayIconClose = true,
+                    onClick = { onRemoveTag(tag) }
+                )
+            }
+        }
+        Spacer(modifier = Modifier.height(16.dp))
+        HorizontalDivider()
     }
 }
 
@@ -885,10 +981,12 @@ private fun PreviewLightningSent() {
                     message = "Thanks for paying at the bar. Here's my share.",
                 )
             ),
-            tags = listOf("Lunch", "Drinks"),
+            assignedContact = null,
+            tags = persistentListOf("Lunch", "Drinks"),
             onRemoveTag = {},
             onAddTagClick = {},
             onAssignClick = {},
+            onDetachClick = {},
             onExploreClick = {},
             onChannelClick = null,
             onCopy = {},
@@ -916,10 +1014,12 @@ private fun PreviewOnchain() {
                     confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
                 )
             ),
-            tags = emptyList(),
+            assignedContact = null,
+            tags = persistentListOf(),
             onRemoveTag = {},
             onAddTagClick = {},
             onAssignClick = {},
+            onDetachClick = {},
             onExploreClick = {},
             onChannelClick = null,
             onCopy = {},
@@ -948,10 +1048,12 @@ private fun PreviewSheetSmallScreen() {
                         message = "Thanks for paying at the bar. Here's my share.",
                     )
                 ),
-                tags = listOf("Lunch", "Drinks"),
+                assignedContact = null,
+                tags = persistentListOf("Lunch", "Drinks"),
                 onRemoveTag = {},
                 onAddTagClick = {},
                 onAssignClick = {},
+                onDetachClick = {},
                 onExploreClick = {},
                 onChannelClick = null,
                 onCopy = {},
@@ -966,7 +1068,7 @@ private fun PreviewSheetSmallScreen() {
 private fun shouldEnableBoostButton(
     item: Activity,
     isCpfpChild: Boolean,
-    boostTxDoesExist: Map<String, Boolean>,
+    boostTxDoesExist: ImmutableMap<String, Boolean>,
 ): Boolean {
     if (item !is Activity.Onchain) return false
 
@@ -986,7 +1088,7 @@ private fun shouldEnableBoostButton(
 @Composable
 private fun isBoostCompleted(
     activity: OnchainActivity,
-    boostTxDoesExist: Map<String, Boolean>,
+    boostTxDoesExist: ImmutableMap<String, Boolean>,
 ): Boolean {
     if (activity.boostTxIds.isEmpty()) return true
 

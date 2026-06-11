@@ -138,8 +138,9 @@
     <string name="lightning__external_manual__scan">Сканировать QR</string>
     <string name="lightning__external_manual__text">Вы можете использовать внешний узел для ручного открытия Lightning соединения. Введите данные узла, чтобы продолжить.</string>
     <string name="lightning__external_manual__title">&lt;accent&gt;Ручная Настройка&lt;/accent&gt;</string>
+    <string name="lightning__external_success__nav_title">Баланс расходов</string>
     <string name="lightning__external_success__text">Lightning соединение инициировано. Вы сможете использовать ваш баланс расходов через &lt;accent&gt;±30 минут&lt;/accent&gt; (зависит от конфигурации узла).</string>
-    <string name="lightning__external_success__title">Соединение\n&lt;accent&gt;Инициировано&lt;/accent&gt;</string>
+    <string name="lightning__external_success__title">Открытие\n&lt;accent&gt;канала&lt;/accent&gt;</string>
     <string name="lightning__fee_rate">Ставка Комиссии</string>
     <string name="lightning__fee_rate_update_time">Время обновления кэша комиссии</string>
     <string name="lightning__fees">Комиссии</string>
@@ -154,9 +155,8 @@
     <string name="lightning__force_title">Принудительный\n&lt;accent&gt;Перевод&lt;/accent&gt;</string>
     <string name="lightning__funding__button1">Перевести из Сбережений</string>
     <string name="lightning__funding__button2">Использовать Другой Кошелёк</string>
-    <string name="lightning__funding__button3">Дополнительно</string>
     <string name="lightning__funding__nav_title">Баланс Расходов</string>
-    <string name="lightning__funding__text">Вы можете использовать свои сбережения Bitkit или отправить биткойны из другого кошелька.</string>
+    <string name="lightning__funding__text">Самый простой вариант — использовать ваши сбережения Bitkit или отправить биткоин с другого кошелька.</string>
     <string name="lightning__funding__text_blocked">Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам напрямую.</string>
     <string name="lightning__funding__text_blocked_cjit">Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам напрямую.</string>
     <string name="lightning__funding__title">Пополните свой &lt;accent&gt;Баланс Расходов&lt;/accent&gt;</string>
@@ -181,6 +181,7 @@
     <string name="lightning__next_outbound_htlc_limit">Лимит след. исходящего HTLC</string>
     <string name="lightning__next_outbound_htlc_min">Мин. след. исходящего HTLC</string>
     <string name="lightning__no_funds__description">Прежде чем вы сможете перевести средства со своего баланса сбережений, вам нужно отправить биткойны в ваш кошелёк Bitkit.</string>
+    <string name="lightning__no_funds__fund_wallet">Пополнить кошелёк</string>
     <string name="lightning__no_funds__title">Недостаточно Средств</string>
     <string name="lightning__node_id">ID Узла LDK</string>
     <string name="lightning__node_info">Lightning Узел</string>
@@ -267,6 +268,9 @@
     <string name="lightning__wait_text_bottom">Подключение и Синхронизация...</string>
     <string name="lightning__wait_text_top">Пожалуйста, подождите, пока Bitkit подключается к платёжной сети (±10 секунд).</string>
     <string name="lightning__wallet_balances">Балансы кошелька</string>
+    <string name="lightning__conn_onboarding_button">Начать</string>
+    <string name="lightning__conn_onboarding_text">Настройте баланс расходов, чтобы наслаждаться мгновенными и дешёвыми транзакциями с друзьями, семьёй и продавцами.</string>
+    <string name="lightning__conn_onboarding_title">Включить\nLightning\n&lt;accent&gt;платежи&lt;/accent&gt;</string>
     <string name="migration__description">Пожалуйста, подождите, пока данные вашего старого кошелька переносятся в эту новую версию Bitkit. Обычно это занимает меньше минуты.</string>
     <string name="migration__nav_title">Миграция кошелька</string>
     <string name="migration__title">МИГРАЦИЯ
@@ -337,10 +341,7 @@
     <string name="other__buy_button">Выбрать Биржу</string>
     <string name="other__buy_header">Купите немного\n&lt;accent&gt;Биткойнов&lt;/accent&gt;</string>
     <string name="other__buy_text">У вас нет биткойнов или нужно больше?</string>
-    <string name="other__camera_ask_msg">Bitkit требуется разрешение на использование вашей камеры</string>
-    <string name="other__camera_ask_title">Разрешение на Использование Камеры</string>
     <string name="other__camera_init_error">Не удалось инициализировать камеру: {message}</string>
-    <string name="other__camera_no_text">&lt;bold&gt;Похоже, что Bitkit не имеет разрешения на доступ к вашей камере.&lt;/bold&gt;\n\nЧтобы использовать эту функцию в будущем, вам нужно будет включить разрешение для камеры для этого приложения в настройках вашего телефона.</string>
     <string name="other__camera_permission_button">Включить камеру</string>
     <string name="other__camera_permission_description">Разрешите доступ к камере для сканирования биткоин-счетов и более быстрой оплаты.</string>
     <string name="other__camera_permission_title">СКАНИРОВАТЬ
@@ -404,7 +405,6 @@
     <string name="other__pay_insufficient_savings_description">Для оплаты этого биткойн-счёта нужно больше ₿.</string>
     <string name="other__pay_insufficient_spending">Недостаточно Средств на Балансе Расходов</string>
     <string name="other__pay_insufficient_spending_amount_description">Для оплаты этого Лайтнинг-счёта нужно ещё ₿ {amount}.</string>
-    <string name="other__phone_settings">Открыть Настройки Телефона</string>
     <string name="other__qr_error_header">Не удалось прочитать QR-код</string>
     <string name="other__qr_error_network_header">Неправильная Сеть</string>
     <string name="other__qr_error_network_text">В настройках Bitkit в данный момент выбрана {selectedNetwork}, а данные предназначены для {dataNetwork}.</string>
@@ -455,11 +455,11 @@
     <string name="security__contact_support">Связаться с Поддержкой</string>
     <string name="security__cp_changed_text">Вы успешно изменили свой PIN-код на новую комбинацию из 4 цифр.</string>
     <string name="security__cp_changed_title">PIN-код Изменён</string>
-    <string name="security__cp_retype_text">Повторно введите 4-значный PIN-код, чтобы завершить процесс установки.</string>
+    <string name="security__cp_retype_text">Повторно введите 4-значный PIN, чтобы завершить настройку и сохранить новый PIN.</string>
     <string name="security__cp_retype_title">Повторите Новый PIN-код</string>
     <string name="security__cp_setnew_text">Пожалуйста, используйте PIN-код, который вы запомните. Если вы забудете свой PIN-код, вы можете сбросить его, но для этого потребуется восстановить кошелёк.</string>
     <string name="security__cp_setnew_title">Новый PIN-код</string>
-    <string name="security__cp_text">Вы можете изменить свой PIN-код на новую\nчетырёхзначную комбинацию. Сначала введите текущий PIN-код.</string>
+    <string name="security__cp_text">Введите &lt;accent>текущий&lt;/accent> PIN, чтобы изменить его.</string>
     <string name="security__cp_title">Изменить PIN-код</string>
     <string name="security__cp_try_again">Попробуйте ещё раз, это не тот PIN-код.</string>
     <string name="security__display_seed">Показать Фразу Восстановления</string>
@@ -476,7 +476,8 @@
     <string name="security__mnemonic_load_error">Не удалось загрузить мнемоническую фразу</string>
     <string name="security__mnemonic_multiple_header">Несколько Устройств</string>
     <string name="security__mnemonic_multiple_text">Не используйте фразу восстановления Bitkit на нескольких телефонах одновременно, так как это может привести к повреждению ваших данных.</string>
-    <string name="security__mnemonic_never_share">&lt;accent&gt;Никогда не делитесь&lt;/accent&gt; своей фразой восстановления с кем-либо, так как это может привести к потере средств.</string>
+    <string name="security__mnemonic_never_share">Убедитесь, что никто не видит ваш экран. &lt;accent&gt;Никогда не делитесь своей фразой восстановления&lt;/accent&gt; с кем-либо, так как это может привести к потере средств.</string>
+    <string name="security__mnemonic_no_access">&lt;accent&gt;Bitkit не может получить доступ к вашим средствам и не может помочь их восстановить&lt;/accent&gt;, если вы потеряете фразу восстановления. Храните её в безопасности!</string>
     <string name="security__mnemonic_phrase">Фраза Восстановления</string>
     <string name="security__mnemonic_result_header">Успешно</string>
     <string name="security__mnemonic_result_text">Убедитесь, что храните свою фразу восстановления в &lt;accent&gt;безопасном месте&lt;/accent&gt;, так как это &lt;accent&gt;единственный способ восстановить&lt;/accent&gt; ваши средства!</string>
@@ -495,8 +496,9 @@
     <string name="security__pin_choose_header">Выберите 4-значный PIN-код</string>
     <string name="security__pin_choose_text">Пожалуйста, используйте PIN-код, который вы запомните. Если вы забудете свой PIN-код, вы можете сбросить его, но для этого потребуется восстановить кошелёк.</string>
     <string name="security__pin_disable_button">Отключить PIN-код</string>
-    <string name="security__pin_disable_text">PIN-код в настоящее время включен. Если вы хотите отключить свой PIN-код, вам необходимо сначала ввести текущий PIN-код.</string>
-    <string name="security__pin_disable_title">Отключить PIN-код</string>
+    <string name="security__pin_disable_text">Введите &lt;accent>PIN&lt;/accent>, чтобы отключить его.</string>
+    <string name="security__pin_enabled_text">PIN-код в настоящее время включён. Если вы хотите отключить или изменить PIN, сначала введите текущий PIN-код.</string>
+    <string name="security__pin_enabled_title">PIN включён</string>
     <string name="security__pin_enter">Пожалуйста, введите PIN-код</string>
     <string name="security__pin_forgot_reset">Сбросить (требуется Фраза Восстановления)</string>
     <string name="security__pin_forgot_text">Забыли свой PIN-код? Сбросьте и восстановите свой кошелёк Bitkit с помощью фразы восстановления. Установите новый PIN-код после завершения восстановления.</string>
@@ -529,6 +531,7 @@
     <string name="security__wipe_app">Сбросить Приложение</string>
     <string name="security__wiped_message">Bitkit был сброшен, и все данные кошелька были удалены.</string>
     <string name="security__wiped_title">Данные Кошелька Удалены</string>
+    <string name="security__pin_enable_button">Включить PIN</string>
     <string name="settings__about__legal">Документы</string>
     <string name="settings__about__share">Поделиться</string>
     <string name="settings__about__shareText">Измените свой кошелёк, измените мир. Скачайте Bitkit для iPhone {appStoreUrl} или Android {playStoreUrl}</string>
@@ -573,6 +576,8 @@
     <string name="settings__adv__section_other">Другое</string>
     <string name="settings__adv__section_payments">Платежи</string>
     <string name="settings__adv__suggestions_reset">Сбросить Рекомендации</string>
+    <string name="settings__adv__electrum_auto">Авто</string>
+    <string name="settings__adv__section_debug">Отладка</string>
     <string name="settings__advanced_title">Дополнительно</string>
     <string name="settings__backup__category_connection_receipts">Квитанции соединений</string>
     <string name="settings__backup__category_connections">Соединения</string>
@@ -585,14 +590,12 @@
     <string name="settings__backup__category_widgets">Виджеты</string>
     <string name="settings__backup__failed_message">Bitkit не удалось создать резервную копию данных кошелька. Повторная попытка через {interval, plural, one {# минуту} few {# минуты} many {# минут} other {# минут}}.</string>
     <string name="settings__backup__failed_title">Ошибка Резервного Копирования</string>
-    <string name="settings__backup__latest">Последние Резервные Копии Данных</string>
     <string name="settings__backup__reset">Сбросить и Восстановить Кошелёк</string>
     <string name="settings__backup__status_failed">Ошибка резервного копирования: {time}</string>
     <string name="settings__backup__status_running">Выполняется</string>
     <string name="settings__backup__status_success">Последнее Резервное Копирование: {time}</string>
-    <string name="settings__backup__title">Резервное копирование</string>
     <string name="settings__backup__wallet">Создать Резервную Копию Кошелька</string>
-    <string name="settings__backup_title">Резервное копирование</string>
+    <string name="settings__backup__data">Резервные копии данных</string>
     <string name="settings__bg__customize">Настроить в настройках Android Bitkit</string>
     <string name="settings__bg__disabled">Фоновые платежи отключены, потому что вы отклонили уведомления.</string>
     <string name="settings__bg__enabled">Фоновые платежи включены. Вы можете получать средства, даже когда приложение закрыто (если ваше устройство подключено к интернету).</string>
@@ -666,7 +669,10 @@
     <string name="settings__general__unit_display">Отображать суммы в</string>
     <string name="settings__general__unit_note">Совет: Быстро переключайтесь между биткойнами и {currency}, нажимая на баланс вашего кошелька.</string>
     <string name="settings__general__unit_title">Единица Измерения по Умолчанию</string>
+    <string name="settings__general__section_interface">Интерфейс</string>
+    <string name="settings__general__section_payments">Платежи</string>
     <string name="settings__general_title">Основные</string>
+    <string name="settings__language_system_default">Системные настройки</string>
     <string name="settings__language_title">Язык</string>
     <string name="settings__quickpay__intro__description">Bitkit QuickPay ускоряет оплату, автоматически оплачивая QR-коды при сканировании.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Платежи&lt;/accent&gt;
@@ -684,13 +690,16 @@
     <string name="settings__security__footer">Когда включено, вы можете использовать {biometryTypeName} вместо PIN-кода для разблокировки кошелька или отправки платежей.</string>
     <string name="settings__security__hide_balance_on_open">Скрывать Баланс при Открытии</string>
     <string name="settings__security__pin">PIN-код</string>
-    <string name="settings__security__pin_change">Сменить PIN-код</string>
+    <string name="settings__security__pin_change">Сменить PIN</string>
     <string name="settings__security__pin_disabled">Выключен</string>
     <string name="settings__security__pin_enabled">Включён</string>
     <string name="settings__security__pin_payments">Требовать PIN-код для Платежей</string>
     <string name="settings__security__swipe_balance_to_hide">Смахнуть Баланс, чтобы Скрыть</string>
     <string name="settings__security__use_bio">Использовать {biometryTypeName} вместо этого</string>
     <string name="settings__security__warn_100">Предупреждать при Отправке более $100</string>
+    <string name="settings__security__section_backup">Резервное копирование или сброс</string>
+    <string name="settings__security__section_privacy">Конфиденциальность</string>
+    <string name="settings__security__section_safety">Безопасность</string>
     <string name="settings__security_title">Безопасность и Конфиденциальность</string>
     <string name="settings__settings">Настройки</string>
     <string name="settings__status__backup__error">Не удалось выполнить полное резервное копирование</string>
@@ -732,10 +741,16 @@
     <string name="settings__support__title">Поддержка</string>
     <string name="settings__support__title_success">Успешно Отправлено</string>
     <string name="settings__support__title_unsuccess">Не Удалось Отправить</string>
+    <string name="settings__support__copyright">Bitkit создан компанией Synonym Software, S.A. DE C.V. ©2025. Все права защищены.</string>
     <string name="settings__support_title">Поддержка</string>
     <string name="settings__widgets__nav_title">Виджеты</string>
-    <string name="settings__widgets__showWidgetTitles">Показывать Заголовки Виджетов</string>
     <string name="settings__widgets__showWidgets">Виджеты</string>
+    <string name="settings__widgets__reset_suggestions">Сбросить карточки предложений</string>
+    <string name="settings__widgets__reset_widgets">Сбросить виджеты</string>
+    <string name="settings__widgets__reset_widgets_dialog_description">Вы уверены, что хотите сбросить виджеты? Будет отображён набор виджетов по умолчанию с настройками по умолчанию.</string>
+    <string name="settings__widgets__reset_widgets_dialog_title">Сбросить виджеты?</string>
+    <string name="settings__widgets__section_display">Отображение</string>
+    <string name="settings__widgets__section_reset">Сбросить к настройкам по умолчанию</string>
     <string name="slashtags__onboarding_profile1_header">Владейте своим\n&lt;accent&gt;профилем&lt;/accent&gt;</string>
     <string name="slashtags__onboarding_profile1_text">Настройте свой публичный профиль и ссылки, чтобы ваши контакты Bitkit могли связаться с вами или заплатить вам в любое время и в любом месте.</string>
     <string name="slashtags__profile">Профиль</string>
@@ -813,7 +828,7 @@
     <string name="wallet__activity_removed">Удалено из мемпула</string>
     <string name="wallet__activity_sent">Отправлено</string>
     <string name="wallet__activity_sent_self">Отправлено себе</string>
-    <string name="wallet__activity_show_all">Показать Все</string>
+    <string name="wallet__activity_show_all">Показать все</string>
     <string name="wallet__activity_status">Статус</string>
     <string name="wallet__activity_successful">Успешно</string>
     <string name="wallet__activity_tabs__all">Все</string>
@@ -850,6 +865,7 @@
     <string name="wallet__drawer__settings">Настройки</string>
     <string name="wallet__drawer__shop">Магазин</string>
     <string name="wallet__drawer__status">Статус Приложения</string>
+    <string name="wallet__drawer__support">Поддержка</string>
     <string name="wallet__drawer__wallet">Кошелёк</string>
     <string name="wallet__drawer__widgets">Виджеты</string>
     <string name="wallet__error_invalid_bitcoin_address">Недействительный адрес отправки Bitcoin</string>
@@ -957,7 +973,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Оплата
 &lt;accent&gt;счёта...&lt;/accent&gt;</string>
-    <string name="wallet__send_review">Проверить и Отправить</string>
+    <string name="wallet__send_review">Подтвердить</string>
     <string name="wallet__send_sent">Биткоины отправлены</string>
     <string name="wallet__send_swipe">Отправить</string>
     <string name="wallet__send_to">Кому</string>
@@ -1020,6 +1036,5 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="widgets__widget__edit_default">По умолчанию</string>
     <string name="widgets__widget__edit_description">Пожалуйста, выберите, какие поля вы хотите отображать в виджете {name}.</string>
     <string name="widgets__widget__nav_title">Виджет</string>
-    <string name="widgets__widget__source">Источник</string>
     <string name="widgets__widgets">Виджеты</string>
 </resources>

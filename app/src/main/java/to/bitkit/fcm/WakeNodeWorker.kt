@@ -35,6 +35,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NotificationDetails
+import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
@@ -61,6 +62,7 @@ class WakeNodeWorker @AssistedInject constructor(
     private var notificationPayload: JsonObject? = null
 
     private val timeout = 2.minutes
+    private val slowWakeNodeThreshold = 10.seconds
     private val deliverSignal = CompletableDeferred<Unit>()
 
     override suspend fun doWork(): Result {
@@ -79,7 +81,7 @@ class WakeNodeWorker @AssistedInject constructor(
         }
 
         return runCatching {
-            measured(label = "doWork", context = TAG) {
+            measured(label = "doWork", context = TAG, slowThreshold = slowWakeNodeThreshold) {
                 lightningRepo.start(
                     walletIndex = 0,
                     timeout = timeout,
@@ -192,7 +194,7 @@ class WakeNodeWorker @AssistedInject constructor(
         showDetails: Boolean,
         hiddenBody: String,
     ) {
-        val sats = event.amountMsat / 1000u
+        val sats = msatCeilOf(event.amountMsat)
         // Save for UI to pick up
         cacheStore.setBackgroundReceive(
             NewTransactionSheetDetails(

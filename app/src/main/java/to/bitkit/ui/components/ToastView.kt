@@ -54,6 +54,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.Toast
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import kotlin.math.roundToInt
@@ -243,7 +244,7 @@ fun ToastView(
                 contentAlignment = Alignment.TopEnd
             ) {
                 IconButton(
-                    onClick = onDismiss,
+                    onClick = rememberDebouncedClick(onClick = onDismiss),
                     modifier = Modifier
                         .size(48.dp)
                         .padding(16.dp)

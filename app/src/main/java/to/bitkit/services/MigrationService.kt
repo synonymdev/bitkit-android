@@ -58,10 +58,11 @@ import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.toSettingsString
 import to.bitkit.models.widget.BlocksPreferences
-import to.bitkit.models.widget.FactsPreferences
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.PricePreferences
+import to.bitkit.models.widget.WeatherDataOption
 import to.bitkit.models.widget.WeatherPreferences
+import to.bitkit.models.widget.limitedToMax
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.services.core.Bip39Service
 import to.bitkit.utils.AppError
@@ -364,6 +365,7 @@ class MigrationService @Inject constructor(
     suspend fun markChannelRecoveryChecked() {
         val key = stringPreferencesKey(RN_CHANNEL_RECOVERY_CHECKED_KEY)
         rnMigrationStore.edit { it[key] = "true" }
+        Logger.info("markChannelRecoveryChecked", context = TAG)
     }
 
     suspend fun hasRNWalletData(): Boolean {
@@ -912,7 +914,6 @@ class MigrationService @Inject constructor(
                 enableAutoReadClipboard = settings.enableAutoReadClipboard ?: current.enableAutoReadClipboard,
                 enableSendAmountWarning = settings.enableSendAmountWarning ?: current.enableSendAmountWarning,
                 showWidgets = settings.showWidgets ?: current.showWidgets,
-                showWidgetTitles = settings.showWidgetTitles ?: current.showWidgetTitles,
                 defaultTransactionSpeed = when (settings.transactionSpeed) {
                     "fast" -> TransactionSpeed.Fast
                     "slow" -> TransactionSpeed.Slow
@@ -1013,6 +1014,7 @@ class MigrationService @Inject constructor(
                     message = item.message ?: "",
                     timestamp = timestampSecs,
                     preimage = item.preimage,
+                    contact = null,
                     createdAt = timestampSecs,
                     updatedAt = timestampSecs,
                     seenAt = timestampSecs,
@@ -1122,14 +1124,10 @@ class MigrationService @Inject constructor(
                     else -> GraphPeriod.ONE_DAY
                 }
 
-                val showSource = priceJson["showSource"]?.jsonPrimitive?.content
-                    ?.toBooleanStrictOrNull() ?: false
-
                 widgetsStore.updatePricePreferences(
                     PricePreferences(
                         enabledPairs = selectedPairs,
                         period = period,
-                        showSource = showSource
                     )
                 )
             }.onFailure {
@@ -1142,19 +1140,18 @@ class MigrationService @Inject constructor(
                 val weatherJson = json.decodeFromString<JsonObject>(
                     weatherData.decodeToString()
                 )
-                val showTitle = weatherJson["showStatus"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: true
-                val showDescription = weatherJson["showText"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
                 val showCurrentFee = weatherJson["showMedian"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
                 val showNextBlockFee = weatherJson["showNextBlockFee"]?.jsonPrimitive?.content
                     ?.toBooleanStrictOrNull() ?: false
 
+                val selectedOption = when {
+                    showCurrentFee -> WeatherDataOption.CURRENT_FEE_FIAT
+                    showNextBlockFee -> WeatherDataOption.NEXT_BLOCK_INCLUSION
+                    else -> WeatherDataOption.CURRENT_FEE_FIAT
+                }
+
                 widgetsStore.updateWeatherPreferences(
-                    WeatherPreferences(
-                        showTitle = showTitle,
-                        showDescription = showDescription,
-                        showCurrentFee = showCurrentFee,
-                        showNextBlockFee = showNextBlockFee
-                    )
+                    WeatherPreferences(selectedOption = selectedOption)
                 )
             }.onFailure {
                 Logger.error("Failed to migrate weather preferences: $it", it, context = TAG)
@@ -1193,7 +1190,6 @@ class MigrationService @Inject constructor(
                 val showTransactions = blocksJson["transactionCount"]?.jsonPrimitive?.content
                     ?.toBooleanStrictOrNull() ?: false
                 val showSize = blocksJson["size"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-                val showSource = blocksJson["showSource"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
 
                 widgetsStore.updateBlocksPreferences(
                     BlocksPreferences(
@@ -1202,28 +1198,10 @@ class MigrationService @Inject constructor(
                         showDate = showDate,
                         showTransactions = showTransactions,
                         showSize = showSize,
-                        showSource = showSource
-                    )
+                    ).limitedToMax()
                 )
             }.onFailure {
                 Logger.error("Failed to migrate blocks preferences: $it", it, context = TAG)
-            }
-        }
-
-        widgetOptions["facts"]?.let { factsData ->
-            runCatching {
-                val factsJson = json.decodeFromString<JsonObject>(
-                    factsData.decodeToString()
-                )
-                val showSource = factsJson["showSource"]?.jsonPrimitive?.content?.toBooleanStrictOrNull() ?: false
-
-                widgetsStore.updateFactsPreferences(
-                    FactsPreferences(
-                        showSource = showSource
-                    )
-                )
-            }.onFailure {
-                Logger.error("Failed to migrate facts preferences: $it", it, context = TAG)
             }
         }
     }
@@ -1488,6 +1466,7 @@ class MigrationService @Inject constructor(
             }
 
             if (monitors.isNotEmpty()) {
+                Logger.info("Found ${monitors.size} channel monitors", context = TAG)
                 pendingChannelMigration = PendingChannelMigration(
                     channelManager = managerData,
                     channelMonitors = monitors,
@@ -1643,6 +1622,7 @@ class MigrationService @Inject constructor(
                     )
                     null
                 }
+
                 else -> TransferEntity(
                     id = txId,
                     type = TransferType.TO_SPENDING,
@@ -1995,6 +1975,7 @@ class MigrationService @Inject constructor(
                     confirmTimestamp = item.confirmTimestamp?.let { (it / MS_PER_SEC).toULong() },
                     channelId = item.channelId,
                     transferTxId = item.transferTxId,
+                    contact = null,
                     doesExist = item.exists ?: true,
                     createdAt = activityTimestamp,
                     updatedAt = activityTimestamp,
@@ -2119,18 +2100,8 @@ class MigrationService @Inject constructor(
                 put("date", getBool(prefs, "date", "showDate", defaultValue = true))
                 put("transactionCount", getBool(prefs, "transactionCount", "showTransactions", defaultValue = false))
                 put("size", getBool(prefs, "size", "showSize", defaultValue = false))
-                put("showSource", getBool(prefs, "showSource", defaultValue = false))
             }
             result["blocks"] = blocksOptions.toString().encodeToByteArray()
-        }
-
-        val factsPrefs = widgetsDict["factsPreferences"]?.jsonObject
-            ?: widgetsDict["facts"]?.jsonObject
-        factsPrefs?.let { prefs ->
-            val factsOptions = buildJsonObject {
-                put("showSource", getBool(prefs, "showSource", defaultValue = false))
-            }
-            result["facts"] = factsOptions.toString().encodeToByteArray()
         }
 
         return result
@@ -2181,7 +2152,6 @@ data class RNSettings(
     val enableQuickpay: Boolean? = null,
     val quickpayAmount: Int? = null,
     val showWidgets: Boolean? = null,
-    val showWidgetTitles: Boolean? = null,
     val transactionSpeed: String? = null,
     val customFeeRate: Int? = null,
     val hideBalance: Boolean? = null,

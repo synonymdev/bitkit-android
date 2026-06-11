@@ -1,15 +1,12 @@
 package to.bitkit.ui.screens.wallets.activity
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -18,12 +15,17 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
-import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
+import to.bitkit.ui.scaffold.PinnedTabsScaffold
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListFilter
 import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
@@ -48,10 +50,8 @@ fun AllActivityScreen(
     val startDate by viewModel.startDate.collectAsStateWithLifecycle()
 
     val selectedTab by viewModel.selectedTab.collectAsStateWithLifecycle()
-    val tabs = ActivityTab.entries
+    val tabs = activityTabs
     val currentTabIndex = tabs.indexOf(selectedTab)
-
-    BackHandler { onBack() }
 
     AllActivityScreenContent(
         filteredActivities = filteredActivities,
@@ -68,20 +68,19 @@ fun AllActivityScreen(
         onTagClick = { app.showSheet(Sheet.ActivityTagSelector) },
         onDateRangeClick = { app.showSheet(Sheet.ActivityDateRangeSelector) },
         onActivityItemClick = onActivityItemClick,
-        onEmptyActivityRowClick = { app.showSheet(Sheet.Receive) },
+        onEmptyActivityRowClick = { app.showSheet(Sheet.Receive()) },
     )
 }
 
 @Composable
-@OptIn(ExperimentalHazeMaterialsApi::class)
 private fun AllActivityScreenContent(
-    filteredActivities: List<Activity>?,
+    filteredActivities: ImmutableList<Activity>?,
     searchText: String,
     onSearchTextChange: (String) -> Unit,
     hasTagFilter: Boolean,
-    selectedTags: Set<String>,
+    selectedTags: ImmutableSet<String>,
     hasDateRangeFilter: Boolean,
-    tabs: List<ActivityTab>,
+    tabs: ImmutableList<ActivityTab>,
     currentTabIndex: Int,
     onRemoveTag: (String) -> Unit,
     onTabChange: (Int) -> Unit,
@@ -91,6 +90,12 @@ private fun AllActivityScreenContent(
     onActivityItemClick: (String) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
 ) {
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(currentTabIndex) {
+        listState.scrollToItem(0)
+    }
+
     Column(
         modifier = Modifier.screen()
     ) {
@@ -102,33 +107,30 @@ private fun AllActivityScreenContent(
             },
         )
 
-        ActivityListFilter(
-            searchText = searchText,
-            onSearchTextChange = onSearchTextChange,
-            hasTagFilter = hasTagFilter,
-            hasDateRangeFilter = hasDateRangeFilter,
-            onTagClick = onTagClick,
-            selectedTags = selectedTags,
-            onRemoveTag = onRemoveTag,
-            onDateRangeClick = onDateRangeClick,
-            tabs = tabs,
-            currentTabIndex = currentTabIndex,
-            onTabChange = { onTabChange(tabs.indexOf(it)) },
-            modifier = Modifier.padding(horizontal = 16.dp)
-
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // List
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-        ) {
+        PinnedTabsScaffold(
+            header = {
+                ActivityListFilter(
+                    searchText = searchText,
+                    onSearchTextChange = onSearchTextChange,
+                    hasTagFilter = hasTagFilter,
+                    hasDateRangeFilter = hasDateRangeFilter,
+                    onTagClick = onTagClick,
+                    selectedTags = selectedTags,
+                    onRemoveTag = onRemoveTag,
+                    onDateRangeClick = onDateRangeClick,
+                    tabs = tabs,
+                    currentTabIndex = currentTabIndex,
+                    onTabChange = { onTabChange(tabs.indexOf(it)) },
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
+        ) { topPadding ->
             ActivityListGrouped(
                 items = filteredActivities,
                 onActivityItemClick = onActivityItemClick,
                 onEmptyActivityRowClick = onEmptyActivityRowClick,
-                contentPadding = PaddingValues(top = 0.dp),
+                listState = listState,
+                contentPadding = PaddingValues(top = topPadding + 16.dp),
                 modifier = Modifier
                     .swipeToChangeTab(
                         currentTabIndex = currentTabIndex,
@@ -142,6 +144,8 @@ private fun AllActivityScreenContent(
     }
 }
 
+private val activityTabs = ActivityTab.entries.toImmutableList()
+
 @Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
@@ -151,9 +155,9 @@ private fun Preview() {
             searchText = "",
             onSearchTextChange = {},
             hasTagFilter = false,
-            selectedTags = setOf(),
+            selectedTags = persistentSetOf(),
             hasDateRangeFilter = false,
-            tabs = ActivityTab.entries,
+            tabs = activityTabs,
             currentTabIndex = 0,
             onTabChange = {},
             onBackClick = {},
@@ -171,13 +175,13 @@ private fun Preview() {
 private fun PreviewEmpty() {
     AppThemeSurface {
         AllActivityScreenContent(
-            filteredActivities = emptyList(),
+            filteredActivities = persistentListOf(),
             searchText = "",
             onSearchTextChange = {},
             hasTagFilter = false,
-            selectedTags = setOf("tag1", "tag2"),
+            selectedTags = persistentSetOf("tag1", "tag2"),
             hasDateRangeFilter = false,
-            tabs = ActivityTab.entries,
+            tabs = activityTabs,
             currentTabIndex = 0,
             onTabChange = {},
             onBackClick = {},

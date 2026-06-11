@@ -19,3 +19,10 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# btleplug (droidplug) Android Bluetooth support
+# These classes are loaded via JNI from Rust code
+-keep class com.nonpolynomial.btleplug.** { *; }
+
+# jni-utils support library for btleplug
+-keep class io.github.gedgygedgy.rust.** { *; }

@@ -3,26 +3,16 @@ package to.bitkit.ui.screens.widgets.price
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -32,19 +22,22 @@ import to.bitkit.data.dto.price.GraphPeriod
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.widget.PricePreferences
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.Headline
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsButtonValue
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.DrawerNavIcon
-import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
+import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
+import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.Insets
 
 @Composable
 fun PricePreviewScreen(
@@ -52,13 +45,14 @@ fun PricePreviewScreen(
     onClose: () -> Unit,
     onBack: () -> Unit,
     navigateEditWidget: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    val showWidgetTitles by priceViewModel.showWidgetTitles.collectAsStateWithLifecycle()
     val customPricePreferences by priceViewModel.customPreferences.collectAsStateWithLifecycle()
     val price by priceViewModel.currentPrice.collectAsStateWithLifecycle()
     val previewPrice by priceViewModel.previewPrice.collectAsStateWithLifecycle()
     val isPriceWidgetEnabled by priceViewModel.isPriceWidgetEnabled.collectAsStateWithLifecycle()
     val isLoading by priceViewModel.isLoading.collectAsStateWithLifecycle()
+    val draftSize by priceViewModel.draftSize.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         priceViewModel.refreshOnDisplay()
@@ -76,17 +70,18 @@ fun PricePreviewScreen(
         onBack = onBack,
         isPriceWidgetEnabled = isPriceWidgetEnabled,
         pricePreferences = customPricePreferences,
-        showWidgetTitles = showWidgetTitles,
         priceDTO = previewPrice ?: price,
         onClickEdit = navigateEditWidget,
         onClickDelete = {
-            priceViewModel.removeWidget()
-            onClose()
+            priceViewModel.removeWidget(onComplete = onClose)
         },
         onClickSave = {
             priceViewModel.savePreferences()
         },
-        isLoading = isLoading
+        isLoading = isLoading,
+        initialSize = draftSize,
+        onSizeSelected = priceViewModel::setSize,
+        modifier = modifier
     )
 }
 
@@ -96,126 +91,119 @@ fun PricePreviewContent(
     onClickEdit: () -> Unit,
     onClickDelete: () -> Unit,
     onClickSave: () -> Unit,
-    showWidgetTitles: Boolean,
     isPriceWidgetEnabled: Boolean,
     pricePreferences: PricePreferences,
     priceDTO: PriceDTO?,
     isLoading: Boolean,
+    modifier: Modifier = Modifier,
+    initialSize: WidgetSize = WidgetSize.WIDE,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
-    ScreenColumn(
-        modifier = Modifier.testTag("price_preview_screen")
+    Column(
+        modifier = modifier
+            .widgetSheetContent()
+            .testTag("price_preview_screen")
     ) {
-        AppTopBar(
-            titleText = stringResource(R.string.widgets__widget__nav_title),
-            onBackClick = onBack,
-            actions = { DrawerNavIcon() },
+        SheetTopBar(
+            titleText = stringResource(R.string.widgets__price__name),
+            onBack = onBack,
         )
 
         Column(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .testTag("WidgetEditScrollView")
         ) {
-            Spacer(modifier = Modifier.height(26.dp))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("header_row"),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Headline(
-                    text = AnnotatedString(stringResource(R.string.widgets__price__name)),
-                    modifier = Modifier
-                        .width(180.dp)
-                        .testTag("widget_title")
-                )
-                Icon(
-                    painter = painterResource(R.drawable.widget_chart_line),
-                    contentDescription = null,
-                    tint = Color.Unspecified,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .testTag("widget_icon")
-                )
-            }
+            VerticalSpacer(16.dp)
 
             BodyM(
                 text = stringResource(R.string.widgets__price__description),
                 color = Colors.White64,
-                modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .testTag("widget_description")
+                modifier = Modifier.testTag("widget_description")
             )
+
+            VerticalSpacer(16.dp)
 
             HorizontalDivider(
                 modifier = Modifier.testTag("divider")
             )
 
             SettingsButtonRow(
-                title = stringResource(R.string.widgets__widget__edit),
+                title = stringResource(R.string.widgets__widget__settings),
                 value = SettingsButtonValue.StringValue(
                     if (pricePreferences == PricePreferences()) {
                         stringResource(R.string.widgets__widget__edit_default)
                     } else {
                         stringResource(R.string.widgets__widget__edit_custom)
-                    }
+                    },
                 ),
                 onClick = onClickEdit,
                 modifier = Modifier.testTag("WidgetEdit")
             )
 
-            Spacer(modifier = Modifier.weight(1f))
-
-            Text13Up(
-                stringResource(R.string.common__preview),
-                color = Colors.White64,
-                modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .testTag("preview_label")
-            )
-
-            priceDTO?.let { dto ->
-                PriceCard(
+            if (priceDTO != null) {
+                WidgetSizeCarousel(
+                    smallContent = {
+                        PriceCardSmall(
+                            pricePreferences = pricePreferences,
+                            priceDTO = priceDTO,
+                            modifier = Modifier
+                                .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+                                .testTag("price_card_small")
+                        )
+                    },
+                    wideContent = {
+                        PriceCard(
+                            pricePreferences = pricePreferences,
+                            priceDTO = priceDTO,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("price_card_wide")
+                        )
+                    },
+                    initialSize = initialSize,
+                    onSizeSelected = onSizeSelected,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("price_card"),
-                    showWidgetTitle = showWidgetTitles,
-                    pricePreferences = pricePreferences,
-                    priceDTO = dto
+                        .weight(1f)
+                        .testTag("price_preview_carousel")
                 )
+            } else {
+                FillHeight()
             }
         }
 
         Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier
-                .padding(vertical = 21.dp, horizontal = 16.dp)
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = Insets.Bottom + 16.dp,
+                    top = 16.dp,
+                )
                 .fillMaxWidth()
-                .testTag("buttons_row"),
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                .testTag("buttons_row")
         ) {
             if (isPriceWidgetEnabled) {
                 SecondaryButton(
                     text = stringResource(R.string.common__delete),
+                    fullWidth = false,
+                    onClick = onClickDelete,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("WidgetDelete"),
-                    fullWidth = false,
-                    onClick = onClickDelete
+                        .testTag("WidgetDelete")
                 )
             }
 
             PrimaryButton(
                 text = stringResource(R.string.common__save),
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("WidgetSave"),
                 fullWidth = false,
                 isLoading = isLoading,
-                onClick = onClickSave
+                onClick = onClickSave,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("WidgetSave")
             )
         }
     }
@@ -227,84 +215,45 @@ private fun Preview() {
     AppThemeSurface {
         PricePreviewContent(
             onBack = {},
-            showWidgetTitles = true,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
             pricePreferences = PricePreferences(),
-            priceDTO = PriceDTO(
-                source = "Bitfinex.com",
-                widgets = listOf(
-                    PriceWidgetData(
-                        pair = TradingPair.BTC_USD,
-                        change = Change(
-                            isPositive = true,
-                            formatted = "$ 20,326"
-                        ),
-                        price = "$20,326",
-                        pastValues = listOf(1.0, 2.0, 3.0, 4.0),
-                        period = GraphPeriod.ONE_DAY,
-                    ),
-                    PriceWidgetData(
-                        pair = TradingPair.BTC_EUR,
-                        change = Change(
-                            isPositive = false,
-                            formatted = "€ 20,326"
-                        ),
-                        price = "€ 20,326",
-                        pastValues = listOf(1.0, 2.0, 3.0, 4.0),
-                        period = GraphPeriod.ONE_DAY,
-                    )
-                )
-            ),
+            priceDTO = SAMPLE_PRICE_DTO,
             isPriceWidgetEnabled = false,
-            isLoading = false
+            isLoading = false,
         )
     }
 }
 
 @Preview(showBackground = true)
 @Composable
-private fun Preview2() {
+private fun PreviewWithDelete() {
     AppThemeSurface {
         PricePreviewContent(
             onBack = {},
-            showWidgetTitles = false,
             onClickEdit = {},
             onClickDelete = {},
             onClickSave = {},
             pricePreferences = PricePreferences(
-                enabledPairs = listOf(TradingPair.BTC_USD, TradingPair.BTC_EUR),
+                enabledPairs = listOf(TradingPair.BTC_USD),
                 period = GraphPeriod.ONE_WEEK,
-                showSource = true
             ),
-            priceDTO = PriceDTO(
-                source = "Bitfinex.com",
-                widgets = listOf(
-                    PriceWidgetData(
-                        pair = TradingPair.BTC_USD,
-                        change = Change(
-                            isPositive = true,
-                            formatted = "$ 20,326"
-                        ),
-                        price = "$20,326",
-                        pastValues = listOf(1.0, 2.0, 3.0, 4.0),
-                        period = GraphPeriod.ONE_DAY,
-                    ),
-                    PriceWidgetData(
-                        pair = TradingPair.BTC_EUR,
-                        change = Change(
-                            isPositive = false,
-                            formatted = "€ 20,326"
-                        ),
-                        price = "€ 20,326",
-                        pastValues = listOf(1.0, 2.0, 3.0, 4.0),
-                        period = GraphPeriod.ONE_DAY,
-                    )
-                )
-            ),
+            priceDTO = SAMPLE_PRICE_DTO,
             isPriceWidgetEnabled = true,
-            isLoading = false
+            isLoading = false,
         )
     }
 }
+
+private val SAMPLE_PRICE_DTO = PriceDTO(
+    widgets = listOf(
+        PriceWidgetData(
+            pair = TradingPair.BTC_USD,
+            change = Change(isPositive = true, formatted = "+1.24%"),
+            price = "75,326",
+            pastValues = listOf(1.0, 2.0, 1.5, 3.0, 2.5, 4.0),
+            period = GraphPeriod.ONE_DAY,
+        ),
+    ),
+)

@@ -40,6 +40,7 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.TransactionDetails
+import kotlinx.collections.immutable.persistentMapOf
 import to.bitkit.R
 import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
@@ -298,7 +299,7 @@ private fun ColumnScope.OnchainDetails(
     )
     if (txDetails != null) {
         Section(
-            title = localizedPlural(R.string.wallet__activity_input, mapOf("count" to txDetails.inputs.size)),
+            title = localizedPlural(R.string.wallet__activity_input, persistentMapOf("count" to txDetails.inputs.size)),
             valueContent = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     txDetails.inputs.forEach { input ->
@@ -309,7 +310,10 @@ private fun ColumnScope.OnchainDetails(
             },
         )
         Section(
-            title = localizedPlural(R.string.wallet__activity_output, mapOf("count" to txDetails.outputs.size)),
+            title = localizedPlural(
+                R.string.wallet__activity_output,
+                persistentMapOf("count" to txDetails.outputs.size),
+            ),
             valueContent = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     txDetails.outputs.forEach { output ->

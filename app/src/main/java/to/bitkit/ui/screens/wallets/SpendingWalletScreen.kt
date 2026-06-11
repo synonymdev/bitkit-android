@@ -3,15 +3,18 @@ package to.bitkit.ui.screens.wallets
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBarsPadding
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -25,7 +28,13 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.synonym.bitkitcore.Activity
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.createChannelDetails
@@ -35,24 +44,29 @@ import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.IncomingTransfer
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.StatusBarSpacer
 import to.bitkit.ui.components.TabBar
+import to.bitkit.ui.components.TopBarSpacer
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
-import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.wallets.activity.components.ActivityListGrouped
+import to.bitkit.ui.screens.wallets.activity.components.activityListGroupedItems
 import to.bitkit.ui.screens.wallets.activity.utils.previewLightningActivityItems
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.theme.TopBarGradient
 import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun SpendingWalletScreen(
-    channels: List<ChannelDetails>,
-    lightningActivities: List<Activity>,
+    channels: ImmutableList<ChannelDetails>,
+    lightningActivities: ImmutableList<Activity>,
     onAllActivityButtonClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
     onTransferToSavingsClick: () -> Unit,
+    onTransferFromSavingsClick: () -> Unit,
     onBackClick: () -> Unit,
     balances: BalanceState = LocalBalances.current,
 ) {
@@ -66,33 +80,60 @@ fun SpendingWalletScreen(
         val hasChannels = channels.isNotEmpty()
         mutableStateOf(hasLnBalance && hasChannels)
     }
+    val canTransferFromSavings by remember(showEmptyState, balances.totalOnchainSats) {
+        mutableStateOf(showEmptyState && balances.totalOnchainSats > 0uL)
+    }
+    val hazeState = rememberHazeState()
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Colors.Black)
+            .blockPointerInputPassthrough()
     ) {
-        Image(
-            painter = painterResource(id = R.drawable.coin_stack_x_2),
-            contentDescription = null,
-            contentScale = ContentScale.Fit,
+        // Background layer: hazeSource must be a sibling of hazeEffect, not a parent.
+        // Haze can't blur an ancestor — source and effect must be at the same level.
+        Box(
             modifier = Modifier
-                .align(Alignment.TopEnd)
-                .offset(x = (155).dp)
-                .size(330.dp)
-        )
-        ScreenColumn(noBackground = true) {
-            AppTopBar(
-                titleText = stringResource(R.string.wallet__spending__title),
-                icon = R.drawable.ic_ln_circle,
-                onBackClick = onBackClick,
-                actions = {
-                    DrawerNavIcon()
-                }
+                .matchParentSize()
+                .background(Colors.Black)
+                .hazeSource(hazeState)
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.coin_stack_x_2),
+                contentDescription = null,
+                contentScale = ContentScale.Fit,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .offset(x = (155).dp)
+                    .size(330.dp)
+                    .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Vertical))
             )
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp)
-            ) {
+        }
+
+        AppTopBar(
+            titleText = stringResource(R.string.wallet__spending__title),
+            icon = R.drawable.ic_ln_circle,
+            onBackClick = onBackClick,
+            actions = {
+                DrawerNavIcon()
+            },
+            modifier = Modifier
+                .hazeEffect(state = hazeState) {
+                    mask = TopBarGradient
+                }
+                .background(TopBarGradient)
+                .zIndex(1f)
+                .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Vertical))
+        )
+
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+        ) {
+            item { StatusBarSpacer() }
+            item { TopBarSpacer() }
+            item {
                 BalanceHeaderView(
                     sats = balances.totalLightningSats.toLong(),
                     testTag = "TotalBalance",
@@ -100,18 +141,42 @@ fun SpendingWalletScreen(
                         .fillMaxWidth()
                         .testTag("TotalBalance")
                 )
+            }
 
-                if (balances.balanceInTransferToSpending > 0u) {
+            if (balances.balanceInTransferToSpending > 0u) {
+                item {
                     IncomingTransfer(
                         amount = balances.balanceInTransferToSpending,
                         modifier = Modifier.padding(vertical = 8.dp)
                     )
                 }
+            }
 
-                if (!showEmptyState) {
-                    Spacer(modifier = Modifier.height(32.dp))
+            if (canTransferFromSavings) {
+                item { VerticalSpacer(32.dp) }
 
-                    if (canTransfer) {
+                item {
+                    SecondaryButton(
+                        onClick = onTransferFromSavingsClick,
+                        text = stringResource(R.string.lightning__funding__button1),
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_transfer),
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        hazeState = hazeState,
+                        modifier = Modifier.testTag("TransferFromSavings")
+                    )
+                }
+            }
+
+            if (!showEmptyState) {
+                item { VerticalSpacer(32.dp) }
+
+                if (canTransfer) {
+                    item {
                         SecondaryButton(
                             onClick = onTransferToSavingsClick,
                             text = stringResource(R.string.wallet__transfer_to_savings),
@@ -119,23 +184,25 @@ fun SpendingWalletScreen(
                                 Icon(
                                     painter = painterResource(R.drawable.ic_transfer),
                                     contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
+                                    modifier = Modifier.size(16.dp)
                                 )
                             },
+                            hazeState = hazeState,
                             modifier = Modifier.testTag("TransferToSavings")
                         )
                     }
-
-                    ActivityListGrouped(
-                        items = lightningActivities,
-                        onActivityItemClick = onActivityItemClick,
-                        onEmptyActivityRowClick = onEmptyActivityRowClick,
-                        showFooter = true,
-                        onAllActivityButtonClick = onAllActivityButtonClick,
-                    )
                 }
+
+                activityListGroupedItems(
+                    items = lightningActivities,
+                    onActivityItemClick = onActivityItemClick,
+                    onEmptyActivityRowClick = onEmptyActivityRowClick,
+                    showFooter = true,
+                    onAllActivityButtonClick = onAllActivityButtonClick,
+                )
             }
         }
+
         if (showEmptyState) {
             EmptyStateView(
                 text = stringResource(R.string.wallet__spending__onboarding).withAccent(accentColor = Colors.Purple),
@@ -153,12 +220,13 @@ private fun Preview() {
     AppThemeSurface {
         Box {
             SpendingWalletScreen(
-                channels = listOf(createChannelDetails()),
+                channels = persistentListOf(createChannelDetails()),
                 lightningActivities = previewLightningActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
                 onTransferToSavingsClick = {},
+                onTransferFromSavingsClick = {},
                 onBackClick = {},
                 balances = BalanceState(totalLightningSats = 50_000u),
             )
@@ -173,12 +241,13 @@ private fun PreviewTransfer() {
     AppThemeSurface {
         Box {
             SpendingWalletScreen(
-                channels = listOf(createChannelDetails()),
+                channels = persistentListOf(createChannelDetails()),
                 lightningActivities = previewLightningActivityItems(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
                 onTransferToSavingsClick = {},
+                onTransferFromSavingsClick = {},
                 onBackClick = {},
                 balances = BalanceState(
                     totalLightningSats = 50_000u,
@@ -196,12 +265,13 @@ private fun PreviewNoActivity() {
     AppThemeSurface {
         Box {
             SpendingWalletScreen(
-                channels = listOf(createChannelDetails()),
-                lightningActivities = emptyList(),
+                channels = persistentListOf(createChannelDetails()),
+                lightningActivities = persistentListOf(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
                 onTransferToSavingsClick = {},
+                onTransferFromSavingsClick = {},
                 onBackClick = {},
                 balances = BalanceState(totalLightningSats = 50_000u),
             )
@@ -216,13 +286,35 @@ private fun PreviewEmpty() {
     AppThemeSurface {
         Box {
             SpendingWalletScreen(
-                channels = emptyList(),
-                lightningActivities = emptyList(),
+                channels = persistentListOf(),
+                lightningActivities = persistentListOf(),
                 onAllActivityButtonClick = {},
                 onActivityItemClick = {},
                 onEmptyActivityRowClick = {},
                 onTransferToSavingsClick = {},
+                onTransferFromSavingsClick = {},
                 onBackClick = {},
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewEmptyWithSavings() {
+    AppThemeSurface {
+        Box {
+            SpendingWalletScreen(
+                channels = persistentListOf(),
+                lightningActivities = persistentListOf(),
+                onAllActivityButtonClick = {},
+                onActivityItemClick = {},
+                onEmptyActivityRowClick = {},
+                onTransferToSavingsClick = {},
+                onTransferFromSavingsClick = {},
+                onBackClick = {},
+                balances = BalanceState(totalOnchainSats = 100_000u),
             )
             TabBar()
         }

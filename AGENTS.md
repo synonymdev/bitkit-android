@@ -1,48 +1,55 @@
 # CLAUDE.md
 
-This file provides guidance to AI agents like Cursor/Claude Code/Codex/WARP when working with code in this repository.
+This file provides guidance to Codex, Claude Code, and Cursor when working with code in this repository.
+
+## Agent Commands
+
+Durable shared agent command specs live in `.agents/commands/`. For PR creation, follow `.agents/commands/pr.md`; `.claude/commands` is a compatibility symlink to the same files.
 
 ## Build Commands
 
 ```sh
 # compile
-./gradlew compileDevDebugKotlin
+just compile
+
+# Build, install, launch dev app on connected target
+just run
 
 # Build for dev
-./gradlew assembleDevDebug
+just build
 
 # Run unit tests
-./gradlew testDevDebugUnitTest
+just test
 
 # Run specific unit test file
-./gradlew testDevDebugUnitTest --tests LightningRepoTest
+just test file LightningRepoTest
 
 # Run instrumented tests
-./gradlew connectedDevDebugAndroidTest
+just test android
 
 # Build for E2E tests (UI hooks enabled, local Electrum by default)
-E2E=true ./gradlew assembleDevRelease
+just e2e
 
 # Build for E2E tests with geoblocking disabled
-GEO=false E2E=true ./gradlew assembleDevRelease
+just e2e no geo
 
 # Build for E2E tests using network Electrum (not local; staging/mainnet based on flavor)
-E2E=true E2E_BACKEND=network ./gradlew assembleTnetRelease
+just e2e network assembleTnetRelease
 
 # Lint using detekt
-./gradlew detekt
+just lint
 
 # Auto-format using detekt
-./gradlew detekt --auto-correct
+just format
 
 # Update detekt baseline
-./gradlew detektBaseline
+just lint baseline
 
 # Install dev build
-./gradlew installDevDebug
+just install
 
 # Clean build artifacts
-./gradlew clean
+just clean
 ```
 
 ## Architecture Overview
@@ -58,7 +65,7 @@ E2E=true E2E_BACKEND=network ./gradlew assembleTnetRelease
 - **State Management**: StateFlow, SharedFlow
 - **Navigation**: Compose Navigation with strongly typed routes
 - **Push Notifications**: Firebase
-- **Storage**: DataStore with json files
+- **Storage**: DataStore with JSON files
 
 ### Project Structure
 
@@ -157,18 +164,21 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 ### Rules
 
 - USE coding rules from `.cursor/default.rules.mdc`
-- ALWAYS run `./gradlew compileDevDebugKotlin` after code changes to verify code compiles
-- ALWAYS run `./gradlew testDevDebugUnitTest` after code changes to verify tests succeed and fix accordingly
-- ALWAYS run `./gradlew detekt` after code changes to check for new lint issues and fix accordingly
+- For multi-step changes, stacked PR surgery, and review follow-up with several small edits, batch validation instead of running the full build/check suite after every edit. Run the relevant Gradle checks once the coherent change set is ready, before updating a PR or pushing.
+- Still run `just compile`, `just test`, and `just lint` before the final PR update/push for code changes, and fix failures before pushing.
+- After fixing validation failures, rerun the narrowest useful check that proves the fix. If only test files changed, prefer the targeted test task and a test-focused lint/detekt check when the project tooling supports it; otherwise use the standard detekt task before pushing.
+- Use narrower checks earlier only when they answer an immediate risk, e.g. a single unit test after touching focused business logic or a Kotlin compile after a risky refactor.
 - ALWAYS ask clarifying questions to ensure an optimal plan when encountering functional or technical uncertainties in requests
 - ALWAYS when fixing lint or test failures prefer to do the minimal amount of changes to fix the issues
 - USE single-line commit messages under 50 chars; use conventional commit messages template format: `feat: add something new`
 - USE `git diff HEAD sourceFilePath` to diff an uncommitted file against the last commit
 - NEVER capitalize words in commit messages
-- ALWAYS run `git status` to check ALL uncommitted changes after completing any code edits, then reply with 3 commit message suggestions covering the ENTIRE uncommitted diff
+- ALWAYS create a `*-backup` branch before performing a rebase
+- ALWAYS suggest 3 commit messages with confidence score ratings, e.g. `fix: show toast on resolution (90%)`. In plan mode, include them at the end of the plan. If the user picks one via plan update, commit after implementation. Outside plan mode, suggest after implementation completes. In both cases, run `git status` to check ALL uncommitted changes after completing code edits
 - ALWAYS check existing code patterns before implementing new features
 - USE existing extensions and utilities rather than creating new ones
-- ALWAYS consider applying YAGNI (You Ain't Gonna Need It) principle for new code
+- ALWAYS use or create `Context` extension properties in `ext/Context.kt` instead of raw `context.getSystemService()` casts
+- ALWAYS apply the YAGNI (You Ain't Gonna Need It) principle for new code
 - ALWAYS reuse existing constants
 - ALWAYS ensure a method exist before calling it
 - ALWAYS remove unused code after refactors
@@ -179,6 +189,9 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS pass the TAG as context to `Logger` calls, e.g. `Logger.debug("message", context = TAG)`
 - NEVER add `e = ` named parameter to Logger calls
 - NEVER manually append the `Throwable`'s message or any other props to the string passed as the 1st param of `Logger.*` calls, its internals are already enriching the final log message with the details of the `Throwable` passed via the `e` arg
+- ALWAYS wrap parameter values in log messages with single quotes, e.g. `Logger.info("Received event '$eventName'", context = TAG)`
+- ALWAYS start log messages with a verb, e.g. `Logger.info("Received payment for '$hash'", context = TAG)`
+- ALWAYS keep log names, tags, labels, and references mechanically traceable to the caller. Do not rewrite them into long descriptions.
 - ALWAYS log errors at the final handling layer where the error is acted upon, not in intermediate layers that just propagate it
 - ALWAYS use the Result API instead of try-catch
 - NEVER wrap methods returning `Result<T>` in try-catch
@@ -188,13 +201,15 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - NEVER hardcode strings and always preserve string resources
 - ALWAYS localize in ViewModels using injected `@ApplicationContext`, e.g. `context.getString()`
 - ALWAYS use `remember` for expensive Compose computations
-- ALWAYS add modifiers to the last place in the argument list when calling composable functions
-- NEVER add parameters with default values BEFORE the `modifier` parameter in composable functions - modifier must be the FIRST optional parameter
+- ALWAYS declare `modifier: Modifier = Modifier,` as the FIRST optional parameter in composable declarations
+- ALWAYS pass `modifier = ...` as the LAST argument in composable calls
+- ALWAYS add trailing commas in multi-line declarations, EXCEPT after a `modifier = ...` last argument — never add a trailing comma there, whether the modifier is a single call (`modifier = Modifier.weight(1f)`) or a chain (`modifier = Modifier.fillMaxWidth().testTag("foo")`)
+- ALWAYS use `navController.navigateTo(route)` for simple navigation; NEVER use raw `navController.navigate(route)` — `navigateTo` prevents duplicate destinations
 - ALWAYS prefer `VerticalSpacer`, `HorizontalSpacer`, `FillHeight` and `FillWidth` over `Spacer` when applicable
 - PREFER declaring small dependant classes, constants, interfaces or top-level functions in the same file with the core class where these are used
 - ALWAYS create data classes for state AFTER viewModel class in same file
 - ALWAYS return early where applicable, PREFER guard-like `if` conditions like `if (condition) return`
-- ALWAYS write the documentation for new features as markdown files in `docs/`
+- USE `docs/` as target dir of saved files when asked to create documentation for new features
 - NEVER write code in the documentation files
 - NEVER add code comments to private functions, classes, etc
 - ALWAYS use `_uiState.update { }`, NEVER use `_stateFlow.value =`
@@ -203,19 +218,45 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS be mindful of thread safety when working with mutable lists & state
 - ALWAYS split screen composables into parent accepting viewmodel + inner private child accepting state and callbacks `Content()`
 - ALWAYS name lambda parameters in a composable function using present tense, NEVER use past tense
-- NEVER use `wheneverBlocking` in unit test expression body functions wrapped in a `= test {}` lambda
-- ALWAYS wrap unit tests `setUp` methods mocking suspending calls with `runBlocking`, e.g `setUp() = runBlocking {}`
-- ALWAYS add business logic to Repository layer via methods returning `Result<T>` and use it in ViewModels
-- ALWAYS order upstream architectural data flow this way: `UI -> ViewModel -> Repository -> RUST` and vice-versa for downstream
-- ALWAYS add new localizable string string resources in alphabetical order in `strings.xml`
+- ALWAYS use `whenever { mock.suspendCall() }` for suspend stubs if not inside `test{}` fn blocks
+- ALWAYS use `whenever(mock.call())` for non-suspend stubs and for suspend stubs if inside `test{}` fn blocks
+- NEVER use the old, deprecated `wheneverBlocking`
+- ALWAYS prefer `kotlin.test` asserts over `org.junit.Assert` in unit tests
+- ALWAYS use a deterministic locale in unit tests to ensure consistent results across CI and local runs
+- ALWAYS add a locale parameter with default value `Locale.getDefault()` to methods that depend on locale
+- ALWAYS add business logic to repository layer via methods returning `Result<T>` and use it in ViewModels
+- ALWAYS order upstream architectural data flow this way: `UI -> ViewModel -> Repository -> RUST` and vice versa for downstream
+- ALWAYS add new localizable string resources in alphabetical order in `strings.xml`
 - NEVER add string resources for strings used only in dev settings screens and previews and never localize acronyms
 - ALWAYS use template in `.github/pull_request_template.md` for PR descriptions
 - ALWAYS wrap `ULong` numbers with `USat` in arithmetic operations, to guard against overflows
 - PREFER to use one-liners with `run {}` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
 - ALWAYS add imports instead of inline fully-qualified names
 - PREFER to place `@Suppress()` annotations at the narrowest possible scope
-- ALWAYS wrap suspend functions in `withContext(bgDispatcher)` if in domain layer, using ctor injected prop `@BgDispatcher private val bgDispatcher: CoroutineDispatcher`
-- ALWAYS position companion object at the top of the class
+- ALWAYS wrap suspend functions in `withContext(ioDispatcher)` if in domain layer, using ctor injected prop `@IoDispatcher private val ioDispatcher: CoroutineDispatcher`
+- ALWAYS position `companion object` at the top of the class
+- NEVER use `Exception` directly, use `AppError` instead
+- ALWAYS inherit custom exceptions from `AppError`
+- ALWAYS prefer `requireNotNull(someNullable) { "error message" }` or `checkNotNull { "someErrorMessage" }` over `!!` or `?: SomeAppError()`
+- ALWAYS prefer Kotlin `Duration` for timeouts and delays
+- ALWAYS prefer `when (subject)` with Kotlin guard conditions (`if`) over condition-based `when {}` with `is` type checks, e.g. `when (event) { is Foo if event.x == y -> ... }` instead of `when { event is Foo && event.x == y -> ... }`
+- ALWAYS prefer `sealed interface` over `sealed class` when no shared state or constructor is needed
+- NEVER duplicate error logging in `.onFailure {}` if the called method already logs the same error internally
+- ALWAYS use `ImmutableList`/`ImmutableMap`/`ImmutableSet` instead of `List`/`Map`/`Set` for composable function parameters and UiState data class fields
+- ALWAYS annotate UiState data classes with `@Immutable`; use `@Stable` instead when any field holds a non-immutable type (e.g. `Throwable`, external library types from `bitkitcore`/`ldknode`/`vssclient`, or types containing plain `List`/`Map`/`Set`)
+- ALWAYS use `.toImmutableList()`, `.toImmutableMap()`, `.toImmutableSet()` when producing collections for UI state
+- ALWAYS use `persistentListOf()`, `persistentMapOf()`, `persistentSetOf()` for default values in UiState fields
+
+### Changelog
+
+- NEVER edit `CHANGELOG.md` in normal feature/fix PRs; release automation collects changelog fragments into it
+- ALWAYS add exactly ONE changelog fragment for user-facing `feat:` and `fix:` PRs; skip for `chore:`, `ci:`, `refactor:`, `test:`, `docs:` unless the change is user-facing
+- PUT normal release fragments in `changelog.d/next/` and hotfix fragments in `changelog.d/hotfix/`
+- NAME fragments `<issue-or-pr>.<category>.md`, where category is one of `added`, `changed`, `deprecated`, `removed`, `fixed`, or `security`
+- WRITE the fragment as one polished user-facing sentence without a leading bullet and without a PR number
+- NEVER add multiple changelog fragments for the same PR — summarize all changes in one concise fragment
+- Release commits consume fragments with `scripts/collect-changelog.sh --target next|hotfix`, update `CHANGELOG.md`, and delete consumed fragment files
+- NEVER modify released version sections manually
 
 ### Device Debugging (adb)
 

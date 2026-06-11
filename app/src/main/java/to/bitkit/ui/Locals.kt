@@ -53,6 +53,3 @@ val settingsViewModel: SettingsViewModel?
 
 val backupsViewModel: BackupsViewModel?
     @Composable get() = LocalBackupsViewModel.current
-
-val drawerState: DrawerState?
-    @Composable get() = LocalDrawerState.current

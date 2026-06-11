@@ -31,5 +31,9 @@ enum class WidgetType(
     WEATHER(
         iconRes = R.drawable.widget_cloud,
         title = R.string.widgets__weather__name
+    ),
+    SUGGESTIONS(
+        iconRes = R.drawable.widget_suggestions,
+        title = R.string.widgets__suggestions__name,
     )
 }

@@ -5,10 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -40,6 +38,7 @@ import to.bitkit.ext.totalValue
 import to.bitkit.ext.txType
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.PubkyProfile
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
@@ -48,6 +47,7 @@ import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.CaptionB
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.settingsViewModel
@@ -67,6 +67,8 @@ fun ActivityRow(
     item: Activity,
     onClick: (String) -> Unit,
     testTag: String,
+    title: String? = null,
+    contact: PubkyProfile? = null,
 ) {
     val blocktankInfo by blocktankViewModel?.info?.collectAsStateWithLifecycle() ?: remember {
         mutableStateOf(null)
@@ -87,9 +89,14 @@ fun ActivityRow(
         is Activity.Onchain -> item.v1.confirmed
     }
     val isTransfer = item.isTransfer()
-
     val activityListViewModel = activityListViewModel
     var isCpfpChild by remember { mutableStateOf(false) }
+    val resolvedTitle = title.takeIf {
+        shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
+    }
+    val resolvedContact = contact.takeIf {
+        shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
+    }
 
     LaunchedEffect(item) {
         isCpfpChild = if (item is Activity.Onchain && activityListViewModel != null) {
@@ -108,10 +115,10 @@ fun ActivityRow(
             .padding(16.dp)
             .testTag(testTag)
     ) {
-        ActivityIcon(activity = item, size = 40.dp, isCpfpChild = isCpfpChild)
-        Spacer(modifier = Modifier.width(16.dp))
+        ActivityIcon(activity = item, size = 40.dp, isCpfpChild = isCpfpChild, contact = resolvedContact)
+        HorizontalSpacer(16.dp)
         Column(
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.weight(1f)
         ) {
             TransactionStatusText(
@@ -119,7 +126,8 @@ fun ActivityRow(
                 isLightning = isLightning,
                 status = status,
                 isTransfer = isTransfer,
-                isCpfpChild = isCpfpChild
+                isCpfpChild = isCpfpChild,
+                title = resolvedTitle,
             )
             val context = LocalContext.current
             val subtitleText = when (item) {
@@ -162,11 +170,25 @@ fun ActivityRow(
                 maxLines = 1,
             )
         }
-        Spacer(modifier = Modifier.width(16.dp))
+        HorizontalSpacer(16.dp)
         AmountView(
             item = item,
             prefix = amountPrefix,
         )
+    }
+}
+
+private fun shouldUseContactActivityTitle(
+    activity: Activity,
+    status: PaymentState?,
+    isTransfer: Boolean,
+    isCpfpChild: Boolean,
+): Boolean {
+    if (isTransfer || isCpfpChild) return false
+
+    return when (activity) {
+        is Activity.Lightning -> status == PaymentState.SUCCEEDED
+        is Activity.Onchain -> activity.v1.doesExist
     }
 }
 
@@ -178,7 +200,13 @@ private fun TransactionStatusText(
     status: PaymentState?,
     isTransfer: Boolean,
     isCpfpChild: Boolean = false,
+    title: String? = null,
 ) {
+    if (title != null) {
+        BodyMSB(text = title)
+        return
+    }
+
     when {
         isTransfer -> BodyMSB(text = stringResource(R.string.wallet__activity_transfer))
         isCpfpChild -> BodyMSB(text = stringResource(R.string.wallet__activity_boost_fee))
@@ -286,7 +314,7 @@ private fun AmountViewContent(
             if (titleSymbol != null && !isSymbolSuffix) {
                 BodyMSB(text = titleSymbol, color = Colors.White64)
             }
-            Spacer(modifier = Modifier.width(2.dp))
+            HorizontalSpacer(2.dp)
             AnimatedContent(
                 targetState = hideBalance,
                 transitionSpec = { BalanceAnimations.activityAmountTransition },

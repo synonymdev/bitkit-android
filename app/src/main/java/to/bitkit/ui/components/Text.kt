@@ -24,6 +24,9 @@ fun Display(
     fontWeight: FontWeight = FontWeight.Black,
     fontSize: TextUnit = 44.sp,
     color: Color = MaterialTheme.colorScheme.primary,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
+    textAlign: TextAlign? = null,
 ) {
     Text(
         text = text.uppercase(),
@@ -32,7 +35,10 @@ fun Display(
             fontSize = fontSize,
             color = color,
         ),
-        modifier = modifier,
+        maxLines = maxLines,
+        overflow = overflow,
+        textAlign = textAlign,
+        modifier = modifier
     )
 }
 
@@ -40,14 +46,36 @@ fun Display(
 fun Display(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
+    fontSize: TextUnit = 44.sp,
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
     Text(
         text = text.toUpperCase(),
         style = AppTextStyles.Display.merge(
+            fontSize = fontSize,
+            lineHeight = fontSize,
             color = color,
         ),
-        modifier = modifier,
+        modifier = modifier
+    )
+}
+
+@Composable
+fun Display34(
+    text: String,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
+) {
+    Text(
+        text = text,
+        style = AppTextStyles.Display34.merge(
+            color = color,
+        ),
+        maxLines = maxLines,
+        overflow = overflow,
+        modifier = modifier
     )
 }
 
@@ -62,7 +90,7 @@ fun Headline(
         style = AppTextStyles.Headline.merge(
             color = color,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -73,14 +101,31 @@ fun Headline20(
     color: Color = MaterialTheme.colorScheme.primary,
 ) {
     Text(
-        text = text.toUpperCase(),
+        text = text,
         style = AppTextStyles.Headline.merge(
             fontSize = 20.sp,
             lineHeight = 20.sp,
             letterSpacing = (-.5).sp,
             color = color,
         ),
-        modifier = modifier,
+        modifier = modifier
+    )
+}
+
+@Composable
+fun Headline24(
+    text: AnnotatedString,
+    modifier: Modifier = Modifier,
+    color: Color = MaterialTheme.colorScheme.primary,
+) {
+    Text(
+        text = text.toUpperCase(),
+        style = AppTextStyles.Headline.merge(
+            fontSize = 24.sp,
+            lineHeight = 24.sp,
+            color = color,
+        ),
+        modifier = modifier
     )
 }
 
@@ -101,7 +146,7 @@ fun Title(
             color = color,
             textAlign = textAlign,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -122,7 +167,7 @@ fun Subtitle(
         ),
         maxLines = maxLines,
         overflow = overflow,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -166,7 +211,7 @@ fun BodyM(
         maxLines = maxLines,
         minLines = minLines,
         overflow = overflow,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -206,7 +251,7 @@ fun BodyMSB(
         ),
         maxLines = maxLines,
         overflow = overflow,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -227,7 +272,7 @@ fun BodyMB(
         ),
         maxLines = maxLines,
         overflow = overflow,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -237,12 +282,16 @@ fun BodyS(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     BodyS(
         text = AnnotatedString(text),
-        modifier = modifier,
         color = color,
         textAlign = textAlign,
+        maxLines = maxLines,
+        overflow = overflow,
+        modifier = modifier
     )
 }
 
@@ -252,6 +301,8 @@ fun BodyS(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     Text(
         text = text,
@@ -259,7 +310,9 @@ fun BodyS(
             color = color,
             textAlign = textAlign,
         ),
-        modifier = modifier,
+        maxLines = maxLines,
+        overflow = overflow,
+        modifier = modifier
     )
 }
 
@@ -312,7 +365,7 @@ fun BodySB(
             color = color,
             textAlign = textAlign,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -329,7 +382,7 @@ fun Text13Up(
             color = color,
             textAlign = textAlign,
         ),
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -350,7 +403,7 @@ fun Caption(
         ),
         maxLines = maxLines,
         overflow = overflow,
-        modifier = modifier,
+        modifier = modifier
     )
 }
 
@@ -400,6 +453,8 @@ fun Caption13Up(
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
     textAlign: TextAlign = TextAlign.Start,
+    maxLines: Int = Int.MAX_VALUE,
+    overflow: TextOverflow = TextOverflow.Clip,
 ) {
     Text(
         text = text.uppercase(),
@@ -407,7 +462,9 @@ fun Caption13Up(
             color = color,
             textAlign = textAlign,
         ),
-        modifier = modifier,
+        maxLines = maxLines,
+        overflow = overflow,
+        modifier = modifier
     )
 }
 
@@ -428,6 +485,6 @@ fun Footnote(
         ),
         maxLines = maxLines,
         overflow = overflow,
-        modifier = modifier,
+        modifier = modifier
     )
 }

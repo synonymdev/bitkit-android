@@ -15,6 +15,9 @@ import to.bitkit.ext.WatchResult
 import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.watchUntil
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.PaymentPendingException
+import to.bitkit.repositories.PendingPaymentRepo
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -22,31 +25,39 @@ import javax.inject.Inject
 class QuickPayViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val lightningRepo: LightningRepo,
+    private val pendingPaymentRepo: PendingPaymentRepo,
 ) : ViewModel() {
+
+    companion object {
+        private const val TAG = "QuickPayViewModel"
+    }
 
     private val _uiState = MutableStateFlow(QuickPayUiState())
     val uiState = _uiState.asStateFlow()
 
     val lightningState = lightningRepo.lightningState
 
-    fun pay(quickPayData: QuickPayData) {
+    fun pay(data: QuickPayData) {
         viewModelScope.launch {
-            val (bolt11, amount) = when (val data = quickPayData) {
+            val (bolt11, amount, displaySats) = when (data) {
                 is QuickPayData.Bolt11 -> {
                     Logger.info("QuickPay: processing bolt11 invoice")
-                    data.bolt11 to data.sats
+                    Triple(data.bolt11, null, data.sats)
                 }
 
                 is QuickPayData.LnurlPay -> {
                     Logger.info("QuickPay: fetching LNURL Pay invoice from callback")
-                    val invoice = lightningRepo.fetchLnurlInvoice(callbackUrl = data.callback, amountSats = data.sats)
+                    val invoice = lightningRepo.fetchLnurlInvoice(
+                        callbackUrl = data.callback,
+                        amountMsats = data.amountMsats,
+                    )
                         .getOrElse { error ->
                             _uiState.update {
                                 it.copy(result = QuickPayResult.Error(error.message.orEmpty()))
                             }
                             return@launch
                         }
-                    invoice.bolt11 to quickPayData.sats
+                    Triple(invoice.bolt11, null, data.sats)
                 }
             }
 
@@ -57,12 +68,25 @@ class QuickPayViewModel @Inject constructor(
                         it.copy(
                             result = QuickPayResult.Success(
                                 paymentHash = paymentHash,
-                                amountWithFee = amount.toLong() // TODO GET FEE WHEN AVAILABLE
+                                amountWithFee = displaySats.toLong() // TODO GET FEE WHEN AVAILABLE
                             )
                         )
                     }
                 }.onFailure { error ->
-                    Logger.error("QuickPay lightning payment failed", error)
+                    if (error is PaymentPendingException) {
+                        Logger.info("QuickPay lightning payment pending", context = TAG)
+                        pendingPaymentRepo.track(error.paymentHash)
+                        _uiState.update {
+                            it.copy(
+                                result = QuickPayResult.Pending(
+                                    paymentHash = error.paymentHash,
+                                    amount = displaySats.toLong(),
+                                )
+                            )
+                        }
+                        return@onFailure
+                    }
+                    Logger.error("QuickPay lightning payment failed", error, context = TAG)
 
                     _uiState.update {
                         it.copy(result = QuickPayResult.Error(error.message.orEmpty()))
@@ -81,30 +105,18 @@ class QuickPayViewModel @Inject constructor(
             }
             .getOrDefault("")
 
-        // Wait until matching payment event is received
-        val result = lightningRepo.nodeEvents.watchUntil { event ->
-            when (event) {
-                is Event.PaymentSuccessful -> {
-                    if (event.paymentHash == hash) {
-                        WatchResult.Complete(Result.success(hash))
-                    } else {
-                        WatchResult.Continue()
-                    }
-                }
-
-                is Event.PaymentFailed -> {
-                    if (event.paymentHash == hash) {
-                        val error = Exception(event.reason.toUserMessage(context))
-                        WatchResult.Complete(Result.failure(error))
-                    } else {
-                        WatchResult.Continue()
-                    }
-                }
+        // Wait until matching payment event is received (with timeout for hold invoices)
+        val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
+            when (it) {
+                is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(Result.success(hash))
+                is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
+                    Result.failure(AppError(it.reason.toUserMessage(context)))
+                )
 
                 else -> WatchResult.Continue()
             }
         }
-        return result
+        return result ?: Result.failure(PaymentPendingException(hash))
     }
 }
 
@@ -112,6 +124,11 @@ sealed class QuickPayResult {
     data class Success(
         val paymentHash: String,
         val amountWithFee: Long,
+    ) : QuickPayResult()
+
+    data class Pending(
+        val paymentHash: String,
+        val amount: Long,
     ) : QuickPayResult()
 
     data class Error(val message: String) : QuickPayResult()

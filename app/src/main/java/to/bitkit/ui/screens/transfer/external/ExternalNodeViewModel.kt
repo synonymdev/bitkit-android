@@ -97,21 +97,20 @@ class ExternalNodeViewModel @Inject constructor(
     }
 
     fun onAmountChange(sats: Long) {
-        val maxAmount = _uiState.value.amount.max
-
-        if (sats > maxAmount) {
-            viewModelScope.launch {
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.lightning__spending_amount__error_max__title),
-                    description = context.getString(R.string.lightning__spending_amount__error_max__description)
-                        .replace("{amount}", maxAmount.formatToModernDisplay()),
-                )
-            }
-            return
-        }
-
         _uiState.update { it.copy(amount = it.amount.copy(sats = sats)) }
+    }
+
+    fun onMaxExceeded() {
+        val maxAmount = _uiState.value.amount.max
+        viewModelScope.launch {
+            ToastEventBus.send(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.lightning__spending_amount__error_max__title),
+                description = context.getString(R.string.lightning__spending_amount__error_max__description)
+                    .replace("{amount}", maxAmount.formatToModernDisplay()),
+                visibilityTime = Toast.VISIBILITY_TIME_SHORT,
+            )
+        }
     }
 
     fun onAmountContinue() {
@@ -187,6 +186,8 @@ class ExternalNodeViewModel @Inject constructor(
 
                 else -> WatchResult.Continue()
             }
+        }.let {
+            checkNotNull(it) { "Timeout in awaitChannelPendingEvent for userChannelId='$userChannelId'" }
         }
     }
 }

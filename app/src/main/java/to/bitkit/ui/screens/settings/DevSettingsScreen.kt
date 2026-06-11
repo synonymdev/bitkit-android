@@ -4,23 +4,34 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.R
 import to.bitkit.env.Env
+import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
+import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.components.settings.SettingsTextButtonRow
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -37,6 +48,8 @@ fun DevSettingsScreen(
     val activity = activityListViewModel ?: return
     val settings = settingsViewModel ?: return
     val context = LocalContext.current
+    val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
+    var showPaykitWarning by remember { mutableStateOf(false) }
 
     ScreenColumn {
         AppTopBar(
@@ -49,14 +62,41 @@ fun DevSettingsScreen(
                 .padding(horizontal = 16.dp)
                 .verticalScroll(rememberScrollState())
         ) {
-            SettingsButtonRow("Fee Settings") { navController.navigate(Routes.FeeSettings) }
-            SettingsButtonRow("Channel Orders") { navController.navigate(Routes.ChannelOrdersSettings) }
-            SettingsButtonRow("LDK") { navController.navigate(Routes.LdkDebug) }
-            SettingsButtonRow("VSS") { navController.navigate(Routes.VssDebug) }
-            SettingsButtonRow("Probing Tool") { navController.navigate(Routes.ProbingTool) }
+            SettingsButtonRow("Fee Settings") { navController.navigateTo(Routes.FeeSettings) }
+            SettingsButtonRow("Channel Orders") { navController.navigateTo(Routes.ChannelOrdersSettings) }
+            SettingsButtonRow("LDK") { navController.navigateTo(Routes.LdkDebug) }
+            SettingsButtonRow("VSS") { navController.navigateTo(Routes.VssDebug) }
+            SettingsButtonRow("Probing Tool") { navController.navigateTo(Routes.ProbingTool) }
+
+            SectionHeader("RECOVERY")
+            SettingsButtonRow("Legacy Close Recovery") { navController.navigateTo(Routes.LegacyRnRecovery) }
+
+            if (PaykitFeatureFlags.isUiAvailable) {
+                SectionHeader("PAYKIT")
+                SettingsSwitchRow(
+                    title = "Enable Paykit UI",
+                    isChecked = isPaykitEnabled,
+                    onClick = {
+                        if (isPaykitEnabled) {
+                            settings.setIsPaykitEnabled(false)
+                            app.toast(
+                                type = Toast.ToastType.SUCCESS,
+                                title = "Paykit UI disabled",
+                                testTag = "PaykitUiDisabledToast",
+                            )
+                        } else {
+                            showPaykitWarning = true
+                        }
+                    },
+                    switchTestTag = "PaykitUiToggle",
+                )
+            }
+
+            SectionHeader("HARDWARE WALLET")
+            SettingsButtonRow("Trezor") { navController.navigateTo(Routes.Trezor) }
 
             SectionHeader("LOGS")
-            SettingsButtonRow("Logs") { navController.navigate(Routes.Logs) }
+            SettingsButtonRow("Logs") { navController.navigateTo(Routes.Logs) }
             SettingsTextButtonRow(
                 title = "Export Logs",
                 onClick = {
@@ -71,7 +111,7 @@ fun DevSettingsScreen(
             if (Env.network == Network.REGTEST) {
                 SectionHeader("REGTEST")
 
-                SettingsButtonRow("Blocktank Regtest") { navController.navigate(Routes.RegtestSettings) }
+                SettingsButtonRow("Blocktank Regtest") { navController.navigateTo(Routes.RegtestSettings) }
             }
 
             SectionHeader("APP CACHE")
@@ -143,6 +183,13 @@ fun DevSettingsScreen(
             SectionHeader("DEBUG")
 
             SettingsTextButtonRow(
+                title = "Reset Widgets Intro Flag",
+                onClick = {
+                    settings.setHasSeenWidgetsIntro(false)
+                    app.toast(type = Toast.ToastType.SUCCESS, title = "Widgets intro flag reset")
+                }
+            )
+            SettingsTextButtonRow(
                 title = "Generate Test Activities",
                 onClick = {
                     val count = 100
@@ -179,5 +226,38 @@ fun DevSettingsScreen(
                 }
             )
         }
+    }
+
+    if (showPaykitWarning && PaykitFeatureFlags.isUiAvailable) {
+        AlertDialog(
+            onDismissRequest = { showPaykitWarning = false },
+            title = { Text("Enable Paykit UI?") },
+            text = {
+                Text(
+                    "Paykit features are still experimental and may not work reliably until supporting homeserver " +
+                        "changes are deployed."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        settings.setIsPaykitEnabled(true)
+                        showPaykitWarning = false
+                        app.toast(
+                            type = Toast.ToastType.SUCCESS,
+                            title = "Paykit UI enabled",
+                            testTag = "PaykitUiEnabledToast",
+                        )
+                    },
+                ) {
+                    Text("Enable")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPaykitWarning = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }

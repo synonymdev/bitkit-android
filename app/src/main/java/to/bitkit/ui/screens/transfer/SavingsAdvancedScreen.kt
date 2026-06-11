@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.transfer
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +12,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Switch
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -24,6 +24,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.filterOpen
@@ -37,6 +40,7 @@ import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -78,7 +82,7 @@ fun SavingsAdvancedScreen(
                 balance = it.amountOnClose,
                 isSelected = selectedChannelIds.contains(it.channelId),
             )
-        }
+        }.toImmutableList()
     }
 
     SavingsAdvancedContent(
@@ -97,7 +101,7 @@ fun SavingsAdvancedScreen(
 
 @Composable
 private fun SavingsAdvancedContent(
-    channelItems: List<TransferChannelUiState>,
+    channelItems: ImmutableList<TransferChannelUiState>,
     onChannelItemClick: (String) -> Unit = {},
     onAmountClick: () -> Unit = {},
     onContinueClick: () -> Unit = {},
@@ -165,7 +169,7 @@ fun ChannelItem(
     onClick: () -> Unit,
 ) {
     Column(
-        modifier = Modifier.clickable { onClick() }
+        modifier = Modifier.clickableAlpha { onClick() }
     ) {
         Row(
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -192,6 +196,7 @@ fun ChannelItem(
     }
 }
 
+@Immutable
 private data class TransferChannelUiState(
     val channelId: String,
     val balance: ULong,
@@ -203,7 +208,7 @@ private data class TransferChannelUiState(
 private fun SavingsAdvancedScreenPreview() {
     AppThemeSurface {
         SavingsAdvancedContent(
-            channelItems = listOf(
+            channelItems = persistentListOf(
                 TransferChannelUiState(
                     channelId = "channelId_1",
                     balance = 45_000u,

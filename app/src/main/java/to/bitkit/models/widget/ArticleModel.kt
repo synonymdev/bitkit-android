@@ -1,5 +1,8 @@
 package to.bitkit.models.widget
 
+import android.net.Uri
+import androidx.compose.runtime.Immutable
+import androidx.core.net.toUri
 import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.ArticleDTO
 import to.bitkit.ext.toRelativeTimeString
@@ -12,6 +15,7 @@ import kotlin.time.ExperimentalTime
 
 private const val TAG = "ArticleModel"
 
+@Immutable
 @Serializable
 data class ArticleModel(
     val title: String,
@@ -19,6 +23,19 @@ data class ArticleModel(
     val link: String,
     val publisher: String
 )
+
+fun ArticleModel.safeBrowserUri(): Uri? = safeBrowserUri(link)
+
+fun safeBrowserUri(link: String): Uri? {
+    if (link.isEmpty()) return null
+    val uri = runCatching { link.toUri() }.getOrNull() ?: return null
+    val scheme = uri.scheme?.lowercase(Locale.ROOT)
+    if (scheme != "http" && scheme != "https") {
+        Logger.warn("Rejected article link with unsafe scheme '$scheme'", context = TAG)
+        return null
+    }
+    return uri
+}
 
 fun ArticleDTO.toArticleModel() = ArticleModel(
     title = this.title,

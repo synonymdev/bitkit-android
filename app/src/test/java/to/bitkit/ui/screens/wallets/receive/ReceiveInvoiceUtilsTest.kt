@@ -1,7 +1,7 @@
 package to.bitkit.ui.screens.wallets.receive
 
-import org.junit.Assert.assertEquals
 import org.junit.Test
+import kotlin.test.assertEquals
 
 class ReceiveInvoiceUtilsTest {
 
@@ -200,7 +200,7 @@ class ReceiveInvoiceUtilsTest {
     }
 
     @Test
-    fun `getInvoiceForTab SPENDING returns bolt11 when node not running even with CJIT`() {
+    fun `getInvoiceForTab SPENDING returns empty when node not running even with CJIT`() {
         val bip21 = "bitcoin:$testAddress?lightning=$testBolt11"
 
         val result = getInvoiceForTab(
@@ -212,6 +212,51 @@ class ReceiveInvoiceUtilsTest {
             onchainAddress = testAddress
         )
 
-        assertEquals(testBolt11, result)
+        assertEquals("", result)
+    }
+
+    @Test
+    fun `getInvoiceForTab SPENDING returns empty when node not running and no CJIT`() {
+        val bip21 = "bitcoin:$testAddress?lightning=$testBolt11"
+
+        val result = getInvoiceForTab(
+            tab = ReceiveTab.SPENDING,
+            bip21 = bip21,
+            bolt11 = testBolt11,
+            cjitInvoice = null,
+            isNodeRunning = false,
+            onchainAddress = testAddress
+        )
+
+        assertEquals("", result)
+    }
+
+    @Test
+    fun `getSavingsCopyText returns plain address when no extra params`() {
+        val bip21 = "bitcoin:$testAddress?lightning=$testBolt11"
+        assertEquals(testAddress, getSavingsCopyText(bip21, testAddress))
+    }
+
+    @Test
+    fun `getSavingsCopyText returns plain address when bip21 has no params`() {
+        val bip21 = "bitcoin:$testAddress"
+        assertEquals(testAddress, getSavingsCopyText(bip21, testAddress))
+    }
+
+    @Test
+    fun `getSavingsCopyText returns bip21 without lightning when amount present`() {
+        val bip21 = "bitcoin:$testAddress?amount=0.001&lightning=$testBolt11"
+        assertEquals("bitcoin:$testAddress?amount=0.001", getSavingsCopyText(bip21, testAddress))
+    }
+
+    @Test
+    fun `getSavingsCopyText returns bip21 without lightning when message present`() {
+        val bip21 = "bitcoin:$testAddress?message=Test&lightning=$testBolt11"
+        assertEquals("bitcoin:$testAddress?message=Test", getSavingsCopyText(bip21, testAddress))
+    }
+
+    @Test
+    fun `getSavingsCopyText returns fallback address when bip21 is empty`() {
+        assertEquals(testAddress, getSavingsCopyText("", testAddress))
     }
 }

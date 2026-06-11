@@ -13,6 +13,7 @@ import to.bitkit.models.NodePeer
 import to.bitkit.utils.Logger
 import java.io.File
 import kotlin.io.path.Path
+import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 @Suppress("ConstPropertyName", "KotlinConstantConditions", "SimplifyBooleanWithConstants")
 internal object Env {
@@ -20,9 +21,12 @@ internal object Env {
     const val isE2eTest = BuildConfig.E2E
     const val isGeoblockingEnabled = BuildConfig.GEO
     val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
+    val isLocalE2eBackend = isE2eTest && e2eBackend == "local"
+    const val e2eHomegateUrl = BuildConfig.E2E_HOMEGATE_URL
     val network = Network.valueOf(BuildConfig.NETWORK)
     val locales = BuildConfig.LOCALES.split(",")
     const val walletSyncIntervalSecs = 10_uL
+    const val walletSyncTimeoutSecs = 10_uL
     val platform = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})"
     const val version = "$VERSION_NAME (${BuildConfig.VERSION_CODE})"
 
@@ -52,10 +56,11 @@ internal object Env {
 
     val electrumServerUrl: String
         get() {
-            val isE2eLocal = isE2eTest && e2eBackend == "local"
             return when (network) {
                 Network.BITCOIN -> ElectrumServers.MAINNET.ESPLORA
-                Network.REGTEST -> if (isE2eLocal) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
+                Network.REGTEST -> {
+                    if (isLocalE2eBackend) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
+                }
                 Network.TESTNET -> ElectrumServers.TESTNET
                 else -> TODO("${network.name} network not implemented")
             }
@@ -130,7 +135,11 @@ internal object Env {
     const val PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=to.bitkit"
 
     const val REPO_URL = "https://github.com/synonymdev/bitkit-android"
-    const val RELEASE_URL = "$REPO_URL/releases/download/updater/release.json"
+    val RELEASE_URL = if (isE2eTest) {
+        "https://github.com/synonymdev/bitkit-e2e-tests/releases/download/updater/release.json"
+    } else {
+        "$REPO_URL/releases/download/updater/release.json"
+    }
     const val EXCHANGES_URL = "https://bitcoin.org/en/exchanges#international"
     const val BTC_MAP_URL = "https://btcmap.org/map"
     const val BITKIT_WEBSITE = "https://bitkit.to/"
@@ -149,11 +158,58 @@ internal object Env {
     const val BITREFILL_APP = "Bitkit"
     const val BITREFILL_REF = "AL6dyZYt"
 
+    private val pubkyDomain: String
+        get() = when (network) {
+            Network.BITCOIN -> "bitkit.to"
+            else -> "staging.bitkit.to"
+        }
+
+    val pubkyCapabilities: String
+        get() {
+            val prefix = when (network) {
+                Network.BITCOIN -> ""
+                else -> "staging."
+            }
+            return "/pub/$pubkyDomain/:rw,/pub/${prefix}pubky.app/:r,/pub/paykit/v0/:rw"
+        }
+
+    val homegateUrl: String
+        get() {
+            if (isLocalE2eBackend) {
+                return e2eHomegateUrl
+            }
+
+            return when (network) {
+                Network.BITCOIN -> "https://homegate.pubky.app"
+                else -> "https://homegate.staging.pubky.app"
+            }
+        }
+
+    val profilePath: String
+        get() = "/pub/$pubkyDomain/profile.json"
+
+    val contactsBasePath: String
+        get() = "/pub/$pubkyDomain/contacts/"
+
+    val blobsBasePath: String
+        get() = "/pub/$pubkyDomain/blobs/"
+
     val rnBackupServerHost: String
         get() = when (network) {
             Network.BITCOIN -> "https://blocktank.synonym.to/backups-ldk"
             else -> "https://bitkit.stag0.blocktank.to/backups-ldk"
         }
+
+    fun electrumUrlForNetwork(network: BitkitCoreNetwork): String {
+        val isE2eLocal = isE2eTest && e2eBackend == "local"
+        return when (network) {
+            BitkitCoreNetwork.BITCOIN -> ElectrumServers.MAINNET.ESPLORA
+            BitkitCoreNetwork.TESTNET, BitkitCoreNetwork.TESTNET4, BitkitCoreNetwork.SIGNET ->
+                ElectrumServers.TESTNET
+            BitkitCoreNetwork.REGTEST ->
+                if (isE2eLocal) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
+        }
+    }
 
     // endregion
 
@@ -201,6 +257,9 @@ internal object Env {
 
 @Suppress("ConstPropertyName")
 object Defaults {
+    /** Default Bolt11 invoice expiry in seconds. */
+    const val bolt11ExpirySec = 86_400u
+
     /** Recommended transaction base fee in sats */
     const val recommendedBaseFee = 256u
 

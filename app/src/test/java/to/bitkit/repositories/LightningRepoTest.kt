@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.ILspNode
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -17,6 +18,7 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.AddressTypeBalance
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PeerDetails
@@ -50,14 +52,24 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
 import to.bitkit.services.LspNotificationsService
+import to.bitkit.services.NetworkGraphInfo
+import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.UrlValidator
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
+@Suppress("LargeClass")
 class LightningRepoTest : BaseUnitTest() {
+    companion object {
+        private const val NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS = 2_500L
+    }
+
     private lateinit var sut: LightningRepo
 
     private val lightningService = mock<LightningService>()
@@ -71,6 +83,12 @@ class LightningRepoTest : BaseUnitTest() {
     private val lnurlService = mock<LnurlService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val vssBackupClientLdk = mock<VssBackupClientLdk>()
+    private val urlValidator = UrlValidator { Result.success(Unit) }
+    private val probePaymentA = "probe-payment-a"
+    private val probePaymentB = "probe-payment-b"
+    private val probeHashA = "probe-hash-a"
+    private val probeHashB = "probe-hash-b"
+    private val probeNodeId = "02abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef12"
 
     @Before
     fun setUp() = runBlocking {
@@ -93,6 +111,7 @@ class LightningRepoTest : BaseUnitTest() {
             preActivityMetadataRepo = preActivityMetadataRepo,
             connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk,
+            urlValidator = urlValidator,
         )
     }
 
@@ -107,6 +126,18 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         // Simulate successful sync to set isSyncHealthy = true
         sut.sync()
+    }
+
+    private suspend fun startNodeAndCaptureEvents(): NodeEventHandler {
+        var capturedHandler: NodeEventHandler? = null
+        whenever { lightningService.start(anyOrNull(), any()) }.thenAnswer {
+            @Suppress("UNCHECKED_CAST")
+            capturedHandler = it.arguments[1] as NodeEventHandler
+            Unit
+        }
+
+        startNodeForTesting()
+        return requireNotNull(capturedHandler)
     }
 
     @Test
@@ -175,11 +206,14 @@ class LightningRepoTest : BaseUnitTest() {
             lightningService.receive(
                 sat = 100uL,
                 description = "test",
-                expirySecs = 3600u
+                expirySecs = 86_400u,
             )
         ).thenReturn(testInvoice)
 
-        val result = sut.createInvoice(amountSats = 100uL, description = "test", expirySeconds = 3600u)
+        val result = sut.createInvoice(
+            amountSats = 100uL,
+            description = "test",
+        )
         assertTrue(result.isSuccess)
         assertEquals(testInvoice, result.getOrNull())
     }
@@ -229,7 +263,7 @@ class LightningRepoTest : BaseUnitTest() {
     fun `getPayments should succeed when node is running`() = test {
         startNodeForTesting()
         val testPayments = listOf(mock<PaymentDetails>())
-        whenever(lightningService.payments).thenReturn(testPayments)
+        whenever(lightningService.listPayments()).thenReturn(testPayments)
 
         val result = sut.getPayments()
         assertTrue(result.isSuccess)
@@ -335,15 +369,89 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Test
     fun `canSend should return false when node is stopped`() = test {
-        assertFalse(sut.canSend(1000uL, fallbackToCachedBalance = true))
+        assertFalse(sut.canSend(1000uL))
     }
 
     @Test
-    fun `canSend should return service value when node is running`() = test {
+    fun `canSend should return true when channels have sufficient capacity`() = test {
         startNodeForTesting()
-        whenever(lightningService.canSend(any())).thenReturn(true)
+        val channel = createChannelDetails().copy(
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = 2_000_000u,
+        )
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        sut.syncState()
 
         assertTrue(sut.canSend(1000uL))
+    }
+
+    @Test
+    fun `canSend should return false when channels have insufficient capacity`() = test {
+        startNodeForTesting()
+        val channel = createChannelDetails().copy(
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = 500_000u,
+        )
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        sut.syncState()
+
+        assertFalse(sut.canSend(1000uL))
+    }
+
+    @Test
+    fun `waitForUsableChannels waits for running state before treating empty channels as absent`() = test {
+        sut.setInitNodeLifecycleState()
+        val channel = createChannelDetails().copy(
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = 2_000_000u,
+        )
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+
+        val wait = async { sut.waitForUsableChannels() }
+
+        assertFalse(wait.isCompleted)
+
+        startNodeForTesting()
+
+        assertTrue(wait.isCompleted)
+        assertEquals(listOf(channel), sut.lightningState.value.channels)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `waitForUsableChannels delays before returning when node cannot run`() = test {
+        val wait = async { sut.waitForUsableChannels() }
+
+        assertFalse(wait.isCompleted)
+
+        testScheduler.advanceTimeBy(NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS - 1)
+
+        assertFalse(wait.isCompleted)
+
+        testScheduler.advanceTimeBy(1)
+        testScheduler.runCurrent()
+
+        assertTrue(wait.isCompleted)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun `waitForUsableChannels delays before returning when running node has no channels`() = test {
+        whenever(lightningService.channels).thenReturn(emptyList())
+        startNodeForTesting()
+
+        val wait = async { sut.waitForUsableChannels() }
+
+        assertFalse(wait.isCompleted)
+
+        testScheduler.advanceTimeBy(NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS - 1)
+
+        assertFalse(wait.isCompleted)
+
+        testScheduler.advanceTimeBy(1)
+        testScheduler.runCurrent()
+
+        assertTrue(wait.isCompleted)
     }
 
     @Test
@@ -495,6 +603,78 @@ class LightningRepoTest : BaseUnitTest() {
         val result = sut.restartWithElectrumServer(customServerUrl)
 
         assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `restartWithRgsServer should setup with new rgs server`() = test {
+        startNodeForTesting()
+        val customRgsUrl = "https://rgs.example.com/snapshot"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+
+        val result = sut.restartWithRgsServer(customRgsUrl)
+
+        assertTrue(result.isSuccess)
+        val inOrder = inOrder(lightningService)
+        inOrder.verify(lightningService).stop()
+        inOrder.verify(lightningService).setup(any(), isNull(), eq(customRgsUrl), anyOrNull(), anyOrNull())
+        inOrder.verify(lightningService).start(anyOrNull(), any())
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `restartWithRgsServer should handle stop failure`() = test {
+        startNodeForTesting()
+        whenever(lightningService.stop()).thenThrow(RuntimeException("Stop failed"))
+
+        val result = sut.restartWithRgsServer("https://rgs.example.com/snapshot")
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `restartWithRgsServer should handle start failure and recover`() = test {
+        startNodeForTesting()
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        whenever(lightningService.setup(any(), isNull(), eq("https://bad.rgs/snapshot"), anyOrNull(), anyOrNull()))
+            .thenThrow(RuntimeException("Failed to start node"))
+
+        val result = sut.restartWithRgsServer("https://bad.rgs/snapshot")
+
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `restartWithRgsServer should fail when url is unreachable`() = test {
+        val failingValidator = UrlValidator { Result.failure(Exception("DNS resolution failed")) }
+        val sutWithFailingValidator = LightningRepo(
+            bgDispatcher = testDispatcher,
+            lightningService = lightningService,
+            settingsStore = settingsStore,
+            coreService = coreService,
+            lspNotificationsService = lspNotificationsService,
+            firebaseMessaging = firebaseMessaging,
+            keychain = keychain,
+            lnurlService = lnurlService,
+            cacheStore = cacheStore,
+            preActivityMetadataRepo = preActivityMetadataRepo,
+            connectivityRepo = connectivityRepo,
+            vssBackupClientLdk = vssBackupClientLdk,
+            urlValidator = failingValidator,
+        )
+        sutWithFailingValidator.setInitNodeLifecycleState()
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.sync()).thenReturn(Unit)
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
+        sutWithFailingValidator.start()
+
+        val result = sutWithFailingValidator.restartWithRgsServer("https://rapidsync.lightningdevkit/snapshot")
+
+        assertTrue(result.isFailure)
+        assertEquals("DNS resolution failed", result.exceptionOrNull()?.message)
     }
 
     @Test
@@ -1063,6 +1243,224 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         // Verify rollback happened (update called twice: once for new, once for rollback)
         verifyBlocking(settingsStore, times(2)) { update(any()) }
+    }
+
+    @Test
+    fun `waitForProbeOutcome returns success when ProbeSuccessful arrives after subscription`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+
+        val result = async { sut.waitForProbeOutcome(setOf(probePaymentA)) }
+        onEvent(Event.ProbeSuccessful(paymentId = probePaymentA, paymentHash = probeHashA))
+
+        val outcome = result.await().getOrThrow()
+        assertIs<ProbeOutcome.Success>(outcome)
+        assertEquals(probePaymentA, outcome.paymentId)
+        assertEquals(probeHashA, outcome.paymentHash)
+    }
+
+    @Test
+    fun `waitForProbeOutcome returns cached success when event arrives before wait`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        onEvent(Event.ProbeSuccessful(paymentId = probePaymentA, paymentHash = probeHashA))
+
+        val outcome = sut.waitForProbeOutcome(setOf(probePaymentA)).getOrThrow()
+
+        assertIs<ProbeOutcome.Success>(outcome)
+        assertEquals(probePaymentA, outcome.paymentId)
+        assertEquals(probeHashA, outcome.paymentHash)
+    }
+
+    @Test
+    fun `waitForProbeOutcome returns last failure only after all tracked probes fail`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        val result = async { sut.waitForProbeOutcome(setOf(probePaymentA, probePaymentB)) }
+
+        onEvent(Event.ProbeFailed(paymentId = probePaymentA, paymentHash = probeHashA, shortChannelId = 1uL))
+        onEvent(Event.ProbeFailed(paymentId = probePaymentB, paymentHash = probeHashB, shortChannelId = 2uL))
+
+        val outcome = result.await().getOrThrow()
+        assertIs<ProbeOutcome.Failure>(outcome)
+        assertEquals(probePaymentB, outcome.paymentId)
+        assertEquals(probeHashB, outcome.paymentHash)
+        assertEquals(2uL, outcome.shortChannelId)
+    }
+
+    @Test
+    fun `waitForProbeOutcome returns first success even when another path already failed`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        val result = async { sut.waitForProbeOutcome(setOf(probePaymentA, probePaymentB)) }
+
+        onEvent(Event.ProbeFailed(paymentId = probePaymentA, paymentHash = probeHashA, shortChannelId = 1uL))
+        onEvent(Event.ProbeSuccessful(paymentId = probePaymentB, paymentHash = probeHashB))
+
+        val outcome = result.await().getOrThrow()
+        assertIs<ProbeOutcome.Success>(outcome)
+        assertEquals(probePaymentB, outcome.paymentId)
+        assertEquals(probeHashB, outcome.paymentHash)
+    }
+
+    @Test
+    fun `waitForProbeOutcome does not hang on partial cached failures`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        onEvent(Event.ProbeFailed(paymentId = probePaymentA, paymentHash = probeHashA, shortChannelId = 1uL))
+
+        val result = async { sut.waitForProbeOutcome(setOf(probePaymentA, probePaymentB)) }
+        onEvent(Event.ProbeFailed(paymentId = probePaymentB, paymentHash = probeHashB, shortChannelId = 2uL))
+
+        val outcome = result.await().getOrThrow()
+        assertIs<ProbeOutcome.Failure>(outcome)
+        assertEquals(probePaymentB, outcome.paymentId)
+        assertEquals(2uL, outcome.shortChannelId)
+    }
+
+    @Test
+    fun `waitForProbeOutcome returns timeout error when no matching event arrives`() = test {
+        startNodeAndCaptureEvents()
+
+        val result = sut.waitForProbeOutcome(setOf(probePaymentA), timeout = 1.seconds)
+
+        assertTrue(result.isFailure)
+        assertIs<ProbeError.TimedOut>(result.exceptionOrNull())
+    }
+
+    @Test
+    fun `stop clears probe cache`() = test {
+        val onEvent = startNodeAndCaptureEvents()
+        whenever(lightningService.stop()).thenReturn(Unit)
+        onEvent(Event.ProbeSuccessful(paymentId = probePaymentA, paymentHash = probeHashA))
+
+        sut.stop()
+        val result = sut.waitForProbeOutcome(setOf(probePaymentA), timeout = 1.seconds)
+
+        assertTrue(result.isFailure)
+        assertIs<ProbeError.TimedOut>(result.exceptionOrNull())
+    }
+
+    @Test
+    fun `sendProbeForInvoice returns ProbeDispatch with payment IDs`() = test {
+        startNodeForTesting()
+        whenever(lightningService.sendProbes("lnbc1")).thenReturn(Result.success(setOf(probePaymentA, probePaymentB)))
+
+        val result = sut.sendProbeForInvoice("lnbc1")
+
+        assertTrue(result.isSuccess)
+        assertEquals(setOf(probePaymentA, probePaymentB), result.getOrThrow().paymentIds)
+    }
+
+    @Test
+    fun `sendProbeForInvoice delegates amount probes when sats are provided`() = test {
+        startNodeForTesting()
+        whenever(lightningService.sendProbesUsingAmount("lnbc1", 42_000uL))
+            .thenReturn(Result.success(setOf(probePaymentA)))
+
+        val result = sut.sendProbeForInvoice("lnbc1", amountSats = 42uL)
+
+        assertTrue(result.isSuccess)
+        assertEquals(setOf(probePaymentA), result.getOrThrow().paymentIds)
+        verify(lightningService).sendProbesUsingAmount("lnbc1", 42_000uL)
+    }
+
+    @Test
+    fun `sendProbeForNode delegates to keysend probe and returns payment IDs`() = test {
+        startNodeForTesting()
+        whenever(lightningService.sendKeysendProbe(probeNodeId, 42_000uL))
+            .thenReturn(Result.success(setOf(probePaymentA)))
+
+        val result = sut.sendProbeForNode(probeNodeId, amountSats = 42uL)
+
+        assertTrue(result.isSuccess)
+        assertEquals(setOf(probePaymentA), result.getOrThrow().paymentIds)
+        verifyBlocking(lightningService) { sendKeysendProbe(probeNodeId, 42_000uL) }
+    }
+
+    @Test
+    fun `probeReadiness reports ready with connected peer, usable channel and network graph`() = test {
+        startNodeForTesting()
+        val peer = PeerDetails(
+            nodeId = probeNodeId,
+            address = "1.2.3.4:9735",
+            isConnected = true,
+            isPersisted = true,
+        )
+        val channel = createChannelDetails().copy(
+            isChannelReady = true,
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = 2_000_000u,
+        )
+        whenever(lightningService.nodeId).thenReturn("node-1")
+        whenever(lightningService.peers).thenReturn(listOf(peer))
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        whenever(lightningService.getNetworkGraphInfo())
+            .thenReturn(NetworkGraphInfo(nodeCount = 1500, channelCount = 4200, latestRgsSyncTimestamp = 123u))
+        sut.syncState()
+
+        val readiness = sut.probeReadiness()
+
+        assertTrue(readiness.ready)
+        assertTrue(readiness.nodeRunning)
+        assertTrue(readiness.syncHealthy)
+        assertEquals("node-1", readiness.nodeId)
+        assertEquals(1, readiness.connectedPeers)
+        assertEquals(1, readiness.readyChannels)
+        assertEquals(1, readiness.usableChannels)
+        assertEquals(2_000uL, readiness.outboundCapacitySats)
+        assertEquals(1500, readiness.graphNodeCount)
+        assertEquals(4200, readiness.graphChannelCount)
+        assertEquals(123u, readiness.latestRgsSyncTimestamp)
+    }
+
+    @Test
+    fun `probeReadiness reports not ready when usable channel has no outbound capacity`() = test {
+        startNodeForTesting()
+        val peer = PeerDetails(
+            nodeId = probeNodeId,
+            address = "1.2.3.4:9735",
+            isConnected = true,
+            isPersisted = true,
+        )
+        val channel = createChannelDetails().copy(
+            isChannelReady = true,
+            isUsable = true,
+            nextOutboundHtlcLimitMsat = 0u,
+        )
+        whenever(lightningService.peers).thenReturn(listOf(peer))
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        whenever(lightningService.getNetworkGraphInfo())
+            .thenReturn(NetworkGraphInfo(nodeCount = 1500, channelCount = 4200, latestRgsSyncTimestamp = 123u))
+        sut.syncState()
+
+        val readiness = sut.probeReadiness()
+
+        assertFalse(readiness.ready)
+        assertEquals(1, readiness.usableChannels)
+        assertEquals(0uL, readiness.outboundCapacitySats)
+    }
+
+    @Test
+    fun `probeReadiness reports not ready when channels are not usable`() = test {
+        startNodeForTesting()
+        val peer = PeerDetails(
+            nodeId = probeNodeId,
+            address = "1.2.3.4:9735",
+            isConnected = true,
+            isPersisted = true,
+        )
+        val channel = createChannelDetails().copy(
+            isChannelReady = true,
+            isUsable = false,
+            nextOutboundHtlcLimitMsat = 0u,
+        )
+        whenever(lightningService.peers).thenReturn(listOf(peer))
+        whenever(lightningService.channels).thenReturn(listOf(channel))
+        whenever(lightningService.getNetworkGraphInfo())
+            .thenReturn(NetworkGraphInfo(nodeCount = 1500, channelCount = 4200, latestRgsSyncTimestamp = 123u))
+        sut.syncState()
+
+        val readiness = sut.probeReadiness()
+
+        assertFalse(readiness.ready)
+        assertEquals(0, readiness.usableChannels)
+        assertEquals(0uL, readiness.outboundCapacitySats)
     }
 
     @Test

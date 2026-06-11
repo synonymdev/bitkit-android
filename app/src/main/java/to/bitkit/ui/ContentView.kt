@@ -13,8 +13,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -32,7 +32,7 @@ import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
-import androidx.navigation.NavOptions
+import androidx.navigation.NavOptionsBuilder
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
@@ -41,17 +41,22 @@ import androidx.navigation.toRoute
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.appwidget.AppWidgetRefreshReason
+import to.bitkit.appwidget.appWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
-import to.bitkit.models.WidgetType
+import to.bitkit.repositories.ConnectivityState
 import to.bitkit.ui.Routes.ExternalConnection
 import to.bitkit.ui.components.AuthCheckScreen
+import to.bitkit.ui.components.DefaultSheetContainerColor
 import to.bitkit.ui.components.DrawerMenu
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.SheetHandlePlacement
 import to.bitkit.ui.components.SheetHost
 import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TimedSheetType
@@ -60,15 +65,40 @@ import to.bitkit.ui.onboarding.WalletRestoreErrorView
 import to.bitkit.ui.onboarding.WalletRestoreSuccessView
 import to.bitkit.ui.screens.CriticalUpdateScreen
 import to.bitkit.ui.screens.common.ComingSoonScreen
+import to.bitkit.ui.screens.contacts.AddContactScreen
+import to.bitkit.ui.screens.contacts.AddContactViewModel
+import to.bitkit.ui.screens.contacts.ContactActivityScreen
+import to.bitkit.ui.screens.contacts.ContactActivityViewModel
+import to.bitkit.ui.screens.contacts.ContactDetailScreen
+import to.bitkit.ui.screens.contacts.ContactDetailViewModel
+import to.bitkit.ui.screens.contacts.ContactImportOverviewScreen
+import to.bitkit.ui.screens.contacts.ContactImportOverviewViewModel
+import to.bitkit.ui.screens.contacts.ContactImportSelectScreen
+import to.bitkit.ui.screens.contacts.ContactImportSelectViewModel
+import to.bitkit.ui.screens.contacts.ContactsIntroScreen
+import to.bitkit.ui.screens.contacts.ContactsScreen
+import to.bitkit.ui.screens.contacts.ContactsViewModel
+import to.bitkit.ui.screens.contacts.EditContactScreen
+import to.bitkit.ui.screens.contacts.EditContactViewModel
+import to.bitkit.ui.screens.contacts.shouldDiscardPendingImport
 import to.bitkit.ui.screens.profile.CreateProfileScreen
+import to.bitkit.ui.screens.profile.CreateProfileViewModel
+import to.bitkit.ui.screens.profile.EditProfileScreen
+import to.bitkit.ui.screens.profile.EditProfileViewModel
+import to.bitkit.ui.screens.profile.PayContactsScreen
+import to.bitkit.ui.screens.profile.PayContactsViewModel
 import to.bitkit.ui.screens.profile.ProfileIntroScreen
+import to.bitkit.ui.screens.profile.ProfileScreen
+import to.bitkit.ui.screens.profile.ProfileViewModel
+import to.bitkit.ui.screens.profile.PubkyAuthApprovalSheet
+import to.bitkit.ui.screens.profile.PubkyChoiceScreen
+import to.bitkit.ui.screens.profile.PubkyChoiceViewModel
 import to.bitkit.ui.screens.recovery.RecoveryMnemonicScreen
 import to.bitkit.ui.screens.recovery.RecoveryModeScreen
-import to.bitkit.ui.screens.scanner.QrScanningScreen
-import to.bitkit.ui.screens.scanner.SCAN_REQUEST_KEY
 import to.bitkit.ui.screens.settings.DevSettingsScreen
 import to.bitkit.ui.screens.settings.FeeSettingsScreen
 import to.bitkit.ui.screens.settings.LdkDebugScreen
+import to.bitkit.ui.screens.settings.LegacyRnRecoveryScreen
 import to.bitkit.ui.screens.settings.ProbingToolScreen
 import to.bitkit.ui.screens.settings.VssDebugScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
@@ -94,36 +124,20 @@ import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
+import to.bitkit.ui.screens.trezor.TrezorScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.SavingsWalletScreen
 import to.bitkit.ui.screens.wallets.SpendingWalletScreen
+import to.bitkit.ui.screens.wallets.activity.ActivityAssignContactScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityDetailScreen
 import to.bitkit.ui.screens.wallets.activity.ActivityExploreScreen
 import to.bitkit.ui.screens.wallets.activity.AllActivityScreen
 import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
+import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.screens.wallets.receive.ReceiveSheet
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
-import to.bitkit.ui.screens.widgets.AddWidgetsScreen
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
-import to.bitkit.ui.screens.widgets.blocks.BlocksEditScreen
-import to.bitkit.ui.screens.widgets.blocks.BlocksPreviewScreen
-import to.bitkit.ui.screens.widgets.blocks.BlocksViewModel
-import to.bitkit.ui.screens.widgets.calculator.CalculatorPreviewScreen
-import to.bitkit.ui.screens.widgets.facts.FactsEditScreen
-import to.bitkit.ui.screens.widgets.facts.FactsPreviewScreen
-import to.bitkit.ui.screens.widgets.facts.FactsViewModel
-import to.bitkit.ui.screens.widgets.headlines.HeadlinesEditScreen
-import to.bitkit.ui.screens.widgets.headlines.HeadlinesPreviewScreen
-import to.bitkit.ui.screens.widgets.headlines.HeadlinesViewModel
-import to.bitkit.ui.screens.widgets.price.PriceEditScreen
-import to.bitkit.ui.screens.widgets.price.PricePreviewScreen
-import to.bitkit.ui.screens.widgets.price.PriceViewModel
-import to.bitkit.ui.screens.widgets.weather.WeatherEditScreen
-import to.bitkit.ui.screens.widgets.weather.WeatherPreviewScreen
-import to.bitkit.ui.screens.widgets.weather.WeatherViewModel
-import to.bitkit.ui.settings.AboutScreen
-import to.bitkit.ui.settings.AdvancedSettingsScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
 import to.bitkit.ui.settings.BlocktankRegtestScreen
 import to.bitkit.ui.settings.CJitDetailScreen
@@ -132,7 +146,6 @@ import to.bitkit.ui.settings.LanguageSettingsScreen
 import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
-import to.bitkit.ui.settings.SecuritySettingsScreen
 import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.advanced.AddressTypePreferenceScreen
 import to.bitkit.ui.settings.advanced.AddressViewerScreen
@@ -144,7 +157,6 @@ import to.bitkit.ui.settings.backgroundPayments.BackgroundPaymentsIntroScreen
 import to.bitkit.ui.settings.backgroundPayments.BackgroundPaymentsSettings
 import to.bitkit.ui.settings.backups.ResetAndRestoreScreen
 import to.bitkit.ui.settings.general.DefaultUnitSettingsScreen
-import to.bitkit.ui.settings.general.GeneralSettingsScreen
 import to.bitkit.ui.settings.general.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.general.TagsSettingsScreen
 import to.bitkit.ui.settings.general.WidgetsSettingsScreen
@@ -152,11 +164,8 @@ import to.bitkit.ui.settings.lightning.ChannelDetailScreen
 import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
-import to.bitkit.ui.settings.pin.ChangePinConfirmScreen
-import to.bitkit.ui.settings.pin.ChangePinNewScreen
-import to.bitkit.ui.settings.pin.ChangePinResultScreen
-import to.bitkit.ui.settings.pin.ChangePinScreen
-import to.bitkit.ui.settings.pin.DisablePinScreen
+import to.bitkit.ui.settings.paymentPreference.PaymentPreferenceScreen
+import to.bitkit.ui.settings.pin.PinManagementScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
 import to.bitkit.ui.settings.support.ReportIssueResultScreen
@@ -164,22 +173,27 @@ import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
+import to.bitkit.ui.sheets.BTCPayConnectionSheet
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.BackupSheet
+import to.bitkit.ui.sheets.ChangePinSheet
 import to.bitkit.ui.sheets.ConnectionClosedSheet
+import to.bitkit.ui.sheets.DisablePinSheet
 import to.bitkit.ui.sheets.ForceTransferSheet
 import to.bitkit.ui.sheets.GiftSheet
 import to.bitkit.ui.sheets.HighBalanceWarningSheet
 import to.bitkit.ui.sheets.LnurlAuthSheet
 import to.bitkit.ui.sheets.PinSheet
+import to.bitkit.ui.sheets.QrScanningSheet
 import to.bitkit.ui.sheets.QuickPayIntroSheet
+import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.SendSheet
 import to.bitkit.ui.sheets.UpdateSheet
-import to.bitkit.ui.theme.TRANSITION_SHEET_MS
+import to.bitkit.ui.sheets.WidgetsSheet
+import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions
-import to.bitkit.ui.utils.Transitions
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
 import to.bitkit.utils.Logger
@@ -212,6 +226,7 @@ fun ContentView(
 
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val context = LocalContext.current
+    val appWidgetRefreshScheduler = remember(context) { context.appWidgetRefreshScheduler }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
 
     val walletUiState by walletViewModel.walletState.collectAsStateWithLifecycle()
@@ -233,8 +248,12 @@ fun ContentView(
 
                     appViewModel.consumePaymentReceivedInBackground()
 
+                    appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.APP_FOREGROUND)
+                    appWidgetRefreshScheduler.requestCatchUp(AppWidgetRefreshReason.APP_FOREGROUND)
                     currencyViewModel.triggerRefresh()
                     blocktankViewModel.refreshOrders()
+                    appViewModel.refreshPublicPaykitEndpoints()
+                    appViewModel.refreshPrivatePaykitEndpoints()
                 }
 
                 Lifecycle.Event.ON_STOP -> {
@@ -260,14 +279,19 @@ fun ContentView(
     LaunchedEffect(appViewModel) {
         appViewModel.mainScreenEffect.collect {
             when (it) {
-                is MainScreenEffect.Navigate -> navController.navigate(it.route, navOptions = it.navOptions)
+                is MainScreenEffect.Navigate -> if (it.clearStack) {
+                    navController.navigateTo(it.route) { popUpTo(0) { inclusive = true } }
+                } else {
+                    navController.navigateTo(it.route)
+                }
+
                 is MainScreenEffect.ProcessClipboardAutoRead -> {
                     val isOnHome = navController.currentDestination?.hasRoute<Routes.Home>() == true
                     if (!isOnHome) {
                         navController.navigateToHome()
                         delay(100) // Small delay to ensure navigation completes
                     }
-                    appViewModel.onScanResult(it.data)
+                    appViewModel.onScanResult(it.data, routePubkyKeys = true)
                 }
 
                 else -> Unit
@@ -339,7 +363,7 @@ fun ContentView(
     }
 
     val balance by walletViewModel.balanceState.collectAsStateWithLifecycle()
-    val currencies by currencyViewModel.uiState.collectAsState()
+    val currencies by currencyViewModel.uiState.collectAsStateWithLifecycle()
 
     // Keep backups in sync
     LaunchedEffect(backupsViewModel) { backupsViewModel.observeAndSyncBackups() }
@@ -361,7 +385,29 @@ fun ContentView(
 
         val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
         val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
+        val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+        val hasSeenContactsIntro by settingsViewModel.hasSeenContactsIntro.collectAsStateWithLifecycle()
+        val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+        val hasPubkyContacts by settingsViewModel.hasPubkyContacts.collectAsStateWithLifecycle()
+        val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
+        val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
+        var homeWalletPageRequest by remember { mutableIntStateOf(0) }
+        var homeWidgetsPageRequest by remember { mutableIntStateOf(0) }
+        val navigateToHomeWallet = {
+            homeWalletPageRequest++
+            navController.navigateToHome()
+        }
+        val navigateToHomeWidgets = {
+            homeWidgetsPageRequest++
+            navController.navigateToHome()
+        }
+        val onConsumeHomeWalletPageRequest = {
+            homeWalletPageRequest = 0
+        }
+        val onConsumeHomeWidgetsPageRequest = {
+            homeWidgetsPageRequest = 0
+        }
 
         Box(
             modifier = modifier.fillMaxSize()
@@ -369,6 +415,14 @@ fun ContentView(
             SheetHost(
                 shouldExpand = currentSheet != null,
                 onDismiss = { appViewModel.hideSheet() },
+                sheetHandlePlacement = when (currentSheet) {
+                    is Sheet.Widgets -> SheetHandlePlacement.ContentOverlay
+                    else -> SheetHandlePlacement.ScaffoldSlot
+                },
+                sheetContainerColor = when (currentSheet) {
+                    is Sheet.Widgets -> Colors.Gray7
+                    else -> DefaultSheetContainerColor
+                },
                 sheets = {
                     when (val sheet = currentSheet) {
                         null -> Unit
@@ -381,27 +435,51 @@ fun ContentView(
                         }
 
                         is Sheet.Receive -> {
-                            val walletState by walletViewModel.walletState.collectAsState()
+                            val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
+                            val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                             ReceiveSheet(
+                                startRoute = sheet.route,
                                 walletState = walletState,
+                                isOffline = connectivityState != ConnectivityState.CONNECTED,
                                 navigateToExternalConnection = {
-                                    navController.navigate(ExternalConnection())
+                                    navController.navigateTo(ExternalConnection())
                                     appViewModel.hideSheet()
-                                }
+                                },
                             )
                         }
 
                         is Sheet.ActivityDateRangeSelector -> DateRangeSelectorSheet()
                         is Sheet.ActivityTagSelector -> TagSelectorSheet()
                         is Sheet.Pin -> PinSheet(sheet, appViewModel)
+                        Sheet.ChangePin -> ChangePinSheet(appViewModel)
+                        Sheet.DisablePin -> DisablePinSheet(appViewModel)
                         is Sheet.Backup -> BackupSheet(sheet, onDismiss = { appViewModel.hideSheet() })
+                        is Sheet.Widgets -> {
+                            WidgetsSheet(
+                                sheet = sheet,
+                                app = appViewModel,
+                                fiatSymbol = LocalCurrencies.current.currencySymbol,
+                                showWidgets = showWidgets,
+                                onNavigateHomeWidgets = navigateToHomeWidgets,
+                                onOpenWidgetsSettings = {
+                                    navController.navigateTo(Routes.WidgetsSettings)
+                                },
+                            )
+                        }
                         is Sheet.LnurlAuth -> LnurlAuthSheet(sheet, appViewModel)
                         Sheet.ForceTransfer -> ForceTransferSheet(appViewModel, transferViewModel)
                         Sheet.ConnectionClosed -> ConnectionClosedSheet(
                             onDismiss = { appViewModel.hideSheet() },
                         )
 
+                        is Sheet.BTCPayConnection -> BTCPayConnectionSheet(sheet, appViewModel)
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
+                        Sheet.QrScanner -> QrScanningSheet(appViewModel)
+                        is Sheet.PubkyAuth -> PubkyAuthApprovalSheet(
+                            authUrl = sheet.authUrl,
+                            viewModel = hiltViewModel(),
+                            onDismiss = { appViewModel.hideSheet() },
+                        )
                         is Sheet.TimedSheet -> {
                             when (sheet.type) {
                                 TimedSheetType.APP_UPDATE -> {
@@ -417,9 +495,13 @@ fun ContentView(
 
                                 TimedSheetType.NOTIFICATIONS -> {
                                     BackgroundPaymentsIntroSheet(
-                                        onContinue = {
+                                        onLater = {
                                             appViewModel.dismissTimedSheet()
-                                            navController.navigate(Routes.BackgroundPaymentsSettings)
+                                            settingsViewModel.setBgPaymentsIntroSeen(true)
+                                        },
+                                        onEnable = {
+                                            appViewModel.dismissTimedSheet()
+                                            navController.navigateTo(Routes.BackgroundPaymentsSettings)
                                             settingsViewModel.setBgPaymentsIntroSeen(true)
                                         },
                                     )
@@ -429,7 +511,7 @@ fun ContentView(
                                     QuickPayIntroSheet(
                                         onContinue = {
                                             appViewModel.dismissTimedSheet()
-                                            navController.navigate(Routes.QuickPaySettings)
+                                            navController.navigateTo(Routes.QuickPaySettings)
                                         },
                                     )
                                 }
@@ -451,6 +533,8 @@ fun ContentView(
                 }
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
+                    var isHomeCalculatorInputActive by remember { mutableStateOf(false) }
+
                     RootNavHost(
                         navController = navController,
                         drawerState = drawerState,
@@ -460,6 +544,12 @@ fun ContentView(
                         settingsViewModel = settingsViewModel,
                         currencyViewModel = currencyViewModel,
                         transferViewModel = transferViewModel,
+                        homeWalletPageRequest = homeWalletPageRequest,
+                        homeWidgetsPageRequest = homeWidgetsPageRequest,
+                        onConsumeHomeWalletPageRequest = onConsumeHomeWalletPageRequest,
+                        onConsumeHomeWidgetsPageRequest = onConsumeHomeWidgetsPageRequest,
+                        onNavigateHomeWidgets = navigateToHomeWidgets,
+                        onHomeCalculatorInputActiveChanged = { isHomeCalculatorInputActive = it },
                     )
 
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -470,13 +560,21 @@ fun ContentView(
                         Routes.Savings::class.qualifiedName,
                         Routes.Spending::class.qualifiedName,
                     )
+                    val hideTabBarForCalculator =
+                        currentRoute == Routes.Home::class.qualifiedName && isHomeCalculatorInputActive
+
+                    LaunchedEffect(currentRoute) {
+                        if (currentRoute != Routes.Home::class.qualifiedName) {
+                            isHomeCalculatorInputActive = false
+                        }
+                    }
 
                     if (showTabBar) {
                         TabBar(
+                            isVisible = !hideTabBarForCalculator,
                             onSendClick = { appViewModel.showSheet(Sheet.Send()) },
-                            onReceiveClick = { appViewModel.showSheet(Sheet.Receive) },
-                            onScanClick = { navController.navigateToScanner() },
-                            modifier = Modifier.align(Alignment.BottomCenter)
+                            onReceiveClick = { appViewModel.showSheet(Sheet.Receive()) },
+                            onScanClick = { appViewModel.showSheet(Sheet.Send(SendRoute.QrScanner)) },
                         )
                     }
                 }
@@ -487,7 +585,21 @@ fun ContentView(
                 rootNavController = navController,
                 hasSeenWidgetsIntro = hasSeenWidgetsIntro,
                 hasSeenShopIntro = hasSeenShopIntro,
-                modifier = Modifier.align(Alignment.TopEnd),
+                onBeforeNavigate = { destination ->
+                    if (shouldDiscardPendingImport(navController.currentDestination, destination)) {
+                        appViewModel.clearPendingPubkyImport()
+                    }
+                },
+                hasSeenProfileIntro = hasSeenProfileIntro,
+                hasSeenContactsIntro = hasSeenContactsIntro,
+                hasContacts = hasPubkyContacts,
+                isProfileAuthenticated = isProfileAuthenticated,
+                isPaykitEnabled = isPaykitEnabled,
+                showWidgets = showWidgets,
+                onOpenWalletHome = navigateToHomeWallet,
+                onOpenWidgetsHome = navigateToHomeWidgets,
+                onOpenWidgetsSheet = { appViewModel.showSheet(Sheet.Widgets()) },
+                modifier = Modifier.align(Alignment.TopEnd)
             )
         }
     }
@@ -503,6 +615,12 @@ private fun RootNavHost(
     settingsViewModel: SettingsViewModel,
     currencyViewModel: CurrencyViewModel,
     transferViewModel: TransferViewModel,
+    homeWalletPageRequest: Int,
+    homeWidgetsPageRequest: Int,
+    onConsumeHomeWalletPageRequest: () -> Unit,
+    onConsumeHomeWidgetsPageRequest: () -> Unit,
+    onNavigateHomeWidgets: () -> Unit,
+    onHomeCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
 
@@ -514,25 +632,24 @@ private fun RootNavHost(
             settingsViewModel = settingsViewModel,
             navController = navController,
             drawerState = drawerState,
+            homeWalletPageRequest = homeWalletPageRequest,
+            homeWidgetsPageRequest = homeWidgetsPageRequest,
+            onConsumeHomeWalletPageRequest = onConsumeHomeWalletPageRequest,
+            onConsumeHomeWidgetsPageRequest = onConsumeHomeWidgetsPageRequest,
+            onCalculatorInputActiveChanged = onHomeCalculatorInputActiveChanged,
         )
         allActivity(
             activityListViewModel = activityListViewModel,
             navController = navController,
         )
         settings(navController, settingsViewModel)
-        comingSoon(navController)
+        contacts(navController, settingsViewModel, appViewModel)
         profile(navController, settingsViewModel)
         shop(navController, settingsViewModel, appViewModel)
-        generalSettings(navController)
-        advancedSettings(navController)
-        aboutSettings(navController)
+        generalSettingsSubScreens(navController, settingsViewModel)
+        advancedSettingsSubScreens(navController)
         transactionSpeedSettings(navController)
-        securitySettings(navController)
-        disablePin(navController)
-        changePin(navController)
-        changePinNew(navController)
-        changePinConfirm(navController)
-        changePinResult(navController)
+        pinManagement(navController)
         defaultUnitSettings(currencyViewModel, navController)
         localCurrencySettings(currencyViewModel, navController)
         backupSettings(navController)
@@ -541,13 +658,17 @@ private fun RootNavHost(
         orderDetailSettings(navController)
         cjitDetailSettings(navController)
         lightningConnections(navController)
-        activityItem(activityListViewModel, navController)
-        qrScanner(appViewModel, navController)
+        activityItem(activityListViewModel, navController, settingsViewModel)
         authCheck(navController)
         logs(navController)
         suggestions(navController)
         support(navController)
-        widgets(navController, settingsViewModel, currencyViewModel)
+        widgets(
+            navController = navController,
+            settingsViewModel = settingsViewModel,
+            appViewModel = appViewModel,
+            onNavigateHomeWidgets = onNavigateHomeWidgets,
+        )
         update()
         recoveryMode(navController, appViewModel)
 
@@ -567,7 +688,7 @@ private fun RootNavHost(
             composableWithDefaultTransitions<Routes.SavingsIntro> {
                 SavingsIntroScreen(
                     onContinueClick = {
-                        navController.navigate(Routes.SavingsAvailability)
+                        navController.navigateTo(Routes.SavingsAvailability)
                         settingsViewModel.setHasSeenSavingsIntro(true)
                     },
                     onBackClick = { navController.popBackStack() },
@@ -577,13 +698,15 @@ private fun RootNavHost(
                 SavingsAvailabilityScreen(
                     onBackClick = { navController.popBackStack() },
                     onCancelClick = { navController.navigateToHome() },
-                    onContinueClick = { navController.navigate(Routes.SavingsConfirm) },
+                    onContinueClick = { navController.navigateTo(Routes.SavingsConfirm) },
                 )
             }
             composableWithDefaultTransitions<Routes.SavingsConfirm> {
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SavingsConfirmScreen(
-                    onConfirm = { navController.navigate(Routes.SavingsProgress) },
-                    onAdvancedClick = { navController.navigate(Routes.SavingsAdvanced) },
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
+                    onConfirm = { navController.navigateTo(Routes.SavingsProgress) },
+                    onAdvancedClick = { navController.navigateTo(Routes.SavingsAdvanced) },
                     onBackClick = { navController.popBackStack() },
                 )
             }
@@ -605,35 +728,39 @@ private fun RootNavHost(
             composableWithDefaultTransitions<Routes.SpendingIntro> {
                 SpendingIntroScreen(
                     onContinueClick = {
-                        navController.navigate(Routes.SpendingAmount)
+                        navController.navigateTo(Routes.SpendingAmount)
                         settingsViewModel.setHasSeenSpendingIntro(true)
                     },
                     onBackClick = { navController.popBackStack() },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingAmount> {
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingAmountScreen(
                     viewModel = transferViewModel,
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.navigate(Routes.SpendingConfirm) },
+                    onOrderCreated = { navController.navigateTo(Routes.SpendingConfirm) },
                     toastException = { appViewModel.toast(it) },
                     toast = { title, description ->
                         appViewModel.toast(
                             type = Toast.ToastType.ERROR,
                             title = title,
-                            description = description
+                            description = description,
                         )
                     },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingConfirm> {
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingConfirmScreen(
                     viewModel = transferViewModel,
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
-                    onLearnMoreClick = { navController.navigate(Routes.TransferLiquidity) },
-                    onAdvancedClick = { navController.navigate(Routes.SpendingAdvanced) },
-                    onConfirm = { navController.navigate(Routes.SettingUp) },
+                    onLearnMoreClick = { navController.navigateTo(Routes.TransferLiquidity) },
+                    onAdvancedClick = { navController.navigateTo(Routes.SpendingAdvanced) },
+                    onConfirm = { navController.navigateTo(Routes.SettingUp) },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingAdvanced> {
@@ -658,7 +785,7 @@ private fun RootNavHost(
                 )
             }
             composableWithDefaultTransitions<Routes.Funding> {
-                val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsState()
+                val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
                 val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
 
                 FundingScreen(
@@ -671,21 +798,20 @@ private fun RootNavHost(
                     },
                     onFund = {
                         scope.launch {
-                            // TODO show receive sheet -> ReceiveAmount
                             navController.navigateToHome()
                             delay(500) // Wait for nav to actually finish
-                            appViewModel.showSheet(Sheet.Receive)
+                            appViewModel.showSheet(Sheet.Receive(route = ReceiveRoute.Amount))
                         }
                     },
-                    onAdvanced = { navController.navigate(Routes.FundingAdvanced) },
+                    onManual = { navController.navigateTo(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
                     isGeoBlocked = isGeoBlocked,
                 )
             }
             composableWithDefaultTransitions<Routes.FundingAdvanced> {
                 FundingAdvancedScreen(
-                    onLnurl = { navController.navigateToScanner() },
-                    onManual = { navController.navigate(Routes.ExternalNav) },
+                    onLnurl = { appViewModel.showScannerSheet() },
+                    onManual = { navController.navigateTo(Routes.ExternalNav) },
                     onBackClick = { navController.popBackStack() },
                 )
             }
@@ -699,10 +825,13 @@ private fun RootNavHost(
 
                     ExternalConnectionScreen(
                         route = route,
-                        savedStateHandle = it.savedStateHandle,
                         viewModel = viewModel,
-                        onNodeConnected = { navController.navigate(Routes.ExternalAmount) },
-                        onScanClick = { navController.navigateToScanner(isCalledForResult = true) },
+                        onNodeConnected = { navController.navigateTo(Routes.ExternalAmount) },
+                        onScanClick = {
+                            appViewModel.showScannerSheet {
+                                viewModel.parseNodeUri(it)
+                            }
+                        },
                         onBackClick = { navController.popBackStack() },
                     )
                 }
@@ -712,7 +841,7 @@ private fun RootNavHost(
 
                     ExternalAmountScreen(
                         viewModel = viewModel,
-                        onContinue = { navController.navigate(Routes.ExternalConfirm) },
+                        onContinue = { navController.navigateTo(Routes.ExternalConfirm) },
                         onBackClick = { navController.popBackStack() },
                     )
                 }
@@ -724,7 +853,7 @@ private fun RootNavHost(
                         viewModel = viewModel,
                         onConfirm = {
                             walletViewModel.refreshState()
-                            navController.navigate(Routes.ExternalSuccess)
+                            navController.navigateTo(Routes.ExternalSuccess)
                         },
                         onBackClick = { navController.popBackStack() },
                     )
@@ -732,7 +861,7 @@ private fun RootNavHost(
                 composableWithDefaultTransitions<Routes.LnurlChannel> {
                     LnurlChannelScreen(
                         route = it.toRoute<Routes.LnurlChannel>(),
-                        onConnected = { navController.navigate(Routes.ExternalSuccess) },
+                        onConnected = { navController.navigateTo(Routes.ExternalSuccess) },
                         onBack = { navController.popBackStack() },
                         onClose = { navController.navigateToHome() },
                     )
@@ -756,6 +885,11 @@ private fun NavGraphBuilder.home(
     settingsViewModel: SettingsViewModel,
     navController: NavHostController,
     drawerState: DrawerState,
+    homeWalletPageRequest: Int,
+    homeWidgetsPageRequest: Int,
+    onConsumeHomeWalletPageRequest: () -> Unit,
+    onConsumeHomeWidgetsPageRequest: () -> Unit,
+    onCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
     composable<Routes.Home> {
         val isRefreshing by walletViewModel.isRefreshing.collectAsStateWithLifecycle()
@@ -782,13 +916,15 @@ private fun NavGraphBuilder.home(
                 walletViewModel = walletViewModel,
                 appViewModel = appViewModel,
                 activityListViewModel = activityListViewModel,
+                walletPageRequest = homeWalletPageRequest,
+                widgetsPageRequest = homeWidgetsPageRequest,
+                onConsumeWalletPageRequest = onConsumeHomeWalletPageRequest,
+                onConsumeWidgetsPageRequest = onConsumeHomeWidgetsPageRequest,
+                onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
             )
         }
     }
-    composable<Routes.Savings>(
-        enterTransition = { Transitions.slideInHorizontally },
-        exitTransition = { Transitions.slideOutHorizontally },
-    ) {
+    composableWithDefaultTransitions<Routes.Savings> {
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
         val onchainActivities by activityListViewModel.onchainActivities.collectAsStateWithLifecycle()
@@ -796,10 +932,10 @@ private fun NavGraphBuilder.home(
 
         SavingsWalletScreen(
             isGeoBlocked = isGeoBlocked,
-            onchainActivities = onchainActivities.orEmpty(),
-            onAllActivityButtonClick = { navController.navigateToAllActivity() },
+            onchainActivities = onchainActivities ?: persistentListOf(),
+            onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navigateToActivityItem(it) },
-            onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive) },
+            onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSpendingClick = {
                 if (!hasSeenSpendingIntro) {
                     navController.navigateToTransferSpendingIntro()
@@ -811,25 +947,30 @@ private fun NavGraphBuilder.home(
             forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
     }
-    composable<Routes.Spending>(
-        enterTransition = { Transitions.slideInHorizontally },
-        exitTransition = { Transitions.slideOutHorizontally },
-    ) {
+    composableWithDefaultTransitions<Routes.Spending> {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
+        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
 
         SpendingWalletScreen(
             channels = lightningState.channels,
-            lightningActivities = lightningActivities.orEmpty(),
-            onAllActivityButtonClick = { navController.navigateToAllActivity() },
+            lightningActivities = lightningActivities ?: persistentListOf(),
+            onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navigateToActivityItem(it) },
-            onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive) },
+            onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSavingsClick = {
                 if (!hasSeenSavingsIntro) {
                     navController.navigateToTransferSavingsIntro()
                 } else {
                     navController.navigateToTransferSavingsAvailability()
+                }
+            },
+            onTransferFromSavingsClick = {
+                if (!hasSeenSpendingIntro) {
+                    navController.navigateToTransferSpendingIntro()
+                } else {
+                    navController.navigateToTransferSpendingAmount()
                 }
             },
             onBackClick = { navController.popBackStack() },
@@ -844,10 +985,7 @@ private fun NavGraphBuilder.allActivity(
     composableWithDefaultTransitions<Routes.AllActivity> {
         AllActivityScreen(
             viewModel = activityListViewModel,
-            onBack = {
-                activityListViewModel.clearFilters()
-                navController.navigateToHome()
-            },
+            onBack = { navController.popBackStack() },
             onActivityItemClick = { id -> navController.navigateToActivityItem(id) },
         )
     }
@@ -867,7 +1005,7 @@ private fun NavGraphBuilder.settings(
             onBack = { navController.popBackStack() },
             onContinue = {
                 settingsViewModel.setQuickPayIntroSeen(true)
-                navController.navigate(Routes.QuickPaySettings)
+                navController.navigateTo(Routes.QuickPaySettings)
             }
         )
     }
@@ -879,6 +1017,12 @@ private fun NavGraphBuilder.settings(
     composableWithDefaultTransitions<Routes.DevSettings> {
         DevSettingsScreen(navController)
     }
+    composableWithDefaultTransitions<Routes.LegacyRnRecovery> {
+        LegacyRnRecoveryScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.Trezor> {
+        TrezorScreen(navController)
+    }
     composableWithDefaultTransitions<Routes.LdkDebug> {
         LdkDebugScreen(navController)
     }
@@ -886,7 +1030,7 @@ private fun NavGraphBuilder.settings(
         VssDebugScreen(navController)
     }
     composableWithDefaultTransitions<Routes.ProbingTool> {
-        ProbingToolScreen(it.savedStateHandle, navController)
+        ProbingToolScreen(navController)
     }
     composableWithDefaultTransitions<Routes.FeeSettings> {
         FeeSettingsScreen(navController)
@@ -901,40 +1045,258 @@ private fun NavGraphBuilder.settings(
     }
 }
 
-private fun NavGraphBuilder.comingSoon(
+@Composable
+private fun PaykitRouteGuard(
+    settingsViewModel: SettingsViewModel,
     navController: NavHostController,
+    redirectWhenDisabled: Boolean = true,
+    disabledContent: @Composable () -> Unit = {},
+    content: @Composable () -> Unit,
 ) {
-    composableWithDefaultTransitions<Routes.Contacts> {
-        ComingSoonScreen(
-            onWalletOverviewClick = { navController.navigateToHome() },
-            onBackClick = { navController.popBackStack() }
-        )
-    }
-    composableWithDefaultTransitions<Routes.Profile> {
-        ComingSoonScreen(
-            onWalletOverviewClick = { navController.navigateToHome() },
-            onBackClick = { navController.popBackStack() }
-        )
+    val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
+    val isPaykitStateLoaded by settingsViewModel.isPaykitStateLoaded.collectAsStateWithLifecycle()
+
+    if (!isPaykitStateLoaded) return
+
+    if (isPaykitEnabled) {
+        content()
+    } else if (redirectWhenDisabled) {
+        LaunchedEffect(Unit) {
+            navController.navigateToHome()
+        }
+    } else {
+        disabledContent()
     }
 }
 
+@Suppress("LongMethod")
+private fun NavGraphBuilder.contacts(
+    navController: NavHostController,
+    settingsViewModel: SettingsViewModel,
+    appViewModel: AppViewModel,
+) {
+    composableWithDefaultTransitions<Routes.Contacts> { backStackEntry ->
+        PaykitRouteGuard(
+            settingsViewModel = settingsViewModel,
+            navController = navController,
+            redirectWhenDisabled = false,
+            disabledContent = {
+                ComingSoonScreen(
+                    onWalletOverviewClick = { navController.navigateToHome() },
+                    onBackClick = { navController.popBackStack() }
+                )
+            },
+        ) {
+            val route = backStackEntry.toRoute<Routes.Contacts>()
+            val viewModel: ContactsViewModel = hiltViewModel()
+            ContactsScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onClickMyProfile = { navController.navigateTo(Routes.Profile) },
+                onClickContact = { navController.navigateTo(Routes.ContactDetail(it)) },
+                onAddContact = { navController.navigateTo(Routes.AddContact(it)) },
+                onScanQr = {
+                    appViewModel.showScannerSheet { scannedData ->
+                        navController.navigateTo(Routes.AddContact(scannedData))
+                    }
+                },
+                openAddContactSheet = route.showAddContactSheet,
+            )
+        }
+    }
+    composableWithDefaultTransitions<Routes.ContactsIntro> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val isAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
+            val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+            ContactsIntroScreen(
+                onContinue = {
+                    settingsViewModel.setHasSeenContactsIntro(true)
+                    when {
+                        isAuthenticated -> navController.navigateTo(
+                            Routes.Contacts(showAddContactSheet = true)
+                        ) { popUpTo(Routes.Home) }
+
+                        hasSeenProfileIntro -> navController.navigateTo(Routes.PubkyChoice) { popUpTo(Routes.Home) }
+                        else -> navController.navigateTo(Routes.ProfileIntro) { popUpTo(Routes.Home) }
+                    }
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
+    }
+    composableWithDefaultTransitions<Routes.ContactDetail> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: ContactDetailViewModel = hiltViewModel()
+            ContactDetailScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onPayContact = { paymentRequest, publicKey ->
+                    appViewModel.openContactPayment(paymentRequest, publicKey)
+                },
+                onActivityClick = { navController.navigateTo(Routes.ContactActivity(it)) },
+                onEditContact = { navController.navigateTo(Routes.EditContact(it)) },
+            )
+        }
+    }
+    composableWithDefaultTransitions<Routes.ContactActivity> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: ContactActivityViewModel = hiltViewModel()
+            ContactActivityScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onActivityItemClick = { navController.navigateToActivityItem(it) },
+            )
+        }
+    }
+    composableWithDefaultTransitions<Routes.AddContact> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: AddContactViewModel = hiltViewModel()
+            AddContactScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onContactSaved = { navController.popBackStack() },
+                onPayContact = { paymentRequest, publicKey ->
+                    navController.popBackStack()
+                    appViewModel.openContactPayment(paymentRequest, publicKey)
+                },
+            )
+        }
+    }
+    composableWithDefaultTransitions<Routes.EditContact> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: EditContactViewModel = hiltViewModel()
+            EditContactScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onContactDeleted = {
+                    navController.navigateTo(Routes.Contacts()) { popUpTo(Routes.Home) }
+                },
+            )
+        }
+    }
+    composableWithDefaultTransitions<Routes.ContactImportOverview> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: ContactImportOverviewViewModel = hiltViewModel()
+            ContactImportOverviewScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onNavigateToSelect = { navController.navigateTo(Routes.ContactImportSelect) },
+                onImportComplete = {
+                    navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+                },
+            )
+        }
+    }
+    composableWithDefaultTransitions<Routes.ContactImportSelect> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: ContactImportSelectViewModel = hiltViewModel()
+            ContactImportSelectScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onImportComplete = {
+                    navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+                },
+            )
+        }
+    }
+}
+
+@Suppress("LongMethod")
 private fun NavGraphBuilder.profile(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
 ) {
-    composableWithDefaultTransitions<Routes.ProfileIntro> {
-        ProfileIntroScreen(
-            onContinue = {
-                settingsViewModel.setHasSeenProfileIntro(true)
-                navController.navigate(Routes.CreateProfile)
+    composableWithDefaultTransitions<Routes.Profile> {
+        PaykitRouteGuard(
+            settingsViewModel = settingsViewModel,
+            navController = navController,
+            redirectWhenDisabled = false,
+            disabledContent = {
+                ComingSoonScreen(
+                    onWalletOverviewClick = { navController.navigateToHome() },
+                    onBackClick = { navController.popBackStack() }
+                )
             },
-            onBackClick = { navController.popBackStack() }
-        )
+        ) {
+            val viewModel: ProfileViewModel = hiltViewModel()
+            ProfileScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onEditProfile = { navController.navigateTo(Routes.EditProfile) },
+            )
+        }
+    }
+    composableWithDefaultTransitions<Routes.ProfileIntro> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            ProfileIntroScreen(
+                onContinue = {
+                    settingsViewModel.setHasSeenProfileIntro(true)
+                    navController.navigateTo(Routes.PubkyChoice)
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
+    }
+    composableWithDefaultTransitions<Routes.PubkyChoice> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: PubkyChoiceViewModel = hiltViewModel()
+            PubkyChoiceScreen(
+                viewModel = viewModel,
+                onNavigateToCreateProfile = { navController.navigateTo(Routes.CreateProfile) },
+                onNavigateToContactImportOverview = {
+                    navController.navigateTo(Routes.ContactImportOverview) { popUpTo(Routes.Home) }
+                },
+                onNavigateToPayContacts = {
+                    navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+                },
+                onNavigateToProfile = {
+                    navController.navigateTo(Routes.Profile) { popUpTo(Routes.Home) }
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.CreateProfile> {
-        CreateProfileScreen(
-            onBack = { navController.popBackStack() },
-        )
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: CreateProfileViewModel = hiltViewModel()
+            CreateProfileScreen(
+                viewModel = viewModel,
+                onNavigateToPayContacts = {
+                    navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
+    }
+    composableWithDefaultTransitions<Routes.EditProfile> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+            val viewModel: EditProfileViewModel = hiltViewModel()
+            EditProfileScreen(
+                viewModel = viewModel,
+                onBackClick = { navController.popBackStack() },
+                onExitProfile = {
+                    val nextRoute = if (hasSeenProfileIntro) {
+                        Routes.PubkyChoice
+                    } else {
+                        Routes.ProfileIntro
+                    }
+                    navController.navigateTo(nextRoute) { popUpTo(Routes.Home) }
+                },
+            )
+        }
+    }
+    composableWithDefaultTransitions<Routes.PayContacts> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val viewModel: PayContactsViewModel = hiltViewModel()
+            PayContactsScreen(
+                viewModel = viewModel,
+                onContinue = {
+                    navController.navigateTo(Routes.Profile) { popUpTo(Routes.Home) }
+                },
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
 }
 
@@ -947,7 +1309,7 @@ private fun NavGraphBuilder.shop(
         ShopIntroScreen(
             onContinue = {
                 settingsViewModel.setHasSeenShopIntro(true)
-                navController.navigate(Routes.ShopDiscover)
+                navController.navigateTo(Routes.ShopDiscover)
             },
             onBackClick = {
                 navController.popBackStack()
@@ -958,7 +1320,7 @@ private fun NavGraphBuilder.shop(
         ShopDiscoverScreen(
             onBack = { navController.popBackStack() },
             navigateWebView = { page, title ->
-                navController.navigate(Routes.ShopWebView(page = page, title = title))
+                navController.navigateTo(Routes.ShopWebView(page = page, title = title))
             }
         )
     }
@@ -975,11 +1337,10 @@ private fun NavGraphBuilder.shop(
     }
 }
 
-private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.GeneralSettings> {
-        GeneralSettingsScreen(navController)
-    }
-
+private fun NavGraphBuilder.generalSettingsSubScreens(
+    navController: NavHostController,
+    settingsViewModel: SettingsViewModel,
+) {
     composableWithDefaultTransitions<Routes.WidgetsSettings> {
         WidgetsSettingsScreen(navController)
     }
@@ -992,29 +1353,34 @@ private fun NavGraphBuilder.generalSettings(navController: NavHostController) {
             onBack = { navController.popBackStack() },
         )
     }
+    composableWithDefaultTransitions<Routes.PaymentPreferenceSettings> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            PaymentPreferenceScreen(
+                onBack = { navController.popBackStack() },
+            )
+        }
+    }
 
     composableWithDefaultTransitions<Routes.BackgroundPaymentsIntro> {
         BackgroundPaymentsIntroScreen(
             onBack = { navController.popBackStack() },
-            onContinue = {
-                navController.navigate(Routes.BackgroundPaymentsSettings)
-            }
+            onLater = { navController.popBackStack() },
+            onEnable = {
+                navController.navigateTo(Routes.BackgroundPaymentsSettings)
+            },
         )
     }
 }
 
-private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.AdvancedSettings> {
-        AdvancedSettingsScreen(navController)
-    }
+private fun NavGraphBuilder.advancedSettingsSubScreens(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.CoinSelectPreference> {
         CoinSelectPreferenceScreen(navController)
     }
     composableWithDefaultTransitions<Routes.ElectrumConfig> {
-        ElectrumConfigScreen(it.savedStateHandle, navController)
+        ElectrumConfigScreen(navController)
     }
     composableWithDefaultTransitions<Routes.RgsServer> {
-        RgsServerScreen(it.savedStateHandle, navController)
+        RgsServerScreen(navController)
     }
     composableWithDefaultTransitions<Routes.AddressTypePreference> {
         AddressTypePreferenceScreen(navController)
@@ -1027,16 +1393,6 @@ private fun NavGraphBuilder.advancedSettings(navController: NavHostController) {
     }
 }
 
-private fun NavGraphBuilder.aboutSettings(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.AboutSettings> {
-        AboutScreen(
-            onBack = {
-                navController.popBackStack()
-            }
-        )
-    }
-}
-
 private fun NavGraphBuilder.transactionSpeedSettings(navController: NavHostController) {
     composableWithDefaultTransitions<Routes.TransactionSpeedSettings> {
         TransactionSpeedSettingsScreen(navController)
@@ -1046,43 +1402,9 @@ private fun NavGraphBuilder.transactionSpeedSettings(navController: NavHostContr
     }
 }
 
-private fun NavGraphBuilder.securitySettings(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.SecuritySettings> {
-        SecuritySettingsScreen(navController = navController)
-    }
-}
-
-private fun NavGraphBuilder.disablePin(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.DisablePin> {
-        DisablePinScreen(navController)
-    }
-}
-
-private fun NavGraphBuilder.changePin(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.ChangePin> {
-        ChangePinScreen(navController)
-    }
-}
-
-private fun NavGraphBuilder.changePinNew(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.ChangePinNew> {
-        ChangePinNewScreen(navController)
-    }
-}
-
-private fun NavGraphBuilder.changePinConfirm(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.ChangePinConfirm> {
-        val route = it.toRoute<Routes.ChangePinConfirm>()
-        ChangePinConfirmScreen(
-            newPin = route.newPin,
-            navController = navController,
-        )
-    }
-}
-
-private fun NavGraphBuilder.changePinResult(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.ChangePinResult> {
-        ChangePinResultScreen(navController)
+private fun NavGraphBuilder.pinManagement(navController: NavHostController) {
+    composableWithDefaultTransitions<Routes.PinManagement> {
+        PinManagementScreen(navController)
     }
 }
 
@@ -1166,19 +1488,17 @@ private fun NavGraphBuilder.lightningConnections(
             LightningConnectionsScreen(navController, viewModel)
         }
         composableWithDefaultTransitions<Routes.ChannelDetail> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
-            val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
+            val route = it.toRoute<Routes.ChannelDetail>()
             ChannelDetailScreen(
+                channelId = route.channelId,
                 navController = navController,
-                viewModel = viewModel,
             )
         }
         composableWithDefaultTransitions<Routes.CloseConnection> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
-            val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
+            val route = it.toRoute<Routes.CloseConnection>()
             CloseConnectionScreen(
+                channelId = route.channelId,
                 navController = navController,
-                viewModel = viewModel,
             )
         }
     }
@@ -1187,44 +1507,35 @@ private fun NavGraphBuilder.lightningConnections(
 private fun NavGraphBuilder.activityItem(
     activityListViewModel: ActivityListViewModel,
     navController: NavHostController,
+    settingsViewModel: SettingsViewModel,
 ) {
     composableWithDefaultTransitions<Routes.ActivityDetail> {
         ActivityDetailScreen(
             listViewModel = activityListViewModel,
             route = it.toRoute(),
             onExploreClick = { id -> navController.navigateToActivityExplore(id) },
+            onAssignContactClick = { id -> navController.navigateTo(Routes.ActivityAssignContact(id)) },
             onChannelClick = { channelId ->
-                navController.currentBackStackEntry?.savedStateHandle?.set("selectedChannelId", channelId)
-                navController.navigate(Routes.ConnectionsNav) {
-                    launchSingleTop = true
-                }
+                navController.navigateTo(Routes.ChannelDetail(channelId))
             },
             onBackClick = { navController.popBackStack() },
             onCloseClick = { navController.navigateToHome() },
         )
+    }
+    composableWithDefaultTransitions<Routes.ActivityAssignContact> {
+        PaykitRouteGuard(settingsViewModel, navController) {
+            val route = it.toRoute<Routes.ActivityAssignContact>()
+            ActivityAssignContactScreen(
+                activityId = route.id,
+                onBackClick = { navController.popBackStack() },
+            )
+        }
     }
     composableWithDefaultTransitions<Routes.ActivityExplore> {
         ActivityExploreScreen(
             route = it.toRoute(),
             onBackClick = { navController.popBackStack() },
         )
-    }
-}
-
-private fun NavGraphBuilder.qrScanner(
-    appViewModel: AppViewModel,
-    navController: NavHostController,
-) {
-    composableWithDefaultTransitions<Routes.QrScanner>(
-        enterTransition = { Transitions.slideInVertically },
-        popExitTransition = { Transitions.slideOutVertically },
-    ) {
-        QrScanningScreen(navController = navController) { qrCode ->
-            appViewModel.onScanResult(
-                data = qrCode,
-                delayMs = TRANSITION_SHEET_MS,
-            )
-        }
     }
 }
 
@@ -1278,7 +1589,7 @@ private fun NavGraphBuilder.recoveryMode(
     composableWithDefaultTransitions<Routes.RecoveryMode> {
         RecoveryModeScreen(
             onNavigateToSeed = {
-                navController.navigate(Routes.RecoveryMnemonic)
+                navController.navigateTo(Routes.RecoveryMnemonic)
             },
             appViewModel = appViewModel
         )
@@ -1308,9 +1619,9 @@ private fun NavGraphBuilder.support(
             onBack = { navController.popBackStack() },
             navigateResultScreen = { isSuccess ->
                 if (isSuccess) {
-                    navController.navigate(Routes.ReportIssueSuccess)
+                    navController.navigateTo(Routes.ReportIssueSuccess)
                 } else {
-                    navController.navigate(Routes.ReportIssueFailure)
+                    navController.navigateTo(Routes.ReportIssueFailure)
                 }
             }
         )
@@ -1333,169 +1644,30 @@ private fun NavGraphBuilder.support(
     }
 }
 
-@Suppress("LongMethod")
 private fun NavGraphBuilder.widgets(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
-    currencyViewModel: CurrencyViewModel,
+    appViewModel: AppViewModel,
+    onNavigateHomeWidgets: () -> Unit,
 ) {
     composableWithDefaultTransitions<Routes.WidgetsIntro> {
+        val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
+
         WidgetsIntroScreen(
-            onContinue = {
+            onViewOrganize = {
                 settingsViewModel.setHasSeenWidgetsIntro(true)
-                navController.navigate(Routes.AddWidget)
+                if (showWidgets) {
+                    onNavigateHomeWidgets()
+                } else {
+                    appViewModel.showSheet(Sheet.Widgets())
+                }
+            },
+            onAddWidget = {
+                settingsViewModel.setHasSeenWidgetsIntro(true)
+                appViewModel.showSheet(Sheet.Widgets())
             },
             onBackClick = { navController.popBackStack() },
         )
-    }
-    composableWithDefaultTransitions<Routes.AddWidget> {
-        AddWidgetsScreen(
-            onWidgetSelected = { widgetType ->
-                when (widgetType) {
-                    WidgetType.BLOCK -> navController.navigate(Routes.BlocksPreview)
-                    WidgetType.CALCULATOR -> navController.navigate(Routes.CalculatorPreview)
-                    WidgetType.FACTS -> navController.navigate(Routes.FactsPreview)
-                    WidgetType.NEWS -> navController.navigate(Routes.HeadlinesPreview)
-                    WidgetType.PRICE -> navController.navigate(Routes.PricePreview)
-                    WidgetType.WEATHER -> navController.navigate(Routes.WeatherPreview)
-                }
-            },
-            fiatSymbol = LocalCurrencies.current.currencySymbol,
-            onBackCLick = { navController.popBackStack() }
-        )
-    }
-    composableWithDefaultTransitions<Routes.CalculatorPreview> {
-        CalculatorPreviewScreen(
-            onClose = { navController.navigateToHome() },
-            onBack = { navController.popBackStack() },
-            currencyViewModel = currencyViewModel
-        )
-    }
-    navigationWithDefaultTransitions<Routes.Headlines>(
-        startDestination = Routes.HeadlinesPreview
-    ) {
-        composableWithDefaultTransitions<Routes.HeadlinesPreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Headlines) }
-            val viewModel = hiltViewModel<HeadlinesViewModel>(parentEntry)
-
-            HeadlinesPreviewScreen(
-                headlinesViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigate(Routes.HeadlinesEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.HeadlinesEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Headlines) }
-            val viewModel = hiltViewModel<HeadlinesViewModel>(parentEntry)
-
-            HeadlinesEditScreen(
-                headlinesViewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = {
-                    navController.navigate(Routes.HeadlinesPreview)
-                }
-            )
-        }
-    }
-    navigationWithDefaultTransitions<Routes.Facts>(
-        startDestination = Routes.FactsPreview
-    ) {
-        composableWithDefaultTransitions<Routes.FactsPreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Facts) }
-            val viewModel = hiltViewModel<FactsViewModel>(parentEntry)
-
-            FactsPreviewScreen(
-                factsViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigate(Routes.FactsEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.FactsEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Facts) }
-            val viewModel = hiltViewModel<FactsViewModel>(parentEntry)
-
-            FactsEditScreen(
-                factsViewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigate(Routes.FactsPreview) }
-            )
-        }
-    }
-    navigationWithDefaultTransitions<Routes.Blocks>(
-        startDestination = Routes.BlocksPreview
-    ) {
-        composableWithDefaultTransitions<Routes.BlocksPreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Blocks) }
-            val viewModel = hiltViewModel<BlocksViewModel>(parentEntry)
-
-            BlocksPreviewScreen(
-                blocksViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigate(Routes.BlocksEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.BlocksEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Blocks) }
-            val viewModel = hiltViewModel<BlocksViewModel>(parentEntry)
-
-            BlocksEditScreen(
-                blocksViewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigate(Routes.BlocksPreview) }
-            )
-        }
-    }
-    navigationWithDefaultTransitions<Routes.Weather>(
-        startDestination = Routes.WeatherPreview
-    ) {
-        composableWithDefaultTransitions<Routes.WeatherPreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Weather) }
-            val viewModel = hiltViewModel<WeatherViewModel>(parentEntry)
-
-            WeatherPreviewScreen(
-                weatherViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigate(Routes.WeatherEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.WeatherEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Weather) }
-            val viewModel = hiltViewModel<WeatherViewModel>(parentEntry)
-
-            WeatherEditScreen(
-                weatherViewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigate(Routes.WeatherPreview) }
-            )
-        }
-    }
-    navigationWithDefaultTransitions<Routes.Price>(
-        startDestination = Routes.PricePreview
-    ) {
-        composableWithDefaultTransitions<Routes.PricePreview> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Price) }
-            val viewModel = hiltViewModel<PriceViewModel>(parentEntry)
-
-            PricePreviewScreen(
-                priceViewModel = viewModel,
-                onClose = { navController.navigateToHome() },
-                onBack = { navController.popBackStack() },
-                navigateEditWidget = { navController.navigate(Routes.PriceEdit) },
-            )
-        }
-        composableWithDefaultTransitions<Routes.PriceEdit> {
-            val parentEntry = remember(it) { navController.getBackStackEntry(Routes.Price) }
-            val viewModel = hiltViewModel<PriceViewModel>(parentEntry)
-            PriceEditScreen(
-                viewModel = viewModel,
-                onBack = { navController.popBackStack() },
-                navigatePreview = { navController.navigate(Routes.PricePreview) }
-            )
-        }
     }
 }
 
@@ -1505,171 +1677,103 @@ private fun NavGraphBuilder.widgets(
 fun NavController.navigateToHome() {
     val popped = popBackStack<Routes.Home>(inclusive = false)
     if (!popped) {
-        navigate(Routes.Home) {
-            popUpTo(graph.startDestinationId)
-            launchSingleTop = true
-        }
+        navigateTo(Routes.Home) { popUpTo(graph.startDestinationId) }
     }
 }
 
-fun NavController.navigateToAllActivity() {
-    navigate(Routes.AllActivity) {
+fun NavController.navigateToAllActivity(onClearFilters: () -> Unit) {
+    onClearFilters()
+    navigateTo(Routes.AllActivity)
+}
+
+/**
+ * Navigates to [route] with [launchSingleTop] always enabled to prevent
+ * duplicate destinations on the back stack (e.g. from double-taps).
+ *
+ * Use the optional [builder] to add extra nav options like `popUpTo`.
+ */
+inline fun <reified T : Any> NavController.navigateTo(
+    route: T,
+    noinline builder: NavOptionsBuilder.() -> Unit = {},
+) {
+    navigate(route) {
+        builder()
         launchSingleTop = true
     }
 }
 
-/**
- * Navigates to the specified route only if not already on that route.
- */
-inline fun <reified T : Any> NavController.navigateIfNotCurrent(route: T) {
-    val isOnRoute = currentBackStackEntry?.destination?.hasRoute<T>() ?: false
-    if (!isOnRoute) {
-        navigate(route)
-    }
+fun NavController.navigateToProfile(
+    isAuthenticated: Boolean,
+    hasSeenIntro: Boolean,
+) = when {
+    isAuthenticated -> navigateTo(Routes.Profile)
+    hasSeenIntro -> navigateTo(Routes.PubkyChoice)
+    else -> navigateTo(Routes.ProfileIntro)
 }
 
-fun NavController.navigateToGeneralSettings() = navigate(
-    route = Routes.GeneralSettings,
-)
-
-fun NavController.navigateToSecuritySettings() = navigate(
-    route = Routes.SecuritySettings,
-)
-
-fun NavController.navigateToDisablePin() = navigate(
-    route = Routes.DisablePin,
-)
-
-fun NavController.navigateToChangePin() = navigate(
-    route = Routes.ChangePin,
-)
-
-fun NavController.navigateToChangePinNew() = navigate(
-    route = Routes.ChangePinNew,
-)
-
-fun NavController.navigateToChangePinConfirm(newPin: String) = navigate(
-    route = Routes.ChangePinConfirm(newPin),
-)
-
-fun NavController.navigateToChangePinResult() = navigate(
-    route = Routes.ChangePinResult,
-)
+fun NavController.navigateToPinManagement() = navigateTo(Routes.PinManagement)
 
 fun NavController.navigateToAuthCheck(
     showLogoOnPin: Boolean = false,
     requirePin: Boolean = false,
     requireBiometrics: Boolean = false,
     onSuccessActionId: String,
-    navOptions: NavOptions? = null,
-) = navigate(
+    builder: NavOptionsBuilder.() -> Unit = {},
+) = navigateTo(
     route = Routes.AuthCheck(
         showLogoOnPin = showLogoOnPin,
         requirePin = requirePin,
         requireBiometrics = requireBiometrics,
         onSuccessActionId = onSuccessActionId,
     ),
-    navOptions = navOptions,
+    builder = builder,
 )
 
-fun NavController.navigateToDefaultUnitSettings() = navigate(
-    route = Routes.DefaultUnitSettings,
-)
+fun NavController.navigateToDefaultUnitSettings() = navigateTo(Routes.DefaultUnitSettings)
 
-fun NavController.navigateToLocalCurrencySettings() = navigate(
-    route = Routes.LocalCurrencySettings,
-)
+fun NavController.navigateToLocalCurrencySettings() = navigateTo(Routes.LocalCurrencySettings)
 
-fun NavController.navigateToBackupSettings() = navigate(
-    route = Routes.BackupSettings,
-)
+fun NavController.navigateToBackupSettings() = navigateTo(Routes.BackupSettings)
 
-fun NavController.navigateToOrderDetail(id: String) = navigate(
-    route = Routes.OrderDetail(id),
-)
+fun NavController.navigateToOrderDetail(id: String) = navigateTo(Routes.OrderDetail(id))
 
-fun NavController.navigateToCjitDetail(id: String) = navigate(
-    route = Routes.CjitDetail(id),
-)
+fun NavController.navigateToCjitDetail(id: String) = navigateTo(Routes.CjitDetail(id))
 
-fun NavController.navigateToDevSettings() = navigate(
-    route = Routes.DevSettings,
-)
+fun NavController.navigateToDevSettings() = navigateTo(Routes.DevSettings)
 
-fun NavController.navigateToTransferSavingsIntro() = navigate(
-    route = Routes.SavingsIntro,
-)
+fun NavController.navigateToTransferSavingsIntro() = navigateTo(Routes.SavingsIntro)
 
-fun NavController.navigateToTransferSavingsAvailability() = navigate(
-    route = Routes.SavingsAvailability,
-)
+fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.SavingsAvailability)
 
-fun NavController.navigateToTransferSpendingIntro() = navigate(
-    route = Routes.SpendingIntro,
-)
+fun NavController.navigateToTransferSpendingIntro() = navigateTo(Routes.SpendingIntro)
 
-fun NavController.navigateToTransferSpendingAmount() = navigate(
-    route = Routes.SpendingAmount,
-)
+fun NavController.navigateToTransferSpendingAmount() = navigateTo(Routes.SpendingAmount)
 
-fun NavController.navigateToTransferIntro() = navigate(
-    route = Routes.TransferIntro,
-)
+fun NavController.navigateToTransferIntro() = navigateTo(Routes.TransferIntro)
 
-fun NavController.navigateToTransferFunding() = navigate(
-    route = Routes.Funding,
-)
+fun NavController.navigateToTransferFunding() = navigateTo(Routes.Funding)
 
-fun NavController.navigateToActivityItem(id: String) = navigate(
-    route = Routes.ActivityDetail(id),
-)
+fun NavController.navigateToActivityItem(id: String) = navigateTo(Routes.ActivityDetail(id))
 
-fun NavController.navigateToActivityExplore(id: String) = navigate(
-    route = Routes.ActivityExplore(id),
-)
+fun NavController.navigateToActivityExplore(id: String) = navigateTo(Routes.ActivityExplore(id))
 
-fun NavController.navigateToScanner(isCalledForResult: Boolean = false) {
-    if (isCalledForResult) {
-        currentBackStackEntry?.savedStateHandle?.set(SCAN_REQUEST_KEY, true)
-    }
-    navigate(Routes.QrScanner)
-}
+fun NavController.navigateToLogDetail(fileName: String) = navigateTo(Routes.LogDetail(fileName))
 
-fun NavController.navigateToLogDetail(fileName: String) = navigate(
-    route = Routes.LogDetail(fileName),
-)
+fun NavController.navigateToTransactionSpeedSettings() = navigateTo(Routes.TransactionSpeedSettings)
 
-fun NavController.navigateToTransactionSpeedSettings() = navigate(
-    route = Routes.TransactionSpeedSettings,
-)
+fun NavController.navigateToPaymentPreferenceSettings() = navigateTo(Routes.PaymentPreferenceSettings)
 
-fun NavController.navigateToCustomFeeSettings() = navigate(
-    route = Routes.CustomFeeSettings,
-)
+fun NavController.navigateToCustomFeeSettings() = navigateTo(Routes.CustomFeeSettings)
 
-fun NavController.navigateToWidgetsSettings() = navigate(
-    route = Routes.WidgetsSettings,
-)
+fun NavController.navigateToWidgetsSettings() = navigateTo(Routes.WidgetsSettings)
 
-fun NavController.navigateToQuickPaySettings(hasSeenIntro: Boolean = true) = navigate(
-    route = if (hasSeenIntro) Routes.QuickPaySettings else Routes.QuickPayIntro,
-)
+fun NavController.navigateToQuickPaySettings(hasSeenIntro: Boolean = true) =
+    navigateTo(if (hasSeenIntro) Routes.QuickPaySettings else Routes.QuickPayIntro)
 
-fun NavController.navigateToTagsSettings() = navigate(
-    route = Routes.TagsSettings,
-)
+fun NavController.navigateToTagsSettings() = navigateTo(Routes.TagsSettings)
 
-fun NavController.navigateToLanguageSettings() = navigate(
-    route = Routes.LanguageSettings,
-)
+fun NavController.navigateToLanguageSettings() = navigateTo(Routes.LanguageSettings)
 
-fun NavController.navigateToAdvancedSettings() = navigate(
-    route = Routes.AdvancedSettings,
-)
-
-fun NavController.navigateToAboutSettings() = navigate(
-    route = Routes.AboutSettings,
-)
 // endregion
 
 @Stable
@@ -1690,19 +1794,16 @@ sealed interface Routes {
     data object NodeInfo : Routes
 
     @Serializable
-    data object GeneralSettings : Routes
+    data object TransactionSpeedSettings : Routes
 
     @Serializable
-    data object TransactionSpeedSettings : Routes
+    data object PaymentPreferenceSettings : Routes
 
     @Serializable
     data object WidgetsSettings : Routes
 
     @Serializable
     data object TagsSettings : Routes
-
-    @Serializable
-    data object AdvancedSettings : Routes
 
     @Serializable
     data object CoinSelectPreference : Routes
@@ -1720,28 +1821,10 @@ sealed interface Routes {
     data object AddressViewer : Routes
 
     @Serializable
-    data object AboutSettings : Routes
-
-    @Serializable
     data object CustomFeeSettings : Routes
 
     @Serializable
-    data object SecuritySettings : Routes
-
-    @Serializable
-    data object DisablePin : Routes
-
-    @Serializable
-    data object ChangePin : Routes
-
-    @Serializable
-    data object ChangePinNew : Routes
-
-    @Serializable
-    data class ChangePinConfirm(val newPin: String) : Routes
-
-    @Serializable
-    data object ChangePinResult : Routes
+    data object PinManagement : Routes
 
     @Serializable
     data class AuthCheck(
@@ -1785,13 +1868,16 @@ sealed interface Routes {
     data object LightningConnections : Routes
 
     @Serializable
-    data object ChannelDetail : Routes
+    data class ChannelDetail(val channelId: String) : Routes
 
     @Serializable
-    data object CloseConnection : Routes
+    data class CloseConnection(val channelId: String) : Routes
 
     @Serializable
     data object DevSettings : Routes
+
+    @Serializable
+    data object LegacyRnRecovery : Routes
 
     @Serializable
     data object LdkDebug : Routes
@@ -1875,10 +1961,10 @@ sealed interface Routes {
     data class ActivityDetail(val id: String) : Routes
 
     @Serializable
-    data class ActivityExplore(val id: String) : Routes
+    data class ActivityAssignContact(val id: String) : Routes
 
     @Serializable
-    data object QrScanner : Routes
+    data class ActivityExplore(val id: String) : Routes
 
     @Serializable
     data object BuyIntro : Routes
@@ -1905,7 +1991,16 @@ sealed interface Routes {
     data object LanguageSettings : Routes
 
     @Serializable
-    data object Contacts : Routes
+    data class Contacts(val showAddContactSheet: Boolean = false) : Routes
+
+    @Serializable
+    data object ContactsIntro : Routes
+
+    @Serializable
+    data class ContactDetail(val publicKey: String) : Routes
+
+    @Serializable
+    data class ContactActivity(val publicKey: String) : Routes
 
     @Serializable
     data object Profile : Routes
@@ -1914,7 +2009,28 @@ sealed interface Routes {
     data object ProfileIntro : Routes
 
     @Serializable
+    data object PubkyChoice : Routes
+
+    @Serializable
     data object CreateProfile : Routes
+
+    @Serializable
+    data object EditProfile : Routes
+
+    @Serializable
+    data object PayContacts : Routes
+
+    @Serializable
+    data class AddContact(val publicKey: String) : Routes
+
+    @Serializable
+    data class EditContact(val publicKey: String) : Routes
+
+    @Serializable
+    data object ContactImportOverview : Routes
+
+    @Serializable
+    data object ContactImportSelect : Routes
 
     @Serializable
     data object ShopIntro : Routes
@@ -1927,57 +2043,6 @@ sealed interface Routes {
 
     @Serializable
     data object WidgetsIntro : Routes
-
-    @Serializable
-    data object AddWidget : Routes
-
-    @Serializable
-    data object Headlines : Routes
-
-    @Serializable
-    data object HeadlinesPreview : Routes
-
-    @Serializable
-    data object HeadlinesEdit : Routes
-
-    @Serializable
-    data object Facts : Routes
-
-    @Serializable
-    data object FactsPreview : Routes
-
-    @Serializable
-    data object FactsEdit : Routes
-
-    @Serializable
-    data object Blocks : Routes
-
-    @Serializable
-    data object BlocksPreview : Routes
-
-    @Serializable
-    data object BlocksEdit : Routes
-
-    @Serializable
-    data object Weather : Routes
-
-    @Serializable
-    data object WeatherPreview : Routes
-
-    @Serializable
-    data object WeatherEdit : Routes
-
-    @Serializable
-    data object Price : Routes
-
-    @Serializable
-    data object PricePreview : Routes
-
-    @Serializable
-    data object PriceEdit : Routes
-
-    @Serializable
-    data object CalculatorPreview : Routes
 
     @Serializable
     data object AppStatus : Routes
@@ -1999,4 +2064,7 @@ sealed interface Routes {
 
     @Serializable
     data object AllActivity : Routes
+
+    @Serializable
+    data object Trezor : Routes
 }

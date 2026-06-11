@@ -14,12 +14,14 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -30,6 +32,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import com.synonym.bitkitcore.BtBolt11InvoiceState
@@ -48,14 +51,18 @@ import com.synonym.bitkitcore.IBtPayment
 import com.synonym.bitkitcore.IDiscount
 import com.synonym.bitkitcore.ILspNode
 import com.synonym.bitkitcore.IcJitEntry
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import org.lightningdevkit.ldknode.OutPoint
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.ext.resolveDisplayShortChannelId
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.Toast
+import to.bitkit.models.msatFloorOf
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.Caption13Up
@@ -67,6 +74,7 @@ import to.bitkit.ui.components.MoneyCaptionB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.navigateTo
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -75,7 +83,6 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.getBlockExplorerUrl
-import to.bitkit.ui.walletViewModel
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -83,49 +90,23 @@ import java.util.Locale
 
 @Composable
 fun ChannelDetailScreen(
+    channelId: String,
     navController: NavController,
-    viewModel: LightningConnectionsViewModel,
+    viewModel: ChannelDetailViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
     val app = appViewModel ?: return
-    val wallet = walletViewModel ?: return
 
-    val selectedChannel by viewModel.selectedChannel.collectAsStateWithLifecycle()
-    val channel = selectedChannel ?: return
+    LaunchedEffect(channelId) {
+        viewModel.loadChannel(channelId)
+    }
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val paidOrders by viewModel.blocktankRepo.blocktankState.collectAsStateWithLifecycle()
-
-    val isClosedChannel = uiState.closedChannels.any { it.details.channelId == channel.details.channelId }
-    val lightningState by wallet.lightningState.collectAsStateWithLifecycle()
-
-    // Fetch transaction details for funding transaction if available
-    LaunchedEffect(channel.details.fundingTxo?.txid) {
-        channel.details.fundingTxo?.txid?.let { txid ->
-            viewModel.fetchTransactionDetails(txid)
-        }
-    }
-
-    // Fetch activity timestamp for transfer activity with matching channel ID
-    LaunchedEffect(channel.details.channelId) {
-        channel.details.channelId?.let { channelId ->
-            viewModel.fetchActivityTimestamp(channelId)
-        }
-    }
-
-    val txTime by viewModel.txTime.collectAsStateWithLifecycle()
 
     Content(
-        channel = channel,
-        blocktankOrders = paidOrders.paidOrders,
-        cjitEntries = paidOrders.cjitEntries,
-        txTime = txTime,
-        isRefreshing = uiState.isRefreshing,
-        isClosedChannel = isClosedChannel,
+        uiState = uiState,
         onBack = { navController.popBackStack() },
-        onRefresh = {
-            viewModel.onPullToRefresh()
-        },
+        onRefresh = { viewModel.onPullToRefresh() },
         onCopyText = { text ->
             context.setClipboardText(text)
             app.toast(
@@ -139,8 +120,10 @@ fun ChannelDetailScreen(
             val intent = Intent(Intent.ACTION_VIEW, url.toUri())
             context.startActivity(intent)
         },
-        onSupport = { order -> contactSupport(order, channel, lightningState.nodeId, context) },
-        onCloseConnection = { navController.navigate(Routes.CloseConnection) },
+        onSupport = { order, channel -> contactSupport(order, channel, uiState.nodeId, context) },
+        onCloseConnection = { channelDetailId ->
+            navController.navigateTo(Routes.CloseConnection(channelId = channelDetailId))
+        },
     )
 }
 
@@ -148,9 +131,61 @@ fun ChannelDetailScreen(
 @Suppress("CyclomaticComplexMethod")
 @Composable
 private fun Content(
+    uiState: ChannelDetailUiState = ChannelDetailUiState(),
+    onBack: () -> Unit = {},
+    onRefresh: () -> Unit = {},
+    onCopyText: (String) -> Unit = {},
+    onOpenUrl: (String) -> Unit = {},
+    onSupport: (Any, ChannelUi) -> Unit = { _, _ -> },
+    onCloseConnection: (String) -> Unit = {},
+) {
+    when (val loadState = uiState.channelLoadState) {
+        is ChannelLoadState.Loading -> {
+            ScreenColumn {
+                AppTopBar(
+                    titleText = "",
+                    onBackClick = onBack,
+                    actions = { DrawerNavIcon() },
+                )
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    CircularProgressIndicator()
+                }
+            }
+        }
+
+        is ChannelLoadState.NotFound -> {
+            LaunchedEffect(Unit) { onBack() }
+        }
+
+        is ChannelLoadState.Success -> {
+            ChannelDetailContent(
+                channel = loadState.channel,
+                blocktankOrders = uiState.paidOrders,
+                cjitEntries = uiState.cjitEntries,
+                txTime = uiState.txTime,
+                isRefreshing = uiState.isRefreshing,
+                isClosedChannel = uiState.isClosedChannel,
+                onBack = onBack,
+                onRefresh = onRefresh,
+                onCopyText = onCopyText,
+                onOpenUrl = onOpenUrl,
+                onSupport = { onSupport(it, loadState.channel) },
+                onCloseConnection = { onCloseConnection(loadState.channel.details.channelId) },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Suppress("CyclomaticComplexMethod")
+@Composable
+private fun ChannelDetailContent(
     channel: ChannelUi,
-    blocktankOrders: List<IBtOrder> = emptyList(),
-    cjitEntries: List<IcJitEntry> = emptyList(),
+    blocktankOrders: ImmutableList<IBtOrder> = persistentListOf(),
+    cjitEntries: ImmutableList<IcJitEntry> = persistentListOf(),
     txTime: ULong? = null,
     isRefreshing: Boolean = false,
     isClosedChannel: Boolean = false,
@@ -161,35 +196,44 @@ private fun Content(
     onSupport: (Any) -> Unit = {},
     onCloseConnection: () -> Unit = {},
 ) {
-    // Check if the channel was opened via CJIT
-    val cjitEntry = cjitEntries.find { entry ->
-        entry.channel?.fundingTx?.id == channel.details.fundingTxo?.txid
-    }
-
-    // Check if the channel was opened via blocktank order
-    val blocktankOrder = blocktankOrders.find { order ->
-        // real channel
-        if (channel.details.fundingTxo?.txid != null) {
-            order.channel?.fundingTx?.id == channel.details.fundingTxo?.txid
-        } else {
-            // fake channel
-            order.id == channel.details.channelId
-        }
-    }
-
-    val order = blocktankOrder ?: cjitEntry
-
-    val capacity = channel.details.channelValueSats.toLong()
-    val localBalance = channel.details.amountOnClose.toLong()
-    val remoteBalance = (channel.details.inboundCapacityMsat / 1000u).toLong()
-    val reserveBalance = (channel.details.unspendablePunishmentReserve ?: 0u).toLong()
-
     ScreenColumn {
         AppTopBar(
             titleText = channel.name,
             onBackClick = onBack,
             actions = { DrawerNavIcon() },
         )
+
+        val cjitEntry = remember(cjitEntries, channel) {
+            cjitEntries.find { entry ->
+                entry.channel?.fundingTx?.id == channel.details.fundingTxo?.txid
+            }
+        }
+
+        val blocktankOrder = remember(blocktankOrders, channel) {
+            blocktankOrders.find { order ->
+                if (channel.details.fundingTxo?.txid != null) {
+                    order.channel?.fundingTx?.id == channel.details.fundingTxo?.txid
+                } else {
+                    order.id == channel.details.channelId
+                }
+            }
+        }
+
+        val order = blocktankOrder ?: cjitEntry
+
+        val linkedOrderScid = when (order) {
+            is IBtOrder -> order.channel?.shortChannelId
+            is IcJitEntry -> order.channel?.shortChannelId
+            else -> null
+        }
+        val displayShortChannelId = remember(channel, linkedOrderScid) {
+            resolveDisplayShortChannelId(channel.details.shortChannelId, linkedOrderScid)
+        }
+
+        val capacity = channel.details.channelValueSats.toLong()
+        val localBalance = channel.details.amountOnClose.toLong()
+        val remoteBalance = msatFloorOf(channel.details.inboundCapacityMsat).toLong()
+        val reserveBalance = (channel.details.unspendablePunishmentReserve ?: 0u).toLong()
 
         PullToRefreshBox(
             isRefreshing = isRefreshing,
@@ -204,7 +248,6 @@ private fun Content(
                     .navigationBarsPadding()
                     .testTag("ChannelScrollView")
             ) {
-                // Channel Display Section
                 VerticalSpacer(16.dp)
                 LightningChannel(
                     capacity = capacity,
@@ -215,7 +258,6 @@ private fun Content(
                 VerticalSpacer(32.dp)
                 HorizontalDivider()
 
-                // Status Section
                 SectionTitle(stringResource(R.string.lightning__status))
                 ChannelStatusView(
                     channel = channel,
@@ -225,7 +267,6 @@ private fun Content(
                 VerticalSpacer(16.dp)
                 HorizontalDivider()
 
-                // Order Details Section
                 if (order != null) {
                     SectionTitle(stringResource(R.string.lightning__order_details))
 
@@ -260,7 +301,6 @@ private fun Content(
                         }
                     )
 
-                    // Order expiry for pending blocktank orders only
                     if (blocktankOrder != null &&
                         (blocktankOrder.state2 == BtOrderState2.CREATED || blocktankOrder.state2 == BtOrderState2.PAID)
                     ) {
@@ -272,7 +312,6 @@ private fun Content(
                         )
                     }
 
-                    // Transaction details if available
                     val fundingTxId = when (order) {
                         is IBtOrder -> order.channel?.fundingTx?.id
                         is IcJitEntry -> order.channel?.fundingTx?.id
@@ -296,7 +335,6 @@ private fun Content(
                         )
                     }
 
-                    // Order fee
                     val orderFee = when (order) {
                         is IBtOrder -> order.feeSat - order.clientBalanceSat
                         is IcJitEntry -> order.feeSat
@@ -312,7 +350,6 @@ private fun Content(
                     }
                 }
 
-                // Balance Section
                 SectionTitle(stringResource(R.string.lightning__balance))
 
                 SectionRow(
@@ -344,14 +381,13 @@ private fun Content(
                     modifier = Modifier.testTag("TotalSize")
                 )
 
-                // Fees Section
                 SectionTitle(stringResource(R.string.lightning__fees))
 
                 SectionRow(
                     name = stringResource(R.string.lightning__base_fee),
                     valueContent = {
                         MoneyCaptionB(
-                            sats = (channel.details.config.forwardingFeeBaseMsat / 1000u).toLong(),
+                            sats = msatFloorOf(channel.details.config.forwardingFeeBaseMsat.toULong()).toLong(),
                             symbol = true
                         )
                     }
@@ -364,7 +400,6 @@ private fun Content(
                     }
                 )
 
-                // Other Section
                 SectionTitle(stringResource(R.string.lightning__other))
 
                 SectionRow(
@@ -381,8 +416,6 @@ private fun Content(
                     }
                 )
 
-                val fundingTxId = channel.details.fundingTxo?.txid
-
                 txTime?.let {
                     SectionRow(
                         name = stringResource(R.string.lightning__opened_on),
@@ -392,7 +425,6 @@ private fun Content(
                     )
                 }
 
-                // Closed date for closed channels
                 val orderClosedAt = when (order) {
                     is IBtOrder -> order.channel?.close?.registeredAt
                     is IcJitEntry -> order.channel?.close?.registeredAt
@@ -407,21 +439,21 @@ private fun Content(
                     )
                 }
 
-                // Channel ID
-                SectionRow(
-                    name = stringResource(R.string.lightning__channel_id),
-                    valueContent = {
-                        CaptionB(
-                            text = channel.details.channelId,
-                            maxLines = 1,
-                            overflow = TextOverflow.MiddleEllipsis,
-                            textAlign = TextAlign.End,
-                        )
-                    },
-                    onClick = { onCopyText(channel.details.channelId) }
-                )
+                displayShortChannelId?.let { scid ->
+                    SectionRow(
+                        name = stringResource(R.string.lightning__channel_id),
+                        valueContent = {
+                            CaptionB(
+                                text = scid,
+                                maxLines = 1,
+                                overflow = TextOverflow.MiddleEllipsis,
+                                textAlign = TextAlign.End,
+                            )
+                        },
+                        onClick = { onCopyText(scid) }
+                    )
+                }
 
-                // Channel point (funding transaction + output index)
                 channel.details.fundingTxo?.let { fundingTxo ->
                     val channelPoint = "${fundingTxo.txid}:${fundingTxo.vout}"
                     SectionRow(
@@ -438,7 +470,6 @@ private fun Content(
                     )
                 }
 
-                // Peer ID
                 SectionRow(
                     name = stringResource(R.string.lightning__channel_node_id),
                     valueContent = {
@@ -452,7 +483,6 @@ private fun Content(
                     onClick = { onCopyText(channel.details.counterpartyNodeId) }
                 )
 
-                // Closure reason for closed channels
                 channel.closureReason?.let { closureReason ->
                     SectionRow(
                         name = stringResource(R.string.lightning__closure_reason),
@@ -462,7 +492,6 @@ private fun Content(
                     )
                 }
 
-                // Action Buttons
                 FillHeight()
                 VerticalSpacer(32.dp)
                 Row(
@@ -588,13 +617,12 @@ private fun contactSupport(
     runCatching {
         context.startActivity(Intent.createChooser(intent, context.getString(R.string.lightning__support)))
     }.onFailure {
-        // Fallback to opening support website
         context.startActivity(Intent(Intent.ACTION_VIEW, Env.SYNONYM_CONTACT.toUri()))
     }
 }
 
 private fun createSupportEmailIntent(
-    order: Any, // IBtOrder or IcJitEntry
+    order: Any,
     channel: ChannelUi,
     nodeId: String,
 ): Intent {
@@ -632,7 +660,7 @@ private fun createSupportEmailIntent(
 @Composable
 private fun PreviewOpenChannel() {
     AppThemeSurface {
-        Content(
+        ChannelDetailContent(
             channel = ChannelUi(
                 name = "Connection 1",
                 details = createChannelDetails().copy(
@@ -653,7 +681,7 @@ private fun PreviewOpenChannel() {
 @Composable
 private fun PreviewChannelWithOrder() {
     AppThemeSurface {
-        Content(
+        ChannelDetailContent(
             channel = ChannelUi(
                 name = "Connection 2",
                 details = createChannelDetails().copy(
@@ -669,7 +697,7 @@ private fun PreviewChannelWithOrder() {
                     isUsable = true,
                 ),
             ),
-            blocktankOrders = listOf(
+            blocktankOrders = persistentListOf(
                 IBtOrder(
                     id = "bt_order_12345",
                     state = BtOrderState.OPEN,
@@ -739,7 +767,7 @@ private fun PreviewChannelWithOrder() {
 @Composable
 private fun PreviewPendingOrder() {
     AppThemeSurface {
-        Content(
+        ChannelDetailContent(
             channel = ChannelUi(
                 name = "Connection 3 (Pending)",
                 details = createChannelDetails().copy(
@@ -751,7 +779,7 @@ private fun PreviewPendingOrder() {
                     isUsable = false,
                 ),
             ),
-            blocktankOrders = listOf(
+            blocktankOrders = persistentListOf(
                 IBtOrder(
                     id = "pending_order_67890",
                     state = BtOrderState.CREATED,
@@ -826,7 +854,7 @@ private fun PreviewPendingOrder() {
 @Composable
 private fun PreviewExpiredOrder() {
     AppThemeSurface {
-        Content(
+        ChannelDetailContent(
             channel = ChannelUi(
                 name = "Connection 4 (Failed)",
                 details = createChannelDetails().copy(
@@ -838,7 +866,7 @@ private fun PreviewExpiredOrder() {
                     isUsable = false,
                 ),
             ),
-            blocktankOrders = listOf(
+            blocktankOrders = persistentListOf(
                 IBtOrder(
                     id = "expired_order_99999",
                     state = BtOrderState.EXPIRED,
@@ -896,7 +924,7 @@ private fun PreviewExpiredOrder() {
 @Composable
 private fun PreviewChannelWithCjit() {
     AppThemeSurface {
-        Content(
+        ChannelDetailContent(
             channel = ChannelUi(
                 name = "CJIT Connection",
                 details = createChannelDetails().copy(
@@ -912,7 +940,7 @@ private fun PreviewChannelWithCjit() {
                     isUsable = true,
                 ),
             ),
-            cjitEntries = listOf(
+            cjitEntries = persistentListOf(
                 IcJitEntry(
                     id = "cjit_entry_456",
                     state = CJitStateEnum.COMPLETED,

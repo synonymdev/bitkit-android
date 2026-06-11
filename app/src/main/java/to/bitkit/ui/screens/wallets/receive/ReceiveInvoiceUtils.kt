@@ -32,11 +32,25 @@ fun getInvoiceForTab(
         }
 
         ReceiveTab.SPENDING -> {
-            // Lightning only: prefer CJIT > bolt11
+            // Lightning only: prefer CJIT > bolt11, empty when node is not running
             cjitInvoice?.takeIf { it.isNotEmpty() && isNodeRunning }
-                ?: bolt11
+                ?: bolt11.takeIf { isNodeRunning }.orEmpty()
         }
     }
+}
+
+/**
+ * Returns the appropriate text to copy to clipboard for the savings tab.
+ * Copies the plain address when there are no extra invoice details (no amount, no message),
+ * or the BIP21 URI (without lightning) when extra details are present.
+ *
+ * @param bip21 Full BIP21 URI (onchain + optional lightning)
+ * @param onchainAddress Plain Bitcoin address (fallback)
+ * @return Plain address if no extra params, BIP21 URI without lightning if there are extra params
+ */
+fun getSavingsCopyText(bip21: String, onchainAddress: String): String {
+    val bip21WithoutLightning = removeLightningFromBip21(bip21, onchainAddress)
+    return if ('?' in bip21WithoutLightning) bip21WithoutLightning else onchainAddress
 }
 
 /**

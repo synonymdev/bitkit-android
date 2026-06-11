@@ -1,6 +1,7 @@
 package to.bitkit.services
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.AddressType
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -8,11 +9,16 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.models.toDerivationPath
+import to.bitkit.test.annotations.CoreServiceIntegration
+import to.bitkit.test.annotations.DeviceIntegration
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @RunWith(AndroidJUnit4::class)
+@DeviceIntegration
+@CoreServiceIntegration
 class OnchainServiceTests {
     private lateinit var onchainService: OnchainService
 
@@ -143,6 +149,86 @@ class OnchainServiceTests {
     }
 
     @Test
+    fun testDeriveBitcoinDescriptorsForSupportedAccountTypes(): Unit = runBlocking {
+        val cases = listOf(
+            DescriptorCase(AccountType.LEGACY, "pkh([", "44"),
+            DescriptorCase(AccountType.WRAPPED_SEGWIT, "sh(wpkh([", "49"),
+            DescriptorCase(AccountType.NATIVE_SEGWIT, "wpkh([", "84"),
+            DescriptorCase(AccountType.TAPROOT, "tr([", "86"),
+        )
+
+        cases.forEach { descriptorCase ->
+            assertDescriptorShape(
+                descriptorCase = descriptorCase,
+                network = Network.BITCOIN,
+                coinType = "0",
+                publicKeyPrefix = "xpub",
+            )
+        }
+    }
+
+    @Test
+    fun testDeriveRegtestDescriptorsForSupportedAccountTypes(): Unit = runBlocking {
+        val cases = listOf(
+            DescriptorCase(AccountType.LEGACY, "pkh([", "44"),
+            DescriptorCase(AccountType.WRAPPED_SEGWIT, "sh(wpkh([", "49"),
+            DescriptorCase(AccountType.NATIVE_SEGWIT, "wpkh([", "84"),
+            DescriptorCase(AccountType.TAPROOT, "tr([", "86"),
+        )
+
+        cases.forEach { descriptorCase ->
+            assertDescriptorShape(
+                descriptorCase = descriptorCase,
+                network = Network.REGTEST,
+                coinType = "1",
+                publicKeyPrefix = "tpub",
+            )
+        }
+    }
+
+    @Test
+    fun testDeriveBitcoinNativeSegwitDescriptorWithPassphrase(): Unit = runBlocking {
+        val descriptor = onchainService.deriveOnchainDescriptor(
+            mnemonicPhrase = mnemonic,
+            network = Network.BITCOIN,
+            bip39Passphrase = "TREZOR",
+            accountType = AccountType.NATIVE_SEGWIT,
+            accountIndex = 0u,
+        )
+        val descriptorWithoutPassphrase = onchainService.deriveOnchainDescriptor(
+            mnemonicPhrase = mnemonic,
+            network = Network.BITCOIN,
+            bip39Passphrase = null,
+            accountType = AccountType.NATIVE_SEGWIT,
+            accountIndex = 0u,
+        )
+
+        assertTrue(descriptor.startsWith("wpkh(["))
+        assertTrue(descriptor.contains("/84'/0'/0']xpub"))
+        assertTrue(descriptor.contains("/0/*"))
+        assertFalse(descriptor == descriptorWithoutPassphrase)
+    }
+
+    private suspend fun assertDescriptorShape(
+        descriptorCase: DescriptorCase,
+        network: Network,
+        coinType: String,
+        publicKeyPrefix: String,
+    ) {
+        val descriptor = onchainService.deriveOnchainDescriptor(
+            mnemonicPhrase = mnemonic,
+            network = network,
+            bip39Passphrase = null,
+            accountType = descriptorCase.accountType,
+            accountIndex = 0u,
+        )
+
+        assertTrue(descriptor.startsWith(descriptorCase.prefix))
+        assertTrue(descriptor.contains("/${descriptorCase.purpose}'/$coinType'/0']$publicKeyPrefix"))
+        assertTrue(descriptor.contains("/0/*"))
+    }
+
+    @Test
     fun testDeriveAddresses(): Unit = runBlocking {
         val derivationPath = AddressType.P2WPKH.toDerivationPath(network = Network.BITCOIN)
         val network = Network.BITCOIN
@@ -229,3 +315,9 @@ class OnchainServiceTests {
     }
 
 }
+
+private data class DescriptorCase(
+    val accountType: AccountType,
+    val prefix: String,
+    val purpose: String,
+)

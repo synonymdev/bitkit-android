@@ -7,6 +7,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.semantics
@@ -17,6 +18,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.Title
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -29,6 +31,8 @@ fun AppAlertDialog(
     modifier: Modifier = Modifier,
     confirmText: String = stringResource(R.string.common__ok),
     dismissText: String = stringResource(R.string.common__dialog_cancel),
+    confirmTextColor: Color = Color.Unspecified,
+    dismissTextColor: Color = Colors.White64,
     onDismissRequest: () -> Unit = onDismiss,
     properties: DialogProperties = DialogProperties(
         dismissOnClickOutside = false,
@@ -42,6 +46,8 @@ fun AppAlertDialog(
         modifier = modifier,
         confirmText = confirmText,
         dismissText = dismissText,
+        confirmTextColor = confirmTextColor,
+        dismissTextColor = dismissTextColor,
         onDismissRequest = onDismissRequest,
         properties = properties,
         textContent = { BodyM(text = text, color = Colors.White64) },
@@ -56,6 +62,8 @@ fun AppAlertDialog(
     modifier: Modifier = Modifier,
     confirmText: String = stringResource(R.string.common__ok),
     dismissText: String = stringResource(R.string.common__dialog_cancel),
+    confirmTextColor: Color = Color.Unspecified,
+    dismissTextColor: Color = Colors.White64,
     onDismissRequest: () -> Unit = onDismiss,
     properties: DialogProperties = DialogProperties(
         dismissOnClickOutside = false,
@@ -67,18 +75,18 @@ fun AppAlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = {
             TextButton(
-                onClick = onConfirm,
+                onClick = rememberDebouncedClick(onClick = onConfirm),
                 modifier = Modifier.testTag("DialogConfirm")
             ) {
-                BodyMSB(text = confirmText)
+                BodyMSB(text = confirmText, color = confirmTextColor)
             }
         },
         dismissButton = {
             TextButton(
-                onClick = onDismiss,
+                onClick = rememberDebouncedClick(onClick = onDismiss),
                 modifier = Modifier.testTag("DialogCancel")
             ) {
-                BodyMSB(text = dismissText, color = Colors.White64)
+                BodyMSB(text = dismissText, color = dismissTextColor)
             }
         },
         title = { Title(text = title) },

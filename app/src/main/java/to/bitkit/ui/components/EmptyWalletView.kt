@@ -26,7 +26,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import to.bitkit.R
+import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -35,8 +37,11 @@ import to.bitkit.ui.utils.withAccent
 fun EmptyStateView(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
+    isSmallScreen: Boolean = false,
     onClose: (() -> Unit)? = null,
 ) {
+    val fontSize = if (isSmallScreen) 32.sp else 44.sp
+    val arrowMaxHeight = if (isSmallScreen) 96.dp else 144.dp
     Box(modifier = modifier) {
         Column(
             modifier = Modifier
@@ -51,6 +56,7 @@ fun EmptyStateView(
             ) {
                 Display(
                     text = text,
+                    fontSize = fontSize,
                     modifier = Modifier.width(220.dp)
                 )
                 Image(
@@ -58,7 +64,7 @@ fun EmptyStateView(
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
-                        .heightIn(max = 144.dp)
+                        .heightIn(max = arrowMaxHeight)
                         .offset(x = (-10).dp)
                 )
                 Spacer(modifier = Modifier.weight(1f))
@@ -66,9 +72,7 @@ fun EmptyStateView(
         }
         if (onClose != null) {
             IconButton(
-                onClick = {
-                    onClose()
-                },
+                onClick = rememberDebouncedClick(onClick = onClose),
                 modifier = Modifier
                     .size(40.dp)
                     .align(Alignment.TopEnd)

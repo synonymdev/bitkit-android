@@ -22,7 +22,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -50,29 +49,26 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberPermissionState
-import com.google.accompanist.permissions.shouldShowRationale
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.env.Env
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.models.Toast
+import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
-import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
@@ -80,18 +76,15 @@ import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.AppViewModel
 import java.util.concurrent.Executors
 
-const val SCAN_REQUEST_KEY = "SCAN_REQUEST"
-const val SCAN_RESULT_KEY = "SCAN_RESULT"
+val CameraOverlayButtonSize = 40.dp
 
 private const val TAG = "QrScanningScreen"
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun QrScanningScreen(
-    navController: NavController,
-    inSheet: Boolean = false,
-    onBack: () -> Unit = { navController.popBackStack() },
     onScanSuccess: (String) -> Unit,
+    onBack: (() -> Unit)? = null,
 ) {
     val app = appViewModel ?: return
 
@@ -100,20 +93,7 @@ fun QrScanningScreen(
     // Handle scan result
     LaunchedEffect(scanResult) {
         scanResult?.let { qrCode ->
-            delay(100) // wait to prevent navigation result race conditions
-
-            val prev = navController.previousBackStackEntry
-            val wasCalledForResult = prev?.savedStateHandle?.contains(SCAN_REQUEST_KEY) == true
-            if (wasCalledForResult) {
-                prev.savedStateHandle[SCAN_RESULT_KEY] = qrCode
-                onBack()
-                prev.savedStateHandle.remove<Boolean?>(SCAN_REQUEST_KEY)
-            } else {
-                onBack()
-                onScanSuccess(qrCode)
-            }
-
-            // Reset scan result to allow new scans
+            onScanSuccess(qrCode)
             setScanResult(null)
         }
     }
@@ -144,7 +124,7 @@ fun QrScanningScreen(
         QrCodeAnalyzer { result ->
             if (result.isSuccess) {
                 val qrCode = result.getOrThrow()
-                Logger.debug("QR code scanned: $qrCode")
+                Logger.debug("Scanned QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
                 setScanResult(qrCode)
             } else {
                 val error = requireNotNull(result.exceptionOrNull())
@@ -200,32 +180,22 @@ fun QrScanningScreen(
         }
     }
 
-    CameraPermissionView(
-        permissionState = cameraPermissionState,
-        deniedContent = {
-            DeniedContent(
-                shouldShowRationale = cameraPermissionState.status.shouldShowRationale,
-                inSheet = inSheet,
-                onClickOpenSettings = {
-                    context.startActivityAppSettings()
-                },
-                onClickRetry = cameraPermissionState::launchPermissionRequest,
-                onClickPaste = handlePaste(context, app, setScanResult),
-                onBack = onBack,
-            )
-        },
-        grantedContent = {
-            Column(
-                modifier = Modifier
-                    .then(if (inSheet) Modifier.gradientBackground() else Modifier)
-                    .then(if (inSheet) Modifier.navigationBarsPadding() else Modifier.systemBarsPadding())
-            ) {
-                if (inSheet) {
-                    SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
-                } else {
-                    AppTopBar(stringResource(R.string.other__qr_scan), onBackClick = onBack)
-                }
+    Column(
+        modifier = Modifier
+            .gradientBackground()
+            .navigationBarsPadding()
+    ) {
+        SheetTopBar(stringResource(R.string.other__qr_scan), onBack = onBack)
 
+        CameraPermissionView(
+            permissionState = cameraPermissionState,
+            deniedContent = {
+                DeniedContent(
+                    onClickRetry = { context.startActivityAppSettings() },
+                    onClickPaste = handlePaste(context, app, setScanResult),
+                )
+            },
+            grantedContent = {
                 Content(
                     previewView = previewView,
                     onClickFlashlight = {
@@ -243,8 +213,8 @@ fun QrScanningScreen(
                     onSubmitDebug = setScanResult,
                 )
             }
-        }
-    )
+        )
+    }
 }
 
 @Composable
@@ -297,7 +267,7 @@ private fun Content(
                     .padding(16.dp)
                     .clip(CircleShape)
                     .background(Colors.White64)
-                    .size(48.dp)
+                    .size(CameraOverlayButtonSize)
                     .align(Alignment.TopStart)
             ) {
                 Icon(
@@ -313,7 +283,7 @@ private fun Content(
                     .padding(16.dp)
                     .clip(CircleShape)
                     .background(Colors.White64)
-                    .size(48.dp)
+                    .size(CameraOverlayButtonSize)
                     .align(Alignment.TopEnd)
             ) {
                 Icon(
@@ -390,7 +360,7 @@ private fun processImageFromGallery(
                 for (barcode in barcodes) {
                     barcode.rawValue?.let { qrCode ->
                         onScanSuccess(qrCode)
-                        Logger.info("QR code found $qrCode")
+                        Logger.info("Found QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
                         return@addOnSuccessListener
                     }
                 }

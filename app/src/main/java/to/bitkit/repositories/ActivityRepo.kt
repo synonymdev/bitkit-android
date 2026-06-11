@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import androidx.annotation.VisibleForTesting
+import androidx.compose.runtime.Immutable
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.ActivityTags
@@ -11,6 +12,9 @@ import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
@@ -29,12 +33,16 @@ import org.lightningdevkit.ldknode.TransactionDetails
 import to.bitkit.data.CacheStore
 import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.di.BgDispatcher
+import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.amountOnClose
+import to.bitkit.ext.contact
+import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.rawId
 import to.bitkit.models.ActivityBackupV1
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -51,6 +59,7 @@ private const val MS_SYNC_TIMEOUT = 40_000L
 @Singleton
 class ActivityRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
     private val lightningRepo: LightningRepo,
     private val blocktankRepo: BlocktankRepo,
@@ -334,6 +343,120 @@ class ActivityRepo @Inject constructor(
         }
     }
 
+    suspend fun contactActivities(publicKey: String): Result<List<Activity>> = withContext(ioDispatcher) {
+        runCatching {
+            val normalizedKey = PubkyPublicKeyFormat.normalized(publicKey) ?: publicKey
+            val txIdsInBoostTxIds = getTxIdsInBoostTxIds()
+            getActivities(
+                filter = ActivityFilter.ALL,
+                sortDirection = SortDirection.DESC,
+            ).getOrThrow()
+                .filterNot { it.isReplacedSentTransaction(txIdsInBoostTxIds) }
+                .filter { PubkyPublicKeyFormat.matches(it.contact(), normalizedKey) }
+        }.onFailure {
+            Logger.error("Failed to load contact activities for '$publicKey'", it, context = TAG)
+        }
+    }
+
+    suspend fun setContact(
+        contactPublicKey: String,
+        forPaymentId: String,
+        syncLdkPayments: Boolean = true,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            if (syncLdkPayments) {
+                lightningRepo.getPayments().onSuccess {
+                    syncLdkNodePayments(it).getOrThrow()
+                }.getOrThrow()
+            }
+
+            val normalizedKey = PubkyPublicKeyFormat.normalized(contactPublicKey) ?: contactPublicKey
+            val activity = findActivityForPaymentId(forPaymentId, syncLdkPayments)
+            if (activity == null) {
+                Logger.warn(
+                    "Skipped setting contact for payment '$forPaymentId' because activity was not found",
+                    context = TAG,
+                )
+                return@runCatching
+            }
+            if (PubkyPublicKeyFormat.matches(activity.contact(), normalizedKey)) {
+                return@runCatching
+            }
+
+            val updatedAt = nowTimestamp().epochSecond.toULong()
+            val updatedActivity = activity.withContact(normalizedKey, updatedAt)
+            updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
+            updateReplacementContactIfNeeded(updatedActivity, normalizedKey, updatedAt)
+        }.onFailure {
+            Logger.error("Failed to set contact for payment '$forPaymentId'", it, context = TAG)
+        }
+    }
+
+    suspend fun clearContact(
+        forPaymentId: String,
+        syncLdkPayments: Boolean = true,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            if (syncLdkPayments) {
+                lightningRepo.getPayments().onSuccess {
+                    syncLdkNodePayments(it).getOrThrow()
+                }.getOrThrow()
+            }
+
+            val activity = findActivityForPaymentId(forPaymentId, syncLdkPayments)
+            if (activity == null) {
+                Logger.warn(
+                    "Skipped clearing contact for payment '$forPaymentId' because activity was not found",
+                    context = TAG,
+                )
+                return@runCatching
+            }
+            if (activity.contact() == null) return@runCatching
+
+            val updatedAt = nowTimestamp().epochSecond.toULong()
+            val updatedActivity = activity.withContact(null, updatedAt)
+            updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
+            updateReplacementContactIfNeeded(updatedActivity, null, updatedAt)
+        }.onFailure {
+            Logger.error("Failed to clear contact for payment '$forPaymentId'", it, context = TAG)
+        }
+    }
+
+    private suspend fun updateReplacementContactIfNeeded(
+        activity: Activity,
+        normalizedKey: String?,
+        updatedAt: ULong,
+    ) {
+        if (activity !is Activity.Onchain || activity.v1.doesExist || activity.v1.txType != PaymentType.SENT) return
+
+        getActivities(filter = ActivityFilter.ONCHAIN).getOrThrow()
+            .filterIsInstance<Activity.Onchain>()
+            .filter { activity.v1.txId in it.v1.boostTxIds }
+            .filterNot { PubkyPublicKeyFormat.matches(it.v1.contact, normalizedKey) }
+            .forEach {
+                val updatedReplacement = Activity.Onchain(it.v1.copy(contact = normalizedKey, updatedAt = updatedAt))
+                updateActivity(updatedReplacement.rawId(), updatedReplacement).getOrThrow()
+            }
+    }
+
+    private suspend fun findActivityForPaymentId(forPaymentId: String, syncLdkPayments: Boolean): Activity? {
+        val activity = getActivityByPaymentId(forPaymentId)
+        if (activity != null) return activity
+        if (!syncLdkPayments) return null
+
+        syncActivities().getOrThrow()
+        return getActivityByPaymentId(forPaymentId)
+    }
+
+    private suspend fun getActivityByPaymentId(forPaymentId: String): Activity? =
+        coreService.activity.getActivity(forPaymentId)
+            ?: getOnchainActivityByTxId(forPaymentId)?.let { Activity.Onchain(it) }
+
+    private fun Activity.withContact(normalizedKey: String?, updatedAt: ULong): Activity = when (this) {
+        is Activity.Lightning -> Activity.Lightning(v1.copy(contact = normalizedKey, updatedAt = updatedAt))
+        is Activity.Onchain -> Activity.Onchain(v1.copy(contact = normalizedKey, updatedAt = updatedAt))
+    }
+
     suspend fun getClosedChannels(
         sortDirection: SortDirection = SortDirection.ASC,
     ): Result<List<ClosedChannelDetails>> = withContext(bgDispatcher) {
@@ -511,6 +634,7 @@ class ActivityRepo @Inject constructor(
                         message = "",
                         timestamp = now,
                         preimage = null,
+                        contact = null,
                         createdAt = now,
                         updatedAt = null,
                         seenAt = null,
@@ -600,7 +724,7 @@ class ActivityRepo @Inject constructor(
         runCatching {
             coreService.activity.allPossibleTags()
         }.onSuccess { tags ->
-            _state.update { it.copy(tags = tags) }
+            _state.update { it.copy(tags = tags.toImmutableList()) }
         }.onFailure {
             Logger.error("getAllAvailableTags error", it, context = TAG)
         }
@@ -677,6 +801,7 @@ class ActivityRepo @Inject constructor(
     }
 }
 
+@Immutable
 data class ActivityState(
-    val tags: List<String> = emptyList(),
+    val tags: ImmutableList<String> = persistentListOf(),
 )

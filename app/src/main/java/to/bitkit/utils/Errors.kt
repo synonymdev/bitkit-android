@@ -21,6 +21,7 @@ sealed class ServiceError(message: String) : AppError(message) {
     class CurrencyRateUnavailable : ServiceError("Currency rate unavailable")
     class BlocktankInfoUnavailable : ServiceError("Blocktank info not available")
     class GeoBlocked : ServiceError("Geo blocked user")
+    class GiftClaimPaymentNotReceived : ServiceError("Gift claim payment not received")
 }
 
 class HttpError(message: String, val code: Int = 500, cause: Throwable? = null) : AppError(message, cause)
@@ -49,6 +50,7 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
                 is BuildException.InvalidAnnouncementAddresses -> "Invalid announcement addresses"
                 is BuildException.InvalidNodeAlias -> "Invalid node alias"
                 is BuildException.NetworkMismatch -> "Network mismatch"
+                is BuildException.DangerousValue -> "Dangerous value"
                 else -> exception.message
             }?.let { "LDK Build error: $it" }
         }

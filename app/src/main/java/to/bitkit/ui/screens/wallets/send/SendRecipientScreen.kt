@@ -60,6 +60,7 @@ import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.models.Toast
+import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
@@ -69,6 +70,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.RectangleButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.scanner.CameraOverlayButtonSize
 import to.bitkit.ui.screens.scanner.QrCodeAnalyzer
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -135,7 +137,7 @@ fun SendRecipientScreen(
         QrCodeAnalyzer { result ->
             if (result.isSuccess) {
                 val qrCode = result.getOrThrow()
-                Logger.debug("QR scanned: '$qrCode'", context = TAG)
+                Logger.debug("Scanned QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
                 onEvent(SendEvent.AddressContinue(qrCode))
             } else {
                 val error = requireNotNull(result.exceptionOrNull())
@@ -204,7 +206,7 @@ fun SendRecipientScreen(
 
     // Gallery picker launchers
     val handleGalleryScanSuccess = { qrCode: String ->
-        Logger.debug("QR from gallery: $qrCode", context = TAG)
+        Logger.debug("Found gallery QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
         onEvent(SendEvent.AddressContinue(qrCode))
     }
 
@@ -265,6 +267,7 @@ fun SendRecipientScreen(
         onClickManual = { onEvent(SendEvent.EnterManually) },
         cameraPermissionGranted = cameraPermissionState.status.isGranted,
         onRequestPermission = { context.startActivityAppSettings() },
+        showContactOption = true,
         modifier = modifier,
     )
 }
@@ -280,6 +283,7 @@ private fun SendRecipientContent(
     cameraPermissionGranted: Boolean,
     onRequestPermission: () -> Unit,
     modifier: Modifier = Modifier,
+    showContactOption: Boolean = false,
 ) {
     Column(
         modifier = modifier
@@ -316,13 +320,15 @@ private fun SendRecipientContent(
                 }
             }
 
-            RectangleButton(
-                label = stringResource(R.string.wallet__recipient_contact),
-                icon = R.drawable.ic_users,
-                iconTint = Colors.Brand,
-                modifier = Modifier.testTag("RecipientContact")
-            ) {
-                onClickContact()
+            if (showContactOption) {
+                RectangleButton(
+                    label = stringResource(R.string.wallet__recipient_contact),
+                    icon = R.drawable.ic_users,
+                    iconTint = Colors.Brand,
+                    modifier = Modifier.testTag("RecipientContact")
+                ) {
+                    onClickContact()
+                }
             }
 
             RectangleButton(
@@ -372,7 +378,7 @@ private fun CameraPreviewWithControls(
                 .padding(16.dp)
                 .clip(CircleShape)
                 .background(Colors.White64)
-                .size(48.dp)
+                .size(CameraOverlayButtonSize)
                 .align(Alignment.TopStart)
         ) {
             Icon(
@@ -397,7 +403,7 @@ private fun CameraPreviewWithControls(
                 .padding(16.dp)
                 .clip(CircleShape)
                 .background(Colors.White64)
-                .size(48.dp)
+                .size(CameraOverlayButtonSize)
                 .align(Alignment.TopEnd)
         ) {
             Icon(
@@ -464,7 +470,7 @@ private fun processImageFromGallery(
                 for (barcode in barcodes) {
                     barcode.rawValue?.let { qrCode ->
                         onScanSuccess(qrCode)
-                        Logger.info("QR from gallery: $qrCode", context = TAG)
+                        Logger.info("Found gallery QR code '${qrCode.sanitizedQrLogValue()}'", context = TAG)
                         return@addOnSuccessListener
                     }
                 }

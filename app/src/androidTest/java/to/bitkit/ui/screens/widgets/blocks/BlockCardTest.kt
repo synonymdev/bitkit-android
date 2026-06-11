@@ -5,8 +5,12 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.models.widget.BlockModel
+import to.bitkit.models.widget.BlocksPreferences
+import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
 
+@ComposeUi
 class BlockCardTest {
 
     @get:Rule
@@ -17,236 +21,169 @@ class BlockCardTest {
     private val testDate = "11/2/2022"
     private val testTransactions = "2,175"
     private val testSize = "1,606Kb"
-    private val testSource = "mempool.io"
+    private val testFees = "25 059 357"
+
+    private val fullBlock = BlockModel(
+        height = testBlock,
+        time = testTime,
+        date = testDate,
+        transactionCount = testTransactions,
+        size = testSize,
+        fees = testFees,
+    )
 
     @Test
-    fun testBlockCardWithAllElements() {
-        // Arrange & Act
+    fun testBlockCardWithDefaultFields() {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlockCard(
-                    showWidgetTitle = true,
-                    showBlock = true,
-                    showTime = true,
-                    showDate = true,
-                    showTransactions = true,
-                    showSize = true,
-                    showSource = true,
-                    block = testBlock,
-                    time = testTime,
-                    date = testDate,
-                    transactions = testTransactions,
-                    size = testSize,
-                    source = testSource
+                    preferences = BlocksPreferences(),
+                    block = fullBlock,
                 )
             }
         }
 
-        // Assert all elements exist
-        composeTestRule.onNodeWithTag("block_card_widget_title_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_widget_title_icon", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_widget_title_text", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_block_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_time_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_date_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_transactions_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_size_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_source_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("block_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("time_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("date_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("transactions_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("size_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("fees_row", useUnmergedTree = true).assertDoesNotExist()
 
-        // Verify text content
-        composeTestRule.onNodeWithTag("block_card_block_text", useUnmergedTree = true).assertTextEquals(testBlock)
-        composeTestRule.onNodeWithTag("block_card_time_text", useUnmergedTree = true).assertTextEquals(testTime)
-        composeTestRule.onNodeWithTag("block_card_date_text", useUnmergedTree = true).assertTextEquals(testDate)
-        composeTestRule.onNodeWithTag("block_card_transactions_text", useUnmergedTree = true).assertTextEquals(testTransactions)
-        composeTestRule.onNodeWithTag("block_card_size_text", useUnmergedTree = true).assertTextEquals(testSize)
-        composeTestRule.onNodeWithTag("block_card_source_text", useUnmergedTree = true).assertTextEquals(testSource)
+        composeTestRule.onNodeWithTag("block_text", useUnmergedTree = true).assertTextEquals(testBlock)
+        composeTestRule.onNodeWithTag("time_text", useUnmergedTree = true).assertTextEquals(testTime)
+        composeTestRule.onNodeWithTag("date_text", useUnmergedTree = true).assertTextEquals(testDate)
+        composeTestRule.onNodeWithTag("transactions_text", useUnmergedTree = true).assertTextEquals(testTransactions)
     }
 
     @Test
-    fun testBlockCardWithoutWidgetTitle() {
-        // Arrange & Act
+    fun testBlockCardWithSizeAndFees() {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlockCard(
-                    showWidgetTitle = false,
-                    showBlock = true,
-                    showTime = true,
-                    showDate = true,
-                    showTransactions = true,
-                    showSize = true,
-                    showSource = true,
-                    block = testBlock,
-                    time = testTime,
-                    date = testDate,
-                    transactions = testTransactions,
-                    size = testSize,
-                    source = testSource
+                    preferences = BlocksPreferences(
+                        showBlock = true,
+                        showTime = true,
+                        showDate = false,
+                        showTransactions = false,
+                        showSize = true,
+                        showFees = true,
+                    ),
+                    block = fullBlock,
                 )
             }
         }
 
-        // Assert main elements exist
-        composeTestRule.onNodeWithTag("block_card_block_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_source_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("block_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("time_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("size_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("fees_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("date_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("transactions_row", useUnmergedTree = true).assertDoesNotExist()
 
-        // Assert widget title elements do not exist
-        composeTestRule.onNodeWithTag("block_card_widget_title_row", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_widget_title_icon", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_widget_title_text", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("size_text", useUnmergedTree = true).assertTextEquals(testSize)
+        composeTestRule.onNodeWithTag("fees_text", useUnmergedTree = true).assertTextEquals(testFees)
     }
 
     @Test
-    fun testBlockCardWithoutSource() {
-        // Arrange & Act
+    fun testBlockCardWithoutFees() {
         composeTestRule.setContent {
             AppThemeSurface {
                 BlockCard(
-                    showWidgetTitle = true,
-                    showBlock = true,
-                    showTime = true,
-                    showDate = true,
-                    showTransactions = true,
-                    showSize = true,
-                    showSource = false,
-                    block = testBlock,
-                    time = testTime,
-                    date = testDate,
-                    transactions = testTransactions,
-                    size = testSize,
-                    source = testSource
+                    preferences = BlocksPreferences(
+                        showBlock = true,
+                        showTime = true,
+                        showDate = true,
+                        showTransactions = false,
+                        showSize = false,
+                        showFees = false,
+                    ),
+                    block = fullBlock,
                 )
             }
         }
 
-        // Assert main elements exist
-        composeTestRule.onNodeWithTag("block_card_widget_title_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_block_row", useUnmergedTree = true).assertExists()
-
-        // Assert source elements do not exist
-        composeTestRule.onNodeWithTag("block_card_source_row", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_source_label", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_source_text", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("block_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("fees_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("fees_text", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
     fun testBlockCardMinimal() {
-        // Arrange & Act - Only block number shown
         composeTestRule.setContent {
             AppThemeSurface {
                 BlockCard(
-                    showWidgetTitle = false,
-                    showBlock = true,
-                    showTime = false,
-                    showDate = false,
-                    showTransactions = false,
-                    showSize = false,
-                    showSource = false,
-                    block = testBlock,
-                    time = "",
-                    date = "",
-                    transactions = "",
-                    size = "",
-                    source = ""
+                    preferences = BlocksPreferences(
+                        showBlock = true,
+                        showTime = false,
+                        showDate = false,
+                        showTransactions = false,
+                        showSize = false,
+                        showFees = false,
+                    ),
+                    block = BlockModel(
+                        height = testBlock,
+                        time = "",
+                        date = "",
+                        transactionCount = "",
+                        size = "",
+                        fees = "",
+                    ),
                 )
             }
         }
 
-        // Assert only block row exists
-        composeTestRule.onNodeWithTag("block_card_block_row", useUnmergedTree = true).assertExists()
-
-        // Assert other elements do not exist
-        composeTestRule.onNodeWithTag("block_card_widget_title_row", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_time_row", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_source_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("block_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("time_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("date_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("transactions_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("size_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("fees_row", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
     fun testBlockCardWithEmptyValues() {
-        // Arrange & Act
         composeTestRule.setContent {
             AppThemeSurface {
                 BlockCard(
-                    showWidgetTitle = true,
-                    showBlock = true,
-                    showTime = true,
-                    showDate = true,
-                    showTransactions = true,
-                    showSize = true,
-                    showSource = true,
-                    block = "",
-                    time = "",
-                    date = "",
-                    transactions = "",
-                    size = "",
-                    source = ""
+                    preferences = BlocksPreferences(),
+                    block = BlockModel(
+                        height = "",
+                        time = "",
+                        date = "",
+                        transactionCount = "",
+                        size = "",
+                        fees = "",
+                    ),
                 )
             }
         }
 
-        // Assert only widget title and labels exist (since values are empty)
-        composeTestRule.onNodeWithTag("block_card_widget_title_row", useUnmergedTree = true).assertExists()
-
-        // Assert text elements don't exist (since values are empty)
-
-        composeTestRule.onNodeWithTag("block_card_time_label", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_date_label", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_transactions_label", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_size_label", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_source_label", useUnmergedTree = true).assertDoesNotExist()
-
-        composeTestRule.onNodeWithTag("block_card_block_label", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_block_text", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_time_text", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_date_text", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_transactions_text", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_size_text", useUnmergedTree = true).assertDoesNotExist()
-        composeTestRule.onNodeWithTag("block_card_source_text", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("block_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("time_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("date_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("transactions_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("size_row", useUnmergedTree = true).assertDoesNotExist()
+        composeTestRule.onNodeWithTag("fees_row", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test
-    fun testAllElementsExistInFullConfiguration() {
-        // Arrange & Act
+    fun testBlockCardSmallWithDefaultFields() {
         composeTestRule.setContent {
             AppThemeSurface {
-                BlockCard(
-                    showWidgetTitle = true,
-                    showBlock = true,
-                    showTime = true,
-                    showDate = true,
-                    showTransactions = true,
-                    showSize = true,
-                    showSource = true,
-                    block = testBlock,
-                    time = testTime,
-                    date = testDate,
-                    transactions = testTransactions,
-                    size = testSize,
-                    source = testSource
+                BlockCardSmall(
+                    preferences = BlocksPreferences(),
+                    block = fullBlock,
                 )
             }
         }
 
-        // Assert all tagged elements exist
-        composeTestRule.onNodeWithTag("block_card_widget_title_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_widget_title_icon", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_widget_title_text", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_block_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_block_label", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_block_text", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_time_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_time_label", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_time_text", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_date_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_date_label", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_date_text", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_transactions_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_transactions_label", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_transactions_text", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_size_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_size_label", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_size_text", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_source_row", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_source_label", useUnmergedTree = true).assertExists()
-        composeTestRule.onNodeWithTag("block_card_source_text", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("block_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("time_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("date_row", useUnmergedTree = true).assertExists()
+        composeTestRule.onNodeWithTag("transactions_row", useUnmergedTree = true).assertExists()
+
+        composeTestRule.onNodeWithTag("block_text", useUnmergedTree = true).assertTextEquals(testBlock)
+        composeTestRule.onNodeWithTag("time_text", useUnmergedTree = true).assertTextEquals(testTime)
     }
 }

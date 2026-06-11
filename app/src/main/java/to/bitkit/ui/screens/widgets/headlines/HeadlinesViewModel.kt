@@ -11,11 +11,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.HeadlinePreferences
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.ui.screens.widgets.WidgetSizeDraft
 import javax.inject.Inject
 
 @HiltViewModel
@@ -43,13 +45,6 @@ class HeadlinesViewModel @Inject constructor(
             initialValue = false
         )
 
-    val showWidgetTitles: StateFlow<Boolean> = widgetsRepo.showWidgetTitles
-        .stateIn(
-            scope = viewModelScope,
-            started = SharingStarted.WhileSubscribed(SUBSCRIPTION_TIMEOUT),
-            initialValue = true
-        )
-
     val currentArticle: StateFlow<ArticleModel> = widgetsRepo.articlesFlow.map { articles ->
         articles.map { it.toArticleModel() }.randomOrNull() ?: DEFAULT_ARTICLE
     }.stateIn(
@@ -62,6 +57,11 @@ class HeadlinesViewModel @Inject constructor(
 
     private val _customPreferences = MutableStateFlow(HeadlinePreferences())
     val customPreferences: StateFlow<HeadlinePreferences> = _customPreferences.asStateFlow()
+
+    private val sizeDraft = WidgetSizeDraft(viewModelScope, WidgetType.NEWS, widgetsRepo.widgetsDataFlow)
+    val draftSize: StateFlow<WidgetSize> = sizeDraft.size
+
+    fun setSize(size: WidgetSize) = sizeDraft.set(size)
 
     init {
         initializeCustomPreferences()
@@ -85,16 +85,18 @@ class HeadlinesViewModel @Inject constructor(
         _customPreferences.value = HeadlinePreferences()
     }
 
-    fun savePreferences() {
+    fun savePreferences(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.updateHeadlinePreferences(_customPreferences.value)
-            widgetsRepo.addWidget(WidgetType.NEWS)
+            widgetsRepo.addWidget(WidgetType.NEWS, sizeDraft.current)
+            onComplete()
         }
     }
 
-    fun removeWidget() {
+    fun removeWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             widgetsRepo.deleteWidget(WidgetType.NEWS)
+            onComplete()
         }
     }
 

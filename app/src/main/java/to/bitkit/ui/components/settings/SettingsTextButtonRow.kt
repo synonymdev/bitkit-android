@@ -54,7 +54,7 @@ fun SettingsTextButtonRow(
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = height)
-                    .clickableAlpha(onClick = if (enabled) onClick else null)
+                    .clickableAlpha(enabled = enabled, onClick = onClick)
             ) {
                 if (iconRes != null) {
                     Icon(

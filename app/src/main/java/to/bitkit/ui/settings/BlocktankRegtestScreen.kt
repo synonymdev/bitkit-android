@@ -270,7 +270,7 @@ fun BlocktankRegtestScreen(
                         runCatching {
                             val voutNum = vout.toUIntOrNull() ?: error("Invalid Vout: $vout")
                             val closeAfter =
-                                forceCloseAfter.toULongOrNull() ?: error("Invalid Force Close After: $forceCloseAfter")
+                                forceCloseAfter.toUIntOrNull() ?: error("Invalid Force Close After: $forceCloseAfter")
                             val closingTxId = viewModel.regtestCloseChannel(
                                 fundingTxId = fundingTxId,
                                 vout = voutNum,

@@ -1,4 +1,5 @@
 <!-- Closes | Fixes | Resolves #ISSUE_ID -->
+<!-- Changelog: For user-facing changes, add one fragment in changelog.d/next/ or changelog.d/hotfix/. Do not edit CHANGELOG.md in normal PRs. -->
 <!-- Brief summary of the PR changes, linking to the related resources (issue/design/bug/etc) if applicable. -->
 
 ### Description

@@ -21,12 +21,14 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 @Composable
 fun MnemonicWordsGrid(
-    actualWords: List<String>,
+    actualWords: ImmutableList<String>,
     showMnemonic: Boolean,
     modifier: Modifier = Modifier,
     blurDurationMs: Int = 800,
@@ -97,7 +99,7 @@ private fun WordItem(
     }
 }
 
-private val previewWords = List(8) { "word${it + 1}" }
+private val previewWords = List(8) { "word${it + 1}" }.toImmutableList()
 
 @Preview
 @Composable

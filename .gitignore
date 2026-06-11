@@ -11,11 +11,15 @@
 local.properties
 # AI
 .ai
+.codex/
+.claude/worktrees
 *.local.*
 !*.local.template*
 # Secrets
 google-services.json
 .env
+.env.*
+!.env.example
 *.keystore
 !debug.keystore
 keystore.*

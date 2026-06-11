@@ -40,6 +40,8 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.WalletState
@@ -85,6 +87,7 @@ fun EditInvoiceScreen(
     var keyboardVisible by remember { mutableStateOf(false) }
     var isSoftKeyboardVisible by keyboardAsState()
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
+    val isLoading by editInvoiceVM.isLoading.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         editInvoiceVM.editInvoiceEffect.collect { effect ->
@@ -140,9 +143,10 @@ fun EditInvoiceScreen(
         },
         onContinueKeyboard = { keyboardVisible = false },
         onContinueGeneral = { editInvoiceVM.onClickContinue() },
+        isLoading = isLoading,
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
-        isSoftKeyboardVisible = isSoftKeyboardVisible
+        isSoftKeyboardVisible = isSoftKeyboardVisible,
     )
 }
 
@@ -153,7 +157,7 @@ fun EditInvoiceContent(
     noteText: String,
     isSoftKeyboardVisible: Boolean,
     keyboardVisible: Boolean,
-    tags: List<String>,
+    tags: ImmutableList<String>,
     onBack: () -> Unit,
     onContinueKeyboard: () -> Unit,
     onClickBalance: () -> Unit,
@@ -162,6 +166,7 @@ fun EditInvoiceContent(
     onTextChanged: (String) -> Unit,
     onClickTag: (String) -> Unit,
     modifier: Modifier = Modifier,
+    isLoading: Boolean = false,
     currencies: CurrencyState = LocalCurrencies.current,
 ) {
     BoxWithConstraints(
@@ -308,7 +313,7 @@ fun EditInvoiceContent(
                                 .fillMaxWidth()
                                 .padding(bottom = 16.dp)
                         ) {
-                            tags.map { tagText ->
+                            tags.forEach { tagText ->
                                 TagButton(
                                     text = tagText,
                                     displayIconClose = true,
@@ -336,6 +341,7 @@ fun EditInvoiceContent(
                         PrimaryButton(
                             text = stringResource(R.string.wallet__receive_show_qr),
                             onClick = onContinueGeneral,
+                            isLoading = isLoading,
                             modifier = Modifier.testTag("ShowQrReceive")
                         )
 
@@ -361,7 +367,7 @@ private fun Preview() {
                 onClickBalance = {},
                 onContinueGeneral = {},
                 onContinueKeyboard = {},
-                tags = listOf(),
+                tags = persistentListOf(),
                 onClickAddTag = {},
                 onClickTag = {},
                 isSoftKeyboardVisible = false,
@@ -385,7 +391,7 @@ private fun PreviewWithTags() {
                 onClickBalance = {},
                 onContinueGeneral = {},
                 onContinueKeyboard = {},
-                tags = listOf("Team", "Dinner", "Home", "Work"),
+                tags = persistentListOf("Team", "Dinner", "Home", "Work"),
                 onClickAddTag = {},
                 onClickTag = {},
                 isSoftKeyboardVisible = false,
@@ -409,7 +415,7 @@ private fun PreviewWithKeyboard() {
                 onClickBalance = {},
                 onContinueGeneral = {},
                 onContinueKeyboard = {},
-                tags = listOf("Team", "Dinner", "Home"),
+                tags = persistentListOf("Team", "Dinner", "Home"),
                 onClickAddTag = {},
                 onClickTag = {},
                 isSoftKeyboardVisible = false,
@@ -433,7 +439,7 @@ private fun PreviewSmallScreen() {
                 onClickBalance = {},
                 onContinueGeneral = {},
                 onContinueKeyboard = {},
-                tags = listOf("Team", "Dinner", "Home"),
+                tags = persistentListOf("Team", "Dinner", "Home"),
                 onClickAddTag = {},
                 onClickTag = {},
                 isSoftKeyboardVisible = false,

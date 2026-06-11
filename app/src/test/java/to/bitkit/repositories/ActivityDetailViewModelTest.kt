@@ -5,6 +5,8 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
@@ -60,7 +62,8 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     @Test
     fun `findOrderForTransfer finds order by channelId`() = test {
         val order = mock<IBtOrder> { on { id } doReturn ORDER_ID }
-        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(orders = listOf(order))))
+        val state = BlocktankState(orders = listOf(order).toImmutableList())
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(state))
 
         val result = sut.findOrderForTransfer(ORDER_ID, null)
 
@@ -70,7 +73,8 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     @Test
     fun `findOrderForTransfer finds order by channelId matching order id`() = test {
         val order = mock<IBtOrder> { on { id } doReturn ORDER_ID }
-        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(orders = listOf(order))))
+        val state = BlocktankState(orders = listOf(order).toImmutableList())
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(state))
 
         val result = sut.findOrderForTransfer(ORDER_ID, null)
 
@@ -79,7 +83,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
 
     @Test
     fun `findOrderForTransfer returns null when order not found`() = test {
-        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(orders = emptyList())))
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(orders = persistentListOf())))
 
         val result = sut.findOrderForTransfer("non-existent-id", null)
 
@@ -106,7 +110,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
 
         // Simulate activity update
         whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.success(updatedActivity))
-        activitiesChangedFlow.value = System.currentTimeMillis()
+        activitiesChangedFlow.value += 1
 
         // Verify ViewModel reflects updated activity
         val updatedState = sut.uiState.value.activityLoadState
@@ -131,7 +135,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
 
         // Trigger activity change
         val callCountBefore = mockingDetails(activityRepo).invocations.size
-        activitiesChangedFlow.value = System.currentTimeMillis()
+        activitiesChangedFlow.value += 1
 
         // Verify no reload after clear (getActivity not called again)
         val callCountAfter = mockingDetails(activityRepo).invocations.size
@@ -152,7 +156,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
 
         // Simulate reload failure
         whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.failure(Exception("Network error")))
-        activitiesChangedFlow.value = System.currentTimeMillis()
+        activitiesChangedFlow.value += 1
 
         // Verify last known state is preserved
         val state = sut.uiState.value.activityLoadState

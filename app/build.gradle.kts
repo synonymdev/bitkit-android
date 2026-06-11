@@ -47,6 +47,100 @@ val bcp47Locales = listOf(
     "en", "ar", "es-419", "ca", "cs", "de", "el", "es", "es-ES", "fr", "it", "nl", "pl", "pt", "pt-BR", "ru"
 )
 val e2eBackendEnv = System.getenv("E2E_BACKEND") ?: "local"
+val e2eHomegateUrlEnv = System.getenv("E2E_HOMEGATE_URL") ?: "http://127.0.0.1:6288"
+val trezorBridgeEnv = System.getenv("TREZOR_BRIDGE")?.toBoolean()?.toString() ?: "false"
+val trezorBridgeUrlEnv = System.getenv("TREZOR_BRIDGE_URL") ?: "http://10.0.2.2:21325"
+val androidTestAnnotationPackage = "to.bitkit.test.annotations"
+val androidTestTaskPrefix = "connectedDevDebug"
+val androidTestTaskSuffix = "AndroidTest"
+val baseAndroidTestTaskName = "$androidTestTaskPrefix$androidTestTaskSuffix"
+val androidTestAnnotationNames = file("src/androidTest/java/to/bitkit/test/annotations")
+    .listFiles()
+    ?.mapNotNull { file ->
+        file.nameWithoutExtension.takeIf {
+            file.isFile &&
+                file.extension == "kt"
+        }
+    }
+    ?.sorted()
+    .orEmpty()
+val requestedTaskNames = gradle.startParameter.taskNames.map { it.substringAfterLast(":") }
+
+fun androidTestTaskName(annotationName: String): String {
+    return "$androidTestTaskPrefix$annotationName$androidTestTaskSuffix"
+}
+
+fun isTaskNameAbbreviation(taskName: String, fullTaskName: String): Boolean {
+    if (taskName.isEmpty() || taskName == fullTaskName) return false
+    return fullTaskName.startsWith(taskName) ||
+        taskName.any { it.isUpperCase() } &&
+        taskName.isSubsequenceOf(fullTaskName)
+}
+
+fun String.isSubsequenceOf(value: String): Boolean {
+    var searchIndex = 0
+    for (char in this) {
+        searchIndex = value.indexOf(char, startIndex = searchIndex)
+        if (searchIndex == -1) return false
+        searchIndex++
+    }
+    return true
+}
+
+val androidTestTaskNames = androidTestAnnotationNames.map { androidTestTaskName(it) }
+val requestedBaseAndroidTestTaskNames = requestedTaskNames.filter { taskName ->
+    taskName == baseAndroidTestTaskName ||
+        isTaskNameAbbreviation(taskName, baseAndroidTestTaskName)
+}
+val abbreviatedAndroidTestTaskNames = requestedTaskNames.filter { taskName ->
+    taskName !in requestedBaseAndroidTestTaskNames &&
+        taskName !in androidTestTaskNames &&
+        androidTestTaskNames.any { isTaskNameAbbreviation(taskName, it) }
+}
+require(abbreviatedAndroidTestTaskNames.isEmpty()) {
+    "Use full generated Android test lane task names. Abbreviated lane tasks are unsupported: " +
+        abbreviatedAndroidTestTaskNames.joinToString(", ")
+}
+val requestedAndroidTestAnnotationTaskNames = requestedTaskNames.filter { taskName ->
+    taskName in androidTestTaskNames
+}
+require(requestedBaseAndroidTestTaskNames.isEmpty() || requestedAndroidTestAnnotationTaskNames.isEmpty()) {
+    "Do not combine '$baseAndroidTestTaskName' with generated Android test lane tasks. Requested lanes: " +
+        requestedAndroidTestAnnotationTaskNames.joinToString(", ")
+}
+require(requestedAndroidTestAnnotationTaskNames.size <= 1) {
+    "Run only one generated Android test lane per Gradle invocation. Requested lanes: " +
+        requestedAndroidTestAnnotationTaskNames.joinToString(", ")
+}
+val requestedAndroidTestAnnotationTask = requestedAndroidTestAnnotationTaskNames.singleOrNull()
+val requestedAndroidTestAnnotationTaskName = requestedAndroidTestAnnotationTask?.let { taskName ->
+    androidTestAnnotationNames.first { androidTestTaskName(it) == taskName }
+}
+val requestedAndroidTestAnnotation = providers.gradleProperty("bitkitAndroidTestAnnotation")
+    .orNull
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
+    ?.also {
+        require('.' !in it) {
+            "Use a simple Android test annotation name, e.g. 'ComposeUi'."
+        }
+        require(it in androidTestAnnotationNames) {
+            "Unsupported bitkitAndroidTestAnnotation '$it'. Supported annotations: " +
+                androidTestAnnotationNames.joinToString(", ")
+        }
+    }
+requestedAndroidTestAnnotationTaskName?.let { annotationName ->
+    requestedAndroidTestAnnotation?.let {
+        require(it == annotationName) {
+            "Do not combine bitkitAndroidTestAnnotation '$it' with generated lane '$annotationName'."
+        }
+    }
+}
+val bitkitAndroidTestAnnotationName = requestedAndroidTestAnnotation
+    ?: requestedAndroidTestAnnotationTaskName
+val bitkitAndroidTestAnnotation = bitkitAndroidTestAnnotationName?.let {
+    "$androidTestAnnotationPackage.$it"
+}
 
 android {
     namespace = "to.bitkit"
@@ -55,15 +149,22 @@ android {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 36
-        versionCode = 177
-        versionName = "2.0.3"
+        versionCode = 182
+        versionName = "2.3.0"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
+        bitkitAndroidTestAnnotation?.let {
+            testInstrumentationRunnerArguments["annotation"] = it
+        }
         vectorDrawables {
             useSupportLibrary = true
         }
         buildConfigField("boolean", "E2E", System.getenv("E2E")?.toBoolean()?.toString() ?: "false")
         buildConfigField("String", "E2E_BACKEND", "\"$e2eBackendEnv\"")
+        buildConfigField("String", "E2E_HOMEGATE_URL", "\"$e2eHomegateUrlEnv\"")
+        buildConfigField("boolean", "TREZOR_BRIDGE", trezorBridgeEnv)
+        buildConfigField("String", "TREZOR_BRIDGE_URL", "\"$trezorBridgeUrlEnv\"")
         buildConfigField("boolean", "GEO", System.getenv("GEO")?.toBoolean()?.toString() ?: "true")
+        buildConfigField("boolean", "FEATURE_PAYKIT_UI_DISABLED", System.getenv("PAYKIT_UI_DISABLED")?.toBoolean()?.toString() ?: "false")
         buildConfigField("String", "LOCALES", "\"${bcp47Locales.joinToString(",")}\"")
     }
 
@@ -215,7 +316,7 @@ composeCompiler {
 }
 
 dependencies {
-    implementation(fileTree("libs") { include("*.aar") })
+    implementation(fileTree("libs") { include("*.aar", "*.jar") })
     implementation(libs.jna) { artifact { type = "aar" } }
     implementation(platform(libs.kotlin.bom))
     implementation(libs.core.ktx)
@@ -225,6 +326,7 @@ dependencies {
     implementation(libs.material)
     implementation(libs.datastore.preferences)
     implementation(libs.kotlinx.datetime)
+    implementation(libs.kotlinx.collections.immutable)
     implementation(libs.biometric)
     implementation(libs.zxing)
     implementation(libs.barcode.scanning)
@@ -236,6 +338,7 @@ dependencies {
     implementation(libs.bouncycastle.provider.jdk)
     implementation(libs.ldk.node.android) { exclude(group = "net.java.dev.jna", module = "jna") }
     implementation(libs.bitkit.core)
+    implementation(libs.paykit)
     implementation(libs.vss.client)
     // Firebase
     implementation(platform(libs.firebase.bom))
@@ -266,6 +369,9 @@ dependencies {
     implementation(libs.charts)
     implementation(libs.haze)
     implementation(libs.haze.materials)
+    // Image Loading
+    implementation(platform(libs.coil.bom))
+    implementation(libs.coil.compose)
     // Compose Navigation
     implementation(libs.navigation.compose)
     androidTestImplementation(libs.navigation.testing)
@@ -279,6 +385,9 @@ dependencies {
     // WorkManager
     implementation(libs.hilt.work)
     implementation(libs.work.runtime.ktx)
+    // Glance - AppWidgets
+    implementation(libs.glance.appwidget)
+    implementation(libs.glance.material3)
     // Ktor - Networking
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
@@ -351,6 +460,14 @@ tasks.withType<Test> {
 // Explicitly enabling dynamic agent loading silences the warning without altering behavior.
 tasks.withType<Test>().configureEach {
     jvmArgs("-XX:+EnableDynamicAgentLoading")
+}
+
+androidTestAnnotationNames.forEach { annotationName ->
+    tasks.register(androidTestTaskName(annotationName)) {
+        group = "verification"
+        description = "Runs devDebug Android tests annotated with '$annotationName'."
+        dependsOn("connectedDevDebugAndroidTest")
+    }
 }
 
 // endregion

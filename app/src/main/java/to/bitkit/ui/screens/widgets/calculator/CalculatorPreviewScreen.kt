@@ -1,71 +1,62 @@
 package to.bitkit.ui.screens.widgets.calculator
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.BitcoinDisplayUnit
+import to.bitkit.models.WidgetSize
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.FillHeight
-import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppTopBar
-import to.bitkit.ui.scaffold.DrawerNavIcon
+import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCard
-import to.bitkit.ui.shared.util.screen
+import to.bitkit.ui.screens.widgets.calculator.components.CalculatorCardSmall
+import to.bitkit.ui.screens.widgets.components.WidgetCardDimens
+import to.bitkit.ui.screens.widgets.components.WidgetSizeCarousel
+import to.bitkit.ui.screens.widgets.components.widgetSheetContent
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.keyboardAsState
-import to.bitkit.viewmodels.CurrencyViewModel
+import to.bitkit.ui.theme.Insets
 
 @Composable
 fun CalculatorPreviewScreen(
-    viewModel: CalculatorViewModel = hiltViewModel(),
-    currencyViewModel: CurrencyViewModel?,
     onClose: () -> Unit,
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+    viewModel: CalculatorViewModel = hiltViewModel(),
 ) {
-    val showWidgetTitles by viewModel.showWidgetTitles.collectAsStateWithLifecycle()
     val isCalculatorWidgetEnabled by viewModel.isCalculatorWidgetEnabled.collectAsStateWithLifecycle()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val draftSize by viewModel.draftSize.collectAsStateWithLifecycle()
 
     CalculatorPreviewContent(
         onBack = onBack,
         isCalculatorWidgetEnabled = isCalculatorWidgetEnabled,
-        showWidgetTitles = showWidgetTitles,
+        uiState = uiState,
         onClickDelete = {
-            viewModel.removeWidget()
-            onClose()
+            viewModel.removeWidget(onComplete = onClose)
         },
         onClickSave = {
-            viewModel.saveWidget()
-            onClose()
+            viewModel.saveWidget(onComplete = onClose)
         },
-        currencyViewModel = currencyViewModel
+        initialSize = draftSize,
+        onSizeSelected = viewModel::setSize,
+        modifier = modifier
     )
 }
 
@@ -74,136 +65,127 @@ fun CalculatorPreviewContent(
     onBack: () -> Unit,
     onClickDelete: () -> Unit,
     onClickSave: () -> Unit,
-    showWidgetTitles: Boolean,
-    currencyViewModel: CurrencyViewModel?,
     isCalculatorWidgetEnabled: Boolean,
+    modifier: Modifier = Modifier,
+    uiState: CalculatorUiState = CalculatorUiState(),
+    initialSize: WidgetSize = WidgetSize.SMALL,
+    onSizeSelected: (WidgetSize) -> Unit = {},
 ) {
-    val isKeyboardVisible by keyboardAsState()
-
     Column(
-        modifier = Modifier
-            .screen()
-            .testTag("facts_preview_screen")
+        modifier = modifier
+            .widgetSheetContent()
+            .testTag("calculator_preview_screen")
     ) {
-        AppTopBar(
-            titleText = stringResource(R.string.widgets__widget__nav_title),
-            onBackClick = onBack,
-            actions = { DrawerNavIcon() },
+        SheetTopBar(
+            titleText = stringResource(R.string.widgets__calculator__name),
+            onBack = onBack,
         )
 
         Column(
             modifier = Modifier
-                .imePadding()
                 .padding(horizontal = 16.dp)
-                .testTag("main_content")
+                .weight(1f)
         ) {
-            AnimatedVisibility(
-                visible = !isKeyboardVisible,
-                enter = expandVertically(),
-                exit = shrinkVertically(),
-            ) {
-                Column {
-                    VerticalSpacer(26.dp)
+            VerticalSpacer(16.dp)
 
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("header_row")
-                    ) {
-                        Headline(
-                            text = AnnotatedString(stringResource(R.string.widgets__calculator__name)),
-                            modifier = Modifier
-                                .width(200.dp)
-                                .testTag("widget_title")
-                        )
-                        Icon(
-                            painter = painterResource(R.drawable.widget_math_operation),
-                            contentDescription = null,
-                            tint = Color.Unspecified,
-                            modifier = Modifier
-                                .size(64.dp)
-                                .testTag("widget_icon")
-                        )
-                    }
-
-                    BodyM(
-                        text = stringResource(R.string.widgets__facts__description),
-                        color = Colors.White64,
-                        modifier = Modifier
-                            .padding(vertical = 16.dp)
-                            .testTag("widget_description")
-                    )
-
-                    HorizontalDivider(
-                        modifier = Modifier.testTag("divider")
-                    )
-                }
-            }
-
-            if (!isKeyboardVisible) {
-                FillHeight()
-            }
-
-            Text13Up(
-                stringResource(R.string.common__preview),
+            BodyM(
+                text = stringResource(R.string.widgets__calculator__description).replace(
+                    "{fiatSymbol}",
+                    uiState.currencySymbol,
+                ),
                 color = Colors.White64,
-                modifier = Modifier
-                    .padding(vertical = 16.dp)
-                    .testTag("preview_label")
+                modifier = Modifier.testTag("widget_description")
             )
 
-            currencyViewModel?.let {
-                CalculatorCard(
-                    showWidgetTitle = showWidgetTitles,
-                    currencyViewModel = it,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+            VerticalSpacer(16.dp)
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier
-                    .padding(vertical = 21.dp)
-                    .fillMaxWidth()
-                    .testTag("buttons_row")
-            ) {
-                if (isCalculatorWidgetEnabled) {
-                    SecondaryButton(
-                        text = stringResource(R.string.common__delete),
-                        fullWidth = false,
-                        onClick = onClickDelete,
+            HorizontalDivider(
+                modifier = Modifier.testTag("divider")
+            )
+
+            WidgetSizeCarousel(
+                smallContent = {
+                    CalculatorCardSmall(
+                        btcPrimaryDisplayUnit = uiState.displayUnit,
+                        btcValue = uiState.btcValue,
+                        fiatSymbol = uiState.currencySymbol,
+                        fiatValue = uiState.fiatValue,
                         modifier = Modifier
-                            .weight(1f)
-                            .testTag("WidgetDelete")
+                            .size(WidgetCardDimens.COMPACT_CARD_SIZE)
+                            .testTag("calculator_card_small")
                     )
-                }
+                },
+                wideContent = {
+                    CalculatorCard(
+                        btcPrimaryDisplayUnit = uiState.displayUnit,
+                        btcValue = uiState.btcValue,
+                        fiatSymbol = uiState.currencySymbol,
+                        fiatName = uiState.selectedCurrency,
+                        fiatValue = uiState.fiatValue,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("calculator_card_wide")
+                    )
+                },
+                initialSize = initialSize,
+                onSizeSelected = onSizeSelected,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("calculator_preview_carousel")
+            )
+        }
 
-                PrimaryButton(
-                    text = stringResource(R.string.common__save),
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .padding(
+                    start = 16.dp,
+                    end = 16.dp,
+                    bottom = Insets.Bottom + 16.dp,
+                    top = 16.dp,
+                )
+                .fillMaxWidth()
+                .testTag("buttons_row")
+        ) {
+            if (isCalculatorWidgetEnabled) {
+                SecondaryButton(
+                    text = stringResource(R.string.common__delete),
                     fullWidth = false,
-                    onClick = onClickSave,
+                    onClick = onClickDelete,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("WidgetSave")
+                        .testTag("WidgetDelete")
                 )
             }
+
+            PrimaryButton(
+                text = stringResource(R.string.widgets__widget__save),
+                fullWidth = false,
+                onClick = onClickSave,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("WidgetSave")
+            )
         }
     }
 }
 
-@Preview(showBackground = true)
+@Preview(showSystemUi = true)
 @Composable
 private fun Preview() {
     AppThemeSurface {
         CalculatorPreviewContent(
             onBack = {},
-            showWidgetTitles = true,
             onClickDelete = {},
             onClickSave = {},
             isCalculatorWidgetEnabled = false,
-            currencyViewModel = null
+            uiState = CalculatorUiState(
+                btcValue = "10000",
+                fiatValue = "6.25",
+                displayUnit = BitcoinDisplayUnit.MODERN,
+                currencySymbol = "$",
+                selectedCurrency = "USD",
+            ),
         )
     }
 }

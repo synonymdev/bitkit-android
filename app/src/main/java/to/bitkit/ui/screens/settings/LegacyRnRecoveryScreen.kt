@@ -1,0 +1,334 @@
+package to.bitkit.ui.screens.settings
+
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
+import to.bitkit.models.formatToModernDisplay
+import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.TextInput
+import to.bitkit.ui.components.settings.SectionHeader
+import to.bitkit.ui.components.settings.SettingsTextButtonRow
+import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.DrawerNavIcon
+import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.DevSettingsViewModel
+import to.bitkit.viewmodels.LegacyRnRecoveryUiState
+
+@Composable
+fun LegacyRnRecoveryScreen(
+    navController: NavController,
+    viewModel: DevSettingsViewModel = hiltViewModel(),
+) {
+    val state by viewModel.legacyRnRecoveryState.collectAsStateWithLifecycle()
+
+    LegacyRnRecoveryContent(
+        state = state,
+        onBackClick = { navController.popBackStack() },
+        onDone = { navController.popBackStack() },
+        onIndexLimitChange = viewModel::setLegacyRnRecoveryIndexLimit,
+        onScan = viewModel::scanLegacyRnRecovery,
+        onPrepare = viewModel::prepareLegacyRnRecoverySweep,
+        onBroadcast = viewModel::broadcastLegacyRnRecoverySweep,
+        onScanAgain = viewModel::scanLegacyRnRecovery,
+    )
+}
+
+@Composable
+private fun LegacyRnRecoveryContent(
+    state: LegacyRnRecoveryUiState,
+    onBackClick: () -> Unit,
+    onDone: () -> Unit,
+    onIndexLimitChange: (String) -> Unit,
+    onScan: () -> Unit,
+    onPrepare: () -> Unit,
+    onBroadcast: () -> Unit,
+    onScanAgain: () -> Unit,
+) {
+    val broadcastTxid = state.broadcastTxid
+    val scanResult = state.scanResult
+    val isBusy = state.isScanning || state.isPreparing || state.isBroadcasting
+    val canScan = state.indexLimit.toUIntOrNull()?.let { it > 0u } == true && !isBusy
+    val hasResult = broadcastTxid != null || state.sweepPreview != null || scanResult != null
+
+    ScreenColumn {
+        AppTopBar(
+            titleText = "Legacy Recovery",
+            onBackClick = onBackClick,
+            actions = { DrawerNavIcon() },
+        )
+
+        if (broadcastTxid != null) {
+            SuccessPageContent(
+                state = state,
+                canScan = canScan,
+                txid = broadcastTxid,
+                onIndexLimitChange = onIndexLimitChange,
+                onScan = onScan,
+                onDone = onDone,
+            )
+        } else {
+            Column(
+                modifier = Modifier
+                    .padding(horizontal = 16.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                ScanContent(
+                    state = state,
+                    canScan = canScan,
+                    showScanButton = !hasResult,
+                    onIndexLimitChange = onIndexLimitChange,
+                    onScan = onScan,
+                )
+
+                state.error?.let { error ->
+                    StatusMessage(title = "ERROR", message = error, color = Colors.Red)
+                }
+
+                when {
+                    state.sweepPreview != null -> PreviewContent(
+                        state = state,
+                        isBusy = isBusy,
+                        onBroadcast = onBroadcast,
+                        onScanAgain = onScanAgain,
+                    )
+
+                    scanResult != null && scanResult.outputsCount == 0u -> NoFundsContent(
+                        indexLimit = state.indexLimit,
+                        isBusy = isBusy,
+                        onScanAgain = onScanAgain,
+                    )
+
+                    scanResult != null -> FoundContent(
+                        state = state,
+                        isBusy = isBusy,
+                        onPrepare = onPrepare,
+                        onScanAgain = onScanAgain,
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(32.dp))
+            }
+        }
+    }
+}
+
+@Composable
+private fun ScanContent(
+    state: LegacyRnRecoveryUiState,
+    canScan: Boolean,
+    showScanButton: Boolean,
+    onIndexLimitChange: (String) -> Unit,
+    onScan: () -> Unit,
+) {
+    SectionHeader("SCAN")
+    BodyS(
+        text = "Scan for native SegWit outputs generated by the legacy channel-close path.",
+        color = Colors.White64,
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+    TextInput(
+        value = state.indexLimit,
+        onValueChange = onIndexLimitChange,
+        placeholder = "10000",
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    if (showScanButton) {
+        Spacer(modifier = Modifier.height(12.dp))
+        PrimaryButton(
+            text = "Scan",
+            isLoading = state.isScanning,
+            enabled = canScan,
+            onClick = onScan,
+        )
+    }
+}
+
+@Composable
+private fun SuccessPageContent(
+    state: LegacyRnRecoveryUiState,
+    canScan: Boolean,
+    txid: String,
+    onIndexLimitChange: (String) -> Unit,
+    onScan: () -> Unit,
+    onDone: () -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+        ) {
+            ScanContent(
+                state = state,
+                canScan = canScan,
+                showScanButton = false,
+                onIndexLimitChange = onIndexLimitChange,
+                onScan = onScan,
+            )
+            Spacer(modifier = Modifier.height(24.dp))
+            SuccessContent(txid = txid)
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+
+        PrimaryButton(
+            text = "Done",
+            onClick = onDone,
+        )
+        Spacer(modifier = Modifier.height(32.dp))
+    }
+}
+
+@Composable
+private fun FoundContent(
+    state: LegacyRnRecoveryUiState,
+    isBusy: Boolean,
+    onPrepare: () -> Unit,
+    onScanAgain: () -> Unit,
+) {
+    val result = state.scanResult ?: return
+
+    SectionHeader("FUNDS FOUND")
+    SettingsTextButtonRow(title = "Total", value = sats(result.totalAmount))
+    SettingsTextButtonRow(title = "Outputs", value = result.outputsCount.toString())
+    Spacer(modifier = Modifier.height(12.dp))
+    PrimaryButton(
+        text = "Prepare Sweep",
+        isLoading = state.isPreparing,
+        enabled = !isBusy,
+        onClick = onPrepare,
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    SecondaryButton(
+        text = "Scan Again",
+        enabled = !isBusy,
+        onClick = onScanAgain,
+    )
+}
+
+@Composable
+private fun NoFundsContent(
+    indexLimit: String,
+    isBusy: Boolean,
+    onScanAgain: () -> Unit,
+) {
+    StatusMessage(
+        title = "NO FUNDS FOUND",
+        message = "No legacy native SegWit close outputs were found up to index $indexLimit.",
+        color = Colors.White64,
+    )
+    Spacer(modifier = Modifier.height(12.dp))
+    SecondaryButton(
+        text = "Scan Again",
+        enabled = !isBusy,
+        onClick = onScanAgain,
+    )
+}
+
+@Composable
+private fun PreviewContent(
+    state: LegacyRnRecoveryUiState,
+    isBusy: Boolean,
+    onBroadcast: () -> Unit,
+    onScanAgain: () -> Unit,
+) {
+    val preview = state.sweepPreview ?: return
+
+    SectionHeader("CONFIRM SWEEP")
+    SettingsTextButtonRow(title = "Receive", value = sats(preview.amountAfterFees))
+    SettingsTextButtonRow(title = "Network Fee", value = sats(preview.estimatedFee))
+    SettingsTextButtonRow(title = "Inputs", value = preview.outputsCount.toString())
+    SettingsTextButtonRow(title = "To", value = preview.destinationAddress.shortened())
+    SettingsTextButtonRow(title = "Tx", value = preview.txid.shortened())
+    Spacer(modifier = Modifier.height(12.dp))
+    PrimaryButton(
+        text = "Broadcast Sweep",
+        isLoading = state.isBroadcasting,
+        enabled = !isBusy,
+        onClick = onBroadcast,
+    )
+    Spacer(modifier = Modifier.height(8.dp))
+    SecondaryButton(
+        text = "Scan Again",
+        enabled = !isBusy,
+        onClick = onScanAgain,
+    )
+}
+
+@Composable
+private fun SuccessContent(
+    txid: String,
+) {
+    SectionHeader("SWEEP COMPLETE")
+    SettingsTextButtonRow(title = "Tx", value = txid.shortened())
+    BodyS(
+        text = "The sweep transaction was broadcast. The funds will appear after the wallet syncs " +
+            "and the transaction confirms.",
+        color = Colors.White64,
+    )
+}
+
+@Composable
+private fun StatusMessage(
+    title: String,
+    message: String,
+    color: androidx.compose.ui.graphics.Color,
+) {
+    SectionHeader(title)
+    BodyS(
+        text = message,
+        color = color,
+        maxLines = 6,
+        overflow = TextOverflow.Ellipsis,
+    )
+}
+
+private fun sats(value: ULong): String = "${value.formatToModernDisplay()} sats"
+
+private fun String.shortened(): String {
+    if (length <= 24) return this
+    return "${take(10)}...${takeLast(10)}"
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        LegacyRnRecoveryContent(
+            state = LegacyRnRecoveryUiState(),
+            onBackClick = {},
+            onDone = {},
+            onIndexLimitChange = {},
+            onScan = {},
+            onPrepare = {},
+            onBroadcast = {},
+            onScanAgain = {},
+        )
+    }
+}

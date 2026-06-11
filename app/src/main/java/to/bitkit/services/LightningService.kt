@@ -30,12 +30,14 @@ import org.lightningdevkit.ldknode.Config
 import org.lightningdevkit.ldknode.ElectrumSyncConfig
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.FeeRate
+import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
+import org.lightningdevkit.ldknode.PublicKey
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.defaultConfig
@@ -45,11 +47,12 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Defaults
 import to.bitkit.env.Env
-import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
@@ -67,6 +70,11 @@ import kotlin.time.Duration
 import org.lightningdevkit.ldknode.AddressType as LdkAddressType
 
 typealias NodeEventHandler = suspend (Event) -> Unit
+
+data class AddressDerivationInfo(
+    val address: String,
+    val index: Int,
+)
 
 @Suppress("LargeClass", "TooManyFunctions")
 @Singleton
@@ -134,11 +142,12 @@ class LightningService @Inject constructor(
                 trustedPeersNoReserve = trustedPeerNodeIds,
                 perChannelReserveSats = 1u,
             ),
+            probingLiquidityLimitMultiplier = 1uL,
             includeUntrustedPendingInSpendable = true,
         )
     }
 
-    @Suppress("ForbiddenComment")
+    @Suppress("ForbiddenComment", "LongMethod")
     private suspend fun build(
         walletIndex: Int,
         customServerUrl: String?,
@@ -186,11 +195,29 @@ class LightningService @Inject constructor(
                 "Building node with \n\t vssUrl: '$vssUrl'\n\t lnurlAuthServerUrl: '$lnurlAuthServerUrl'",
                 context = TAG,
             )
-            if (lnurlAuthServerUrl.isNotEmpty()) {
-                builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
-            } else {
-                builder.buildWithVssStoreAndFixedHeaders(vssUrl, vssStoreId, fixedHeaders)
+
+            fun buildNode() = runCatching {
+                if (lnurlAuthServerUrl.isNotEmpty()) {
+                    builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
+                } else {
+                    builder.buildWithVssStoreAndFixedHeaders(vssUrl, vssStoreId, fixedHeaders)
+                }
             }
+
+            buildNode().recoverCatching { error ->
+                if (error !is BuildException.DangerousValue) throw error
+                Logger.warn(
+                    "Retrying build failed with 'DangerousValue' using 'setAcceptStaleChannelMonitors' for recovery.",
+                    error,
+                    context = TAG,
+                )
+                builder.setAcceptStaleChannelMonitors(true)
+                buildNode()
+                    .onFailure {
+                        Logger.error("Failed recovery retry using 'setAcceptStaleChannelMonitors'.", it, context = TAG)
+                    }
+                    .getOrThrow()
+            }.getOrThrow()
         } catch (e: BuildException) {
             throw LdkError(e)
         } finally {
@@ -226,6 +253,7 @@ class LightningService @Inject constructor(
                     lightningWalletSyncIntervalSecs = Env.walletSyncIntervalSecs,
                     feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
                 ),
+                connectionTimeoutSecs = Env.walletSyncTimeoutSecs,
             ),
         )
     }
@@ -394,6 +422,62 @@ class LightningService @Inject constructor(
         }
     }
 
+    suspend fun newAddressForType(addressType: AddressType): String {
+        val addressInfo = newAddressInfoForType(addressType)
+        return addressInfo.address
+    }
+
+    suspend fun newAddressInfoForType(addressType: AddressType): AddressDerivationInfo {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        return ServiceQueue.LDK.background {
+            val addressInfo = node.onchainPayment().newAddressInfoForType(addressType.toLdkAddressType())
+            AddressDerivationInfo(address = addressInfo.address, index = addressInfo.index.toInt())
+        }
+    }
+
+    suspend fun addressInfoForType(addressType: AddressType, receiveIndex: Int): AddressDerivationInfo {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        return ServiceQueue.LDK.background {
+            val addressInfo = node.onchainPayment().addressInfoForTypeAtIndex(
+                addressType.toLdkAddressType(),
+                KeychainKind.EXTERNAL,
+                receiveIndex.toUInt(),
+            )
+            AddressDerivationInfo(address = addressInfo.address, index = addressInfo.index.toInt())
+        }
+    }
+
+    suspend fun addressInfosForType(
+        addressType: AddressType,
+        isChange: Boolean,
+        startIndex: Int,
+        count: Int,
+    ): List<AddressDerivationInfo> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        val keychain = if (isChange) KeychainKind.INTERNAL else KeychainKind.EXTERNAL
+
+        return ServiceQueue.LDK.background {
+            node.onchainPayment()
+                .addressInfosForType(
+                    addressType.toLdkAddressType(),
+                    keychain,
+                    startIndex.toUInt(),
+                    count.toUInt(),
+                )
+                .map { AddressDerivationInfo(address = it.address, index = it.index.toInt()) }
+        }
+    }
+
+    suspend fun revealReceiveAddresses(toReceiveIndex: Int, forType: AddressType) {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        ServiceQueue.LDK.background {
+            node.onchainPayment().revealReceiveAddressesTo(forType.toLdkAddressType(), toReceiveIndex.toUInt())
+        }
+    }
+
     // region peers
     suspend fun connectToTrustedPeers() {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
@@ -548,8 +632,26 @@ class LightningService @Inject constructor(
             Logger.info("Channel close initiated (force=$force): '$channelId'", context = TAG)
         } catch (e: NodeException) {
             val error = LdkError(e)
-            Logger.error("Error initiating channel close (force=$force): '$channelId'", error, context = TAG)
+            Logger.error("Failed to initiate channel close for '$channelId' with force '$force'", error, context = TAG)
+            logCloseChannelPeerState(node, channel)
             throw LdkError(e)
+        }
+    }
+
+    private fun logCloseChannelPeerState(node: Node, channel: ChannelDetails) {
+        runCatching {
+            val peer = node.listPeers().firstOrNull { it.nodeId == channel.counterpartyNodeId }
+            Logger.info(
+                "Collected close peer state for channel '${channel.channelId}': " +
+                    "counterparty='${channel.counterpartyNodeId}', " +
+                    "peerFound='${peer != null}', " +
+                    "peerAddress='${peer?.address}', " +
+                    "peerConnected='${peer?.isConnected}', " +
+                    "peerPersisted='${peer?.isPersisted}'",
+                context = TAG,
+            )
+        }.onFailure {
+            Logger.warn("Failed to collect close peer state for channel '${channel.channelId}'", it, context = TAG)
         }
     }
     // endregion
@@ -562,24 +664,36 @@ class LightningService @Inject constructor(
             return false
         }
 
-        if (channels.none { it.isChannelReady }) {
-            Logger.warn("canReceive = false: Found no LN channel ready to enable receive: '$channels'", context = TAG)
+        if (channels.none { it.isUsable }) {
+            Logger.warn("canReceive = false: Found no LN channel usable to enable receive: '$channels'", context = TAG)
             return false
         }
 
         return true
     }
 
-    suspend fun receive(sat: ULong? = null, description: String, expirySecs: UInt = 3600u): String {
+    suspend fun receive(
+        sat: ULong? = null,
+        description: String,
+        expirySecs: UInt = Defaults.bolt11ExpirySec,
+    ): String {
+        return receiveMsats(amountMsat = sat?.let { it * 1000u }, description = description, expirySecs = expirySecs)
+    }
+
+    suspend fun receiveMsats(
+        amountMsat: ULong? = null,
+        description: String,
+        expirySecs: UInt = Defaults.bolt11ExpirySec,
+    ): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         val message = description
 
         return ServiceQueue.LDK.background {
-            val bolt11Invoice: Bolt11Invoice = if (sat != null) {
+            val bolt11Invoice: Bolt11Invoice = if (amountMsat != null) {
                 node.bolt11Payment()
                     .receive(
-                        amountMsat = sat * 1000u,
+                        amountMsat = amountMsat,
                         description = Bolt11InvoiceDescription.Direct(description = message),
                         expirySecs = expirySecs,
                     )
@@ -593,23 +707,6 @@ class LightningService @Inject constructor(
 
             return@background bolt11Invoice.toString()
         }
-    }
-
-    fun canSend(amountSats: ULong): Boolean {
-        val channels = this.channels
-        if (channels == null) {
-            Logger.warn("Channels not available", context = TAG)
-            return false
-        }
-
-        val totalNextOutboundHtlcLimitSats = channels.totalNextOutboundHtlcLimitSats()
-
-        if (totalNextOutboundHtlcLimitSats < amountSats) {
-            Logger.warn("Insufficient outbound capacity: $totalNextOutboundHtlcLimitSats < $amountSats", context = TAG)
-            return false
-        }
-
-        return true
     }
 
     suspend fun send(
@@ -671,7 +768,7 @@ class LightningService @Inject constructor(
             return@background runCatching {
                 val invoice = Bolt11Invoice.fromStr(bolt11)
                 val feesMsat = node.bolt11Payment().estimateRoutingFees(invoice)
-                val feeSat = feesMsat / 1000u
+                val feeSat = msatFloorOf(feesMsat)
                 Result.success(feeSat)
             }.getOrElse {
                 Result.failure(if (it is NodeException) LdkError(it) else it)
@@ -687,7 +784,7 @@ class LightningService @Inject constructor(
                 val invoice = Bolt11Invoice.fromStr(bolt11)
                 val amountMsat = amountSats * 1000u
                 val feesMsat = node.bolt11Payment().estimateRoutingFeesUsingAmount(invoice, amountMsat)
-                val feeSat = feesMsat / 1000u
+                val feeSat = msatFloorOf(feesMsat)
                 Result.success(feeSat)
             }.getOrElse {
                 Result.failure(if (it is NodeException) LdkError(it) else it)
@@ -697,7 +794,7 @@ class LightningService @Inject constructor(
     // endregion
 
     // region probing
-    suspend fun sendProbes(bolt11: String): Result<Unit> {
+    suspend fun sendProbes(bolt11: String): Result<Set<PaymentId>> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
@@ -705,14 +802,14 @@ class LightningService @Inject constructor(
 
         val invoiceAmountMsat = bolt11Invoice.amountMilliSatoshis()
         Logger.debug(
-            "sendProbes: invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { it / 1000u }} sats)",
+            "sendProbes: invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { msatFloorOf(it) }} sats)",
             context = TAG
         )
 
         return ServiceQueue.LDK.background {
             runCatching {
-                node.bolt11Payment().sendProbes(bolt11Invoice, null)
-                Result.success(Unit)
+                val handles = node.bolt11Payment().sendProbes(bolt11Invoice, null)
+                Result.success(handles.map { it.paymentId }.toSet())
             }.getOrElse {
                 dumpNetworkGraphInfo(bolt11)
                 Result.failure(if (it is NodeException) LdkError(it) else it)
@@ -720,7 +817,7 @@ class LightningService @Inject constructor(
         }
     }
 
-    suspend fun sendProbesUsingAmount(bolt11: String, amountMsat: ULong): Result<Unit> {
+    suspend fun sendProbesUsingAmount(bolt11: String, amountMsat: ULong): Result<Set<PaymentId>> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
         val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
@@ -728,17 +825,35 @@ class LightningService @Inject constructor(
 
         val invoiceAmountMsat = bolt11Invoice.amountMilliSatoshis()
         Logger.debug(
-            "sendProbesUsingAmount: customAmountMsat=$amountMsat (${amountMsat / 1000u} sats), " +
-                "invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { it / 1000u }} sats)",
+            "sendProbesUsingAmount: customAmountMsat=$amountMsat (${msatFloorOf(amountMsat)} sats), " +
+                "invoiceAmountMsat=$invoiceAmountMsat (${invoiceAmountMsat?.let { msatFloorOf(it) }} sats)",
             context = TAG
         )
 
         return ServiceQueue.LDK.background {
             runCatching {
-                node.bolt11Payment().sendProbesUsingAmount(bolt11Invoice, amountMsat, null)
-                Result.success(Unit)
+                val handles = node.bolt11Payment().sendProbesUsingAmount(bolt11Invoice, amountMsat, null)
+                Result.success(handles.map { it.paymentId }.toSet())
             }.getOrElse {
                 dumpNetworkGraphInfo(bolt11)
+                Result.failure(if (it is NodeException) LdkError(it) else it)
+            }
+        }
+    }
+
+    suspend fun sendKeysendProbe(nodeId: PublicKey, amountMsat: ULong): Result<Set<PaymentId>> {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        Logger.debug(
+            "Sending keysend probe to nodeId='$nodeId' amountMsat='$amountMsat' (${msatFloorOf(amountMsat)} sats)",
+            context = TAG,
+        )
+
+        return ServiceQueue.LDK.background {
+            runCatching {
+                val handles = node.spontaneousPayment().sendProbes(amountMsat, nodeId)
+                Result.success(handles.map { it.paymentId }.toSet())
+            }.getOrElse {
                 Result.failure(if (it is NodeException) LdkError(it) else it)
             }
         }
@@ -993,7 +1108,13 @@ class LightningService @Inject constructor(
     val config: Config? get() = node?.config()
     val peers: List<PeerDetails>? get() = node?.listPeers()
     val channels: List<ChannelDetails>? get() = node?.listChannels()
-    val payments: List<PaymentDetails>? get() = node?.listPayments()
+
+    suspend fun listPayments(): List<PaymentDetails>? {
+        val node = this.node ?: return null
+        return ServiceQueue.LDK.background {
+            node.listPayments()
+        }
+    }
     // endregion
 
     // region debug

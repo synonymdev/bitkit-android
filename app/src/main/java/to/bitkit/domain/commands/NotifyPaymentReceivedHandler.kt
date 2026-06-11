@@ -17,6 +17,7 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NotificationDetails
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.formatToModernDisplay
+import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.utils.Logger
@@ -68,14 +69,22 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         if (command.event.details.amountSats <= 0) return false
 
         delay(DELAY_FOR_ACTIVITY_SYNC_MS)
-        val shouldShowSheet = activityRepo.shouldShowReceivedSheet(
+        val shouldShowSheet = retryShouldShowReceivedSheet(
             command.event.txid,
-            command.event.details.amountSats.toULong()
+            command.event.details.amountSats.toULong(),
         )
         if (shouldShowSheet) {
             activityRepo.markOnchainActivityAsSeen(command.event.txid)
         }
         return shouldShowSheet
+    }
+
+    private suspend fun retryShouldShowReceivedSheet(txid: String, amountSats: ULong): Boolean {
+        repeat(MAX_RETRIES) {
+            if (activityRepo.shouldShowReceivedSheet(txid, amountSats)) return true
+            delay(RETRY_DELAY_MS)
+        }
+        return activityRepo.shouldShowReceivedSheet(txid, amountSats)
     }
 
     private fun buildSheetDetails(command: NotifyPaymentReceived.Command) = NewTransactionSheetDetails(
@@ -89,7 +98,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
             is NotifyPaymentReceived.Command.Onchain -> command.event.txid
         },
         sats = when (command) {
-            is NotifyPaymentReceived.Command.Lightning -> (command.event.amountMsat / 1000u).toLong()
+            is NotifyPaymentReceived.Command.Lightning -> msatCeilOf(command.event.amountMsat).toLong()
             is NotifyPaymentReceived.Command.Onchain -> command.event.details.amountSats
         },
     )
@@ -128,5 +137,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
          * the transaction before checking for RBF replacement or channel closure.
          */
         private const val DELAY_FOR_ACTIVITY_SYNC_MS = 500L
+        private const val RETRY_DELAY_MS = 300L
+        private const val MAX_RETRIES = 3
     }
 }

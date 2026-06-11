@@ -1,11 +1,16 @@
 package to.bitkit.ui.shared.modifiers
 
+import android.os.SystemClock
 import androidx.compose.animation.core.Animatable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.SuspendingPointerInputModifierNode
 import androidx.compose.ui.input.pointer.pointerInput
@@ -23,47 +28,94 @@ import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.role
 import androidx.compose.ui.unit.Constraints
 import kotlinx.coroutines.launch
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import androidx.compose.ui.semantics.onLongClick as semanticsOnLongClick
+
+private val CLICK_DEBOUNCE = 500.milliseconds
+
+private class ClickDebouncer {
+    private var lastClickTime = 0L
+
+    fun tryClick(debounce: Duration = CLICK_DEBOUNCE, onClick: () -> Unit): Boolean {
+        val now = SystemClock.uptimeMillis()
+        if (now - lastClickTime >= debounce.inWholeMilliseconds) {
+            lastClickTime = now
+            onClick()
+            return true
+        }
+        return false
+    }
+}
+
+@Composable
+fun rememberDebouncedClick(debounce: Duration = CLICK_DEBOUNCE, onClick: () -> Unit): () -> Unit {
+    val debouncer = remember { ClickDebouncer() }
+    val currentOnClick by rememberUpdatedState(onClick)
+    return remember(debouncer, debounce) { { debouncer.tryClick(debounce, currentOnClick) } }
+}
 
 /**
  * Adjusts the alpha of a composable when it is pressed and makes it clickable.
  * When pressed, the alpha is reduced to provide visual feedback.
- * If `onClick` is null, the clickable behavior is disabled.
+ * If `onClick` is null or `enabled` is false, the clickable behavior is disabled.
+ *
+ * Set `ripple` to true to show the standard Material ripple indication alongside
+ * the alpha animation (useful for list items, menu buttons, etc.).
  *
  * Analogue of `TouchableOpacity` in React Native.
  */
+@Composable
 fun Modifier.clickableAlpha(
     pressedAlpha: Float = 0.7f,
+    enabled: Boolean = true,
+    ripple: Boolean = false,
+    debounce: Duration = CLICK_DEBOUNCE,
+    onLongClick: (() -> Unit)? = null,
     onClick: (() -> Unit)?,
-): Modifier = if (onClick != null) {
-    this.then(ClickableAlphaElement(pressedAlpha, onClick))
-} else {
-    this
+): Modifier = when {
+    onClick == null || !enabled -> this
+    ripple && onLongClick == null ->
+        this
+            .alphaFeedback(pressedAlpha)
+            .clickable(onClick = rememberDebouncedClick(debounce, onClick))
+
+    else -> this.then(ClickableAlphaElement(pressedAlpha, debounce, onLongClick, onClick))
 }
 
 private data class ClickableAlphaElement(
     val pressedAlpha: Float,
+    val debounce: Duration,
+    val onLongClick: (() -> Unit)?,
     val onClick: () -> Unit,
 ) : ModifierNodeElement<ClickableAlphaNode>() {
-    override fun create(): ClickableAlphaNode = ClickableAlphaNode(pressedAlpha, onClick)
+    override fun create(): ClickableAlphaNode = ClickableAlphaNode(pressedAlpha, debounce, onLongClick, onClick)
 
     override fun update(node: ClickableAlphaNode) {
         node.pressedAlpha = pressedAlpha
+        node.debounce = debounce
+        node.onLongClick = onLongClick
         node.onClick = onClick
     }
 
     override fun InspectorInfo.inspectableProperties() {
         name = "clickableAlpha"
         properties["pressedAlpha"] = pressedAlpha
+        properties["debounce"] = debounce
+        properties["onLongClick"] = onLongClick
         properties["onClick"] = onClick
     }
 }
 
 private class ClickableAlphaNode(
     var pressedAlpha: Float,
+    var debounce: Duration,
+    var onLongClick: (() -> Unit)?,
     var onClick: () -> Unit,
 ) : DelegatingNode(), LayoutModifierNode, SemanticsModifierNode {
 
     private val animatable = Animatable(1f)
+    private val debouncer = ClickDebouncer()
 
     init {
         delegate(
@@ -76,16 +128,26 @@ private class ClickableAlphaNode(
                             coroutineScope.launch { animatable.animateTo(1f) }
                         }
                     },
+                    onLongPress = if (onLongClick == null) null else ::handleLongPress,
                     onTap = {
-                        onClick()
-                        coroutineScope.launch {
-                            animatable.animateTo(pressedAlpha)
-                            animatable.animateTo(1f)
+                        if (debouncer.tryClick(debounce, onClick)) {
+                            coroutineScope.launch {
+                                animatable.animateTo(pressedAlpha)
+                                animatable.animateTo(1f)
+                            }
+                        } else {
+                            coroutineScope.launch { animatable.animateTo(1f) }
                         }
                     }
                 )
             }
         )
+    }
+
+    @Suppress("UNUSED_PARAMETER")
+    private fun handleLongPress(offset: Offset) {
+        onLongClick?.invoke()
+        coroutineScope.launch { animatable.animateTo(1f) }
     }
 
     override fun MeasureScope.measure(measurable: Measurable, constraints: Constraints): MeasureResult {
@@ -101,8 +163,14 @@ private class ClickableAlphaNode(
     override fun SemanticsPropertyReceiver.applySemantics() {
         role = Role.Button
         onClick {
-            onClick()
+            debouncer.tryClick(debounce, onClick)
             true
+        }
+        onLongClick?.let {
+            semanticsOnLongClick {
+                it()
+                true
+            }
         }
     }
 }

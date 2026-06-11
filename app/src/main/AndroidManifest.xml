@@ -3,8 +3,13 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <queries>
+        <package android:name="to.pubky.ring" />
         <intent>
             <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="pubkyauth" />
         </intent>
     </queries>
 
@@ -17,10 +22,30 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission
         android:name="android.permission.FOREGROUND_SERVICE"
         tools:ignore="ForegroundServicePermission,ForegroundServicesPolicy" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+
+    <!-- USB Host support for Trezor hardware wallet -->
+    <uses-feature
+        android:name="android.hardware.usb.host"
+        android:required="false" />
+
+    <!-- Bluetooth permissions for Trezor Safe 7 (Android 12+) -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+
+    <!-- Bluetooth permissions (legacy, Android 11 and below) -->
+    <uses-permission android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN"
+        android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"
+        android:maxSdkVersion="30" />
+
     <!-- Required for E2E tests connecting to local Electrum server (Android 16+) -->
     <uses-permission
         android:name="android.permission.NEARBY_WIFI_DEVICES"
@@ -56,6 +81,7 @@
             android:name=".ui.MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
+            android:screenOrientation="portrait"
             android:theme="@style/Theme.App.Splash"
             android:windowSoftInputMode="adjustResize|stateHidden">
             <intent-filter>
@@ -99,6 +125,7 @@
                 <data android:scheme="lnurlw" />
                 <data android:scheme="lnurlc" />
                 <data android:scheme="lnurlp" />
+                <data android:scheme="pubkyauth" />
             </intent-filter>
 
             <!-- NFC -->
@@ -125,6 +152,14 @@
                 <data android:scheme="lnurlp" />
             </intent-filter>
 
+            <!-- USB device attached — auto-grants permission when Trezor is plugged in -->
+            <intent-filter>
+                <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
+            </intent-filter>
+            <meta-data
+                android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
+                android:resource="@xml/usb_device_filter" />
+
             <meta-data
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
@@ -137,6 +172,16 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <receiver
+            android:name=".appwidget.AppWidgetRefreshReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="to.bitkit.appwidget.REFRESH_ALARM" />
+            </intent-filter>
+        </receiver>
 
         <provider
             android:name="androidx.startup.InitializationProvider"
@@ -170,6 +215,85 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/provider_paths" />
         </provider>
+
+        <!-- AppWidget Config Activity -->
+        <activity
+            android:name=".appwidget.config.AppWidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:screenOrientation="portrait"
+            android:taskAffinity=""
+            android:theme="@style/Theme.App">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
+        <!-- Price Widget -->
+        <receiver
+            android:name=".appwidget.ui.price.PriceGlanceReceiver"
+            android:exported="true"
+            android:label="@string/widgets__price__name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_info_price" />
+        </receiver>
+
+        <!-- Headlines Widget -->
+        <receiver
+            android:name=".appwidget.ui.headlines.HeadlinesGlanceReceiver"
+            android:exported="true"
+            android:label="@string/widgets__news__name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_info_headlines" />
+        </receiver>
+
+        <!-- Blocks Widget -->
+        <receiver
+            android:name=".appwidget.ui.blocks.BlocksGlanceReceiver"
+            android:exported="true"
+            android:label="@string/widgets__blocks__name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_info_blocks" />
+        </receiver>
+
+        <!-- Facts Widget -->
+        <receiver
+            android:name=".appwidget.ui.facts.FactsGlanceReceiver"
+            android:exported="true"
+            android:label="@string/widgets__facts__name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_info_facts" />
+        </receiver>
+
+        <!-- Weather Widget -->
+        <receiver
+            android:name=".appwidget.ui.weather.WeatherGlanceReceiver"
+            android:exported="true"
+            android:label="@string/widgets__weather__name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/appwidget_info_weather" />
+        </receiver>
+
     </application>
 
 </manifest>
