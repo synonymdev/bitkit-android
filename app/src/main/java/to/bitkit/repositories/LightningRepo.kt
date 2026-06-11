@@ -1625,7 +1625,11 @@ class LightningRepo @Inject constructor(
         )
     }
 
-    suspend fun resetPathfindingScores(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
+    /**
+     * Returns the device epoch seconds captured after the VSS deletes and before the node restart,
+     * so callers can require any scores sync timestamp to be strictly newer to prove a post-reset download.
+     */
+    suspend fun resetPathfindingScores(walletIndex: Int = 0): Result<Long> = withContext(bgDispatcher) {
         Logger.info("Resetting pathfinding scores", context = TAG)
 
         waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
@@ -1650,9 +1654,13 @@ class LightningRepo @Inject constructor(
             return@withContext Result.failure(it)
         }
 
-        start(walletIndex = walletIndex, shouldRetry = false).onSuccess {
-            Logger.info("Pathfinding scores reset", context = TAG)
-        }
+        val resetAtSecs = System.currentTimeMillis() / 1000
+
+        start(walletIndex = walletIndex, shouldRetry = false)
+            .map { resetAtSecs }
+            .onSuccess {
+                Logger.info("Pathfinding scores reset at '$resetAtSecs'", context = TAG)
+            }
     }
     // endregion
 

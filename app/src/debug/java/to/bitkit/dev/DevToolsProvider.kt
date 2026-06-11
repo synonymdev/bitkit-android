@@ -180,7 +180,7 @@ private sealed interface DevCommand {
         override suspend fun execute(deps: DevToolsProvider.Dependencies): DevResult {
             Logger.info("Resetting pathfinding scores via devtools", context = TAG)
             return deps.lightningRepo().resetPathfindingScores().fold(
-                onSuccess = { DevResult.Ack() },
+                onSuccess = { DevResult.Ack(timestamp = it) },
                 onFailure = {
                     Logger.error("Failed to reset pathfinding scores", it, context = TAG)
                     DevResult.Error(it.message)
@@ -199,7 +199,7 @@ private sealed interface DevResult {
 
     @Serializable data class Invoice(val bolt11: String) : DevResult
 
-    @Serializable data class Ack(val success: Boolean = true) : DevResult
+    @Serializable data class Ack(val success: Boolean = true, val timestamp: Long? = null) : DevResult
 
     @Serializable
     data class ProbeSuccess(
