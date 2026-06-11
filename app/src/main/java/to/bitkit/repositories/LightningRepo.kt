@@ -1620,8 +1620,33 @@ class LightningRepo @Inject constructor(
             graphNodeCount = graph?.nodeCount,
             graphChannelCount = graph?.channelCount,
             latestRgsSyncTimestamp = graph?.latestRgsSyncTimestamp,
+            latestPathfindingScoresSyncTimestamp = state.nodeStatus?.latestPathfindingScoresSyncTimestamp,
             syncHealthy = state.isSyncHealthy,
         )
+    }
+
+    suspend fun resetPathfindingScores(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
+        Logger.info("Resetting pathfinding scores", context = TAG)
+
+        waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
+        stop().onFailure {
+            Logger.error("Failed to stop node during pathfinding scores reset", it, context = TAG)
+            return@withContext Result.failure(it)
+        }
+
+        runCatching {
+            vssBackupClientLdk.setup(walletIndex).getOrThrow()
+            vssBackupClientLdk.deleteObject(VSS_KEY_SCORER).getOrThrow()
+            vssBackupClientLdk.deleteObject(VSS_KEY_EXTERNAL_SCORES_CACHE).getOrThrow()
+        }.onFailure {
+            Logger.error("Failed to delete pathfinding scores from VSS", it, context = TAG)
+            start(walletIndex = walletIndex, shouldRetry = false)
+            return@withContext Result.failure(it)
+        }
+
+        start(walletIndex = walletIndex, shouldRetry = false).onSuccess {
+            Logger.info("Pathfinding scores reset", context = TAG)
+        }
     }
     // endregion
 
@@ -1642,6 +1667,8 @@ class LightningRepo @Inject constructor(
     companion object {
         private const val TAG = "LightningRepo"
         private const val LENGTH_CHANNEL_ID_PREVIEW = 10
+        private const val VSS_KEY_SCORER = "scorer"
+        private const val VSS_KEY_EXTERNAL_SCORES_CACHE = "external_pathfinding_scores_cache"
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
@@ -1702,6 +1729,7 @@ data class ProbeReadiness(
     val graphNodeCount: Int?,
     val graphChannelCount: Int?,
     val latestRgsSyncTimestamp: ULong?,
+    val latestPathfindingScoresSyncTimestamp: ULong?,
     val syncHealthy: Boolean,
 ) {
     val ready: Boolean
