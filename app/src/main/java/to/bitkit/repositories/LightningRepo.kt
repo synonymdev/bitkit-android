@@ -1635,12 +1635,18 @@ class LightningRepo @Inject constructor(
         }
 
         runCatching {
+            val lifecycleState = _lightningState.value.nodeLifecycleState
+            check(lifecycleState == NodeLifecycleState.Stopped) {
+                "Node lifecycle changed to '$lifecycleState' during pathfinding scores reset"
+            }
             vssBackupClientLdk.setup(walletIndex).getOrThrow()
             vssBackupClientLdk.deleteObject(VSS_KEY_SCORER).getOrThrow()
             vssBackupClientLdk.deleteObject(VSS_KEY_EXTERNAL_SCORES_CACHE).getOrThrow()
         }.onFailure {
             Logger.error("Failed to delete pathfinding scores from VSS", it, context = TAG)
-            start(walletIndex = walletIndex, shouldRetry = false)
+            start(walletIndex = walletIndex, shouldRetry = false).onFailure { startError ->
+                Logger.error("Failed to restart node after pathfinding scores reset failure", startError, context = TAG)
+            }
             return@withContext Result.failure(it)
         }
 
