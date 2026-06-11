@@ -8,7 +8,7 @@ cd "$repo_root"
 variant="mainnetRelease"
 output="app/build/outputs/native-debug-symbols/$variant/native-debug-symbols.zip"
 output_dir=$(dirname "$output")
-required_libs="libbitkitcore.so libldk_node.so libvss_rust_client_ffi.so"
+required_libs="libbitkitcore.so libldk_node.so libpaykit.so libvss_rust_client_ffi.so"
 archive_symbol_suffixes=".dbg .sym"
 
 tmp_dirs=""
@@ -57,8 +57,8 @@ find_readelf() {
 
 readelf_bin=$(find_readelf)
 
-has_debug_metadata() {
-    "$readelf_bin" -S "$1" | grep -Eq '\.(symtab|debug_|gnu_debugdata)'
+has_dwarf_debug_metadata() {
+    "$readelf_bin" -S "$1" | grep -Eq '\.debug_info'
 }
 
 validate_symbol_tree() {
@@ -72,10 +72,10 @@ validate_symbol_tree() {
                 exit 1
             fi
 
-            if ! has_debug_metadata "$lib"; then
-                echo "Native debug symbols unavailable: '$abi/$lib_name' has no .symtab, .debug_*, or .gnu_debugdata sections." >&2
+            if ! has_dwarf_debug_metadata "$lib"; then
+                echo "Native debug symbols unavailable: '$abi/$lib_name' has no .debug_info DWARF metadata." >&2
                 echo "Refusing to create '$output' from stripped native libraries." >&2
-                echo "Publish or consume native dependencies with usable debug metadata before releasing." >&2
+                echo "Publish or consume native dependencies with full DWARF debug metadata before releasing." >&2
                 exit 1
             fi
         done

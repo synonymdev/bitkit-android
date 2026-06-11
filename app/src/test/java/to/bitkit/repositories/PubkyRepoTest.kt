@@ -4,7 +4,7 @@ import app.cash.turbine.test
 import coil3.ImageLoader
 import coil3.disk.DiskCache
 import coil3.memory.MemoryCache
-import com.synonym.paykit.FfiPaymentEntry
+import com.synonym.paykit.FfiPaymentEndpoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -1209,9 +1209,9 @@ class PubkyRepoTest : BaseUnitTest() {
         sut.completeAuthentication()
     }
 
-    private fun paymentEntry(methodId: MethodId) = FfiPaymentEntry(
-        methodId = methodId.rawValue,
-        endpointData = """{"value":"value"}""",
+    private fun paymentEntry(methodId: MethodId) = FfiPaymentEndpoint(
+        paymentEndpointIdentifier = methodId.rawValue,
+        paymentEndpointPayload = """{"value":"value"}""",
     )
 
     private suspend fun startAuthForTesting(authUri: String = "auth_uri") {

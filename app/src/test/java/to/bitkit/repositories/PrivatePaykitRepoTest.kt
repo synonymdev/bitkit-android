@@ -4,8 +4,8 @@ import android.app.Activity
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
-import com.synonym.paykit.FfiPaymentEntry
-import com.synonym.paykit.FfiPrivatePaymentsPayload
+import com.synonym.paykit.FfiPaymentEndpoint
+import com.synonym.paykit.FfiPrivatePaymentList
 import com.synonym.paykit.PaykitFfiException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -403,8 +403,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verify(pubkyService).setPrivatePayments(
             eq(LINK_ID),
-            argThat<List<FfiPaymentEntry>> {
-                isNotEmpty() && all { it.endpointData == TOMBSTONE_PAYLOAD }
+            argThat<List<FfiPaymentEndpoint>> {
+                isNotEmpty() && all { it.paymentEndpointPayload == TOMBSTONE_PAYLOAD }
             },
         )
         verify(addressReservationRepo).clearContactAssignment(CONTACT_KEY)
@@ -461,8 +461,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(publicPaykitRepo, never()).syncPublishedEndpoints(false)
         verify(pubkyService).setPrivatePayments(
             eq(LINK_ID),
-            argThat<List<FfiPaymentEntry>> {
-                isNotEmpty() && all { it.endpointData == TOMBSTONE_PAYLOAD }
+            argThat<List<FfiPaymentEndpoint>> {
+                isNotEmpty() && all { it.paymentEndpointPayload == TOMBSTONE_PAYLOAD }
             },
         )
         verify(addressReservationRepo).clearContactAssignment(CONTACT_KEY)
@@ -671,8 +671,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(pubkyService).getPrivatePayments(LINK_ID)
         verify(pubkyService).setPrivatePayments(
             eq(LINK_ID),
-            argThat<List<FfiPaymentEntry>> {
-                any { it.endpointData == PublicPaykitRepo.serializePayload("bcrt1qprivate") }
+            argThat<List<FfiPaymentEndpoint>> {
+                any { it.paymentEndpointPayload == PublicPaykitRepo.serializePayload("bcrt1qprivate") }
             },
         )
     }
@@ -819,10 +819,10 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verify(pubkyService).setPrivatePayments(
             eq(LINK_ID),
-            argThat<List<FfiPaymentEntry>> {
+            argThat<List<FfiPaymentEndpoint>> {
                 any {
-                    it.methodId == MethodId.Bolt11.rawValue &&
-                        it.endpointData == PublicPaykitRepo.serializePayload(bolt11)
+                    it.paymentEndpointIdentifier == MethodId.Bolt11.rawValue &&
+                        it.paymentEndpointPayload == PublicPaykitRepo.serializePayload(bolt11)
                 }
             },
         )
@@ -864,11 +864,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verify(pubkyService).setPrivatePayments(
             eq(LINK_ID),
-            argThat<List<FfiPaymentEntry>> {
-                none { it.methodId == MethodId.Bolt11.rawValue } &&
+            argThat<List<FfiPaymentEndpoint>> {
+                none { it.paymentEndpointIdentifier == MethodId.Bolt11.rawValue } &&
                     any {
-                        it.methodId == MethodId.P2wpkh.rawValue &&
-                            it.endpointData == PublicPaykitRepo.serializePayload(address)
+                        it.paymentEndpointIdentifier == MethodId.P2wpkh.rawValue &&
+                            it.paymentEndpointPayload == PublicPaykitRepo.serializePayload(address)
                     }
             },
         )
@@ -1060,8 +1060,14 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(
                 privatePaymentsPayload(
                     listOf(
-                        FfiPaymentEntry(MethodId.Bolt11.rawValue, TOMBSTONE_PAYLOAD),
-                        FfiPaymentEntry(MethodId.P2wpkh.rawValue, TOMBSTONE_PAYLOAD),
+                        FfiPaymentEndpoint(
+                            paymentEndpointIdentifier = MethodId.Bolt11.rawValue,
+                            paymentEndpointPayload = TOMBSTONE_PAYLOAD,
+                        ),
+                        FfiPaymentEndpoint(
+                            paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
+                            paymentEndpointPayload = TOMBSTONE_PAYLOAD,
+                        ),
                     ),
                 ),
             )
@@ -1101,9 +1107,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(
                 privatePaymentsPayload(
                     listOf(
-                        FfiPaymentEntry(
-                            MethodId.Bolt11.rawValue,
-                            PublicPaykitRepo.serializePayload(PRIVATE_BOLT11),
+                        FfiPaymentEndpoint(
+                            paymentEndpointIdentifier = MethodId.Bolt11.rawValue,
+                            paymentEndpointPayload = PublicPaykitRepo.serializePayload(PRIVATE_BOLT11),
                         ),
                     ),
                 ),
@@ -1293,9 +1299,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.getPrivatePayments(retryLinkId)).thenReturn(
             privatePaymentsPayload(
                 listOf(
-                    FfiPaymentEntry(
-                        methodId = MethodId.P2wpkh.rawValue,
-                        endpointData = PublicPaykitRepo.serializePayload("bcrt1qprivate"),
+                    FfiPaymentEndpoint(
+                        paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
+                        paymentEndpointPayload = PublicPaykitRepo.serializePayload("bcrt1qprivate"),
                     ),
                 ),
             ),
@@ -1466,10 +1472,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         payeeNodeId = null,
     )
 
-    private fun privatePaymentsPayload(entries: List<FfiPaymentEntry>) = FfiPrivatePaymentsPayload(
-        reference = "550e8400-e29b-41d4-a716-446655440000",
-        entries = entries,
-    )
+    private fun privatePaymentsPayload(entries: List<FfiPaymentEndpoint>) =
+        FfiPrivatePaymentList(paymentEndpoints = entries)
 
     private fun secretStateJson(
         linkSnapshotHex: String? = LINK_SNAPSHOT,

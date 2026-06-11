@@ -3,7 +3,7 @@ package to.bitkit.repositories
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import coil3.ImageLoader
-import com.synonym.paykit.FfiPaymentEntry
+import com.synonym.paykit.FfiPaymentEndpoint
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
@@ -389,7 +389,7 @@ class PubkyRepo @Inject constructor(
 
     // region Payment endpoints
 
-    suspend fun getPaymentList(publicKey: String): Result<List<FfiPaymentEntry>> = withContext(ioDispatcher) {
+    suspend fun getPaymentList(publicKey: String): Result<List<FfiPaymentEndpoint>> = withContext(ioDispatcher) {
         runCatching {
             pubkyService.getPaymentList(publicKey.ensurePubkyPrefix())
         }
@@ -417,7 +417,7 @@ class PubkyRepo @Inject constructor(
                 .toSet()
 
             pubkyService.getPaymentList(currentPublicKey)
-                .map { it.methodId }
+                .map { it.paymentEndpointIdentifier }
                 .filter { it in managedMethodIds }
                 .forEach { pubkyService.removePaymentEndpoint(it) }
         }

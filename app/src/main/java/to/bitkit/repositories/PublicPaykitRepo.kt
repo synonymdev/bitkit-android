@@ -220,7 +220,7 @@ class PublicPaykitRepo @Inject constructor(
         runCatching {
             val normalizedKey = PubkyPublicKeyFormat.normalized(publicKey) ?: publicKey
             pubkyRepo.getPaymentList(normalizedKey).getOrThrow()
-                .mapNotNull { parseEndpoint(it.methodId, it.endpointData) }
+                .mapNotNull { parseEndpoint(it.paymentEndpointIdentifier, it.paymentEndpointPayload) }
                 .associateBy { it.methodId }
                 .values
                 .sortedBy { endpoint -> payablePreferenceOrder.indexOf(endpoint.methodId) }
@@ -255,7 +255,7 @@ class PublicPaykitRepo @Inject constructor(
 
     private suspend fun currentPublishedMethodIds(): Set<String> {
         return pubkyRepo.getPaymentList(requireCurrentPublicKey()).getOrThrow()
-            .map { it.methodId }
+            .map { it.paymentEndpointIdentifier }
             .toSet()
     }
 

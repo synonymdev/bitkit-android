@@ -99,16 +99,22 @@ class NativeReleaseConfigTest {
             "Native debug symbols script must create a zip archive.",
         )
         assertTrue(
-            symbolsScript.contains("""required_libs="libbitkitcore.so libldk_node.so libvss_rust_client_ffi.so""""),
-            "Native debug symbols script must validate Rust native libraries.",
+            symbolsScript.contains(
+                """required_libs="libbitkitcore.so libldk_node.so libpaykit.so libvss_rust_client_ffi.so"""",
+            ),
+            "Native debug symbols script must validate release-critical native libraries.",
         )
         assertTrue(
             symbolsScript.contains("""archive_symbol_suffixes=".dbg .sym""""),
             "Native debug symbols script must accept AGP native debug symbol entry suffixes.",
         )
         assertTrue(
-            symbolsScript.contains("""grep -Eq '\.(symtab|debug_|gnu_debugdata)'"""),
-            "Native debug symbols script must validate usable debug metadata before zipping.",
+            symbolsScript.contains("""grep -Eq '\.debug_info'"""),
+            "Native debug symbols script must validate full DWARF debug metadata before zipping.",
+        )
+        assertFalse(
+            symbolsScript.contains("symtab|debug_|gnu_debugdata"),
+            "Native debug symbols script must not accept symbol-table-only metadata for FULL symbols.",
         )
         assertTrue(
             symbolsScript.contains("Refusing to create '${'$'}output' from stripped native libraries."),
