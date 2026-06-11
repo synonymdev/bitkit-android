@@ -27,7 +27,7 @@ instead of UI interactions.
 
 ## Prerequisites
 
-1. Docker running (OrbStack) with the `bitkit-docker` stack up:
+1. Docker running with the `bitkit-docker` stack up:
    ```sh
    cd ../bitkit-docker && docker compose up -d
    ```
