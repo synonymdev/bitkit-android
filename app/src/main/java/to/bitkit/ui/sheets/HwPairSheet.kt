@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -16,6 +17,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -38,6 +40,7 @@ private val PAIRING_CELL_WIDTH = 32.dp
 fun HwPairSheet(
     onSubmit: (String) -> Unit,
     onCancel: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var code by remember { mutableStateOf("") }
     var submitted by remember { mutableStateOf(false) }
@@ -49,9 +52,11 @@ fun HwPairSheet(
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .gradientBackground()
+            .navigationBarsPadding()
+            .testTag("hw_pair_screen")
     ) {
         SheetTopBar(titleText = stringResource(R.string.hardware__pairing_title))
         Column(
@@ -93,7 +98,6 @@ fun HwPairSheet(
                     }
                 }
             },
-            includeNavigationBarsPadding = true,
         )
     }
 }

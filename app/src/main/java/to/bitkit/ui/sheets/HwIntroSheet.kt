@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -42,12 +44,15 @@ private const val INTRO_IMAGE_STAGGER_RATIO = 12f / 375f
 
 @Composable
 fun HwIntroSheet(
+    modifier: Modifier = Modifier,
     onDismiss: () -> Unit = {},
 ) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .gradientBackground()
+            .navigationBarsPadding()
+            .testTag("hw_intro_screen")
     ) {
         SheetTopBar(titleText = stringResource(R.string.hardware__intro_title))
         BoxWithConstraints(
@@ -58,13 +63,12 @@ fun HwIntroSheet(
             val imageSize = maxWidth * INTRO_IMAGE_SIZE_RATIO
             val staggerY = maxWidth * INTRO_IMAGE_STAGGER_RATIO
             TrezorImage(imageSize, staggerY)
-            LedgerImage(imageSize, staggerY, modifier = Modifier.blur(32.dp))
+            LedgerImage(imageSize, staggerY, modifier = Modifier.blur(16.dp, BlurredEdgeTreatment.Unbounded))
         }
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp)
-                .navigationBarsPadding()
         ) {
             Display(stringResource(R.string.hardware__intro_header).withAccent(accentColor = Colors.Blue))
             VerticalSpacer(8.dp)
