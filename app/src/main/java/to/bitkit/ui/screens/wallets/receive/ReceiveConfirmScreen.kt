@@ -43,7 +43,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.rememberRequestNotificationPermission
+import to.bitkit.ui.utils.rememberNotificationToggleClick
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.SettingsViewModel
 
@@ -90,9 +90,10 @@ fun ReceiveConfirmScreen(
         } ?: sats.toString()
     }
 
-    val requestNotificationPermission = rememberRequestNotificationPermission(
+    val onNotificationSwitchClick = rememberNotificationToggleClick(
+        isGranted = notificationsGranted,
         onPermissionResult = { granted -> settingsViewModel.setNotificationPreference(granted) },
-        onPreTiramisu = { context.openNotificationSettings() },
+        onOpenSystemSettings = { context.openNotificationSettings() },
     )
 
     Content(
@@ -102,7 +103,7 @@ fun ReceiveConfirmScreen(
         receiveAmountFormatted = receiveAmountFormatted,
         onLearnMoreClick = onLearnMore,
         isAdditional = isAdditional,
-        onSystemSettingsClick = requestNotificationPermission,
+        onSystemSettingsClick = onNotificationSwitchClick,
         hasNotificationPermission = notificationsGranted,
         onContinueClick = { onContinue(entry.invoice) },
         onBackClick = onBack,

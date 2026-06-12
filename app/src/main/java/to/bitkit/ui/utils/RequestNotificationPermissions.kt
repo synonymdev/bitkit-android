@@ -98,3 +98,25 @@ fun rememberRequestNotificationPermission(
         }
     }
 }
+
+@Composable
+fun rememberNotificationToggleClick(
+    isGranted: Boolean,
+    onPermissionResult: (Boolean) -> Unit,
+    onOpenSystemSettings: () -> Unit,
+): () -> Unit {
+    val requestPermission = rememberRequestNotificationPermission(
+        onPermissionResult = onPermissionResult,
+        onPreTiramisu = onOpenSystemSettings,
+    )
+    val currentIsGranted by rememberUpdatedState(isGranted)
+    val currentOnOpenSystemSettings by rememberUpdatedState(onOpenSystemSettings)
+
+    return remember(requestPermission) {
+        {
+            // Already granted: the runtime request is a no-op, so send the user to system
+            // settings where they can actually turn notifications off.
+            if (currentIsGranted) currentOnOpenSystemSettings() else requestPermission()
+        }
+    }
+}

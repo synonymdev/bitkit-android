@@ -31,7 +31,7 @@ import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.utils.composableWithDefaultTransitions
-import to.bitkit.ui.utils.rememberRequestNotificationPermission
+import to.bitkit.ui.utils.rememberNotificationToggleClick
 import to.bitkit.ui.walletViewModel
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.SettingsViewModel
@@ -151,9 +151,10 @@ fun ReceiveSheet(
                     cjitEntryDetails.value?.let { entryDetails ->
                         val context = LocalContext.current
                         val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
-                        val requestNotificationPermission = rememberRequestNotificationPermission(
+                        val onNotificationSwitchClick = rememberNotificationToggleClick(
+                            isGranted = notificationsGranted,
                             onPermissionResult = { granted -> settingsViewModel.setNotificationPreference(granted) },
-                            onPreTiramisu = { context.openNotificationSettings() },
+                            onOpenSystemSettings = { context.openNotificationSettings() },
                         )
 
                         ReceiveLiquidityScreen(
@@ -161,7 +162,7 @@ fun ReceiveSheet(
                             onContinue = { navController.popBackStack() },
                             onBack = { navController.popBackStack() },
                             hasNotificationPermission = notificationsGranted,
-                            onSwitchClick = requestNotificationPermission,
+                            onSwitchClick = onNotificationSwitchClick,
                         )
                     }
                 }
@@ -169,9 +170,10 @@ fun ReceiveSheet(
                     cjitEntryDetails.value?.let { entryDetails ->
                         val context = LocalContext.current
                         val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
-                        val requestNotificationPermission = rememberRequestNotificationPermission(
+                        val onNotificationSwitchClick = rememberNotificationToggleClick(
+                            isGranted = notificationsGranted,
                             onPermissionResult = { granted -> settingsViewModel.setNotificationPreference(granted) },
-                            onPreTiramisu = { context.openNotificationSettings() },
+                            onOpenSystemSettings = { context.openNotificationSettings() },
                         )
 
                         ReceiveLiquidityScreen(
@@ -180,7 +182,7 @@ fun ReceiveSheet(
                             isAdditional = true,
                             onBack = { navController.popBackStack() },
                             hasNotificationPermission = notificationsGranted,
-                            onSwitchClick = requestNotificationPermission,
+                            onSwitchClick = onNotificationSwitchClick,
                         )
                     }
                 }

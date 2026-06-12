@@ -9,12 +9,15 @@ toggle now goes through the shared `rememberRequestNotificationPermission` helpe
 system notification settings.
 
 ## What the fix does
-- **Android 13+ (API 33, TIRAMISU)**: tapping the toggle launches the OS
+- **Toggle OFF (permission already granted)**: re-requesting a granted permission is a
+  no-op, so tapping opens the **system notification settings** (`openNotificationSettings`)
+  where the user can actually turn notifications off — the behaviour these toggles had
+  before the refactor.
+- **Toggle ON, Android 13+ (API 33, TIRAMISU)**: tapping launches the OS
   `POST_NOTIFICATIONS` runtime permission dialog. Granting it flips the toggle to
   checked; the result is persisted via `SettingsViewModel.setNotificationPreference`.
-- **Pre-13 (API < 33)**: there is no runtime dialog, so the toggle falls back to the
-  caller's `onPreTiramisu` action — the in-app background-payments settings on the
-  intro sheet, the system notification settings on the transfer/receive toggles.
+- **Toggle ON, pre-13 (API < 33)**: there is no runtime dialog, so it falls back to the
+  system notification settings.
 
 The same helper backs four entry points; these journeys cover the three the user can
 reach directly:
