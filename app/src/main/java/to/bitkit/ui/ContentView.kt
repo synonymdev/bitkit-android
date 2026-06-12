@@ -200,6 +200,7 @@ import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
+import to.bitkit.ui.utils.rememberRequestNotificationPermission
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -241,11 +242,10 @@ fun ContentView(
     val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
     val walletExists = walletUiState.walletExists
 
-    val notificationPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        settingsViewModel.setNotificationPreference(granted)
-    }
+    val requestNotificationPermission = rememberRequestNotificationPermission(
+        onPermissionResult = { granted -> settingsViewModel.setNotificationPreference(granted) },
+        onPreTiramisu = { navController.navigateTo(Routes.BackgroundPaymentsSettings) },
+    )
 
     // Effects on app entering fg (ON_START) / bg (ON_STOP)
     DisposableEffect(lifecycle) {
@@ -512,15 +512,7 @@ fun ContentView(
                                         onEnable = {
                                             appViewModel.dismissTimedSheet()
                                             settingsViewModel.setBgPaymentsIntroSeen(true)
-                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                                                notificationPermissionLauncher.launch(
-                                                    Manifest.permission.POST_NOTIFICATIONS
-                                                )
-                                            } else {
-                                                // Pre-13 has no runtime permission dialog; open the
-                                                // in-app background payments settings instead.
-                                                navController.navigateTo(Routes.BackgroundPaymentsSettings)
-                                            }
+                                            requestNotificationPermission()
                                         },
                                     )
                                 }

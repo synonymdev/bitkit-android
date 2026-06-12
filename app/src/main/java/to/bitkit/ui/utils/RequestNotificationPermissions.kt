@@ -72,3 +72,29 @@ fun RequestNotificationPermissions(
         }
     }
 }
+
+@Composable
+fun rememberRequestNotificationPermission(
+    onPermissionResult: (Boolean) -> Unit,
+    onPreTiramisu: () -> Unit,
+): () -> Unit {
+    val currentOnPermissionResult by rememberUpdatedState(onPermissionResult)
+    val currentOnPreTiramisu by rememberUpdatedState(onPreTiramisu)
+
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        currentOnPermissionResult(granted)
+    }
+
+    return remember(launcher) {
+        {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                // Pre-13 has no runtime permission dialog; defer to the caller-provided fallback.
+                currentOnPreTiramisu()
+            }
+        }
+    }
+}
