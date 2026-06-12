@@ -149,6 +149,45 @@ class WakeNodeWorkerTest : BaseUnitTest() {
         verify(activityRepo).insertActivityFromCjit(any(), any())
     }
 
+    @Test
+    fun `payment received formats amount with thousands separators`() = test {
+        whenever(workerParams.inputData).thenReturn(
+            workDataOf("type" to BlocktankNotificationType.incomingHtlc.name),
+        )
+        whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
+        stubStartFiring(paymentReceivedEvent(sats = 48_064))
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        val notification = findNotificationByTitle(context.getString(R.string.notification__received__title))
+        assertNotNull(notification, "Payment notification should be delivered when app is killed")
+        assertEquals(
+            "$BITCOIN_SYMBOL ${48_064L.formatToModernDisplay()}",
+            notification?.extras?.getString(Notification.EXTRA_TEXT),
+        )
+    }
+
+    @Test
+    fun `payment received skips notification when foreground service is running`() = test {
+        LightningNodeService.isRunning = true
+        whenever(workerParams.inputData).thenReturn(
+            workDataOf("type" to BlocktankNotificationType.incomingHtlc.name),
+        )
+        whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
+        stubStartFiring(paymentReceivedEvent(sats = 48_064))
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertNull(
+            findNotificationByTitle(context.getString(R.string.notification__received__title)),
+            "Notification is deduped when the foreground service handles it",
+        )
+        // Receive is still cached for the in-app UI to pick up
+        verify(cacheStore).setBackgroundReceive(any())
+    }
+
     private fun worker() = WakeNodeWorker(
         appContext = context,
         workerParams = workerParams,
@@ -162,6 +201,13 @@ class WakeNodeWorkerTest : BaseUnitTest() {
     private fun channelReadyEvent() = mock<Event.ChannelReady> {
         on { this.channelId } doReturn this@WakeNodeWorkerTest.channelId
     }
+
+    private fun paymentReceivedEvent(sats: Long) = Event.PaymentReceived(
+        paymentId = "payment-1",
+        paymentHash = "hash-1",
+        amountMsat = (sats * 1000).toULong(),
+        customRecords = emptyList(),
+    )
 
     private fun cjitChannel(sats: Long) = createChannelDetails().copy(
         channelId = channelId,
@@ -189,5 +235,10 @@ class WakeNodeWorkerTest : BaseUnitTest() {
     private fun findNotification(body: String): Notification? {
         val shadows = Shadows.shadowOf(context.notificationManager)
         return shadows.allNotifications.find { it.extras.getString(Notification.EXTRA_TEXT) == body }
+    }
+
+    private fun findNotificationByTitle(title: String): Notification? {
+        val shadows = Shadows.shadowOf(context.notificationManager)
+        return shadows.allNotifications.find { it.extras.getString(Notification.EXTRA_TITLE) == title }
     }
 }

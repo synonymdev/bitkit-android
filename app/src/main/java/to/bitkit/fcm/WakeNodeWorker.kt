@@ -206,11 +206,19 @@ class WakeNodeWorker @AssistedInject constructor(
                 sats = sats.toLong(),
             )
         )
-        val content = if (showDetails) "$BITCOIN_SYMBOL ${sats.formatToModernDisplay()}" else hiddenBody
-        bestAttemptContent = NotificationDetails(
-            title = appContext.getString(R.string.notification__received__title),
-            body = content,
-        )
+
+        // The in-app UI or foreground service shows a richer notification for this event; avoid duplicating it
+        if (isHandledInProcess()) {
+            Logger.debug("Skipping payment notification: handled in-process", context = TAG)
+            bestAttemptContent = null
+        } else {
+            val content = if (showDetails) "$BITCOIN_SYMBOL ${sats.formatToModernDisplay()}" else hiddenBody
+            bestAttemptContent = NotificationDetails(
+                title = appContext.getString(R.string.notification__received__title),
+                body = content,
+            )
+        }
+
         if (notificationType == incomingHtlc) {
             deliver()
         }
