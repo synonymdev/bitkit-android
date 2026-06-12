@@ -43,7 +43,7 @@ import java.util.UUID
 import javax.inject.Inject
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LargeClass")
 @HiltViewModel
 class TrezorViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,

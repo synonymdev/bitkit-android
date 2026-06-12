@@ -71,7 +71,7 @@ import kotlin.time.ExperimentalTime
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
 @OptIn(ExperimentalTime::class)
-@Suppress("TooManyFunctions", "LongParameterList")
+@Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
 @Singleton
 class TrezorRepo @Inject constructor(
     @ApplicationContext private val context: Context,

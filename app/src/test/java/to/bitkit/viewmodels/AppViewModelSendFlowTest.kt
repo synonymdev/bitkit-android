@@ -143,6 +143,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut = createViewModel()
     }
 
+    @Suppress("LongMethod")
     private fun stubRepositories() {
         whenever(context.getString(any())).thenReturn("")
         whenever(context.getSystemService(Context.CLIPBOARD_SERVICE)).thenReturn(clipboardManager)

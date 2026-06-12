@@ -1623,6 +1623,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    @Suppress("LongMethod")
     private suspend fun handleScan(
         result: String,
         routePubkyKeys: Boolean,
