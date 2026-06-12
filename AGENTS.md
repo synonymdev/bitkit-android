@@ -178,6 +178,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS check existing code patterns before implementing new features
 - USE existing extensions and utilities rather than creating new ones
 - ALWAYS use or create `Context` extension properties in `ext/Context.kt` instead of raw `context.getSystemService()` casts
+- NEVER use `System.currentTimeMillis()`, use time helpers from `ext/DateTime.kt` instead (e.g. `nowMillis()`, `Clock.nowMs()`) — they accept a `Clock` and are unit-testable
 - ALWAYS apply the YAGNI (You Ain't Gonna Need It) principle for new code
 - ALWAYS reuse existing constants
 - ALWAYS ensure a method exist before calling it
