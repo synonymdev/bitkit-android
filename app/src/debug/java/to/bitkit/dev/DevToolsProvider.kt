@@ -64,6 +64,7 @@ private sealed interface DevCommand {
             ProbeInvoice.METHOD -> ProbeInvoice.parse(arg)
             ProbeNode.METHOD -> ProbeNode.parse(arg)
             ProbeReadiness.METHOD -> ProbeReadiness
+            ResetScores.METHOD -> ResetScores
             else -> null
         }
     }
@@ -172,6 +173,21 @@ private sealed interface DevCommand {
         override suspend fun execute(deps: DevToolsProvider.Dependencies): DevResult =
             DevResult.ProbeReadiness.from(deps.lightningRepo().probeReadiness())
     }
+
+    data object ResetScores : DevCommand {
+        const val METHOD = "resetScores"
+
+        override suspend fun execute(deps: DevToolsProvider.Dependencies): DevResult {
+            Logger.info("Resetting pathfinding scores via devtools", context = TAG)
+            return deps.lightningRepo().resetPathfindingScores().fold(
+                onSuccess = { DevResult.Ack(timestamp = it) },
+                onFailure = {
+                    Logger.error("Failed to reset pathfinding scores", it, context = TAG)
+                    DevResult.Error(it.message)
+                },
+            )
+        }
+    }
 }
 
 @Serializable
@@ -182,6 +198,8 @@ private sealed interface DevResult {
     }
 
     @Serializable data class Invoice(val bolt11: String) : DevResult
+
+    @Serializable data class Ack(val success: Boolean = true, val timestamp: Long? = null) : DevResult
 
     @Serializable
     data class ProbeSuccess(
@@ -224,6 +242,7 @@ private sealed interface DevResult {
         val graphNodeCount: Int? = null,
         val graphChannelCount: Int? = null,
         val latestRgsSyncTimestamp: ULong? = null,
+        val latestPathfindingScoresSyncTimestamp: ULong? = null,
     ) : DevResult {
         companion object {
             fun from(readiness: NodeProbeReadiness) = ProbeReadiness(
@@ -241,6 +260,7 @@ private sealed interface DevResult {
                 graphNodeCount = readiness.graphNodeCount,
                 graphChannelCount = readiness.graphChannelCount,
                 latestRgsSyncTimestamp = readiness.latestRgsSyncTimestamp,
+                latestPathfindingScoresSyncTimestamp = readiness.latestPathfindingScoresSyncTimestamp,
             )
         }
     }
