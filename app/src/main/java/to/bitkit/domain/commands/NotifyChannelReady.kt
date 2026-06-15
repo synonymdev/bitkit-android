@@ -22,5 +22,7 @@ sealed interface NotifyChannelReady {
         ) : Result
 
         data object Skip : Result
+
+        data object Duplicate : Result
     }
 }

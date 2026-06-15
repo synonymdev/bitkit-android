@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
@@ -25,6 +26,8 @@ import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.ext.create
+import to.bitkit.ext.createChannelDetails
+import to.bitkit.ext.mock
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -468,6 +471,43 @@ class ActivityRepoTest : BaseUnitTest() {
         whenever(cacheStore.data).thenReturn(flowOf(cacheData))
 
         val result = sut.insertActivity(testActivity)
+
+        assertTrue(result.isFailure)
+        verify(coreService.activity, never()).insert(any())
+    }
+
+    @Test
+    fun `insertActivityFromCjit returns true when newly inserted`() = test {
+        val channel = createChannelDetails()
+        val id = channel.fundingTxo?.txid.orEmpty()
+        wheneverBlocking { coreService.activity.getActivity(id) }.thenReturn(null)
+        wheneverBlocking { coreService.activity.insert(any()) }.thenReturn(Unit)
+
+        val result = sut.insertActivityFromCjit(cjitEntry = IcJitEntry.mock(), channel = channel)
+
+        assertTrue(result.isSuccess)
+        assertTrue(result.getOrThrow())
+        verify(coreService.activity).insert(any())
+    }
+
+    @Test
+    fun `insertActivityFromCjit returns false when activity already exists`() = test {
+        val channel = createChannelDetails()
+        val id = channel.fundingTxo?.txid.orEmpty()
+        wheneverBlocking { coreService.activity.getActivity(id) }.thenReturn(testActivity)
+
+        val result = sut.insertActivityFromCjit(cjitEntry = IcJitEntry.mock(), channel = channel)
+
+        assertTrue(result.isSuccess)
+        assertFalse(result.getOrThrow())
+        verify(coreService.activity, never()).insert(any())
+    }
+
+    @Test
+    fun `insertActivityFromCjit fails when cjitEntry is null`() = test {
+        val channel = createChannelDetails()
+
+        val result = sut.insertActivityFromCjit(cjitEntry = null, channel = channel)
 
         assertTrue(result.isFailure)
         verify(coreService.activity, never()).insert(any())

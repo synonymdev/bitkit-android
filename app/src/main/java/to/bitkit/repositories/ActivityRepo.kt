@@ -612,20 +612,29 @@ class ActivityRepo @Inject constructor(
     }
 
     /**
-     * Inserts a new activity for a fulfilled (channel ready) CJIT order
+     * Inserts a new activity for a fulfilled (channel ready) CJIT order.
+     *
+     * Returns `true` when a new activity was inserted and `false` when one already existed for the
+     * channel. Callers use this to deduplicate repeated channel ready events so the same CJIT receive
+     * is not reported twice.
      */
     suspend fun insertActivityFromCjit(
         cjitEntry: IcJitEntry?,
         channel: ChannelDetails,
-    ): Result<Unit> = withContext(bgDispatcher) {
+    ): Result<Boolean> = withContext(bgDispatcher) {
         runCatching {
             requireNotNull(cjitEntry)
+            val id = channel.fundingTxo?.txid.orEmpty()
+            if (coreService.activity.getActivity(id) != null) {
+                Logger.debug("Skipping CJIT activity insert: already exists for '$id'", context = TAG)
+                return@runCatching false
+            }
             val amount = channel.amountOnClose
             val now = nowTimestamp().epochSecond.toULong()
             insertActivity(
                 Activity.Lightning(
                     LightningActivity(
-                        id = channel.fundingTxo?.txid.orEmpty(),
+                        id = id,
                         txType = PaymentType.RECEIVED,
                         status = PaymentState.SUCCEEDED,
                         value = amount,
@@ -641,6 +650,7 @@ class ActivityRepo @Inject constructor(
                     )
                 )
             ).getOrThrow()
+            true
         }.onFailure {
             Logger.error("insertActivity error", it, context = TAG)
         }

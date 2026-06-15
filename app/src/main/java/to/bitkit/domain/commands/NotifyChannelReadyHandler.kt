@@ -51,8 +51,11 @@ class NotifyChannelReadyHandler @Inject constructor(
             val cjitEntry = blocktankRepo.getCjitEntry(channel)
                 ?: return@runCatching NotifyChannelReady.Result.Skip
 
+            val inserted = activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
+                .getOrDefault(false)
+            if (!inserted) return@runCatching NotifyChannelReady.Result.Duplicate
+
             val sats = channel.amountOnClose.toLong()
-            activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
 
             val details = NewTransactionSheetDetails(
                 type = NewTransactionSheetType.LIGHTNING,

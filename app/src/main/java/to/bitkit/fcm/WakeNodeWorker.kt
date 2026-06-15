@@ -257,6 +257,15 @@ class WakeNodeWorker @AssistedInject constructor(
             return
         }
 
+        // A duplicate channel ready event for an already recorded CJIT receive must not notify again
+        val inserted = activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
+            .getOrDefault(false)
+        if (!inserted) {
+            Logger.debug("Skipping CJIT notification: already recorded for '${event.channelId}'", context = TAG)
+            bestAttemptContent = null
+            return
+        }
+
         val sats = channel.amountOnClose
         // Save for UI to pick up
         cacheStore.setBackgroundReceive(
@@ -266,7 +275,6 @@ class WakeNodeWorker @AssistedInject constructor(
                 sats = sats.toLong(),
             )
         )
-        activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
 
         // The in-app UI or foreground service shows a richer notification for this event; avoid duplicating it
         if (isHandledInProcess()) {

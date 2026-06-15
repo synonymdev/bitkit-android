@@ -938,6 +938,7 @@ class AppViewModel @Inject constructor(
             showTransactionSheet(result.sheet)
             return
         }
+        if (result is NotifyChannelReady.Result.Duplicate) return
         toast(
             type = Toast.ToastType.LIGHTNING,
             title = context.getString(R.string.lightning__channel_opened_title),

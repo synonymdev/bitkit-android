@@ -136,6 +136,20 @@ class WakeNodeWorkerTest : BaseUnitTest() {
     }
 
     @Test
+    fun `cjit channel ready skips notification when activity already exists`() = test {
+        val channel = cjitChannel(sats = 48_064)
+        stubChannel(channel, cjitEntry = IcJitEntry.mock())
+        whenever(activityRepo.insertActivityFromCjit(any(), any())).thenReturn(Result.success(false))
+        stubStartFiring(channelReadyEvent())
+
+        val result = worker().doWork()
+
+        assertEquals(ListenableWorker.Result.success(), result)
+        assertNull(findNotification(viaNewChannel), "A duplicate CJIT channel ready must not notify again")
+        verify(cacheStore, never()).setBackgroundReceive(any())
+    }
+
+    @Test
     fun `cjit channel ready skips notification when app is in foreground`() = test {
         App.currentActivity?.onActivityStarted(mock<Activity>())
         val channel = cjitChannel(sats = 48_064)
@@ -218,7 +232,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
     private suspend fun stubChannel(channel: ChannelDetails, cjitEntry: IcJitEntry?) {
         whenever(lightningRepo.getChannels()).thenReturn(listOf(channel))
         whenever(blocktankRepo.getCjitEntry(channel)).thenReturn(cjitEntry)
-        whenever(activityRepo.insertActivityFromCjit(any(), any())).thenReturn(Result.success(Unit))
+        whenever(activityRepo.insertActivityFromCjit(any(), any())).thenReturn(Result.success(true))
         whenever(lightningRepo.stop()).thenReturn(Result.success(Unit))
     }
 

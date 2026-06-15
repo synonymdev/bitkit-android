@@ -568,6 +568,33 @@ class LightningNodeServiceTest : BaseUnitTest() {
     }
 
     @Test
+    fun `duplicate cjit channel ready shows no notification`() = test {
+        whenever(notifyChannelReadyHandler.invoke(any()))
+            .thenReturn(Result.success(NotifyChannelReady.Result.Duplicate))
+
+        startService()
+        testScheduler.advanceUntilIdle()
+
+        val event = Event.ChannelReady(
+            channelId = "channel-1",
+            userChannelId = "u1",
+            counterpartyNodeId = null,
+            fundingTxo = null,
+        )
+        capturedHandler?.invoke(event)
+        testScheduler.advanceUntilIdle()
+
+        val notificationManager = context.notificationManager
+        val shadows = Shadows.shadowOf(notificationManager)
+        val cjitTitle = context.getString(R.string.notification__received__title)
+        val notification = shadows.allNotifications.find {
+            it.extras.getString(Notification.EXTRA_TITLE) == cjitTitle
+        }
+        assertNull(notification, "A duplicate CJIT channel ready should NOT trigger a notification")
+        verify(cacheStore, never()).setBackgroundReceive(any())
+    }
+
+    @Test
     fun `cjit channel ready in foreground shows no notification`() = test {
         val mockActivity: Activity = mock()
         App.currentActivity?.onActivityStarted(mockActivity)
