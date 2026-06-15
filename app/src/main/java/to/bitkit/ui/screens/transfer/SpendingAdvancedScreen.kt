@@ -75,6 +75,7 @@ fun SpendingAdvancedScreen(
 
     val transferValues by viewModel.transferValues.collectAsStateWithLifecycle()
     val currentMaxLspBalance by rememberUpdatedState(transferValues.maxLspBalance)
+    val currentCurrencies by rememberUpdatedState(currencies)
 
     LaunchedEffect(order.clientBalanceSat) {
         viewModel.updateTransferValues(order.clientBalanceSat)
@@ -113,7 +114,7 @@ fun SpendingAdvancedScreen(
         amountInputViewModel.effect.collect {
             when (it) {
                 AmountInputEffect.MaxExceeded -> {
-                    amountInputViewModel.setSats(currentMaxLspBalance.toLong(), currencies)
+                    amountInputViewModel.setSats(currentMaxLspBalance.toLong(), currentCurrencies)
                     app.toast(
                         type = Toast.ToastType.WARNING,
                         title = context.getString(R.string.lightning__spending_advanced__error_max__title),

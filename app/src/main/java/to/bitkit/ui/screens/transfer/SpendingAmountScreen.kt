@@ -73,6 +73,7 @@ fun SpendingAmountScreen(
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val currentMaxAllowedToSend by rememberUpdatedState(uiState.maxAllowedToSend)
+    val currentCurrencies by rememberUpdatedState(currencies)
 
     LaunchedEffect(isOffline) {
         viewModel.updateLimits()
@@ -92,7 +93,7 @@ fun SpendingAmountScreen(
         amountInputViewModel.effect.collect {
             when (it) {
                 AmountInputEffect.MaxExceeded -> {
-                    amountInputViewModel.setSats(currentMaxAllowedToSend, currencies)
+                    amountInputViewModel.setSats(currentMaxAllowedToSend, currentCurrencies)
                     toast(
                         context.getString(R.string.lightning__spending_amount__error_max__title),
                         context.getString(R.string.lightning__spending_amount__error_max__description)
