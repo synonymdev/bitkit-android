@@ -27,6 +27,7 @@ import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
+import kotlin.math.roundToLong
 import kotlin.test.assertEquals
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -89,6 +90,7 @@ class TransferViewModelTest : BaseUnitTest() {
         val state = sut.spendingUiState.value
         assertEquals(OPTION_MAX_CLIENT_BALANCE.toLong(), state.maxAllowedToSend)
         assertEquals(OPTION_MAX_CLIENT_BALANCE.toLong(), state.balanceAfterFee)
+        assertEquals((OPTION_MAX_CLIENT_BALANCE.toDouble() * 0.25).roundToLong(), state.quarterAmount)
 
         // The order fee must be estimated against the clamped client balance, not the full balance.
         verify(blocktankRepo).estimateOrderFee(eq(LSP_MAX_CLIENT_BALANCE), any(), any())
