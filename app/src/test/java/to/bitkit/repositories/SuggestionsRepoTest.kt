@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -46,12 +47,15 @@ class SuggestionsRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `resetDismissedSuggestionsIfEmpty resets dismissed when no suggestions are visible`() = test {
+    fun `resetDismissedSuggestionsIfEmpty clears dismissed when no suggestions are visible`() = test {
         setUp(SettingsData(dismissedSuggestions = Suggestion.entries.map { it.name }))
 
         sut.resetDismissedSuggestionsIfEmpty()
 
-        verify(settingsStore).update(any())
+        val captor = argumentCaptor<(SettingsData) -> SettingsData>()
+        verify(settingsStore).update(captor.capture())
+        val result = captor.firstValue(SettingsData(dismissedSuggestions = listOf(Suggestion.BUY.name)))
+        assertTrue(result.dismissedSuggestions.isEmpty())
     }
 
     @Test
