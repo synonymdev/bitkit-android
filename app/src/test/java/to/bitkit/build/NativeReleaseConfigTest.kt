@@ -112,6 +112,16 @@ class NativeReleaseConfigTest {
             symbolsScript.contains("""grep -Eq '\.debug_info'"""),
             "Native debug symbols script must validate full DWARF debug metadata before zipping.",
         )
+        assertTrue(
+            symbolsScript.contains("ANDROID_NDK_ROOT"),
+            "Native debug symbols script must use the same NDK env paths Gradle can use.",
+        )
+        assertTrue(
+            symbolsScript.contains("local.properties") &&
+                symbolsScript.contains("ndk.dir") &&
+                symbolsScript.contains("sdk.dir"),
+            "Native debug symbols script must use local.properties NDK/SDK paths before PATH fallback.",
+        )
         assertFalse(
             symbolsScript.contains("symtab|debug_|gnu_debugdata"),
             "Native debug symbols script must not accept symbol-table-only metadata for FULL symbols.",

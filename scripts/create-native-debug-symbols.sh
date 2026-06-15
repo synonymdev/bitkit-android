@@ -25,15 +25,35 @@ make_tmp_dir() {
     echo "$dir"
 }
 
+local_properties_value() {
+    key="$1"
+    if [ ! -f "$repo_root/local.properties" ]; then
+        return
+    fi
+
+    awk -F= -v key="$key" '$1 == key { value = $0; sub(/^[^=]*=/, "", value) } END { print value }' \
+        "$repo_root/local.properties" | sed 's/\\ / /g'
+}
+
 find_readelf() {
-    for sdk_dir in "${ANDROID_NDK_HOME:-}" "${ANDROID_HOME:-}/ndk" "${ANDROID_SDK_ROOT:-}/ndk"; do
-        if [ -z "$sdk_dir" ]; then
+    local_ndk_dir=$(local_properties_value "ndk.dir")
+    local_sdk_dir=$(local_properties_value "sdk.dir")
+
+    for ndk_dir in \
+        "${ANDROID_NDK_ROOT:-}" \
+        "${ANDROID_NDK_HOME:-}" \
+        "${NDK_HOME:-}" \
+        "$local_ndk_dir" \
+        "${ANDROID_HOME:+$ANDROID_HOME/ndk}" \
+        "${ANDROID_SDK_ROOT:+$ANDROID_SDK_ROOT/ndk}" \
+        "${local_sdk_dir:+$local_sdk_dir/ndk}"; do
+        if [ -z "$ndk_dir" ]; then
             continue
         fi
 
         for candidate in \
-            "$sdk_dir"/toolchains/llvm/prebuilt/*/bin/llvm-readelf \
-            "$sdk_dir"/*/toolchains/llvm/prebuilt/*/bin/llvm-readelf; do
+            "$ndk_dir"/toolchains/llvm/prebuilt/*/bin/llvm-readelf \
+            "$ndk_dir"/*/toolchains/llvm/prebuilt/*/bin/llvm-readelf; do
             if [ -x "$candidate" ]; then
                 echo "$candidate"
                 return
