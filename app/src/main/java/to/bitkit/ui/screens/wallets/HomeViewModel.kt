@@ -328,7 +328,7 @@ class HomeViewModel @Inject constructor(
                 spendingSuggestions(settings, profileAuthenticated, hasHardwareWallet)
             balanceState.totalOnchainSats > 0uL ->
                 savingsOnlySuggestions(settings, transfers, profileAuthenticated, hasHardwareWallet)
-            else -> emptyWalletSuggestions(settings, transfers, profileAuthenticated)
+            else -> emptyWalletSuggestions(settings, transfers, profileAuthenticated, hasHardwareWallet)
         }
         val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
         baseSuggestions
@@ -373,11 +373,13 @@ class HomeViewModel @Inject constructor(
         settings: SettingsData,
         transfers: List<TransferEntity>,
         profileAuthenticated: Boolean,
+        hasHardwareWallet: Boolean,
     ) = listOfNotNull(
         Suggestion.BUY,
         Suggestion.LIGHTNING.takeIf {
             transfers.all { it.type != TransferType.TO_SPENDING }
         },
+        Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
         Suggestion.SUPPORT,
         Suggestion.BACK_UP.takeIf { !settings.backupVerified },
         Suggestion.SECURE.takeIf { !settings.isPinEnabled },
