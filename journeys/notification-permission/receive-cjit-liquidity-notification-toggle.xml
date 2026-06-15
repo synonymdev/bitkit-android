@@ -1,0 +1,25 @@
+<journey name="receive cjit liquidity toggle requests notification permission">
+  <description>
+    Verifies that the "Set up in background" toggle on the Receive → CJIT liquidity screen
+    (ReceiveLiquidityScreen, reached via "Learn more" from the confirm screen) launches the
+    Android POST_NOTIFICATIONS runtime permission dialog on API 33+, and that granting it
+    checks the toggle.
+
+    Precondition: API 33+ onboarded dev wallet with the node connected to the LSP so a CJIT
+    order can be quoted, and POST_NOTIFICATIONS in the "ask" state (revoke or reinstall
+    first — the dialog is one-shot). Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the "Receive" button on the home screen</action>
+    <action>Tap the "Spending" tab in the Receive sheet</action>
+    <action>Tap "Receive Lightning funds"</action>
+    <action>On the amount screen, enter an amount above the CJIT minimum (e.g. 100 000 sats) using the number pad</action>
+    <action>Tap "Continue" and wait for the confirm screen to appear</action>
+    <action>Tap "Learn more" to open the liquidity screen</action>
+    <action>Verify the liquidity screen with the lightning channel and the "Set up in background" toggle (testTag "ReceiveLiquidityNotificationSwitch") is visible and unchecked</action>
+    <action>Tap the "Set up in background" toggle</action>
+    <action>Verify the Android system notification permission dialog appears (text like "Allow Bitkit to send you notifications?")</action>
+    <action>Tap "Allow"</action>
+    <action>Verify the "Set up in background" toggle is now checked</action>
+  </actions>
+</journey>

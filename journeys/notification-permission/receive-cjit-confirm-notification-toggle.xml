@@ -1,0 +1,23 @@
+<journey name="receive cjit confirm toggle requests notification permission">
+  <description>
+    Verifies that the "Set up in background" toggle on the Receive → CJIT confirm screen
+    (ReceiveConfirmScreen) launches the Android POST_NOTIFICATIONS runtime permission
+    dialog on API 33+, and that granting it checks the toggle.
+
+    Precondition: API 33+ onboarded dev wallet with the node connected to the LSP so a
+    CJIT order can be quoted, and POST_NOTIFICATIONS in the "ask" state (revoke or
+    reinstall first — the dialog is one-shot). Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the "Receive" button on the home screen</action>
+    <action>Tap the "Spending" tab in the Receive sheet</action>
+    <action>Tap "Receive Lightning funds"</action>
+    <action>On the amount screen, enter an amount above the CJIT minimum (e.g. 100 000 sats) using the number pad</action>
+    <action>Tap "Continue" and wait for the CJIT order to be created and the confirm screen ("To set up your spending balance...") to appear</action>
+    <action>Verify the "Set up in background" toggle (testTag "ReceiveConfirmNotificationSwitch") is visible and unchecked</action>
+    <action>Tap the "Set up in background" toggle</action>
+    <action>Verify the Android system notification permission dialog appears (text like "Allow Bitkit to send you notifications?")</action>
+    <action>Tap "Allow"</action>
+    <action>Verify the "Set up in background" toggle is now checked</action>
+  </actions>
+</journey>

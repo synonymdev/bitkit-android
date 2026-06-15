@@ -2,7 +2,11 @@
 
 package to.bitkit.ui
 
+import android.Manifest
 import android.content.Intent
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.DrawerState
@@ -196,6 +200,7 @@ import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
+import to.bitkit.ui.utils.rememberRequestNotificationPermission
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -236,6 +241,11 @@ fun ContentView(
     val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
     val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
     val walletExists = walletUiState.walletExists
+
+    val requestNotificationPermission = rememberRequestNotificationPermission(
+        onPermissionResult = { granted -> settingsViewModel.setNotificationPreference(granted) },
+        onPreTiramisu = { navController.navigateTo(Routes.BackgroundPaymentsSettings) },
+    )
 
     // Effects on app entering fg (ON_START) / bg (ON_STOP)
     DisposableEffect(lifecycle) {
@@ -501,8 +511,8 @@ fun ContentView(
                                         },
                                         onEnable = {
                                             appViewModel.dismissTimedSheet()
-                                            navController.navigateTo(Routes.BackgroundPaymentsSettings)
                                             settingsViewModel.setBgPaymentsIntroSeen(true)
+                                            requestNotificationPermission()
                                         },
                                     )
                                 }
@@ -896,8 +906,10 @@ private fun NavGraphBuilder.home(
         val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
         val hazeState = rememberHazeState()
 
+        // Only keep notification permission state in sync; the system dialog is requested
+        // from the background payments intro sheet, not automatically on the home screen.
         RequestNotificationPermissions(
-            showPermissionDialog = !isRecoveryMode,
+            showPermissionDialog = false,
             onPermissionChange = { granted ->
                 settingsViewModel.setNotificationPreference(granted)
             }
@@ -1362,10 +1374,18 @@ private fun NavGraphBuilder.generalSettingsSubScreens(
     }
 
     composableWithDefaultTransitions<Routes.BackgroundPaymentsIntro> {
+        val notificationPermissionLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { granted ->
+            settingsViewModel.setNotificationPreference(granted)
+        }
         BackgroundPaymentsIntroScreen(
             onBack = { navController.popBackStack() },
             onLater = { navController.popBackStack() },
             onEnable = {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                }
                 navController.navigateTo(Routes.BackgroundPaymentsSettings)
             },
         )
