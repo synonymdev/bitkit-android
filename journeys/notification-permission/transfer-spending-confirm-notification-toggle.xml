@@ -1,0 +1,25 @@
+<journey name="transfer spending confirm toggle requests notification permission">
+  <description>
+    Verifies that the "Set up in background" toggle on the Transfer → Spending confirm
+    screen (SpendingConfirmScreen) launches the Android POST_NOTIFICATIONS runtime
+    permission dialog on API 33+, and that granting it checks the toggle.
+
+    Precondition: API 33+ onboarded dev wallet with a POSITIVE on-chain Savings balance and
+    the node connected to the LSP (so a real max can be quoted), and POST_NOTIFICATIONS in
+    the "ask" state (revoke or reinstall first — the dialog is one-shot). The spending max
+    starts at 0 behind a spinner — wait for it to populate. Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the Spending balance card on the home screen</action>
+    <action>Tap "Transfer from Savings"</action>
+    <action>If a transfer intro screen appears, tap "Get Started"</action>
+    <action>On the spending amount screen (testTag "SpendingAmount"), wait until the available/maximum amount (testTag "SpendingAmountAvailable") finishes loading and shows a positive value</action>
+    <action>Enter an amount within the maximum using the number pad</action>
+    <action>Tap continue (testTag "SpendingAmountContinue") and wait for the spending confirm screen to appear</action>
+    <action>Verify the "Set up in background" toggle (testTag "SpendingConfirmNotificationSwitch") is visible and unchecked</action>
+    <action>Tap the "Set up in background" toggle</action>
+    <action>Verify the Android system notification permission dialog appears (text like "Allow Bitkit to send you notifications?")</action>
+    <action>Tap "Allow"</action>
+    <action>Verify the "Set up in background" toggle is now checked</action>
+  </actions>
+</journey>
