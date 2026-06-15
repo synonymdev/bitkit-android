@@ -405,12 +405,14 @@ class TransferViewModel @Inject constructor(
                 liquidity.maxClientBalanceSat.toLong(),
                 maxClientBalance.toLong()
             )
+            val quarterAmount = min((maxSend.toDouble() * 0.25).roundToLong(), maxSend)
 
             _spendingUiState.update {
                 it.copy(
                     maxAllowedToSend = maxSend,
                     isLoading = false,
                     balanceAfterFee = maxSend,
+                    quarterAmount = quarterAmount,
                 )
             }
         }.onFailure {
@@ -650,12 +652,11 @@ data class TransferToSpendingUiState(
     val isAdvanced: Boolean = false,
     val maxAllowedToSend: Long = 0,
     val balanceAfterFee: Long = 0,
+    val quarterAmount: Long = 0,
     val isLoading: Boolean = false,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
-) {
-    fun balanceAfterFeeQuarter() = (balanceAfterFee.toDouble() * 0.25).roundToLong()
-}
+)
 
 data class TransferValues(
     val defaultLspBalance: ULong = 0u,
