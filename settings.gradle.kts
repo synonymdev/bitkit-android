@@ -12,10 +12,12 @@ fun getGithubCredentials(
     passKey: String = "gpr.key",
     userKey: String = "gpr.user",
 ): Pair<String?, String?> {
-    val user = System.getenv("GITHUB_ACTOR")
+    val user = System.getenv("GPR_USER")
+        ?: System.getenv("GITHUB_ACTOR")
         ?: providers.gradleProperty(userKey).orNull
         ?: localProperties.getProperty(userKey)
-    val key = System.getenv("GITHUB_TOKEN")
+    val key = System.getenv("GPR_TOKEN")
+        ?: System.getenv("GITHUB_TOKEN")
         ?: providers.gradleProperty(passKey).orNull
         ?: localProperties.getProperty(passKey)
     return user to key

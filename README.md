@@ -10,11 +10,15 @@ This repository contains the **native Android app** for Bitkit.
 
 #### 1. Firebase Configuration
 
-Download `google-services.json` from the Firebase Console for each of the following build flavor groups,:
-- dev/tnet/mainnetDebug: Place in `app/google-services.json`
+Dev and testnet debug builds use a checked-in placeholder at `app/google-services.json` so a fresh clone can compile without private Firebase files.
+
+Download `google-services.json` from the Firebase Console when you need real Firebase integration for push notifications testing:
+- Debug builds: Place in `app/src/debug/google-services.json`
 - mainnetRelease: Place in `app/src/mainnetRelease/google-services.json`
 
-> **Note**: Each flavor requires its own Firebase project configuration. The mainnet flavor will fail to build without its dedicated `google-services.json` file.
+The debug file above is ignored by Git and takes precedence over the checked-in placeholder. To use real Firebase integration across debug variants, make sure it includes each application ID you build.
+
+> **Note**: Placeholder config is only for local dev and testnet debug builds. FCM token registration and push notifications require real Firebase configuration. The mainnet release flavor should always use the real `mainnetRelease/google-services.json` file.
 
 #### 2. GitHub Packages setup
 
