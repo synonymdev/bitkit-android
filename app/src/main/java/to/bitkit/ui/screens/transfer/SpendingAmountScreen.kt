@@ -92,11 +92,14 @@ fun SpendingAmountScreen(
     LaunchedEffect(Unit) {
         amountInputViewModel.effect.collect {
             when (it) {
-                AmountInputEffect.MaxExceeded -> toast(
-                    context.getString(R.string.lightning__spending_amount__error_max__title),
-                    context.getString(R.string.lightning__spending_amount__error_max__description)
-                        .replace("{amount}", currentMaxAllowedToSend.formatToModernDisplay()),
-                )
+                AmountInputEffect.MaxExceeded -> {
+                    amountInputViewModel.setSats(currentMaxAllowedToSend, currencies)
+                    toast(
+                        context.getString(R.string.lightning__spending_amount__error_max__title),
+                        context.getString(R.string.lightning__spending_amount__error_max__description)
+                            .replace("{amount}", currentMaxAllowedToSend.formatToModernDisplay()),
+                    )
+                }
             }
         }
     }
