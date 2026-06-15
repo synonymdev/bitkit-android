@@ -23,6 +23,10 @@ class SuggestionsRepo @Inject constructor(
     private val transferRepo: TransferRepo,
     private val pubkyRepo: PubkyRepo,
 ) {
+    companion object {
+        private const val MAX_SUGGESTIONS = 4
+    }
+
     val suggestionsFlow: Flow<List<Suggestion>> = combine(
         walletRepo.balanceState,
         settingsStore.data,
@@ -92,8 +96,4 @@ class SuggestionsRepo @Inject constructor(
         Suggestion.PROFILE.takeIf { !profileAuthenticated },
         Suggestion.INVITE,
     )
-
-    companion object {
-        private const val MAX_SUGGESTIONS = 4
-    }
 }
