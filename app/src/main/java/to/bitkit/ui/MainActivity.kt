@@ -4,6 +4,7 @@ import android.app.NotificationManager
 import android.content.Intent
 import android.hardware.usb.UsbManager
 import android.os.Bundle
+import android.os.Looper
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
@@ -94,9 +95,8 @@ class MainActivity : FragmentActivity() {
         val consumedLaunchIntent = savedInstanceState?.getString(KEY_CONSUMED_LAUNCH_INTENT)
         val currentLaunchIntent = intent.launchKey()
         if (currentLaunchIntent == null || currentLaunchIntent != consumedLaunchIntent) {
-            appViewModel.handleDeeplinkIntent(intent)
+            handleLaunchIntent(intent)
         }
-        handleUsbAttachIntent(intent)
 
         installSplashScreen()
         enableAppEdgeToEdge()
@@ -209,21 +209,34 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onNewIntent(intent: Intent) {
+        if (!isMainThread()) {
+            runOnUiThread { onNewIntent(intent) }
+            return
+        }
+
         super.onNewIntent(intent)
         setIntent(intent)
+        handleLaunchIntent(intent)
+    }
+
+    private fun handleLaunchIntent(intent: Intent) {
+        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+            handleUsbAttachIntent()
+            return
+        }
+
         appViewModel.handleDeeplinkIntent(intent)
-        handleUsbAttachIntent(intent)
     }
 
     /**
      * The OS delivers the USB attach event as an activity intent (via the app picker),
      * not as a broadcast, so it is forwarded from here to trigger the silent reconnect.
      */
-    private fun handleUsbAttachIntent(intent: Intent) {
-        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
-            appViewModel.onUsbDeviceAttached()
-        }
+    private fun handleUsbAttachIntent() {
+        appViewModel.onUsbDeviceAttached()
     }
+
+    private fun isMainThread() = Looper.myLooper() == Looper.getMainLooper()
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
@@ -262,6 +275,7 @@ internal fun Intent?.launchKey(): String? {
         Intent.ACTION_VIEW -> data?.toString()?.let {
             SamRockSetupRequest.sanitizedLaunchKey(it) ?: it
         }
+        UsbManager.ACTION_USB_DEVICE_ATTACHED -> action
         else -> null
     }
 }
