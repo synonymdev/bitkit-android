@@ -112,13 +112,16 @@ fun SpendingAdvancedScreen(
     LaunchedEffect(Unit) {
         amountInputViewModel.effect.collect {
             when (it) {
-                AmountInputEffect.MaxExceeded -> app.toast(
-                    type = Toast.ToastType.WARNING,
-                    title = context.getString(R.string.lightning__spending_advanced__error_max__title),
-                    description = context.getString(R.string.lightning__spending_advanced__error_max__description)
-                        .replace("{amount}", currentMaxLspBalance.formatToModernDisplay()),
-                    visibilityTime = Toast.VISIBILITY_TIME_SHORT,
-                )
+                AmountInputEffect.MaxExceeded -> {
+                    amountInputViewModel.setSats(currentMaxLspBalance.toLong(), currencies)
+                    app.toast(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(R.string.lightning__spending_advanced__error_max__title),
+                        description = context.getString(R.string.lightning__spending_advanced__error_max__description)
+                            .replace("{amount}", currentMaxLspBalance.formatToModernDisplay()),
+                        visibilityTime = Toast.VISIBILITY_TIME_SHORT,
+                    )
+                }
             }
         }
     }
