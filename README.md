@@ -180,6 +180,8 @@ just release
 
 `just release` builds both the mainnet APK and Play Store AAB. AAB is generated in `app/build/outputs/bundle/mainnetRelease/`.
 
+See [release reproducibility tests](docs/reproducible-builds.md) for the release reproducibility flow.
+
 ### Build for E2E Testing
 
 Pass `E2E=true` and build any flavor. By default, E2E uses a local Electrum override.

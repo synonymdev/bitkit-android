@@ -25,8 +25,14 @@ plugins {
 val keystoreProperties by lazy {
     val keystorePropertiesFile = rootProject.file("keystore.properties")
     val keystoreProperties = Properties()
+    val envStoreFile = System.getenv("KEYSTORE_FILE")?.takeIf { it.isNotBlank() }
 
-    if (keystorePropertiesFile.exists()) {
+    if (envStoreFile != null) {
+        keystoreProperties["storeFile"] = envStoreFile
+        keystoreProperties["storePassword"] = System.getenv("KEYSTORE_PASSWORD") ?: ""
+        keystoreProperties["keyAlias"] = System.getenv("KEY_ALIAS") ?: ""
+        keystoreProperties["keyPassword"] = System.getenv("KEY_PASSWORD") ?: ""
+    } else if (keystorePropertiesFile.exists()) {
         keystoreProperties.load(FileInputStream(keystorePropertiesFile))
     } else {
         keystoreProperties["storeFile"] = System.getenv("KEYSTORE_FILE") ?: ""
