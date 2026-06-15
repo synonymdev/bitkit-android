@@ -72,3 +72,51 @@ fun RequestNotificationPermissions(
         }
     }
 }
+
+@Composable
+fun rememberRequestNotificationPermission(
+    onPermissionResult: (Boolean) -> Unit,
+    onPreTiramisu: () -> Unit,
+): () -> Unit {
+    val currentOnPermissionResult by rememberUpdatedState(onPermissionResult)
+    val currentOnPreTiramisu by rememberUpdatedState(onPreTiramisu)
+
+    val launcher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        currentOnPermissionResult(granted)
+    }
+
+    return remember(launcher) {
+        {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else {
+                // Pre-13 has no runtime permission dialog; defer to the caller-provided fallback.
+                currentOnPreTiramisu()
+            }
+        }
+    }
+}
+
+@Composable
+fun rememberNotificationToggleClick(
+    isGranted: Boolean,
+    onPermissionResult: (Boolean) -> Unit,
+    onOpenSystemSettings: () -> Unit,
+): () -> Unit {
+    val requestPermission = rememberRequestNotificationPermission(
+        onPermissionResult = onPermissionResult,
+        onPreTiramisu = onOpenSystemSettings,
+    )
+    val currentIsGranted by rememberUpdatedState(isGranted)
+    val currentOnOpenSystemSettings by rememberUpdatedState(onOpenSystemSettings)
+
+    return remember(requestPermission) {
+        {
+            // Already granted: the runtime request is a no-op, so send the user to system
+            // settings where they can actually turn notifications off.
+            if (currentIsGranted) currentOnOpenSystemSettings() else requestPermission()
+        }
+    }
+}

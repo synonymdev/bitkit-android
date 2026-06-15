@@ -66,6 +66,7 @@ import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.RequestNotificationPermissions
+import to.bitkit.ui.utils.rememberNotificationToggleClick
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
@@ -100,6 +101,12 @@ fun SpendingConfirmScreen(
         showPermissionDialog = false,
     )
 
+    val onNotificationSwitchClick = rememberNotificationToggleClick(
+        isGranted = notificationsGranted,
+        onPermissionResult = { granted -> settingsViewModel.setNotificationPreference(granted) },
+        onOpenSystemSettings = { context.openNotificationSettings() },
+    )
+
     Box {
         Content(
             onBackClick = onBackClick,
@@ -110,7 +117,7 @@ fun SpendingConfirmScreen(
             onTransferToSpendingConfirm = viewModel::onTransferToSpendingConfirm,
             order = order,
             hasNotificationPermission = notificationsGranted,
-            onSwitchClick = { context.openNotificationSettings() },
+            onSwitchClick = onNotificationSwitchClick,
             isAdvanced = isAdvanced,
         )
         AnimatedVisibility(
@@ -224,6 +231,7 @@ private fun Content(
                     isChecked = hasNotificationPermission,
                     colors = AppSwitchDefaults.colorsPurple,
                     onClick = onSwitchClick,
+                    switchTestTag = "SpendingConfirmNotificationSwitch",
                     modifier = Modifier.fillMaxWidth()
                 )
 

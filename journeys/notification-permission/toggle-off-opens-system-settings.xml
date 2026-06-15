@@ -1,0 +1,24 @@
+<journey name="notification toggle off opens system settings">
+  <description>
+    Verifies that when the "Set up in background" toggle is already ON (POST_NOTIFICATIONS
+    granted), tapping it opens the system notification settings instead of re-requesting the
+    permission (which would be a no-op). Uses the Receive → CJIT confirm screen, but the
+    behaviour is shared by the transfer and liquidity toggles.
+
+    Precondition: API 33+ onboarded dev wallet with the node connected to the LSP so a CJIT
+    order can be quoted, and POST_NOTIFICATIONS ALREADY GRANTED so the toggle starts checked
+    (grant via: adb shell pm grant to.bitkit.dev android.permission.POST_NOTIFICATIONS).
+    Start on the wallet home screen.
+  </description>
+  <actions>
+    <action>Tap the "Receive" button on the home screen</action>
+    <action>Tap the "Spending" tab in the Receive sheet</action>
+    <action>Tap "Receive Lightning funds"</action>
+    <action>On the amount screen, enter an amount above the CJIT minimum (e.g. 100 000 sats) using the number pad</action>
+    <action>Tap "Continue" and wait for the confirm screen to appear</action>
+    <action>Verify the "Set up in background" toggle (testTag "ReceiveConfirmNotificationSwitch") is visible and checked</action>
+    <action>Tap the "Set up in background" toggle</action>
+    <action>Verify the Android system notification settings screen for Bitkit opens (no in-app navigation, no permission dialog)</action>
+    <action>Press back to return to Bitkit and verify the confirm screen is still shown</action>
+  </actions>
+</journey>
