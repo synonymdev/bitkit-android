@@ -14,6 +14,9 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonObject
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -829,9 +832,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `prepareSavedContacts drops lightning when raw endpoint map fits but envelope is too large`() = test {
-        val bolt11 = "l".repeat(850)
+    fun `prepareSavedContacts keeps lightning when new private payment list payload fits`() = test {
+        val bolt11 = "l".repeat(830)
         val address = "bcrt1qprivate"
+        assertTrue(privatePaymentListPayloadSize(bolt11, address) <= 1_000)
+        assertTrue(legacyPrivatePaymentsPayloadSize(bolt11, address) > 1_000)
         val entriesOnlyPayload = mapOf(
             MethodId.Bolt11.rawValue to PublicPaykitRepo.serializePayload(bolt11),
             MethodId.P2wpkh.rawValue to PublicPaykitRepo.serializePayload(address),
@@ -865,7 +870,10 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(pubkyService).setPrivatePayments(
             eq(LINK_ID),
             argThat<List<FfiPaymentEndpoint>> {
-                none { it.paymentEndpointIdentifier == MethodId.Bolt11.rawValue } &&
+                any {
+                    it.paymentEndpointIdentifier == MethodId.Bolt11.rawValue &&
+                        it.paymentEndpointPayload == PublicPaykitRepo.serializePayload(bolt11)
+                } &&
                     any {
                         it.paymentEndpointIdentifier == MethodId.P2wpkh.rawValue &&
                             it.paymentEndpointPayload == PublicPaykitRepo.serializePayload(address)
@@ -1471,6 +1479,25 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         networkType = NetworkType.REGTEST,
         payeeNodeId = null,
     )
+
+    private fun privatePaymentListPayloadSize(bolt11: String, address: String) = buildJsonObject {
+        put("version", 1)
+        put("kind", "paykit.private_payment_list")
+        putJsonObject("payment_endpoints") {
+            put(MethodId.Bolt11.rawValue, PublicPaykitRepo.serializePayload(bolt11))
+            put(MethodId.P2wpkh.rawValue, PublicPaykitRepo.serializePayload(address))
+        }
+    }.toString().encodeToByteArray().size
+
+    private fun legacyPrivatePaymentsPayloadSize(bolt11: String, address: String) = buildJsonObject {
+        put("version", 1)
+        put("kind", "paykit.private_payments")
+        put("reference", "550e8400-e29b-41d4-a716-446655440000")
+        putJsonObject("entries") {
+            put(MethodId.Bolt11.rawValue, PublicPaykitRepo.serializePayload(bolt11))
+            put(MethodId.P2wpkh.rawValue, PublicPaykitRepo.serializePayload(address))
+        }
+    }.toString().encodeToByteArray().size
 
     private fun privatePaymentsPayload(entries: List<FfiPaymentEndpoint>) =
         FfiPrivatePaymentList(paymentEndpoints = entries)
