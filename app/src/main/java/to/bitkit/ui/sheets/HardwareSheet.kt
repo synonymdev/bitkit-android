@@ -1,8 +1,6 @@
 package to.bitkit.ui.sheets
 
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -30,29 +28,24 @@ fun HardwareSheet(
 ) {
     val navController = rememberNavController()
 
-    Box(
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .sheetHeight(SheetSize.LARGE),
+            .sheetHeight(SheetSize.LARGE)
+            .testTag("hardware_sheet")
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .testTag("hardware_sheet"),
+        NavHost(
+            navController = navController,
+            startDestination = sheet.route,
         ) {
-            NavHost(
-                navController = navController,
-                startDestination = sheet.route,
-            ) {
-                composableWithDefaultTransitions<HardwareRoute.Intro> {
-                    HwIntroSheet(onDismiss = onDismiss)
-                }
-                composableWithDefaultTransitions<HardwareRoute.PairingCode> {
-                    HwPairSheet(
-                        onSubmit = onSubmitPairingCode,
-                        onCancel = onCancelPairingCode,
-                    )
-                }
+            composableWithDefaultTransitions<HardwareRoute.Intro> {
+                HwIntroSheet(onDismiss = onDismiss)
+            }
+            composableWithDefaultTransitions<HardwareRoute.PairingCode> {
+                HwPairSheet(
+                    onSubmit = onSubmitPairingCode,
+                    onCancel = onCancelPairingCode,
+                )
             }
         }
     }
