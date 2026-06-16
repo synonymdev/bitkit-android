@@ -1,10 +1,10 @@
-<journey name="HW USB Reconnect">
+<journey name="Hardware Wallet USB Reconnect">
   <description>
     Verifies the disconnect indicator and the USB-attach auto-reconnect chain by
     injecting the OS attach intent, with the Bridge emulator standing in for the
     transport. Covers MainActivity intent handling, the serialized reconnect retry
     loop, and the prompt-free reconnect. Requires a paired Bridge emulator (run
-    hw-connect-home-tile.journey.xml first).
+    connect-home-tile.xml first).
   </description>
   <actions>
     <action>

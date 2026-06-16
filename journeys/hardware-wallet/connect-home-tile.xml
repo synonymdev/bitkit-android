@@ -1,4 +1,4 @@
-<journey name="HW Connect and Home Tile">
+<journey name="Hardware Wallet Connect and Home Tile">
   <description>
     Pairs the Bridge Trezor emulator through the dev Trezor screen, then verifies the
     home-screen hardware wallet tile: name, connection indicator, balance, and the

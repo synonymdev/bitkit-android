@@ -46,15 +46,15 @@ instead of UI interactions.
 
 ## Journeys
 
-Run in this order — `hw-connect-home-tile` pairs the emulator that the later journeys rely
-on, and `hw-suggestion-intro-sheet` ends by re-pairing after a forget.
+Run in this order — `connect-home-tile.xml` pairs the emulator that the later journeys
+rely on, and `suggestion-intro-sheet.xml` ends by re-pairing after a forget.
 
 | Journey | Covers |
 | - | - |
-| `hw-connect-home-tile.journey.xml` | Dev-screen connect, home tile, indicator, balance, overview toast |
-| `hw-activity-blue-icons.journey.xml` | Hardware activity merge, blue icons, All Activity filters, detail fallback |
-| `hw-usb-reconnect.journey.xml` | Disconnect indicator, injected USB attach intent → silent auto-reconnect |
-| `hw-suggestion-intro-sheet.journey.xml` | Forget device, Hardware suggestion card, connect intro sheet |
+| `connect-home-tile.xml` | Dev-screen connect, home tile, indicator, balance, overview toast |
+| `activity-blue-icons.xml` | Hardware activity merge, blue icons, All Activity filters, detail fallback |
+| `usb-reconnect.xml` | Disconnect indicator, injected USB attach intent → silent auto-reconnect |
+| `suggestion-intro-sheet.xml` | Forget device, Hardware suggestion card, connect intro sheet |
 
 To exercise the received-money sheet (not covered by a journey because it needs an
 out-of-band transfer), fund the emulator wallet on regtest from `bitkit-docker`, e.g.

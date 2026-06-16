@@ -1,4 +1,4 @@
-<journey name="HW Suggestion Card and Intro Sheet">
+<journey name="Hardware Wallet Suggestion Card and Intro Sheet">
   <description>
     Verifies the no-device home state: forgetting the paired device removes the
     hardware tile, the Hardware suggestion card appears, and tapping it opens the
