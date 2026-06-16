@@ -6,7 +6,22 @@ repo_root=$(cd "$script_dir/.." && pwd)
 cd "$repo_root"
 
 variant="mainnetRelease"
-output="app/build/outputs/native-debug-symbols/$variant/native-debug-symbols.zip"
+build_number=$(
+    awk -F= '
+        /^[[:space:]]*versionCode[[:space:]]*=/ {
+            value = $2
+            gsub(/[[:space:]]/, "", value)
+            print value
+            exit
+        }
+    ' app/build.gradle.kts
+)
+if [ -z "$build_number" ]; then
+    echo "Unable to read versionCode from app/build.gradle.kts." >&2
+    exit 1
+fi
+
+output="app/build/outputs/native-debug-symbols/$variant/native-debug-symbols-$build_number.zip"
 output_dir=$(dirname "$output")
 dependency_symbols_dir="app/build/intermediates/native-debug-symbol-artifacts"
 required_libs="libbitkitcore.so libldk_node.so libpaykit.so libvss_rust_client_ffi.so"
@@ -173,7 +188,7 @@ create_output_zip_from_tree() {
     validate_symbol_tree "$root"
 
     mkdir -p "$output_dir"
-    rm -f "$output"
+    rm -f "$output_dir"/native-debug-symbols*.zip
 
     (
         cd "$root"

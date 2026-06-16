@@ -30,7 +30,7 @@ class NativeReleaseConfigTest {
 
         assertTrue(
             justfile.contains(
-                """rm -f "${'$'}symbols"""",
+                """rm -f "${'$'}symbols_dir"/native-debug-symbols*.zip""",
             ),
             "Release builds must remove stale native debug symbols before rebuilding.",
         )
@@ -62,12 +62,12 @@ class NativeReleaseConfigTest {
 
         assertTrue(
             releaseCommand.contains(
-                "app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols.zip",
+                "app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols-{newVersionCode}.zip",
             ),
             "Release command must include the native debug symbols archive path.",
         )
         assertTrue(
-            releaseCommand.contains("Native debug symbols uploaded: native-debug-symbols.zip"),
+            releaseCommand.contains("Native debug symbols uploaded: native-debug-symbols-{newVersionCode}.zip"),
             "Release command summary must report the native debug symbols archive.",
         )
         assertFalse(
@@ -88,12 +88,7 @@ class NativeReleaseConfigTest {
     fun `native debug symbols script rejects stripped release libraries`() {
         val symbolsScript = repoRoot.resolve("scripts/create-native-debug-symbols.sh").readText()
 
-        assertTrue(
-            symbolsScript.contains(
-                "app/build/outputs/native-debug-symbols/${'$'}variant/native-debug-symbols.zip",
-            ),
-            "Native debug symbols script must write the canonical archive path.",
-        )
+        assertBuildNumberedArchiveOutput(symbolsScript)
         assertTrue(
             symbolsScript.contains("native-debug-symbol-artifacts"),
             "Native debug symbols script must use upstream native dependency symbol archives.",
@@ -142,6 +137,19 @@ class NativeReleaseConfigTest {
         assertTrue(
             symbolsScript.contains("syncNativeDebugSymbolArtifacts"),
             "Native debug symbols script must point to the Gradle task that resolves symbol artifacts.",
+        )
+    }
+
+    private fun assertBuildNumberedArchiveOutput(symbolsScript: String) {
+        assertTrue(
+            symbolsScript.contains(
+                "app/build/outputs/native-debug-symbols/${'$'}variant/native-debug-symbols-${'$'}build_number.zip",
+            ),
+            "Native debug symbols script must write the build-numbered archive path.",
+        )
+        assertTrue(
+            symbolsScript.contains("""rm -f "${'$'}output_dir"/native-debug-symbols*.zip"""),
+            "Native debug symbols script must clear stale build-numbered archives before writing.",
         )
     }
 
