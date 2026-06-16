@@ -233,11 +233,18 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun connect(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
+    suspend fun connect(
+        deviceId: String,
+        requestUsbPermission: Boolean = true,
+    ): Result<TrezorFeatures> = withContext(ioDispatcher) {
         runCatching {
             _state.update { it.copy(isConnecting = true, error = null) }
             TrezorDebugLog.log("CONNECT", "connect() called for deviceId=$deviceId")
-            val features = connectWithThpRetry(deviceId, trezorUiHandler.currentSelection())
+            val features = connectWithThpRetry(
+                deviceId = deviceId,
+                selection = trezorUiHandler.currentSelection(),
+                requestUsbPermission = requestUsbPermission,
+            )
             TrezorDebugLog.log("CONNECT", "connect() succeeded: label=${features.label}, model=${features.model}")
             val deviceInfo = _state.value.nearbyDevices.find { it.id == deviceId }
                 ?: _state.value.knownDevices.find { it.id == deviceId }?.let { known ->
@@ -518,7 +525,7 @@ class TrezorRepo @Inject constructor(
                     // toggled), so reset it before a fresh scan and connect.
                     runCatching { trezorService.disconnect() }
                 }
-                val scannedDevices = scan().getOrThrow()
+                val scannedDevices = scan().getOrThrow().filter { it.canAutoReconnect() }
                 val knownIds = knownDevices.map { it.id }.toSet()
                 val usbDevice = scannedDevices.find {
                     it.transportType == TrezorTransportType.USB && it.id in knownIds
@@ -535,7 +542,7 @@ class TrezorRepo @Inject constructor(
                 }
                 val match = preferredMatch ?: idMatch ?: usbDevice
                     ?: throw AppError("No known device found nearby")
-                connect(match.id).getOrThrow()
+                connect(match.id, requestUsbPermission = false).getOrThrow()
             }
         }.onSuccess {
             _state.update { it.copy(isAutoReconnecting = false) }
@@ -543,6 +550,13 @@ class TrezorRepo @Inject constructor(
             Logger.error("Auto-reconnect failed", e, context = TAG)
             _state.update { it.copy(isAutoReconnecting = false, error = e.message) }
         }
+    }
+
+    private fun TrezorDeviceInfo.canAutoReconnect(): Boolean {
+        if (transportType.toTransportType() != TransportType.USB) return true
+        if (trezorTransport.hasUsbPermission(path)) return true
+        Logger.info("Skipped USB auto-reconnect without permission for '$path'", context = TAG)
+        return false
     }
 
     suspend fun connectKnownDevice(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
@@ -817,11 +831,12 @@ class TrezorRepo @Inject constructor(
     private suspend fun connectWithThpRetry(
         deviceId: String,
         selection: WalletSelection,
+        requestUsbPermission: Boolean = true,
     ): TrezorFeatures {
         TrezorDebugLog.log("THPRetry", "First connect attempt for: $deviceId")
         logCredentialFileState(deviceId, "BEFORE 1st attempt")
         return runCatching {
-            trezorService.connect(deviceId, selection)
+            connectDevice(deviceId, selection, requestUsbPermission)
         }.onSuccess {
             logCredentialFileState(deviceId, "AFTER 1st attempt (success)")
             TrezorDebugLog.log("THPRetry", "First attempt succeeded")
@@ -835,11 +850,21 @@ class TrezorRepo @Inject constructor(
             TrezorDebugLog.log("THPRetry", "Error is retryable, attempting second connect...")
             Logger.warn("Connection failed for $deviceId, retrying", e, context = TAG)
             logCredentialFileState(deviceId, "BEFORE 2nd attempt")
-            val result = trezorService.connect(deviceId, selection)
+            val result = connectDevice(deviceId, selection, requestUsbPermission)
             logCredentialFileState(deviceId, "AFTER 2nd attempt (success)")
             TrezorDebugLog.log("THPRetry", "Second attempt succeeded")
             result
         }
+    }
+
+    private suspend fun connectDevice(
+        deviceId: String,
+        selection: WalletSelection,
+        requestUsbPermission: Boolean,
+    ) = if (requestUsbPermission) {
+        trezorService.connect(deviceId, selection)
+    } else {
+        trezorService.connect(deviceId, selection, requestUsbPermission = false)
     }
 
     private fun logCredentialFileState(deviceId: String, label: String) {

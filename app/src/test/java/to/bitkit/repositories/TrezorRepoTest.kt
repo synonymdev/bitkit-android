@@ -78,6 +78,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorTransport.needsPairingCode).thenReturn(MutableStateFlow(false))
         whenever(trezorTransport.externalDisconnect).thenReturn(MutableSharedFlow())
         whenever(trezorTransport.transportRestored).thenReturn(MutableSharedFlow())
+        whenever(trezorTransport.hasUsbPermission(any())).thenReturn(true)
         whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(false))
         whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Standard)
         whenever(context.filesDir).thenReturn(tempFolder.root)
@@ -224,7 +225,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
         whenever(trezorService.isConnected()).thenReturn(false)
         whenever(trezorService.scan()).thenReturn(listOf(device))
-        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
         sut = createSut()
 
         transportRestored.emit(TransportType.USB)
@@ -243,7 +244,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorService.isConnected()).thenReturn(false)
         // A device is usually not advertising yet right after the transport returns.
         whenever(trezorService.scan()).thenReturn(emptyList(), listOf(device))
-        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
         sut = createSut()
 
         transportRestored.emit(TransportType.USB)
@@ -266,13 +267,13 @@ class TrezorRepoTest : BaseUnitTest() {
         )
         whenever(trezorService.isConnected()).thenReturn(false)
         whenever(trezorService.scan()).thenReturn(listOf(bleDevice, usbDevice))
-        whenever(trezorService.connect(eq("usb-1"), any())).thenReturn(features)
+        whenever(trezorService.connect(eq("usb-1"), any(), eq(false))).thenReturn(features)
         sut = createSut()
 
         sut.onTransportRestored(TransportType.USB)
         advanceUntilIdle()
 
-        verify(trezorService).connect(eq("usb-1"), any())
+        verify(trezorService).connect(eq("usb-1"), any(), eq(false))
         verify(trezorService, never()).connect(eq("ble-1"), any())
     }
 
@@ -283,7 +284,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
         whenever(trezorService.isConnected()).thenReturn(false)
         whenever(trezorService.scan()).thenReturn(listOf(device))
-        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
         sut = createSut()
 
         repeat(3) { sut.onTransportRestored(TransportType.USB) }
@@ -291,7 +292,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertNotNull(sut.state.value.connected)
         verify(trezorService, times(1)).scan()
-        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
+        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any(), eq(false))
     }
 
     @Test
@@ -329,13 +330,29 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
         whenever(trezorService.isConnected()).thenReturn(false)
         whenever(trezorService.scan()).thenReturn(listOf(device))
-        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
         sut = createSut()
 
         sut.onTransportRestored(TransportType.USB)
         advanceUntilIdle()
 
         assertNotNull(sut.state.value.connected)
+    }
+
+    @Test
+    fun `onTransportRestored skips usb device without permission`() = test {
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorTransport.hasUsbPermission(DEVICE_PATH)).thenReturn(false)
+        sut = createSut()
+
+        sut.onTransportRestored(TransportType.USB)
+        advanceUntilIdle()
+
+        assertNull(sut.state.value.connected)
+        verify(trezorService, never()).connect(eq(DEVICE_ID), any(), eq(false))
     }
 
     @Test
@@ -346,7 +363,7 @@ class TrezorRepoTest : BaseUnitTest() {
         // The core still reports a session although the transport dropped underneath it.
         whenever(trezorService.isConnected()).thenReturn(true)
         whenever(trezorService.scan()).thenReturn(listOf(device))
-        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
         sut = createSut()
         sut.initialize()
 
@@ -693,7 +710,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val features = mockFeatures()
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.scan()).thenReturn(listOf(device))
-        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
         whenever(trezorService.isConnected()).thenReturn(false)
         sut = createSut()
 

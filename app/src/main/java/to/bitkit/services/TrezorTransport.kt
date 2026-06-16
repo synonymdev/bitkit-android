@@ -117,6 +117,9 @@ class TrezorTransport @Inject constructor(
 
     private val userInitiatedCloseSet: MutableSet<String> = ConcurrentHashMap.newKeySet()
 
+    @Volatile
+    private var requestUsbPermissionEnabled = true
+
     private val _externalDisconnect = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val externalDisconnect: SharedFlow<String> = _externalDisconnect
 
@@ -218,6 +221,16 @@ class TrezorTransport @Inject constructor(
         @Volatile var disconnectLatch: CountDownLatch? = null,
         @Volatile var writeStatus: Int = BluetoothGatt.GATT_SUCCESS,
     )
+
+    suspend fun <T> withUsbPermissionRequestsEnabled(enabled: Boolean, block: suspend () -> T): T {
+        val previous = requestUsbPermissionEnabled
+        requestUsbPermissionEnabled = enabled
+        return try {
+            block()
+        } finally {
+            requestUsbPermissionEnabled = previous
+        }
+    }
 
     override fun enumerateDevices(): List<NativeDeviceInfo> {
         val devices = mutableListOf<NativeDeviceInfo>()
@@ -633,7 +646,13 @@ class TrezorTransport @Inject constructor(
                 ?: return TrezorTransportWriteResult(success = false, error = "Device not found: $path")
 
             if (!usbManager.hasPermission(device)) {
-                Logger.info("USB permission not yet granted, requesting...", context = TAG)
+                if (!requestUsbPermissionEnabled) {
+                    Logger.info("Skipped USB permission request for '$path'", context = TAG)
+                    return TrezorTransportWriteResult(
+                        success = false,
+                        error = "USB permission missing for '$path'",
+                    )
+                }
                 if (!requestUsbPermission(device)) {
                     return TrezorTransportWriteResult(
                         success = false,
