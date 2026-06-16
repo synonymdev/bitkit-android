@@ -8,6 +8,7 @@ cd "$repo_root"
 variant="mainnetRelease"
 output="app/build/outputs/native-debug-symbols/$variant/native-debug-symbols.zip"
 output_dir=$(dirname "$output")
+dependency_symbols_dir="app/build/intermediates/native-debug-symbol-artifacts"
 required_libs="libbitkitcore.so libldk_node.so libpaykit.so libvss_rust_client_ffi.so"
 archive_symbol_suffixes=".dbg .sym"
 
@@ -139,6 +140,47 @@ validate_output_zip() {
     validate_symbol_tree "$tmp_dir"
 }
 
+create_output_zip_from_tree() {
+    root="$1"
+
+    validate_symbol_tree "$root"
+
+    mkdir -p "$output_dir"
+    rm -f "$output"
+
+    (
+        cd "$root"
+        zip -qr "$repo_root/$output" arm64-v8a armeabi-v7a
+    )
+
+    zip -T "$output" >/dev/null
+    echo "Native debug symbols: $output"
+    ls -lh "$output"
+}
+
+if [ -d "$dependency_symbols_dir" ]; then
+    tmp_dir=$(make_tmp_dir)
+    found_archive=false
+
+    for archive in "$dependency_symbols_dir"/*.zip; do
+        if [ ! -f "$archive" ]; then
+            continue
+        fi
+
+        found_archive=true
+        unzip -q "$archive" -d "$tmp_dir"
+    done
+
+    if [ "$found_archive" = false ]; then
+        echo "No native debug symbol archives found in '$dependency_symbols_dir'." >&2
+        echo "Run './gradlew :app:syncNativeDebugSymbolArtifacts' before creating release symbols." >&2
+        exit 1
+    fi
+
+    create_output_zip_from_tree "$tmp_dir"
+    exit 0
+fi
+
 if [ -f "$output" ]; then
     validate_output_zip "$output"
     echo "Native debug symbols: $output"
@@ -183,16 +225,4 @@ for abi in arm64-v8a armeabi-v7a; do
     fi
 done
 
-validate_symbol_tree "$tmp_dir"
-
-mkdir -p "$output_dir"
-rm -f "$output"
-
-(
-    cd "$tmp_dir"
-    zip -qr "$repo_root/$output" arm64-v8a armeabi-v7a
-)
-
-zip -T "$output" >/dev/null
-echo "Native debug symbols: $output"
-ls -lh "$output"
+create_output_zip_from_tree "$tmp_dir"

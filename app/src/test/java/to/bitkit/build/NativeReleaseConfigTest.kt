@@ -39,6 +39,10 @@ class NativeReleaseConfigTest {
             "Release builds must create the native debug symbols archive before publishing.",
         )
         assertTrue(
+            justfile.contains(":app:syncNativeDebugSymbolArtifacts"),
+            "Release builds must resolve upstream native debug symbol artifacts before publishing.",
+        )
+        assertTrue(
             justfile.contains("Attach this exact file to GitHub releases"),
             "Release builds must tell the releaser to attach native debug symbols.",
         )
@@ -46,9 +50,9 @@ class NativeReleaseConfigTest {
             justfile.contains("upload it to Play Console for this release"),
             "Release builds must tell the releaser to upload native debug symbols to Play.",
         )
-        assertFalse(
-            justfile.contains("download"),
-            "Release builds should keep native debug symbols in release storage.",
+        assertTrue(
+            justfile.contains("syncNativeDebugSymbolArtifacts"),
+            "Release builds should download native dependency symbols from release artifacts.",
         )
     }
 
@@ -71,8 +75,8 @@ class NativeReleaseConfigTest {
             "Release command should use current Play native symbol wording.",
         )
         assertTrue(
-            releaseCommand.contains("fails instead of creating a placeholder zip from stripped `.so` files"),
-            "Release command must fail instead of publishing fake native debug symbols.",
+            releaseCommand.contains("resolves upstream native debug symbol artifacts"),
+            "Release command must document upstream native debug symbol artifact resolution.",
         )
         assertTrue(
             releaseCommand.contains("Play Console may only show delete/replace controls"),
@@ -89,6 +93,10 @@ class NativeReleaseConfigTest {
                 "app/build/outputs/native-debug-symbols/${'$'}variant/native-debug-symbols.zip",
             ),
             "Native debug symbols script must write the canonical archive path.",
+        )
+        assertTrue(
+            symbolsScript.contains("native-debug-symbol-artifacts"),
+            "Native debug symbols script must use upstream native dependency symbol archives.",
         )
         assertTrue(
             symbolsScript.contains("arm64-v8a armeabi-v7a"),
@@ -129,6 +137,10 @@ class NativeReleaseConfigTest {
         assertTrue(
             symbolsScript.contains("Refusing to create '${'$'}output' from stripped native libraries."),
             "Native debug symbols script must refuse placeholder archives.",
+        )
+        assertTrue(
+            symbolsScript.contains("syncNativeDebugSymbolArtifacts"),
+            "Native debug symbols script must point to the Gradle task that resolves symbol artifacts.",
         )
     }
 }
