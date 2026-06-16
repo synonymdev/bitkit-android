@@ -35,6 +35,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NotificationDetails
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.services.NodeServiceState
 import to.bitkit.ui.ID_NOTIFICATION_NODE
 import to.bitkit.ui.MainActivity
 import to.bitkit.ui.pushNotification
@@ -73,6 +74,9 @@ class LightningNodeService : Service() {
 
     @Inject
     lateinit var appWidgetRefreshScheduler: AppWidgetRefreshScheduler
+
+    @Inject
+    lateinit var nodeServiceState: NodeServiceState
 
     private var hasStartedNode = false
 
@@ -185,7 +189,7 @@ class LightningNodeService : Service() {
             }
 
             ACTION_START_SERVICE -> if (promoteToForeground(startId)) {
-                isRunning = true
+                nodeServiceState.setForegroundServiceRunning(true)
                 setupService()
             }
             else -> stop(startId) { Logger.warn("Stopped service for unsupported action '$action'", context = TAG) }
@@ -227,7 +231,7 @@ class LightningNodeService : Service() {
 
     override fun onDestroy() {
         Logger.debug("onDestroy", context = TAG)
-        isRunning = false
+        nodeServiceState.setForegroundServiceRunning(false)
         // Safe to call even if already stopped — guarded by lifecycleMutex + isStoppedOrStopping()
         serviceScope.launch { lightningRepo.stop() }
         super.onDestroy()
@@ -244,10 +248,6 @@ class LightningNodeService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
-        @Volatile
-        var isRunning = false
-            internal set
-
         const val CHANNEL_ID_NODE = "bitkit_notification_channel_node"
         const val TAG = "LightningNodeService"
         const val ACTION_START_SERVICE = "to.bitkit.androidServices.action.START_SERVICE"

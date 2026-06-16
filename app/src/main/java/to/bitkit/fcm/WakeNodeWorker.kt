@@ -18,7 +18,6 @@ import kotlinx.serialization.json.jsonObject
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
 import to.bitkit.R
-import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.data.CacheStore
 import to.bitkit.di.json
 import to.bitkit.domain.commands.ReceivedNotificationContent
@@ -38,6 +37,7 @@ import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.services.NodeServiceState
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
 import to.bitkit.utils.measured
@@ -54,6 +54,7 @@ class WakeNodeWorker @AssistedInject constructor(
     private val activityRepo: ActivityRepo,
     private val cacheStore: CacheStore,
     private val receivedNotificationContent: ReceivedNotificationContent,
+    private val nodeServiceState: NodeServiceState,
 ) : CoroutineWorker(appContext, workerParams) {
     private var bestAttemptContent: NotificationDetails? = null
 
@@ -268,7 +269,7 @@ class WakeNodeWorker @AssistedInject constructor(
     }
 
     private fun isHandledInProcess(): Boolean =
-        App.currentActivity?.value != null || LightningNodeService.isRunning
+        App.currentActivity?.value != null || nodeServiceState.isForegroundServiceRunning
 
     private suspend fun deliver() {
         // Send notification first

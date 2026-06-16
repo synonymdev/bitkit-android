@@ -30,7 +30,6 @@ import org.robolectric.annotation.Config
 import to.bitkit.App
 import to.bitkit.CurrentActivity
 import to.bitkit.R
-import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.data.CacheStore
 import to.bitkit.domain.commands.ReceivedNotificationContent
 import to.bitkit.ext.createChannelDetails
@@ -42,6 +41,7 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.NodeEventHandler
+import to.bitkit.services.NodeServiceState
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -57,6 +57,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val cacheStore = mock<CacheStore>()
     private val receivedNotificationContent = mock<ReceivedNotificationContent>()
+    private val nodeServiceState = NodeServiceState()
 
     private val channelId = "channel-1"
     private val receivedTitle by lazy { context.getString(R.string.notification__received__title) }
@@ -70,15 +71,13 @@ class WakeNodeWorkerTest : BaseUnitTest() {
         val app = context as Application
         Shadows.shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
 
-        // Default: app killed (no foreground activity), no foreground service running
+        // Default: app killed (no foreground activity); nodeServiceState defaults to not-running
         App.currentActivity = CurrentActivity()
-        LightningNodeService.isRunning = false
     }
 
     @After
     fun tearDown() {
         App.currentActivity = null
-        LightningNodeService.isRunning = false
     }
 
     @Test
@@ -114,7 +113,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
 
     @Test
     fun `cjit channel ready skips notification when foreground service is running`() = test {
-        LightningNodeService.isRunning = true
+        nodeServiceState.setForegroundServiceRunning(true)
         val channel = cjitChannel(sats = 48_064)
         stubChannel(channel, cjitEntry = IcJitEntry.mock())
         stubStartFiring(channelReadyEvent())
@@ -179,7 +178,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
 
     @Test
     fun `payment received skips notification when foreground service is running`() = test {
-        LightningNodeService.isRunning = true
+        nodeServiceState.setForegroundServiceRunning(true)
         whenever(workerParams.inputData).thenReturn(
             workDataOf("type" to BlocktankNotificationType.incomingHtlc.name),
         )
@@ -205,6 +204,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
         activityRepo = activityRepo,
         cacheStore = cacheStore,
         receivedNotificationContent = receivedNotificationContent,
+        nodeServiceState = nodeServiceState,
     )
 
     private fun channelReadyEvent() = mock<Event.ChannelReady> {

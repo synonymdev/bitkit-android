@@ -170,7 +170,6 @@ class LightningNodeServiceTest : BaseUnitTest() {
     @After
     fun tearDown() {
         App.currentActivity = null
-        LightningNodeService.isRunning = false
     }
 
     @Test
