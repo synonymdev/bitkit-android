@@ -46,16 +46,29 @@ init:
 compile:
     {{ gradle }} compileDevDebugKotlin
 
-run mode="":
+run mode="" logs="":
     #!/usr/bin/env sh
     set -eu
 
     app_id="to.bitkit.dev"
     app_dir="app/build/outputs/apk/dev/debug"
     mode="{{ mode }}"
+    logs="{{ logs }}"
+    attach_logs=false
 
+    if [ "$mode" = "logs" ]; then
+        attach_logs=true
+        mode=""
+    fi
+    if [ -n "$logs" ]; then
+        if [ "$logs" != "logs" ]; then
+            echo "usage: just run [docker] [logs]" >&2
+            exit 1
+        fi
+        attach_logs=true
+    fi
     if [ -n "$mode" ] && [ "$mode" != "docker" ]; then
-        echo "usage: just run [docker]" >&2
+        echo "usage: just run [docker] [logs]" >&2
         exit 1
     fi
 
@@ -136,6 +149,11 @@ run mode="":
     echo "Launching $app_id..."
     adb -s "$device_id" shell am force-stop "$app_id"
     adb -s "$device_id" shell monkey -p "$app_id" -c android.intent.category.LAUNCHER 1 >/dev/null
+
+    if [ "$attach_logs" != "true" ]; then
+        echo "Launched $app_id"
+        exit 0
+    fi
 
     pid="$(
         adb -s "$device_id" shell pidof -s "$app_id" 2>/dev/null \
