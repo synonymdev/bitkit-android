@@ -123,8 +123,9 @@ class WakeNodeWorkerTest : BaseUnitTest() {
 
         assertEquals(ListenableWorker.Result.success(), result)
         assertNull(findNotificationByTitle(receivedTitle), "Deduped when the foreground service handles it")
-        // Activity is still recorded so the receive is not lost
-        verify(activityRepo).insertActivityFromCjit(any(), any())
+        // Defers entirely: the in-process handler owns the insert, so the worker must not win the dedup race
+        verify(activityRepo, never()).insertActivityFromCjit(any(), any())
+        verify(cacheStore, never()).setBackgroundReceive(any())
     }
 
     @Test
@@ -152,7 +153,9 @@ class WakeNodeWorkerTest : BaseUnitTest() {
 
         assertEquals(ListenableWorker.Result.success(), result)
         assertNull(findNotificationByTitle(receivedTitle), "Notification is deduped when the in-app UI handles it")
-        verify(activityRepo).insertActivityFromCjit(any(), any())
+        // Defers entirely: the in-app handler owns the insert, so the worker must not win the dedup race
+        verify(activityRepo, never()).insertActivityFromCjit(any(), any())
+        verify(cacheStore, never()).setBackgroundReceive(any())
     }
 
     @Test

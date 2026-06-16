@@ -236,6 +236,15 @@ class WakeNodeWorker @AssistedInject constructor(
             return
         }
 
+        // The in-app UI or foreground service owns this event: it records the activity (via the same
+        // insertActivityFromCjit dedup) and shows the richer notification/sheet. Defer entirely —
+        // do NOT insert here, or we'd win the dedup race and silence the in-process handler.
+        if (isHandledInProcess()) {
+            Logger.debug("Skipping CJIT notification: handled in-process", context = TAG)
+            bestAttemptContent = null
+            return
+        }
+
         // A duplicate channel ready event for an already recorded CJIT receive must not notify again
         val inserted = activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
             .getOrDefault(false)
@@ -254,13 +263,6 @@ class WakeNodeWorker @AssistedInject constructor(
                 sats = sats.toLong(),
             )
         )
-
-        // The in-app UI or foreground service shows a richer notification for this event; avoid duplicating it
-        if (isHandledInProcess()) {
-            Logger.debug("Skipping CJIT notification: handled in-process", context = TAG)
-            bestAttemptContent = null
-            return
-        }
 
         bestAttemptContent = receivedNotificationContent.build(sats.toLong())
     }
