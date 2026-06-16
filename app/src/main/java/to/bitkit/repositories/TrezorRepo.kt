@@ -161,6 +161,42 @@ class TrezorRepo @Inject constructor(
         trezorUiHandler.setWalletMode(TrezorWalletMode.STANDARD)
     }
 
+    suspend fun resetState() = withContext(ioDispatcher) {
+        transportReconnectJob?.cancel()
+        transportReconnectJob = null
+
+        val knownDevices = (_state.value.knownDevices + hwWalletStore.loadKnownDevices())
+            .distinctBy { it.id }
+
+        if (_state.value.connected != null) {
+            runCatching { trezorService.disconnect() }
+                .onFailure { Logger.warn("Failed to disconnect Trezor while resetting", it, context = TAG) }
+        }
+
+        knownDevices.forEach { device ->
+            runCatching { trezorTransport.clearDeviceCredential(device.id) }
+                .onFailure { Logger.warn("Failed to clear transport credential for '${device.id}'", it, context = TAG) }
+            runCatching { trezorService.clearCredentials(device.id) }
+                .onFailure { Logger.warn("Failed to clear Trezor credentials for '${device.id}'", it, context = TAG) }
+        }
+
+        trezorUiHandler.setWalletMode(TrezorWalletMode.STANDARD)
+        hwWalletStore.reset()
+        _state.update {
+            it.copy(
+                isScanning = false,
+                isConnecting = false,
+                isAutoReconnecting = false,
+                knownDevices = persistentListOf(),
+                nearbyDevices = persistentListOf(),
+                connected = null,
+                lastAddress = null,
+                lastPublicKey = null,
+                error = null,
+            )
+        }
+    }
+
     /**
      * Switch between the standard wallet and a passphrase (hidden) wallet.
      *

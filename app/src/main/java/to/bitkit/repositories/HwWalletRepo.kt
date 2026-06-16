@@ -76,6 +76,7 @@ class HwWalletRepo @Inject constructor(
     private val retryingWatcherStarts = mutableSetOf<String>()
     private val watcherSyncRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val _watcherData = MutableStateFlow<Map<String, HwWatcherData>>(emptyMap())
+    private val emittedReceivedTxIds = mutableSetOf<String>()
 
     private val _receivedTxs = MutableSharedFlow<HwWalletReceivedTx>(extraBufferCapacity = 8)
 
@@ -92,8 +93,9 @@ class HwWalletRepo @Inject constructor(
         }
         activeWatchers.clear()
         retryingWatcherStarts.clear()
+        emittedReceivedTxIds.clear()
         _watcherData.update { emptyMap() }
-        hwWalletStore.reset()
+        trezorRepo.resetState()
     }
 
     /** Pairing-code request raised by the device during connect; the UI shows the Pair Device sheet. */
@@ -161,10 +163,9 @@ class HwWalletRepo @Inject constructor(
                     transactions = event.transactions.toImmutableList(),
                     activities = activities,
                 )
-                _watcherData.update {
-                    it + (watcherId to watcher)
-                }
-                emitReceivedTxs(previous, event)
+                val updatedWatcherData = _watcherData.value + (watcherId to watcher)
+                _watcherData.update { updatedWatcherData }
+                emitReceivedTxs(previous, event, updatedWatcherData)
             }
         }
     }
@@ -173,12 +174,24 @@ class HwWalletRepo @Inject constructor(
      * The first event after a watcher starts delivers the full transaction history;
      * treat it as the baseline so only transactions arriving while watching are emitted.
      */
-    private suspend fun emitReceivedTxs(previous: HwWatcherData?, event: WatcherEvent.TransactionsChanged) {
+    private suspend fun emitReceivedTxs(
+        previous: HwWatcherData?,
+        event: WatcherEvent.TransactionsChanged,
+        watcherData: Map<String, HwWatcherData>,
+    ) {
         if (previous == null) return
         val knownTxIds = previous.activities.map { it.rawId() }.toSet()
+        val mergedActivities = watcherData.values.toList().toMergedActivities()
         event.transactions
-            .filter { it.direction == TxDirection.RECEIVED && it.txid !in knownTxIds }
-            .forEach { _receivedTxs.emit(HwWalletReceivedTx(txid = it.txid, sats = it.amount)) }
+            .filter {
+                it.direction == TxDirection.RECEIVED &&
+                    it.txid !in knownTxIds &&
+                    emittedReceivedTxIds.add(it.txid)
+            }
+            .forEach {
+                val sats = mergedActivities.findOnchain(it.txid)?.v1?.value ?: it.amount
+                _receivedTxs.emit(HwWalletReceivedTx(txid = it.txid, sats = sats))
+            }
     }
 
     private fun syncWatchers() {

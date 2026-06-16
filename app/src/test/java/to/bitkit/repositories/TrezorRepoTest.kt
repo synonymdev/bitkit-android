@@ -621,6 +621,27 @@ class TrezorRepoTest : BaseUnitTest() {
 
     // endregion
 
+    // region resetState
+
+    @Test
+    fun `resetState clears known devices and credentials`() = test {
+        val knownDevice = mockKnownDevice()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        sut = createSut()
+
+        sut.initialize()
+        sut.resetState()
+
+        assertTrue(sut.state.value.knownDevices.isEmpty())
+        assertTrue(sut.state.value.nearbyDevices.isEmpty())
+        assertNull(sut.state.value.connectedDevice)
+        verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
+        verify(trezorService).clearCredentials(DEVICE_ID)
+        verify(hwWalletStore).reset()
+    }
+
+    // endregion
+
     // region getAddress
 
     @Test

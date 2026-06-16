@@ -323,6 +323,54 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `emits received tx once when multiple watchers report the same new tx`() = test {
+        val sut = createRepo()
+        val received = mutableListOf<HwWalletReceivedTx>()
+        val job = launch { sut.receivedTxs.collect { received += it } }
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 0uL),
+                transactions = emptyList(),
+                txCount = 0u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+        watcherEvents.emit(
+            "dev1|taproot" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 0uL),
+                transactions = emptyList(),
+                txCount = 0u,
+                blockHeight = 1u,
+                accountType = AccountType.TAPROOT,
+            )
+        )
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 100uL),
+                transactions = listOf(receivedTransaction(amount = 100uL).copy(txid = "shared")),
+                txCount = 1u,
+                blockHeight = 2u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+        watcherEvents.emit(
+            "dev1|taproot" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 50uL),
+                transactions = listOf(receivedTransaction(amount = 50uL).copy(txid = "shared")),
+                txCount = 1u,
+                blockHeight = 2u,
+                accountType = AccountType.TAPROOT,
+            )
+        )
+
+        assertEquals(listOf(HwWalletReceivedTx(txid = "shared", sats = 100uL)), received)
+        job.cancel()
+    }
+
+    @Test
     fun `does not emit received tx for new outbound transactions`() = test {
         val sut = createRepo()
         val received = mutableListOf<HwWalletReceivedTx>()
@@ -451,7 +499,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         sut.resetState()
 
         verify(trezorRepo).stopWatcher("dev1|nativeSegwit")
-        verify(hwWalletStore).reset()
+        verify(trezorRepo).resetState()
         assertEquals(0uL, sut.totalSats.value)
     }
 
