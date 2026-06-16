@@ -77,6 +77,8 @@ Cherry-pick the commits you need onto this branch now, then continue.
 ```
 Wait for the user to confirm they are done cherry-picking before proceeding.
 
+If the base is a tag that predates the release workflow changes, port the current release workflow support onto the release branch before proceeding. At minimum, the release branch/tag must contain the updated artifact naming in `.github/workflows/release.yml`, otherwise Step 7 will dispatch an old workflow and then look for an artifact name it cannot produce.
+
 Finalize changelog after the release branch contains all release commits:
 
 ```bash
@@ -207,6 +209,11 @@ Print the path to the release notes file so the user can share it for review.
 ```bash
 release_ref="v{newVersionName}"
 release_artifact_dir=".ai/release-artifacts-{newVersionName}"
+if ! git show "$release_ref:.github/workflows/release.yml" | grep -q 'bitkit-release-$build_number-$GITHUB_RUN_NUMBER'; then
+  echo "Release ref $release_ref does not contain the current release artifact naming." >&2
+  echo "Port the release workflow changes onto the release branch, retag, then rerun /release." >&2
+  exit 1
+fi
 dispatch_started_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 gh workflow run release.yml --ref "$release_ref"
 run_id=""
