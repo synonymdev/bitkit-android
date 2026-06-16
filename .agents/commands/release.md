@@ -207,8 +207,27 @@ Print the path to the release notes file so the user can share it for review.
 ```bash
 release_ref="v{newVersionName}"
 release_artifact_dir=".ai/release-artifacts-{newVersionName}"
-run_url="$(gh workflow run release.yml --ref "$release_ref")"
-run_id="${run_url##*/}"
+dispatch_started_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+gh workflow run release.yml --ref "$release_ref"
+run_id=""
+for attempt in {1..30}; do
+  run_id="$(gh run list \
+    --workflow release.yml \
+    --branch "$release_ref" \
+    --event workflow_dispatch \
+    --created ">=$dispatch_started_at" \
+    --limit 1 \
+    --json databaseId \
+    --jq '.[0].databaseId // empty')"
+  if [ -n "$run_id" ]; then
+    break
+  fi
+  sleep 5
+done
+if [ -z "$run_id" ]; then
+  echo "Failed to find release workflow run for $release_ref" >&2
+  exit 1
+fi
 gh run watch "$run_id" --exit-status
 workflow_run_url="$(gh run view "$run_id" --json url --jq .url)"
 run_number="$(gh run view "$run_id" --json number --jq .number)"
