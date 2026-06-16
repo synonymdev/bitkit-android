@@ -19,27 +19,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
-import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
-import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 private const val PAIRING_CODE_LENGTH = 6
 private val PAIRING_CELL_WIDTH = 32.dp
 
 @Composable
-fun HwPairSheet(
+fun HwPairCodeSheet(
     onSubmit: (String) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
@@ -101,19 +96,5 @@ fun HwPairSheet(
                 }
             },
         )
-    }
-}
-
-@Preview(showSystemUi = true)
-@Composable
-private fun Preview() {
-    AppThemeSurface {
-        BottomSheetPreview {
-            HwPairSheet(
-                onSubmit = {},
-                onCancel = {},
-                modifier = Modifier.sheetHeight(SheetSize.LARGE),
-            )
-        }
     }
 }

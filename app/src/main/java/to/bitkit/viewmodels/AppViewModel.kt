@@ -340,7 +340,7 @@ class AppViewModel @Inject constructor(
                 } else {
                     isPairingCodeSheetQueued = false
                     _currentSheet.update { sheet ->
-                        if (sheet is Sheet.Hardware && sheet.route == HardwareRoute.PairingCode) null else sheet
+                        if (sheet is Sheet.Hardware && sheet.route == HardwareRoute.PairCode) null else sheet
                     }
                 }
             }
@@ -3074,7 +3074,7 @@ class AppViewModel @Inject constructor(
         }
 
         isPairingCodeSheetQueued = false
-        showSheet(Sheet.Hardware(route = HardwareRoute.PairingCode))
+        showSheet(Sheet.Hardware(route = HardwareRoute.PairCode))
     }
 
     private fun showQueuedPairingCodeSheet() {

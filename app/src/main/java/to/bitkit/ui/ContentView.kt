@@ -465,12 +465,7 @@ fun ContentView(
                         Sheet.ChangePin -> ChangePinSheet(appViewModel)
                         Sheet.DisablePin -> DisablePinSheet(appViewModel)
                         is Sheet.Backup -> BackupSheet(sheet, onDismiss = { appViewModel.hideSheet() })
-                        is Sheet.Hardware -> HardwareSheet(
-                            sheet = sheet,
-                            onDismiss = { appViewModel.hideSheet() },
-                            onSubmitPairingCode = appViewModel::submitPairingCode,
-                            onCancelPairingCode = appViewModel::cancelPairingCode,
-                        )
+                        is Sheet.Hardware -> HardwareSheet(sheet, appViewModel)
                         is Sheet.Widgets -> {
                             WidgetsSheet(
                                 sheet = sheet,

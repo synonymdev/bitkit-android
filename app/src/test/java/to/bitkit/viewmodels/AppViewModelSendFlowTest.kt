@@ -265,7 +265,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         needsPairingCode.value = true
         advanceUntilIdle()
 
-        assertEquals(Sheet.Hardware(route = HardwareRoute.PairingCode), sut.currentSheet.value)
+        assertEquals(Sheet.Hardware(route = HardwareRoute.PairCode), sut.currentSheet.value)
 
         needsPairingCode.value = false
         advanceUntilIdle()
@@ -295,7 +295,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.hideSheet()
         advanceUntilIdle()
 
-        assertEquals(Sheet.Hardware(route = HardwareRoute.PairingCode), sut.currentSheet.value)
+        assertEquals(Sheet.Hardware(route = HardwareRoute.PairCode), sut.currentSheet.value)
     }
 
     @Test

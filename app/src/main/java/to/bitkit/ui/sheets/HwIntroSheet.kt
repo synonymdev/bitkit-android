@@ -20,21 +20,16 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
-import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
@@ -127,14 +122,4 @@ private fun BoxWithConstraintsScope.LedgerImage(
             .align(Alignment.CenterEnd)
             .offset(x = maxWidth * INTRO_LEDGER_BLEED_RATIO, y = -staggerY)
     )
-}
-
-@Preview(showSystemUi = true)
-@Composable
-private fun Preview() {
-    AppThemeSurface {
-        BottomSheetPreview {
-            HwIntroSheet(modifier = Modifier.sheetHeight(SheetSize.LARGE))
-        }
-    }
 }
