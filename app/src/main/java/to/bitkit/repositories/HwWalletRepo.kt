@@ -36,6 +36,7 @@ import to.bitkit.ext.rawId
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.TransportType
+import to.bitkit.models.safe
 import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
@@ -125,8 +126,8 @@ class HwWalletRepo @Inject constructor(
                     transportType = device.transportType,
                     isConnected = connectedDevice != null,
                     balanceSats = deviceWatchers.fold(0uL) { acc, watcher -> acc + watcher.balanceSats },
-                    activities = deviceWatchers.flatMap { it.activities }
-                        .distinctBy { it.rawId() }
+                    activities = deviceWatchers
+                        .toMergedActivities()
                         .toImmutableList(),
                 )
             }
@@ -151,9 +152,17 @@ class HwWalletRepo @Inject constructor(
             trezorRepo.watcherEvents.collect { (watcherId, event) ->
                 if (event !is WatcherEvent.TransactionsChanged) return@collect
                 val previous = _watcherData.value[watcherId]
-                val activities = event.transactions.map { it.toOnchainActivity(clock) }.toImmutableList()
+                val activities = event.transactions
+                    .map { it.toOnchainActivity(clock, previous?.activities.orEmpty()) }
+                    .toImmutableList()
+                val watcher = HwWatcherData(
+                    deviceId = watcherId.toDeviceId(),
+                    balanceSats = event.balance.total,
+                    transactions = event.transactions.toImmutableList(),
+                    activities = activities,
+                )
                 _watcherData.update {
-                    it + (watcherId to HwWatcherData(watcherId.toDeviceId(), event.balance.total, activities))
+                    it + (watcherId to watcher)
                 }
                 emitReceivedTxs(previous, event)
             }
@@ -236,25 +245,63 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    private fun HistoryTransaction.toOnchainActivity(clock: Clock): Activity {
-        val type = when (direction) {
-            TxDirection.RECEIVED -> PaymentType.RECEIVED
-            TxDirection.SENT, TxDirection.SELF_TRANSFER -> PaymentType.SENT
+    private fun HistoryTransaction.toOnchainActivity(clock: Clock, previousActivities: List<Activity>): Activity {
+        val activityTimestamp = timestamp ?: previousActivities.findOnchain(txid)?.v1?.timestamp
+            ?: clock.now().epochSeconds.toULong()
+        return listOf(this).toOnchainActivity(
+            timestamp = activityTimestamp,
+            sourceActivities = previousActivities,
+        )
+    }
+
+    private fun List<HwWatcherData>.toMergedActivities(): List<Activity> {
+        val sourceActivities = flatMap { it.activities }
+        return flatMap { it.transactions }
+            .groupBy { it.txid }
+            .values
+            .map { transactions ->
+                val timestamp = transactions.mapNotNull { it.timestamp }.minOrNull()
+                    ?: sourceActivities.findOnchain(transactions.first().txid)?.v1?.timestamp
+                    ?: 0uL
+                transactions.toOnchainActivity(timestamp, sourceActivities)
+            }
+    }
+
+    private fun List<HistoryTransaction>.toOnchainActivity(
+        timestamp: ULong,
+        sourceActivities: List<Activity>,
+    ): Activity {
+        val first = first()
+        val received = fold(0uL) { acc, tx -> acc.safe() + tx.received.safe() }
+        val sent = fold(0uL) { acc, tx -> acc.safe() + tx.sent.safe() }
+        val fee = mapNotNull { it.fee }.maxOrNull() ?: 0uL
+        val type = when {
+            received > sent -> PaymentType.RECEIVED
+            else -> PaymentType.SENT
         }
-        val activityTimestamp = timestamp ?: clock.now().epochSeconds.toULong()
+        val value = when (type) {
+            PaymentType.RECEIVED -> received.safe() - sent.safe()
+            PaymentType.SENT -> (sent.safe() - received.safe()).safe() - fee.safe()
+        }
+        val confirmations = maxOf { it.confirmations }
+        val sourceActivity = sourceActivities.findOnchain(first.txid)
         return Activity.Onchain(
             OnchainActivity.create(
-                id = txid,
+                id = first.txid,
                 txType = type,
-                txId = txid,
-                value = amount,
-                fee = fee ?: 0uL,
+                txId = first.txid,
+                value = value,
+                fee = fee,
                 address = "",
-                timestamp = activityTimestamp,
+                timestamp = timestamp,
                 confirmed = confirmations > 0u,
+                confirmTimestamp = sourceActivity?.v1?.confirmTimestamp,
             )
         )
     }
+
+    private fun List<Activity>.findOnchain(txid: String) = filterIsInstance<Activity.Onchain>()
+        .firstOrNull { it.v1.txId == txid }
 
     private data class WatcherSpec(
         val deviceId: String,
@@ -290,5 +337,6 @@ private val KnownDevice.displayName: String
 private data class HwWatcherData(
     val deviceId: String,
     val balanceSats: ULong,
+    val transactions: ImmutableList<HistoryTransaction>,
     val activities: ImmutableList<Activity>,
 )

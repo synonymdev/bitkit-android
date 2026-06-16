@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.HistoryTransaction
+import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WalletBalance
 import com.synonym.bitkitcore.WatcherEvent
@@ -36,6 +37,7 @@ import kotlin.test.assertEquals
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 class HwWalletRepoTest : BaseUnitTest() {
@@ -43,7 +45,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     private val trezorRepo = mock<TrezorRepo>()
     private val hwWalletStore = mock<HwWalletStore>()
     private val settingsStore = mock<SettingsStore>()
-    private val clock = Clock.System
+    private val clock = mock<Clock>()
 
     private lateinit var storeData: MutableStateFlow<HwWalletData>
     private lateinit var settingsData: MutableStateFlow<SettingsData>
@@ -71,6 +73,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(trezorRepo.state).thenReturn(trezorState)
         whenever(trezorRepo.watcherEvents).thenReturn(watcherEvents)
+        whenever(clock.now()).thenReturn(Instant.fromEpochSeconds(1_700_000_000))
     }
 
     private fun createRepo() = HwWalletRepo(trezorRepo, hwWalletStore, settingsStore, clock, testDispatcher)
@@ -160,6 +163,74 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(150uL, sut.wallets.value.single().balanceSats)
         assertEquals(150uL, sut.totalSats.value)
+    }
+
+    @Test
+    fun `merges duplicate tx activities from multiple address-type watchers`() = test {
+        val sut = createRepo()
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 100uL),
+                transactions = listOf(receivedTransaction(amount = 100uL).copy(txid = "shared")),
+                txCount = 1u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+        watcherEvents.emit(
+            "dev1|taproot" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 50uL),
+                transactions = listOf(receivedTransaction(amount = 50uL).copy(txid = "shared")),
+                txCount = 1u,
+                blockHeight = 1u,
+                accountType = AccountType.TAPROOT,
+            )
+        )
+
+        val activity = sut.wallets.value.single().activities.single() as Activity.Onchain
+        assertEquals(PaymentType.RECEIVED, activity.v1.txType)
+        assertEquals(150uL, activity.v1.value)
+        assertEquals(150uL, sut.wallets.value.single().balanceSats)
+    }
+
+    @Test
+    fun `preserves generated timestamp for pending tx refreshes`() = test {
+        whenever(clock.now())
+            .thenReturn(Instant.fromEpochSeconds(1_800_000_000))
+            .thenReturn(Instant.fromEpochSeconds(1_800_000_060))
+        val sut = createRepo()
+        val pendingTx = receivedTransaction(amount = 100uL).copy(
+            txid = "pending",
+            blockHeight = null,
+            timestamp = null,
+            confirmations = 0u,
+        )
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 100uL),
+                transactions = listOf(pendingTx),
+                txCount = 1u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+        val firstTimestamp = (sut.wallets.value.single().activities.single() as Activity.Onchain).v1.timestamp
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 100uL),
+                transactions = listOf(pendingTx),
+                txCount = 1u,
+                blockHeight = 2u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+        val refreshedTimestamp = (sut.wallets.value.single().activities.single() as Activity.Onchain).v1.timestamp
+
+        assertEquals(1_800_000_000uL, firstTimestamp)
+        assertEquals(firstTimestamp, refreshedTimestamp)
     }
 
     @Test
