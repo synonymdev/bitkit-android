@@ -1,12 +1,17 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
+import com.synonym.bitkitcore.FundingTx
+import com.synonym.bitkitcore.IBtChannel
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtOrder
+import com.synonym.bitkitcore.IcJitEntry
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.OutPoint
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
@@ -191,5 +196,64 @@ class BlocktankRepoTest : BaseUnitTest() {
             val result = sut.getOrder(testOrder1.id, refresh = true)
             assertTrue(result.isFailure)
         }
+    }
+
+    @Test
+    fun `getCjitEntry returns null when channel has no funding txo`() = test {
+        sut = createSut()
+        val channelDetails = mock<ChannelDetails>()
+        whenever(channelDetails.fundingTxo).thenReturn(null)
+
+        assertNull(sut.getCjitEntry(channelDetails))
+    }
+
+    @Test
+    fun `getCjitEntry does not match a stale unpaid CJIT entry without an opened channel`() = test {
+        sut = createSut()
+        // A leftover CJIT entry that was never paid: same size & LSP as a transfer-flow channel order,
+        // but it never opened a channel. It must not be mistaken for the freshly opened channel.
+        val staleEntry = mock<IcJitEntry>()
+        whenever(staleEntry.channel).thenReturn(null)
+        whenever(coreService.blocktank.cjitEntries(refresh = true)).thenReturn(listOf(staleEntry))
+
+        val channelDetails = mock<ChannelDetails>()
+        whenever(channelDetails.fundingTxo).thenReturn(OutPoint(txid = "channel-order-funding-tx", vout = 0u))
+
+        assertNull(sut.getCjitEntry(channelDetails))
+    }
+
+    @Test
+    fun `getCjitEntry matches the entry whose channel funding tx matches`() = test {
+        sut = createSut()
+        val fundingTxId = "cjit-funding-tx"
+        val matchingChannel = mock<IBtChannel>()
+        whenever(matchingChannel.fundingTx).thenReturn(FundingTx(id = fundingTxId, vout = 0u))
+        val otherChannel = mock<IBtChannel>()
+        whenever(otherChannel.fundingTx).thenReturn(FundingTx(id = "other-funding-tx", vout = 0u))
+        val matchingEntry = mock<IcJitEntry>()
+        whenever(matchingEntry.channel).thenReturn(matchingChannel)
+        val otherEntry = mock<IcJitEntry>()
+        whenever(otherEntry.channel).thenReturn(otherChannel)
+        whenever(coreService.blocktank.cjitEntries(refresh = true)).thenReturn(listOf(otherEntry, matchingEntry))
+
+        val channelDetails = mock<ChannelDetails>()
+        whenever(channelDetails.fundingTxo).thenReturn(OutPoint(txid = fundingTxId, vout = 0u))
+
+        assertEquals(matchingEntry, sut.getCjitEntry(channelDetails))
+    }
+
+    @Test
+    fun `getCjitEntry returns null when no CJIT channel funding tx matches`() = test {
+        sut = createSut()
+        val channel = mock<IBtChannel>()
+        whenever(channel.fundingTx).thenReturn(FundingTx(id = "cjit-funding-tx", vout = 0u))
+        val entry = mock<IcJitEntry>()
+        whenever(entry.channel).thenReturn(channel)
+        whenever(coreService.blocktank.cjitEntries(refresh = true)).thenReturn(listOf(entry))
+
+        val channelDetails = mock<ChannelDetails>()
+        whenever(channelDetails.fundingTxo).thenReturn(OutPoint(txid = "different-funding-tx", vout = 0u))
+
+        assertNull(sut.getCjitEntry(channelDetails))
     }
 }

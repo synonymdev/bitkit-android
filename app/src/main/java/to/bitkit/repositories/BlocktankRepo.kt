@@ -125,10 +125,13 @@ class BlocktankRepo @Inject constructor(
     }
 
     suspend fun getCjitEntry(channel: ChannelDetails): IcJitEntry? = withContext(bgDispatcher) {
-        return@withContext _blocktankState.value.cjitEntries.firstOrNull { order ->
-            order.channelSizeSat == channel.channelValueSats &&
-                order.lspNode.pubkey == channel.counterpartyNodeId
-        }
+        val fundingTxId = channel.fundingTxo?.txid ?: return@withContext null
+
+        // Refresh from the server so a freshly opened CJIT channel association is up to date before matching.
+        val entries = runCatching { coreService.blocktank.cjitEntries(refresh = true) }
+            .getOrElse { _blocktankState.value.cjitEntries }
+
+        return@withContext entries.firstOrNull { it.channel?.fundingTx?.id == fundingTxId }
     }
 
     suspend fun refreshInfo() = withContext(bgDispatcher) {
