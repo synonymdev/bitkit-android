@@ -19,15 +19,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 private const val PAIRING_CODE_LENGTH = 6
@@ -48,6 +51,30 @@ fun HwPairCodeSheet(
         onDispose { if (!submitted) onCancel() }
     }
 
+    Content(
+        code = code,
+        onKeyPress = { key ->
+            when {
+                key == KEY_DELETE -> code = code.dropLast(1)
+                code.length < PAIRING_CODE_LENGTH -> {
+                    code += key
+                    if (code.length == PAIRING_CODE_LENGTH) {
+                        submitted = true
+                        onSubmit(code)
+                    }
+                }
+            }
+        },
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun Content(
+    code: String,
+    onKeyPress: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -83,18 +110,20 @@ fun HwPairCodeSheet(
             FillHeight()
         }
         NumberPad(
-            onPress = { key ->
-                when {
-                    key == KEY_DELETE -> code = code.dropLast(1)
-                    code.length < PAIRING_CODE_LENGTH -> {
-                        code += key
-                        if (code.length == PAIRING_CODE_LENGTH) {
-                            submitted = true
-                            onSubmit(code)
-                        }
-                    }
-                }
-            },
+            onPress = onKeyPress,
         )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                code = "123",
+                onKeyPress = {},
+            )
+        }
     }
 }

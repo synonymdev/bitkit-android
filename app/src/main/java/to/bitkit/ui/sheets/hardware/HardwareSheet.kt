@@ -5,15 +5,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
-import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.shared.modifiers.sheetHeight
-import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
 
@@ -28,7 +25,7 @@ fun HardwareSheet(
     sheet: Sheet.Hardware,
     appViewModel: AppViewModel,
 ) {
-    HardwareSheetContent(
+    Content(
         sheet = sheet,
         onDismiss = appViewModel::hideSheet,
         onSubmitPairingCode = appViewModel::submitPairingCode,
@@ -37,7 +34,7 @@ fun HardwareSheet(
 }
 
 @Composable
-private fun HardwareSheetContent(
+private fun Content(
     sheet: Sheet.Hardware,
     modifier: Modifier = Modifier,
     onDismiss: () -> Unit = {},
@@ -75,27 +72,4 @@ sealed interface HardwareRoute {
 
     @Serializable
     data object PairCode : HardwareRoute
-}
-
-@Preview(showSystemUi = true, name = "Intro")
-@Composable
-private fun PreviewIntro() {
-    HardwareSheetPreview(route = HardwareRoute.Intro)
-}
-
-@Preview(showSystemUi = true, name = "Pair Code")
-@Composable
-private fun PreviewPairCode() {
-    HardwareSheetPreview(route = HardwareRoute.PairCode)
-}
-
-@Composable
-private fun HardwareSheetPreview(route: HardwareRoute) {
-    AppThemeSurface {
-        BottomSheetPreview {
-            HardwareSheetContent(
-                sheet = Sheet.Hardware(route = route),
-            )
-        }
-    }
 }
