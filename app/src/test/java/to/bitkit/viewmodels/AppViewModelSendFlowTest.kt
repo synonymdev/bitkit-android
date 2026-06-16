@@ -285,6 +285,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pairing code request shows after high priority sheet closes`() = test {
+        sut.showSheet(Sheet.Pin())
+        advanceUntilIdle()
+
+        needsPairingCode.value = true
+        advanceUntilIdle()
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Hardware(route = HardwareRoute.PairingCode), sut.currentSheet.value)
+    }
+
+    @Test
     fun `submitPairingCode forwards to the hardware wallet repo`() = test {
         sut.submitPairingCode("123456")
 

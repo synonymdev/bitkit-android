@@ -253,6 +253,7 @@ class AppViewModel @Inject constructor(
 
     private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
     val currentSheet = _currentSheet.asStateFlow()
+    private var isPairingCodeSheetQueued = false
 
     private val processedPaymentsLock = Any()
     private val processedPayments = mutableSetOf<String>()
@@ -337,6 +338,7 @@ class AppViewModel @Inject constructor(
                 if (needsCode) {
                     showPairingCodeSheet()
                 } else {
+                    isPairingCodeSheetQueued = false
                     _currentSheet.update { sheet ->
                         if (sheet is Sheet.Hardware && sheet.route == HardwareRoute.PairingCode) null else sheet
                     }
@@ -349,14 +351,7 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             timedSheetManager.currentSheet.collect { sheetType ->
                 if (sheetType != null) {
-                    val currentSheet = _currentSheet.value
-                    val isHighPrioritySheetShowing = currentSheet is Sheet.Gift ||
-                        currentSheet is Sheet.Send ||
-                        currentSheet is Sheet.BTCPayConnection ||
-                        currentSheet is Sheet.LnurlAuth ||
-                        currentSheet is Sheet.Pin ||
-                        currentSheet is Sheet.PubkyAuth
-                    if (!isHighPrioritySheetShowing) {
+                    if (!isHighPrioritySheet(_currentSheet.value)) {
                         showSheet(Sheet.TimedSheet(sheetType))
                     }
                 } else {
@@ -2839,6 +2834,7 @@ class AppViewModel @Inject constructor(
             else -> _currentSheet.update { null }
         }
         clearActiveContactPaymentContext()
+        showQueuedPairingCodeSheet()
     }
 
     // endregion
@@ -3069,20 +3065,34 @@ class AppViewModel @Inject constructor(
     /**
      * The device asks for its one-time pairing code mid-connect, which can happen on
      * any screen via silent reconnects, so the sheet is shown app-wide. High-priority
-     * sheets are not interrupted: reconnect retries re-raise the request shortly after.
+     * sheets are not interrupted: the pairing sheet waits until the active sheet closes.
      */
     private fun showPairingCodeSheet() {
-        val current = _currentSheet.value
-        val isHighPrioritySheetShowing = current is Sheet.Gift ||
-            current is Sheet.Send ||
-            current is Sheet.BTCPayConnection ||
-            current is Sheet.LnurlAuth ||
-            current is Sheet.Pin ||
-            current is Sheet.PubkyAuth
-        if (!isHighPrioritySheetShowing) {
-            showSheet(Sheet.Hardware(route = HardwareRoute.PairingCode))
+        if (isHighPrioritySheet(_currentSheet.value)) {
+            isPairingCodeSheetQueued = true
+            return
         }
+
+        isPairingCodeSheetQueued = false
+        showSheet(Sheet.Hardware(route = HardwareRoute.PairingCode))
     }
+
+    private fun showQueuedPairingCodeSheet() {
+        if (!isPairingCodeSheetQueued) return
+        if (!hwWalletRepo.needsPairingCode.value) {
+            isPairingCodeSheetQueued = false
+            return
+        }
+
+        showPairingCodeSheet()
+    }
+
+    private fun isHighPrioritySheet(sheet: Sheet?) = sheet is Sheet.Gift ||
+        sheet is Sheet.Send ||
+        sheet is Sheet.BTCPayConnection ||
+        sheet is Sheet.LnurlAuth ||
+        sheet is Sheet.Pin ||
+        sheet is Sheet.PubkyAuth
 
     fun clearPendingPubkyImport() {
         viewModelScope.launch {
