@@ -663,7 +663,7 @@ private fun ActivityDetailContent(
                         }
                     }
                 }
-                val shouldEnable = shouldEnableBoostButton(item, isCpfpChild, boostTxDoesExist)
+                val shouldEnable = shouldEnableBoostButton(item, isCpfpChild, isHardware, boostTxDoesExist)
                 PrimaryButton(
                     text = stringResource(
                         if (hasCompletedBoost) {
@@ -1071,8 +1071,10 @@ private fun PreviewSheetSmallScreen() {
 private fun shouldEnableBoostButton(
     item: Activity,
     isCpfpChild: Boolean,
+    isHardware: Boolean,
     boostTxDoesExist: ImmutableMap<String, Boolean>,
 ): Boolean {
+    if (isHardware) return false
     if (item !is Activity.Onchain) return false
 
     val activity = item.v1

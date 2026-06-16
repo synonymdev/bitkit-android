@@ -329,6 +329,32 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `resetState clears store and stops active watchers`() = test {
+        storeData.value = HwWalletData(
+            knownDevices = listOf(device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS")))
+        )
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 100uL),
+                transactions = emptyList(),
+                txCount = 0u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+
+        sut.resetState()
+
+        verify(trezorRepo).stopWatcher("dev1|nativeSegwit")
+        verify(hwWalletStore).reset()
+        assertEquals(0uL, sut.totalSats.value)
+    }
+
+    @Test
     fun `forwards transport restored to the trezor repo`() = test {
         val sut = createRepo()
 

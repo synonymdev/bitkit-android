@@ -28,6 +28,7 @@ import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.test.BaseUnitTest
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -91,6 +92,16 @@ class HomeViewModelTest : BaseUnitTest() {
         assertTrue(hardwareWallet in sut.uiState.value.hardwareWallets)
     }
 
+    @Test
+    fun `hides empty state for hardware wallet balance`() = test {
+        hardwareWallets.value = persistentListOf(hardwareWallet(balanceSats = 1uL))
+        val sut = createViewModel()
+
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.showEmptyState)
+    }
+
     private fun createViewModel() = HomeViewModel(
         context = context,
         walletRepo = walletRepo,
@@ -104,13 +115,13 @@ class HomeViewModelTest : BaseUnitTest() {
         suggestionsRepo = suggestionsRepo,
     )
 
-    private fun hardwareWallet() = HwWallet(
+    private fun hardwareWallet(balanceSats: ULong = 0uL) = HwWallet(
         id = "device-id",
         name = "Trezor",
         model = "Safe 5",
         transportType = TransportType.USB,
         isConnected = true,
-        balanceSats = 0uL,
+        balanceSats = balanceSats,
         activities = persistentListOf(),
     )
 }

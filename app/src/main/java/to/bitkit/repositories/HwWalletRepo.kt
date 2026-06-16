@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
@@ -36,6 +37,7 @@ import to.bitkit.models.TransportType
 import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -59,6 +61,7 @@ class HwWalletRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
+        private const val TAG = "HwWalletRepo"
         private const val WATCHER_ID_SEPARATOR = "|"
     }
 
@@ -74,6 +77,16 @@ class HwWalletRepo @Inject constructor(
 
     /** Forwards UI-delivered transport events, e.g. the USB attach intent from the OS app picker. */
     fun onTransportRestored(transportType: TransportType) = trezorRepo.onTransportRestored(transportType)
+
+    suspend fun resetState() = withContext(ioDispatcher) {
+        activeWatchers.toList().forEach { watcherId ->
+            trezorRepo.stopWatcher(watcherId)
+                .onFailure { Logger.warn("Failed to stop watcher '$watcherId' while resetting", it, context = TAG) }
+        }
+        activeWatchers.clear()
+        _watcherData.update { emptyMap() }
+        hwWalletStore.reset()
+    }
 
     /** Pairing-code request raised by the device during connect; the UI shows the Pair Device sheet. */
     val needsPairingCode = trezorRepo.needsPairingCode

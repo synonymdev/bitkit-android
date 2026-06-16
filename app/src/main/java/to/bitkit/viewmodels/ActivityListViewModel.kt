@@ -60,17 +60,20 @@ class ActivityListViewModel @Inject constructor(
     val onchainActivities = _onchainActivities.asStateFlow()
 
     private val _latestActivities = MutableStateFlow<ImmutableList<Activity>?>(null)
+    private val _localActivityIds = MutableStateFlow<Set<String>>(emptySet())
 
     // Merge the device's watch-only hardware-wallet activity into the home list,
     // newest first, capped at the same limit as the on-chain/lightning list.
     val latestActivities: StateFlow<ImmutableList<Activity>?> = combine(
         _latestActivities,
         hwWalletRepo.activities,
-    ) { localActivities, hardwareActivities ->
-        if (localActivities == null && hardwareActivities.isEmpty()) {
+        _localActivityIds,
+    ) { localActivities, hardwareActivities, localActivityIds ->
+        val visibleHardwareActivities = hardwareActivities.withoutLocalDuplicates(localActivityIds)
+        if (localActivities == null && visibleHardwareActivities.isEmpty()) {
             null
         } else {
-            (localActivities.orEmpty() + hardwareActivities)
+            (localActivities.orEmpty() + visibleHardwareActivities)
                 .sortedByDescending { it.timestamp() }
                 .take(SIZE_LATEST)
                 .toImmutableList()
@@ -88,8 +91,14 @@ class ActivityListViewModel @Inject constructor(
     val availableTags: StateFlow<ImmutableList<String>> =
         activityRepo.state.map { it.tags }.stateInScope(persistentListOf())
 
-    val hardwareIds: StateFlow<ImmutableSet<String>> = hwWalletRepo.activities
-        .map { activities -> activities.map { it.rawId() }.toImmutableSet() }
+    val hardwareIds: StateFlow<ImmutableSet<String>> = combine(
+        hwWalletRepo.activities,
+        _localActivityIds,
+    ) { activities, localActivityIds ->
+        activities.withoutLocalDuplicates(localActivityIds)
+            .map { it.rawId() }
+            .toImmutableSet()
+    }
         .stateInScope(persistentSetOf())
 
     private val _filters = MutableStateFlow(ActivityFilters())
@@ -135,10 +144,12 @@ class ActivityListViewModel @Inject constructor(
             _filters.map { it.copy(searchText = "") },
             activityRepo.activitiesChanged,
             hwWalletRepo.activities,
-        ) { debouncedSearch, filtersWithoutSearch, _, hardwareActivities ->
+            _localActivityIds,
+        ) { debouncedSearch, filtersWithoutSearch, _, hardwareActivities, localActivityIds ->
             val filters = filtersWithoutSearch.copy(searchText = debouncedSearch)
             fetchFilteredActivities(filters)?.let { activities ->
-                (activities + hardwareActivities.filteredWith(filters)).sortedByDescending { it.timestamp() }
+                (activities + hardwareActivities.withoutLocalDuplicates(localActivityIds).filteredWith(filters))
+                    .sortedByDescending { it.timestamp() }
             }
         }.collect { activities ->
             _filteredActivities.update { activities?.toImmutableList() }
@@ -170,9 +181,14 @@ class ActivityListViewModel @Inject constructor(
         }
     }
 
+    private fun List<Activity>.withoutLocalDuplicates(localActivityIds: Set<String>) = filterNot {
+        it.rawId() in localActivityIds
+    }
+
     private suspend fun refreshActivityState() {
         val all = activityRepo.getActivities(filter = ActivityFilter.ALL).getOrNull() ?: emptyList()
         val filtered = filterOutReplacedSentTransactions(all)
+        _localActivityIds.update { filtered.map { it.rawId() }.toSet() }
         _latestActivities.update { filtered.take(SIZE_LATEST).toImmutableList() }
         _lightningActivities.update { filtered.filterIsInstance<Activity.Lightning>().toImmutableList() }
         _onchainActivities.update { filtered.filterIsInstance<Activity.Onchain>().toImmutableList() }

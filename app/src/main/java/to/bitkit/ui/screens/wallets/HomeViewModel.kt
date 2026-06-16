@@ -133,11 +133,16 @@ class HomeViewModel @Inject constructor(
                 walletRepo.balanceState,
                 transferRepo.activeTransfers,
                 hasActivityFlow,
-            ) { settings, balanceState, activeTransfers, hasActivity ->
+                hwWalletRepo.wallets,
+            ) { settings, balanceState, activeTransfers, hasActivity, hardwareWallets ->
+                val hasHardwareActivity = hardwareWallets.any { wallet ->
+                    wallet.balanceSats > 0uL || wallet.activities.isNotEmpty()
+                }
                 _uiState.update {
                     it.copy(
                         showEmptyState = settings.showEmptyBalanceView &&
                             !hasActivity &&
+                            !hasHardwareActivity &&
                             balanceState.totalSats == 0uL &&
                             balanceState.balanceInTransferToSpending == 0uL &&
                             balanceState.balanceInTransferToSavings == 0uL &&

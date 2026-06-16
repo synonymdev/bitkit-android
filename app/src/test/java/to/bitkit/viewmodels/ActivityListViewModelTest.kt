@@ -3,7 +3,9 @@ package to.bitkit.viewmodels
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -23,6 +25,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.wallets.activity.components.ActivityTab
 import kotlin.test.assertEquals
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class ActivityListViewModelTest : BaseUnitTest() {
 
     private val activityRepo = mock<ActivityRepo>()
@@ -32,9 +35,11 @@ class ActivityListViewModelTest : BaseUnitTest() {
 
     private val dbActivity = onchainActivity(id = "db1", txType = PaymentType.SENT, timestamp = 200uL)
     private val hwActivity = onchainActivity(id = "hw1", txType = PaymentType.RECEIVED, timestamp = 100uL)
+    private lateinit var hardwareActivities: MutableStateFlow<ImmutableList<Activity>>
 
     @Before
     fun setUp() {
+        hardwareActivities = MutableStateFlow(persistentListOf(hwActivity))
         whenever(activityRepo.state).thenReturn(MutableStateFlow(ActivityState()))
         whenever(activityRepo.activitiesChanged).thenReturn(MutableStateFlow(0L))
         whenever { activityRepo.syncActivities() }.thenReturn(Result.success(Unit))
@@ -51,7 +56,7 @@ class ActivityListViewModelTest : BaseUnitTest() {
                 anyOrNull(),
             )
         }.thenReturn(Result.success(listOf(dbActivity)))
-        whenever(hwWalletRepo.activities).thenReturn(MutableStateFlow(persistentListOf<Activity>(hwActivity)))
+        whenever(hwWalletRepo.activities).thenReturn(hardwareActivities)
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(emptyList()))
         whenever(settingsStore.isPaykitEnabled).thenReturn(MutableStateFlow(false))
     }
@@ -96,6 +101,21 @@ class ActivityListViewModelTest : BaseUnitTest() {
         val job = launch { sut.hardwareIds.collect {} }
         advanceUntilIdle()
 
+        assertEquals(setOf("hw1"), sut.hardwareIds.value)
+        job.cancel()
+    }
+
+    @Test
+    fun `hardware duplicates of local activities are excluded`() = test {
+        hardwareActivities.value = persistentListOf(
+            hwActivity,
+            onchainActivity(id = "db1", txType = PaymentType.RECEIVED, timestamp = 300uL),
+        )
+        val sut = createViewModel()
+        val job = launch { sut.hardwareIds.collect {} }
+        advanceUntilIdle()
+
+        assertEquals(listOf("db1", "hw1"), sut.filteredActivities.value?.map { it.rawId() })
         assertEquals(setOf("hw1"), sut.hardwareIds.value)
         job.cancel()
     }
