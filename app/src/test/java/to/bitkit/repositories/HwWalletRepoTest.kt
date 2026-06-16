@@ -53,6 +53,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         label = "Trezor",
         model = "Safe 5",
         lastConnectedAt = 0L,
+        xpubs = mapOf("nativeSegwit" to "zpubNS"),
     )
 
     @Before
@@ -78,6 +79,15 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals("Trezor", wallet.name)
         assertEquals(0uL, wallet.balanceSats)
         assertEquals(0uL, sut.totalSats.value)
+    }
+
+    @Test
+    fun `does not expose known devices before xpubs are captured`() = test {
+        storeData.value = HwWalletData(knownDevices = listOf(device.copy(xpubs = emptyMap())))
+
+        val sut = createRepo()
+
+        assertEquals(emptyList(), sut.wallets.value)
     }
 
     @Test

@@ -104,6 +104,7 @@ class HwWalletRepo @Inject constructor(
         // entries with different transport-level ids; its xpubs are the cross-transport
         // identity, so group by them to show one wallet and count its balance once.
         data.knownDevices
+            .filter { it.xpubs.isNotEmpty() }
             .groupBy { it.walletKey }
             .map { (_, devices) ->
                 val connectedDevice = devices.find { it.id == trezorState.connectedDeviceId }
