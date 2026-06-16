@@ -81,7 +81,8 @@ jobs:
           set -euo pipefail
           android_sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           test -n "$android_sdk_root"
-          llvm_readelf_path="$(find "$android_sdk_root/ndk/$BITKIT_NDK_VERSION" -name llvm-readelf -print -quit)"
+          llvm_readelf_candidates=("$android_sdk_root/ndk/$BITKIT_NDK_VERSION"/toolchains/llvm/prebuilt/*/bin/llvm-readelf)
+          llvm_readelf_path="${llvm_readelf_candidates[0]}"
           test -x "$llvm_readelf_path"
 
           native_count=0
