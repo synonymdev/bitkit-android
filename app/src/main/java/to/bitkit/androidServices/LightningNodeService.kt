@@ -112,6 +112,12 @@ class LightningNodeService : Service() {
     }
 
     private suspend fun handleChannelReady(event: Event.ChannelReady) {
+        // When the app is in the foreground, AppViewModel handles this event and shows the receive
+        // sheet. Running here would consume the CJIT dedup gate (insertActivityFromCjit) and then
+        // skip the notification (foreground), leaving the in-app handler to see Duplicate and show
+        // nothing — so defer entirely.
+        if (App.currentActivity?.value != null) return
+
         val command = NotifyChannelReady.Command(event = event, includeNotification = true)
         notifyChannelReadyHandler(command).onSuccess {
             Logger.debug("Channel ready notification result: $it", context = TAG)

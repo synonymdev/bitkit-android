@@ -630,6 +630,8 @@ class LightningNodeServiceTest : BaseUnitTest() {
             it.extras.getString(Notification.EXTRA_TITLE) == cjitTitle
         }
         assertNull(notification, "CJIT notification should NOT be present in foreground")
+        // Defers to AppViewModel: must not invoke the handler, or it would consume the CJIT dedup gate
+        verify(notifyChannelReadyHandler, never()).invoke(any())
     }
 
     @Test
