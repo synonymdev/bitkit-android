@@ -10,7 +10,6 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -21,12 +20,10 @@ import to.bitkit.App
 import to.bitkit.R
 import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.data.CacheStore
-import to.bitkit.data.SettingsStore
 import to.bitkit.di.json
 import to.bitkit.domain.commands.ReceivedNotificationContent
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.toUserMessage
-import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BlocktankNotificationType
 import to.bitkit.models.BlocktankNotificationType.cjitPaymentArrived
 import to.bitkit.models.BlocktankNotificationType.incomingHtlc
@@ -37,7 +34,6 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NotificationDetails
-import to.bitkit.models.formatToModernDisplay
 import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -56,7 +52,6 @@ class WakeNodeWorker @AssistedInject constructor(
     private val lightningRepo: LightningRepo,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
-    private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
     private val receivedNotificationContent: ReceivedNotificationContent,
 ) : CoroutineWorker(appContext, workerParams) {
@@ -141,8 +136,6 @@ class WakeNodeWorker @AssistedInject constructor(
      * @param event The LDK event to check.
      */
     private suspend fun handleLdkEvent(event: Event) {
-        val showDetails = settingsStore.data.first().showNotificationDetails
-        val hiddenBody = appContext.getString(R.string.notification__received__body_hidden)
         when (event) {
             is Event.PaymentReceived -> onPaymentReceived(event)
 
@@ -154,7 +147,7 @@ class WakeNodeWorker @AssistedInject constructor(
                 // Don't deliver, give a chance for channelReady event to update the content if it's a turbo channel
             }
 
-            is Event.ChannelReady -> onChannelReady(event, showDetails, hiddenBody)
+            is Event.ChannelReady -> onChannelReady(event)
             is Event.ChannelClosed -> onChannelClosed(event)
 
             is Event.PaymentFailed -> {
@@ -218,13 +211,9 @@ class WakeNodeWorker @AssistedInject constructor(
         }
     }
 
-    private suspend fun onChannelReady(
-        event: Event.ChannelReady,
-        showDetails: Boolean,
-        hiddenBody: String,
-    ) {
+    private suspend fun onChannelReady(event: Event.ChannelReady) {
         when (notificationType) {
-            cjitPaymentArrived -> onCjitChannelReady(event, showDetails, hiddenBody)
+            cjitPaymentArrived -> onCjitChannelReady(event)
 
             orderPaymentConfirmed -> bestAttemptContent = NotificationDetails(
                 title = appContext.getString(R.string.notification__channel_opened_title),
@@ -236,11 +225,7 @@ class WakeNodeWorker @AssistedInject constructor(
         deliver()
     }
 
-    private suspend fun onCjitChannelReady(
-        event: Event.ChannelReady,
-        showDetails: Boolean,
-        hiddenBody: String,
-    ) {
+    private suspend fun onCjitChannelReady(event: Event.ChannelReady) {
         val channel = lightningRepo.getChannels()?.find { it.channelId == event.channelId }
         val cjitEntry = channel?.let { blocktankRepo.getCjitEntry(it) }
 
@@ -277,11 +262,7 @@ class WakeNodeWorker @AssistedInject constructor(
             return
         }
 
-        val content = if (showDetails) "$BITCOIN_SYMBOL ${sats.formatToModernDisplay()}" else hiddenBody
-        bestAttemptContent = NotificationDetails(
-            title = content,
-            body = appContext.getString(R.string.notification__received__body_channel),
-        )
+        bestAttemptContent = receivedNotificationContent.build(sats.toLong())
     }
 
     private fun isHandledInProcess(): Boolean =

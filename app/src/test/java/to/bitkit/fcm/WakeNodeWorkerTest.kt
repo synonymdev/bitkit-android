@@ -10,7 +10,6 @@ import androidx.work.ListenableWorker
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.synonym.bitkitcore.IcJitEntry
-import kotlinx.coroutines.flow.flowOf
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -33,16 +32,12 @@ import to.bitkit.CurrentActivity
 import to.bitkit.R
 import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.data.CacheStore
-import to.bitkit.data.SettingsData
-import to.bitkit.data.SettingsStore
 import to.bitkit.domain.commands.ReceivedNotificationContent
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.mock
 import to.bitkit.ext.notificationManager
-import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BlocktankNotificationType
 import to.bitkit.models.NotificationDetails
-import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
@@ -51,7 +46,6 @@ import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
-import kotlin.test.assertTrue
 
 @Config(sdk = [34])
 @RunWith(RobolectricTestRunner::class)
@@ -61,19 +55,17 @@ class WakeNodeWorkerTest : BaseUnitTest() {
     private val lightningRepo = mock<LightningRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
-    private val settingsStore = mock<SettingsStore>()
     private val cacheStore = mock<CacheStore>()
     private val receivedNotificationContent = mock<ReceivedNotificationContent>()
 
     private val channelId = "channel-1"
-    private val viaNewChannel by lazy { context.getString(R.string.notification__received__body_channel) }
+    private val receivedTitle by lazy { context.getString(R.string.notification__received__title) }
 
     @Before
     fun setUp() {
         whenever(workerParams.inputData).thenReturn(
             workDataOf("type" to BlocktankNotificationType.cjitPaymentArrived.name),
         )
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(showNotificationDetails = true)))
 
         val app = context as Application
         Shadows.shadowOf(app).grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
@@ -90,7 +82,9 @@ class WakeNodeWorkerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `cjit channel ready formats amount with thousands separators`() = test {
+    fun `cjit channel ready delivers rich notification content with fiat`() = test {
+        val body = $$"Received ₿ 48 064 ($30.79)"
+        whenever(receivedNotificationContent.build(48_064L)).thenReturn(NotificationDetails(receivedTitle, body))
         val channel = cjitChannel(sats = 48_064)
         stubChannel(channel, cjitEntry = IcJitEntry.mock())
         stubStartFiring(channelReadyEvent())
@@ -98,14 +92,9 @@ class WakeNodeWorkerTest : BaseUnitTest() {
         val result = worker().doWork()
 
         assertEquals(ListenableWorker.Result.success(), result)
-        val notification = findNotification(viaNewChannel)
+        val notification = findNotificationByTitle(receivedTitle)
         assertNotNull(notification, "CJIT notification should be delivered when app is killed")
-        assertEquals(
-            "$BITCOIN_SYMBOL ${48_064L.formatToModernDisplay()}",
-            notification?.extras?.getString(Notification.EXTRA_TITLE),
-        )
-        // sanity: a thousands separator is actually present
-        assertTrue(48_064L.formatToModernDisplay().contains(' '), "amount should be grouped")
+        assertEquals(body, notification?.extras?.getString(Notification.EXTRA_TEXT))
         verify(activityRepo).insertActivityFromCjit(any(), any())
     }
 
@@ -118,7 +107,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
         val result = worker().doWork()
 
         assertEquals(ListenableWorker.Result.success(), result)
-        assertNull(findNotification(viaNewChannel), "A non-CJIT channel must not show a 'via new channel' notification")
+        assertNull(findNotificationByTitle(receivedTitle), "A non-CJIT channel must not show a payment notification")
         verify(activityRepo, never()).insertActivityFromCjit(any(), any())
         verify(cacheStore, never()).setBackgroundReceive(any())
     }
@@ -133,7 +122,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
         val result = worker().doWork()
 
         assertEquals(ListenableWorker.Result.success(), result)
-        assertNull(findNotification(viaNewChannel), "Notification is deduped when the foreground service handles it")
+        assertNull(findNotificationByTitle(receivedTitle), "Deduped when the foreground service handles it")
         // Activity is still recorded so the receive is not lost
         verify(activityRepo).insertActivityFromCjit(any(), any())
     }
@@ -148,7 +137,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
         val result = worker().doWork()
 
         assertEquals(ListenableWorker.Result.success(), result)
-        assertNull(findNotification(viaNewChannel), "A duplicate CJIT channel ready must not notify again")
+        assertNull(findNotificationByTitle(receivedTitle), "A duplicate CJIT channel ready must not notify again")
         verify(cacheStore, never()).setBackgroundReceive(any())
     }
 
@@ -162,7 +151,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
         val result = worker().doWork()
 
         assertEquals(ListenableWorker.Result.success(), result)
-        assertNull(findNotification(viaNewChannel), "Notification is deduped when the in-app UI handles it")
+        assertNull(findNotificationByTitle(receivedTitle), "Notification is deduped when the in-app UI handles it")
         verify(activityRepo).insertActivityFromCjit(any(), any())
     }
 
@@ -211,7 +200,6 @@ class WakeNodeWorkerTest : BaseUnitTest() {
         lightningRepo = lightningRepo,
         blocktankRepo = blocktankRepo,
         activityRepo = activityRepo,
-        settingsStore = settingsStore,
         cacheStore = cacheStore,
         receivedNotificationContent = receivedNotificationContent,
     )
@@ -248,11 +236,6 @@ class WakeNodeWorkerTest : BaseUnitTest() {
             handler?.invoke(event)
             Result.success(Unit)
         }
-    }
-
-    private fun findNotification(body: String): Notification? {
-        val shadows = Shadows.shadowOf(context.notificationManager)
-        return shadows.allNotifications.find { it.extras.getString(Notification.EXTRA_TEXT) == body }
     }
 
     private fun findNotificationByTitle(title: String): Notification? {
