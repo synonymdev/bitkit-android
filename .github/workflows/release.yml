@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TERM: xterm-256color
+  FORCE_COLOR: 1
+
+jobs:
+  build-release:
+    if: github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/heads/release-') || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: release
+
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'adopt'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Decode mainnet release google-services.json
+        env:
+          MAINNET_RELEASE_GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.MAINNET_RELEASE_GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$MAINNET_RELEASE_GOOGLE_SERVICES_JSON_BASE64"
+          mkdir -p app/src/mainnetRelease
+          printf '%s' "$MAINNET_RELEASE_GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/src/mainnetRelease/google-services.json
+
+      - name: Decode release keystore
+        env:
+          BITKIT_KEYSTORE_BASE64: ${{ secrets.BITKIT_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$BITKIT_KEYSTORE_BASE64"
+          umask 077
+          keystore_path="$RUNNER_TEMP/bitkit.keystore"
+          printf '%s' "$BITKIT_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          echo "KEYSTORE_FILE=$keystore_path" >> "$GITHUB_ENV"
+
+      - name: Build release artifacts
+        env:
+          GPR_USER: ${{ secrets.GPR_USER || github.actor }}
+          GPR_TOKEN: ${{ secrets.GPR_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ secrets.GPR_TOKEN || github.token }}
+          KEYSTORE_PASSWORD: ${{ secrets.BITKIT_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.BITKIT_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.BITKIT_KEY_PASSWORD }}
+        run: ./gradlew assembleMainnetRelease bundleMainnetRelease --no-daemon --stacktrace
+
+      - name: Verify release signatures
+        run: |
+          set -euo pipefail
+          android_sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$android_sdk_root"
+          apksigner_path="$(find "$android_sdk_root/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          test -n "$apksigner_path"
+
+          apk_count=0
+          while IFS= read -r -d '' apk_path; do
+            apk_count=$((apk_count + 1))
+            "$apksigner_path" verify --verbose --print-certs "$apk_path"
+          done < <(find app/build/outputs/apk/mainnet/release -name 'bitkit-mainnet-release-*.apk' -print0)
+          test "$apk_count" -gt 0
+
+          bundle_count=0
+          while IFS= read -r -d '' bundle_path; do
+            bundle_count=$((bundle_count + 1))
+            verify_output="$(mktemp)"
+            if ! jarsigner -verify -verbose -certs "$bundle_path" 2>&1 | tee "$verify_output"; then
+              rm -f "$verify_output"
+              exit 1
+            fi
+            if grep -qi "jar is unsigned" "$verify_output"; then
+              echo "Unsigned bundle: $bundle_path"
+              rm -f "$verify_output"
+              exit 1
+            fi
+            if ! grep -qi "jar verified" "$verify_output"; then
+              echo "Bundle signature verification did not report success: $bundle_path"
+              rm -f "$verify_output"
+              exit 1
+            fi
+            rm -f "$verify_output"
+          done < <(find app/build/outputs/bundle/mainnetRelease -name 'bitkit-mainnet-release-*.aab' -print0)
+          test "$bundle_count" -gt 0
+
+      - name: Collect release artifacts
+        id: artifacts
+        run: |
+          set -euo pipefail
+          artifact_dir="$RUNNER_TEMP/release"
+          mkdir -p "$artifact_dir"
+          find app/build/outputs/bundle/mainnetRelease -name 'bitkit-mainnet-release-*.aab' -print0 |
+            xargs -0 -I {} cp {} "$artifact_dir/"
+          find app/build/outputs/apk/mainnet/release -name 'bitkit-mainnet-release-*.apk' -print0 |
+            xargs -0 -I {} cp {} "$artifact_dir/"
+          (cd "$artifact_dir" && sha256sum *.aab *.apk > SHA256SUMS.txt)
+          echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: bitkit-release-${{ github.run_number }}
+          path: ${{ steps.artifacts.outputs.artifact_dir }}
+          retention-days: 30
