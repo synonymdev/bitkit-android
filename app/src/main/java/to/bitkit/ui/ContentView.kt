@@ -186,7 +186,6 @@ import to.bitkit.ui.sheets.ConnectionClosedSheet
 import to.bitkit.ui.sheets.DisablePinSheet
 import to.bitkit.ui.sheets.ForceTransferSheet
 import to.bitkit.ui.sheets.GiftSheet
-import to.bitkit.ui.sheets.HardwareSheet
 import to.bitkit.ui.sheets.HighBalanceWarningSheet
 import to.bitkit.ui.sheets.LnurlAuthSheet
 import to.bitkit.ui.sheets.PinSheet
@@ -196,6 +195,7 @@ import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.SendSheet
 import to.bitkit.ui.sheets.UpdateSheet
 import to.bitkit.ui.sheets.WidgetsSheet
+import to.bitkit.ui.sheets.hardware.HardwareSheet
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions

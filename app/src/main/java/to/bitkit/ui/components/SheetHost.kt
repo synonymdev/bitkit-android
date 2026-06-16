@@ -34,10 +34,10 @@ import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.sheets.BackupRoute
-import to.bitkit.ui.sheets.HardwareRoute
 import to.bitkit.ui.sheets.PinRoute
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.WidgetsRoute
+import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.Colors
 

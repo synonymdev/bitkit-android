@@ -74,8 +74,8 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.shared.toast.ToastQueueManager
-import to.bitkit.ui.sheets.HardwareRoute
 import to.bitkit.ui.sheets.SendRoute
+import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.utils.AppError
 import to.bitkit.utils.timedsheets.TimedSheetManager

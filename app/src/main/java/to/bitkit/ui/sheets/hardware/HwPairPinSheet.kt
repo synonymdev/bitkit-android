@@ -1,4 +1,4 @@
-package to.bitkit.ui.sheets
+package to.bitkit.ui.sheets.hardware
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
