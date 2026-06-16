@@ -50,7 +50,7 @@ val e2eBackendEnv = System.getenv("E2E_BACKEND") ?: "local"
 val e2eHomegateUrlEnv = System.getenv("E2E_HOMEGATE_URL") ?: "http://127.0.0.1:6288"
 val trezorBridgeEnv = System.getenv("TREZOR_BRIDGE")?.toBoolean()?.toString() ?: "false"
 val trezorBridgeUrlEnv = System.getenv("TREZOR_BRIDGE_URL") ?: "http://10.0.2.2:21325"
-val bitkitNdkVersion = System.getenv("BITKIT_NDK_VERSION")?.takeIf { it.isNotBlank() }
+val requestedNdkVersion = System.getenv("NDK_VERSION")?.takeIf { it.isNotBlank() }
 val androidTestAnnotationPackage = "to.bitkit.test.annotations"
 val androidTestTaskPrefix = "connectedDevDebug"
 val androidTestTaskSuffix = "AndroidTest"
@@ -146,7 +146,7 @@ val bitkitAndroidTestAnnotation = bitkitAndroidTestAnnotationName?.let {
 android {
     namespace = "to.bitkit"
     compileSdk = 36
-    bitkitNdkVersion?.let { ndkVersion = it }
+    requestedNdkVersion?.let { ndkVersion = it }
     defaultConfig {
         applicationId = "to.bitkit"
         minSdk = 28

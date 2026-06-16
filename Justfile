@@ -155,7 +155,7 @@ build task="assembleDevDebug":
     {{ gradle }} {{ task }}
 
 release:
-    BITKIT_NDK_VERSION={{ android_ndk_version }} {{ gradle }} assembleMainnetRelease bundleMainnetRelease
+    NDK_VERSION={{ android_ndk_version }} {{ gradle }} assembleMainnetRelease bundleMainnetRelease
 
 install:
     {{ gradle }} installDevDebug

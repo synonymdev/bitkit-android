@@ -10,7 +10,7 @@ concurrency:
 env:
   TERM: xterm-256color
   FORCE_COLOR: 1
-  BITKIT_NDK_VERSION: 28.1.13356709
+  NDK_VERSION: 28.1.13356709
 
 jobs:
   build-internal:
@@ -44,7 +44,7 @@ jobs:
           sdkmanager_path="$android_sdk_root/cmdline-tools/latest/bin/sdkmanager"
           test -x "$sdkmanager_path"
           yes | "$sdkmanager_path" --licenses >/dev/null || true
-          "$sdkmanager_path" --install "ndk;$BITKIT_NDK_VERSION"
+          "$sdkmanager_path" --install "ndk;$NDK_VERSION"
 
       - name: Decode mainnet release google-services.json
         env:
@@ -81,7 +81,7 @@ jobs:
           set -euo pipefail
           android_sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           test -n "$android_sdk_root"
-          llvm_readelf_candidates=("$android_sdk_root/ndk/$BITKIT_NDK_VERSION"/toolchains/llvm/prebuilt/*/bin/llvm-readelf)
+          llvm_readelf_candidates=("$android_sdk_root/ndk/$NDK_VERSION"/toolchains/llvm/prebuilt/*/bin/llvm-readelf)
           llvm_readelf_path="${llvm_readelf_candidates[0]}"
           test -x "$llvm_readelf_path"
 
