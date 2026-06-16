@@ -140,8 +140,19 @@ class HwWalletRepo @Inject constructor(
         .map { wallets -> wallets.fold(0uL) { acc, wallet -> acc + wallet.balanceSats } }
         .stateIn(scope, SharingStarted.Eagerly, 0uL)
 
-    val activities: StateFlow<ImmutableList<Activity>> = wallets
-        .map { wallets -> wallets.flatMap { it.activities }.toImmutableList() }
+    val activities: StateFlow<ImmutableList<Activity>> = combine(
+        hwWalletStore.data,
+        _watcherData,
+    ) { data, watcherData ->
+        val knownDeviceIds = data.knownDevices
+            .filter { it.xpubs.isNotEmpty() }
+            .map { it.id }
+            .toSet()
+        watcherData.values
+            .filter { it.deviceId in knownDeviceIds }
+            .toMergedActivities()
+            .toImmutableList()
+    }
         .stateIn(scope, SharingStarted.Eagerly, persistentListOf())
 
     init {

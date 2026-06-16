@@ -195,6 +195,43 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `merges duplicate tx activities across hardware wallets`() = test {
+        val secondDevice = device.copy(
+            id = "dev2",
+            path = "ble:CC:DD",
+            lastConnectedAt = 1L,
+            xpubs = mapOf("nativeSegwit" to "zpubNS2"),
+        )
+        storeData.value = HwWalletData(knownDevices = listOf(device, secondDevice))
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 100uL),
+                transactions = listOf(receivedTransaction(amount = 100uL).copy(txid = "shared")),
+                txCount = 1u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+        watcherEvents.emit(
+            "dev2|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 50uL),
+                transactions = listOf(receivedTransaction(amount = 50uL).copy(txid = "shared")),
+                txCount = 1u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+
+        val activity = sut.activities.value.single() as Activity.Onchain
+        assertEquals(2, sut.wallets.value.size)
+        assertEquals(PaymentType.RECEIVED, activity.v1.txType)
+        assertEquals(150uL, activity.v1.value)
+    }
+
+    @Test
     fun `preserves generated timestamp for pending tx refreshes`() = test {
         whenever(clock.now())
             .thenReturn(Instant.fromEpochSeconds(1_800_000_000))
