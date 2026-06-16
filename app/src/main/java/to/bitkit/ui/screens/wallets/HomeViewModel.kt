@@ -18,15 +18,11 @@ import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.entities.TransferEntity
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BannerItem
 import to.bitkit.models.Suggestion
-import to.bitkit.models.TransferType
 import to.bitkit.models.WidgetType
-import to.bitkit.models.toSuggestionOrNull
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.toArticleModel
 import to.bitkit.models.widget.toBlockModel
@@ -34,6 +30,7 @@ import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.SuggestionsRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
@@ -53,11 +50,8 @@ class HomeViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     private val activityRepo: ActivityRepo,
     private val hwWalletRepo: HwWalletRepo,
+    private val suggestionsRepo: SuggestionsRepo,
 ) : ViewModel() {
-
-    companion object {
-        private const val MAX_SUGGESTIONS = 4
-    }
 
     private val _uiState = MutableStateFlow(HomeUiState())
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
@@ -117,7 +111,7 @@ class HomeViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            createSuggestionsFlow().collect { suggestions ->
+            suggestionsRepo.suggestionsFlow.collect { suggestions ->
                 _uiState.update { it.copy(suggestions = suggestions.toImmutableList()) }
             }
         }
@@ -314,76 +308,4 @@ class HomeViewModel @Inject constructor(
             _uiState.update { it.copy(banners = banners.toImmutableList()) }
         }
     }
-
-    private fun createSuggestionsFlow() = combine(
-        walletRepo.balanceState,
-        settingsStore.data,
-        transferRepo.activeTransfers,
-        pubkyRepo.isAuthenticated,
-        hwWalletRepo.wallets,
-    ) { balanceState, settings, transfers, profileAuthenticated, hardwareWallets ->
-        val hasHardwareWallet = hardwareWallets.isNotEmpty()
-        val baseSuggestions = when {
-            balanceState.totalLightningSats > 0uL ->
-                spendingSuggestions(settings, profileAuthenticated, hasHardwareWallet)
-            balanceState.totalOnchainSats > 0uL ->
-                savingsOnlySuggestions(settings, transfers, profileAuthenticated, hasHardwareWallet)
-            else -> emptyWalletSuggestions(settings, transfers, profileAuthenticated, hasHardwareWallet)
-        }
-        val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
-        baseSuggestions
-            .filterNot { it in dismissedList }
-            .take(MAX_SUGGESTIONS)
-    }
-
-    private fun spendingSuggestions(
-        settings: SettingsData,
-        profileAuthenticated: Boolean,
-        hasHardwareWallet: Boolean,
-    ) = listOfNotNull(
-        Suggestion.QUICK_PAY.takeIf { !settings.isQuickPayEnabled },
-        Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
-        Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
-        Suggestion.SHOP,
-        Suggestion.PROFILE.takeIf { !profileAuthenticated },
-        Suggestion.SUPPORT,
-        Suggestion.INVITE,
-        Suggestion.BUY,
-    )
-
-    private fun savingsOnlySuggestions(
-        settings: SettingsData,
-        transfers: List<TransferEntity>,
-        profileAuthenticated: Boolean,
-        hasHardwareWallet: Boolean,
-    ) = listOfNotNull(
-        Suggestion.BACK_UP.takeIf { !settings.backupVerified },
-        Suggestion.SECURE.takeIf { !settings.isPinEnabled },
-        Suggestion.LIGHTNING.takeIf {
-            transfers.all { it.type != TransferType.TO_SPENDING }
-        },
-        Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
-        Suggestion.SUPPORT,
-        Suggestion.PROFILE.takeIf { !profileAuthenticated },
-        Suggestion.INVITE,
-        Suggestion.BUY,
-    )
-
-    private fun emptyWalletSuggestions(
-        settings: SettingsData,
-        transfers: List<TransferEntity>,
-        profileAuthenticated: Boolean,
-        hasHardwareWallet: Boolean,
-    ) = listOfNotNull(
-        Suggestion.BUY,
-        Suggestion.LIGHTNING.takeIf {
-            transfers.all { it.type != TransferType.TO_SPENDING }
-        },
-        Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
-        Suggestion.SUPPORT,
-        Suggestion.BACK_UP.takeIf { !settings.backupVerified },
-        Suggestion.SECURE.takeIf { !settings.isPinEnabled },
-        Suggestion.PROFILE.takeIf { !profileAuthenticated },
-        Suggestion.INVITE,
-    )
 }

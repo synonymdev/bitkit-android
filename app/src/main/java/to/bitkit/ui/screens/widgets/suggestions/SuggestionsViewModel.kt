@@ -9,12 +9,14 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import to.bitkit.models.WidgetType
+import to.bitkit.repositories.SuggestionsRepo
 import to.bitkit.repositories.WidgetsRepo
 import javax.inject.Inject
 
 @HiltViewModel
 class SuggestionsViewModel @Inject constructor(
     private val widgetsRepo: WidgetsRepo,
+    private val suggestionsRepo: SuggestionsRepo,
 ) : ViewModel() {
 
     companion object {
@@ -29,6 +31,7 @@ class SuggestionsViewModel @Inject constructor(
 
     fun addWidget(onComplete: () -> Unit = {}) {
         viewModelScope.launch {
+            suggestionsRepo.resetDismissedSuggestionsIfEmpty()
             widgetsRepo.addWidget(WidgetType.SUGGESTIONS)
             onComplete()
         }

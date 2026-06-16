@@ -176,6 +176,7 @@ import to.bitkit.ui.screens.widgets.headlines.HeadlineCard
 import to.bitkit.ui.screens.widgets.headlines.HeadlineCardSmall
 import to.bitkit.ui.screens.widgets.price.PriceCard
 import to.bitkit.ui.screens.widgets.price.PriceCardSmall
+import to.bitkit.ui.screens.widgets.suggestions.SuggestionsPreviewGrid
 import to.bitkit.ui.screens.widgets.weather.WeatherCard
 import to.bitkit.ui.screens.widgets.weather.WeatherCardSmall
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -1275,15 +1276,20 @@ private fun WidgetCardContent(
         }
 
         WidgetType.SUGGESTIONS -> {
-            if (homeUiState.suggestions.isEmpty()) {
-                WidgetEditPlaceholder(small = false)
-            } else {
-                SuggestionsSection(
+            when {
+                homeUiState.suggestions.isNotEmpty() -> SuggestionsSection(
                     suggestions = homeUiState.suggestions,
                     onRemoveSuggestion = onRemoveSuggestion,
                     onClickSuggestion = onClickSuggestion,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                homeUiState.isEditingWidgets -> SuggestionsPreviewGrid(
+                    onSuggestionClick = {},
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                else -> WidgetEditPlaceholder(small = false)
             }
         }
     }

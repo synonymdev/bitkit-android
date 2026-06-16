@@ -23,11 +23,11 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.SuggestionsRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.test.BaseUnitTest
-import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -42,12 +42,15 @@ class HomeViewModelTest : BaseUnitTest() {
     private val pubkyRepo = mock<PubkyRepo>()
     private val activityRepo = mock<ActivityRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
+    private val suggestionsRepo = mock<SuggestionsRepo>()
 
     private lateinit var hardwareWallets: MutableStateFlow<ImmutableList<HwWallet>>
+    private lateinit var suggestions: MutableStateFlow<List<Suggestion>>
 
     @Before
     fun setUp() {
         hardwareWallets = MutableStateFlow(persistentListOf())
+        suggestions = MutableStateFlow(emptyList())
 
         whenever(context.getString(R.string.lightning__transfer_in_progress)).thenReturn("Transfer in progress")
         whenever(walletRepo.balanceState).thenReturn(MutableStateFlow(BalanceState()))
@@ -64,10 +67,12 @@ class HomeViewModelTest : BaseUnitTest() {
         whenever(activityRepo.activitiesChanged).thenReturn(MutableStateFlow(0L))
         whenever { activityRepo.getActivities(limit = 1u) }.thenReturn(Result.success(emptyList()))
         whenever(hwWalletRepo.wallets).thenReturn(hardwareWallets)
+        whenever(suggestionsRepo.suggestionsFlow).thenReturn(suggestions)
     }
 
     @Test
-    fun `shows hardware suggestion for empty wallet without paired hardware`() = test {
+    fun `updates suggestions from repo`() = test {
+        suggestions.value = listOf(Suggestion.HARDWARE)
         val sut = createViewModel()
 
         advanceUntilIdle()
@@ -76,13 +81,14 @@ class HomeViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `hides hardware suggestion for empty wallet with paired hardware`() = test {
-        hardwareWallets.value = persistentListOf(hardwareWallet())
+    fun `updates hardware wallets from repo`() = test {
+        val hardwareWallet = hardwareWallet()
+        hardwareWallets.value = persistentListOf(hardwareWallet)
         val sut = createViewModel()
 
         advanceUntilIdle()
 
-        assertFalse(Suggestion.HARDWARE in sut.uiState.value.suggestions)
+        assertTrue(hardwareWallet in sut.uiState.value.hardwareWallets)
     }
 
     private fun createViewModel() = HomeViewModel(
@@ -95,6 +101,7 @@ class HomeViewModelTest : BaseUnitTest() {
         pubkyRepo = pubkyRepo,
         activityRepo = activityRepo,
         hwWalletRepo = hwWalletRepo,
+        suggestionsRepo = suggestionsRepo,
     )
 
     private fun hardwareWallet() = HwWallet(
