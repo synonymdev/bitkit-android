@@ -28,6 +28,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -1331,6 +1332,54 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         verify(pubkyService).closeEncryptedLink(LINK_ID)
         verify(pubkyService).getPrivatePayments(retryLinkId)
+    }
+
+    @Test
+    fun `beginSavedContactPayment persists remote endpoints before advancing link snapshot`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to PrivatePaykitContactCacheData(
+                    lastLocalPayloadHash = LOCAL_PAYLOAD_HASH,
+                    linkCompletedAt = NOW_SECONDS - 60,
+                ),
+            ),
+        )
+        whenever(keychain.loadString(Keychain.Key.PRIVATE_PAYKIT_SECRET_STATE.name))
+            .thenReturn(secretStateJson())
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(SECRET_KEY_HEX)
+        whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
+        whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
+        whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
+        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(
+            privatePaymentsPayload(
+                listOf(
+                    FfiPaymentEndpoint(
+                        paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
+                        paymentEndpointPayload = PublicPaykitRepo.serializePayload("bcrt1qprivate"),
+                    ),
+                ),
+            ),
+        )
+        whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
+        whenever(publicPaykitRepo.payableEndpoints(any())).thenAnswer { it.getArgument<List<Endpoint>>(0) }
+        whenever(coreService.isAddressUsed("bcrt1qprivate")).thenReturn(false)
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        rememberSavedContact()
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+        val snapshot = sut.backupSnapshot().getOrThrow()?.get(CONTACT_KEY)
+
+        assertTrue(result is PublicPaykitPaymentResult.Opened)
+        assertNotNull(snapshot)
+        assertEquals(
+            mapOf(MethodId.P2wpkh.rawValue to PublicPaykitRepo.serializePayload("bcrt1qprivate")),
+            snapshot.remoteEndpoints,
+        )
+
+        val order = inOrder(pubkyService, cacheStore)
+        order.verify(pubkyService).getPrivatePayments(LINK_ID)
+        order.verify(cacheStore).update(any())
+        order.verify(pubkyService).serializeEncryptedLink(LINK_ID)
     }
 
     @Test

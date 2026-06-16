@@ -116,6 +116,7 @@ class NativeReleaseConfigTest {
             symbolsScript.contains("""archive_symbol_suffixes=".dbg .sym""""),
             "Native debug symbols script must accept AGP native debug symbol entry suffixes.",
         )
+        assertDependencyArchiveEntriesAreNormalized(symbolsScript)
         assertTrue(
             symbolsScript.contains("""grep -Eq '\.debug_info'"""),
             "Native debug symbols script must validate full DWARF debug metadata before zipping.",
@@ -141,6 +142,14 @@ class NativeReleaseConfigTest {
         assertTrue(
             symbolsScript.contains("syncNativeDebugSymbolArtifacts"),
             "Native debug symbols script must point to the Gradle task that resolves symbol artifacts.",
+        )
+    }
+
+    private fun assertDependencyArchiveEntriesAreNormalized(symbolsScript: String) {
+        assertTrue(
+            symbolsScript.contains("copy_archive_symbols") &&
+                symbolsScript.contains("""mv "${'$'}tmp_dir/${'$'}entry" "${'$'}tmp_dir/${'$'}abi/${'$'}lib_name""""),
+            "Native debug symbols script must normalize suffixed dependency archive entries before validation.",
         )
     }
 }

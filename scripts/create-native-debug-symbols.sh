@@ -126,6 +126,33 @@ extract_archive_lib() {
     exit 1
 }
 
+copy_archive_symbols() {
+    archive="$1"
+    tmp_dir="$2"
+
+    for abi in arm64-v8a armeabi-v7a; do
+        mkdir -p "$tmp_dir/$abi"
+        for lib_name in $required_libs; do
+            copied=false
+            entry="$abi/$lib_name"
+            if unzip -qo "$archive" "$entry" -d "$tmp_dir" 2>/dev/null; then
+                copied=true
+            fi
+
+            if [ "$copied" = false ]; then
+                for suffix in $archive_symbol_suffixes; do
+                    entry="$abi/$lib_name$suffix"
+                    if unzip -qo "$archive" "$entry" -d "$tmp_dir" 2>/dev/null; then
+                        mv "$tmp_dir/$entry" "$tmp_dir/$abi/$lib_name"
+                        copied=true
+                        break
+                    fi
+                done
+            fi
+        done
+    done
+}
+
 validate_output_zip() {
     archive="$1"
     zip -T "$archive" >/dev/null
@@ -168,7 +195,7 @@ if [ -d "$dependency_symbols_dir" ]; then
         fi
 
         found_archive=true
-        unzip -q "$archive" -d "$tmp_dir"
+        copy_archive_symbols "$archive" "$tmp_dir"
     done
 
     if [ "$found_archive" = false ]; then
