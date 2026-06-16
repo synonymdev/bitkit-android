@@ -38,7 +38,6 @@ import com.synonym.paykit.paykitImportSession
 import com.synonym.paykit.paykitInitialize
 import com.synonym.paykit.paykitInitiateEncryptedLink
 import com.synonym.paykit.paykitIsAuthenticated
-import com.synonym.paykit.paykitParsePrivatePaymentListJson
 import com.synonym.paykit.paykitReceivePrivateApplicationMessages
 import com.synonym.paykit.paykitRemovePaymentEndpoint
 import com.synonym.paykit.paykitRestoreEncryptedLink
@@ -202,7 +201,7 @@ class PubkyService @Inject constructor(
         isSetup.await()
         paykitReceivePrivateApplicationMessages(linkId)
             .asReversed()
-            .firstNotNullOfOrNull { runCatching { paykitParsePrivatePaymentListJson(it.rawJson) }.getOrNull() }
+            .firstNotNullOfOrNull { PrivatePaykitMessageParser.parsePrivatePaymentListJson(it.rawJson) }
     }
 
     // endregion
