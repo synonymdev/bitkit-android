@@ -112,7 +112,7 @@ jobs:
             xargs -0 -I {} cp {} "$artifact_dir/"
           find app/build/outputs/apk/mainnet/release -name 'bitkit-mainnet-release-*.apk' -print0 |
             xargs -0 -I {} cp {} "$artifact_dir/"
-          (cd "$artifact_dir" && sha256sum *.aab *.apk > SHA256SUMS.txt)
+          (cd "$artifact_dir" && sha256sum -- *.aab *.apk > SHA256SUMS.txt)
           echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
 
       - name: Upload release artifacts
