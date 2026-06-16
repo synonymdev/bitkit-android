@@ -21,35 +21,48 @@ class ConnectionStateReceiver(
     private val onBluetoothOn: () -> Unit,
     private val onUsbDetached: (path: String) -> Unit,
     private val onUsbAttached: (device: UsbDevice) -> Unit,
-) : BroadcastReceiver() {
+) {
+    private val bluetoothReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context, intent: Intent) {
+            if (intent.action != BluetoothAdapter.ACTION_STATE_CHANGED) return
 
-    override fun onReceive(ctx: Context, intent: Intent) {
-        when (intent.action) {
-            BluetoothAdapter.ACTION_STATE_CHANGED -> {
-                when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
-                    BluetoothAdapter.STATE_OFF, BluetoothAdapter.STATE_TURNING_OFF -> onBluetoothOff()
-                    BluetoothAdapter.STATE_ON -> onBluetoothOn()
+            when (intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)) {
+                BluetoothAdapter.STATE_OFF, BluetoothAdapter.STATE_TURNING_OFF -> onBluetoothOff()
+                BluetoothAdapter.STATE_ON -> onBluetoothOn()
+            }
+        }
+    }
+
+    private val usbReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context, intent: Intent) {
+            val device = IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+
+            when (intent.action) {
+                UsbManager.ACTION_USB_DEVICE_DETACHED -> device?.deviceName?.let(onUsbDetached)
+                UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
+                    device?.let(onUsbAttached)
                 }
-            }
-
-            UsbManager.ACTION_USB_DEVICE_DETACHED -> {
-                val device = IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-                device?.deviceName?.let(onUsbDetached)
-            }
-
-            UsbManager.ACTION_USB_DEVICE_ATTACHED -> {
-                val device = IntentCompat.getParcelableExtra(intent, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-                device?.let(onUsbAttached)
             }
         }
     }
 
     fun register(context: Context) {
-        val filter = IntentFilter().apply {
-            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+        ContextCompat.registerReceiver(
+            context,
+            bluetoothReceiver,
+            IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED),
+            ContextCompat.RECEIVER_EXPORTED,
+        )
+
+        val usbFilter = IntentFilter().apply {
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
             addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
         }
-        ContextCompat.registerReceiver(context, this, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(
+            context,
+            usbReceiver,
+            usbFilter,
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
     }
 }
