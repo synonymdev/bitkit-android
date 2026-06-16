@@ -32,6 +32,7 @@ import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
 import to.bitkit.services.TrezorUiHandler
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -122,6 +123,19 @@ class TrezorRepoTest : BaseUnitTest() {
         on { this.model }.thenReturn(model)
     }
 
+    private fun mockPublicKeyResponse(
+        xpub: String,
+        path: String,
+    ) = TrezorPublicKeyResponse(
+        xpub = xpub,
+        path = path,
+        publicKey = "pubkey",
+        chainCode = "chaincode",
+        fingerprint = 0u,
+        depth = 3u,
+        rootFingerprint = 0u,
+    )
+
     @Suppress("LongParameterList")
     private fun mockKnownDevice(
         id: String = DEVICE_ID,
@@ -130,6 +144,7 @@ class TrezorRepoTest : BaseUnitTest() {
         label: String? = DEVICE_LABEL,
         model: String? = DEVICE_MODEL,
         transportType: TransportType = TransportType.USB,
+        xpubs: Map<String, String> = emptyMap(),
     ) = KnownDevice(
         id = id,
         name = name,
@@ -138,6 +153,7 @@ class TrezorRepoTest : BaseUnitTest() {
         label = label,
         model = model,
         lastConnectedAt = 123L,
+        xpubs = xpubs,
     )
 
     // region initialize
@@ -450,6 +466,49 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(TransportType.USB, saved.transportType)
         assertEquals("Savings", saved.label)
         assertEquals("Safe 5", saved.model)
+    }
+
+    @Test
+    fun `connect preserves stored xpubs when account xpub refresh is partial`() = test {
+        val previousXpubs = mapOf(
+            "nativeSegwit" to "old-native-xpub",
+            "taproot" to "old-taproot-xpub",
+        )
+        val nativeSegwitPath = "m/84'/1'/0'"
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice(xpubs = previousXpubs)))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        ).thenAnswer {
+            val path = it.getArgument<String>(0)
+            if (path == nativeSegwitPath) {
+                mockPublicKeyResponse(xpub = "new-native-xpub", path = nativeSegwitPath)
+            } else {
+                throw AppError("xpub failed")
+            }
+        }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertEquals(
+            mapOf(
+                "nativeSegwit" to "new-native-xpub",
+                "taproot" to "old-taproot-xpub",
+            ),
+            captor.firstValue.single().xpubs,
+        )
     }
 
     @Test

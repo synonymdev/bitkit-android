@@ -100,9 +100,10 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.dto.FeeCondition
@@ -112,7 +113,6 @@ import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.data.dto.price.PriceWidgetData
 import to.bitkit.data.dto.price.TradingPair
 import to.bitkit.env.Env
-import to.bitkit.ext.rawId
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BannerItem
@@ -236,6 +236,7 @@ fun HomeScreen(
     val bgPaymentsIntroSeen: Boolean by settingsViewModel.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
     val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
     val latestActivities by activityListViewModel.latestActivities.collectAsStateWithLifecycle()
+    val hardwareIds by activityListViewModel.hardwareIds.collectAsStateWithLifecycle()
 
     val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
 
@@ -275,6 +276,7 @@ fun HomeScreen(
         showProfileButton = isPaykitEnabled,
         onClickProfile = navigateToProfile,
         latestActivities = latestActivities,
+        hardwareIds = hardwareIds,
         onRefresh = {
             activityListViewModel.resync()
             walletViewModel.onPullToRefresh()
@@ -406,6 +408,7 @@ private fun Content(
     showProfileButton: Boolean = false,
     onClickProfile: () -> Unit = {},
     latestActivities: ImmutableList<Activity>?,
+    hardwareIds: ImmutableSet<String> = persistentSetOf(),
     onRefresh: () -> Unit = {},
     onRemoveSuggestion: (Suggestion) -> Unit = {},
     onClickSuggestion: (Suggestion) -> Unit = {},
@@ -546,6 +549,7 @@ private fun Content(
                     isRefreshing = isRefreshing,
                     homeUiState = homeUiState,
                     latestActivities = paginatedActivities,
+                    hardwareIds = hardwareIds,
                     balances = balances,
                     isSmallScreen = isSmallScreen,
                     onRefresh = onRefresh,
@@ -587,6 +591,7 @@ private fun WalletPage(
     isRefreshing: Boolean,
     homeUiState: HomeUiState,
     latestActivities: ImmutableList<Activity>?,
+    hardwareIds: ImmutableSet<String> = persistentSetOf(),
     balances: BalanceState,
     isSmallScreen: Boolean,
     onRefresh: () -> Unit,
@@ -671,11 +676,6 @@ private fun WalletPage(
                         }
                     }
 
-                    val hardwareIds = remember(homeUiState.hardwareWallets) {
-                        homeUiState.hardwareWallets
-                            .flatMap { wallet -> wallet.activities.map { it.rawId() } }
-                            .toImmutableSet()
-                    }
                     ActivityListSimple(
                         items = latestActivities,
                         onAllActivityClick = onNavigateToAllActivity,

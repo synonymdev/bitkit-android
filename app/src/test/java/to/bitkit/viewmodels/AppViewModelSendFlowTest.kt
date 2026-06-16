@@ -38,6 +38,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.BalanceState
+import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
@@ -125,6 +126,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val toastManager = mock<ToastQueueManager>()
 
     private val balanceState = MutableStateFlow(BalanceState())
+    private val hwReceivedTxs = MutableSharedFlow<HwWalletReceivedTx>()
     private val needsPairingCode = MutableStateFlow(false)
     private val settingsData = MutableStateFlow(SettingsData())
     private val isPaykitEnabled = MutableStateFlow(false)
@@ -151,12 +153,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(mock()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
-        whenever(hwWalletRepo.receivedTxs).thenReturn(MutableSharedFlow())
+        whenever(hwWalletRepo.receivedTxs).thenReturn(hwReceivedTxs)
         whenever(hwWalletRepo.needsPairingCode).thenReturn(needsPairingCode)
         whenever(coreService.activity).thenReturn(activityService)
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(walletRepo.walletExists()).thenReturn(true)
+        whenever(backupRepo.isRestoring).thenReturn(MutableStateFlow(false))
         stubSettingsStore()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
@@ -258,6 +261,23 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onUsbDeviceAttached()
 
         verify(hwWalletRepo).onTransportRestored(TransportType.USB)
+    }
+
+    @Test
+    fun `hardware received tx details navigate directly to hardware activity`() = test {
+        val txId = "hardware-tx"
+
+        sut.mainScreenEffect.test {
+            advanceUntilIdle()
+            hwReceivedTxs.emit(HwWalletReceivedTx(txid = txId, sats = 21uL))
+            advanceUntilIdle()
+
+            assertEquals(txId, sut.transactionSheet.value.activityId)
+            sut.onClickActivityDetail()
+
+            assertEquals(MainScreenEffect.Navigate(Routes.ActivityDetail(txId)), awaitItem())
+        }
+        verify(activityRepo, never()).findActivityByPaymentId(any(), any(), any(), any())
     }
 
     @Test

@@ -328,6 +328,7 @@ class AppViewModel @Inject constructor(
                         type = NewTransactionSheetType.ONCHAIN,
                         direction = NewTransactionSheetDirection.RECEIVED,
                         paymentHashOrTxId = tx.txid,
+                        activityId = tx.txid,
                         sats = tx.sats.toLong(),
                     ),
                 )
@@ -2436,6 +2437,12 @@ class AppViewModel @Inject constructor(
     }
 
     fun onClickActivityDetail() {
+        _transactionSheet.value.activityId?.let {
+            hideNewTransactionSheet()
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(it)))
+            return
+        }
+
         val activityType = _transactionSheet.value.type.toActivityFilter()
         val txType = _transactionSheet.value.direction.toTxType()
         val paymentHashOrTxId = _transactionSheet.value.paymentHashOrTxId ?: return

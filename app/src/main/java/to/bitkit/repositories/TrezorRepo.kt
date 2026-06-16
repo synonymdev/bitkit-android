@@ -752,7 +752,9 @@ class TrezorRepo @Inject constructor(
 
     private suspend fun addOrUpdateKnownDevice(deviceInfo: TrezorDeviceInfo, features: TrezorFeatures) {
         val existing = _state.value.knownDevices
-        val previous = existing.find { it.id == deviceInfo.id }
+        val existingIds = existing.map { it.id }.toSet()
+        val knownDevices = existing + hwWalletStore.loadKnownDevices().filter { it.id !in existingIds }
+        val previous = knownDevices.find { it.id == deviceInfo.id }
         val known = KnownDevice(
             id = deviceInfo.id,
             name = deviceInfo.name,
@@ -761,9 +763,9 @@ class TrezorRepo @Inject constructor(
             label = features.label ?: deviceInfo.label,
             model = features.model ?: deviceInfo.model,
             lastConnectedAt = clock.nowMs(),
-            xpubs = fetchAccountXpubs().ifEmpty { previous?.xpubs ?: emptyMap() },
+            xpubs = previous?.xpubs.orEmpty() + fetchAccountXpubs(),
         )
-        val updated = existing.filter { it.id != known.id } + known
+        val updated = knownDevices.filter { it.id != known.id } + known
         saveKnownDevices(updated)
         _state.update { it.copy(knownDevices = updated.toImmutableList()) }
     }
