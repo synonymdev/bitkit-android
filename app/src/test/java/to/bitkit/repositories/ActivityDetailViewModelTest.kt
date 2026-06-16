@@ -82,6 +82,29 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hardware wallet activity updates while loaded`() = test {
+        val initialActivity = createTestActivity(ACTIVITY_ID, confirmed = false)
+        val updatedActivity = createTestActivity(ACTIVITY_ID, confirmed = true)
+        val hardwareActivities = MutableStateFlow(persistentListOf<Activity>(initialActivity))
+
+        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.success(null))
+        whenever(hwWalletRepo.activities).thenReturn(hardwareActivities)
+
+        sut.loadActivity(ACTIVITY_ID)
+
+        val initialState = sut.uiState.value.activityLoadState
+        assertTrue(initialState is ActivityDetailViewModel.ActivityLoadState.Success)
+        assertEquals(initialActivity, initialState.activity)
+
+        hardwareActivities.value = persistentListOf(updatedActivity)
+
+        val updatedState = sut.uiState.value.activityLoadState
+        assertTrue(updatedState is ActivityDetailViewModel.ActivityLoadState.Success)
+        assertEquals(updatedActivity, updatedState.activity)
+        assertTrue(sut.uiState.value.isHardwareActivity)
+    }
+
+    @Test
     fun `loadActivity reports not found when missing from database and hardware wallets`() = test {
         whenever { activityRepo.getActivity(ACTIVITY_ID) }.thenReturn(Result.success(null))
 

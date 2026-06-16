@@ -12,6 +12,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -41,6 +43,7 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 /**
@@ -63,11 +66,14 @@ class HwWalletRepo @Inject constructor(
     companion object {
         private const val TAG = "HwWalletRepo"
         private const val WATCHER_ID_SEPARATOR = "|"
+        private val WATCHER_START_RETRY_DELAY = 30.seconds
     }
 
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     private val activeWatchers = mutableSetOf<String>()
+    private val retryingWatcherStarts = mutableSetOf<String>()
+    private val watcherSyncRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val _watcherData = MutableStateFlow<Map<String, HwWatcherData>>(emptyMap())
 
     private val _receivedTxs = MutableSharedFlow<HwWalletReceivedTx>(extraBufferCapacity = 8)
@@ -84,6 +90,7 @@ class HwWalletRepo @Inject constructor(
                 .onFailure { Logger.warn("Failed to stop watcher '$watcherId' while resetting", it, context = TAG) }
         }
         activeWatchers.clear()
+        retryingWatcherStarts.clear()
         _watcherData.update { emptyMap() }
         hwWalletStore.reset()
     }
@@ -167,11 +174,18 @@ class HwWalletRepo @Inject constructor(
 
     private fun syncWatchers() {
         scope.launch {
-            combine(
+            val desiredWatchers = combine(
                 hwWalletStore.data,
                 settingsStore.data.map { it.addressTypesToMonitor.toSet() }.distinctUntilChanged(),
             ) { data, monitoredTypes ->
                 data.knownDevices to monitoredTypes
+            }
+
+            combine(
+                desiredWatchers,
+                watcherSyncRequests.onStart { emit(Unit) },
+            ) { desired, _ ->
+                desired
             }.collect { (knownDevices, monitoredTypes) ->
                 // Only watch the address types the user monitors (Settings > Advanced > Address Type),
                 // mirroring the on-chain wallet. Xpubs for all types are still captured on connect, so
@@ -191,7 +205,13 @@ class HwWalletRepo @Inject constructor(
                         extendedKey = spec.xpub,
                         network = Env.network.toCoreNetwork(),
                         accountType = spec.addressType.toAddressType()?.toAccountType(),
-                    ).onSuccess { activeWatchers += spec.watcherId }
+                    ).onSuccess {
+                        activeWatchers += spec.watcherId
+                        retryingWatcherStarts -= spec.watcherId
+                    }.onFailure {
+                        Logger.warn("Retrying watcher '${spec.watcherId}' after start failure", it, context = TAG)
+                        scheduleWatcherStartRetry(spec.watcherId)
+                    }
                 }
 
                 // A failed stop stays active so the next sync retries it; dropping it here
@@ -203,6 +223,16 @@ class HwWalletRepo @Inject constructor(
                     }
                 }
             }
+        }
+    }
+
+    private fun scheduleWatcherStartRetry(watcherId: String) {
+        if (!retryingWatcherStarts.add(watcherId)) return
+
+        scope.launch {
+            delay(WATCHER_START_RETRY_DELAY)
+            retryingWatcherStarts -= watcherId
+            watcherSyncRequests.emit(Unit)
         }
     }
 

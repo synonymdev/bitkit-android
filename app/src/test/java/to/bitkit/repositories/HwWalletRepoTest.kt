@@ -6,9 +6,12 @@ import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WalletBalance
 import com.synonym.bitkitcore.WatcherEvent
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -16,6 +19,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.HwWalletData
@@ -30,9 +34,10 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
-@OptIn(ExperimentalTime::class)
+@OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 class HwWalletRepoTest : BaseUnitTest() {
 
     private val trezorRepo = mock<TrezorRepo>()
@@ -178,6 +183,21 @@ class HwWalletRepoTest : BaseUnitTest() {
         verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull())
         verify(trezorRepo).startWatcher(eq("dev1|taproot"), any(), any(), any(), anyOrNull())
         verify(trezorRepo, never()).startWatcher(eq("dev1|legacy"), any(), any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `retries watcher start after failure`() = test {
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("start failed")), Result.success(Unit))
+
+        createRepo()
+
+        verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull())
+
+        advanceTimeBy(30.seconds)
+        runCurrent()
+
+        verify(trezorRepo, times(2)).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull())
     }
 
     @Test

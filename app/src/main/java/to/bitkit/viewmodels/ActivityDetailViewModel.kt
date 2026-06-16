@@ -92,10 +92,6 @@ class ActivityDetailViewModel @Inject constructor(
         _tags.update { persistentListOf() }
     }
 
-    /**
-     * Watch-only hardware-wallet activities live in [HwWalletRepo], not the activity
-     * database, so tags and change observation don't apply to them.
-     */
     private fun loadHwWalletActivity(activityId: String) {
         val hwActivity = hwWalletRepo.activities.value.find { it.rawId() == activityId }
         if (hwActivity != null) {
@@ -103,6 +99,7 @@ class ActivityDetailViewModel @Inject constructor(
             _uiState.update {
                 it.copy(activityLoadState = ActivityLoadState.Success(hwActivity), isHardwareActivity = true)
             }
+            observeHwWalletActivityChanges(activityId)
         } else {
             _uiState.update {
                 it.copy(
@@ -110,6 +107,22 @@ class ActivityDetailViewModel @Inject constructor(
                         context.getString(R.string.wallet__activity_error_not_found)
                     )
                 )
+            }
+        }
+    }
+
+    private fun observeHwWalletActivityChanges(activityId: String) {
+        observeJob?.cancel()
+        observeJob = viewModelScope.launch(bgDispatcher) {
+            hwWalletRepo.activities.collect { activities ->
+                val updatedActivity = activities.find { it.rawId() == activityId } ?: return@collect
+                activity = updatedActivity
+                _uiState.update {
+                    it.copy(
+                        activityLoadState = ActivityLoadState.Success(updatedActivity),
+                        isHardwareActivity = true,
+                    )
+                }
             }
         }
     }
