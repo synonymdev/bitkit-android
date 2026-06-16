@@ -23,6 +23,7 @@ import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.json
+import to.bitkit.domain.commands.ReceivedNotificationContent
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.toUserMessage
 import to.bitkit.models.BITCOIN_SYMBOL
@@ -57,6 +58,7 @@ class WakeNodeWorker @AssistedInject constructor(
     private val activityRepo: ActivityRepo,
     private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
+    private val receivedNotificationContent: ReceivedNotificationContent,
 ) : CoroutineWorker(appContext, workerParams) {
     private var bestAttemptContent: NotificationDetails? = null
 
@@ -142,7 +144,7 @@ class WakeNodeWorker @AssistedInject constructor(
         val showDetails = settingsStore.data.first().showNotificationDetails
         val hiddenBody = appContext.getString(R.string.notification__received__body_hidden)
         when (event) {
-            is Event.PaymentReceived -> onPaymentReceived(event, showDetails, hiddenBody)
+            is Event.PaymentReceived -> onPaymentReceived(event)
 
             is Event.ChannelPending -> {
                 bestAttemptContent = NotificationDetails(
@@ -191,11 +193,7 @@ class WakeNodeWorker @AssistedInject constructor(
         deliver()
     }
 
-    private suspend fun onPaymentReceived(
-        event: Event.PaymentReceived,
-        showDetails: Boolean,
-        hiddenBody: String,
-    ) {
+    private suspend fun onPaymentReceived(event: Event.PaymentReceived) {
         val sats = msatCeilOf(event.amountMsat)
         // Save for UI to pick up
         cacheStore.setBackgroundReceive(
@@ -212,11 +210,7 @@ class WakeNodeWorker @AssistedInject constructor(
             Logger.debug("Skipping payment notification: handled in-process", context = TAG)
             bestAttemptContent = null
         } else {
-            val content = if (showDetails) "$BITCOIN_SYMBOL ${sats.formatToModernDisplay()}" else hiddenBody
-            bestAttemptContent = NotificationDetails(
-                title = appContext.getString(R.string.notification__received__title),
-                body = content,
-            )
+            bestAttemptContent = receivedNotificationContent.build(sats.toLong())
         }
 
         if (notificationType == incomingHtlc) {

@@ -35,11 +35,13 @@ import to.bitkit.androidServices.LightningNodeService
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.domain.commands.ReceivedNotificationContent
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.mock
 import to.bitkit.ext.notificationManager
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BlocktankNotificationType
+import to.bitkit.models.NotificationDetails
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -61,6 +63,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val settingsStore = mock<SettingsStore>()
     private val cacheStore = mock<CacheStore>()
+    private val receivedNotificationContent = mock<ReceivedNotificationContent>()
 
     private val channelId = "channel-1"
     private val viaNewChannel by lazy { context.getString(R.string.notification__received__body_channel) }
@@ -164,7 +167,10 @@ class WakeNodeWorkerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `payment received formats amount with thousands separators`() = test {
+    fun `payment received delivers rich notification content with fiat`() = test {
+        val title = context.getString(R.string.notification__received__title)
+        val body = $$"Received ₿ 48 064 ($30.79)"
+        whenever(receivedNotificationContent.build(48_064L)).thenReturn(NotificationDetails(title, body))
         whenever(workerParams.inputData).thenReturn(
             workDataOf("type" to BlocktankNotificationType.incomingHtlc.name),
         )
@@ -174,12 +180,9 @@ class WakeNodeWorkerTest : BaseUnitTest() {
         val result = worker().doWork()
 
         assertEquals(ListenableWorker.Result.success(), result)
-        val notification = findNotificationByTitle(context.getString(R.string.notification__received__title))
+        val notification = findNotificationByTitle(title)
         assertNotNull(notification, "Payment notification should be delivered when app is killed")
-        assertEquals(
-            "$BITCOIN_SYMBOL ${48_064L.formatToModernDisplay()}",
-            notification?.extras?.getString(Notification.EXTRA_TEXT),
-        )
+        assertEquals(body, notification?.extras?.getString(Notification.EXTRA_TEXT))
     }
 
     @Test
@@ -210,6 +213,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
         activityRepo = activityRepo,
         settingsStore = settingsStore,
         cacheStore = cacheStore,
+        receivedNotificationContent = receivedNotificationContent,
     )
 
     private fun channelReadyEvent() = mock<Event.ChannelReady> {

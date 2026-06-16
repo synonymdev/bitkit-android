@@ -61,13 +61,15 @@ class NotifyChannelReadyHandlerTest : BaseUnitTest() {
         )
 
         sut = NotifyChannelReadyHandler(
-            context = context,
             ioDispatcher = testDispatcher,
             lightningRepo = lightningRepo,
             blocktankRepo = blocktankRepo,
             activityRepo = activityRepo,
-            currencyRepo = currencyRepo,
-            settingsStore = settingsStore,
+            receivedNotificationContent = ReceivedNotificationContent(
+                context = context,
+                currencyRepo = currencyRepo,
+                settingsStore = settingsStore,
+            ),
         )
     }
 
