@@ -3,7 +3,7 @@ set dotenv-filename := ".env"
 set windows-shell := ["sh", "-cu"]
 
 gradle := "./gradlew"
-android_ndk_version := "28.1.13356709"
+ndk_ver := "28.1.13356709"
 
 default:
     @just list
@@ -173,7 +173,7 @@ build task="assembleDevDebug":
     {{ gradle }} {{ task }}
 
 release:
-    NDK_VERSION={{ android_ndk_version }} {{ gradle }} assembleMainnetRelease bundleMainnetRelease
+    NDK_VERSION={{ ndk_ver }} {{ gradle }} assembleMainnetRelease bundleMainnetRelease
 
 install:
     {{ gradle }} installDevDebug
