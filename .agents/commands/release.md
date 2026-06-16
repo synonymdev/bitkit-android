@@ -215,7 +215,7 @@ run_number="$(gh run view "$run_id" --json number --jq .number)"
 rm -rf "$release_artifact_dir"
 mkdir -p "$release_artifact_dir"
 gh run download "$run_id" \
-  --name "bitkit-release-${run_number}" \
+  --name "bitkit-release-{newVersionCode}-${run_number}" \
   --dir "$release_artifact_dir"
 if command -v sha256sum >/dev/null; then
   (cd "$release_artifact_dir" && sha256sum -c SHA256SUMS.txt)

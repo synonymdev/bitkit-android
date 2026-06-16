@@ -108,16 +108,30 @@ jobs:
           set -euo pipefail
           artifact_dir="$RUNNER_TEMP/release"
           mkdir -p "$artifact_dir"
-          find app/build/outputs/bundle/mainnetRelease -name 'bitkit-mainnet-release-*.aab' -print0 |
-            xargs -0 -I {} cp {} "$artifact_dir/"
-          find app/build/outputs/apk/mainnet/release -name 'bitkit-mainnet-release-*.apk' -print0 |
-            xargs -0 -I {} cp {} "$artifact_dir/"
+          mapfile -d '' bundle_paths < <(find app/build/outputs/bundle/mainnetRelease -name 'bitkit-mainnet-release-*.aab' -print0)
+          mapfile -d '' apk_paths < <(find app/build/outputs/apk/mainnet/release -name 'bitkit-mainnet-release-*.apk' -print0)
+          test "${#bundle_paths[@]}" -gt 0
+          test "${#apk_paths[@]}" -gt 0
+
+          for bundle_path in "${bundle_paths[@]}"; do
+            cp "$bundle_path" "$artifact_dir/"
+          done
+          for apk_path in "${apk_paths[@]}"; do
+            cp "$apk_path" "$artifact_dir/"
+          done
+
+          apk_file="$(basename "${apk_paths[0]}")"
+          build_number="${apk_file#bitkit-mainnet-release-}"
+          build_number="${build_number%%-*}"
+          [[ "$build_number" =~ ^[0-9]+$ ]]
+
           (cd "$artifact_dir" && sha256sum -- *.aab *.apk > SHA256SUMS.txt)
+          echo "artifact_name=bitkit-release-$build_number-$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
           echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v6
         with:
-          name: bitkit-release-${{ github.run_number }}
+          name: ${{ steps.artifacts.outputs.artifact_name }}
           path: ${{ steps.artifacts.outputs.artifact_dir }}
           retention-days: 30
