@@ -15,10 +15,8 @@ import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
 
 /**
- * Entry point for the hardware-wallet connect flow opened from the home suggestion
- * card, and host of the Pair Device screen shown app-wide when the device asks for
- * its one-time pairing code. The remaining connect steps land in the dedicated
- * connect-flow subtask, which enables the Continue button.
+ * Entry point for the hardware-wallet connect flow opened from the home suggestion card,
+ * and host of the Pair Device screen shown app-wide when the device asks for its one-time pairing code.
  */
 @Composable
 fun HardwareSheet(
