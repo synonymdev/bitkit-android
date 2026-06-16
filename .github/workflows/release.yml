@@ -10,6 +10,7 @@ concurrency:
 env:
   TERM: xterm-256color
   FORCE_COLOR: 1
+  BITKIT_NDK_VERSION: 28.1.13356709
 
 jobs:
   build-release:
@@ -34,6 +35,16 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
+
+      - name: Setup Android NDK
+        run: |
+          set -euo pipefail
+          android_sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$android_sdk_root"
+          sdkmanager_path="$android_sdk_root/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$sdkmanager_path"
+          yes | "$sdkmanager_path" --licenses >/dev/null || true
+          "$sdkmanager_path" --install "ndk;$BITKIT_NDK_VERSION"
 
       - name: Decode mainnet release google-services.json
         env:
@@ -64,6 +75,32 @@ jobs:
           KEY_ALIAS: ${{ secrets.BITKIT_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.BITKIT_KEY_PASSWORD }}
         run: ./gradlew assembleMainnetRelease bundleMainnetRelease --no-daemon --stacktrace
+
+      - name: Verify native libraries are stripped
+        run: |
+          set -euo pipefail
+          android_sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$android_sdk_root"
+          llvm_readelf_path="$(find "$android_sdk_root/ndk/$BITKIT_NDK_VERSION" -name llvm-readelf -print -quit)"
+          test -x "$llvm_readelf_path"
+
+          native_count=0
+          extract_root="$(mktemp -d)"
+          trap 'rm -rf "$extract_root"' EXIT
+          while IFS= read -r -d '' artifact_path; do
+            extract_dir="$extract_root/$(basename "$artifact_path")"
+            mkdir -p "$extract_dir"
+            unzip -q "$artifact_path" 'lib/*/*.so' 'base/lib/*/*.so' -d "$extract_dir" 2>/dev/null || true
+            while IFS= read -r -d '' native_path; do
+              native_count=$((native_count + 1))
+              if "$llvm_readelf_path" -S "$native_path" | grep -q '\.debug_'; then
+                native_entry="${native_path#"$extract_dir"/}"
+                echo "Native library contains debug sections: $artifact_path:$native_entry"
+                exit 1
+              fi
+            done < <(find "$extract_dir" -name '*.so' -print0)
+          done < <(find app/build/outputs/apk/mainnet/release app/build/outputs/bundle/mainnetRelease -type f \( -name '*.apk' -o -name '*.aab' \) -print0)
+          test "$native_count" -gt 0
 
       - name: Verify release signatures
         run: |
