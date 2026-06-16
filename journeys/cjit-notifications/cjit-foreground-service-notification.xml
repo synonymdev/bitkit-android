@@ -18,8 +18,8 @@
     <action>Wait ~5s for the ChannelReady event and notification delivery</action>
     <action>Dump notifications: adb shell dumpsys notification --noredact | grep -A3 -i "to.bitkit"</action>
     <action>Verify EXACTLY ONE Bitkit payment notification is posted for this channel opening (not two)</action>
-    <action>Verify its amount uses a thousands separator space, e.g. "₿ 48 064" — NOT "₿ 48064"</action>
-    <action>Verify there is NO separate notification whose body is "Via new channel" alongside the payment notification</action>
+    <action>Verify its title is "Payment Received" and body is "Received ₿ &lt;amount&gt; (&lt;fiat&gt;)" with the amount space-grouped (e.g. "Received ₿ 48 064 ($30.79)") — NOT a bare "₿ 48064"</action>
+    <action>Verify there is NO separate "Via new channel" notification from WakeNodeWorker alongside it (the push path is deduped while the foreground service is running)</action>
     <action>Tap the notification, bring the app to the foreground, and verify the received-transaction sheet shows the correct amount</action>
   </actions>
 </journey>

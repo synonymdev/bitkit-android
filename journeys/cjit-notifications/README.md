@@ -22,12 +22,18 @@ producers:
 
 ## The fix (what the journeys assert)
 
-- `WakeNodeWorker` formats amounts with `formatToModernDisplay()` (space-grouped). [#1]
-- `WakeNodeWorker` only emits the "Via new channel" CJIT notification when the channel actually has
-  a Blocktank CJIT entry; a regular channel opening shows no payment notification. [#3]
+- All received-payment notifications (foreground service, in-app, and the `WakeNodeWorker` push
+  path, for both regular payments and CJIT receives) are built by one shared
+  `ReceivedNotificationContent`, so they are identical: title "Payment Received", body
+  "Received ₿ &lt;amount&gt; (&lt;fiat&gt;)" — space-grouped BTC plus fiat, ordered by the primary
+  display setting (or hidden when notification details are off). The legacy bare "₿ &lt;sats&gt;" /
+  "Via new channel" push format is gone. [#1]
+- `WakeNodeWorker` only emits a CJIT notification when the channel actually has a Blocktank CJIT
+  entry and the receive was not already recorded; a regular channel opening shows no payment
+  notification. [#3]
 - `WakeNodeWorker` skips its own user-facing notification when an in-process handler covers the
   event — i.e. when the app is in the foreground OR `LightningNodeService.isRunning` — leaving a
-  single, richer notification. It still wakes the node and records the activity. [#2]
+  single notification. It still wakes the node and records the activity. [#2]
 
 ## Mandatory setup
 
@@ -54,6 +60,9 @@ notifications Bitkit posted for a single channel opening.
 ## Test tags / references
 
 - Foreground "Spending balance ready" toast: testTag `SpendingBalanceReadyToast`.
-- Notification strings: `notification__received__title`, `notification__received__body_channel`
-  ("Via new channel"), `notification__received__body_amount` ("Received %s").
-- Amount grouping separator: `SATS_GROUPING_SEPARATOR` (a space) via `formatToModernDisplay`.
+- Notification strings: `notification__received__title` ("Payment Received"),
+  `notification__received__body_amount` ("Received %s"), `notification__received__body_hidden`
+  (when notification details are off). Note: `notification__received__body_channel`
+  ("Via new channel") is no longer used for the push notification.
+- Amount grouping separator: `SATS_GROUPING_SEPARATOR` (a space) via `formatToModernDisplay`,
+  applied inside `ReceivedNotificationContent`.
