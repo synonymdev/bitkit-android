@@ -573,8 +573,7 @@ fun ContentView(
                         Routes.AllActivity::class.qualifiedName,
                         Routes.Savings::class.qualifiedName,
                         Routes.Spending::class.qualifiedName,
-                        Routes.HardwareWallet::class.qualifiedName,
-                    )
+                    ) || navBackStackEntry?.destination?.hasRoute<Routes.HardwareWallet>() == true
                     val hideTabBarForCalculator =
                         currentRoute == Routes.Home::class.qualifiedName && isHomeCalculatorInputActive
 
