@@ -377,5 +377,5 @@ private fun Toast.tintColor(): Color = when (type) {
     Toast.ToastType.INFO -> Colors.Blue
     Toast.ToastType.LIGHTNING -> Colors.Purple
     Toast.ToastType.WARNING -> Colors.Brand
-    Toast.ToastType.ERROR -> Colors.Red
+    Toast.ToastType.ERROR -> Colors.Brand
 }
