@@ -85,6 +85,7 @@
     <string name="common__ok_random">Awesome!\nNice!\nCool!\nGreat!\nFantastic!\nSweet!\nExcellent!\nTerrific!</string>
     <string name="common__preview">Preview</string>
     <string name="common__ready">Ready</string>
+    <string name="common__remove">Remove</string>
     <string name="common__reset">Reset</string>
     <string name="common__retry">Retry</string>
     <string name="common__sat_vbyte">₿ / vbyte</string>
@@ -168,6 +169,10 @@
     <string name="hardware__intro_title">Hardware Wallet</string>
     <string name="hardware__pairing_text">Enter the 6-digit code shown on your hardware device.</string>
     <string name="hardware__pairing_title">Pair Device</string>
+    <string name="hardware__remove_button">Remove %1$s</string>
+    <string name="hardware__remove_dialog_text">Don\'t worry, your funds are safe and your coins won\'t be deleted. Bitkit will simply stop displaying the amounts in the wallet.</string>
+    <string name="hardware__remove_dialog_title">Remove %1$s</string>
+    <string name="hardware__remove_error">Could not remove the hardware wallet. Please try again.</string>
     <string name="lightning__availability__text">Funds transfer to savings is usually instant, but settlement may take up to &lt;accent&gt;14 days&lt;/accent&gt; under certain network conditions.</string>
     <string name="lightning__availability__title">Funds\n&lt;accent&gt;availability&lt;/accent&gt;</string>
     <string name="lightning__balance">Balance</string>
