@@ -170,6 +170,7 @@ fun LazyListScope.activityListGroupedItems(
     showFooter: Boolean = false,
     onAllActivityButtonClick: () -> Unit = {},
     hardwareIds: ImmutableSet<String> = persistentSetOf(),
+    footerContent: (@Composable () -> Unit)? = null,
 ) {
     if (!items.isNullOrEmpty()) {
         val groupedItems = groupActivityItems(items)
@@ -233,6 +234,9 @@ fun LazyListScope.activityListGroupedItems(
                         .padding(top = 8.dp)
                 )
             }
+        }
+        footerContent?.let { content ->
+            item { content() }
         }
         item {
             VerticalSpacer(120.dp)

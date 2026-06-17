@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -128,9 +129,8 @@ private fun HardwareWalletContent(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .offset(x = 120.dp)
-                    .size(320.dp)
-                    .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Vertical))
+                    .offset(x = 119.dp, y = 92.dp)
+                    .size(256.dp)
             )
         }
 
@@ -194,16 +194,17 @@ private fun HardwareWalletContent(
                     onEmptyActivityRowClick = {},
                     showFooter = false,
                     hardwareIds = hardwareIds,
+                    footerContent = {
+                        TertiaryButton(
+                            text = stringResource(R.string.hardware__remove_button, wallet.name),
+                            onClick = onRemoveClick,
+                            modifier = Modifier
+                                .wrapContentWidth()
+                                .padding(top = 8.dp)
+                                .testTag("RemoveHardwareWallet")
+                        )
+                    },
                 )
-
-                item {
-                    TertiaryButton(
-                        text = stringResource(R.string.hardware__remove_button, wallet.name),
-                        onClick = onRemoveClick,
-                        modifier = Modifier.testTag("RemoveHardwareWallet")
-                    )
-                }
-                item { VerticalSpacer(120.dp) }
             }
         }
 
