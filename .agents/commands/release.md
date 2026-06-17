@@ -1,5 +1,5 @@
 ---
-description: "Create a new release: bump version, create PR, build mainnet, tag, draft release"
+description: "Create a new release: bump version, create PR, run release workflow, tag, draft release"
 allowed_tools: Bash, Read, Edit, Write, Glob, Grep, AskUserQuestion, mcp__github__create_pull_request, mcp__github__list_pull_requests, mcp__github__pull_request_read, mcp__github__get_file_contents, mcp__github__update_pull_request
 ---
 
@@ -76,6 +76,8 @@ Release branch created from {baseRef}.
 Cherry-pick the commits you need onto this branch now, then continue.
 ```
 Wait for the user to confirm they are done cherry-picking before proceeding.
+
+If the base is a tag that predates the release workflow changes, port the current release workflow support onto the release branch before proceeding. At minimum, the release branch/tag must contain the updated artifact naming in `.github/workflows/release.yml`, otherwise Step 7 will dispatch an old workflow and then look for an artifact name it cannot produce.
 
 Finalize changelog after the release branch contains all release commits:
 
@@ -202,22 +204,64 @@ gh release edit v{newVersionName} --notes-file /tmp/release-notes.md
 
 Print the path to the release notes file so the user can share it for review.
 
-### 7. Build Mainnet Release
+### 7. Run Store Release Workflow
 
 ```bash
-just release
+release_ref="v{newVersionName}"
+release_artifact_dir=".ai/release-artifacts-{newVersionName}"
+if ! git show "$release_ref:.github/workflows/release.yml" | grep -q 'bitkit-release-$build_number-$GITHUB_RUN_NUMBER'; then
+  echo "Release ref $release_ref does not contain the current release artifact naming." >&2
+  echo "Port the release workflow changes onto the release branch, retag, then rerun /release." >&2
+  exit 1
+fi
+dispatch_started_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+gh workflow run release.yml --ref "$release_ref"
+run_id=""
+for attempt in {1..30}; do
+  run_id="$(gh run list \
+    --workflow release.yml \
+    --branch "$release_ref" \
+    --event workflow_dispatch \
+    --created ">=$dispatch_started_at" \
+    --limit 1 \
+    --json databaseId \
+    --jq '.[0].databaseId // empty')"
+  if [ -n "$run_id" ]; then
+    break
+  fi
+  sleep 5
+done
+if [ -z "$run_id" ]; then
+  echo "Failed to find release workflow run for $release_ref" >&2
+  exit 1
+fi
+gh run watch "$run_id" --exit-status
+workflow_run_url="$(gh run view "$run_id" --json url --jq .url)"
+run_number="$(gh run view "$run_id" --json number --jq .number)"
+rm -rf "$release_artifact_dir"
+mkdir -p "$release_artifact_dir"
+gh run download "$run_id" \
+  --name "bitkit-release-{newVersionCode}-${run_number}" \
+  --dir "$release_artifact_dir"
+if command -v sha256sum >/dev/null; then
+  (cd "$release_artifact_dir" && sha256sum -c SHA256SUMS.txt)
+else
+  (cd "$release_artifact_dir" && shasum -a 256 -c SHA256SUMS.txt)
+fi
 ```
 
-Expected APK path: `app/build/outputs/apk/mainnet/release/bitkit-mainnet-release-{newVersionCode}-universal.apk`
-Expected AAB path: `app/build/outputs/bundle/mainnetRelease/bitkit-mainnet-release-{newVersionCode}.aab`
+Expected APK path: `.ai/release-artifacts-{newVersionName}/bitkit-mainnet-release-{newVersionCode}-universal.apk`
+Expected AAB path: `.ai/release-artifacts-{newVersionName}/bitkit-mainnet-release-{newVersionCode}.aab`
 
-Verify both files exist. If the build fails, stop and report the error to the user.
+Verify both files exist. If the workflow fails or the artifact checksum verification fails, stop and report the error to the user.
 
-### 8. Upload APK to Draft Release
+Store `workflow_run_url` for the summary.
+
+### 8. Upload Workflow APK to Draft Release
 
 ```bash
 gh release upload v{newVersionName} \
-  app/build/outputs/apk/mainnet/release/bitkit-mainnet-release-{newVersionCode}-universal.apk
+  .ai/release-artifacts-{newVersionName}/bitkit-mainnet-release-{newVersionCode}-universal.apk
 ```
 
 ### 9. Return to Master
@@ -235,14 +279,16 @@ Version bump PR: {PR URL}
 Release branch: release-{newVersionName}
 Tag: v{newVersionName}
 Draft release: {release URL}
+Release workflow: {workflow run URL}
+Artifacts: .ai/release-artifacts-{newVersionName}
 APK uploaded: bitkit-mainnet-release-{newVersionCode}-universal.apk
 Store release notes: .ai/release-notes-{newVersionName}.md
 
 Next steps:
 - Share release notes with Jacobo for review
-- QA the APK
-- If patching the release branch: increment only versionCode, re-tag, rebuild, and re-upload
-- Submit to Play Store when QA passes
+- QA the workflow-built APK
+- Submit the workflow-built AAB to Play Store when QA passes
+- If patching the release branch: increment only versionCode, re-tag, rerun the release workflow, and re-upload
 - Publish the draft release on GitHub after store release
 - Merge release branch PR into master
 ```
