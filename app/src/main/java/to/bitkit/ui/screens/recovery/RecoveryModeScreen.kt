@@ -73,6 +73,9 @@ fun RecoveryModeScreen(
                 recoveryViewModel.wipeWallet()
             },
             onWipeCancel = recoveryViewModel::hideWipeConfirmation,
+            onResetGraph = recoveryViewModel::showGraphResetConfirmation,
+            onResetGraphConfirm = recoveryViewModel::resetNetworkGraph,
+            onResetGraphCancel = recoveryViewModel::hideGraphResetConfirmation,
         )
 
         AnimatedVisibility(
@@ -107,6 +110,9 @@ private fun Content(
     onWipeApp: () -> Unit,
     onWipeConfirm: () -> Unit,
     onWipeCancel: () -> Unit,
+    onResetGraph: () -> Unit,
+    onResetGraphConfirm: () -> Unit,
+    onResetGraphCancel: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -148,6 +154,13 @@ private fun Content(
                 )
 
                 SecondaryButton(
+                    text = stringResource(R.string.security__reset_graph_button),
+                    isLoading = uiState.isResettingGraph,
+                    onClick = onResetGraph,
+                    enabled = walletExists,
+                )
+
+                SecondaryButton(
                     text = stringResource(R.string.security__wipe_app),
                     enabled = walletExists,
                     onClick = onWipeApp,
@@ -166,6 +179,17 @@ private fun Content(
             onDismiss = onWipeCancel,
         )
     }
+
+    if (uiState.showGraphResetConfirmation) {
+        AppAlertDialog(
+            onDismissRequest = onResetGraphCancel,
+            title = stringResource(R.string.security__reset_graph_dialog_title),
+            text = stringResource(R.string.security__reset_graph_dialog_desc),
+            confirmText = stringResource(R.string.security__reset_graph_confirm),
+            onConfirm = onResetGraphConfirm,
+            onDismiss = onResetGraphCancel,
+        )
+    }
 }
 
 @Preview(showSystemUi = true)
@@ -181,6 +205,9 @@ private fun Preview() {
             onWipeApp = {},
             onWipeConfirm = {},
             onWipeCancel = {},
+            onResetGraph = {},
+            onResetGraphConfirm = {},
+            onResetGraphCancel = {},
         )
     }
 }
