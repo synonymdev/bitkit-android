@@ -1,0 +1,21 @@
+<journey name="non-cjit channel opening shows no payment notification">
+  <description>
+    Reproduces PR #787 issue #3 (🔴). Opening a regular (non-CJIT) Lightning channel must NOT be
+    reported as a received payment: no "Payment Received" notification, and never several duplicates.
+    When the app is in the foreground the only feedback is the in-app "Spending balance ready" toast.
+
+    Precondition: onboarded regtest wallet connected to the LSP, with a positive on-chain balance to
+    fund the transfer. No CJIT entry is involved here — this is a manual/Transfer channel opening
+    (orderPaymentConfirmed), not a CJIT receive.
+  </description>
+  <actions>
+    <action>Keep the app in the foreground on the wallet home screen</action>
+    <action>Open a regular spending channel via Transfer → Spending (fund some sats and confirm), OR open one through the lsp skill order flow</action>
+    <action>Mine confirmations if required: ./lsp POST /regtest/mine '{"count":3}'</action>
+    <action>Wait for the ChannelReady event (~5-10s)</action>
+    <action>Verify an in-app "Spending balance ready" toast appears (testTag "SpendingBalanceReadyToast")</action>
+    <action>Dump notifications: adb shell dumpsys notification --noredact | grep -A3 -i "to.bitkit"</action>
+    <action>Verify NO "Payment Received" notification was posted for this channel opening</action>
+    <action>Verify there are not multiple duplicate channel-ready notifications stacked in the shade</action>
+  </actions>
+</journey>

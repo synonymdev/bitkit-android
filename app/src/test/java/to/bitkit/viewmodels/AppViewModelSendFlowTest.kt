@@ -36,6 +36,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.BalanceState
 import to.bitkit.models.HwWalletReceivedTx
@@ -110,6 +111,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val blocktankRepo = mock<BlocktankRepo>()
     private val appUpdaterService = mock<AppUpdaterService>()
     private val notifyPaymentReceivedHandler = mock<NotifyPaymentReceivedHandler>()
+    private val notifyChannelReadyHandler = mock<NotifyChannelReadyHandler>()
     private val cacheStore = mock<CacheStore>()
     private val transferRepo = mock<TransferRepo>()
     private val migrationService = mock<MigrationService>()
@@ -239,6 +241,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         blocktankRepo = blocktankRepo,
         appUpdaterService = appUpdaterService,
         notifyPaymentReceivedHandler = notifyPaymentReceivedHandler,
+        notifyChannelReadyHandler = notifyChannelReadyHandler,
         cacheStore = cacheStore,
         transferRepo = transferRepo,
         migrationService = migrationService,

@@ -71,12 +71,13 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
+import to.bitkit.domain.commands.NotifyChannelReady
+import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
-import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.channelId
@@ -193,6 +194,7 @@ class AppViewModel @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val appUpdaterService: AppUpdaterService,
     private val notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler,
+    private val notifyChannelReadyHandler: NotifyChannelReadyHandler,
     private val cacheStore: CacheStore,
     private val transferRepo: TransferRepo,
     private val migrationService: MigrationService,
@@ -953,20 +955,13 @@ class AppViewModel @Inject constructor(
     // region Notifications
 
     private suspend fun notifyChannelReady(event: Event.ChannelReady) {
-        val channel = lightningRepo.getChannels()?.find { it.channelId == event.channelId }
-        val cjitEntry = channel?.let { blocktankRepo.getCjitEntry(it) }
-        if (cjitEntry != null) {
-            val amount = channel.amountOnClose.toLong()
-            showTransactionSheet(
-                NewTransactionSheetDetails(
-                    type = NewTransactionSheetType.LIGHTNING,
-                    direction = NewTransactionSheetDirection.RECEIVED,
-                    sats = amount,
-                ),
-            )
-            activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
+        val command = NotifyChannelReady.Command(event = event)
+        val result = notifyChannelReadyHandler(command).getOrNull()
+        if (result is NotifyChannelReady.Result.ShowSheet) {
+            showTransactionSheet(result.sheet)
             return
         }
+        if (result is NotifyChannelReady.Result.Duplicate) return
         toast(
             type = Toast.ToastType.LIGHTNING,
             title = context.getString(R.string.lightning__channel_opened_title),

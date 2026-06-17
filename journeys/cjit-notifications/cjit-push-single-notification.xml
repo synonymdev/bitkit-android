@@ -1,0 +1,24 @@
+<journey name="cjit push notification is delivered exactly once">
+  <description>
+    Reproduces PR #787 issue #2 on the pure push path. With the app fully killed (no foreground
+    activity and no foreground service), a CJIT payment must still surface a single payment
+    notification delivered by WakeNodeWorker — this is the wake-the-node-and-open-the-channel path,
+    so it must keep working. The notification must use the same rich content as the in-app one:
+    title "Payment Received", body "Received ₿ &lt;amount&gt; (&lt;fiat&gt;)" — NOT the old bare
+    "₿ &lt;sats&gt;" / "Via new channel".
+
+    Precondition: onboarded regtest wallet connected to the LSP. A funded CJIT entry is ready to pay
+    (see README.md). Background notifications DISABLED (so no foreground service survives the kill),
+    and the app force-stopped so only the FCM push + WakeNodeWorker run.
+  </description>
+  <actions>
+    <action>Ensure background notifications are DISABLED in Settings → Notifications</action>
+    <action>Force-stop the app: adb shell am force-stop to.bitkit.dev</action>
+    <action>Pay the CJIT invoice via the lsp skill: ./lsp POST /regtest/lightning/pay '{"invoice":"&lt;bolt11&gt;"}'</action>
+    <action>Wait up to ~30s for the FCM push to wake the node and deliver the notification</action>
+    <action>Dump notifications: adb shell dumpsys notification --noredact | grep -A3 -i "to.bitkit"</action>
+    <action>Verify EXACTLY ONE Bitkit notification is posted for this CJIT payment</action>
+    <action>Verify the title is "Payment Received" and the body is "Received ₿ &lt;amount&gt; (&lt;fiat&gt;)" with the amount space-grouped (e.g. "Received ₿ 48 064 ($30.79)") — NOT a bare "₿ 48064" and NOT "Via new channel"</action>
+    <action>Tap the notification to open the app and verify the received amount in the activity list matches</action>
+  </actions>
+</journey>
