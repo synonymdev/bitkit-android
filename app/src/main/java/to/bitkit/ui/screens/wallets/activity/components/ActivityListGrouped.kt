@@ -162,13 +162,14 @@ fun ActivityListGrouped(
     }
 }
 
-@Suppress("LongMethod")
+@Suppress("LongMethod", "LongParameterList")
 fun LazyListScope.activityListGroupedItems(
     items: ImmutableList<Activity>?,
     onActivityItemClick: (String) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
     showFooter: Boolean = false,
     onAllActivityButtonClick: () -> Unit = {},
+    hardwareIds: ImmutableSet<String> = persistentSetOf(),
 ) {
     if (!items.isNullOrEmpty()) {
         val groupedItems = groupActivityItems(items)
@@ -211,7 +212,12 @@ fun LazyListScope.activityListGroupedItems(
                                 placementSpec = tween(durationMillis = 300),
                             )
                     ) {
-                        ActivityRow(item, onActivityItemClick, testTag = "Activity-$index")
+                        ActivityRow(
+                            item = item,
+                            onClick = onActivityItemClick,
+                            testTag = "Activity-$index",
+                            isHardware = item.rawId() in hardwareIds,
+                        )
                         VerticalSpacer(16.dp)
                     }
                 }
