@@ -189,6 +189,18 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `resetNetworkGraph fails when VSS delete fails`() = test {
+        whenever(vssBackupClientLdk.setup(any())).thenReturn(Result.success(Unit))
+        whenever(vssBackupClientLdk.deleteObject(any(), any()))
+            .thenReturn(Result.failure(RuntimeException("vss unavailable")))
+
+        val result = sut.resetNetworkGraph()
+
+        assertTrue(result.isFailure)
+        verify(lightningService).resetNetworkGraph(0)
+    }
+
+    @Test
     fun `newAddress should fail when node is not running`() = test {
         val result = sut.newAddress()
         assertTrue(result.isFailure)

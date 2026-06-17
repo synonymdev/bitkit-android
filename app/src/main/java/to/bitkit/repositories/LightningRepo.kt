@@ -483,13 +483,14 @@ class LightningRepo @Inject constructor(
             if (lightningService.node != null) {
                 lightningService.stop()
             }
-            clearNetworkGraph(walletIndex)
+            // Propagate VSS failures: a manual reset that leaves the graph in VSS is ineffective.
+            clearNetworkGraph(walletIndex).getOrThrow()
         }
     }
 
-    private suspend fun clearNetworkGraph(walletIndex: Int) {
+    private suspend fun clearNetworkGraph(walletIndex: Int): Result<Unit> {
         lightningService.resetNetworkGraph(walletIndex)
-        runCatching {
+        return runCatching {
             vssBackupClientLdk.setup(walletIndex).getOrThrow()
             vssBackupClientLdk.deleteObject("network_graph").getOrThrow()
             Logger.info("Cleared network graph from VSS", context = TAG)
