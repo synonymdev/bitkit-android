@@ -141,7 +141,6 @@ class RecoveryViewModel @Inject constructor(
                     )
                     // Keep the loading state and restart so the graph is re-downloaded on next launch.
                     delay(RESTART_DELAY)
-                    lightningRepo.stop()
                     context.relaunchApp()
                 },
                 onFailure = { error ->
