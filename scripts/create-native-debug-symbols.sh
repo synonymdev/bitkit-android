@@ -16,10 +16,12 @@ build_number=$(
         }
     ' app/build.gradle.kts
 )
-if [ -z "$build_number" ]; then
-    echo "Unable to read versionCode from app/build.gradle.kts." >&2
-    exit 1
-fi
+case "$build_number" in
+    ''|*[!0-9]*)
+        echo "Unable to read numeric versionCode from app/build.gradle.kts." >&2
+        exit 1
+        ;;
+esac
 
 output="app/build/outputs/native-debug-symbols/$variant/native-debug-symbols-$build_number.zip"
 output_dir=$(dirname "$output")
@@ -150,15 +152,14 @@ copy_archive_symbols() {
         for lib_name in $required_libs; do
             copied=false
             entry="$abi/$lib_name"
-            if unzip -qo "$archive" "$entry" -d "$tmp_dir" 2>/dev/null; then
+            if copy_archive_entry "$archive" "$tmp_dir" "$abi" "$lib_name" "$entry"; then
                 copied=true
             fi
 
             if [ "$copied" = false ]; then
                 for suffix in $archive_symbol_suffixes; do
                     entry="$abi/$lib_name$suffix"
-                    if unzip -qo "$archive" "$entry" -d "$tmp_dir" 2>/dev/null; then
-                        mv "$tmp_dir/$entry" "$tmp_dir/$abi/$lib_name"
+                    if copy_archive_entry "$archive" "$tmp_dir" "$abi" "$lib_name" "$entry"; then
                         copied=true
                         break
                     fi
@@ -166,6 +167,30 @@ copy_archive_symbols() {
             fi
         done
     done
+}
+
+copy_archive_entry() {
+    archive="$1"
+    tmp_dir="$2"
+    abi="$3"
+    lib_name="$4"
+    entry="$5"
+    output_lib="$tmp_dir/$abi/$lib_name"
+
+    if ! unzip -Z -1 "$archive" "$entry" >/dev/null 2>&1; then
+        return 1
+    fi
+
+    if [ -f "$output_lib" ]; then
+        echo "Duplicate native debug symbol entry '$abi/$lib_name' found while reading '$archive'." >&2
+        echo "Refusing to overwrite symbol metadata from an earlier archive." >&2
+        exit 1
+    fi
+
+    unzip -q "$archive" "$entry" -d "$tmp_dir"
+    if [ "$entry" != "$abi/$lib_name" ]; then
+        mv "$tmp_dir/$entry" "$output_lib"
+    fi
 }
 
 validate_output_zip() {
