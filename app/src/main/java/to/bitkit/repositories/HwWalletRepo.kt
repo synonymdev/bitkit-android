@@ -107,6 +107,32 @@ class HwWalletRepo @Inject constructor(
 
     fun cancelPairingCode() = trezorRepo.cancelPairingCode()
 
+    /**
+     * Removes a paired hardware wallet: stops its watchers and forgets every device entry
+     * that tracks the same wallet. The same physical device paired over both bluetooth and
+     * usb is stored once per transport but shares an xpub-derived identity, so forgetting a
+     * single id would leave the tile reappearing through the other transport.
+     */
+    suspend fun removeDevice(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            val knownDevices = hwWalletStore.loadKnownDevices()
+            val target = knownDevices.find { it.id == deviceId }
+            val ids = when (target) {
+                null -> setOf(deviceId)
+                else -> knownDevices.filter { it.walletKey == target.walletKey }.map { it.id }.toSet()
+            }
+            activeWatchers.toList()
+                .filter { it.toDeviceId() in ids }
+                .forEach { stopActiveWatcher(it) }
+            // forgetDevice can report a benign cleanup failure (e.g. disconnecting the live
+            // transport) after it has already dropped the device from the store, so treat the
+            // removal as successful as long as the device is actually gone afterwards.
+            ids.forEach { trezorRepo.forgetDevice(it) }
+            val remaining = hwWalletStore.loadKnownDevices().map { it.id }.toSet()
+            check(ids.none { it in remaining }) { "Hardware wallet '$deviceId' still present after removal" }
+        }
+    }
+
     val wallets: StateFlow<ImmutableList<HwWallet>> = combine(
         hwWalletStore.data,
         trezorRepo.state,

@@ -583,6 +583,64 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `removeDevice stops the device watchers and forgets it`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+        runCurrent()
+
+        val result = sut.removeDevice("dev1")
+
+        assertEquals(true, result.isSuccess)
+        verify(trezorRepo).stopWatcher("dev1|nativeSegwit")
+        verify(trezorRepo).forgetDevice("dev1")
+    }
+
+    @Test
+    fun `removeDevice succeeds when the device is gone despite a cleanup failure`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.failure(AppError("disconnect failed")))
+        val sut = createRepo()
+
+        val result = sut.removeDevice("dev1")
+
+        assertEquals(true, result.isSuccess)
+        verify(trezorRepo).forgetDevice("dev1")
+    }
+
+    @Test
+    fun `removeDevice forgets every entry of a device paired over both transports`() = test {
+        val bleEntry = device.copy(id = "ble1", lastConnectedAt = 1L, xpubs = mapOf("nativeSegwit" to "zpubNS"))
+        val usbEntry = bleEntry.copy(id = "usb1", transportType = TransportType.USB, lastConnectedAt = 2L)
+        storeData.value = HwWalletData(knownDevices = listOf(bleEntry, usbEntry))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(bleEntry, usbEntry), emptyList())
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+        runCurrent()
+
+        sut.removeDevice("usb1")
+
+        verify(trezorRepo).stopWatcher("ble1|nativeSegwit")
+        verify(trezorRepo).forgetDevice("ble1")
+        verify(trezorRepo).forgetDevice("usb1")
+    }
+
+    @Test
+    fun `removeDevice fails when the device is still present afterwards`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.failure(AppError("forget failed")))
+        val sut = createRepo()
+
+        val result = sut.removeDevice("dev1")
+
+        assertEquals(true, result.isFailure)
+    }
+
+    @Test
     fun `forwards transport restored to the trezor repo`() = test {
         val sut = createRepo()
 
