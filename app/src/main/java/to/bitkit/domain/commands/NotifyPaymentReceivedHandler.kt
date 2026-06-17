@@ -1,36 +1,23 @@
 package to.bitkit.domain.commands
 
-import android.content.Context
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import to.bitkit.R
-import to.bitkit.data.SettingsData
-import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
-import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.models.NotificationDetails
-import to.bitkit.models.PrimaryDisplay
-import to.bitkit.models.formatToModernDisplay
 import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
-import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
 class NotifyPaymentReceivedHandler @Inject constructor(
-    @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
-    private val currencyRepo: CurrencyRepo,
-    private val settingsStore: SettingsStore,
+    private val receivedNotificationContent: ReceivedNotificationContent,
 ) {
     suspend operator fun invoke(
         command: NotifyPaymentReceived.Command,
@@ -46,7 +33,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
             val details = buildSheetDetails(command)
 
             if (command.includeNotification) {
-                val notification = buildNotificationContent(details.sats)
+                val notification = receivedNotificationContent.build(details.sats)
                 NotifyPaymentReceived.Result.ShowNotification(details, notification)
             } else {
                 NotifyPaymentReceived.Result.ShowSheet(details)
@@ -102,32 +89,6 @@ class NotifyPaymentReceivedHandler @Inject constructor(
             is NotifyPaymentReceived.Command.Onchain -> command.event.details.amountSats
         },
     )
-
-    private suspend fun buildNotificationContent(sats: Long): NotificationDetails {
-        val settings = settingsStore.data.first()
-        val title = context.getString(R.string.notification__received__title)
-        val body = if (settings.showNotificationDetails) {
-            formatNotificationAmount(sats, settings)
-        } else {
-            context.getString(R.string.notification__received__body_hidden)
-        }
-        return NotificationDetails(title, body)
-    }
-
-    private fun formatNotificationAmount(sats: Long, settings: SettingsData): String {
-        val converted = currencyRepo.convertSatsToFiat(sats).getOrNull()
-
-        val amountText = converted?.let {
-            val btcDisplay = it.bitcoinDisplay(settings.displayUnit)
-            if (settings.primaryDisplay == PrimaryDisplay.BITCOIN) {
-                "${btcDisplay.symbol} ${btcDisplay.value} (${it.formattedWithSymbol()})"
-            } else {
-                "${it.formattedWithSymbol()} (${btcDisplay.symbol} ${btcDisplay.value})"
-            }
-        } ?: "$BITCOIN_SYMBOL ${sats.formatToModernDisplay()}"
-
-        return context.getString(R.string.notification__received__body_amount, amountText)
-    }
 
     companion object {
         const val TAG = "NotifyPaymentReceivedHandler"
