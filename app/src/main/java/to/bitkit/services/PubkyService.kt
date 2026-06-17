@@ -20,8 +20,8 @@ import com.synonym.bitkitcore.pubkySignIn
 import com.synonym.bitkitcore.pubkySignUp
 import com.synonym.bitkitcore.startPubkyAuth
 import com.synonym.paykit.FfiHandshakeProgress
-import com.synonym.paykit.FfiPaymentEndpoint
-import com.synonym.paykit.FfiPrivatePaymentList
+import com.synonym.paykit.FfiPaymentEntry
+import com.synonym.paykit.FfiPrivatePaymentsPayload
 import com.synonym.paykit.PaykitAndroid
 import com.synonym.paykit.paykitAcceptEncryptedLink
 import com.synonym.paykit.paykitAdvanceHandshake
@@ -31,21 +31,22 @@ import com.synonym.paykit.paykitEncryptedLinkHandshakeSnapshotRecipient
 import com.synonym.paykit.paykitEncryptedLinkSnapshotRecipient
 import com.synonym.paykit.paykitExportSession
 import com.synonym.paykit.paykitForceSignOut
+import com.synonym.paykit.paykitGeneratePaymentReference
 import com.synonym.paykit.paykitGetCurrentPublicKey
 import com.synonym.paykit.paykitGetPaymentEndpoint
 import com.synonym.paykit.paykitGetPaymentList
+import com.synonym.paykit.paykitGetPrivatePayments
 import com.synonym.paykit.paykitImportSession
 import com.synonym.paykit.paykitInitialize
 import com.synonym.paykit.paykitInitiateEncryptedLink
 import com.synonym.paykit.paykitIsAuthenticated
-import com.synonym.paykit.paykitReceivePrivateApplicationMessages
 import com.synonym.paykit.paykitRemovePaymentEndpoint
 import com.synonym.paykit.paykitRestoreEncryptedLink
 import com.synonym.paykit.paykitRestoreEncryptedLinkHandshake
 import com.synonym.paykit.paykitSerializeEncryptedLink
 import com.synonym.paykit.paykitSerializeEncryptedLinkHandshake
 import com.synonym.paykit.paykitSetPaymentEndpoint
-import com.synonym.paykit.paykitSetPrivatePaymentList
+import com.synonym.paykit.paykitSetPrivatePayments
 import com.synonym.paykit.paykitSignOut
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
@@ -107,7 +108,7 @@ class PubkyService @Inject constructor(
 
     // region Payment endpoints
 
-    suspend fun getPaymentList(publicKey: String): List<FfiPaymentEndpoint> = ServiceQueue.CORE.background {
+    suspend fun getPaymentList(publicKey: String): List<FfiPaymentEntry> = ServiceQueue.CORE.background {
         isSetup.await()
         paykitGetPaymentList(publicKey)
     }
@@ -191,17 +192,19 @@ class PubkyService @Inject constructor(
         paykitDropEncryptedLinkHandshake(handshakeId)
     }
 
-    suspend fun setPrivatePayments(linkId: String, entries: List<FfiPaymentEndpoint>) =
+    suspend fun setPrivatePayments(linkId: String, entries: List<FfiPaymentEntry>) =
         ServiceQueue.CORE.background {
             isSetup.await()
-            paykitSetPrivatePaymentList(linkId, FfiPrivatePaymentList(paymentEndpoints = entries))
+            val payload = FfiPrivatePaymentsPayload(
+                reference = paykitGeneratePaymentReference(),
+                entries = entries,
+            )
+            paykitSetPrivatePayments(linkId, payload)
         }
 
-    suspend fun getPrivatePayments(linkId: String): FfiPrivatePaymentList? = ServiceQueue.CORE.background {
+    suspend fun getPrivatePayments(linkId: String): FfiPrivatePaymentsPayload? = ServiceQueue.CORE.background {
         isSetup.await()
-        paykitReceivePrivateApplicationMessages(linkId)
-            .asReversed()
-            .firstNotNullOfOrNull { PrivatePaykitMessageParser.parsePrivatePaymentListJson(it.rawJson) }
+        paykitGetPrivatePayments(linkId)
     }
 
     // endregion

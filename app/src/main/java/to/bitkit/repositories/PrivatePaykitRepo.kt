@@ -1,7 +1,7 @@
 package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Scanner
-import com.synonym.paykit.FfiPaymentEndpoint
+import com.synonym.paykit.FfiPaymentEntry
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -45,16 +45,6 @@ import kotlin.time.ExperimentalTime
 private data class PrivatePaymentAttempt(
     val result: Result<PublicPaykitPaymentResult>,
     val shouldDeferPublicFallback: Boolean,
-)
-
-private fun StoredPaymentEntry.toFfiPaymentEndpoint() = FfiPaymentEndpoint(
-    paymentEndpointIdentifier = methodId,
-    paymentEndpointPayload = endpointData,
-)
-
-private fun FfiPaymentEndpoint.toStoredPaymentEntry() = StoredPaymentEntry(
-    methodId = paymentEndpointIdentifier,
-    endpointData = paymentEndpointPayload,
 )
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
@@ -965,7 +955,7 @@ class PrivatePaykitRepo @Inject constructor(
                 ensureCurrentGeneration(generation)
                 if (!canPublishPrivateEndpoints() || knownSavedContact(publicKey) == null) return@withLock
 
-                pubkyService.setPrivatePayments(linkId, entries.map { it.toFfiPaymentEndpoint() })
+                pubkyService.setPrivatePayments(linkId, entries.map { FfiPaymentEntry(it.methodId, it.endpointData) })
                 ensureCurrentGeneration(generation)
                 persistLinkSnapshot(linkId, publicKey, linkWasReplaced = false, generation = generation).getOrThrow()
                 contactState.lastLocalPayloadHash = payloadHash
@@ -1106,27 +1096,14 @@ class PrivatePaykitRepo @Inject constructor(
                 val remotePayload = pubkyService.getPrivatePayments(linkId)
                 ensureCurrentGeneration(generation)
                 recordLinkSuccess(publicKey)
-                if (remotePayload == null) {
-                    persistLinkSnapshot(
-                        linkId = linkId,
-                        publicKey = publicKey,
-                        linkWasReplaced = false,
-                        generation = generation,
-                    ).getOrThrow()
-                    return@runCatching 0
-                }
-
-                val remoteEntries = remotePayload.paymentEndpoints
-                val contactState = ensureState().contacts.getOrPut(publicKey) { ContactState() }
-                contactState.remoteEndpoints = remoteEntries.map { it.toStoredPaymentEntry() }
-                persistState(markWalletBackup = true)
+                persistLinkSnapshot(linkId, publicKey, linkWasReplaced = false, generation = generation).getOrThrow()
                 ensureCurrentGeneration(generation)
-                persistLinkSnapshot(
-                    linkId = linkId,
-                    publicKey = publicKey,
-                    linkWasReplaced = false,
-                    generation = generation,
-                ).getOrThrow()
+                if (remotePayload == null) return@runCatching 0
+
+                val remoteEntries = remotePayload.entries
+                val contactState = ensureState().contacts.getOrPut(publicKey) { ContactState() }
+                contactState.remoteEndpoints = remoteEntries.map { StoredPaymentEntry(it.methodId, it.endpointData) }
+                persistState(markWalletBackup = true)
                 remoteEntries.count()
             }
         }
@@ -1637,7 +1614,7 @@ class PrivatePaykitRepo @Inject constructor(
                     PrivatePaykitPayloads.validateNoisePayload(entries)
                     pubkyService.setPrivatePayments(
                         linkId,
-                        entries.map { it.toFfiPaymentEndpoint() },
+                        entries.map { FfiPaymentEntry(it.methodId, it.endpointData) },
                     )
                     ensureCurrentGeneration(generation)
                     ensureState().contacts[publicKey]?.lastLocalPayloadHash = null

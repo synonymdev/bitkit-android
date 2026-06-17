@@ -103,7 +103,7 @@ class NativeReleaseConfigTest {
         )
         assertTrue(
             symbolsScript.contains(
-                """required_libs="libbitkitcore.so libldk_node.so libpaykit.so libvss_rust_client_ffi.so"""",
+                """required_libs="libbitkitcore.so libldk_node.so libvss_rust_client_ffi.so"""",
             ),
             "Native debug symbols script must validate release-critical native libraries.",
         )

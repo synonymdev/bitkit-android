@@ -3,7 +3,7 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
-import com.synonym.paykit.FfiPaymentEndpoint
+import com.synonym.paykit.FfiPaymentEntry
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Before
@@ -446,9 +446,9 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         clock = clock,
     )
 
-    private fun paymentEntry(methodId: MethodId, value: String) = FfiPaymentEndpoint(
-        paymentEndpointIdentifier = methodId.rawValue,
-        paymentEndpointPayload = """{"value":"$value"}""",
+    private fun paymentEntry(methodId: MethodId, value: String) = FfiPaymentEntry(
+        methodId = methodId.rawValue,
+        endpointData = """{"value":"$value"}""",
     )
 
     private fun setSettings(settings: SettingsData) {

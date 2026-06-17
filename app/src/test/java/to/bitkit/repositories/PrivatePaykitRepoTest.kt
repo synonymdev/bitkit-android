@@ -4,8 +4,8 @@ import android.app.Activity
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
-import com.synonym.paykit.FfiPaymentEndpoint
-import com.synonym.paykit.FfiPrivatePaymentList
+import com.synonym.paykit.FfiPaymentEntry
+import com.synonym.paykit.FfiPrivatePaymentsPayload
 import com.synonym.paykit.PaykitFfiException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,9 +14,6 @@ import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
-import kotlinx.serialization.json.putJsonObject
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -28,7 +25,6 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.eq
-import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -407,8 +403,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verify(pubkyService).setPrivatePayments(
             eq(LINK_ID),
-            argThat<List<FfiPaymentEndpoint>> {
-                isNotEmpty() && all { it.paymentEndpointPayload == TOMBSTONE_PAYLOAD }
+            argThat<List<FfiPaymentEntry>> {
+                isNotEmpty() && all { it.endpointData == TOMBSTONE_PAYLOAD }
             },
         )
         verify(addressReservationRepo).clearContactAssignment(CONTACT_KEY)
@@ -465,8 +461,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(publicPaykitRepo, never()).syncPublishedEndpoints(false)
         verify(pubkyService).setPrivatePayments(
             eq(LINK_ID),
-            argThat<List<FfiPaymentEndpoint>> {
-                isNotEmpty() && all { it.paymentEndpointPayload == TOMBSTONE_PAYLOAD }
+            argThat<List<FfiPaymentEntry>> {
+                isNotEmpty() && all { it.endpointData == TOMBSTONE_PAYLOAD }
             },
         )
         verify(addressReservationRepo).clearContactAssignment(CONTACT_KEY)
@@ -675,8 +671,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verify(pubkyService).getPrivatePayments(LINK_ID)
         verify(pubkyService).setPrivatePayments(
             eq(LINK_ID),
-            argThat<List<FfiPaymentEndpoint>> {
-                any { it.paymentEndpointPayload == PublicPaykitRepo.serializePayload("bcrt1qprivate") }
+            argThat<List<FfiPaymentEntry>> {
+                any { it.endpointData == PublicPaykitRepo.serializePayload("bcrt1qprivate") }
             },
         )
     }
@@ -823,21 +819,19 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verify(pubkyService).setPrivatePayments(
             eq(LINK_ID),
-            argThat<List<FfiPaymentEndpoint>> {
+            argThat<List<FfiPaymentEntry>> {
                 any {
-                    it.paymentEndpointIdentifier == MethodId.Bolt11.rawValue &&
-                        it.paymentEndpointPayload == PublicPaykitRepo.serializePayload(bolt11)
+                    it.methodId == MethodId.Bolt11.rawValue &&
+                        it.endpointData == PublicPaykitRepo.serializePayload(bolt11)
                 }
             },
         )
     }
 
     @Test
-    fun `prepareSavedContacts keeps lightning when new private payment list payload fits`() = test {
-        val bolt11 = "l".repeat(830)
+    fun `prepareSavedContacts drops lightning when raw endpoint map fits but envelope is too large`() = test {
+        val bolt11 = "l".repeat(850)
         val address = "bcrt1qprivate"
-        assertTrue(privatePaymentListPayloadSize(bolt11, address) <= 1_000)
-        assertTrue(legacyPrivatePaymentsPayloadSize(bolt11, address) > 1_000)
         val entriesOnlyPayload = mapOf(
             MethodId.Bolt11.rawValue to PublicPaykitRepo.serializePayload(bolt11),
             MethodId.P2wpkh.rawValue to PublicPaykitRepo.serializePayload(address),
@@ -870,14 +864,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verify(pubkyService).setPrivatePayments(
             eq(LINK_ID),
-            argThat<List<FfiPaymentEndpoint>> {
-                any {
-                    it.paymentEndpointIdentifier == MethodId.Bolt11.rawValue &&
-                        it.paymentEndpointPayload == PublicPaykitRepo.serializePayload(bolt11)
-                } &&
+            argThat<List<FfiPaymentEntry>> {
+                none { it.methodId == MethodId.Bolt11.rawValue } &&
                     any {
-                        it.paymentEndpointIdentifier == MethodId.P2wpkh.rawValue &&
-                            it.paymentEndpointPayload == PublicPaykitRepo.serializePayload(address)
+                        it.methodId == MethodId.P2wpkh.rawValue &&
+                            it.endpointData == PublicPaykitRepo.serializePayload(address)
                     }
             },
         )
@@ -1069,14 +1060,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(
                 privatePaymentsPayload(
                     listOf(
-                        FfiPaymentEndpoint(
-                            paymentEndpointIdentifier = MethodId.Bolt11.rawValue,
-                            paymentEndpointPayload = TOMBSTONE_PAYLOAD,
-                        ),
-                        FfiPaymentEndpoint(
-                            paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
-                            paymentEndpointPayload = TOMBSTONE_PAYLOAD,
-                        ),
+                        FfiPaymentEntry(MethodId.Bolt11.rawValue, TOMBSTONE_PAYLOAD),
+                        FfiPaymentEntry(MethodId.P2wpkh.rawValue, TOMBSTONE_PAYLOAD),
                     ),
                 ),
             )
@@ -1116,9 +1101,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(
                 privatePaymentsPayload(
                     listOf(
-                        FfiPaymentEndpoint(
-                            paymentEndpointIdentifier = MethodId.Bolt11.rawValue,
-                            paymentEndpointPayload = PublicPaykitRepo.serializePayload(PRIVATE_BOLT11),
+                        FfiPaymentEntry(
+                            MethodId.Bolt11.rawValue,
+                            PublicPaykitRepo.serializePayload(PRIVATE_BOLT11),
                         ),
                     ),
                 ),
@@ -1308,9 +1293,9 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(pubkyService.getPrivatePayments(retryLinkId)).thenReturn(
             privatePaymentsPayload(
                 listOf(
-                    FfiPaymentEndpoint(
-                        paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
-                        paymentEndpointPayload = PublicPaykitRepo.serializePayload("bcrt1qprivate"),
+                    FfiPaymentEntry(
+                        methodId = MethodId.P2wpkh.rawValue,
+                        endpointData = PublicPaykitRepo.serializePayload("bcrt1qprivate"),
                     ),
                 ),
             ),
@@ -1332,54 +1317,6 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         verify(pubkyService).closeEncryptedLink(LINK_ID)
         verify(pubkyService).getPrivatePayments(retryLinkId)
-    }
-
-    @Test
-    fun `beginSavedContactPayment persists remote endpoints before advancing link snapshot`() = test {
-        cacheData.value = PrivatePaykitCacheData(
-            contacts = mapOf(
-                CONTACT_KEY to PrivatePaykitContactCacheData(
-                    lastLocalPayloadHash = LOCAL_PAYLOAD_HASH,
-                    linkCompletedAt = NOW_SECONDS - 60,
-                ),
-            ),
-        )
-        whenever(keychain.loadString(Keychain.Key.PRIVATE_PAYKIT_SECRET_STATE.name))
-            .thenReturn(secretStateJson())
-        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(SECRET_KEY_HEX)
-        whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
-        whenever(pubkyService.encryptedLinkSnapshotRecipient(LINK_SNAPSHOT)).thenReturn(CONTACT_KEY)
-        whenever(pubkyService.restoreEncryptedLink(SECRET_KEY_HEX, LINK_SNAPSHOT)).thenReturn(LINK_ID)
-        whenever(pubkyService.getPrivatePayments(LINK_ID)).thenReturn(
-            privatePaymentsPayload(
-                listOf(
-                    FfiPaymentEndpoint(
-                        paymentEndpointIdentifier = MethodId.P2wpkh.rawValue,
-                        paymentEndpointPayload = PublicPaykitRepo.serializePayload("bcrt1qprivate"),
-                    ),
-                ),
-            ),
-        )
-        whenever(pubkyService.serializeEncryptedLink(LINK_ID)).thenReturn(UPDATED_LINK_SNAPSHOT)
-        whenever(publicPaykitRepo.payableEndpoints(any())).thenAnswer { it.getArgument<List<Endpoint>>(0) }
-        whenever(coreService.isAddressUsed("bcrt1qprivate")).thenReturn(false)
-        whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
-        rememberSavedContact()
-
-        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
-        val snapshot = sut.backupSnapshot().getOrThrow()?.get(CONTACT_KEY)
-
-        assertTrue(result is PublicPaykitPaymentResult.Opened)
-        assertNotNull(snapshot)
-        assertEquals(
-            mapOf(MethodId.P2wpkh.rawValue to PublicPaykitRepo.serializePayload("bcrt1qprivate")),
-            snapshot.remoteEndpoints,
-        )
-
-        val order = inOrder(pubkyService, cacheStore)
-        order.verify(pubkyService).getPrivatePayments(LINK_ID)
-        order.verify(cacheStore).update(any())
-        order.verify(pubkyService).serializeEncryptedLink(LINK_ID)
     }
 
     @Test
@@ -1529,27 +1466,10 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         payeeNodeId = null,
     )
 
-    private fun privatePaymentListPayloadSize(bolt11: String, address: String) = buildJsonObject {
-        put("version", 1)
-        put("kind", "paykit.private_payment_list")
-        putJsonObject("payment_endpoints") {
-            put(MethodId.Bolt11.rawValue, PublicPaykitRepo.serializePayload(bolt11))
-            put(MethodId.P2wpkh.rawValue, PublicPaykitRepo.serializePayload(address))
-        }
-    }.toString().encodeToByteArray().size
-
-    private fun legacyPrivatePaymentsPayloadSize(bolt11: String, address: String) = buildJsonObject {
-        put("version", 1)
-        put("kind", "paykit.private_payments")
-        put("reference", "550e8400-e29b-41d4-a716-446655440000")
-        putJsonObject("entries") {
-            put(MethodId.Bolt11.rawValue, PublicPaykitRepo.serializePayload(bolt11))
-            put(MethodId.P2wpkh.rawValue, PublicPaykitRepo.serializePayload(address))
-        }
-    }.toString().encodeToByteArray().size
-
-    private fun privatePaymentsPayload(entries: List<FfiPaymentEndpoint>) =
-        FfiPrivatePaymentList(paymentEndpoints = entries)
+    private fun privatePaymentsPayload(entries: List<FfiPaymentEntry>) = FfiPrivatePaymentsPayload(
+        reference = "550e8400-e29b-41d4-a716-446655440000",
+        entries = entries,
+    )
 
     private fun secretStateJson(
         linkSnapshotHex: String? = LINK_SNAPSHOT,

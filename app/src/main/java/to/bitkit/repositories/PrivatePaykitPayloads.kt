@@ -1,7 +1,5 @@
 package to.bitkit.repositories
 
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import to.bitkit.di.json
@@ -10,7 +8,8 @@ import java.security.MessageDigest
 internal object PrivatePaykitPayloads {
     private const val MAX_NOISE_PAYLOAD_BYTES = 1000
     private const val PRIVATE_ENDPOINT_REMOVAL_PAYLOAD = """{"value":""}"""
-    private const val PRIVATE_PAYMENT_LIST_KIND = "paykit.private_payment_list"
+    private const val PRIVATE_PAYMENTS_ENVELOPE_KIND = "paykit.private_payments"
+    private const val PRIVATE_PAYMENTS_REFERENCE_PLACEHOLDER = "550e8400-e29b-41d4-a716-446655440000"
 
     private val noisePayloadJson = Json(json) {
         prettyPrint = false
@@ -53,22 +52,23 @@ internal object PrivatePaykitPayloads {
         endpoints.toSortedMap().map { StoredPaymentEntry(it.key, it.value) }
 
     private fun isNoisePayloadWithinLimit(entries: List<StoredPaymentEntry>): Boolean {
-        val paymentEndpoints = entries.associate { it.methodId to it.endpointData }
-        val envelope = PrivatePaymentListEnvelope(
+        val payload = entries.associate { it.methodId to it.endpointData }
+        val envelope = PrivatePaymentsEnvelope(
             version = 1,
-            kind = PRIVATE_PAYMENT_LIST_KIND,
-            paymentEndpoints = paymentEndpoints,
+            kind = PRIVATE_PAYMENTS_ENVELOPE_KIND,
+            reference = PRIVATE_PAYMENTS_REFERENCE_PLACEHOLDER,
+            entries = payload,
         )
         return noisePayloadJson.encodeToString(envelope).encodeToByteArray().size <= MAX_NOISE_PAYLOAD_BYTES
     }
 }
 
-@Serializable
-private data class PrivatePaymentListEnvelope(
+@kotlinx.serialization.Serializable
+private data class PrivatePaymentsEnvelope(
     val version: Int,
     val kind: String,
-    @SerialName("payment_endpoints")
-    val paymentEndpoints: Map<String, String>,
+    val reference: String,
+    val entries: Map<String, String>,
 )
 
 internal data class PrivatePaykitPayloadSelection(
