@@ -3,6 +3,7 @@ package to.bitkit.ui.screens.recovery
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.runtime.Immutable
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -116,6 +117,40 @@ class RecoveryViewModel @Inject constructor(
         _uiState.update { it.copy(showWipeConfirmation = false) }
     }
 
+    fun showGraphResetConfirmation() {
+        _uiState.update { it.copy(showGraphResetConfirmation = true) }
+    }
+
+    fun hideGraphResetConfirmation() {
+        _uiState.update { it.copy(showGraphResetConfirmation = false) }
+    }
+
+    fun resetNetworkGraph() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isResettingGraph = true, showGraphResetConfirmation = false) }
+
+            lightningRepo.resetNetworkGraph().fold(
+                onSuccess = {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.SUCCESS,
+                        title = context.getString(R.string.security__reset_graph_success_title),
+                        description = context.getString(R.string.security__reset_graph_success_description),
+                    )
+                },
+                onFailure = { error ->
+                    Logger.error("Failed to reset network graph", error, context = TAG)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.common__error),
+                        description = context.getString(R.string.security__reset_graph_error),
+                    )
+                },
+            )
+
+            _uiState.update { it.copy(isResettingGraph = false) }
+        }
+    }
+
     fun wipeWallet() {
         viewModelScope.launch {
             walletRepo.wipeWallet().onFailure { error ->
@@ -184,9 +219,12 @@ class RecoveryViewModel @Inject constructor(
     }
 }
 
+@Immutable
 data class RecoveryUiState(
     val isExportingLogs: Boolean = false,
     val showWipeConfirmation: Boolean = false,
+    val showGraphResetConfirmation: Boolean = false,
+    val isResettingGraph: Boolean = false,
     val errorMessage: String? = null,
     val authAction: PendingAuthAction = PendingAuthAction.None,
     val isPinEnabled: Boolean = false,
