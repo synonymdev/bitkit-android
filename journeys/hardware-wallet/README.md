@@ -47,14 +47,16 @@ instead of UI interactions.
 ## Journeys
 
 Run in this order — `connect-home-tile.xml` pairs the emulator that the later journeys
-rely on, and `suggestion-intro-sheet.xml` ends by re-pairing after a forget.
+rely on, `suggestion-intro-sheet.xml` ends by re-pairing after a forget, and
+`detail-overview.xml` runs last because its final Remove step forgets the device.
 
 | Journey | Covers |
 | - | - |
-| `connect-home-tile.xml` | Dev-screen connect, home tile, indicator, balance, overview toast |
+| `connect-home-tile.xml` | Dev-screen connect, home tile, indicator, balance, detail screen opens |
 | `activity-blue-icons.xml` | Hardware activity merge, blue icons, All Activity filters, detail fallback |
 | `usb-reconnect.xml` | Disconnect indicator, injected USB attach intent → silent auto-reconnect |
 | `suggestion-intro-sheet.xml` | Forget device, Hardware suggestion card, connect intro sheet |
+| `detail-overview.xml` | Detail screen overview, Transfer placeholder, activity, Remove confirm + forget |
 
 To exercise the received-money sheet (not covered by a journey because it needs an
 out-of-band transfer), fund the emulator wallet on regtest from `bitkit-docker`, e.g.
