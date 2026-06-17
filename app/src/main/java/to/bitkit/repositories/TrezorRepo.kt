@@ -672,12 +672,13 @@ class TrezorRepo @Inject constructor(
         network: BitkitCoreNetwork,
         gapLimit: UInt = 20u,
         accountType: AccountType? = null,
+        electrumUrl: String = electrumUrlForNetwork(network),
     ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             val params = WatcherParams(
                 watcherId = watcherId,
                 extendedKey = extendedKey,
-                electrumUrl = electrumUrlForNetwork(network),
+                electrumUrl = electrumUrl,
                 network = network,
                 accountType = accountType,
                 gapLimit = gapLimit,

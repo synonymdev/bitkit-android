@@ -203,7 +203,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             xpubs = mapOf("nativeSegwit" to "zpubNS2"),
         )
         storeData.value = HwWalletData(knownDevices = listOf(device, secondDevice))
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
         val sut = createRepo()
 
         watcherEvents.emit(
@@ -284,28 +284,70 @@ class HwWalletRepoTest : BaseUnitTest() {
             )
         )
         settingsData.value = SettingsData(addressTypesToMonitor = listOf("nativeSegwit", "taproot"))
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
 
         createRepo()
 
-        verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull())
-        verify(trezorRepo).startWatcher(eq("dev1|taproot"), any(), any(), any(), anyOrNull())
-        verify(trezorRepo, never()).startWatcher(eq("dev1|legacy"), any(), any(), any(), anyOrNull())
+        verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any())
+        verify(trezorRepo).startWatcher(eq("dev1|taproot"), any(), any(), any(), anyOrNull(), any())
+        verify(trezorRepo, never()).startWatcher(eq("dev1|legacy"), any(), any(), any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `starts watchers on configured electrum server`() = test {
+        val electrumServer = "ssl://custom.example:50002"
+        settingsData.value = SettingsData(electrumServer = electrumServer)
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+
+        createRepo()
+
+        verify(trezorRepo).startWatcher(
+            watcherId = eq("dev1|nativeSegwit"),
+            extendedKey = eq("zpubNS"),
+            network = eq(Env.network.toCoreNetwork()),
+            gapLimit = any(),
+            accountType = anyOrNull(),
+            electrumUrl = eq(electrumServer),
+        )
+    }
+
+    @Test
+    fun `restarts active watchers when electrum server changes`() = test {
+        val firstServer = "ssl://first.example:50002"
+        val secondServer = "ssl://second.example:50002"
+        settingsData.value = SettingsData(electrumServer = firstServer)
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever(trezorRepo.stopWatcher(any())).thenReturn(Result.success(Unit))
+
+        createRepo()
+        runCurrent()
+
+        settingsData.value = settingsData.value.copy(electrumServer = secondServer)
+        runCurrent()
+
+        verify(trezorRepo).stopWatcher("dev1|nativeSegwit")
+        verify(trezorRepo).startWatcher(
+            watcherId = eq("dev1|nativeSegwit"),
+            extendedKey = eq("zpubNS"),
+            network = eq(Env.network.toCoreNetwork()),
+            gapLimit = any(),
+            accountType = anyOrNull(),
+            electrumUrl = eq(secondServer),
+        )
     }
 
     @Test
     fun `retries watcher start after failure`() = test {
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull()))
-            .thenReturn(Result.failure(AppError("start failed")), Result.success(Unit))
+        wheneverStartWatcher().thenReturn(Result.failure(AppError("start failed")), Result.success(Unit))
 
         createRepo()
 
-        verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull())
+        verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any())
 
         advanceTimeBy(30.seconds)
         runCurrent()
 
-        verify(trezorRepo, times(2)).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull())
+        verify(trezorRepo, times(2)).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any())
     }
 
     @Test
@@ -443,12 +485,12 @@ class HwWalletRepoTest : BaseUnitTest() {
         val bleEntry = device.copy(id = "ble1", lastConnectedAt = 1L, xpubs = mapOf("nativeSegwit" to "zpubNS"))
         val usbEntry = bleEntry.copy(id = "usb1", transportType = TransportType.USB, lastConnectedAt = 2L)
         storeData.value = HwWalletData(knownDevices = listOf(bleEntry, usbEntry))
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
 
         val sut = createRepo()
 
-        verify(trezorRepo).startWatcher(eq("ble1|nativeSegwit"), any(), any(), any(), anyOrNull())
-        verify(trezorRepo, never()).startWatcher(eq("usb1|nativeSegwit"), any(), any(), any(), anyOrNull())
+        verify(trezorRepo).startWatcher(eq("ble1|nativeSegwit"), any(), any(), any(), anyOrNull(), any())
+        verify(trezorRepo, never()).startWatcher(eq("usb1|nativeSegwit"), any(), any(), any(), anyOrNull(), any())
 
         watcherEvents.emit(
             "ble1|nativeSegwit" to WatcherEvent.TransactionsChanged(
@@ -475,7 +517,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         trezorState.value = TrezorState(
             connected = ConnectedTrezorDevice(id = "usb1", features = mock()),
         )
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
 
         val sut = createRepo()
 
@@ -490,7 +532,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         storeData.value = HwWalletData(
             knownDevices = listOf(device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS")))
         )
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.failure(AppError("stop failed")))
         val sut = createRepo()
 
@@ -519,7 +561,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         storeData.value = HwWalletData(
             knownDevices = listOf(device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS")))
         )
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
         val sut = createRepo()
 
@@ -565,7 +607,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         storeData.value = HwWalletData(
             knownDevices = listOf(device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS")))
         )
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull())).thenReturn(Result.success(Unit))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
 
         createRepo()
 
@@ -575,6 +617,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             network = eq(Env.network.toCoreNetwork()),
             gapLimit = any(),
             accountType = anyOrNull(),
+            electrumUrl = any(),
         )
     }
 
@@ -598,5 +641,16 @@ class HwWalletRepoTest : BaseUnitTest() {
         blockHeight = 850_000u,
         timestamp = 1_700_000_000uL,
         confirmations = 3u,
+    )
+
+    private suspend fun wheneverStartWatcher() = whenever(
+        trezorRepo.startWatcher(
+            any(),
+            any(),
+            any(),
+            any(),
+            anyOrNull(),
+            any(),
+        )
     )
 }

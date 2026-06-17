@@ -73,6 +73,7 @@ class HwWalletRepo @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     private val activeWatchers = mutableSetOf<String>()
+    private val activeWatcherElectrumUrls = mutableMapOf<String, String>()
     private val retryingWatcherStarts = mutableSetOf<String>()
     private val watcherSyncRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val _watcherData = MutableStateFlow<Map<String, HwWatcherData>>(emptyMap())
@@ -92,6 +93,7 @@ class HwWalletRepo @Inject constructor(
                 .onFailure { Logger.warn("Failed to stop watcher '$watcherId' while resetting", it, context = TAG) }
         }
         activeWatchers.clear()
+        activeWatcherElectrumUrls.clear()
         retryingWatcherStarts.clear()
         emittedReceivedTxIds.clear()
         _watcherData.update { emptyMap() }
@@ -209,9 +211,11 @@ class HwWalletRepo @Inject constructor(
         scope.launch {
             val desiredWatchers = combine(
                 hwWalletStore.data,
-                settingsStore.data.map { it.addressTypesToMonitor.toSet() }.distinctUntilChanged(),
-            ) { data, monitoredTypes ->
-                data.knownDevices to monitoredTypes
+                settingsStore.data
+                    .map { WatcherSettings(it.addressTypesToMonitor.toSet(), it.electrumServer) }
+                    .distinctUntilChanged(),
+            ) { data, settings ->
+                data.knownDevices to settings
             }
 
             combine(
@@ -219,27 +223,34 @@ class HwWalletRepo @Inject constructor(
                 watcherSyncRequests.onStart { emit(Unit) },
             ) { desired, _ ->
                 desired
-            }.collect { (knownDevices, monitoredTypes) ->
+            }.collect { (knownDevices, watcherSettings) ->
                 // Only watch the address types the user monitors (Settings > Advanced > Address Type),
                 // mirroring the on-chain wallet. Xpubs for all types are still captured on connect, so
                 // toggling a type on later starts its watcher without reconnecting the device.
                 // Device entries sharing an xpub (same device on bluetooth and usb) watch it only once.
                 val filtered = knownDevices.flatMap { device ->
                     device.xpubs
-                        .filterKeys { it in monitoredTypes }
-                        .map { (addressType, xpub) -> WatcherSpec(device.id, addressType, xpub) }
+                        .filterKeys { it in watcherSettings.monitoredTypes }
+                        .map { (addressType, xpub) ->
+                            WatcherSpec(device.id, addressType, xpub, watcherSettings.electrumUrl)
+                        }
                 }.distinctBy { it.addressType to it.xpub }
                 val filteredIds = filtered.map { it.watcherId }.toSet()
 
                 filtered.forEach { spec ->
-                    if (spec.watcherId in activeWatchers) return@forEach
+                    val isActive = spec.watcherId in activeWatchers
+                    if (isActive && activeWatcherElectrumUrls[spec.watcherId] == spec.electrumUrl) return@forEach
+                    if (isActive && !stopActiveWatcher(spec.watcherId)) return@forEach
+
                     trezorRepo.startWatcher(
                         watcherId = spec.watcherId,
                         extendedKey = spec.xpub,
                         network = Env.network.toCoreNetwork(),
                         accountType = spec.addressType.toAddressType()?.toAccountType(),
+                        electrumUrl = spec.electrumUrl,
                     ).onSuccess {
                         activeWatchers += spec.watcherId
+                        activeWatcherElectrumUrls[spec.watcherId] = spec.electrumUrl
                         retryingWatcherStarts -= spec.watcherId
                     }.onFailure {
                         Logger.warn("Retrying watcher '${spec.watcherId}' after start failure", it, context = TAG)
@@ -250,14 +261,18 @@ class HwWalletRepo @Inject constructor(
                 // A failed stop stays active so the next sync retries it; dropping it here
                 // would leave the orphaned watcher feeding _watcherData as a ghost balance.
                 (activeWatchers - filteredIds).forEach { staleId ->
-                    trezorRepo.stopWatcher(staleId).onSuccess {
-                        activeWatchers -= staleId
-                        _watcherData.update { it - staleId }
-                    }
+                    stopActiveWatcher(staleId)
                 }
             }
         }
     }
+
+    private suspend fun stopActiveWatcher(watcherId: String): Boolean =
+        trezorRepo.stopWatcher(watcherId).onSuccess {
+            activeWatchers -= watcherId
+            activeWatcherElectrumUrls -= watcherId
+            _watcherData.update { it - watcherId }
+        }.isSuccess
 
     private fun scheduleWatcherStartRetry(watcherId: String) {
         if (!retryingWatcherStarts.add(watcherId)) return
@@ -331,12 +346,18 @@ class HwWalletRepo @Inject constructor(
         val deviceId: String,
         val addressType: String,
         val xpub: String,
+        val electrumUrl: String,
     ) {
         val watcherId: String get() = "$deviceId$WATCHER_ID_SEPARATOR$addressType"
     }
 
     private fun String.toDeviceId(): String = substringBefore(WATCHER_ID_SEPARATOR)
 }
+
+private data class WatcherSettings(
+    val monitoredTypes: Set<String>,
+    val electrumUrl: String,
+)
 
 /**
  * Cross-transport identity of the wallet a device entry tracks: entries created by
