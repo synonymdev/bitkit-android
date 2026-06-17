@@ -214,7 +214,6 @@ private fun HardwareWalletContent(
                 text = stringResource(R.string.hardware__remove_dialog_text),
                 confirmText = stringResource(R.string.common__remove),
                 dismissText = stringResource(R.string.common__cancel),
-                confirmTextColor = Colors.Brand,
                 onConfirm = onConfirmRemove,
                 onDismiss = onDismissRemoveDialog,
             )
