@@ -3,11 +3,13 @@ package to.bitkit.ui.screens.recovery
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.runtime.Immutable
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -17,6 +19,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.ext.relaunchApp
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
@@ -24,6 +27,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class RecoveryViewModel @Inject constructor(
@@ -116,6 +120,42 @@ class RecoveryViewModel @Inject constructor(
         _uiState.update { it.copy(showWipeConfirmation = false) }
     }
 
+    fun showGraphResetConfirmation() {
+        _uiState.update { it.copy(showGraphResetConfirmation = true) }
+    }
+
+    fun hideGraphResetConfirmation() {
+        _uiState.update { it.copy(showGraphResetConfirmation = false) }
+    }
+
+    fun resetNetworkGraph() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isResettingGraph = true, showGraphResetConfirmation = false) }
+
+            lightningRepo.resetNetworkGraph().fold(
+                onSuccess = {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.SUCCESS,
+                        title = context.getString(R.string.security__reset_graph_success_title),
+                        description = context.getString(R.string.security__reset_graph_success_description),
+                    )
+                    // Keep the loading state and restart so the graph is re-downloaded on next launch.
+                    delay(RESTART_DELAY)
+                    context.relaunchApp()
+                },
+                onFailure = { error ->
+                    Logger.error("Failed to reset network graph", error, context = TAG)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.common__error),
+                        description = context.getString(R.string.security__reset_graph_error),
+                    )
+                    _uiState.update { it.copy(isResettingGraph = false) }
+                },
+            )
+        }
+    }
+
     fun wipeWallet() {
         viewModelScope.launch {
             walletRepo.wipeWallet().onFailure { error ->
@@ -181,12 +221,16 @@ class RecoveryViewModel @Inject constructor(
     private companion object {
         const val TAG = "RecoveryViewModel"
         private const val SUBJECT = "Bitkit Support"
+        private val RESTART_DELAY = 5.seconds
     }
 }
 
+@Immutable
 data class RecoveryUiState(
     val isExportingLogs: Boolean = false,
     val showWipeConfirmation: Boolean = false,
+    val showGraphResetConfirmation: Boolean = false,
+    val isResettingGraph: Boolean = false,
     val errorMessage: String? = null,
     val authAction: PendingAuthAction = PendingAuthAction.None,
     val isPinEnabled: Boolean = false,
