@@ -87,6 +87,8 @@ class HwWalletRepo @Inject constructor(
     /** Forwards UI-delivered transport events, e.g. the USB attach intent from the OS app picker. */
     fun onTransportRestored(transportType: TransportType) = trezorRepo.onTransportRestored(transportType)
 
+    fun onAppForegrounded() = trezorRepo.onAppForegrounded()
+
     suspend fun resetState() = withContext(ioDispatcher) {
         activeWatchers.toList().forEach { watcherId ->
             trezorRepo.stopWatcher(watcherId)

@@ -9,6 +9,7 @@ import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.WalletSelection
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -41,7 +42,7 @@ import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-@OptIn(ExperimentalTime::class)
+@OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 @Suppress("LargeClass")
 class TrezorRepoTest : BaseUnitTest() {
 
@@ -353,6 +354,39 @@ class TrezorRepoTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertNotNull(sut.state.value.connected)
+    }
+
+    @Test
+    fun `app foreground auto-reconnects to a known bluetooth device`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo(
+            transportType = TrezorTransportType.BLUETOOTH,
+            path = "ble-path",
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(
+            listOf(mockKnownDevice(transportType = TransportType.BLUETOOTH))
+        )
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
+        sut = createSut()
+
+        sut.onAppForegrounded()
+        advanceUntilIdle()
+
+        assertNotNull(sut.state.value.connected)
+        verify(trezorService).connect(eq(DEVICE_ID), any(), eq(false))
+    }
+
+    @Test
+    fun `app foreground skips reconnect without a known bluetooth device`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        sut = createSut()
+
+        sut.onAppForegrounded()
+        advanceUntilIdle()
+
+        verify(trezorService, never()).scan()
     }
 
     @Test

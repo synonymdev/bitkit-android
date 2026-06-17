@@ -3186,6 +3186,11 @@ class AppViewModel @Inject constructor(
 
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()
 
+    fun onHomeResumed() {
+        checkTimedSheets()
+        hwWalletRepo.onAppForegrounded()
+    }
+
     fun onLeftHome() = timedSheetManager.onHomeScreenExited()
 
     fun dismissTimedSheet() = timedSheetManager.dismissCurrentSheet()

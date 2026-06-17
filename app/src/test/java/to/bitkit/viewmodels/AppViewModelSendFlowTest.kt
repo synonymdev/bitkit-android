@@ -264,6 +264,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onHomeResumed forwards app foreground to the hardware wallet repo`() = test {
+        sut.onHomeResumed()
+
+        verify(hwWalletRepo).onAppForegrounded()
+    }
+
+    @Test
     fun `hardware received tx details navigate directly to hardware activity`() = test {
         val txId = "hardware-tx"
 

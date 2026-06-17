@@ -244,7 +244,7 @@ fun HomeScreen(
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> appViewModel.checkTimedSheets()
+                Lifecycle.Event.ON_RESUME -> appViewModel.onHomeResumed()
                 Lifecycle.Event.ON_PAUSE -> appViewModel.onLeftHome()
                 else -> Unit
             }
