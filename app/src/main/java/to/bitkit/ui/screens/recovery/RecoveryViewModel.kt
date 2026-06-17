@@ -9,6 +9,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +19,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.ext.relaunchApp
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LogsRepo
@@ -25,6 +27,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
+import kotlin.time.Duration.Companion.seconds
 
 @HiltViewModel
 class RecoveryViewModel @Inject constructor(
@@ -136,6 +139,10 @@ class RecoveryViewModel @Inject constructor(
                         title = context.getString(R.string.security__reset_graph_success_title),
                         description = context.getString(R.string.security__reset_graph_success_description),
                     )
+                    // Keep the loading state and restart so the graph is re-downloaded on next launch.
+                    delay(RESTART_DELAY)
+                    lightningRepo.stop()
+                    context.relaunchApp()
                 },
                 onFailure = { error ->
                     Logger.error("Failed to reset network graph", error, context = TAG)
@@ -144,10 +151,9 @@ class RecoveryViewModel @Inject constructor(
                         title = context.getString(R.string.common__error),
                         description = context.getString(R.string.security__reset_graph_error),
                     )
+                    _uiState.update { it.copy(isResettingGraph = false) }
                 },
             )
-
-            _uiState.update { it.copy(isResettingGraph = false) }
         }
     }
 
@@ -216,6 +222,7 @@ class RecoveryViewModel @Inject constructor(
     private companion object {
         const val TAG = "RecoveryViewModel"
         private const val SUBJECT = "Bitkit Support"
+        private val RESTART_DELAY = 5.seconds
     }
 }
 

@@ -20,6 +20,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import to.bitkit.R
+import to.bitkit.androidServices.LightningNodeService
 import java.io.InputStream
 
 // System Services
@@ -88,4 +89,14 @@ fun Context.startActivityAppSettings() {
     } else {
         startActivity(Intent(Settings.ACTION_SETTINGS))
     }
+}
+
+fun Context.relaunchApp() {
+    // Stop the foreground node service (its onDestroy stops the LDK node) before relaunching.
+    runCatching { stopService(Intent(this, LightningNodeService::class.java)) }
+
+    val launchIntent = packageManager.getLaunchIntentForPackage(packageName)
+        ?.apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK) }
+    startActivity(launchIntent)
+    Runtime.getRuntime().exit(0)
 }
