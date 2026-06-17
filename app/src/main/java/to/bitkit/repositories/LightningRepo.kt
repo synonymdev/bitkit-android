@@ -361,15 +361,7 @@ class LightningRepo @Inject constructor(
                     Logger.warn("Network graph is stale, resetting and restarting...", context = TAG)
 
                     lightningService.stop()
-                    lightningService.resetNetworkGraph(walletIndex)
-
-                    runCatching {
-                        vssBackupClientLdk.setup(walletIndex).getOrThrow()
-                        vssBackupClientLdk.deleteObject("network_graph").getOrThrow()
-                        Logger.info("Cleared stale network graph from VSS (first delete)", context = TAG)
-                    }.onFailure {
-                        Logger.warn("Failed to clear graph from VSS (first delete)", it, context = TAG)
-                    }
+                    clearNetworkGraph(walletIndex)
 
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
                     shouldRestartForGraphReset = true
@@ -482,6 +474,27 @@ class LightningRepo @Inject constructor(
                     _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
                 }
             }
+        }
+    }
+
+    suspend fun resetNetworkGraph(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
+        Logger.warn("Resetting network graph (manual)", context = TAG)
+        runCatching {
+            if (lightningService.node != null) {
+                lightningService.stop()
+            }
+            clearNetworkGraph(walletIndex)
+        }
+    }
+
+    private suspend fun clearNetworkGraph(walletIndex: Int) {
+        lightningService.resetNetworkGraph(walletIndex)
+        runCatching {
+            vssBackupClientLdk.setup(walletIndex).getOrThrow()
+            vssBackupClientLdk.deleteObject("network_graph").getOrThrow()
+            Logger.info("Cleared network graph from VSS", context = TAG)
+        }.onFailure {
+            Logger.warn("Failed to clear network graph from VSS", it, context = TAG)
         }
     }
 
