@@ -35,7 +35,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NotificationDetails
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
-import to.bitkit.services.NodeServiceState
+import to.bitkit.services.NodeServiceFgState
 import to.bitkit.ui.ID_NOTIFICATION_NODE
 import to.bitkit.ui.MainActivity
 import to.bitkit.ui.pushNotification
@@ -76,7 +76,7 @@ class LightningNodeService : Service() {
     lateinit var appWidgetRefreshScheduler: AppWidgetRefreshScheduler
 
     @Inject
-    lateinit var nodeServiceState: NodeServiceState
+    lateinit var nodeServiceFgState: NodeServiceFgState
 
     private var hasStartedNode = false
 
@@ -195,7 +195,7 @@ class LightningNodeService : Service() {
             }
 
             ACTION_START_SERVICE -> if (promoteToForeground(startId)) {
-                nodeServiceState.setForegroundServiceRunning(true)
+                nodeServiceFgState.setForegroundServiceRunning(true)
                 setupService()
             }
             else -> stop(startId) { Logger.warn("Stopped service for unsupported action '$action'", context = TAG) }
@@ -237,7 +237,7 @@ class LightningNodeService : Service() {
 
     override fun onDestroy() {
         Logger.debug("onDestroy", context = TAG)
-        nodeServiceState.setForegroundServiceRunning(false)
+        nodeServiceFgState.setForegroundServiceRunning(false)
         // Safe to call even if already stopped — guarded by lifecycleMutex + isStoppedOrStopping()
         serviceScope.launch { lightningRepo.stop() }
         super.onDestroy()

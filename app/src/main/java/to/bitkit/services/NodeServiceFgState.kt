@@ -10,7 +10,7 @@ import javax.inject.Singleton
  * instead of posting its own (duplicate) notification.
  */
 @Singleton
-class NodeServiceState @Inject constructor() {
+class NodeServiceFgState @Inject constructor() {
     @Volatile
     var isForegroundServiceRunning = false
         private set

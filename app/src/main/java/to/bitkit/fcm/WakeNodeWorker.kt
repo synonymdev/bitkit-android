@@ -37,7 +37,7 @@ import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
-import to.bitkit.services.NodeServiceState
+import to.bitkit.services.NodeServiceFgState
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
 import to.bitkit.utils.measured
@@ -54,7 +54,7 @@ class WakeNodeWorker @AssistedInject constructor(
     private val activityRepo: ActivityRepo,
     private val cacheStore: CacheStore,
     private val receivedNotificationContent: ReceivedNotificationContent,
-    private val nodeServiceState: NodeServiceState,
+    private val nodeServiceFgState: NodeServiceFgState,
 ) : CoroutineWorker(appContext, workerParams) {
     private var bestAttemptContent: NotificationDetails? = null
 
@@ -269,7 +269,7 @@ class WakeNodeWorker @AssistedInject constructor(
     }
 
     private fun isHandledInProcess(): Boolean =
-        App.currentActivity?.value != null || nodeServiceState.isForegroundServiceRunning
+        App.currentActivity?.value != null || nodeServiceFgState.isForegroundServiceRunning
 
     private suspend fun deliver() {
         // Send notification first
