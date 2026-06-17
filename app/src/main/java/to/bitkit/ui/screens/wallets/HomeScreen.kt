@@ -119,7 +119,6 @@ import to.bitkit.models.BannerItem
 import to.bitkit.models.HwWallet
 import to.bitkit.models.MoneyType
 import to.bitkit.models.Suggestion
-import to.bitkit.models.Toast
 import to.bitkit.models.TransportType
 import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
@@ -180,7 +179,6 @@ import to.bitkit.ui.screens.widgets.suggestions.SuggestionsPreviewGrid
 import to.bitkit.ui.screens.widgets.weather.WeatherCard
 import to.bitkit.ui.screens.widgets.weather.WeatherCardSmall
 import to.bitkit.ui.shared.modifiers.clickableAlpha
-import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.PinRoute
@@ -224,7 +222,6 @@ fun HomeScreen(
     homeViewModel: HomeViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val hasSeenTransferIntro by settingsViewModel.hasSeenTransferIntro.collectAsStateWithLifecycle()
     val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
     val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
@@ -384,14 +381,7 @@ fun HomeScreen(
         onNavigateToActivityItem = { rootNavController.navigateToActivityItem(it) },
         onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
         onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },
-        onClickHardwareWallet = {
-            scope.launch {
-                ToastEventBus.send(
-                    type = Toast.ToastType.WARNING,
-                    title = "Hardware wallet overview not yet implemented.",
-                )
-            }
-        },
+        onClickHardwareWallet = { walletNavController.navigateTo(Routes.HardwareWallet(it)) },
         onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
     )
 }
@@ -429,7 +419,7 @@ private fun Content(
     onNavigateToActivityItem: (String) -> Unit = {},
     onNavigateToSavings: () -> Unit = {},
     onNavigateToSpending: () -> Unit = {},
-    onClickHardwareWallet: () -> Unit = {},
+    onClickHardwareWallet: (String) -> Unit = {},
     onCalculatorInputActiveChanged: (Boolean) -> Unit = {},
     hazeState: HazeState = rememberHazeState(),
     balances: BalanceState = LocalBalances.current,
@@ -600,7 +590,7 @@ private fun WalletPage(
     onNavigateToActivityItem: (String) -> Unit,
     onNavigateToSavings: () -> Unit,
     onNavigateToSpending: () -> Unit,
-    onClickHardwareWallet: () -> Unit,
+    onClickHardwareWallet: (String) -> Unit,
 ) {
     val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val pullToRefreshState = rememberPullToRefreshState()
@@ -711,7 +701,7 @@ private fun BalancesSection(
     hardwareWallets: ImmutableList<HwWallet>,
     onNavigateToSavings: () -> Unit,
     onNavigateToSpending: () -> Unit,
-    onClickHardwareWallet: () -> Unit,
+    onClickHardwareWallet: (String) -> Unit,
 ) {
     Column(modifier = Modifier.fillMaxWidth()) {
         Row(
@@ -752,7 +742,7 @@ private fun BalancesSection(
 @Composable
 private fun HwDevices(
     wallets: ImmutableList<HwWallet>,
-    onClick: () -> Unit,
+    onClick: (String) -> Unit,
 ) {
     wallets.chunked(2).forEach { rowWallets ->
         VerticalSpacer(16.dp)
@@ -777,14 +767,14 @@ private fun HwDevices(
 @Composable
 private fun RowScope.HwDeviceCell(
     wallet: HwWallet,
-    onClick: () -> Unit,
+    onClick: (String) -> Unit,
 ) {
     WalletBalanceView(
         title = wallet.name,
         sats = wallet.balanceSats.toLong(),
         icon = painterResource(id = R.drawable.ic_btc_circle_blue),
         modifier = Modifier
-            .clickableAlpha(onClick = onClick)
+            .clickableAlpha(onClick = { onClick(wallet.id) })
             .padding(vertical = 4.dp)
             .testTag("ActivityHardware")
     ) {
