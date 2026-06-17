@@ -10,7 +10,6 @@ import dagger.assisted.AssistedInject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -20,11 +19,10 @@ import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
 import to.bitkit.R
 import to.bitkit.data.CacheStore
-import to.bitkit.data.SettingsStore
 import to.bitkit.di.json
+import to.bitkit.domain.commands.ReceivedNotificationContent
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.toUserMessage
-import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.BlocktankNotificationType
 import to.bitkit.models.BlocktankNotificationType.cjitPaymentArrived
 import to.bitkit.models.BlocktankNotificationType.incomingHtlc
@@ -39,6 +37,7 @@ import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.services.NodeServiceFgState
 import to.bitkit.ui.pushNotification
 import to.bitkit.utils.Logger
 import to.bitkit.utils.measured
@@ -53,8 +52,9 @@ class WakeNodeWorker @AssistedInject constructor(
     private val lightningRepo: LightningRepo,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
-    private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
+    private val receivedNotificationContent: ReceivedNotificationContent,
+    private val nodeServiceFgState: NodeServiceFgState,
 ) : CoroutineWorker(appContext, workerParams) {
     private var bestAttemptContent: NotificationDetails? = null
 
@@ -137,10 +137,8 @@ class WakeNodeWorker @AssistedInject constructor(
      * @param event The LDK event to check.
      */
     private suspend fun handleLdkEvent(event: Event) {
-        val showDetails = settingsStore.data.first().showNotificationDetails
-        val hiddenBody = appContext.getString(R.string.notification__received__body_hidden)
         when (event) {
-            is Event.PaymentReceived -> onPaymentReceived(event, showDetails, hiddenBody)
+            is Event.PaymentReceived -> onPaymentReceived(event)
 
             is Event.ChannelPending -> {
                 bestAttemptContent = NotificationDetails(
@@ -150,7 +148,7 @@ class WakeNodeWorker @AssistedInject constructor(
                 // Don't deliver, give a chance for channelReady event to update the content if it's a turbo channel
             }
 
-            is Event.ChannelReady -> onChannelReady(event, showDetails, hiddenBody)
+            is Event.ChannelReady -> onChannelReady(event)
             is Event.ChannelClosed -> onChannelClosed(event)
 
             is Event.PaymentFailed -> {
@@ -189,11 +187,7 @@ class WakeNodeWorker @AssistedInject constructor(
         deliver()
     }
 
-    private suspend fun onPaymentReceived(
-        event: Event.PaymentReceived,
-        showDetails: Boolean,
-        hiddenBody: String,
-    ) {
+    private suspend fun onPaymentReceived(event: Event.PaymentReceived) {
         val sats = msatCeilOf(event.amountMsat)
         // Save for UI to pick up
         cacheStore.setBackgroundReceive(
@@ -204,56 +198,78 @@ class WakeNodeWorker @AssistedInject constructor(
                 sats = sats.toLong(),
             )
         )
-        val content = if (showDetails) "$BITCOIN_SYMBOL $sats" else hiddenBody
-        bestAttemptContent = NotificationDetails(
-            title = appContext.getString(R.string.notification__received__title),
-            body = content,
-        )
+
+        // The in-app UI or foreground service shows a richer notification for this event; avoid duplicating it
+        if (isHandledInProcess()) {
+            Logger.debug("Skipping payment notification: handled in-process", context = TAG)
+            bestAttemptContent = null
+        } else {
+            bestAttemptContent = receivedNotificationContent.build(sats.toLong())
+        }
+
         if (notificationType == incomingHtlc) {
             deliver()
         }
     }
 
-    private suspend fun onChannelReady(
-        event: Event.ChannelReady,
-        showDetails: Boolean,
-        hiddenBody: String,
-    ) {
-        val viaNewChannel = appContext.getString(R.string.notification__received__body_channel)
-        if (notificationType == cjitPaymentArrived) {
-            bestAttemptContent = NotificationDetails(
-                title = appContext.getString(R.string.notification__received__title),
-                body = viaNewChannel,
-            )
+    private suspend fun onChannelReady(event: Event.ChannelReady) {
+        when (notificationType) {
+            cjitPaymentArrived -> onCjitChannelReady(event)
 
-            lightningRepo.getChannels()?.find { it.channelId == event.channelId }?.let { channel ->
-                val sats = channel.amountOnClose
-                val content = if (showDetails) "$BITCOIN_SYMBOL $sats" else hiddenBody
-                bestAttemptContent = NotificationDetails(
-                    title = content,
-                    body = viaNewChannel,
-                )
-                val cjitEntry = channel.let { blocktankRepo.getCjitEntry(it) }
-                if (cjitEntry != null) {
-                    // Save for UI to pick up
-                    cacheStore.setBackgroundReceive(
-                        NewTransactionSheetDetails(
-                            type = NewTransactionSheetType.LIGHTNING,
-                            direction = NewTransactionSheetDirection.RECEIVED,
-                            sats = sats.toLong(),
-                        )
-                    )
-                    activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
-                }
-            }
-        } else if (notificationType == orderPaymentConfirmed) {
-            bestAttemptContent = NotificationDetails(
+            orderPaymentConfirmed -> bestAttemptContent = NotificationDetails(
                 title = appContext.getString(R.string.notification__channel_opened_title),
                 body = appContext.getString(R.string.notification__channel_ready_body),
             )
+
+            else -> Unit
         }
         deliver()
     }
+
+    private suspend fun onCjitChannelReady(event: Event.ChannelReady) {
+        val channel = lightningRepo.getChannels()?.find { it.channelId == event.channelId }
+        val cjitEntry = channel?.let { blocktankRepo.getCjitEntry(it) }
+
+        // A regular (non-CJIT) channel opening must not be reported as a received payment
+        if (channel == null || cjitEntry == null) {
+            Logger.debug("Skipping CJIT notification: no cjit entry for channel '${event.channelId}'", context = TAG)
+            bestAttemptContent = null
+            return
+        }
+
+        // The in-app UI or foreground service owns this event: it records the activity (via the same
+        // insertActivityFromCjit dedup) and shows the richer notification/sheet. Defer entirely —
+        // do NOT insert here, or we'd win the dedup race and silence the in-process handler.
+        if (isHandledInProcess()) {
+            Logger.debug("Skipping CJIT notification: handled in-process", context = TAG)
+            bestAttemptContent = null
+            return
+        }
+
+        // A duplicate channel ready event for an already recorded CJIT receive must not notify again
+        val inserted = activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
+            .getOrDefault(false)
+        if (!inserted) {
+            Logger.debug("Skipping CJIT notification: already recorded for '${event.channelId}'", context = TAG)
+            bestAttemptContent = null
+            return
+        }
+
+        val sats = channel.amountOnClose
+        // Save for UI to pick up
+        cacheStore.setBackgroundReceive(
+            NewTransactionSheetDetails(
+                type = NewTransactionSheetType.LIGHTNING,
+                direction = NewTransactionSheetDirection.RECEIVED,
+                sats = sats.toLong(),
+            )
+        )
+
+        bestAttemptContent = receivedNotificationContent.build(sats.toLong())
+    }
+
+    private fun isHandledInProcess(): Boolean =
+        App.currentActivity?.value != null || nodeServiceFgState.isForegroundServiceRunning
 
     private suspend fun deliver() {
         // Send notification first

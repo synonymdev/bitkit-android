@@ -755,6 +755,17 @@ class TrezorRepo @Inject constructor(
      */
     fun onTransportRestored(transportType: TransportType) = launchTransportReconnect(transportType)
 
+    fun onAppForegrounded() {
+        scope.launch {
+            if (_state.value.connected != null || isConnectInProgress()) return@launch
+            val knownDevices = _state.value.knownDevices.ifEmpty { loadKnownDevices() }
+            if (knownDevices.none { it.transportType == TransportType.BLUETOOTH }) return@launch
+
+            Logger.info("Attempting bluetooth auto-reconnect after app foregrounded", context = TAG)
+            launchTransportReconnect(TransportType.BLUETOOTH)
+        }
+    }
+
     /**
      * Serializes reconnect triggers into one in-flight retry loop. A Trezor
      * re-enumerates USB during its unlock flow, so a single replug delivers several

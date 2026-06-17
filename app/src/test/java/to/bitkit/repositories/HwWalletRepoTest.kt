@@ -653,6 +653,15 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `forwards app foregrounded to the trezor repo`() = test {
+        val sut = createRepo()
+
+        sut.onAppForegrounded()
+
+        verify(trezorRepo).onAppForegrounded()
+    }
+
+    @Test
     fun `forwards pairing code calls to the trezor repo`() = test {
         val sut = createRepo()
 
