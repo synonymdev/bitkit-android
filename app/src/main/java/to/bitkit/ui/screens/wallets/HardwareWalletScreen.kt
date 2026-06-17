@@ -69,7 +69,7 @@ fun HardwareWalletScreen(
 ) {
     val wallets by viewModel.wallets.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val wallet = remember(wallets, deviceId) { wallets.find { it.id == deviceId } }
+    val wallet = remember(wallets, deviceId) { wallets.find { deviceId in it.deviceIds } }
 
     // Leave the screen once the device is gone, whether removed here or forgotten elsewhere.
     LaunchedEffect(wallet) {
@@ -195,16 +195,22 @@ private fun HardwareWalletContent(
                     showFooter = false,
                     hardwareIds = hardwareIds,
                     footerContent = {
-                        TertiaryButton(
-                            text = stringResource(R.string.hardware__remove_button, wallet.name),
+                        RemoveHardwareWalletButton(
+                            walletName = wallet.name,
                             onClick = onRemoveClick,
-                            modifier = Modifier
-                                .wrapContentWidth()
-                                .padding(top = 8.dp)
-                                .testTag("RemoveHardwareWallet")
                         )
                     },
                 )
+            }
+            if (showEmptyState) {
+                item { VerticalSpacer(32.dp) }
+                item {
+                    RemoveHardwareWalletButton(
+                        walletName = wallet.name,
+                        onClick = onRemoveClick,
+                    )
+                }
+                item { VerticalSpacer(120.dp) }
             }
         }
 
@@ -219,6 +225,22 @@ private fun HardwareWalletContent(
             )
         }
     }
+}
+
+@Composable
+private fun RemoveHardwareWalletButton(
+    walletName: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    TertiaryButton(
+        text = stringResource(R.string.hardware__remove_button, walletName),
+        onClick = onClick,
+        modifier = modifier
+            .wrapContentWidth()
+            .padding(top = 8.dp)
+            .testTag("RemoveHardwareWallet")
+    )
 }
 
 private fun previewWallet(

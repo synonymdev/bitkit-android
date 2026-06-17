@@ -255,6 +255,10 @@ fun LazyListScope.activityListGroupedItems(
                 )
             }
         }
+        footerContent?.let { content ->
+            item { content() }
+            item { VerticalSpacer(120.dp) }
+        }
     }
 }
 

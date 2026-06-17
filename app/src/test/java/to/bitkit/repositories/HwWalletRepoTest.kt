@@ -84,6 +84,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         val wallet = sut.wallets.value.single()
         assertEquals("dev1", wallet.id)
+        assertEquals(setOf("dev1"), wallet.deviceIds)
         assertEquals("Trezor", wallet.name)
         assertEquals(0uL, wallet.balanceSats)
         assertEquals(0uL, sut.totalSats.value)
@@ -506,6 +507,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(421_900uL, wallet.balanceSats)
         assertEquals(421_900uL, sut.totalSats.value)
         assertEquals(1, wallet.activities.size)
+        assertEquals(setOf("ble1", "usb1"), wallet.deviceIds)
         assertEquals(TransportType.USB, wallet.transportType)
     }
 
@@ -523,6 +525,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         val wallet = sut.wallets.value.single()
         assertEquals("usb1", wallet.id)
+        assertEquals(setOf("ble1", "usb1"), wallet.deviceIds)
         assertEquals(TransportType.USB, wallet.transportType)
         assertEquals(true, wallet.isConnected)
     }
@@ -599,14 +602,14 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `removeDevice succeeds when the device is gone despite a cleanup failure`() = test {
+    fun `removeDevice fails when forget reports credential cleanup failure despite the device being gone`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
-        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.failure(AppError("disconnect failed")))
+        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.failure(AppError("clear failed")))
         val sut = createRepo()
 
         val result = sut.removeDevice("dev1")
 
-        assertEquals(true, result.isSuccess)
+        assertEquals(true, result.isFailure)
         verify(trezorRepo).forgetDevice("dev1")
     }
 
@@ -631,8 +634,8 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `removeDevice fails when the device is still present afterwards`() = test {
-        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
-        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.failure(AppError("forget failed")))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), listOf(device))
+        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.success(Unit))
         val sut = createRepo()
 
         val result = sut.removeDevice("dev1")

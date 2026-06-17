@@ -9,6 +9,7 @@ import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -124,11 +125,9 @@ class HwWalletRepo @Inject constructor(
             activeWatchers.toList()
                 .filter { it.toDeviceId() in ids }
                 .forEach { stopActiveWatcher(it) }
-            // forgetDevice can report a benign cleanup failure (e.g. disconnecting the live
-            // transport) after it has already dropped the device from the store, so treat the
-            // removal as successful as long as the device is actually gone afterwards.
-            ids.forEach { trezorRepo.forgetDevice(it) }
+            val failures = ids.mapNotNull { trezorRepo.forgetDevice(it).exceptionOrNull() }
             val remaining = hwWalletStore.loadKnownDevices().map { it.id }.toSet()
+            failures.firstOrNull()?.let { throw it }
             check(ids.none { it in remaining }) { "Hardware wallet '$deviceId' still present after removal" }
         }
     }
@@ -159,6 +158,7 @@ class HwWalletRepo @Inject constructor(
                     activities = deviceWatchers
                         .toMergedActivities()
                         .toImmutableList(),
+                    deviceIds = ids.toImmutableSet(),
                 )
             }
             .toImmutableList()

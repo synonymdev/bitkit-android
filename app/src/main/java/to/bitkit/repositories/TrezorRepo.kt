@@ -655,8 +655,11 @@ class TrezorRepo @Inject constructor(
             val updated = _state.value.knownDevices.filter { it.id != deviceId }
             saveKnownDevices(updated)
             _state.update { it.copy(knownDevices = updated.toImmutableList()) }
-            disconnectResult.getOrThrow()
             clearCredentialsResult.getOrThrow()
+            disconnectResult.onFailure {
+                TrezorDebugLog.log("FORGET", "Ignored disconnect failure: ${it.message}")
+                Logger.warn("Ignored disconnect failure while forgetting device '$deviceId'", it, context = TAG)
+            }
             TrezorDebugLog.log("FORGET", "Device forgotten successfully")
             Logger.info("Forgot device: '$deviceId'", context = TAG)
         }.onFailure { e ->
