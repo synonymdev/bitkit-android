@@ -137,6 +137,7 @@ import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.Headline24
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.HwWalletConnectionIcon
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.StatusBarSpacer
@@ -779,15 +780,9 @@ private fun RowScope.HwDeviceCell(
             .testTag("ActivityHardware")
     ) {
         HorizontalSpacer(4.dp)
-        Icon(
-            painter = painterResource(
-                id = when (wallet.transportType) {
-                    TransportType.BLUETOOTH -> R.drawable.ic_bluetooth_connected
-                    TransportType.USB -> R.drawable.ic_usb_connected
-                }
-            ),
-            contentDescription = null,
-            tint = if (wallet.isConnected) Colors.Green else Colors.Gray1,
+        HwWalletConnectionIcon(
+            transportType = wallet.transportType,
+            isConnected = wallet.isConnected,
             modifier = Modifier.size(16.dp)
         )
     }

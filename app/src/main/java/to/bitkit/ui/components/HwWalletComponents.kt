@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -14,6 +15,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
+import to.bitkit.models.TransportType
+import to.bitkit.ui.theme.Colors
 
 // Device illustration proportions, taken from the Figma hardware wallet frames.
 private const val HW_DEVICE_IMAGE_SIZE_RATIO = 256f / 375f
@@ -33,6 +36,26 @@ fun HwDeviceIllustrations(modifier: Modifier = Modifier) {
             modifier = Modifier.blur(16.dp, BlurredEdgeTreatment.Unbounded)
         )
     }
+}
+
+@Composable
+fun HwWalletConnectionIcon(
+    transportType: TransportType,
+    isConnected: Boolean,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null,
+) {
+    Icon(
+        painter = painterResource(
+            id = when (transportType) {
+                TransportType.BLUETOOTH -> R.drawable.ic_bluetooth_connected
+                TransportType.USB -> R.drawable.ic_usb_connected
+            }
+        ),
+        contentDescription = contentDescription,
+        tint = if (isConnected) Colors.Green else Colors.Gray1,
+        modifier = modifier
+    )
 }
 
 @Composable

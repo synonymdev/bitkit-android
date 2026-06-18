@@ -40,6 +40,7 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.HwDeviceIllustrations
+import to.bitkit.ui.components.HwWalletConnectionIcon
 import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -237,15 +238,10 @@ private fun HwConnectionBadge(
             .clip(CircleShape)
             .background(if (isConnected) Colors.Green16 else Colors.White16)
     ) {
-        Icon(
-            painter = painterResource(
-                id = when (transportType) {
-                    TransportType.BLUETOOTH -> R.drawable.ic_bluetooth_connected
-                    TransportType.USB -> R.drawable.ic_usb_connected
-                }
-            ),
+        HwWalletConnectionIcon(
+            transportType = transportType,
+            isConnected = isConnected,
             contentDescription = contentDescription,
-            tint = if (isConnected) Colors.Green else Colors.White64,
             modifier = Modifier.size(16.dp)
         )
     }
