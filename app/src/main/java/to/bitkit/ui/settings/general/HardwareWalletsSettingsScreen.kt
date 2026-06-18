@@ -214,23 +214,6 @@ private fun HwConnectionBadge(
     isConnected: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val contentDescription = when (transportType) {
-        TransportType.BLUETOOTH -> {
-            if (isConnected) {
-                stringResource(R.string.hardware__connection_badge_connected_bluetooth)
-            } else {
-                stringResource(R.string.hardware__connection_badge_disconnected_bluetooth)
-            }
-        }
-        TransportType.USB -> {
-            if (isConnected) {
-                stringResource(R.string.hardware__connection_badge_connected_usb)
-            } else {
-                stringResource(R.string.hardware__connection_badge_disconnected_usb)
-            }
-        }
-    }
-
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -241,7 +224,6 @@ private fun HwConnectionBadge(
         HwWalletConnectionIcon(
             transportType = transportType,
             isConnected = isConnected,
-            contentDescription = contentDescription,
             modifier = Modifier.size(16.dp)
         )
     }

@@ -12,6 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
@@ -43,8 +44,22 @@ fun HwWalletConnectionIcon(
     transportType: TransportType,
     isConnected: Boolean,
     modifier: Modifier = Modifier,
-    contentDescription: String? = null,
 ) {
+    val contentDescription = stringResource(
+        id = when (transportType) {
+            TransportType.BLUETOOTH -> if (isConnected) {
+                R.string.hardware__connection_badge_connected_bluetooth
+            } else {
+                R.string.hardware__connection_badge_disconnected_bluetooth
+            }
+            TransportType.USB -> if (isConnected) {
+                R.string.hardware__connection_badge_connected_usb
+            } else {
+                R.string.hardware__connection_badge_disconnected_usb
+            }
+        }
+    )
+
     Icon(
         painter = painterResource(
             id = when (transportType) {
