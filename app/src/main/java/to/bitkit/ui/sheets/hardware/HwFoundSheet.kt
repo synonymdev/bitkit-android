@@ -24,8 +24,10 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -113,7 +115,10 @@ private fun Content(
 private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(deviceModel = "Trezor Safe 3")
+            Content(
+                deviceModel = "Trezor Safe 3",
+                modifier = Modifier.sheetHeight(SheetSize.LARGE)
+            )
         }
     }
 }
