@@ -9,8 +9,10 @@ import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.WalletSelection
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
@@ -20,21 +22,28 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import to.bitkit.data.TrezorStore
+import to.bitkit.data.HwWalletStore
 import to.bitkit.env.Env
+import to.bitkit.models.TransportType
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
 import to.bitkit.services.TrezorUiHandler
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
+@Suppress("LargeClass")
 class TrezorRepoTest : BaseUnitTest() {
 
     companion object Fixtures {
@@ -55,7 +64,7 @@ class TrezorRepoTest : BaseUnitTest() {
     private val trezorService = mock<TrezorService>()
     private val trezorTransport = mock<TrezorTransport>()
     private val trezorUiHandler = mock<TrezorUiHandler>()
-    private val trezorStore = mock<TrezorStore>()
+    private val hwWalletStore = mock<HwWalletStore>()
     private val prefs = mock<SharedPreferences>()
     private val prefsEditor = mock<SharedPreferences.Editor>()
 
@@ -70,10 +79,12 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(prefsEditor.putString(any(), any())).thenReturn(prefsEditor)
         whenever(trezorTransport.needsPairingCode).thenReturn(MutableStateFlow(false))
         whenever(trezorTransport.externalDisconnect).thenReturn(MutableSharedFlow())
+        whenever(trezorTransport.transportRestored).thenReturn(MutableSharedFlow())
+        whenever(trezorTransport.hasUsbPermission(any())).thenReturn(true)
         whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(false))
         whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Standard)
         whenever(context.filesDir).thenReturn(tempFolder.root)
-        whenever { trezorStore.loadKnownDevices() }.thenReturn(emptyList())
+        whenever { hwWalletStore.loadKnownDevices() }.thenReturn(emptyList())
     }
 
     private fun createSut(): TrezorRepo = TrezorRepo(
@@ -81,7 +92,8 @@ class TrezorRepoTest : BaseUnitTest() {
         trezorService = trezorService,
         trezorTransport = trezorTransport,
         trezorUiHandler = trezorUiHandler,
-        trezorStore = trezorStore,
+        hwWalletStore = hwWalletStore,
+        clock = Clock.System,
         ioDispatcher = testDispatcher,
     )
 
@@ -112,20 +124,37 @@ class TrezorRepoTest : BaseUnitTest() {
         on { this.model }.thenReturn(model)
     }
 
+    private fun mockPublicKeyResponse(
+        xpub: String,
+        path: String,
+    ) = TrezorPublicKeyResponse(
+        xpub = xpub,
+        path = path,
+        publicKey = "pubkey",
+        chainCode = "chaincode",
+        fingerprint = 0u,
+        depth = 3u,
+        rootFingerprint = 0u,
+    )
+
+    @Suppress("LongParameterList")
     private fun mockKnownDevice(
         id: String = DEVICE_ID,
         name: String? = DEVICE_NAME,
         path: String = DEVICE_PATH,
         label: String? = DEVICE_LABEL,
         model: String? = DEVICE_MODEL,
+        transportType: TransportType = TransportType.USB,
+        xpubs: Map<String, String> = emptyMap(),
     ) = KnownDevice(
         id = id,
         name = name,
         path = path,
-        transportType = KnownDeviceTransportType.USB,
+        transportType = transportType,
         label = label,
         model = model,
         lastConnectedAt = 123L,
+        xpubs = xpubs,
     )
 
     // region initialize
@@ -176,7 +205,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val knownDevice = mockKnownDevice()
         val known = mockDeviceInfo()
         val nearby = mockDeviceInfo(id = "device-456", path = "/dev/trezor1")
-        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.scan()).thenReturn(listOf(known, nearby))
         sut = createSut()
 
@@ -203,6 +232,234 @@ class TrezorRepoTest : BaseUnitTest() {
     // endregion
 
     // region connect
+
+    @Test
+    fun `transport restored auto-reconnects to a known device`() = test {
+        val transportRestored = MutableSharedFlow<TransportType>()
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
+        sut = createSut()
+
+        transportRestored.emit(TransportType.USB)
+        advanceUntilIdle()
+
+        assertNotNull(sut.state.value.connected)
+    }
+
+    @Test
+    fun `transport restored retries reconnect until the device is discoverable`() = test {
+        val transportRestored = MutableSharedFlow<TransportType>()
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        // A device is usually not advertising yet right after the transport returns.
+        whenever(trezorService.scan()).thenReturn(emptyList(), listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
+        sut = createSut()
+
+        transportRestored.emit(TransportType.USB)
+        advanceUntilIdle()
+
+        assertNotNull(sut.state.value.connected)
+        verify(trezorService, times(2)).scan()
+    }
+
+    @Test
+    fun `reconnect prefers the transport that came back`() = test {
+        val features = mockFeatures()
+        val bleDevice = mockDeviceInfo(id = "ble-1", transportType = TrezorTransportType.BLUETOOTH, path = "ble-path")
+        val usbDevice = mockDeviceInfo(id = "usb-1", transportType = TrezorTransportType.USB, path = "usb-path")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(
+            listOf(
+                mockKnownDevice(id = "ble-1", transportType = TransportType.BLUETOOTH),
+                mockKnownDevice(id = "usb-1"),
+            ),
+        )
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(bleDevice, usbDevice))
+        whenever(trezorService.connect(eq("usb-1"), any(), eq(false))).thenReturn(features)
+        sut = createSut()
+
+        sut.onTransportRestored(TransportType.USB)
+        advanceUntilIdle()
+
+        verify(trezorService).connect(eq("usb-1"), any(), eq(false))
+        verify(trezorService, never()).connect(eq("ble-1"), any())
+    }
+
+    @Test
+    fun `repeated transport restored triggers run a single reconnect`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
+        sut = createSut()
+
+        repeat(3) { sut.onTransportRestored(TransportType.USB) }
+        advanceUntilIdle()
+
+        assertNotNull(sut.state.value.connected)
+        verify(trezorService, times(1)).scan()
+        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any(), eq(false))
+    }
+
+    @Test
+    fun `autoReconnect bails while device awaits pin entry`() = test {
+        whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(true))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        sut = createSut()
+
+        val result = sut.autoReconnect()
+
+        assertTrue(result.isFailure)
+        verify(trezorService, never()).disconnect()
+        verify(trezorService, never()).scan()
+    }
+
+    @Test
+    fun `transport restored skips reconnect while device awaits pairing code`() = test {
+        val transportRestored = MutableSharedFlow<TransportType>()
+        whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
+        whenever(trezorTransport.needsPairingCode).thenReturn(MutableStateFlow(true))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        sut = createSut()
+
+        transportRestored.emit(TransportType.USB)
+        advanceUntilIdle()
+
+        verify(trezorService, never()).disconnect()
+        verify(trezorService, never()).scan()
+    }
+
+    @Test
+    fun `onTransportRestored auto-reconnects to a known device`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
+        sut = createSut()
+
+        sut.onTransportRestored(TransportType.USB)
+        advanceUntilIdle()
+
+        assertNotNull(sut.state.value.connected)
+    }
+
+    @Test
+    fun `app foreground auto-reconnects to a known bluetooth device`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo(
+            transportType = TrezorTransportType.BLUETOOTH,
+            path = "ble-path",
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(
+            listOf(mockKnownDevice(transportType = TransportType.BLUETOOTH))
+        )
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
+        sut = createSut()
+
+        sut.onAppForegrounded()
+        advanceUntilIdle()
+
+        assertNotNull(sut.state.value.connected)
+        verify(trezorService).connect(eq(DEVICE_ID), any(), eq(false))
+    }
+
+    @Test
+    fun `app foreground skips reconnect without a known bluetooth device`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        sut = createSut()
+
+        sut.onAppForegrounded()
+        advanceUntilIdle()
+
+        verify(trezorService, never()).scan()
+    }
+
+    @Test
+    fun `onTransportRestored skips usb device without permission`() = test {
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorTransport.hasUsbPermission(DEVICE_PATH)).thenReturn(false)
+        sut = createSut()
+
+        sut.onTransportRestored(TransportType.USB)
+        advanceUntilIdle()
+
+        assertNull(sut.state.value.connected)
+        verify(trezorService, never()).connect(eq(DEVICE_ID), any(), eq(false))
+    }
+
+    @Test
+    fun `autoReconnect resets a stale session before scanning`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        // The core still reports a session although the transport dropped underneath it.
+        whenever(trezorService.isConnected()).thenReturn(true)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
+        sut = createSut()
+        sut.initialize()
+
+        val result = sut.autoReconnect()
+
+        assertTrue(result.isSuccess)
+        verify(trezorService).disconnect()
+        assertNotNull(sut.state.value.connected)
+    }
+
+    @Test
+    fun `transport restored does not reconnect when a device is already connected`() = test {
+        val transportRestored = MutableSharedFlow<TransportType>()
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        sut = createSut()
+        sut.scan()
+        sut.connect(DEVICE_ID)
+
+        transportRestored.emit(TransportType.USB)
+        advanceUntilIdle()
+
+        verify(trezorService, times(1)).scan()
+    }
+
+    @Test
+    fun `external disconnect clears the connected device while no screen observes it`() = test {
+        val externalDisconnect = MutableSharedFlow<String>()
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorTransport.externalDisconnect).thenReturn(externalDisconnect)
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        assertNotNull(sut.state.value.connected)
+
+        externalDisconnect.emit(DEVICE_PATH)
+
+        assertNull(sut.state.value.connected)
+        assertEquals("Device disconnected", sut.state.value.error)
+    }
 
     @Test
     fun `connect should return features and update connectedDevice state`() = test {
@@ -237,12 +494,55 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(trezorStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
         val saved = captor.firstValue.single()
         assertEquals(DEVICE_ID, saved.id)
-        assertEquals(KnownDeviceTransportType.USB, saved.transportType)
+        assertEquals(TransportType.USB, saved.transportType)
         assertEquals("Savings", saved.label)
         assertEquals("Safe 5", saved.model)
+    }
+
+    @Test
+    fun `connect preserves stored xpubs when account xpub refresh is partial`() = test {
+        val previousXpubs = mapOf(
+            "nativeSegwit" to "old-native-xpub",
+            "taproot" to "old-taproot-xpub",
+        )
+        val nativeSegwitPath = "m/84'/1'/0'"
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice(xpubs = previousXpubs)))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        ).thenAnswer {
+            val path = it.getArgument<String>(0)
+            if (path == nativeSegwitPath) {
+                mockPublicKeyResponse(xpub = "new-native-xpub", path = nativeSegwitPath)
+            } else {
+                throw AppError("xpub failed")
+            }
+        }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertEquals(
+            mapOf(
+                "nativeSegwit" to "new-native-xpub",
+                "taproot" to "old-taproot-xpub",
+            ),
+            captor.firstValue.single().xpubs,
+        )
     }
 
     @Test
@@ -351,6 +651,27 @@ class TrezorRepoTest : BaseUnitTest() {
         assertNull(sut.state.value.lastAddress)
         assertNull(sut.state.value.lastPublicKey)
         assertEquals("disconnect failed", sut.state.value.error)
+    }
+
+    // endregion
+
+    // region resetState
+
+    @Test
+    fun `resetState clears known devices and credentials`() = test {
+        val knownDevice = mockKnownDevice()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        sut = createSut()
+
+        sut.initialize()
+        sut.resetState()
+
+        assertTrue(sut.state.value.knownDevices.isEmpty())
+        assertTrue(sut.state.value.nearbyDevices.isEmpty())
+        assertNull(sut.state.value.connectedDevice)
+        verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
+        verify(trezorService).clearCredentials(DEVICE_ID)
+        verify(hwWalletStore).reset()
     }
 
     // endregion
@@ -501,9 +822,9 @@ class TrezorRepoTest : BaseUnitTest() {
         val knownDevice = mockKnownDevice()
         val device = mockDeviceInfo()
         val features = mockFeatures()
-        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.scan()).thenReturn(listOf(device))
-        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
         whenever(trezorService.isConnected()).thenReturn(false)
         sut = createSut()
 
@@ -525,7 +846,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val knownDevice = mockKnownDevice()
         val device = mockDeviceInfo()
         val features = mockFeatures()
-        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.scan()).thenReturn(listOf(device))
         whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         sut = createSut()
@@ -582,7 +903,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val device = mockDeviceInfo()
         val features = mockFeatures()
         val addressResponse = mock<TrezorAddressResponse>()
-        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.isConnected()).thenReturn(false)
         whenever(trezorService.scan()).thenReturn(listOf(device))
         whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
@@ -615,7 +936,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val knownDevice = mockKnownDevice()
         val features = mockFeatures()
         val device = mockDeviceInfo()
-        whenever(trezorStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
         whenever(trezorService.scan()).thenReturn(listOf(device))
         sut = createSut()
@@ -635,7 +956,7 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals("disconnect failed", sut.state.value.error)
         verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
         verify(trezorService).clearCredentials(DEVICE_ID)
-        verify(trezorStore).saveKnownDevices(emptyList())
+        verify(hwWalletStore).saveKnownDevices(emptyList())
     }
 
     // endregion

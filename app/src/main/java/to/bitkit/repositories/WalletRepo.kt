@@ -37,6 +37,7 @@ import to.bitkit.models.BalanceState
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAccountDerivationPath
+import to.bitkit.models.toBalance
 import to.bitkit.models.toDerivationPath
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
@@ -66,6 +67,7 @@ class WalletRepo @Inject constructor(
     private val wipeWalletUseCase: WipeWalletUseCase,
     private val transferRepo: TransferRepo,
     private val activityRepo: ActivityRepo,
+    private val hwWalletRepo: HwWalletRepo,
 ) {
     private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
 
@@ -82,6 +84,11 @@ class WalletRepo @Inject constructor(
             lightningRepo.nodeEvents.collect { event ->
                 if (!walletExists()) return@collect
                 refreshBip21ForEvent(event)
+            }
+        }
+        repoScope.launch {
+            hwWalletRepo.wallets.collect { wallets ->
+                _balanceState.update { state -> state.copy(hardwareWallets = wallets.map { it.toBalance() }) }
             }
         }
     }

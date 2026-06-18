@@ -1,9 +1,9 @@
 package to.bitkit.models
 
-import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.Stable
 import kotlinx.serialization.Serializable
 
-@Immutable
+@Stable
 @Serializable
 data class BalanceState(
     val totalOnchainSats: ULong = 0uL,
@@ -13,6 +13,11 @@ data class BalanceState(
     val maxSendOnchainSats: ULong = 0uL,
     val balanceInTransferToSavings: ULong = 0uL,
     val balanceInTransferToSpending: ULong = 0uL,
+    val hardwareWallets: List<HwWalletBalance> = emptyList(),
 ) {
     val totalSats get() = totalOnchainSats + totalLightningSats
+
+    val totalHardwareSats get() = hardwareWallets.fold(0uL) { acc, wallet -> acc.safe() + wallet.sats.safe() }
+
+    val totalWithHardwareSats get() = totalSats.safe() + totalHardwareSats.safe()
 }

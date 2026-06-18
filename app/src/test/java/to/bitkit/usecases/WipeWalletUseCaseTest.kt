@@ -17,6 +17,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -38,6 +39,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val widgetsStore = mock<WidgetsStore>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
+    private val hwWalletRepo = mock<HwWalletRepo>()
     private val lightningRepo = mock<LightningRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
@@ -71,6 +73,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             widgetsStore = widgetsStore,
             blocktankRepo = blocktankRepo,
             activityRepo = activityRepo,
+            hwWalletRepo = hwWalletRepo,
             lightningRepo = lightningRepo,
             pubkyRepo = pubkyRepo,
             privatePaykitRepo = privatePaykitRepoProvider,
@@ -98,6 +101,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             widgetsStore,
             blocktankRepo,
             activityRepo,
+            hwWalletRepo,
             lightningRepo,
             pubkyRepo,
             privatePaykitRepo,
@@ -118,6 +122,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(widgetsStore).reset()
         inOrder.verify(blocktankRepo).resetState()
         inOrder.verify(activityRepo).resetState()
+        inOrder.verify(hwWalletRepo).resetState()
         assertTrue(onWipeCalled)
         inOrder.verify(lightningRepo).wipeStorage(0)
         assertTrue(onSetWalletExistsStateCalled)

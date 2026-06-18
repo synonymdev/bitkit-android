@@ -31,6 +31,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -43,12 +44,17 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import to.bitkit.data.TrezorStore
+import to.bitkit.data.HwWalletStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.nowMs
+import to.bitkit.models.ALL_ADDRESS_TYPES
+import to.bitkit.models.TransportType
+import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toCoreNetwork
+import to.bitkit.models.toSettingsString
+import to.bitkit.models.toTrezorCoinType
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
@@ -59,16 +65,21 @@ import to.bitkit.utils.Logger
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
-@Suppress("TooManyFunctions")
+@OptIn(ExperimentalTime::class)
+@Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
 @Singleton
 class TrezorRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     private val trezorService: TrezorService,
     private val trezorTransport: TrezorTransport,
     private val trezorUiHandler: TrezorUiHandler,
-    private val trezorStore: TrezorStore,
+    private val hwWalletStore: HwWalletStore,
+    private val clock: Clock,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
@@ -77,12 +88,22 @@ class TrezorRepo @Inject constructor(
         private const val DEFAULT_ADDRESS_PATH = "m/84'/0'/0'/0/0"
         private const val DEFAULT_ACCOUNT_PATH = "m/84'/0'/0'"
         private const val WALLET_MODE_RECONNECT_DELAY_MS = 1_000L
+        private const val TRANSPORT_RESTORED_MAX_ATTEMPTS = 4
+        private val TRANSPORT_RESTORED_RECONNECT_DELAY = 2.seconds
     }
 
     private val _state = MutableStateFlow(TrezorState())
     val state = _state.asStateFlow()
 
-    private val watcherCleanupScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
+
+    @Volatile
+    private var transportReconnectJob: Job? = null
+
+    init {
+        observeExternalDisconnects()
+        observeTransportRestored()
+    }
 
     private val _watcherEvents = MutableSharedFlow<Pair<String, WatcherEvent>>(extraBufferCapacity = 64)
     val watcherEvents: SharedFlow<Pair<String, WatcherEvent>> = _watcherEvents.asSharedFlow()
@@ -138,6 +159,42 @@ class TrezorRepo @Inject constructor(
      */
     fun resetWalletSelection() {
         trezorUiHandler.setWalletMode(TrezorWalletMode.STANDARD)
+    }
+
+    suspend fun resetState() = withContext(ioDispatcher) {
+        transportReconnectJob?.cancel()
+        transportReconnectJob = null
+
+        val knownDevices = (_state.value.knownDevices + hwWalletStore.loadKnownDevices())
+            .distinctBy { it.id }
+
+        if (_state.value.connected != null) {
+            runCatching { trezorService.disconnect() }
+                .onFailure { Logger.warn("Failed to disconnect Trezor while resetting", it, context = TAG) }
+        }
+
+        knownDevices.forEach { device ->
+            runCatching { trezorTransport.clearDeviceCredential(device.id) }
+                .onFailure { Logger.warn("Failed to clear transport credential for '${device.id}'", it, context = TAG) }
+            runCatching { trezorService.clearCredentials(device.id) }
+                .onFailure { Logger.warn("Failed to clear Trezor credentials for '${device.id}'", it, context = TAG) }
+        }
+
+        trezorUiHandler.setWalletMode(TrezorWalletMode.STANDARD)
+        hwWalletStore.reset()
+        _state.update {
+            it.copy(
+                isScanning = false,
+                isConnecting = false,
+                isAutoReconnecting = false,
+                knownDevices = persistentListOf(),
+                nearbyDevices = persistentListOf(),
+                connected = null,
+                lastAddress = null,
+                lastPublicKey = null,
+                error = null,
+            )
+        }
     }
 
     /**
@@ -212,11 +269,18 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun connect(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
+    suspend fun connect(
+        deviceId: String,
+        requestUsbPermission: Boolean = true,
+    ): Result<TrezorFeatures> = withContext(ioDispatcher) {
         runCatching {
             _state.update { it.copy(isConnecting = true, error = null) }
             TrezorDebugLog.log("CONNECT", "connect() called for deviceId=$deviceId")
-            val features = connectWithThpRetry(deviceId, trezorUiHandler.currentSelection())
+            val features = connectWithThpRetry(
+                deviceId = deviceId,
+                selection = trezorUiHandler.currentSelection(),
+                requestUsbPermission = requestUsbPermission,
+            )
             TrezorDebugLog.log("CONNECT", "connect() succeeded: label=${features.label}, model=${features.model}")
             val deviceInfo = _state.value.nearbyDevices.find { it.id == deviceId }
                 ?: _state.value.knownDevices.find { it.id == deviceId }?.let { known ->
@@ -468,7 +532,16 @@ class TrezorRepo @Inject constructor(
 
     fun hasKnownDevices(): Boolean = _state.value.knownDevices.isNotEmpty()
 
-    suspend fun autoReconnect(walletIndex: Int = 0): Result<TrezorFeatures> = withContext(ioDispatcher) {
+    suspend fun autoReconnect(
+        walletIndex: Int = 0,
+        preferredTransport: TransportType? = null,
+    ): Result<TrezorFeatures> = withContext(ioDispatcher) {
+        if (isConnectInProgress()) {
+            // A live handshake looks like a stale session (transport connected,
+            // features pending), so resetting here would drop the session the
+            // user is entering their PIN or pairing code into.
+            return@withContext Result.failure(AppError("Connect already in progress"))
+        }
         val knownDevices = _state.value.knownDevices.ifEmpty { loadKnownDevices() }
         if (knownDevices.isEmpty()) {
             return@withContext Result.failure(AppError("No known devices"))
@@ -479,10 +552,16 @@ class TrezorRepo @Inject constructor(
             if (!_state.value.isInitialized) {
                 initialize(walletIndex).getOrThrow()
             }
-            if (trezorService.isConnected()) {
-                _state.value.connectedDevice ?: throw AppError("Connected but no features")
+            val cachedFeatures = if (trezorService.isConnected()) _state.value.connectedDevice else null
+            if (cachedFeatures != null) {
+                cachedFeatures
             } else {
-                val scannedDevices = scan().getOrThrow()
+                if (trezorService.isConnected()) {
+                    // The transport dropped underneath the session (e.g. bluetooth was
+                    // toggled), so reset it before a fresh scan and connect.
+                    runCatching { trezorService.disconnect() }
+                }
+                val scannedDevices = scan().getOrThrow().filter { it.canAutoReconnect() }
                 val knownIds = knownDevices.map { it.id }.toSet()
                 val usbDevice = scannedDevices.find {
                     it.transportType == TrezorTransportType.USB && it.id in knownIds
@@ -490,8 +569,16 @@ class TrezorRepo @Inject constructor(
                 val idMatch = knownDevices.firstNotNullOfOrNull { known ->
                     scannedDevices.find { it.id == known.id }
                 }
-                val match = idMatch ?: usbDevice ?: throw AppError("No known device found nearby")
-                connect(match.id).getOrThrow()
+                // Prefer the transport that just came back, so e.g. a USB replug does
+                // not reconnect over BLE when the same device is known on both.
+                val preferredMatch = preferredTransport?.let { preferred ->
+                    scannedDevices.find {
+                        it.id in knownIds && it.transportType.toTransportType() == preferred
+                    }
+                }
+                val match = preferredMatch ?: idMatch ?: usbDevice
+                    ?: throw AppError("No known device found nearby")
+                connect(match.id, requestUsbPermission = false).getOrThrow()
             }
         }.onSuccess {
             _state.update { it.copy(isAutoReconnecting = false) }
@@ -499,6 +586,13 @@ class TrezorRepo @Inject constructor(
             Logger.error("Auto-reconnect failed", e, context = TAG)
             _state.update { it.copy(isAutoReconnecting = false, error = e.message) }
         }
+    }
+
+    private fun TrezorDeviceInfo.canAutoReconnect(): Boolean {
+        if (transportType.toTransportType() != TransportType.USB) return true
+        if (trezorTransport.hasUsbPermission(path)) return true
+        Logger.info("Skipped USB auto-reconnect without permission for '$path'", context = TAG)
+        return false
     }
 
     suspend fun connectKnownDevice(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
@@ -578,12 +672,13 @@ class TrezorRepo @Inject constructor(
         network: BitkitCoreNetwork,
         gapLimit: UInt = 20u,
         accountType: AccountType? = null,
+        electrumUrl: String = electrumUrlForNetwork(network),
     ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             val params = WatcherParams(
                 watcherId = watcherId,
                 extendedKey = extendedKey,
-                electrumUrl = electrumUrlForNetwork(network),
+                electrumUrl = electrumUrl,
                 network = network,
                 accountType = accountType,
                 gapLimit = gapLimit,
@@ -609,7 +704,7 @@ class TrezorRepo @Inject constructor(
     }
 
     fun stopWatcherOnCleared(watcherId: String) {
-        watcherCleanupScope.launch { stopWatcher(watcherId) }
+        scope.launch { stopWatcher(watcherId) }
     }
 
     suspend fun stopAllWatchers(): Result<Unit> = withContext(ioDispatcher) {
@@ -626,7 +721,7 @@ class TrezorRepo @Inject constructor(
         _state.update { it.copy(error = null) }
     }
 
-    fun observeExternalDisconnects(scope: CoroutineScope) {
+    private fun observeExternalDisconnects() {
         trezorTransport.externalDisconnect.onEach { path ->
             val currentId = _state.value.connectedDeviceId ?: return@onEach
             val knownDevice = _state.value.knownDevices.find { it.path == path }
@@ -639,31 +734,120 @@ class TrezorRepo @Inject constructor(
         }.launchIn(scope)
     }
 
+    /**
+     * Silently reconnects to a known device when its transport comes back: stored THP
+     * credentials make the connect prompt-free, so the link indicator recovers on its
+     * own after Bluetooth is re-enabled or the device is plugged back in.
+     */
+    private fun observeTransportRestored() {
+        trezorTransport.transportRestored.onEach {
+            launchTransportReconnect(it)
+        }.launchIn(scope)
+    }
+
+    /**
+     * Triggers the silent reconnect for transport events delivered through UI intents,
+     * e.g. the USB attach intent the OS app picker routes to the activity (attach is
+     * not broadcast to receivers, unlike detach).
+     */
+    fun onTransportRestored(transportType: TransportType) = launchTransportReconnect(transportType)
+
+    fun onAppForegrounded() {
+        scope.launch {
+            if (_state.value.connected != null || isConnectInProgress()) return@launch
+            val knownDevices = _state.value.knownDevices.ifEmpty { loadKnownDevices() }
+            if (knownDevices.none { it.transportType == TransportType.BLUETOOTH }) return@launch
+
+            Logger.info("Attempting bluetooth auto-reconnect after app foregrounded", context = TAG)
+            launchTransportReconnect(TransportType.BLUETOOTH)
+        }
+    }
+
+    /**
+     * Serializes reconnect triggers into one in-flight retry loop. A Trezor
+     * re-enumerates USB during its unlock flow, so a single replug delivers several
+     * attach intents; letting each spawn its own loop staggers connect attempts for
+     * many seconds, and every attempt restarts the device's PIN entry.
+     */
+    private fun launchTransportReconnect(transportType: TransportType) {
+        if (transportReconnectJob?.isActive == true) return
+        transportReconnectJob = scope.launch { retryAutoReconnect(transportType) }
+    }
+
+    /**
+     * A device is often not discoverable right after its transport returns (a BLE
+     * Trezor takes a few seconds to advertise again), so retry the silent reconnect
+     * with growing delays instead of giving up on the first empty scan.
+     */
+    private suspend fun retryAutoReconnect(transportType: TransportType) {
+        repeat(TRANSPORT_RESTORED_MAX_ATTEMPTS) { attempt ->
+            if (_state.value.connected != null || isConnectInProgress()) return
+            delay(TRANSPORT_RESTORED_RECONNECT_DELAY * (attempt + 1))
+            // A connect may have started while this attempt was waiting.
+            if (_state.value.connected != null || isConnectInProgress()) return
+            Logger.info("Attempting auto-reconnect after transport restored, attempt '${attempt + 1}'", context = TAG)
+            if (autoReconnect(preferredTransport = transportType).isSuccess) return
+        }
+    }
+
+    private fun isConnectInProgress(): Boolean = run {
+        val current = _state.value
+        current.isConnecting ||
+            current.isAutoReconnecting ||
+            needsPinEntry.value ||
+            needsPairingCode.value
+    }
+
     private suspend fun addOrUpdateKnownDevice(deviceInfo: TrezorDeviceInfo, features: TrezorFeatures) {
         val existing = _state.value.knownDevices
+        val existingIds = existing.map { it.id }.toSet()
+        val knownDevices = existing + hwWalletStore.loadKnownDevices().filter { it.id !in existingIds }
+        val previous = knownDevices.find { it.id == deviceInfo.id }
         val known = KnownDevice(
             id = deviceInfo.id,
             name = deviceInfo.name,
             path = deviceInfo.path,
-            transportType = deviceInfo.transportType.toKnownTransportType(),
+            transportType = deviceInfo.transportType.toTransportType(),
             label = features.label ?: deviceInfo.label,
             model = features.model ?: deviceInfo.model,
-            lastConnectedAt = System.currentTimeMillis(),
+            lastConnectedAt = clock.nowMs(),
+            xpubs = previous?.xpubs.orEmpty() + fetchAccountXpubs(),
         )
-        val updated = existing.filter { it.id != known.id } + known
+        val updated = knownDevices.filter { it.id != known.id } + known
         saveKnownDevices(updated)
         _state.update { it.copy(knownDevices = updated.toImmutableList()) }
     }
 
+    /**
+     * Reads account-level extended public keys for every supported address type so a
+     * watch-only balance can be tracked later without the device present. Failures are
+     * swallowed per type: a missing xpub just means that address type is not watched.
+     */
+    private suspend fun fetchAccountXpubs(): Map<String, String> {
+        val coin = Env.network.toTrezorCoinType()
+        return ALL_ADDRESS_TYPES.mapNotNull { addressType ->
+            runCatching {
+                val xpub = trezorService.getPublicKey(
+                    path = addressType.toAccountDerivationPath(network = Env.network),
+                    coin = coin,
+                    showOnTrezor = false,
+                ).xpub
+                addressType.toSettingsString() to xpub
+            }.onFailure {
+                Logger.warn("Could not read xpub for '${addressType.toSettingsString()}'", it, context = TAG)
+            }.getOrNull()
+        }.toMap()
+    }
+
     private suspend fun loadKnownDevices(): List<KnownDevice> = runCatching {
-        trezorStore.loadKnownDevices()
+        hwWalletStore.loadKnownDevices()
     }.onFailure {
         Logger.error("Failed to load known devices", it, context = TAG)
     }.getOrDefault(emptyList())
 
     private suspend fun saveKnownDevices(devices: List<KnownDevice>) {
         runCatching {
-            trezorStore.saveKnownDevices(devices)
+            hwWalletStore.saveKnownDevices(devices)
         }.onFailure { Logger.error("Failed to save known devices", it, context = TAG) }
     }
 
@@ -697,11 +881,12 @@ class TrezorRepo @Inject constructor(
     private suspend fun connectWithThpRetry(
         deviceId: String,
         selection: WalletSelection,
+        requestUsbPermission: Boolean = true,
     ): TrezorFeatures {
         TrezorDebugLog.log("THPRetry", "First connect attempt for: $deviceId")
         logCredentialFileState(deviceId, "BEFORE 1st attempt")
         return runCatching {
-            trezorService.connect(deviceId, selection)
+            connectDevice(deviceId, selection, requestUsbPermission)
         }.onSuccess {
             logCredentialFileState(deviceId, "AFTER 1st attempt (success)")
             TrezorDebugLog.log("THPRetry", "First attempt succeeded")
@@ -715,11 +900,21 @@ class TrezorRepo @Inject constructor(
             TrezorDebugLog.log("THPRetry", "Error is retryable, attempting second connect...")
             Logger.warn("Connection failed for $deviceId, retrying", e, context = TAG)
             logCredentialFileState(deviceId, "BEFORE 2nd attempt")
-            val result = trezorService.connect(deviceId, selection)
+            val result = connectDevice(deviceId, selection, requestUsbPermission)
             logCredentialFileState(deviceId, "AFTER 2nd attempt (success)")
             TrezorDebugLog.log("THPRetry", "Second attempt succeeded")
             result
         }
+    }
+
+    private suspend fun connectDevice(
+        deviceId: String,
+        selection: WalletSelection,
+        requestUsbPermission: Boolean,
+    ) = if (requestUsbPermission) {
+        trezorService.connect(deviceId, selection)
+    } else {
+        trezorService.connect(deviceId, selection, requestUsbPermission = false)
     }
 
     private fun logCredentialFileState(deviceId: String, label: String) {
@@ -774,27 +969,20 @@ data class KnownDevice(
     val id: String,
     val name: String?,
     val path: String,
-    val transportType: KnownDeviceTransportType,
+    val transportType: TransportType,
     val label: String?,
     val model: String?,
     val lastConnectedAt: Long,
+    /** Account-level extended public keys per address type (key = [AddressType.toSettingsString]). */
+    val xpubs: Map<String, String> = emptyMap(),
 )
 
-@Serializable
-enum class KnownDeviceTransportType {
-    @SerialName("bluetooth")
-    BLUETOOTH,
-
-    @SerialName("usb")
-    USB,
+private fun TrezorTransportType.toTransportType(): TransportType = when (this) {
+    TrezorTransportType.BLUETOOTH -> TransportType.BLUETOOTH
+    TrezorTransportType.USB -> TransportType.USB
 }
 
-private fun TrezorTransportType.toKnownTransportType(): KnownDeviceTransportType = when (this) {
-    TrezorTransportType.BLUETOOTH -> KnownDeviceTransportType.BLUETOOTH
-    TrezorTransportType.USB -> KnownDeviceTransportType.USB
-}
-
-private fun KnownDeviceTransportType.toCoreTransportType(): TrezorTransportType = when (this) {
-    KnownDeviceTransportType.BLUETOOTH -> TrezorTransportType.BLUETOOTH
-    KnownDeviceTransportType.USB -> TrezorTransportType.USB
+private fun TransportType.toCoreTransportType(): TrezorTransportType = when (this) {
+    TransportType.BLUETOOTH -> TrezorTransportType.BLUETOOTH
+    TransportType.USB -> TrezorTransportType.USB
 }

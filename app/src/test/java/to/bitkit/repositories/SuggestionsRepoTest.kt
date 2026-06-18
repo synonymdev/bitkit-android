@@ -1,5 +1,7 @@
 package to.bitkit.repositories
 
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
@@ -14,8 +16,11 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.BalanceState
+import to.bitkit.models.HwWallet
 import to.bitkit.models.Suggestion
+import to.bitkit.models.TransportType
 import to.bitkit.test.BaseUnitTest
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SuggestionsRepoTest : BaseUnitTest() {
@@ -25,12 +30,21 @@ class SuggestionsRepoTest : BaseUnitTest() {
     private val settingsStore = mock<SettingsStore>()
     private val transferRepo = mock<TransferRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
+    private val hwWalletRepo = mock<HwWalletRepo>()
 
-    private fun setUp(settings: SettingsData) {
+    private lateinit var hardwareWallets: MutableStateFlow<ImmutableList<HwWallet>>
+
+    private fun setUp(
+        settings: SettingsData,
+        wallets: ImmutableList<HwWallet> = persistentListOf(),
+    ) {
+        hardwareWallets = MutableStateFlow(wallets)
+
         whenever(walletRepo.balanceState).thenReturn(MutableStateFlow(BalanceState()))
         whenever(settingsStore.data).thenReturn(flowOf(settings))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(pubkyRepo.isAuthenticated).thenReturn(MutableStateFlow(false))
+        whenever(hwWalletRepo.wallets).thenReturn(hardwareWallets)
 
         sut = SuggestionsRepo(
             bgDispatcher = testDispatcher,
@@ -38,6 +52,7 @@ class SuggestionsRepoTest : BaseUnitTest() {
             settingsStore = settingsStore,
             transferRepo = transferRepo,
             pubkyRepo = pubkyRepo,
+            hwWalletRepo = hwWalletRepo,
         )
     }
 
@@ -75,4 +90,32 @@ class SuggestionsRepoTest : BaseUnitTest() {
 
         assertTrue(Suggestion.BUY !in suggestions)
     }
+
+    @Test
+    fun `suggestionsFlow shows hardware suggestion without paired hardware`() = test {
+        setUp(SettingsData())
+
+        val suggestions = sut.suggestionsFlow.first()
+
+        assertTrue(Suggestion.HARDWARE in suggestions)
+    }
+
+    @Test
+    fun `suggestionsFlow hides hardware suggestion with paired hardware`() = test {
+        setUp(SettingsData(), wallets = persistentListOf(hardwareWallet()))
+
+        val suggestions = sut.suggestionsFlow.first()
+
+        assertFalse(Suggestion.HARDWARE in suggestions)
+    }
+
+    private fun hardwareWallet() = HwWallet(
+        id = "device-id",
+        name = "Trezor",
+        model = "Safe 5",
+        transportType = TransportType.USB,
+        isConnected = true,
+        balanceSats = 0uL,
+        activities = persistentListOf(),
+    )
 }

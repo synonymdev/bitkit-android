@@ -45,6 +45,7 @@ fun RowScope.WalletBalanceView(
     icon: Painter,
     modifier: Modifier = Modifier,
     currencies: CurrencyState = LocalCurrencies.current,
+    titleTrailing: @Composable RowScope.() -> Unit = {},
 ) {
     val isPreview = LocalInspectionMode.current
     if (isPreview) {
@@ -63,6 +64,7 @@ fun RowScope.WalletBalanceView(
             primaryDisplay = PrimaryDisplay.BITCOIN,
             displayUnit = BitcoinDisplayUnit.MODERN,
             hideBalance = false,
+            titleTrailing = titleTrailing,
         )
     }
 
@@ -83,6 +85,7 @@ fun RowScope.WalletBalanceView(
         primaryDisplay = primaryDisplay,
         displayUnit = displayUnit,
         hideBalance = hideBalance,
+        titleTrailing = titleTrailing,
     )
 }
 
@@ -95,16 +98,20 @@ private fun RowScope.Content(
     primaryDisplay: PrimaryDisplay,
     displayUnit: BitcoinDisplayUnit,
     hideBalance: Boolean,
+    titleTrailing: @Composable RowScope.() -> Unit = {},
 ) {
     Column(
         modifier = Modifier
             .weight(1f)
             .then(modifier)
     ) {
-        Text13Up(
-            text = title,
-            color = Colors.White64,
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text13Up(
+                text = title,
+                color = Colors.White64,
+            )
+            titleTrailing()
+        }
         VerticalSpacer(8.dp)
 
         converted?.let { converted ->

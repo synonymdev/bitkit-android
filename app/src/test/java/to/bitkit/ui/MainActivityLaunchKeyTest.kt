@@ -1,11 +1,13 @@
 package to.bitkit.ui
 
 import android.content.Intent
+import android.hardware.usb.UsbManager
 import android.net.Uri
 import org.junit.Test
 import org.mockito.kotlin.mock
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
@@ -50,12 +52,21 @@ class MainActivityLaunchKeyTest {
     }
 
     @Test
-    fun `launch key ignores non view intents`() {
+    fun `launch key ignores unsupported intents`() {
         val intent = mock<Intent> {
             on { action }.thenReturn(Intent.ACTION_SEND)
         }
 
         assertNull(intent.launchKey())
+    }
+
+    @Test
+    fun `launch key tracks usb attach intents`() {
+        val intent = mock<Intent> {
+            on { action }.thenReturn(UsbManager.ACTION_USB_DEVICE_ATTACHED)
+        }
+
+        assertEquals(UsbManager.ACTION_USB_DEVICE_ATTACHED, intent.launchKey())
     }
 
     private fun viewIntent(url: String): Intent {

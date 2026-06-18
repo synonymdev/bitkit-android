@@ -2,6 +2,7 @@
 
 package to.bitkit.models
 
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.AddressType
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.env.Env
@@ -97,6 +98,14 @@ fun AddressType.toAccountDerivationPath(network: Network = Env.network): String 
         AddressType.P2PKH -> "m/44'/$coinType'/0'"
         else -> ""
     }
+}
+
+fun AddressType.toAccountType(): AccountType = when (this) {
+    AddressType.P2TR -> AccountType.TAPROOT
+    AddressType.P2WPKH -> AccountType.NATIVE_SEGWIT
+    AddressType.P2SH -> AccountType.WRAPPED_SEGWIT
+    AddressType.P2PKH -> AccountType.LEGACY
+    else -> AccountType.NATIVE_SEGWIT
 }
 
 fun AddressType.toSettingsString(): String = when (this) {

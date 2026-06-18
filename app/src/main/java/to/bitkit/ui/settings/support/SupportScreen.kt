@@ -43,7 +43,6 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
-import java.time.LocalDate
 import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.env.Env
@@ -65,6 +64,7 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import java.time.LocalDate
 
 private const val DEV_MODE_TAP_THRESHOLD = 5
 private const val COPYRIGHT_YEAR_PLACEHOLDER = "{year}"

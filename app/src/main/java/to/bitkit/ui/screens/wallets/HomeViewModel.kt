@@ -28,6 +28,7 @@ import to.bitkit.models.widget.toArticleModel
 import to.bitkit.models.widget.toBlockModel
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.SuggestionsRepo
 import to.bitkit.repositories.TransferRepo
@@ -48,6 +49,7 @@ class HomeViewModel @Inject constructor(
     private val transferRepo: TransferRepo,
     private val pubkyRepo: PubkyRepo,
     private val activityRepo: ActivityRepo,
+    private val hwWalletRepo: HwWalletRepo,
     private val suggestionsRepo: SuggestionsRepo,
 ) : ViewModel() {
 
@@ -114,6 +116,12 @@ class HomeViewModel @Inject constructor(
             }
         }
 
+        viewModelScope.launch {
+            hwWalletRepo.wallets.collect { wallets ->
+                _uiState.update { it.copy(hardwareWallets = wallets) }
+            }
+        }
+
         @OptIn(ExperimentalCoroutinesApi::class)
         val hasActivityFlow = activityRepo.activitiesChanged.mapLatest {
             activityRepo.getActivities(limit = 1u).getOrNull()?.isNotEmpty() == true
@@ -125,11 +133,16 @@ class HomeViewModel @Inject constructor(
                 walletRepo.balanceState,
                 transferRepo.activeTransfers,
                 hasActivityFlow,
-            ) { settings, balanceState, activeTransfers, hasActivity ->
+                hwWalletRepo.wallets,
+            ) { settings, balanceState, activeTransfers, hasActivity, hardwareWallets ->
+                val hasHardwareActivity = hardwareWallets.any { wallet ->
+                    wallet.balanceSats > 0uL || wallet.activities.isNotEmpty()
+                }
                 _uiState.update {
                     it.copy(
                         showEmptyState = settings.showEmptyBalanceView &&
                             !hasActivity &&
+                            !hasHardwareActivity &&
                             balanceState.totalSats == 0uL &&
                             balanceState.balanceInTransferToSpending == 0uL &&
                             balanceState.balanceInTransferToSavings == 0uL &&
