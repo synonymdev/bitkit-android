@@ -129,10 +129,12 @@ class BlocktankRepo @Inject constructor(
     }
 
     suspend fun getCjitEntry(channel: ChannelDetails): IcJitEntry? = withContext(bgDispatcher) {
-        val fundingTxId = channel.fundingTxo?.txid ?: return@withContext null
+        val fundingTxo = channel.fundingTxo ?: return@withContext null
 
-        fun List<IcJitEntry>.matching(): IcJitEntry? =
-            firstOrNull { it.channel?.fundingTx?.id == fundingTxId }
+        fun List<IcJitEntry>.matching(): IcJitEntry? = firstOrNull { entry ->
+            val fundingTx = entry.channel?.fundingTx ?: return@firstOrNull false
+            fundingTx.id == fundingTxo.txid && fundingTx.vout == fundingTxo.vout.toULong()
+        }
 
         val cached = _blocktankState.value.cjitEntries
         cached.matching()?.let { return@withContext it }

@@ -264,6 +264,24 @@ class BlocktankRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `getCjitEntry does not match a CJIT entry with the same funding txid but a different vout`() = test {
+        sut = createSut()
+        seedCjitEntries(pendingCjitEntry())
+        // A batched funding tx can hold several channel outputs sharing one txid; only vout distinguishes them.
+        val sharedTxId = "shared-funding-tx"
+        val channel = mock<IBtChannel>()
+        whenever(channel.fundingTx).thenReturn(FundingTx(id = sharedTxId, vout = 0u))
+        val entry = mock<IcJitEntry>()
+        whenever(entry.channel).thenReturn(channel)
+        whenever(coreService.blocktank.cjitEntries(refresh = true)).thenReturn(listOf(entry))
+
+        val channelDetails = mock<ChannelDetails>()
+        whenever(channelDetails.fundingTxo).thenReturn(OutPoint(txid = sharedTxId, vout = 1u))
+
+        assertNull(sut.getCjitEntry(channelDetails))
+    }
+
+    @Test
     fun `getCjitEntry does not refresh when no cached CJIT entry is awaiting a channel`() = test {
         sut = createSut()
         // Only an already-associated entry is cached (none awaiting a channel), so this ChannelReady cannot be a
