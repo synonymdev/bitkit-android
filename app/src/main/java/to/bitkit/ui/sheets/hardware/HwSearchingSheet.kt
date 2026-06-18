@@ -38,6 +38,10 @@ import to.bitkit.ui.utils.withAccent
 private val ANIMATION_SIZE = 280.dp
 private const val ARROWS_SIZE_RATIO = 0.82f
 
+// Mirrors the Figma "Loading Animation" HW variants: four 90° keyframes, each a 1s linear
+// Smart Animate step, so the arrows complete a counter-clockwise turn every 4 seconds.
+private const val ARROWS_ROTATION_DURATION_MS = 4000
+
 @Composable
 fun HwSearchingSheet(
     modifier: Modifier = Modifier,
@@ -98,8 +102,8 @@ private fun SearchingAnimation(modifier: Modifier = Modifier) {
     val transition = rememberInfiniteTransition(label = "hw_searching")
     val rotation by transition.animateFloat(
         initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(tween(durationMillis = 2500, easing = LinearEasing)),
+        targetValue = -360f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = ARROWS_ROTATION_DURATION_MS, easing = LinearEasing)),
         label = "arrows_rotation",
     )
 
