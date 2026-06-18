@@ -100,10 +100,10 @@ private fun Content(
                 .weight(1f)
         ) {
             Image(
-                painter = painterResource(R.drawable.coin_stack),
+                painter = painterResource(R.drawable.hw_paired_coins),
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
-                modifier = Modifier.size(220.dp)
+                modifier = Modifier.size(240.dp)
             )
         }
         Column(
