@@ -68,12 +68,13 @@ fun HardwareWalletScreen(
     viewModel: HwWalletViewModel = hiltViewModel(),
 ) {
     val wallets by viewModel.wallets.collectAsStateWithLifecycle()
+    val walletsLoaded by viewModel.walletsLoaded.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val wallet = remember(wallets, deviceId) { wallets.find { deviceId in it.deviceIds } }
 
     // Leave the screen once the device is gone, whether removed here or forgotten elsewhere.
-    LaunchedEffect(wallet) {
-        if (wallet == null) onBackClick()
+    LaunchedEffect(wallet, walletsLoaded) {
+        if (walletsLoaded && wallet == null) onBackClick()
     }
 
     wallet?.let {
@@ -161,9 +162,7 @@ private fun HardwareWalletContent(
                 BalanceHeaderView(
                     sats = wallet.balanceSats.toLong(),
                     testTag = "TotalBalance",
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("TotalBalance")
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
 

@@ -41,6 +41,7 @@ import to.bitkit.models.safe
 import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -126,11 +127,15 @@ class HwWalletRepo @Inject constructor(
             }
             activeWatchers.toList()
                 .filter { it.toDeviceId() in ids }
-                .forEach { stopActiveWatcher(it) }
+                .forEach {
+                    if (!stopActiveWatcher(it)) throw AppError("Failed to stop hardware wallet watcher '$it'")
+                }
             val failures = ids.mapNotNull { trezorRepo.forgetDevice(it).exceptionOrNull() }
             val remaining = hwWalletStore.loadKnownDevices().map { it.id }.toSet()
             failures.firstOrNull()?.let { throw it }
             check(ids.none { it in remaining }) { "Hardware wallet '$deviceId' still present after removal" }
+        }.onFailure {
+            watcherSyncRequests.tryEmit(Unit)
         }
     }
 
@@ -165,6 +170,10 @@ class HwWalletRepo @Inject constructor(
             }
             .toImmutableList()
     }.stateIn(scope, SharingStarted.Eagerly, persistentListOf())
+
+    val walletsLoaded: StateFlow<Boolean> = hwWalletStore.data
+        .map { true }
+        .stateIn(scope, SharingStarted.Eagerly, false)
 
     val totalSats: StateFlow<ULong> = wallets
         .map { wallets -> wallets.fold(0uL) { acc, wallet -> acc + wallet.balanceSats } }

@@ -986,6 +986,22 @@ class TrezorRepoTest : BaseUnitTest() {
         verify(hwWalletStore).saveKnownDevices(emptyList())
     }
 
+    @Test
+    fun `forgetDevice should preserve devices that are only in the store`() = test {
+        val knownDevice = mockKnownDevice()
+        val otherDevice = mockKnownDevice(id = "other-device", path = "/dev/trezor1")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice, otherDevice))
+        sut = createSut()
+
+        val result = sut.forgetDevice(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf(otherDevice), sut.state.value.knownDevices)
+        verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
+        verify(trezorService).clearCredentials(DEVICE_ID)
+        verify(hwWalletStore).saveKnownDevices(listOf(otherDevice))
+    }
+
     // endregion
 
     // region initial state

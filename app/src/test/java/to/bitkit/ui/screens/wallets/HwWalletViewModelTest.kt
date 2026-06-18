@@ -39,11 +39,14 @@ class HwWalletViewModelTest : BaseUnitTest() {
     )
 
     private lateinit var wallets: MutableStateFlow<kotlinx.collections.immutable.ImmutableList<HwWallet>>
+    private lateinit var walletsLoaded: MutableStateFlow<Boolean>
 
     @Before
     fun setUp() {
         wallets = MutableStateFlow(listOf(wallet).toImmutableList())
+        walletsLoaded = MutableStateFlow(true)
         whenever(hwWalletRepo.wallets).thenReturn(wallets)
+        whenever(hwWalletRepo.walletsLoaded).thenReturn(walletsLoaded)
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
         whenever(context.getString(R.string.hardware__remove_error)).thenReturn("Could not remove")
     }
@@ -55,6 +58,7 @@ class HwWalletViewModelTest : BaseUnitTest() {
         val sut = createSut()
 
         assertEquals(listOf(wallet), sut.wallets.value)
+        assertEquals(true, sut.walletsLoaded.value)
     }
 
     @Test

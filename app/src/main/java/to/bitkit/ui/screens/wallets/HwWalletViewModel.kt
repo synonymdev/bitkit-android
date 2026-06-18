@@ -26,6 +26,7 @@ class HwWalletViewModel @Inject constructor(
 ) : ViewModel() {
 
     val wallets: StateFlow<ImmutableList<HwWallet>> = hwWalletRepo.wallets
+    val walletsLoaded: StateFlow<Boolean> = hwWalletRepo.walletsLoaded
 
     private val _uiState = MutableStateFlow(HwWalletDetailUiState())
     val uiState: StateFlow<HwWalletDetailUiState> = _uiState.asStateFlow()
