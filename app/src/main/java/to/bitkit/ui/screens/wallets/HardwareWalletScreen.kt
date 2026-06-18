@@ -77,13 +77,13 @@ fun HardwareWalletScreen(
         if (walletsLoaded && wallet == null) onBackClick()
     }
 
-    wallet?.let {
+    wallet?.let { device ->
         HardwareWalletContent(
-            wallet = it,
-            showRemoveDialog = uiState.showRemoveDialog,
+            wallet = device,
+            showRemoveDialog = uiState.isPendingRemoval != null,
             onActivityItemClick = onActivityItemClick,
             onTransferToSpendingClick = onTransferToSpendingClick,
-            onRemoveClick = viewModel::onRemoveClick,
+            onRemoveClick = { viewModel.onRemoveClick(device) },
             onConfirmRemove = { viewModel.removeDevice(deviceId) },
             onDismissRemoveDialog = viewModel::onDismissRemoveDialog,
             onBackClick = onBackClick,
