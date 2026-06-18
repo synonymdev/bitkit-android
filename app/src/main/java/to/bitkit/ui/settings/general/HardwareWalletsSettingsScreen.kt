@@ -161,7 +161,7 @@ private fun EmptyState(modifier: Modifier = Modifier) {
         VerticalSpacer(8.dp)
         BodyM(
             text = stringResource(R.string.settings__hardware_wallets__empty_text),
-            color = Colors.White64,
+            color = Colors.White80,
         )
     }
 }

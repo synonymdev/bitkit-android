@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -23,6 +24,7 @@ import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class HwWalletViewModelTest : BaseUnitTest() {
 
     private val context: Context = mock()
@@ -49,14 +51,12 @@ class HwWalletViewModelTest : BaseUnitTest() {
     )
 
     private lateinit var wallets: MutableStateFlow<ImmutableList<HwWallet>>
-    private lateinit var walletsLoaded: MutableStateFlow<Boolean>
 
     @Before
     fun setUp() {
         wallets = MutableStateFlow(listOf(wallet).toImmutableList())
-        walletsLoaded = MutableStateFlow(true)
         whenever(hwWalletRepo.wallets).thenReturn(wallets)
-        whenever(hwWalletRepo.walletsLoaded).thenReturn(walletsLoaded)
+        whenever(hwWalletRepo.walletsLoaded).thenReturn(MutableStateFlow(true))
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
         whenever(context.getString(R.string.hardware__remove_error)).thenReturn("Could not remove")
     }

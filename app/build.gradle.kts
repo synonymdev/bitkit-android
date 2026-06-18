@@ -41,6 +41,21 @@ val keystoreProperties by lazy {
     keystoreProperties
 }
 
+val localProperties by lazy {
+    Properties().apply {
+        val localPropertiesFile = rootProject.file("local.properties")
+        if (localPropertiesFile.exists()) {
+            localPropertiesFile.inputStream().use { load(it) }
+        }
+    }
+}
+
+fun localProp(key: String): String? {
+    return System.getenv(key)
+        ?: providers.gradleProperty(key).orNull
+        ?: localProperties.getProperty(key)
+}
+
 // Android resource qualifier format for androidResources.localeFilters
 val androidLocales = listOf(
     "en", "ar", "b+es+419", "ca", "cs", "de", "el", "es", "es-rES", "fr", "it", "nl", "pl", "pt", "pt-rBR", "ru"
@@ -51,8 +66,8 @@ val bcp47Locales = listOf(
 )
 val e2eBackendEnv = System.getenv("E2E_BACKEND") ?: "local"
 val e2eHomegateUrlEnv = System.getenv("E2E_HOMEGATE_URL") ?: "http://127.0.0.1:6288"
-val trezorBridgeEnv = System.getenv("TREZOR_BRIDGE")?.toBoolean()?.toString() ?: "false"
-val trezorBridgeUrlEnv = System.getenv("TREZOR_BRIDGE_URL") ?: "http://10.0.2.2:21325"
+val trezorBridgeEnv = localProp("TREZOR_BRIDGE")?.toBoolean()?.toString() ?: "false"
+val trezorBridgeUrlEnv = localProp("TREZOR_BRIDGE_URL") ?: "http://10.0.2.2:21325"
 val requestedNdkVersion = System.getenv("NDK_VERSION")?.takeIf { it.isNotBlank() }
 val androidTestAnnotationPackage = "to.bitkit.test.annotations"
 val androidTestTaskPrefix = "connectedDevDebug"
