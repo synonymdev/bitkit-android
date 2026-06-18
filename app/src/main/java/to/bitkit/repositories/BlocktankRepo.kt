@@ -130,18 +130,34 @@ class BlocktankRepo @Inject constructor(
     suspend fun getCjitEntry(channel: ChannelDetails): IcJitEntry? = withContext(bgDispatcher) {
         val fundingTxId = channel.fundingTxo?.txid ?: return@withContext null
 
-        // Refresh from the server so a freshly opened CJIT channel association is up to date before matching.
-        val entries = runCatching {
-            withTimeout(CJIT_REFRESH_TIMEOUT) {
-                coreService.blocktank.cjitEntries(refresh = true)
-            }
-        }.getOrElse {
-            if (it is CancellationException && it !is TimeoutCancellationException) throw it
-            Logger.warn("Failed to refresh CJIT entries; using cached state", it, context = TAG)
-            _blocktankState.value.cjitEntries
-        }
+        fun cachedMatch(): IcJitEntry? = _blocktankState.value.cjitEntries
+            .firstOrNull { it.channel?.fundingTx?.id == fundingTxId }
 
-        return@withContext entries.firstOrNull { it.channel?.fundingTx?.id == fundingTxId }
+        // Use cached state first; only refresh from the server when the freshly opened channel isn't associated yet.
+        return@withContext cachedMatch() ?: run {
+            refreshCjitEntries()
+            cachedMatch()
+        }
+    }
+
+    private suspend fun refreshCjitEntries() {
+        repeat(CJIT_REFRESH_ATTEMPTS) { attempt ->
+            runCatching {
+                withTimeout(CJIT_REFRESH_TIMEOUT) {
+                    coreService.blocktank.cjitEntries(refresh = true)
+                }
+            }.onSuccess { entries ->
+                _blocktankState.update { it.copy(cjitEntries = entries.toImmutableList()) }
+                return
+            }.onFailure {
+                if (it is CancellationException && it !is TimeoutCancellationException) throw it
+                if (attempt == CJIT_REFRESH_ATTEMPTS - 1) {
+                    Logger.warn("Failed to refresh CJIT entries; using cached state", it, context = TAG)
+                    return
+                }
+            }
+            delay(CJIT_REFRESH_RETRY_DELAY)
+        }
     }
 
     suspend fun refreshInfo() = withContext(bgDispatcher) {
@@ -566,7 +582,9 @@ class BlocktankRepo @Inject constructor(
         private const val PEER_CONNECTION_DELAY_MS = 2_000L
         private val TIMEOUT_GIFT_CODE = 30.seconds
         private val GIFT_PAYMENT_RECEIVE_TIMEOUT = 45.seconds
+        private const val CJIT_REFRESH_ATTEMPTS = 3
         private val CJIT_REFRESH_TIMEOUT = 5.seconds
+        private val CJIT_REFRESH_RETRY_DELAY = 1.seconds
     }
 }
 

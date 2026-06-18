@@ -259,7 +259,7 @@ class BlocktankRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `getCjitEntry falls back to cached entries when refresh fails`() = test {
+    fun `getCjitEntry returns cached entry without refreshing when already associated`() = test {
         sut = createSut()
         val fundingTxId = "cached-funding-tx"
         val channel = mock<IBtChannel>()
@@ -271,11 +271,40 @@ class BlocktankRepoTest : BaseUnitTest() {
             BlocktankBackupV1(createdAt = 0L, orders = emptyList(), cjitEntries = listOf(cachedEntry)),
         )
 
+        val channelDetails = mock<ChannelDetails>()
+        whenever(channelDetails.fundingTxo).thenReturn(OutPoint(txid = fundingTxId, vout = 0u))
+
+        // A server refresh would return no entries (setUp default), so a non-null result can only come
+        // from the cached state short-circuit, proving the server is not hit when the entry is already known.
+        assertEquals(cachedEntry, sut.getCjitEntry(channelDetails))
+    }
+
+    @Test
+    fun `getCjitEntry returns null when cache misses and refresh fails`() = test {
+        sut = createSut()
         whenever(coreService.blocktank.cjitEntries(refresh = true)).thenThrow(RuntimeException("Network error"))
+
+        val channelDetails = mock<ChannelDetails>()
+        whenever(channelDetails.fundingTxo).thenReturn(OutPoint(txid = "missing-funding-tx", vout = 0u))
+
+        assertNull(sut.getCjitEntry(channelDetails))
+    }
+
+    @Test
+    fun `getCjitEntry retries the refresh and matches after a transient failure`() = test {
+        sut = createSut()
+        val fundingTxId = "cjit-funding-tx"
+        val channel = mock<IBtChannel>()
+        whenever(channel.fundingTx).thenReturn(FundingTx(id = fundingTxId, vout = 0u))
+        val entry = mock<IcJitEntry>()
+        whenever(entry.channel).thenReturn(channel)
+        whenever(coreService.blocktank.cjitEntries(refresh = true))
+            .thenThrow(RuntimeException("transient"))
+            .thenReturn(listOf(entry))
 
         val channelDetails = mock<ChannelDetails>()
         whenever(channelDetails.fundingTxo).thenReturn(OutPoint(txid = fundingTxId, vout = 0u))
 
-        assertEquals(cachedEntry, sut.getCjitEntry(channelDetails))
+        assertEquals(entry, sut.getCjitEntry(channelDetails))
     }
 }
