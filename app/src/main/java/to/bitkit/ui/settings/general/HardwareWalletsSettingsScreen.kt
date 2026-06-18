@@ -11,6 +11,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -36,7 +38,6 @@ import to.bitkit.models.HwWallet
 import to.bitkit.models.TransportType
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.HwDeviceIllustrations
 import to.bitkit.ui.components.MoneySSB
@@ -111,11 +112,19 @@ private fun Content(
                 if (wallets.isEmpty()) {
                     EmptyState(modifier = Modifier.weight(1f))
                 } else {
-                    wallets.forEach { wallet ->
-                        HwWalletRow(wallet = wallet, onRemoveClick = onRemoveClick)
-                        HorizontalDivider(color = Colors.White10)
+                    LazyColumn(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                    ) {
+                        items(
+                            items = wallets,
+                            key = { it.id },
+                        ) { wallet ->
+                            HwWalletRow(wallet = wallet, onRemoveClick = onRemoveClick)
+                            HorizontalDivider(color = Colors.White10)
+                        }
                     }
-                    FillHeight()
                 }
 
                 PrimaryButton(
@@ -168,7 +177,7 @@ private fun HwWalletRow(
         modifier = modifier
             .fillMaxWidth()
             .height(52.dp)
-            .testTag("HardwareWalletRow")
+            .testTag("HardwareWalletRow_${wallet.id}")
     ) {
         HwConnectionBadge(transportType = wallet.transportType, isConnected = wallet.isConnected)
         HorizontalSpacer(12.dp)
@@ -186,7 +195,7 @@ private fun HwWalletRow(
         )
         IconButton(
             onClick = { onRemoveClick(wallet) },
-            modifier = Modifier.testTag("HardwareWalletRowDelete")
+            modifier = Modifier.testTag("HardwareWalletRowDelete_${wallet.id}")
         ) {
             Icon(
                 painter = painterResource(R.drawable.ic_trash),
@@ -204,6 +213,23 @@ private fun HwConnectionBadge(
     isConnected: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val contentDescription = when (transportType) {
+        TransportType.BLUETOOTH -> {
+            if (isConnected) {
+                stringResource(R.string.hardware__connection_badge_connected_bluetooth)
+            } else {
+                stringResource(R.string.hardware__connection_badge_disconnected_bluetooth)
+            }
+        }
+        TransportType.USB -> {
+            if (isConnected) {
+                stringResource(R.string.hardware__connection_badge_connected_usb)
+            } else {
+                stringResource(R.string.hardware__connection_badge_disconnected_usb)
+            }
+        }
+    }
+
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -218,7 +244,7 @@ private fun HwConnectionBadge(
                     TransportType.USB -> R.drawable.ic_usb_connected
                 }
             ),
-            contentDescription = null,
+            contentDescription = contentDescription,
             tint = if (isConnected) Colors.Green else Colors.White64,
             modifier = Modifier.size(16.dp)
         )
