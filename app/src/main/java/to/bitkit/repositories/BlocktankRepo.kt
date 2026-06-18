@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.BtOrderState2
+import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.ChannelLiquidityOptions
 import com.synonym.bitkitcore.ChannelLiquidityParams
 import com.synonym.bitkitcore.CreateCjitOptions
@@ -133,11 +134,17 @@ class BlocktankRepo @Inject constructor(
         fun cachedMatch(): IcJitEntry? = _blocktankState.value.cjitEntries
             .firstOrNull { it.channel?.fundingTx?.id == fundingTxId }
 
-        // Use cached state first; only refresh from the server when the freshly opened channel isn't associated yet.
-        return@withContext cachedMatch() ?: run {
-            refreshCjitEntries()
-            cachedMatch()
+        cachedMatch()?.let { return@withContext it }
+
+        // A ChannelReady can only be a CJIT if a live cached entry is still awaiting its channel; otherwise skip
+        // the server round-trip so a non-CJIT transfer confirmation isn't delayed by a slow Blocktank API.
+        val hasPendingCjit = _blocktankState.value.cjitEntries.any {
+            it.channel == null && it.state != CJitStateEnum.EXPIRED && it.state != CJitStateEnum.FAILED
         }
+        if (!hasPendingCjit) return@withContext null
+
+        refreshCjitEntries()
+        return@withContext cachedMatch()
     }
 
     private suspend fun refreshCjitEntries() {
