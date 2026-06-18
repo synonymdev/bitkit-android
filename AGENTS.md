@@ -184,6 +184,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS ensure a method exist before calling it
 - ALWAYS remove unused code after refactors
 - ALWAYS follow Material3 design guidelines for UI components
+- When building from a Figma frame, reuse only scaffolding (sheet host, `SheetTopBar`, buttons, typography); NEVER swap a design-specific illustration/animation for a lookalike. Export the frame's assets via the Figma MCP and read animation timing/easing/direction from prototype reactions (`use_figma` → `node.reactions`)
 - ALWAYS ensure proper error handling in coroutines
 - ALWAYS acknowledge datastore async operations run synchronously in a suspend context
 - NEVER use `runBlocking` in suspend functions
@@ -220,6 +221,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS follow the patterns of the existing code in `app/src/test` when writing new unit tests
 - ALWAYS be mindful of thread safety when working with mutable lists & state
 - ALWAYS split screen composables into parent accepting viewmodel + inner private child accepting state and callbacks `Content()`
+- ALWAYS preview an in-sheet screen as `BottomSheetPreview { Content(modifier = Modifier.sheetHeight()) }` (see `SendErrorScreen.kt`); `Content` uses `modifier.fillMaxSize()` and never hardcodes a `SheetSize`
 - ALWAYS name lambda parameters in a composable function using present tense, NEVER use past tense
 - ALWAYS use `whenever { mock.suspendCall() }` for suspend stubs if not inside `test{}` fn blocks
 - ALWAYS use `whenever(mock.call())` for non-suspend stubs and for suspend stubs if inside `test{}` fn blocks
