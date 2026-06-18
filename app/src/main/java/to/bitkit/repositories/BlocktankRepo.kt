@@ -131,23 +131,24 @@ class BlocktankRepo @Inject constructor(
     suspend fun getCjitEntry(channel: ChannelDetails): IcJitEntry? = withContext(bgDispatcher) {
         val fundingTxId = channel.fundingTxo?.txid ?: return@withContext null
 
-        fun cachedMatch(): IcJitEntry? = _blocktankState.value.cjitEntries
-            .firstOrNull { it.channel?.fundingTx?.id == fundingTxId }
+        fun List<IcJitEntry>.matching(): IcJitEntry? =
+            firstOrNull { it.channel?.fundingTx?.id == fundingTxId }
 
-        cachedMatch()?.let { return@withContext it }
+        val cached = _blocktankState.value.cjitEntries
+        cached.matching()?.let { return@withContext it }
 
         // A ChannelReady can only be a CJIT if a live cached entry is still awaiting its channel; otherwise skip
         // the server round-trip so a non-CJIT transfer confirmation isn't delayed by a slow Blocktank API.
-        val hasPendingCjit = _blocktankState.value.cjitEntries.any {
+        val hasPendingCjit = cached.any {
             it.channel == null && it.state != CJitStateEnum.EXPIRED && it.state != CJitStateEnum.FAILED
         }
         if (!hasPendingCjit) return@withContext null
 
-        refreshCjitEntries()
-        return@withContext cachedMatch()
+        // Match against the freshly fetched list so a concurrent refreshOrders() can't clobber state before we read.
+        return@withContext refreshCjitEntries().matching()
     }
 
-    private suspend fun refreshCjitEntries() {
+    private suspend fun refreshCjitEntries(): List<IcJitEntry> {
         repeat(CJIT_REFRESH_ATTEMPTS) { attempt ->
             runCatching {
                 withTimeout(CJIT_REFRESH_TIMEOUT) {
@@ -155,16 +156,16 @@ class BlocktankRepo @Inject constructor(
                 }
             }.onSuccess { entries ->
                 _blocktankState.update { it.copy(cjitEntries = entries.toImmutableList()) }
-                return
+                return entries
             }.onFailure {
                 if (it is CancellationException && it !is TimeoutCancellationException) throw it
                 if (attempt == CJIT_REFRESH_ATTEMPTS - 1) {
                     Logger.warn("Failed to refresh CJIT entries; using cached state", it, context = TAG)
-                    return
                 }
             }
             delay(CJIT_REFRESH_RETRY_DELAY)
         }
+        return _blocktankState.value.cjitEntries
     }
 
     suspend fun refreshInfo() = withContext(bgDispatcher) {
