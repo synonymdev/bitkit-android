@@ -4,6 +4,8 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.Activity
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.serialization.Serializable
 
 /** A paired hardware wallet tracked as a watch-only balance. */
@@ -16,6 +18,7 @@ data class HwWallet(
     val isConnected: Boolean,
     val balanceSats: ULong,
     val activities: ImmutableList<Activity>,
+    val deviceIds: ImmutableSet<String> = persistentSetOf(id),
 )
 
 /** Serializable per-device balance snapshot carried by [BalanceState]. */

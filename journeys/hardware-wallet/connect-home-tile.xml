@@ -40,7 +40,10 @@
       Tap the hardware wallet tile
     </action>
     <action>
-      Verify a notice appears saying "Hardware wallet overview not yet implemented."
+      Verify the hardware wallet detail screen opens, showing the device name with a blue bitcoin icon in the top bar and a balance header
+    </action>
+    <action>
+      Navigate back to the wallet home screen
     </action>
   </actions>
 </journey>

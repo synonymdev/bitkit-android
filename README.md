@@ -180,6 +180,22 @@ To build the mainnet flavor for release run:
 just release
 ```
 
+`just release` builds the mainnet APK, Play Store AAB, resolves upstream native debug symbol artifacts, and validates the native debug symbols archive.
+
+Release artifacts:
+
+- APK: `app/build/outputs/apk/mainnet/release/`
+- AAB: `app/build/outputs/bundle/mainnetRelease/`
+- Native debug symbols: `app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols-{versionCode}.zip`
+
+The native debug symbols archive must come from the same `just release` build as the APK/AAB being published. Keep the build-numbered filename, e.g. `native-debug-symbols-182.zip`, so it matches the APK/AAB build number. Native Rust dependencies publish stripped release AARs for app size and separate `native-debug-symbols` classifier artifacts for crash symbolication; `just release` merges those upstream symbol artifacts into the final archive and refuses placeholder symbols from stripped packaged `.so` files.
+
+For Play Store releases, upload the AAB as usual, then upload `native-debug-symbols-{versionCode}.zip` for that exact version/build in Play Console: App bundle explorer → Downloads → Assets. Verify Play lists the native debug symbols after upload.
+
+Keep the release-built `native-debug-symbols-{versionCode}.zip` in GitHub releases or internal release storage. Play Console may only show delete/replace controls after upload, which is enough for release verification.
+
+For GitHub releases, attach `native-debug-symbols-{versionCode}.zip` alongside the APK so native crashes from GitHub-distributed builds can be symbolicated later.
+
 #### Android App Bundle (AAB)
 
 `just release` builds both the mainnet APK and Play Store AAB. AAB is generated in `app/build/outputs/bundle/mainnetRelease/`.
