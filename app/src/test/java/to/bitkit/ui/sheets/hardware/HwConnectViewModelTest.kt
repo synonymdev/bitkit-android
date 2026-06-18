@@ -1,0 +1,149 @@
+package to.bitkit.ui.sheets.hardware
+
+import app.cash.turbine.test
+import com.synonym.bitkitcore.TrezorDeviceInfo
+import com.synonym.bitkitcore.TrezorFeatures
+import com.synonym.bitkitcore.TrezorTransportType
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import org.junit.Before
+import org.junit.Test
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+import to.bitkit.models.HwWallet
+import to.bitkit.models.TransportType
+import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.TrezorState
+import to.bitkit.test.BaseUnitTest
+import kotlin.test.assertEquals
+
+@OptIn(ExperimentalCoroutinesApi::class)
+class HwConnectViewModelTest : BaseUnitTest() {
+
+    private val hwWalletRepo = mock<HwWalletRepo>()
+    private val needsPairingCode = MutableStateFlow(false)
+    private val wallets = MutableStateFlow<ImmutableList<HwWallet>>(persistentListOf())
+    private val deviceState = MutableStateFlow(TrezorState())
+
+    private lateinit var sut: HwConnectViewModel
+
+    @Before
+    fun setUp() {
+        whenever(hwWalletRepo.needsPairingCode).thenReturn(needsPairingCode)
+        whenever(hwWalletRepo.wallets).thenReturn(wallets)
+        whenever(hwWalletRepo.deviceState).thenReturn(deviceState)
+        sut = HwConnectViewModel(hwWalletRepo)
+    }
+
+    @Test
+    fun `onIntroContinue searches then advances to found with the first discovered device`() = test {
+        deviceState.value = TrezorState(nearbyDevices = persistentListOf(deviceInfo("dev1", model = "Safe 3")))
+        whenever(hwWalletRepo.scan()).thenReturn(Result.success(emptyList()))
+
+        sut.effects.test {
+            sut.onIntroContinue()
+            assertEquals(HwConnectEffect.NavigateToSearching, awaitItem())
+            assertEquals(HwConnectEffect.NavigateToFound, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        verify(hwWalletRepo).scan()
+        assertEquals("dev1", sut.uiState.value.foundDeviceId)
+        assertEquals("Trezor Safe 3", sut.uiState.value.deviceModel)
+    }
+
+    @Test
+    fun `onConnectClick connects the found device and advances to paired`() = test {
+        givenDeviceFound()
+        val connectedFeatures = features(model = "Safe 3")
+        whenever(hwWalletRepo.connect("dev1")).thenReturn(Result.success(connectedFeatures))
+
+        sut.effects.test {
+            sut.onConnectClick()
+            assertEquals(HwConnectEffect.NavigateToPaired, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        verify(hwWalletRepo).connect("dev1")
+        assertEquals("dev1", sut.uiState.value.pairedDeviceId)
+        assertEquals("Trezor Safe 3", sut.uiState.value.labelInput)
+    }
+
+    @Test
+    fun `pairing code request surfaces the inline pair code step`() = test {
+        sut.effects.test {
+            needsPairingCode.value = true
+            assertEquals(HwConnectEffect.NavigateToPairCode, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `connected wallet updates the balance shown on the paired step`() = test {
+        givenDeviceFound()
+        val connectedFeatures = features(model = "Safe 3")
+        whenever(hwWalletRepo.connect("dev1")).thenReturn(Result.success(connectedFeatures))
+        sut.onConnectClick()
+
+        wallets.value = persistentListOf(hwWallet("dev1", name = "Trezor Safe 3", balance = 10_562_411uL))
+
+        assertEquals(10_562_411uL, sut.uiState.value.balanceSats)
+        assertEquals("Trezor Safe 3", sut.uiState.value.deviceName)
+    }
+
+    @Test
+    fun `onFinishClick persists the edited label and dismisses`() = test {
+        givenDeviceFound()
+        val connectedFeatures = features(model = "Safe 3")
+        whenever(hwWalletRepo.connect("dev1")).thenReturn(Result.success(connectedFeatures))
+        sut.onConnectClick()
+        sut.onLabelChange("My Cold Wallet")
+        whenever(hwWalletRepo.setDeviceLabel("dev1", "My Cold Wallet")).thenReturn(Result.success(Unit))
+
+        sut.effects.test {
+            sut.onFinishClick()
+            assertEquals(HwConnectEffect.Dismiss, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        verify(hwWalletRepo).setDeviceLabel("dev1", "My Cold Wallet")
+    }
+
+    private suspend fun givenDeviceFound() {
+        deviceState.value = TrezorState(nearbyDevices = persistentListOf(deviceInfo("dev1", model = "Safe 3")))
+        whenever(hwWalletRepo.scan()).thenReturn(Result.success(emptyList()))
+        sut.onIntroContinue()
+    }
+
+    private fun deviceInfo(id: String, model: String?) = TrezorDeviceInfo(
+        id = id,
+        transportType = TrezorTransportType.BLUETOOTH,
+        name = null,
+        path = "ble:$id",
+        label = null,
+        model = model,
+        isBootloader = false,
+    )
+
+    private fun features(model: String?): TrezorFeatures {
+        val features = mock<TrezorFeatures>()
+        whenever(features.label).thenReturn(null)
+        whenever(features.model).thenReturn(model)
+        return features
+    }
+
+    private fun hwWallet(id: String, name: String, balance: ULong) = HwWallet(
+        id = id,
+        name = name,
+        model = null,
+        transportType = TransportType.BLUETOOTH,
+        isConnected = true,
+        balanceSats = balance,
+        activities = persistentListOf(),
+        deviceIds = persistentSetOf(id),
+    )
+}
