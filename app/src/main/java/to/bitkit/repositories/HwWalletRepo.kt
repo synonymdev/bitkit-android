@@ -4,6 +4,8 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.TrezorDeviceInfo
+import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.collections.immutable.ImmutableList
@@ -110,6 +112,31 @@ class HwWalletRepo @Inject constructor(
     fun submitPairingCode(code: String) = trezorRepo.submitPairingCode(code)
 
     fun cancelPairingCode() = trezorRepo.cancelPairingCode()
+
+    /** Device discovery and connection state used by the Connect Hardware flow. */
+    val deviceState: StateFlow<TrezorState> = trezorRepo.state
+
+    /** Scans for nearby unpaired devices over USB/Bluetooth; results land in [deviceState]'s nearbyDevices. */
+    suspend fun scan(): Result<List<TrezorDeviceInfo>> = trezorRepo.scan()
+
+    /** Connects and pairs a discovered device, persisting it as a watch-only known device. */
+    suspend fun connect(deviceId: String): Result<TrezorFeatures> = trezorRepo.connect(deviceId)
+
+    /**
+     * Persists the Bitkit-side funds label for a paired device. Applied to every entry sharing the
+     * same wallet identity so the same device paired over both transports renames consistently.
+     */
+    suspend fun setDeviceLabel(deviceId: String, label: String): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            val devices = hwWalletStore.loadKnownDevices()
+            val target = requireNotNull(devices.find { it.id == deviceId }) { "Unknown hardware wallet '$deviceId'" }
+            val customLabel = label.trim().ifEmpty { null }
+            val updated = devices.map {
+                if (it.walletKey == target.walletKey) it.copy(customLabel = customLabel) else it
+            }
+            hwWalletStore.saveKnownDevices(updated)
+        }
+    }
 
     /**
      * Removes a paired hardware wallet: stops its watchers and forgets every device entry
@@ -405,16 +432,19 @@ private val KnownDevice.walletKey: String
     get() = xpubs.values.sorted().joinToString().ifEmpty { id }
 
 /**
- * The label is the user-set name stored on the device itself; without one (or with the
- * factory default that just mirrors the model), fall back to the vendor-prefixed model
- * (e.g. "Safe 7" reads as "Trezor Safe 7").
+ * Resolves the name shown for a hardware wallet: the Bitkit-side custom label if the user set one,
+ * otherwise the device's own label; without one (or with the factory default that just mirrors the
+ * model) it falls back to the vendor-prefixed model (e.g. "Safe 7" reads as "Trezor Safe 7").
  */
+fun resolveHwWalletName(label: String?, model: String?, customLabel: String? = null): String {
+    customLabel?.takeIf { it.isNotBlank() }?.let { return it }
+    label?.takeIf { it != model }?.let { return it }
+    val resolvedModel = model ?: return "Trezor"
+    return if (resolvedModel.startsWith("Trezor")) resolvedModel else "Trezor $resolvedModel"
+}
+
 private val KnownDevice.displayName: String
-    get() {
-        label?.takeIf { it != model }?.let { return it }
-        val model = model ?: return "Trezor"
-        return if (model.startsWith("Trezor")) model else "Trezor $model"
-    }
+    get() = resolveHwWalletName(label = label, model = model, customLabel = customLabel)
 
 private data class HwWatcherData(
     val deviceId: String,

@@ -816,6 +816,7 @@ class TrezorRepo @Inject constructor(
             model = features.model ?: deviceInfo.model,
             lastConnectedAt = clock.nowMs(),
             xpubs = previous?.xpubs.orEmpty() + fetchAccountXpubs(),
+            customLabel = previous?.customLabel,
         )
         val updated = knownDevices.filter { it.id != known.id } + known
         saveKnownDevices(updated)
@@ -979,6 +980,8 @@ data class KnownDevice(
     val lastConnectedAt: Long,
     /** Account-level extended public keys per address type (key = [AddressType.toSettingsString]). */
     val xpubs: Map<String, String> = emptyMap(),
+    /** Bitkit-side funds label set by the user while pairing; null until renamed within Bitkit. */
+    val customLabel: String? = null,
 )
 
 private fun TrezorTransportType.toTransportType(): TransportType = when (this) {

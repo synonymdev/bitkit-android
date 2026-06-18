@@ -3075,6 +3075,10 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        // The Connect Hardware flow is itself a Hardware sheet and drives the pair-code step
+        // inline within its own NavHost; replacing it here would tear down that back stack.
+        if (_currentSheet.value is Sheet.Hardware) return
+
         isPairingCodeSheetQueued = false
         showSheet(Sheet.Hardware(route = HardwareRoute.PairCode))
     }
