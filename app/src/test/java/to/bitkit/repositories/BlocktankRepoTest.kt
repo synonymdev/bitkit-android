@@ -19,6 +19,7 @@ import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
+import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
@@ -255,5 +256,26 @@ class BlocktankRepoTest : BaseUnitTest() {
         whenever(channelDetails.fundingTxo).thenReturn(OutPoint(txid = "different-funding-tx", vout = 0u))
 
         assertNull(sut.getCjitEntry(channelDetails))
+    }
+
+    @Test
+    fun `getCjitEntry falls back to cached entries when refresh fails`() = test {
+        sut = createSut()
+        val fundingTxId = "cached-funding-tx"
+        val channel = mock<IBtChannel>()
+        whenever(channel.fundingTx).thenReturn(FundingTx(id = fundingTxId, vout = 0u))
+        val cachedEntry = mock<IcJitEntry>()
+        whenever(cachedEntry.channel).thenReturn(channel)
+
+        sut.restoreFromBackup(
+            BlocktankBackupV1(createdAt = 0L, orders = emptyList(), cjitEntries = listOf(cachedEntry)),
+        )
+
+        whenever(coreService.blocktank.cjitEntries(refresh = true)).thenThrow(RuntimeException("Network error"))
+
+        val channelDetails = mock<ChannelDetails>()
+        whenever(channelDetails.fundingTxo).thenReturn(OutPoint(txid = fundingTxId, vout = 0u))
+
+        assertEquals(cachedEntry, sut.getCjitEntry(channelDetails))
     }
 }

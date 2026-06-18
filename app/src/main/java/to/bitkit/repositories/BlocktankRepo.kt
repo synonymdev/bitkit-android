@@ -18,10 +18,12 @@ import com.synonym.bitkitcore.giftPay
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -41,6 +43,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -128,8 +131,15 @@ class BlocktankRepo @Inject constructor(
         val fundingTxId = channel.fundingTxo?.txid ?: return@withContext null
 
         // Refresh from the server so a freshly opened CJIT channel association is up to date before matching.
-        val entries = runCatching { coreService.blocktank.cjitEntries(refresh = true) }
-            .getOrElse { _blocktankState.value.cjitEntries }
+        val entries = runCatching {
+            withTimeout(CJIT_REFRESH_TIMEOUT) {
+                coreService.blocktank.cjitEntries(refresh = true)
+            }
+        }.getOrElse {
+            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            Logger.warn("Failed to refresh CJIT entries; using cached state", it, context = TAG)
+            _blocktankState.value.cjitEntries
+        }
 
         return@withContext entries.firstOrNull { it.channel?.fundingTx?.id == fundingTxId }
     }
@@ -556,6 +566,7 @@ class BlocktankRepo @Inject constructor(
         private const val PEER_CONNECTION_DELAY_MS = 2_000L
         private val TIMEOUT_GIFT_CODE = 30.seconds
         private val GIFT_PAYMENT_RECEIVE_TIMEOUT = 45.seconds
+        private val CJIT_REFRESH_TIMEOUT = 5.seconds
     }
 }
 
