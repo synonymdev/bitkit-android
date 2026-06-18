@@ -29,7 +29,6 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -154,7 +153,7 @@ private fun InfiniteTransition.animateRotation(durationMillis: Int, clockwise: B
 private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(modifier = Modifier.sheetHeight(SheetSize.LARGE))
+            Content(modifier = Modifier.sheetHeight())
         }
     }
 }

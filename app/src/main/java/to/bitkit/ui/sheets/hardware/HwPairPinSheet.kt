@@ -28,7 +28,6 @@ import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
-import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -125,7 +124,7 @@ private fun Preview() {
             Content(
                 code = "123",
                 onKeyPress = {},
-                modifier = Modifier.sheetHeight(SheetSize.LARGE)
+                modifier = Modifier.sheetHeight()
             )
         }
     }

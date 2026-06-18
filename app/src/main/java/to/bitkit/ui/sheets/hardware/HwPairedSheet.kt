@@ -25,7 +25,6 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
@@ -134,7 +133,7 @@ private fun Preview() {
                     balanceSats = 10_562_411uL,
                     labelInput = "Trezor Safe 3",
                 ),
-                modifier = Modifier.sheetHeight(SheetSize.LARGE)
+                modifier = Modifier.sheetHeight()
             )
         }
     }

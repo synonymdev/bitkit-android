@@ -24,7 +24,6 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -117,7 +116,7 @@ private fun Preview() {
         BottomSheetPreview {
             Content(
                 deviceModel = "Trezor Safe 3",
-                modifier = Modifier.sheetHeight(SheetSize.LARGE)
+                modifier = Modifier.sheetHeight()
             )
         }
     }

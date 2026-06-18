@@ -20,7 +20,6 @@ import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.HwDeviceIllustrations
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
-import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -95,7 +94,7 @@ private fun Content(
 private fun PreviewIntro() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(modifier = Modifier.sheetHeight(SheetSize.LARGE))
+            Content(modifier = Modifier.sheetHeight())
         }
     }
 }
