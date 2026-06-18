@@ -30,10 +30,12 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun HwIntroSheet(
     modifier: Modifier = Modifier,
-    onDismiss: () -> Unit = {},
+    onContinue: () -> Unit = {},
+    onCancel: () -> Unit = {},
 ) {
     Content(
-        onDismiss = onDismiss,
+        onContinue = onContinue,
+        onCancel = onCancel,
         modifier = modifier
     )
 }
@@ -41,7 +43,8 @@ fun HwIntroSheet(
 @Composable
 private fun Content(
     modifier: Modifier = Modifier,
-    onDismiss: () -> Unit = {},
+    onContinue: () -> Unit = {},
+    onCancel: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -71,13 +74,12 @@ private fun Content(
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.common__cancel),
-                    onClick = onDismiss,
+                    onClick = onCancel,
                     modifier = Modifier.weight(1f)
                 )
                 PrimaryButton(
                     text = stringResource(R.string.common__continue),
-                    onClick = {},
-                    enabled = false,
+                    onClick = onContinue,
                     modifier = Modifier.weight(1f)
                 )
             }
