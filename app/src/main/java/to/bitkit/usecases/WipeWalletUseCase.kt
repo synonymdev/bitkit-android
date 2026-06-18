@@ -9,6 +9,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -32,6 +33,7 @@ class WipeWalletUseCase @Inject constructor(
     private val widgetsStore: WidgetsStore,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
+    private val hwWalletRepo: HwWalletRepo,
     private val lightningRepo: LightningRepo,
     private val pubkyRepo: PubkyRepo,
     private val privatePaykitRepo: Provider<PrivatePaykitRepo>,
@@ -66,6 +68,7 @@ class WipeWalletUseCase @Inject constructor(
 
             blocktankRepo.resetState()
             activityRepo.resetState()
+            hwWalletRepo.resetState()
             resetWalletState()
 
             migrationService.markMigrationChecked()

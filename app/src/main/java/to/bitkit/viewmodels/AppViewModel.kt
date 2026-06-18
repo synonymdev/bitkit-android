@@ -71,12 +71,13 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
+import to.bitkit.domain.commands.NotifyChannelReady
+import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.WatchResult
-import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.channelId
@@ -110,6 +111,7 @@ import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
+import to.bitkit.models.TransportType
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
 import to.bitkit.models.sanitizedDeeplinkLogValue
@@ -123,6 +125,7 @@ import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentNotification
@@ -144,6 +147,7 @@ import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
+import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.utils.AppError
@@ -181,6 +185,7 @@ class AppViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val pendingPaymentRepo: PendingPaymentRepo,
     private val walletRepo: WalletRepo,
+    private val hwWalletRepo: HwWalletRepo,
     private val backupRepo: BackupRepo,
     private val settingsStore: SettingsStore,
     private val currencyRepo: CurrencyRepo,
@@ -189,6 +194,7 @@ class AppViewModel @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val appUpdaterService: AppUpdaterService,
     private val notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler,
+    private val notifyChannelReadyHandler: NotifyChannelReadyHandler,
     private val cacheStore: CacheStore,
     private val transferRepo: TransferRepo,
     private val migrationService: MigrationService,
@@ -249,6 +255,7 @@ class AppViewModel @Inject constructor(
 
     private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
     val currentSheet = _currentSheet.asStateFlow()
+    private var isPairingCodeSheetQueued = false
 
     private val processedPaymentsLock = Any()
     private val processedPayments = mutableSetOf<String>()
@@ -317,19 +324,37 @@ class AppViewModel @Inject constructor(
             lightningRepo.updateGeoBlockState()
         }
         viewModelScope.launch {
+            hwWalletRepo.receivedTxs.collect { tx ->
+                showTransactionSheet(
+                    NewTransactionSheetDetails(
+                        type = NewTransactionSheetType.ONCHAIN,
+                        direction = NewTransactionSheetDirection.RECEIVED,
+                        paymentHashOrTxId = tx.txid,
+                        activityId = tx.txid,
+                        sats = tx.sats.toLong(),
+                    ),
+                )
+            }
+        }
+        viewModelScope.launch {
+            hwWalletRepo.needsPairingCode.collect { needsCode ->
+                if (needsCode) {
+                    showPairingCodeSheet()
+                } else {
+                    isPairingCodeSheetQueued = false
+                    _currentSheet.update { sheet ->
+                        if (sheet is Sheet.Hardware && sheet.route == HardwareRoute.PairCode) null else sheet
+                    }
+                }
+            }
+        }
+        viewModelScope.launch {
             widgetsRepo.refreshEnabledWidgets()
         }
         viewModelScope.launch {
             timedSheetManager.currentSheet.collect { sheetType ->
                 if (sheetType != null) {
-                    val currentSheet = _currentSheet.value
-                    val isHighPrioritySheetShowing = currentSheet is Sheet.Gift ||
-                        currentSheet is Sheet.Send ||
-                        currentSheet is Sheet.BTCPayConnection ||
-                        currentSheet is Sheet.LnurlAuth ||
-                        currentSheet is Sheet.Pin ||
-                        currentSheet is Sheet.PubkyAuth
-                    if (!isHighPrioritySheetShowing) {
+                    if (!isHighPrioritySheet(_currentSheet.value)) {
                         showSheet(Sheet.TimedSheet(sheetType))
                     }
                 } else {
@@ -930,20 +955,13 @@ class AppViewModel @Inject constructor(
     // region Notifications
 
     private suspend fun notifyChannelReady(event: Event.ChannelReady) {
-        val channel = lightningRepo.getChannels()?.find { it.channelId == event.channelId }
-        val cjitEntry = channel?.let { blocktankRepo.getCjitEntry(it) }
-        if (cjitEntry != null) {
-            val amount = channel.amountOnClose.toLong()
-            showTransactionSheet(
-                NewTransactionSheetDetails(
-                    type = NewTransactionSheetType.LIGHTNING,
-                    direction = NewTransactionSheetDirection.RECEIVED,
-                    sats = amount,
-                ),
-            )
-            activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
+        val command = NotifyChannelReady.Command(event = event)
+        val result = notifyChannelReadyHandler(command).getOrNull()
+        if (result is NotifyChannelReady.Result.ShowSheet) {
+            showTransactionSheet(result.sheet)
             return
         }
+        if (result is NotifyChannelReady.Result.Duplicate) return
         toast(
             type = Toast.ToastType.LIGHTNING,
             title = context.getString(R.string.lightning__channel_opened_title),
@@ -1596,6 +1614,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    @Suppress("LongMethod")
     private suspend fun handleScan(
         result: String,
         routePubkyKeys: Boolean,
@@ -2413,6 +2432,12 @@ class AppViewModel @Inject constructor(
     }
 
     fun onClickActivityDetail() {
+        _transactionSheet.value.activityId?.let {
+            hideNewTransactionSheet()
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(it)))
+            return
+        }
+
         val activityType = _transactionSheet.value.type.toActivityFilter()
         val txType = _transactionSheet.value.direction.toTxType()
         val paymentHashOrTxId = _transactionSheet.value.paymentHashOrTxId ?: return
@@ -2811,6 +2836,7 @@ class AppViewModel @Inject constructor(
             else -> _currentSheet.update { null }
         }
         clearActiveContactPaymentContext()
+        showQueuedPairingCodeSheet()
     }
 
     // endregion
@@ -3032,6 +3058,44 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    fun onUsbDeviceAttached() = hwWalletRepo.onTransportRestored(TransportType.USB)
+
+    fun submitPairingCode(code: String) = hwWalletRepo.submitPairingCode(code)
+
+    fun cancelPairingCode() = hwWalletRepo.cancelPairingCode()
+
+    /**
+     * The device asks for its one-time pairing code mid-connect, which can happen on
+     * any screen via silent reconnects, so the sheet is shown app-wide. High-priority
+     * sheets are not interrupted: the pairing sheet waits until the active sheet closes.
+     */
+    private fun showPairingCodeSheet() {
+        if (isHighPrioritySheet(_currentSheet.value)) {
+            isPairingCodeSheetQueued = true
+            return
+        }
+
+        isPairingCodeSheetQueued = false
+        showSheet(Sheet.Hardware(route = HardwareRoute.PairCode))
+    }
+
+    private fun showQueuedPairingCodeSheet() {
+        if (!isPairingCodeSheetQueued) return
+        if (!hwWalletRepo.needsPairingCode.value) {
+            isPairingCodeSheetQueued = false
+            return
+        }
+
+        showPairingCodeSheet()
+    }
+
+    private fun isHighPrioritySheet(sheet: Sheet?) = sheet is Sheet.Gift ||
+        sheet is Sheet.Send ||
+        sheet is Sheet.BTCPayConnection ||
+        sheet is Sheet.LnurlAuth ||
+        sheet is Sheet.Pin ||
+        sheet is Sheet.PubkyAuth
+
     fun clearPendingPubkyImport() {
         viewModelScope.launch {
             pubkyRepo.clearPendingImport()
@@ -3116,6 +3180,11 @@ class AppViewModel @Inject constructor(
     }
 
     fun checkTimedSheets() = timedSheetManager.onHomeScreenEntered()
+
+    fun onHomeResumed() {
+        checkTimedSheets()
+        hwWalletRepo.onAppForegrounded()
+    }
 
     fun onLeftHome() = timedSheetManager.onHomeScreenExited()
 

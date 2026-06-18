@@ -24,7 +24,9 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import to.bitkit.R
 import to.bitkit.ext.rawId
 import to.bitkit.ui.activityListViewModel
@@ -54,6 +56,7 @@ fun ActivityListGrouped(
     contentPadding: PaddingValues = PaddingValues(top = 20.dp),
     activityTestTagPrefix: String = "Activity",
     showContactAvatar: Boolean = true,
+    hardwareIds: ImmutableSet<String> = persistentSetOf(),
     titleProvider: @Composable (Activity) -> String? = { null },
 ) {
     val contacts by activityListViewModel?.contacts?.collectAsStateWithLifecycle() ?: remember {
@@ -117,6 +120,7 @@ fun ActivityListGrouped(
                                     onClick = onActivityItemClick,
                                     testTag = "$activityTestTagPrefix-$index",
                                     title = titleProvider(item) ?: contactActivityTitle(item, contacts),
+                                    isHardware = item.rawId() in hardwareIds,
                                     contact = if (showContactAvatar) contactForActivity(item, contacts) else null,
                                 )
                                 VerticalSpacer(16.dp)

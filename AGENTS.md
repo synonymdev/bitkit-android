@@ -230,6 +230,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS add new localizable string resources in alphabetical order in `strings.xml`
 - NEVER add string resources for strings used only in dev settings screens and previews and never localize acronyms
 - ALWAYS use template in `.github/pull_request_template.md` for PR descriptions
+- ALWAYS reference test files in PR descriptions/QA Notes by bare file name only (e.g. `HwWalletRepoTest.kt`), NEVER the full path; only when two referenced test files share the same name, prefix the shortest leading path segment(s) that disambiguate them (e.g. `repositories/FooTest.kt` vs `viewmodels/FooTest.kt`)
 - ALWAYS wrap `ULong` numbers with `USat` in arithmetic operations, to guard against overflows
 - PREFER to use one-liners with `run {}` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
 - ALWAYS add imports instead of inline fully-qualified names

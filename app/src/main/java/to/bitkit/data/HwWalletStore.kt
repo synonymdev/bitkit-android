@@ -9,25 +9,25 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import to.bitkit.data.serializers.TrezorDataSerializer
+import to.bitkit.data.serializers.HwWalletDataSerializer
 import to.bitkit.di.IoDispatcher
 import to.bitkit.repositories.KnownDevice
 import javax.inject.Inject
 import javax.inject.Singleton
 
-private val Context.trezorDataStore: DataStore<TrezorData> by dataStore(
+private val Context.hwWalletDataStore: DataStore<HwWalletData> by dataStore(
     fileName = "trezor_device.json",
-    serializer = TrezorDataSerializer
+    serializer = HwWalletDataSerializer
 )
 
 @Singleton
-class TrezorStore @Inject constructor(
+class HwWalletStore @Inject constructor(
     @ApplicationContext private val context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
-    private val store = context.trezorDataStore
+    private val store = context.hwWalletDataStore
 
-    val data: Flow<TrezorData> = store.data
+    val data: Flow<HwWalletData> = store.data
 
     suspend fun loadKnownDevices(): List<KnownDevice> = withContext(ioDispatcher) {
         store.data.first().knownDevices
@@ -39,12 +39,12 @@ class TrezorStore @Inject constructor(
     }
 
     suspend fun reset() = withContext(ioDispatcher) {
-        store.updateData { TrezorData() }
+        store.updateData { HwWalletData() }
         Unit
     }
 }
 
 @Serializable
-data class TrezorData(
+data class HwWalletData(
     val knownDevices: List<KnownDevice> = emptyList(),
 )

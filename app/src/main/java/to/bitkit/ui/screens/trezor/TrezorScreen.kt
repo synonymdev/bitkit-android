@@ -97,7 +97,6 @@ private fun TrezorScreenContent(
 ) {
     val trezorState by viewModel.trezorState.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val needsPairingCode by viewModel.needsPairingCode.collectAsStateWithLifecycle()
     val needsPinEntry by viewModel.needsPinEntry.collectAsStateWithLifecycle()
     val walletMode by viewModel.walletMode.collectAsStateWithLifecycle()
 
@@ -113,13 +112,6 @@ private fun TrezorScreenContent(
         } else {
             permissionsState.launchMultiplePermissionRequest()
         }
-    }
-
-    if (needsPairingCode) {
-        PairingCodeDialog(
-            onSubmit = viewModel::submitPairingCode,
-            onCancel = viewModel::cancelPairingCode,
-        )
     }
 
     if (needsPinEntry) {

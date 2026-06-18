@@ -44,6 +44,7 @@ fun AllActivityScreen(
 ) {
     val app = appViewModel ?: return
     val filteredActivities by viewModel.filteredActivities.collectAsStateWithLifecycle()
+    val hardwareIds by viewModel.hardwareIds.collectAsStateWithLifecycle()
 
     val searchText by viewModel.searchText.collectAsStateWithLifecycle()
     val selectedTags by viewModel.selectedTags.collectAsStateWithLifecycle()
@@ -55,6 +56,7 @@ fun AllActivityScreen(
 
     AllActivityScreenContent(
         filteredActivities = filteredActivities,
+        hardwareIds = hardwareIds,
         searchText = searchText,
         onSearchTextChange = { viewModel.setSearchText(it) },
         hasTagFilter = selectedTags.isNotEmpty(),
@@ -76,6 +78,7 @@ fun AllActivityScreen(
 private fun AllActivityScreenContent(
     filteredActivities: ImmutableList<Activity>?,
     searchText: String,
+    hardwareIds: ImmutableSet<String> = persistentSetOf(),
     onSearchTextChange: (String) -> Unit,
     hasTagFilter: Boolean,
     selectedTags: ImmutableSet<String>,
@@ -129,6 +132,7 @@ private fun AllActivityScreenContent(
                 items = filteredActivities,
                 onActivityItemClick = onActivityItemClick,
                 onEmptyActivityRowClick = onEmptyActivityRowClick,
+                hardwareIds = hardwareIds,
                 listState = listState,
                 contentPadding = PaddingValues(top = topPadding + 16.dp),
                 modifier = Modifier

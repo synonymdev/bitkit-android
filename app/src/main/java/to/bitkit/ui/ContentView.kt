@@ -195,6 +195,7 @@ import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.SendSheet
 import to.bitkit.ui.sheets.UpdateSheet
 import to.bitkit.ui.sheets.WidgetsSheet
+import to.bitkit.ui.sheets.hardware.HardwareSheet
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions
@@ -464,6 +465,7 @@ fun ContentView(
                         Sheet.ChangePin -> ChangePinSheet(appViewModel)
                         Sheet.DisablePin -> DisablePinSheet(appViewModel)
                         is Sheet.Backup -> BackupSheet(sheet, onDismiss = { appViewModel.hideSheet() })
+                        is Sheet.Hardware -> HardwareSheet(sheet, appViewModel)
                         is Sheet.Widgets -> {
                             WidgetsSheet(
                                 sheet = sheet,

@@ -32,6 +32,8 @@
     <string name="cards__backupSeedPhrase__title">Back up</string>
     <string name="cards__buyBitcoin__description">Buy some bitcoin</string>
     <string name="cards__buyBitcoin__title">Buy</string>
+    <string name="cards__hardware__description">Connect device</string>
+    <string name="cards__hardware__title">Hardware</string>
     <string name="cards__invite__description">Share Bitkit</string>
     <string name="cards__invite__title">Invite</string>
     <string name="cards__lightning__description">Instant payments</string>
@@ -161,6 +163,11 @@
     <string name="fee__slow__description">±1-2 hours</string>
     <string name="fee__slow__shortDescription">±1h</string>
     <string name="fee__slow__title">Slow</string>
+    <string name="hardware__intro_header">Add your &lt;accent&gt;hardware wallet&lt;/accent&gt;</string>
+    <string name="hardware__intro_text">Connect your hardware device to watch or manage your long-term funds.</string>
+    <string name="hardware__intro_title">Hardware Wallet</string>
+    <string name="hardware__pairing_text">Enter the 6-digit code shown on your hardware device.</string>
+    <string name="hardware__pairing_title">Pair Device</string>
     <string name="lightning__availability__text">Funds transfer to savings is usually instant, but settlement may take up to &lt;accent&gt;14 days&lt;/accent&gt; under certain network conditions.</string>
     <string name="lightning__availability__title">Funds\n&lt;accent&gt;availability&lt;/accent&gt;</string>
     <string name="lightning__balance">Balance</string>
@@ -678,6 +685,13 @@
     <string name="security__reset_confirm">Yes, Reset</string>
     <string name="security__reset_dialog_desc">Are you sure you want to reset your Bitkit Wallet? Do you have a backup of your recovery phrase and wallet data?</string>
     <string name="security__reset_dialog_title">Reset Bitkit?</string>
+    <string name="security__reset_graph_button">Reset Network Graph</string>
+    <string name="security__reset_graph_confirm">Yes, Reset</string>
+    <string name="security__reset_graph_dialog_desc">This clears the cached Lightning network graph so it is downloaded again from scratch. It can fix \"route not found\" errors. Bitkit will restart automatically.</string>
+    <string name="security__reset_graph_dialog_title">Reset Network Graph?</string>
+    <string name="security__reset_graph_error">Could not reset the network graph. Please try again.</string>
+    <string name="security__reset_graph_success_description">Bitkit will restart in a few seconds to download a fresh network graph.</string>
+    <string name="security__reset_graph_success_title">Network Graph Reset</string>
     <string name="security__reset_text">Back up your wallet first to avoid loss of your funds and wallet data. Resetting will overwrite your current Bitkit setup.</string>
     <string name="security__reset_title">Reset And Restore</string>
     <string name="security__success_bio">You have successfully set up a PIN code and {biometricsName} to improve wallet security.</string>

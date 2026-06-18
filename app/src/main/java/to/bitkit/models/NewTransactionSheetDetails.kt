@@ -9,6 +9,7 @@ data class NewTransactionSheetDetails(
     val type: NewTransactionSheetType,
     val direction: NewTransactionSheetDirection,
     val paymentHashOrTxId: String? = null,
+    val activityId: String? = null,
     val sats: Long = 0,
     val isLoadingDetails: Boolean = false,
 ) {

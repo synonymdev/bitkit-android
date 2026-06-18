@@ -1,0 +1,46 @@
+<journey name="Hardware Wallet Suggestion Card and Intro Sheet">
+  <description>
+    Verifies the no-device home state: forgetting the paired device removes the
+    hardware tile, the Hardware suggestion card appears, and tapping it opens the
+    connect intro sheet with disabled Continue. Re-pairs the emulator at the end so
+    other journeys can run afterwards. Requires a paired Bridge emulator.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app, open the menu, navigate to Settings, then Dev Settings, then tap the "Trezor" row
+    </action>
+    <action>
+      Tap the forget-device (trash) icon next to the known device, confirming any dialog
+    </action>
+    <action>
+      Navigate back to the wallet home screen
+    </action>
+    <action>
+      Verify no hardware wallet tile is shown beneath the SAVINGS and SPENDING tiles
+    </action>
+    <action>
+      Scroll the suggestion cards horizontally until a card titled "Hardware" with the text "Connect device" is visible
+    </action>
+    <action>
+      Tap the "Hardware" suggestion card
+    </action>
+    <action>
+      Verify a bottom sheet opens titled "Hardware Wallet" showing Trezor and Ledger device images
+    </action>
+    <action>
+      Verify the headline reads "Add your hardware wallet" with the words "hardware wallet" in blue
+    </action>
+    <action>
+      Verify the "Continue" button appears disabled and tapping it does nothing
+    </action>
+    <action>
+      Tap the "Cancel" button and verify the sheet closes back to the home screen
+    </action>
+    <action>
+      Open the menu, navigate to Settings, then Dev Settings, then tap the "Trezor" row, tap "Scan", and tap the discovered device to re-pair it
+    </action>
+    <action>
+      Verify the device connects within 15 seconds
+    </action>
+  </actions>
+</journey>

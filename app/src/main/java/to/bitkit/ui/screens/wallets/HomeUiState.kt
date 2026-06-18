@@ -5,6 +5,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.data.dto.price.PriceDTO
 import to.bitkit.models.BannerItem
+import to.bitkit.models.HwWallet
 import to.bitkit.models.Suggestion
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
@@ -19,6 +20,7 @@ import to.bitkit.ui.screens.widgets.blocks.WeatherModel
 @Stable
 data class HomeUiState(
     val suggestions: ImmutableList<Suggestion> = persistentListOf(),
+    val hardwareWallets: ImmutableList<HwWallet> = persistentListOf(),
     val banners: ImmutableList<BannerItem> = persistentListOf(),
     val showWidgets: Boolean = false,
     val widgetsWithPosition: ImmutableList<WidgetWithPosition> = persistentListOf(),

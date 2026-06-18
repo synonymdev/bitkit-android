@@ -22,6 +22,7 @@ class SuggestionsRepo @Inject constructor(
     private val settingsStore: SettingsStore,
     private val transferRepo: TransferRepo,
     private val pubkyRepo: PubkyRepo,
+    private val hwWalletRepo: HwWalletRepo,
 ) {
     companion object {
         private const val MAX_SUGGESTIONS = 4
@@ -32,13 +33,15 @@ class SuggestionsRepo @Inject constructor(
         settingsStore.data,
         transferRepo.activeTransfers,
         pubkyRepo.isAuthenticated,
-    ) { balanceState, settings, transfers, profileAuthenticated ->
+        hwWalletRepo.wallets,
+    ) { balanceState, settings, transfers, profileAuthenticated, hardwareWallets ->
+        val hasHardwareWallet = hardwareWallets.isNotEmpty()
         val baseSuggestions = when {
             balanceState.totalLightningSats > 0uL ->
-                spendingSuggestions(settings, profileAuthenticated)
+                spendingSuggestions(settings, profileAuthenticated, hasHardwareWallet)
             balanceState.totalOnchainSats > 0uL ->
-                savingsOnlySuggestions(settings, transfers, profileAuthenticated)
-            else -> emptyWalletSuggestions(settings, transfers, profileAuthenticated)
+                savingsOnlySuggestions(settings, transfers, profileAuthenticated, hasHardwareWallet)
+            else -> emptyWalletSuggestions(settings, transfers, profileAuthenticated, hasHardwareWallet)
         }
         val dismissedList = settings.dismissedSuggestions.mapNotNull { it.toSuggestionOrNull() }
         baseSuggestions
@@ -55,9 +58,11 @@ class SuggestionsRepo @Inject constructor(
     private fun spendingSuggestions(
         settings: SettingsData,
         profileAuthenticated: Boolean,
+        hasHardwareWallet: Boolean,
     ) = listOfNotNull(
         Suggestion.QUICK_PAY.takeIf { !settings.isQuickPayEnabled },
         Suggestion.NOTIFICATIONS.takeIf { !settings.notificationsGranted },
+        Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
         Suggestion.SHOP,
         Suggestion.PROFILE.takeIf { !profileAuthenticated },
         Suggestion.SUPPORT,
@@ -69,12 +74,14 @@ class SuggestionsRepo @Inject constructor(
         settings: SettingsData,
         transfers: List<TransferEntity>,
         profileAuthenticated: Boolean,
+        hasHardwareWallet: Boolean,
     ) = listOfNotNull(
         Suggestion.BACK_UP.takeIf { !settings.backupVerified },
         Suggestion.SECURE.takeIf { !settings.isPinEnabled },
         Suggestion.LIGHTNING.takeIf {
             transfers.all { it.type != TransferType.TO_SPENDING }
         },
+        Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
         Suggestion.SUPPORT,
         Suggestion.PROFILE.takeIf { !profileAuthenticated },
         Suggestion.INVITE,
@@ -85,11 +92,13 @@ class SuggestionsRepo @Inject constructor(
         settings: SettingsData,
         transfers: List<TransferEntity>,
         profileAuthenticated: Boolean,
+        hasHardwareWallet: Boolean,
     ) = listOfNotNull(
         Suggestion.BUY,
         Suggestion.LIGHTNING.takeIf {
             transfers.all { it.type != TransferType.TO_SPENDING }
         },
+        Suggestion.HARDWARE.takeIf { !hasHardwareWallet },
         Suggestion.SUPPORT,
         Suggestion.BACK_UP.takeIf { !settings.backupVerified },
         Suggestion.SECURE.takeIf { !settings.isPinEnabled },

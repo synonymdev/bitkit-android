@@ -1,0 +1,36 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="32dp"
+    android:height="32dp"
+    android:viewportWidth="32"
+    android:viewportHeight="32">
+    <path
+        android:fillColor="#FFFF6600"
+        android:fillAlpha="0.2"
+        android:pathData="M15 4L23 10 15 16V4Z"/>
+    <path
+        android:fillColor="#FFFF6600"
+        android:fillAlpha="0.2"
+        android:pathData="M15 16L23 22 15 28V16Z"/>
+    <path
+        android:fillColor="#FFFF6600"
+        android:fillType="evenOdd"
+        android:pathData="M14.55 3.11C14.89 2.94 15.3 2.97 15.6 3.2L23.6 9.2C23.85 9.39 24 9.69 24 10 24 10.32 23.85 10.61 23.6 10.8L15.6 16.8C15.3 17.03 14.89 17.06 14.55 16.89 14.21 16.73 14 16.38 14 16V4C14 3.62 14.21 3.28 14.55 3.11ZM16 6V14L21.33 10 16 6Z"/>
+    <path
+        android:fillColor="#FFFF6600"
+        android:fillType="evenOdd"
+        android:pathData="M14.55 15.11C14.89 14.94 15.3 14.97 15.6 15.2L23.6 21.2C23.85 21.39 24 21.69 24 22 24 22.32 23.85 22.61 23.6 22.8L15.6 28.8C15.3 29.03 14.89 29.06 14.55 28.89 14.21 28.73 14 28.38 14 28V16C14 15.62 14.21 15.28 14.55 15.11ZM16 18V26L21.33 22 16 18Z"/>
+    <path
+        android:fillColor="#FFFF6600"
+        android:fillType="evenOdd"
+        android:pathData="M6.2 9.4C6.53 8.96 7.16 8.87 7.6 9.2L15.6 15.2C16.04 15.53 16.13 16.16 15.8 16.6 15.47 17.04 14.84 17.13 14.4 16.8L6.4 10.8C5.96 10.47 5.87 9.84 6.2 9.4Z"/>
+    <path
+        android:fillColor="#FFFF6600"
+        android:fillType="evenOdd"
+        android:pathData="M15.8 15.4C16.13 15.84 16.04 16.47 15.6 16.8L7.6 22.8C7.16 23.13 6.53 23.04 6.2 22.6 5.87 22.16 5.96 21.53 6.4 21.2L14.4 15.2C14.84 14.87 15.47 14.96 15.8 15.4Z"/>
+    <path
+        android:fillColor="#FFFF6600"
+        android:pathData="M24.5 17.5C25.33 17.5 26 16.83 26 16 26 15.17 25.33 14.5 24.5 14.5 23.67 14.5 23 15.17 23 16 23 16.83 23.67 17.5 24.5 17.5Z"/>
+    <path
+        android:fillColor="#FFFF6600"
+        android:pathData="M6.5 17.5C7.33 17.5 8 16.83 8 16 8 15.17 7.33 14.5 6.5 14.5 5.67 14.5 5 15.17 5 16 5 16.83 5.67 17.5 6.5 17.5Z"/>
+</vector>

@@ -103,8 +103,18 @@ class TrezorService @Inject constructor(
      * it is supplied per-connect rather than cached between calls.
      */
     suspend fun connect(deviceId: String, selection: WalletSelection): TrezorFeatures {
+        return connect(deviceId, selection, requestUsbPermission = true)
+    }
+
+    suspend fun connect(
+        deviceId: String,
+        selection: WalletSelection,
+        requestUsbPermission: Boolean,
+    ): TrezorFeatures {
         return ServiceQueue.CORE.background {
-            trezorConnect(deviceId = deviceId, selection = selection)
+            transport.withUsbPermissionRequestsEnabled(requestUsbPermission) {
+                trezorConnect(deviceId = deviceId, selection = selection)
+            }
         }
     }
 

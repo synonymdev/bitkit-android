@@ -17,8 +17,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import to.bitkit.R
+import to.bitkit.ext.rawId
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -30,6 +33,7 @@ fun ActivityListSimple(
     items: ImmutableList<Activity>?,
     onAllActivityClick: () -> Unit,
     onActivityItemClick: (String) -> Unit,
+    hardwareIds: ImmutableSet<String> = persistentSetOf(),
 ) {
     if (items.isNullOrEmpty()) return
 
@@ -47,6 +51,7 @@ fun ActivityListSimple(
                 onClick = onActivityItemClick,
                 testTag = "ActivityShort-$index",
                 title = contactActivityTitle(item, contacts),
+                isHardware = item.rawId() in hardwareIds,
                 contact = contactForActivity(item, contacts),
             )
             if (index < items.lastIndex) {

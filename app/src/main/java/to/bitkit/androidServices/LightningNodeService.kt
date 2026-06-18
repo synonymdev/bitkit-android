@@ -24,6 +24,8 @@ import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.data.CacheStore
 import to.bitkit.di.UiDispatcher
+import to.bitkit.domain.commands.NotifyChannelReady
+import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.domain.commands.NotifyPendingPaymentResolved
@@ -33,6 +35,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NotificationDetails
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.services.NodeServiceFgState
 import to.bitkit.ui.ID_NOTIFICATION_NODE
 import to.bitkit.ui.MainActivity
 import to.bitkit.ui.pushNotification
@@ -61,6 +64,9 @@ class LightningNodeService : Service() {
     lateinit var notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler
 
     @Inject
+    lateinit var notifyChannelReadyHandler: NotifyChannelReadyHandler
+
+    @Inject
     lateinit var notifyPendingPaymentResolvedHandler: NotifyPendingPaymentResolvedHandler
 
     @Inject
@@ -68,6 +74,9 @@ class LightningNodeService : Service() {
 
     @Inject
     lateinit var appWidgetRefreshScheduler: AppWidgetRefreshScheduler
+
+    @Inject
+    lateinit var nodeServiceFgState: NodeServiceFgState
 
     private var hasStartedNode = false
 
@@ -80,6 +89,7 @@ class LightningNodeService : Service() {
                 eventHandler = { event ->
                     Logger.debug("LDK-node event received in $TAG: ${jsonLogOf(event)}", context = TAG)
                     handlePaymentReceived(event)
+                    if (event is Event.ChannelReady) handleChannelReady(event)
                     handlePendingPaymentResolved(event)
                 }
             ).onSuccess {
@@ -97,6 +107,21 @@ class LightningNodeService : Service() {
         notifyPaymentReceivedHandler(command).onSuccess {
             Logger.debug("Payment notification result: $it", context = TAG)
             if (it !is NotifyPaymentReceived.Result.ShowNotification) return
+            showPaymentNotification(it.sheet, it.notification)
+        }
+    }
+
+    private suspend fun handleChannelReady(event: Event.ChannelReady) {
+        // When the app is in the foreground, AppViewModel handles this event and shows the receive
+        // sheet. Running here would consume the CJIT dedup gate (insertActivityFromCjit) and then
+        // skip the notification (foreground), leaving the in-app handler to see Duplicate and show
+        // nothing — so defer entirely.
+        if (App.currentActivity?.value != null) return
+
+        val command = NotifyChannelReady.Command(event = event, includeNotification = true)
+        notifyChannelReadyHandler(command).onSuccess {
+            Logger.debug("Channel ready notification result: $it", context = TAG)
+            if (it !is NotifyChannelReady.Result.ShowNotification) return
             showPaymentNotification(it.sheet, it.notification)
         }
     }
@@ -169,7 +194,10 @@ class LightningNodeService : Service() {
                 serviceScope.launch { lightningRepo.stop() }
             }
 
-            ACTION_START_SERVICE -> if (promoteToForeground(startId)) setupService()
+            ACTION_START_SERVICE -> if (promoteToForeground(startId)) {
+                nodeServiceFgState.setForegroundServiceRunning(true)
+                setupService()
+            }
             else -> stop(startId) { Logger.warn("Stopped service for unsupported action '$action'", context = TAG) }
         }
         return START_NOT_STICKY
@@ -209,6 +237,7 @@ class LightningNodeService : Service() {
 
     override fun onDestroy() {
         Logger.debug("onDestroy", context = TAG)
+        nodeServiceFgState.setForegroundServiceRunning(false)
         // Safe to call even if already stopped — guarded by lifecycleMutex + isStoppedOrStopping()
         serviceScope.launch { lightningRepo.stop() }
         super.onDestroy()
