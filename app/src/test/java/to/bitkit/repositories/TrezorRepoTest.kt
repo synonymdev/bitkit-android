@@ -932,7 +932,7 @@ class TrezorRepoTest : BaseUnitTest() {
     // region forgetDevice
 
     @Test
-    fun `forgetDevice should remove known device when service cleanup fails`() = test {
+    fun `forgetDevice should remove known device when disconnect cleanup fails`() = test {
         val knownDevice = mockKnownDevice()
         val features = mockFeatures()
         val device = mockDeviceInfo()
@@ -945,6 +945,32 @@ class TrezorRepoTest : BaseUnitTest() {
         sut.scan()
         sut.connect(DEVICE_ID)
         whenever(trezorService.disconnect()).thenThrow(RuntimeException("disconnect failed"))
+
+        val result = sut.forgetDevice(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        assertTrue(sut.state.value.knownDevices.isEmpty())
+        assertNull(sut.state.value.connectedDevice)
+        assertNull(sut.state.value.connectedDeviceId)
+        assertNull(sut.state.value.error)
+        verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
+        verify(trezorService).clearCredentials(DEVICE_ID)
+        verify(hwWalletStore).saveKnownDevices(emptyList())
+    }
+
+    @Test
+    fun `forgetDevice should fail when credential cleanup fails`() = test {
+        val knownDevice = mockKnownDevice()
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.initialize()
+        sut.scan()
+        sut.connect(DEVICE_ID)
         whenever(trezorService.clearCredentials(DEVICE_ID)).thenThrow(RuntimeException("clear failed"))
 
         val result = sut.forgetDevice(DEVICE_ID)
@@ -953,10 +979,27 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(sut.state.value.knownDevices.isEmpty())
         assertNull(sut.state.value.connectedDevice)
         assertNull(sut.state.value.connectedDeviceId)
-        assertEquals("disconnect failed", sut.state.value.error)
+        assertEquals("clear failed", result.exceptionOrNull()?.message)
+        assertEquals("clear failed", sut.state.value.error)
         verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
         verify(trezorService).clearCredentials(DEVICE_ID)
         verify(hwWalletStore).saveKnownDevices(emptyList())
+    }
+
+    @Test
+    fun `forgetDevice should preserve devices that are only in the store`() = test {
+        val knownDevice = mockKnownDevice()
+        val otherDevice = mockKnownDevice(id = "other-device", path = "/dev/trezor1")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice, otherDevice))
+        sut = createSut()
+
+        val result = sut.forgetDevice(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf(otherDevice), sut.state.value.knownDevices)
+        verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
+        verify(trezorService).clearCredentials(DEVICE_ID)
+        verify(hwWalletStore).saveKnownDevices(listOf(otherDevice))
     }
 
     // endregion

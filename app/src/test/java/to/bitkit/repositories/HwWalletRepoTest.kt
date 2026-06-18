@@ -84,8 +84,10 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         val wallet = sut.wallets.value.single()
         assertEquals("dev1", wallet.id)
+        assertEquals(setOf("dev1"), wallet.deviceIds)
         assertEquals("Trezor", wallet.name)
         assertEquals(0uL, wallet.balanceSats)
+        assertEquals(true, sut.walletsLoaded.value)
         assertEquals(0uL, sut.totalSats.value)
     }
 
@@ -506,6 +508,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(421_900uL, wallet.balanceSats)
         assertEquals(421_900uL, sut.totalSats.value)
         assertEquals(1, wallet.activities.size)
+        assertEquals(setOf("ble1", "usb1"), wallet.deviceIds)
         assertEquals(TransportType.USB, wallet.transportType)
     }
 
@@ -523,6 +526,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         val wallet = sut.wallets.value.single()
         assertEquals("usb1", wallet.id)
+        assertEquals(setOf("ble1", "usb1"), wallet.deviceIds)
         assertEquals(TransportType.USB, wallet.transportType)
         assertEquals(true, wallet.isConnected)
     }
@@ -580,6 +584,102 @@ class HwWalletRepoTest : BaseUnitTest() {
         verify(trezorRepo).stopWatcher("dev1|nativeSegwit")
         verify(trezorRepo).resetState()
         assertEquals(0uL, sut.totalSats.value)
+    }
+
+    @Test
+    fun `removeDevice stops the device watchers and forgets it`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+        runCurrent()
+
+        val result = sut.removeDevice("dev1")
+
+        assertEquals(true, result.isSuccess)
+        verify(trezorRepo).stopWatcher("dev1|nativeSegwit")
+        verify(trezorRepo).forgetDevice("dev1")
+    }
+
+    @Test
+    fun `removeDevice fails when forget reports credential cleanup failure despite the device being gone`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.failure(AppError("clear failed")))
+        val sut = createRepo()
+
+        val result = sut.removeDevice("dev1")
+
+        assertEquals(true, result.isFailure)
+        verify(trezorRepo).forgetDevice("dev1")
+    }
+
+    @Test
+    fun `removeDevice fails before forgetting when watcher stop fails`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.failure(AppError("stop failed")))
+        val sut = createRepo()
+        runCurrent()
+
+        val result = sut.removeDevice("dev1")
+
+        assertEquals(true, result.isFailure)
+        verify(trezorRepo).stopWatcher("dev1|nativeSegwit")
+        verify(trezorRepo, never()).forgetDevice(any())
+    }
+
+    @Test
+    fun `removeDevice forgets every entry of a device paired over both transports`() = test {
+        val bleEntry = device.copy(id = "ble1", lastConnectedAt = 1L, xpubs = mapOf("nativeSegwit" to "zpubNS"))
+        val usbEntry = bleEntry.copy(id = "usb1", transportType = TransportType.USB, lastConnectedAt = 2L)
+        storeData.value = HwWalletData(knownDevices = listOf(bleEntry, usbEntry))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(bleEntry, usbEntry), emptyList())
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+        runCurrent()
+
+        sut.removeDevice("usb1")
+
+        verify(trezorRepo).stopWatcher("ble1|nativeSegwit")
+        verify(trezorRepo).forgetDevice("ble1")
+        verify(trezorRepo).forgetDevice("usb1")
+    }
+
+    @Test
+    fun `removeDevice fails when the device is still present afterwards`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), listOf(device))
+        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice("dev1")
+
+        assertEquals(true, result.isFailure)
+    }
+
+    @Test
+    fun `removeDevice restarts watchers when removal verification fails`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), listOf(device))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+        runCurrent()
+
+        val result = sut.removeDevice("dev1")
+        runCurrent()
+
+        assertEquals(true, result.isFailure)
+        verify(trezorRepo, times(2)).startWatcher(
+            watcherId = eq("dev1|nativeSegwit"),
+            extendedKey = any(),
+            network = any(),
+            gapLimit = any(),
+            accountType = anyOrNull(),
+            electrumUrl = any(),
+        )
     }
 
     @Test

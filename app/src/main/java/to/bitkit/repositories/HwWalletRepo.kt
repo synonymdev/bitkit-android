@@ -9,6 +9,7 @@ import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -40,6 +41,7 @@ import to.bitkit.models.safe
 import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -109,6 +111,34 @@ class HwWalletRepo @Inject constructor(
 
     fun cancelPairingCode() = trezorRepo.cancelPairingCode()
 
+    /**
+     * Removes a paired hardware wallet: stops its watchers and forgets every device entry
+     * that tracks the same wallet. The same physical device paired over both bluetooth and
+     * usb is stored once per transport but shares an xpub-derived identity, so forgetting a
+     * single id would leave the tile reappearing through the other transport.
+     */
+    suspend fun removeDevice(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            val knownDevices = hwWalletStore.loadKnownDevices()
+            val target = knownDevices.find { it.id == deviceId }
+            val ids = when (target) {
+                null -> setOf(deviceId)
+                else -> knownDevices.filter { it.walletKey == target.walletKey }.map { it.id }.toSet()
+            }
+            activeWatchers.toList()
+                .filter { it.toDeviceId() in ids }
+                .forEach {
+                    if (!stopActiveWatcher(it)) throw AppError("Failed to stop hardware wallet watcher '$it'")
+                }
+            val failures = ids.mapNotNull { trezorRepo.forgetDevice(it).exceptionOrNull() }
+            val remaining = hwWalletStore.loadKnownDevices().map { it.id }.toSet()
+            failures.firstOrNull()?.let { throw it }
+            check(ids.none { it in remaining }) { "Hardware wallet '$deviceId' still present after removal" }
+        }.onFailure {
+            watcherSyncRequests.tryEmit(Unit)
+        }
+    }
+
     val wallets: StateFlow<ImmutableList<HwWallet>> = combine(
         hwWalletStore.data,
         trezorRepo.state,
@@ -135,10 +165,15 @@ class HwWalletRepo @Inject constructor(
                     activities = deviceWatchers
                         .toMergedActivities()
                         .toImmutableList(),
+                    deviceIds = ids.toImmutableSet(),
                 )
             }
             .toImmutableList()
     }.stateIn(scope, SharingStarted.Eagerly, persistentListOf())
+
+    val walletsLoaded: StateFlow<Boolean> = hwWalletStore.data
+        .map { true }
+        .stateIn(scope, SharingStarted.Eagerly, false)
 
     val totalSats: StateFlow<ULong> = wallets
         .map { wallets -> wallets.fold(0uL) { acc, wallet -> acc + wallet.balanceSats } }

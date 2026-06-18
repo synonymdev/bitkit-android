@@ -129,6 +129,7 @@ import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
 import to.bitkit.ui.screens.trezor.TrezorScreen
+import to.bitkit.ui.screens.wallets.HardwareWalletScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
 import to.bitkit.ui.screens.wallets.SavingsWalletScreen
 import to.bitkit.ui.screens.wallets.SpendingWalletScreen
@@ -177,6 +178,7 @@ import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.sheets.BTCPayConnectionSheet
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
@@ -571,7 +573,7 @@ fun ContentView(
                         Routes.AllActivity::class.qualifiedName,
                         Routes.Savings::class.qualifiedName,
                         Routes.Spending::class.qualifiedName,
-                    )
+                    ) || navBackStackEntry?.destination?.hasRoute<Routes.HardwareWallet>() == true
                     val hideTabBarForCalculator =
                         currentRoute == Routes.Home::class.qualifiedName && isHomeCalculatorInputActive
 
@@ -985,6 +987,22 @@ private fun NavGraphBuilder.home(
                     navController.navigateToTransferSpendingIntro()
                 } else {
                     navController.navigateToTransferSpendingAmount()
+                }
+            },
+            onBackClick = { navController.popBackStack() },
+        )
+    }
+    composableWithDefaultTransitions<Routes.HardwareWallet> {
+        val scope = rememberCoroutineScope()
+        HardwareWalletScreen(
+            deviceId = it.toRoute<Routes.HardwareWallet>().deviceId,
+            onActivityItemClick = { id -> navController.navigateToActivityItem(id) },
+            onTransferToSpendingClick = {
+                scope.launch {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.WARNING,
+                        title = "Transfer to spending not yet implemented.",
+                    )
                 }
             },
             onBackClick = { navController.popBackStack() },
@@ -1808,6 +1826,9 @@ sealed interface Routes {
 
     @Serializable
     data object Spending : Routes
+
+    @Serializable
+    data class HardwareWallet(val deviceId: String) : Routes
 
     @Serializable
     data object Settings : Routes

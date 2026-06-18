@@ -1,0 +1,41 @@
+<journey name="Hardware Wallet Detail Overview">
+  <description>
+    Opens the hardware wallet detail screen from the home tile and verifies its overview:
+    the top bar, balance header, the not-yet-implemented Transfer To Spending action, the
+    grouped activity list, and the Remove device confirm dialog. The final Remove step
+    forgets the device, so run this last (re-run connect-home-tile.xml to pair again).
+    Requires a paired Bridge emulator (run connect-home-tile.xml first).
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Tap the hardware wallet tile beneath the SAVINGS and SPENDING tiles
+    </action>
+    <action>
+      Verify the hardware wallet detail screen opens, showing the device name with a blue bitcoin icon in the top bar and a balance header
+    </action>
+    <action>
+      If a "Transfer To Spending" button is shown, tap it and verify a notice appears saying "Transfer to spending not yet implemented.", otherwise skip this step
+    </action>
+    <action>
+      If the activity list shows transactions, verify their circular icons are blue, then tap the first one, verify an activity detail screen opens, and navigate back
+    </action>
+    <action>
+      Tap the "Remove" button labelled with the device name near the bottom of the screen
+    </action>
+    <action>
+      Verify a confirm dialog appears explaining that your funds are safe and your coins won't be deleted
+    </action>
+    <action>
+      Tap "Cancel" and verify the hardware wallet detail screen is still shown
+    </action>
+    <action>
+      Tap the "Remove" button labelled with the device name again, then tap "Remove" in the confirm dialog
+    </action>
+    <action>
+      Verify the app returns to the wallet home screen and no hardware wallet tile is shown
+    </action>
+  </actions>
+</journey>
