@@ -1,0 +1,48 @@
+<journey name="Hardware Wallet Connect Flow From Settings">
+  <description>
+    Verifies the Connect Hardware flow entered from Hardware Wallets settings: forgets the
+    paired device so it can be rediscovered, opens Settings then Hardware Wallets, taps Add,
+    and runs Searching, Found and Paired, editing the Label Funds field before finishing.
+    Confirms the paired device is listed under its custom label, which re-pairs the emulator
+    so later journeys can run. Requires a paired Bridge emulator (run connect-home-tile.xml
+    first).
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app, open the menu, navigate to Settings, then Dev Settings, then tap the "Trezor" row
+    </action>
+    <action>
+      Tap the forget-device (trash) icon next to the known device, confirming any dialog, so the device becomes discoverable again
+    </action>
+    <action>
+      Navigate back to Settings, open General, then Payments, then tap the "Hardware Wallets" row
+    </action>
+    <action>
+      Verify the Hardware Wallets screen (testTag "HardwareWalletsScreen") shows no paired devices
+    </action>
+    <action>
+      Tap the "Add Hardware Wallet" button (testTag "AddHardwareWallet")
+    </action>
+    <action>
+      Verify a bottom sheet opens titled "Hardware Wallet" (testTag "hw_intro_screen"); tap the "Continue" button
+    </action>
+    <action>
+      Verify the sheet advances to the "Connect Device" step (testTag "hw_searching_screen") headed "Searching for devices"
+    </action>
+    <action>
+      Verify the sheet advances to the "Found Device" step (testTag "hw_found_screen") headed "Found Trezor" within 15 seconds, then tap "Connect"
+    </action>
+    <action>
+      Verify the sheet advances to the "Device Connected" step (testTag "hw_paired_screen") headed "Paired Trezor", showing a balance and an editable "Label Funds" field, with no PIN or pairing prompt
+    </action>
+    <action>
+      Clear the "Label Funds" field (testTag "hw_paired_label_field") and type "My Trezor"
+    </action>
+    <action>
+      Tap the "Finish" button (testTag "hw_paired_finish") and verify the sheet closes back to the Hardware Wallets screen
+    </action>
+    <action>
+      Verify the Hardware Wallets screen now lists one paired device named "My Trezor" with a green connection indicator
+    </action>
+  </actions>
+</journey>

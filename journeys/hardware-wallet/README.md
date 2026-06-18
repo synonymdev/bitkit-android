@@ -13,14 +13,15 @@ The Bridge transport is HTTP (`TrezorBridgeTransport` → `http://127.0.0.1:2132
 
 - **Reliably simulated**: the device itself (deterministic seed and label), the full
   wallet protocol (scan, connect, features, xpubs, watchers, signing), and therefore all
-  home-screen UI behavior: tiles, balances, activity, indicators, sheets.
+  home-screen UI behavior: tiles, balances, activity, indicators, sheets. This includes the
+  Connect Hardware flow's Searching → Found → Paired steps (the device pairs without a code).
 - **Partially simulated**: the USB attach → auto-reconnect chain. The OS-level attach
   intent can be injected with `am start -a android.hardware.usb.action.USB_DEVICE_ATTACHED`,
   which drives the full in-app path (MainActivity → AppViewModel → reconnect loop), with
   the Bridge standing in for the transport.
 - **Not simulated**: kernel/libusbhost behavior, USB enumeration timing, permission
-  grants, the OS app picker, and THP pairing (the Pair Device sheet). Those need a
-  physical device.
+  grants, the OS app picker, and the THP one-time pairing code (the inline Pair Device step
+  of the connect flow). Those need a physical device.
 
 Journey steps that start with `adb:` are device commands the runner executes verbatim
 instead of UI interactions.
@@ -47,18 +48,23 @@ instead of UI interactions.
 ## Journeys
 
 Run in this order — `connect-home-tile.xml` pairs the emulator that the later journeys
-rely on, `suggestion-intro-sheet.xml` and `settings-hardware-wallets.xml` each end by
-re-pairing after a forget, and `detail-overview.xml` runs last because its final Remove step
-forgets the device.
+rely on, `suggestion-intro-sheet.xml`, `connect-flow.xml` and `settings-hardware-wallets.xml`
+each end by re-pairing after a forget, and `detail-overview.xml` runs last because its final
+Remove step forgets the device.
 
 | Journey | Covers |
 | - | - |
 | `connect-home-tile.xml` | Dev-screen connect, home tile, indicator, balance, detail screen opens |
 | `activity-blue-icons.xml` | Hardware activity merge, blue icons, All Activity filters, detail fallback |
 | `usb-reconnect.xml` | Disconnect indicator, injected USB attach intent → silent auto-reconnect |
-| `suggestion-intro-sheet.xml` | Forget device, Hardware suggestion card, connect intro sheet |
+| `suggestion-intro-sheet.xml` | Forget device, Hardware suggestion card, full connect flow (Searching → Found → Paired → Finish) re-pairs |
+| `connect-flow.xml` | Settings Add button → connect flow with an edited Label Funds → paired device count + name |
 | `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, Add button sheet, per-row delete confirm + re-pair |
 | `detail-overview.xml` | Detail screen overview, Transfer placeholder, activity, Remove confirm + forget |
+
+Connect-flow testTags: `hardware_sheet`, `hw_intro_screen`, `hw_searching_screen`,
+`hw_found_screen`, `hw_paired_screen`, `hw_paired_label_field`, `hw_paired_finish`,
+`hw_pair_screen` (inline pair code, physical device only).
 
 To exercise the received-money sheet (not covered by a journey because it needs an
 out-of-band transfer), fund the emulator wallet on regtest from `bitkit-docker`, e.g.
