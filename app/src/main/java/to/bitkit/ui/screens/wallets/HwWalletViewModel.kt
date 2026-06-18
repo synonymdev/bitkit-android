@@ -31,13 +31,13 @@ class HwWalletViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HwWalletDetailUiState())
     val uiState: StateFlow<HwWalletDetailUiState> = _uiState.asStateFlow()
 
-    fun onRemoveClick() = _uiState.update { it.copy(showRemoveDialog = true) }
+    fun onRemoveClick(wallet: HwWallet) = _uiState.update { it.copy(isPendingRemoval = wallet) }
 
-    fun onDismissRemoveDialog() = _uiState.update { it.copy(showRemoveDialog = false) }
+    fun onDismissRemoveDialog() = _uiState.update { it.copy(isPendingRemoval = null) }
 
     fun removeDevice(deviceId: String) {
         viewModelScope.launch {
-            _uiState.update { it.copy(showRemoveDialog = false) }
+            _uiState.update { it.copy(isPendingRemoval = null) }
             hwWalletRepo.removeDevice(deviceId).onFailure {
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
@@ -51,5 +51,5 @@ class HwWalletViewModel @Inject constructor(
 
 @Immutable
 data class HwWalletDetailUiState(
-    val showRemoveDialog: Boolean = false,
+    val isPendingRemoval: HwWallet? = null,
 )

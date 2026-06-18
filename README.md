@@ -60,6 +60,17 @@ Set up local env:
 
 Run `just list` to see available commands. The common ones are `just init`, `just compile`, `just run`, `just build`, `just release`, `just test`, `just lint`, and `just translations pull`. `just run` prefers a physical device and falls back to an emulator.
 
+### Trezor Bridge In Android Studio
+
+When testing the Trezor Bridge emulator from bitkit-docker through Android Studio, add these gitignored local values to `local.properties`:
+
+```properties
+TREZOR_BRIDGE=true
+TREZOR_BRIDGE_URL=http://10.0.2.2:21325
+```
+
+CLI builds can still pass the same values as environment variables.
+
 ### Lint
 
 This project uses detekt with default ktlint and compose-rules for android code linting.

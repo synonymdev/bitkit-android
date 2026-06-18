@@ -1,0 +1,60 @@
+<journey name="Hardware Wallet Settings">
+  <description>
+    Verifies the Hardware Wallets settings surface: the Payments row with the paired-device
+    count, the Hardware Wallets screen listing the paired device (name, balance, connection
+    indicator), the Add Hardware Wallet button opening the connect intro sheet, and the
+    per-row delete confirm dialog. The final Remove forgets the device, so this re-pairs the
+    emulator at the end so other journeys can run afterwards. Requires a paired Bridge
+    emulator (run connect-home-tile.xml first).
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app, open the menu, and navigate to Settings
+    </action>
+    <action>
+      Ensure the "General" tab is selected and scroll down to the "Payments" section
+    </action>
+    <action>
+      Verify a "Hardware Wallets" row is shown under Payments with a numeric value of at least 1
+    </action>
+    <action>
+      Tap the "Hardware Wallets" row
+    </action>
+    <action>
+      Verify the Hardware Wallets screen opens with the top bar titled "Hardware Wallets"
+    </action>
+    <action>
+      Verify the paired device is listed with its name, a bitcoin balance prefixed with the ₿ symbol, and a green connection indicator on the left
+    </action>
+    <action>
+      Tap the "Add Hardware Wallet" button near the bottom
+    </action>
+    <action>
+      Verify a bottom sheet opens titled "Hardware Wallet" showing Trezor and Ledger device images, then tap "Cancel" to close it
+    </action>
+    <action>
+      Tap the trash (delete) icon on the device row
+    </action>
+    <action>
+      Verify a confirm dialog appears explaining that your funds are safe and your coins won't be deleted
+    </action>
+    <action>
+      Tap "Cancel" and verify the device is still listed on the Hardware Wallets screen
+    </action>
+    <action>
+      Tap the trash (delete) icon again, then tap "Remove" in the confirm dialog
+    </action>
+    <action>
+      Verify the device is removed: the list no longer shows it and an empty state is displayed
+    </action>
+    <action>
+      Navigate back to Settings and verify the "Hardware Wallets" row value decreased (or the row shows 0)
+    </action>
+    <action>
+      Open the menu, navigate to Settings, then Dev Settings, then tap the "Trezor" row, tap "Scan", and tap the discovered device to re-pair it
+    </action>
+    <action>
+      Verify the device connects within 15 seconds
+    </action>
+  </actions>
+</journey>

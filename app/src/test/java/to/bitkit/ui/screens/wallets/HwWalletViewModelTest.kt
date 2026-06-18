@@ -1,8 +1,10 @@
 package to.bitkit.ui.screens.wallets
 
 import android.content.Context
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -20,9 +22,9 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
-import kotlin.test.assertTrue
+import kotlin.test.assertNull
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class HwWalletViewModelTest : BaseUnitTest() {
 
     private val context: Context = mock()
@@ -38,15 +40,23 @@ class HwWalletViewModelTest : BaseUnitTest() {
         activities = persistentListOf(),
     )
 
-    private lateinit var wallets: MutableStateFlow<kotlinx.collections.immutable.ImmutableList<HwWallet>>
-    private lateinit var walletsLoaded: MutableStateFlow<Boolean>
+    private val otherWallet = HwWallet(
+        id = "dev2",
+        name = "Trezor Safe 5",
+        model = "Safe 5",
+        transportType = TransportType.BLUETOOTH,
+        isConnected = false,
+        balanceSats = 2_735_180uL,
+        activities = persistentListOf(),
+    )
+
+    private lateinit var wallets: MutableStateFlow<ImmutableList<HwWallet>>
 
     @Before
     fun setUp() {
         wallets = MutableStateFlow(listOf(wallet).toImmutableList())
-        walletsLoaded = MutableStateFlow(true)
         whenever(hwWalletRepo.wallets).thenReturn(wallets)
-        whenever(hwWalletRepo.walletsLoaded).thenReturn(walletsLoaded)
+        whenever(hwWalletRepo.walletsLoaded).thenReturn(MutableStateFlow(true))
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
         whenever(context.getString(R.string.hardware__remove_error)).thenReturn("Could not remove")
     }
@@ -62,27 +72,37 @@ class HwWalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onRemoveClick shows the dialog and onDismiss hides it`() = test {
+    fun `onRemoveClick sets the pending device and onDismiss clears it`() = test {
         val sut = createSut()
 
-        sut.onRemoveClick()
-        assertTrue(sut.uiState.value.showRemoveDialog)
+        sut.onRemoveClick(wallet)
+        assertEquals(wallet, sut.uiState.value.isPendingRemoval)
 
         sut.onDismissRemoveDialog()
-        assertFalse(sut.uiState.value.showRemoveDialog)
+        assertNull(sut.uiState.value.isPendingRemoval)
     }
 
     @Test
-    fun `removeDevice delegates to the repo and hides the dialog`() = test {
+    fun `onRemoveClick stores the clicked device when multiple are paired`() = test {
+        wallets.value = listOf(wallet, otherWallet).toImmutableList()
+        val sut = createSut()
+
+        sut.onRemoveClick(otherWallet)
+
+        assertEquals(otherWallet, sut.uiState.value.isPendingRemoval)
+    }
+
+    @Test
+    fun `removeDevice delegates to the repo and clears the pending device`() = test {
         whenever { hwWalletRepo.removeDevice("dev1") }.thenReturn(Result.success(Unit))
         val sut = createSut()
-        sut.onRemoveClick()
+        sut.onRemoveClick(wallet)
 
         sut.removeDevice("dev1")
         advanceUntilIdle()
 
         verify(hwWalletRepo).removeDevice("dev1")
-        assertFalse(sut.uiState.value.showRemoveDialog)
+        assertNull(sut.uiState.value.isPendingRemoval)
     }
 
     @Test
