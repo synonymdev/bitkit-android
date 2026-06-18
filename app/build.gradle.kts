@@ -1,6 +1,9 @@
 import com.android.build.gradle.internal.api.BaseVariantOutputImpl
 import com.android.build.gradle.internal.tasks.FinalizeBundleTask
 import io.gitlab.arturbosch.detekt.Detekt
+import org.gradle.api.artifacts.MinimalExternalModuleDependency
+import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.Sync
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -232,7 +235,7 @@ android {
             )
             signingConfig = signingConfigs.getByName("release")
             ndk {
-                debugSymbolLevel = "SYMBOL_TABLE"
+                debugSymbolLevel = "FULL"
                 // noinspection ChromeOsAbiSupport
                 abiFilters += listOf("armeabi-v7a", "arm64-v8a")
             }
@@ -318,6 +321,31 @@ composeCompiler {
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 
+val nativeDebugSymbols by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+fun Provider<MinimalExternalModuleDependency>.nativeDebugSymbolsArtifact(): String {
+    val dependency = get()
+    val version = dependency.versionConstraint.requiredVersion
+        .ifBlank { dependency.versionConstraint.preferredVersion }
+
+    require(version.isNotBlank()) {
+        "Native debug symbols dependency '${dependency.module}' must declare an explicit version."
+    }
+
+    return "${dependency.module.group}:${dependency.module.name}:$version:native-debug-symbols@zip"
+}
+
+val syncNativeDebugSymbolArtifacts by tasks.registering(Sync::class) {
+    group = "build"
+    description = "Downloads native debug symbol archives for release native dependencies."
+
+    from(nativeDebugSymbols)
+    into(layout.buildDirectory.dir("intermediates/native-debug-symbol-artifacts"))
+}
+
 dependencies {
     implementation(fileTree("libs") { include("*.aar", "*.jar") })
     implementation(libs.jna) { artifact { type = "aar" } }
@@ -343,6 +371,9 @@ dependencies {
     implementation(libs.bitkit.core)
     implementation(libs.paykit)
     implementation(libs.vss.client)
+    nativeDebugSymbols(libs.bitkit.core.nativeDebugSymbolsArtifact())
+    nativeDebugSymbols(libs.ldk.node.android.nativeDebugSymbolsArtifact())
+    nativeDebugSymbols(libs.vss.client.nativeDebugSymbolsArtifact())
     // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

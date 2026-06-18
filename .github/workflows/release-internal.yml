@@ -73,7 +73,11 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.INTERNAL_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.INTERNAL_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.INTERNAL_KEY_PASSWORD }}
-        run: ./gradlew assembleMainnetRelease --no-daemon --stacktrace
+        run: |
+          set -euo pipefail
+          ./gradlew assembleMainnetRelease --no-daemon --stacktrace
+          ./gradlew :app:syncNativeDebugSymbolArtifacts --no-daemon --stacktrace
+          scripts/create-native-debug-symbols.sh
 
       - name: Verify native libraries are stripped
         run: |
@@ -124,10 +128,15 @@ jobs:
           artifact_dir="$RUNNER_TEMP/internal-release"
           mkdir -p "$artifact_dir"
           mapfile -d '' apk_paths < <(find app/build/outputs/apk/mainnet/release -name 'bitkit-mainnet-release-*.apk' -print0)
+          mapfile -d '' symbol_paths < <(find app/build/outputs/native-debug-symbols/mainnetRelease -name 'native-debug-symbols-*.zip' -print0)
           test "${#apk_paths[@]}" -gt 0
+          test "${#symbol_paths[@]}" -gt 0
 
           for apk_path in "${apk_paths[@]}"; do
             cp "$apk_path" "$artifact_dir/"
+          done
+          for symbol_path in "${symbol_paths[@]}"; do
+            cp "$symbol_path" "$artifact_dir/"
           done
 
           apk_file="$(basename "${apk_paths[0]}")"
@@ -135,7 +144,7 @@ jobs:
           build_number="${build_number%%-*}"
           [[ "$build_number" =~ ^[0-9]+$ ]]
 
-          (cd "$artifact_dir" && sha256sum -- *.apk > SHA256SUMS.txt)
+          (cd "$artifact_dir" && sha256sum -- *.apk native-debug-symbols-*.zip > SHA256SUMS.txt)
           echo "artifact_name=bitkit-release-internal-$build_number-$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
           echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
 
