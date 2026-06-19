@@ -377,6 +377,24 @@ class BlocktankRepoTest : BaseUnitTest() {
         assertEquals(entry, sut.getCjitEntry(channelDetails))
     }
 
+    @Test
+    fun `getCjitEntry refreshes when the cache is empty`() = test {
+        sut = createSut()
+        // Cold start / right after createCjit: cjitEntries hasn't loaded yet, so an empty cache must not be
+        // treated as a terminal no-match — the server refresh has to surface the matching entry.
+        val fundingTxId = "cjit-funding-tx"
+        val channel = mock<IBtChannel>()
+        whenever(channel.fundingTx).thenReturn(FundingTx(id = fundingTxId, vout = 0u))
+        val entry = mock<IcJitEntry>()
+        whenever(entry.channel).thenReturn(channel)
+        whenever(coreService.blocktank.cjitEntries(refresh = true)).thenReturn(listOf(entry))
+
+        val channelDetails = mock<ChannelDetails>()
+        whenever(channelDetails.fundingTxo).thenReturn(OutPoint(txid = fundingTxId, vout = 0u))
+
+        assertEquals(entry, sut.getCjitEntry(channelDetails))
+    }
+
     private fun pendingCjitEntry(): IcJitEntry = mock<IcJitEntry>().apply {
         whenever(channel).thenReturn(null)
         whenever(state).thenReturn(CJitStateEnum.CREATED)

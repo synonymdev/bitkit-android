@@ -144,7 +144,7 @@ class BlocktankRepo @Inject constructor(
         val hasPendingCjit = cached.any {
             it.channel == null && it.state != CJitStateEnum.EXPIRED && it.state != CJitStateEnum.FAILED
         }
-        if (!hasPendingCjit) return@withContext null
+        if (cached.isNotEmpty() && !hasPendingCjit) return@withContext null
 
         // Match against the freshly fetched list so a concurrent refreshOrders() can't clobber state before we read.
         return@withContext refreshCjitEntries().matching()
