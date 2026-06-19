@@ -84,14 +84,14 @@ private fun Content(
                     modifier = Modifier.weight(1f)
                 )
             }
-            VerticalSpacer(16.dp)
         }
+        VerticalSpacer(16.dp)
     }
 }
 
 @Preview(showSystemUi = true)
 @Composable
-private fun PreviewIntro() {
+private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
             Content(modifier = Modifier.sheetHeight())

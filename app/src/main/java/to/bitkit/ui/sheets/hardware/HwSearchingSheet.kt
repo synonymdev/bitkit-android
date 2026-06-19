@@ -102,13 +102,15 @@ private fun Content(
                 text = stringResource(R.string.common__cancel),
                 onClick = onCancel,
             )
-            VerticalSpacer(16.dp)
         }
+        VerticalSpacer(16.dp)
     }
 }
 
 @Composable
-private fun SearchingAnimation(modifier: Modifier = Modifier) {
+private fun SearchingAnimation(
+    modifier: Modifier = Modifier,
+) {
     val transition = rememberInfiniteTransition(label = "hw_searching")
     val arrowsRotation by transition.animateRotation(ARROWS_SPIN_MS, clockwise = false, label = "arrows")
     val outerRingRotation by transition.animateRotation(RING_SPIN_MS, clockwise = false, label = "outer_ring")

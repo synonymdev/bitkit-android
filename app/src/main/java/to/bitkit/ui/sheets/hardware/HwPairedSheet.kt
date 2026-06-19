@@ -113,15 +113,15 @@ private fun Content(
                     .width(maxWidth * HW_ILLUSTRATION_SIZE_RATIO)
                     .aspectRatio(COINS_ASPECT_RATIO)
             )
-            PrimaryButton(
-                text = stringResource(R.string.hardware__paired_finish),
-                onClick = onFinish,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(start = 32.dp, end = 32.dp, bottom = 16.dp)
-                    .testTag("HwPairedFinish")
-            )
         }
+        PrimaryButton(
+            text = stringResource(R.string.hardware__paired_finish),
+            onClick = onFinish,
+            modifier = Modifier
+                .padding(horizontal = 32.dp)
+                .testTag("HwPairedFinish")
+        )
+        VerticalSpacer(16.dp)
     }
 }
 

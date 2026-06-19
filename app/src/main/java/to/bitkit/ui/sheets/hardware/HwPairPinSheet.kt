@@ -80,9 +80,9 @@ fun HwPairCodeSheet(
 @Composable
 private fun Content(
     code: String,
-    submitting: Boolean,
-    onKeyPress: (String) -> Unit,
     modifier: Modifier = Modifier,
+    submitting: Boolean = false,
+    onKeyPress: (String) -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -162,8 +162,20 @@ private fun Preview() {
         BottomSheetPreview {
             Content(
                 code = "123",
-                submitting = false,
-                onKeyPress = {},
+                modifier = Modifier.sheetHeight()
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewSubmitting() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                code = "123",
+                submitting = true,
                 modifier = Modifier.sheetHeight()
             )
         }
