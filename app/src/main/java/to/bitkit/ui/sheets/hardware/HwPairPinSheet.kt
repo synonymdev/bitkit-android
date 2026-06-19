@@ -1,5 +1,8 @@
 package to.bitkit.ui.sheets.hardware
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -17,6 +21,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -26,6 +31,7 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -54,6 +60,7 @@ fun HwPairCodeSheet(
 
     Content(
         code = code,
+        submitting = submitted,
         onKeyPress = { key ->
             when {
                 key == KEY_DELETE -> code = code.dropLast(1)
@@ -73,6 +80,7 @@ fun HwPairCodeSheet(
 @Composable
 private fun Content(
     code: String,
+    submitting: Boolean,
     onKeyPress: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -93,25 +101,56 @@ private fun Content(
         ) {
             BodyM(stringResource(R.string.hardware__pairing_text), color = Colors.White64)
             FillHeight()
-            // Fixed-width cells so digits replace dots without the row shifting.
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                repeat(PAIRING_CODE_LENGTH) { index ->
-                    val digit = code.getOrNull(index)?.toString()
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.width(PAIRING_CELL_WIDTH)
-                    ) {
-                        Display(
-                            text = digit ?: "•",
-                            color = if (digit != null) Colors.White else Colors.White32,
-                        )
+            // Submitting crossfades the entered code into the spinner in-place: the cells keep
+            // their footprint (alpha only) so the row never reflows, while the spinner scales in.
+            val submitProgress by animateFloatAsState(
+                targetValue = if (submitting) 1f else 0f,
+                animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
+                label = "pairCodeSubmit",
+            )
+            Box(contentAlignment = Alignment.Center) {
+                // Fixed-width cells so digits replace dots without the row shifting.
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.graphicsLayer {
+                        alpha = 1f - submitProgress
+                        val cellsScale = 1f - 0.08f * submitProgress
+                        scaleX = cellsScale
+                        scaleY = cellsScale
                     }
+                ) {
+                    repeat(PAIRING_CODE_LENGTH) { index ->
+                        val digit = code.getOrNull(index)?.toString()
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier.width(PAIRING_CELL_WIDTH)
+                        ) {
+                            Display(
+                                text = digit ?: "•",
+                                color = if (digit != null) Colors.White else Colors.White32,
+                            )
+                        }
+                    }
+                }
+                if (submitting) {
+                    GradientCircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .graphicsLayer {
+                                alpha = submitProgress
+                                val spinnerScale = 0.8f + 0.2f * submitProgress
+                                scaleX = spinnerScale
+                                scaleY = spinnerScale
+                            }
+                    )
                 }
             }
             FillHeight()
         }
         NumberPad(
             onPress = onKeyPress,
+            enabled = !submitting,
         )
     }
 }
@@ -123,6 +162,7 @@ private fun Preview() {
         BottomSheetPreview {
             Content(
                 code = "123",
+                submitting = false,
                 onKeyPress = {},
                 modifier = Modifier.sheetHeight()
             )
