@@ -26,13 +26,16 @@
       Tap the "Hardware" suggestion card
     </action>
     <action>
-      Verify a bottom sheet opens titled "Hardware Wallet" showing Trezor and Ledger device images
+      Verify a bottom sheet opens titled "Hardware Wallet" (testTag "HwIntroScreen") showing hardware device illustrations
     </action>
     <action>
       Verify the headline reads "Add your hardware wallet" with the words "hardware wallet" in blue
     </action>
     <action>
       Tap the "Continue" button and verify the sheet advances to the "Connect Device" step headed "Searching for devices", showing a loading animation and a "Cancel" button
+    </action>
+    <action>
+      If Android shows a Nearby devices/Bluetooth permission prompt or Bluetooth enable prompt, allow it and continue waiting on the Searching step
     </action>
     <action>
       Verify the sheet advances to the "Found Device" step within 15 seconds, headed "Found Trezor" with a "Connect" button

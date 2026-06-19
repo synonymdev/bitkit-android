@@ -3,8 +3,10 @@
     Verifies the disconnect indicator and the USB-attach auto-reconnect chain by
     injecting the OS attach intent, with the Bridge emulator standing in for the
     transport. Covers MainActivity intent handling, the serialized reconnect retry
-    loop, and the prompt-free reconnect. Requires a paired Bridge emulator (run
-    connect-home-tile.xml first).
+    loop, and the prompt-free reconnect for an already paired wallet. The unpaired
+    physical-device OS chooser path ("Open with Bitkit" → Found Device sheet) cannot
+    be fully simulated by this injected intent because it lacks a real UsbDevice extra.
+    Requires a paired Bridge emulator (run connect-home-tile.xml first).
   </description>
   <actions>
     <action>

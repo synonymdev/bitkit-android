@@ -30,6 +30,9 @@
       Verify the sheet advances to the "Connect Device" step (testTag "HwSearchingScreen") headed "Searching for devices"
     </action>
     <action>
+      If Android shows a Nearby devices/Bluetooth permission prompt or Bluetooth enable prompt, allow it and continue waiting on the Searching step
+    </action>
+    <action>
       Verify the sheet advances to the "Found Device" step (testTag "HwFoundScreen") headed "Found Trezor" within 15 seconds, then tap "Connect"
     </action>
     <action>

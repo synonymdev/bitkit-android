@@ -14,14 +14,19 @@ The Bridge transport is HTTP (`TrezorBridgeTransport` → `http://127.0.0.1:2132
 - **Reliably simulated**: the device itself (deterministic seed and label), the full
   wallet protocol (scan, connect, features, xpubs, watchers, signing), and therefore all
   home-screen UI behavior: tiles, balances, activity, indicators, sheets. This includes the
-  Connect Hardware flow's Searching → Found → Paired steps (the device pairs without a code).
+  Connect Hardware flow's Intro → Searching → Found → Paired steps (the Bridge device pairs
+  without the inline pair-code step).
 - **Partially simulated**: the USB attach → auto-reconnect chain. The OS-level attach
   intent can be injected with `am start -a android.hardware.usb.action.USB_DEVICE_ATTACHED`,
-  which drives the full in-app path (MainActivity → AppViewModel → reconnect loop), with
-  the Bridge standing in for the transport.
+  which drives the in-app reconnect path (MainActivity → AppViewModel → reconnect loop), with
+  the Bridge standing in for the transport. A real OS chooser event with a `UsbDevice` extra
+  is still needed to verify the "Open with Bitkit" path that opens the Found Device sheet for
+  an unpaired Trezor.
 - **Not simulated**: kernel/libusbhost behavior, USB enumeration timing, permission
-  grants, the OS app picker, and the THP one-time pairing code (the inline Pair Device step
-  of the connect flow). Those need a physical device.
+  grants, the OS app picker, BLE runtime/settings recovery, THP one-time pairing code
+  (the inline Pair Device step), and passphrase/hidden-wallet selection. Those need a physical
+  device or a dedicated emulator scenario; passphrase coverage is tracked in
+  synonymdev/bitkit-android#1030.
 
 Journey steps that start with `adb:` are device commands the runner executes verbatim
 instead of UI interactions.
@@ -55,16 +60,31 @@ Remove step forgets the device.
 | Journey | Covers |
 | - | - |
 | `connect-home-tile.xml` | Dev-screen connect, home tile, indicator, balance, detail screen opens |
-| `activity-blue-icons.xml` | Hardware activity merge, blue icons, All Activity filters, detail fallback |
-| `usb-reconnect.xml` | Disconnect indicator, injected USB attach intent → silent auto-reconnect |
-| `suggestion-intro-sheet.xml` | Forget device, Hardware suggestion card, full connect flow (Searching → Found → Paired → Finish) re-pairs |
+| `activity-blue-icons.xml` | Hardware activity merge, blue icons, All Activity filters, current watch-only detail fallback |
+| `usb-reconnect.xml` | Disconnect indicator, injected USB attach intent → silent auto-reconnect; physical-device chooser path noted separately |
+| `suggestion-intro-sheet.xml` | Forget device, Hardware suggestion card, full connect flow (Intro → Searching → Found → Paired → Finish) re-pairs |
 | `connect-flow.xml` | Settings Add button → connect flow with an edited Label Funds → paired device count + name |
-| `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, Add button sheet, per-row delete confirm + re-pair |
-| `detail-overview.xml` | Detail screen overview, Transfer placeholder, activity, Remove confirm + forget |
+| `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, Add button sheet/back dismiss, per-row delete confirm + re-pair |
+| `detail-overview.xml` | Detail screen overview, Transfer placeholder when funded, activity, Remove confirm + forget |
 
 Connect-flow testTags: `HardwareSheet`, `HwIntroScreen`, `HwSearchingScreen`,
 `HwFoundScreen`, `HwPairedScreen`, `HwPairedLabelField`, `HwPairedFinish`,
-`HwPairScreen` (inline pair code, physical device only).
+`HwPairScreen` (inline pair code, physical device only), `HwSearchingError`, and
+`HwFoundError`.
+
+The current Connect Hardware sheet starts USB discovery immediately after Continue. BLE is
+included only once Android nearby-devices permission is granted and Bluetooth is enabled.
+The sheet has no internal back navigation; Android back dismisses the sheet.
+
+If Android shows the Nearby devices/Bluetooth runtime permission prompt after tapping
+Continue, allow it and keep waiting on the Searching step. If permission is denied, Bitkit
+should show its Bluetooth access recovery dialog with an Open Settings action; that recovery
+path is better validated on a physical device because the Bridge path can still find devices
+without BLE.
+
+Current journeys pair the standard wallet. Hidden/passphrase wallet behavior is intentionally
+not asserted here yet; it needs explicit UX and identity-scoping coverage as described in
+synonymdev/bitkit-android#1030.
 
 To exercise the received-money sheet (not covered by a journey because it needs an
 out-of-band transfer), fund the emulator wallet on regtest from `bitkit-docker`, e.g.

@@ -21,16 +21,16 @@
       Tap the "Hardware Wallets" row
     </action>
     <action>
-      Verify the Hardware Wallets screen opens with the top bar titled "Hardware Wallets"
+      Verify the Hardware Wallets screen opens (testTag "HardwareWalletsScreen") with the top bar titled "Hardware Wallets"
     </action>
     <action>
       Verify the paired device is listed with its name, a bitcoin balance prefixed with the ₿ symbol, and a green connection indicator on the left
     </action>
     <action>
-      Tap the "Add Hardware Wallet" button near the bottom
+      Tap the "Add Hardware Wallet" button near the bottom (testTag "AddHardwareWallet")
     </action>
     <action>
-      Verify a bottom sheet opens titled "Hardware Wallet" showing Trezor and Ledger device images, then tap "Cancel" to close it
+      Verify a bottom sheet opens titled "Hardware Wallet" (testTag "HwIntroScreen") showing hardware device illustrations, then press Android back and verify the sheet closes back to the Hardware Wallets screen
     </action>
     <action>
       Tap the trash (delete) icon on the device row
