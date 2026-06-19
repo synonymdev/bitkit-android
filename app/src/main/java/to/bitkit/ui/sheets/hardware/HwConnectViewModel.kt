@@ -1,10 +1,12 @@
 package to.bitkit.ui.sheets.hardware
 
+import android.content.Context
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.TrezorFeatures
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -14,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import to.bitkit.R
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
 import to.bitkit.repositories.resolveHwWalletName
@@ -30,6 +33,7 @@ import kotlin.time.Duration.Companion.seconds
 @HiltViewModel
 class HwConnectViewModel @Inject constructor(
     private val hwWalletRepo: HwWalletRepo,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
     companion object {
         /** Delay between scan attempts while searching for a nearby device. */
@@ -54,6 +58,7 @@ class HwConnectViewModel @Inject constructor(
 
     fun onIntroContinue(includeBluetooth: Boolean = true) {
         includeBluetoothInScan = includeBluetooth
+        _uiState.update { it.copy(errorMessage = null) }
         setEffect(HwConnectEffect.NavigateToSearching)
         startSearching()
     }
@@ -71,6 +76,7 @@ class HwConnectViewModel @Inject constructor(
                 isSearching = false,
                 foundDeviceId = deviceId,
                 deviceModel = deviceModel.ifBlank { resolveHwWalletName(label = null, model = null) },
+                errorMessage = null,
             )
         }
         scanUsbBeforeConnect = true
@@ -81,14 +87,21 @@ class HwConnectViewModel @Inject constructor(
         val deviceId = deviceIdOverride ?: state.foundDeviceId ?: return
         val shouldScanUsbBeforeConnect = scanUsbBeforeConnect
         searchJob?.cancel()
-        _uiState.update { it.copy(isConnecting = true) }
+        _uiState.update { it.copy(isConnecting = true, errorMessage = null) }
         viewModelScope.launch {
             if (shouldScanUsbBeforeConnect) {
                 hwWalletRepo.scan(includeBluetooth = false)
             }
             hwWalletRepo.connect(deviceId)
                 .onSuccess { onConnected(deviceId, it) }
-                .onFailure { _uiState.update { state -> state.copy(isConnecting = false) } }
+                .onFailure {
+                    _uiState.update { state ->
+                        state.copy(
+                            isConnecting = false,
+                            errorMessage = context.getString(R.string.hardware__connect_error),
+                        )
+                    }
+                }
         }
     }
 
@@ -118,20 +131,30 @@ class HwConnectViewModel @Inject constructor(
     private fun startSearching() {
         if (searchJob?.isActive == true) return
         scanUsbBeforeConnect = false
-        _uiState.update { it.copy(isSearching = true) }
+        _uiState.update { it.copy(isSearching = true, errorMessage = null) }
         searchJob = viewModelScope.launch {
             while (isActive) {
-                hwWalletRepo.scan(includeBluetooth = includeBluetoothInScan)
+                val scanResult = hwWalletRepo.scan(includeBluetooth = includeBluetoothInScan)
+                if (scanResult.isFailure) {
+                    _uiState.update {
+                        it.copy(errorMessage = context.getString(R.string.hardware__search_error))
+                    }
+                    delay(SCAN_INTERVAL)
+                    continue
+                }
+                _uiState.update { it.copy(errorMessage = null) }
                 val device = hwWalletRepo.deviceState.value.nearbyDevices.firstOrNull()
                 if (device != null) {
+                    val deviceModel = resolveHwWalletName(label = null, model = device.model)
                     _uiState.update {
                         it.copy(
                             isSearching = false,
                             foundDeviceId = device.id,
-                            deviceModel = resolveHwWalletName(label = null, model = device.model),
+                            deviceModel = deviceModel,
+                            errorMessage = null,
                         )
                     }
-                    setEffect(HwConnectEffect.NavigateToFound)
+                    setEffect(HwConnectEffect.NavigateToFound(device.id, deviceModel))
                     return@launch
                 }
                 delay(SCAN_INTERVAL)
@@ -147,6 +170,7 @@ class HwConnectViewModel @Inject constructor(
                 pairedDeviceId = deviceId,
                 deviceName = name,
                 labelInput = if (labelInitialized) it.labelInput else name,
+                errorMessage = null,
             )
         }
         labelInitialized = true
@@ -191,11 +215,12 @@ data class HwConnectUiState(
     val deviceModel: String = "",
     val balanceSats: ULong = 0uL,
     val labelInput: String = "",
+    val errorMessage: String? = null,
 )
 
 sealed interface HwConnectEffect {
     data object NavigateToSearching : HwConnectEffect
-    data object NavigateToFound : HwConnectEffect
+    data class NavigateToFound(val deviceId: String, val deviceModel: String) : HwConnectEffect
     data object NavigateToPairCode : HwConnectEffect
     data object NavigateToPaired : HwConnectEffect
     data object Dismiss : HwConnectEffect

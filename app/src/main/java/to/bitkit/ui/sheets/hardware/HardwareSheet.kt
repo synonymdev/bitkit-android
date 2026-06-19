@@ -88,7 +88,11 @@ fun HardwareSheet(
         }
     }
     val blePermissions = rememberMultiplePermissionsState(bluetoothPermissions) { results ->
-        if (results.values.all { it }) enableBleScanning()
+        if (results.values.all { it }) {
+            enableBleScanning()
+        } else {
+            showBlePermissionDialog = true
+        }
     }
     val requestBleAccess: () -> Unit = {
         when {
@@ -135,7 +139,10 @@ fun HardwareSheet(
                 )
             }
             composableWithDefaultTransitions<HardwareRoute.Searching> {
-                HwSearchingSheet(onCancel = appViewModel::hideSheet)
+                HwSearchingSheet(
+                    errorMessage = uiState.errorMessage,
+                    onCancel = appViewModel::hideSheet,
+                )
             }
             composableWithDefaultTransitions<HardwareRoute.Found> { backStackEntry ->
                 val route = backStackEntry.toRoute<HardwareRoute.Found>()
@@ -151,6 +158,7 @@ fun HardwareSheet(
                 HwFoundSheet(
                     deviceModel = deviceModel,
                     isConnecting = uiState.isConnecting,
+                    errorMessage = uiState.errorMessage,
                     onConnect = { viewModel.onConnectClick(route.deviceId) },
                     onCancel = appViewModel::hideSheet,
                 )
@@ -199,7 +207,12 @@ private fun ConnectEffectHandler(
         viewModel.effects.collect { effect ->
             when (effect) {
                 HwConnectEffect.NavigateToSearching -> navController.navigateTo(HardwareRoute.Searching)
-                HwConnectEffect.NavigateToFound -> navController.navigateTo(HardwareRoute.Found())
+                is HwConnectEffect.NavigateToFound -> navController.navigateTo(
+                    HardwareRoute.Found(
+                        deviceId = effect.deviceId,
+                        deviceModel = effect.deviceModel,
+                    ),
+                )
                 HwConnectEffect.NavigateToPairCode -> navController.navigateTo(HardwareRoute.PairCode)
                 HwConnectEffect.NavigateToPaired -> navController.navigateTo(HardwareRoute.Paired)
                 HwConnectEffect.Dismiss -> appViewModel.hideSheet()

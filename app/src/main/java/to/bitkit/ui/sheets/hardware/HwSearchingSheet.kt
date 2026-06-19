@@ -1,5 +1,6 @@
 package to.bitkit.ui.sheets.hardware
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.InfiniteTransition
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
@@ -26,6 +27,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.SecondaryButton
@@ -55,9 +57,11 @@ private const val RING_SPIN_MS = 2000
 @Composable
 fun HwSearchingSheet(
     modifier: Modifier = Modifier,
+    errorMessage: String? = null,
     onCancel: () -> Unit = {},
 ) {
     Content(
+        errorMessage = errorMessage,
         onCancel = onCancel,
         modifier = modifier
     )
@@ -66,6 +70,7 @@ fun HwSearchingSheet(
 @Composable
 private fun Content(
     modifier: Modifier = Modifier,
+    errorMessage: String? = null,
     onCancel: () -> Unit = {},
 ) {
     Column(
@@ -84,6 +89,16 @@ private fun Content(
             Display(stringResource(R.string.hardware__connect_header).withAccent(accentColor = Colors.Blue))
             VerticalSpacer(8.dp)
             BodyM(stringResource(R.string.hardware__connect_text), color = Colors.White64)
+            AnimatedVisibility(visible = errorMessage != null) {
+                Column {
+                    VerticalSpacer(16.dp)
+                    BodyS(
+                        text = errorMessage.orEmpty(),
+                        color = Colors.Red,
+                        modifier = Modifier.testTag("HwSearchingError")
+                    )
+                }
+            }
         }
         Box(
             contentAlignment = Alignment.Center,

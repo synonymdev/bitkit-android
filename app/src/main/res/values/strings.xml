@@ -167,6 +167,7 @@
     <string name="hardware__bluetooth_permission_settings">Open Settings</string>
     <string name="hardware__bluetooth_permission_text">Bitkit needs the nearby-devices (Bluetooth) permission to find your hardware wallet. Enable it in Settings, then try again.</string>
     <string name="hardware__bluetooth_permission_title">Bluetooth access needed</string>
+    <string name="hardware__connect_error">Could not connect to your Trezor. Check that it is unlocked and try again.</string>
     <string name="hardware__connect_header">Searching for &lt;accent&gt;devices&lt;/accent&gt;</string>
     <string name="hardware__connect_text">Please connect your hardware wallet now via USB or Bluetooth.</string>
     <string name="hardware__connect_title">Connect Device</string>
@@ -192,6 +193,7 @@
     <string name="hardware__remove_dialog_text">Don\'t worry, your funds are safe and your coins won\'t be deleted. Bitkit will simply stop displaying the amounts in the wallet.</string>
     <string name="hardware__remove_dialog_title">Remove %1$s</string>
     <string name="hardware__remove_error">Could not remove the hardware wallet. Please try again.</string>
+    <string name="hardware__search_error">Could not search for hardware wallets. Check your connection and try again.</string>
     <string name="lightning__availability__text">Funds transfer to savings is usually instant, but settlement may take up to &lt;accent&gt;14 days&lt;/accent&gt; under certain network conditions.</string>
     <string name="lightning__availability__title">Funds\n&lt;accent&gt;availability&lt;/accent&gt;</string>
     <string name="lightning__balance">Balance</string>

@@ -40,6 +40,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import to.bitkit.ext.bluetoothManager
 import to.bitkit.ext.usbManager
 import to.bitkit.models.TransportType
@@ -205,6 +207,7 @@ class TrezorTransport @Inject constructor(
 
     private val bleConnections = ConcurrentHashMap<String, BleConnection>()
     private val discoveredBleDevices = ConcurrentHashMap<String, BluetoothDevice>()
+    private val optionScopeMutex = Mutex()
 
     private data class UsbOpenDevice(
         val connection: UsbDeviceConnection,
@@ -225,20 +228,26 @@ class TrezorTransport @Inject constructor(
         @Volatile var writeStatus: Int = BluetoothGatt.GATT_SUCCESS,
     )
 
-    suspend fun <T> withUsbPermissionRequestsEnabled(enabled: Boolean, block: suspend () -> T): T {
+    suspend fun <T> withUsbPermissionRequestsEnabled(
+        enabled: Boolean,
+        block: suspend () -> T,
+    ): T = optionScopeMutex.withLock {
         val previous = requestUsbPermissionEnabled
         requestUsbPermissionEnabled = enabled
-        return try {
+        try {
             block()
         } finally {
             requestUsbPermissionEnabled = previous
         }
     }
 
-    suspend fun <T> withBluetoothScanningEnabled(enabled: Boolean, block: suspend () -> T): T {
+    suspend fun <T> withBluetoothScanningEnabled(
+        enabled: Boolean,
+        block: suspend () -> T,
+    ): T = optionScopeMutex.withLock {
         val previous = bluetoothScanningEnabled
         bluetoothScanningEnabled = enabled
-        return try {
+        try {
             block()
         } finally {
             bluetoothScanningEnabled = previous

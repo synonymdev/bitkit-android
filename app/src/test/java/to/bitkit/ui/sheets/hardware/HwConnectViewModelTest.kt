@@ -1,5 +1,6 @@
 package to.bitkit.ui.sheets.hardware
 
+import android.content.Context
 import app.cash.turbine.test
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
@@ -9,22 +10,28 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.R
 import to.bitkit.models.HwWallet
 import to.bitkit.models.TransportType
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.TrezorState
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HwConnectViewModelTest : BaseUnitTest() {
 
     private val hwWalletRepo = mock<HwWalletRepo>()
+    private val context = mock<Context>()
     private val needsPairingCode = MutableStateFlow(false)
     private val wallets = MutableStateFlow<ImmutableList<HwWallet>>(persistentListOf())
     private val deviceState = MutableStateFlow(TrezorState())
@@ -36,7 +43,12 @@ class HwConnectViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.needsPairingCode).thenReturn(needsPairingCode)
         whenever(hwWalletRepo.wallets).thenReturn(wallets)
         whenever(hwWalletRepo.deviceState).thenReturn(deviceState)
-        sut = HwConnectViewModel(hwWalletRepo)
+        whenever(context.getString(R.string.hardware__connect_error)).thenReturn(CONNECT_ERROR)
+        whenever(context.getString(R.string.hardware__search_error)).thenReturn(SEARCH_ERROR)
+        sut = HwConnectViewModel(
+            hwWalletRepo = hwWalletRepo,
+            context = context,
+        )
     }
 
     @Test
@@ -47,7 +59,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
         sut.effects.test {
             sut.onIntroContinue()
             assertEquals(HwConnectEffect.NavigateToSearching, awaitItem())
-            assertEquals(HwConnectEffect.NavigateToFound, awaitItem())
+            assertEquals(HwConnectEffect.NavigateToFound("dev1", "Trezor Safe 3"), awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
 
@@ -64,12 +76,29 @@ class HwConnectViewModelTest : BaseUnitTest() {
         sut.effects.test {
             sut.onIntroContinue(includeBluetooth = false)
             assertEquals(HwConnectEffect.NavigateToSearching, awaitItem())
-            assertEquals(HwConnectEffect.NavigateToFound, awaitItem())
+            assertEquals(HwConnectEffect.NavigateToFound("usb1", "Trezor Safe 5"), awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
 
         verify(hwWalletRepo).scan(includeBluetooth = false)
         assertEquals("usb1", sut.uiState.value.foundDeviceId)
+    }
+
+    @Test
+    fun `onIntroContinue surfaces search failures while searching`() = test {
+        whenever(hwWalletRepo.scan(includeBluetooth = true)).thenReturn(Result.failure(AppError("scan failed")))
+
+        sut.effects.test {
+            sut.onIntroContinue()
+            assertEquals(HwConnectEffect.NavigateToSearching, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        runCurrent()
+        verify(hwWalletRepo).scan(includeBluetooth = true)
+        assertTrue(sut.uiState.value.isSearching)
+        assertEquals(SEARCH_ERROR, sut.uiState.value.errorMessage)
+        sut.resetState()
     }
 
     @Test
@@ -104,6 +133,21 @@ class HwConnectViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo).connect("dev1")
         assertEquals("dev1", sut.uiState.value.pairedDeviceId)
         assertEquals("Trezor Safe 3", sut.uiState.value.labelInput)
+    }
+
+    @Test
+    fun `onConnectClick surfaces connect failures and allows retry`() = test {
+        givenDeviceFound()
+        runCurrent()
+        whenever(hwWalletRepo.connect("dev1")).thenReturn(Result.failure(AppError("connect failed")))
+
+        sut.onConnectClick()
+        runCurrent()
+
+        verify(hwWalletRepo).connect("dev1")
+        assertFalse(sut.uiState.value.isConnecting)
+        assertEquals(CONNECT_ERROR, sut.uiState.value.errorMessage)
+        assertEquals("dev1", sut.uiState.value.foundDeviceId)
     }
 
     @Test
@@ -186,4 +230,9 @@ class HwConnectViewModelTest : BaseUnitTest() {
         activities = persistentListOf(),
         deviceIds = persistentSetOf(id),
     )
+
+    private companion object {
+        const val CONNECT_ERROR = "Could not connect"
+        const val SEARCH_ERROR = "Could not search"
+    }
 }
