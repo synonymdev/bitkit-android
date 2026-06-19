@@ -216,6 +216,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - USE `docs/` as target dir of saved files when asked to create documentation for new features
 - NEVER write code in the documentation files
 - NEVER add code comments to private functions, classes, etc
+- ALWAYS use `/** */` to document constants
 - ALWAYS use `_uiState.update { }`, NEVER use `_stateFlow.value =`
 - ALWAYS add the warranted changes in unit tests to keep the unit tests succeeding
 - ALWAYS follow the patterns of the existing code in `app/src/test` when writing new unit tests
