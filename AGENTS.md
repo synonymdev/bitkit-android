@@ -153,7 +153,7 @@ fun updateState(action: Action) {
 
 ```kotlin
 suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
-  runCatching {
+  runSuspendCatching {
     apiService.fetchData()
   }.onFailure {
     Logger.error("Failed", it, context = TAG)
@@ -196,6 +196,8 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS log errors at the final handling layer where the error is acted upon, not in intermediate layers that just propagate it
 - ALWAYS use the Result API instead of try-catch
 - NEVER wrap methods returning `Result<T>` in try-catch
+- ALWAYS use `runSuspendCatching` (from `ext/Coroutines.kt`) instead of `runCatching` when the block calls suspend functions or runs in a coroutine — it re-throws `CancellationException` so structured-concurrency cancellation is preserved; plain `runCatching` catches `Throwable` and swallows it. NEVER log a `CancellationException` as an error
+- EXCEPTION: when a `TimeoutCancellationException` from `withTimeout` must be treated as a retriable failure, use `runCatching` with an explicit `if (it is CancellationException && it !is TimeoutCancellationException) throw it` guard (e.g. `BlocktankRepo.refreshCjitEntries`)
 - PREFER to use `it` instead of explicit named parameters in lambdas e.g. `fn().onSuccess { log(it) }.onFailure { log(it) }`
 - NEVER inject ViewModels as dependencies - Only android activities and composable functions can use viewmodels
 - ALWAYS co-locate screen-specific ViewModels in the same package as their screen; only place ViewModels in `viewmodels/` when shared across multiple screens
