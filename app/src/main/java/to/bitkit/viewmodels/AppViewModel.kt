@@ -3058,7 +3058,28 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun onUsbDeviceAttached() = hwWalletRepo.onTransportRestored(TransportType.USB)
+    fun onUsbDeviceAttached(
+        deviceId: String? = null,
+        deviceModel: String = "",
+    ) {
+        hwWalletRepo.onTransportRestored(TransportType.USB)
+        deviceId ?: return
+
+        viewModelScope.launch {
+            if (hwWalletRepo.hasKnownDevice(deviceId)) return@launch
+            if (isHighPrioritySheet(_currentSheet.value)) return@launch
+            if (_currentSheet.value is Sheet.Hardware) return@launch
+
+            showSheet(
+                Sheet.Hardware(
+                    route = HardwareRoute.Found(
+                        deviceId = deviceId,
+                        deviceModel = deviceModel,
+                    ),
+                )
+            )
+        }
+    }
 
     fun submitPairingCode(code: String) = hwWalletRepo.submitPairingCode(code)
 

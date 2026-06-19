@@ -44,22 +44,48 @@ class HwConnectViewModel @Inject constructor(
 
     private var searchJob: Job? = null
     private var labelInitialized = false
+    private var includeBluetoothInScan = true
+    private var scanUsbBeforeConnect = false
 
     init {
         observePairingCode()
         observeConnectedWallet()
     }
 
-    fun onIntroContinue() {
+    fun onIntroContinue(includeBluetooth: Boolean = true) {
+        includeBluetoothInScan = includeBluetooth
         setEffect(HwConnectEffect.NavigateToSearching)
         startSearching()
     }
 
-    fun onConnectClick() {
-        val deviceId = _uiState.value.foundDeviceId ?: return
+    fun setBluetoothScanningEnabled() {
+        includeBluetoothInScan = true
+    }
+
+    fun onFoundRoute(deviceId: String?, deviceModel: String) {
+        if (deviceId == null) return
+        searchJob?.cancel()
+        searchJob = null
+        _uiState.update {
+            it.copy(
+                isSearching = false,
+                foundDeviceId = deviceId,
+                deviceModel = deviceModel.ifBlank { resolveHwWalletName(label = null, model = null) },
+            )
+        }
+        scanUsbBeforeConnect = true
+    }
+
+    fun onConnectClick(deviceIdOverride: String? = null) {
+        val state = _uiState.value
+        val deviceId = deviceIdOverride ?: state.foundDeviceId ?: return
+        val shouldScanUsbBeforeConnect = scanUsbBeforeConnect
         searchJob?.cancel()
         _uiState.update { it.copy(isConnecting = true) }
         viewModelScope.launch {
+            if (shouldScanUsbBeforeConnect) {
+                hwWalletRepo.scan(includeBluetooth = false)
+            }
             hwWalletRepo.connect(deviceId)
                 .onSuccess { onConnected(deviceId, it) }
                 .onFailure { _uiState.update { state -> state.copy(isConnecting = false) } }
@@ -84,15 +110,18 @@ class HwConnectViewModel @Inject constructor(
         searchJob?.cancel()
         searchJob = null
         labelInitialized = false
+        includeBluetoothInScan = true
+        scanUsbBeforeConnect = false
         _uiState.update { HwConnectUiState() }
     }
 
     private fun startSearching() {
         if (searchJob?.isActive == true) return
+        scanUsbBeforeConnect = false
         _uiState.update { it.copy(isSearching = true) }
         searchJob = viewModelScope.launch {
             while (isActive) {
-                hwWalletRepo.scan()
+                hwWalletRepo.scan(includeBluetooth = includeBluetoothInScan)
                 val device = hwWalletRepo.deviceState.value.nearbyDevices.firstOrNull()
                 if (device != null) {
                     _uiState.update {

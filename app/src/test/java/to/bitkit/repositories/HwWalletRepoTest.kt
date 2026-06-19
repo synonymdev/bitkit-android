@@ -757,12 +757,12 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `scan delegates to trezorRepo`() = test {
-        whenever(trezorRepo.scan()).thenReturn(Result.success(emptyList()))
+        whenever(trezorRepo.scan(includeBluetooth = false)).thenReturn(Result.success(emptyList()))
         val sut = createRepo()
 
-        sut.scan()
+        sut.scan(includeBluetooth = false)
 
-        verify(trezorRepo).scan()
+        verify(trezorRepo).scan(includeBluetooth = false)
     }
 
     @Test

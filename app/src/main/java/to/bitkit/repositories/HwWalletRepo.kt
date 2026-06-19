@@ -117,8 +117,14 @@ class HwWalletRepo @Inject constructor(
     /** Device discovery and connection state used by the Connect Hardware flow. */
     val deviceState: StateFlow<TrezorState> = trezorRepo.state
 
-    /** Scans for nearby unpaired devices over USB/Bluetooth; results land in [deviceState]'s nearbyDevices. */
-    suspend fun scan(): Result<List<TrezorDeviceInfo>> = trezorRepo.scan()
+    /** Scans for nearby unpaired devices; results land in [deviceState]'s nearbyDevices. */
+    suspend fun scan(
+        includeBluetooth: Boolean = true,
+    ): Result<List<TrezorDeviceInfo>> = trezorRepo.scan(
+        includeBluetooth = includeBluetooth,
+    )
+
+    suspend fun hasKnownDevice(deviceId: String): Boolean = trezorRepo.hasKnownDevice(deviceId)
 
     /** Connects and pairs a discovered device, persisting it as a watch-only known device. */
     suspend fun connect(deviceId: String): Result<TrezorFeatures> = trezorRepo.connect(deviceId)

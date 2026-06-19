@@ -21,8 +21,10 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import kotlinx.serialization.Serializable
@@ -54,9 +56,8 @@ private val bluetoothPermissions: List<String>
  * Entry point for the hardware-wallet connect flow opened from the home suggestion card and the
  * Hardware Wallets settings Add button. Hosts the four connect steps (Intro -> Searching -> Found
  * -> Paired) plus the Pair Device step shown when the device asks for its one-time pairing code.
- * Continuing from the intro gates searching on the nearby-devices permission and Bluetooth being on:
- * it requests the permission, prompts to enable Bluetooth, or sends the user to Settings if the
- * permission was permanently denied.
+ * Continuing from the intro starts USB discovery immediately; Bluetooth discovery is included once
+ * the nearby-devices permission is granted and Bluetooth is turned on.
  */
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -75,24 +76,22 @@ fun HardwareSheet(
     val enableBluetoothLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
-        if (context.isBluetoothEnabled) viewModel.onIntroContinue()
+        if (context.isBluetoothEnabled) viewModel.setBluetoothScanningEnabled()
     }
 
-    // BLE discovery needs both the runtime nearby-devices permission and Bluetooth turned on.
-    val proceedAfterPermission: () -> Unit = {
+    val enableBleScanning: () -> Unit = {
         if (context.isBluetoothEnabled) {
-            viewModel.onIntroContinue()
+            viewModel.setBluetoothScanningEnabled()
         } else {
             enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
         }
     }
     val blePermissions = rememberMultiplePermissionsState(bluetoothPermissions) { results ->
-        if (results.values.all { it }) proceedAfterPermission()
+        if (results.values.all { it }) enableBleScanning()
     }
-    val onIntroContinue: () -> Unit = {
+    val requestBleAccess: () -> Unit = {
         when {
-            blePermissions.allPermissionsGranted -> proceedAfterPermission()
-            // Permanently denied (already asked, system won't re-prompt): send to Settings instead.
+            blePermissions.allPermissionsGranted -> enableBleScanning()
             blePermissionRequested && !blePermissions.shouldShowRationale -> showBlePermissionDialog = true
             else -> {
                 blePermissionRequested = true
@@ -100,22 +99,23 @@ fun HardwareSheet(
             }
         }
     }
+    val onIntroContinue: () -> Unit = {
+        val includeBluetooth = blePermissions.allPermissionsGranted && context.isBluetoothEnabled
+        viewModel.onIntroContinue(includeBluetooth = includeBluetooth)
+        if (!includeBluetooth) {
+            requestBleAccess()
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose { viewModel.resetState() }
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.effects.collect { effect ->
-            when (effect) {
-                HwConnectEffect.NavigateToSearching -> navController.navigateTo(HardwareRoute.Searching)
-                HwConnectEffect.NavigateToFound -> navController.navigateTo(HardwareRoute.Found)
-                HwConnectEffect.NavigateToPairCode -> navController.navigateTo(HardwareRoute.PairCode)
-                HwConnectEffect.NavigateToPaired -> navController.navigateTo(HardwareRoute.Paired)
-                HwConnectEffect.Dismiss -> appViewModel.hideSheet()
-            }
-        }
-    }
+    ConnectEffectHandler(
+        viewModel = viewModel,
+        navController = navController,
+        appViewModel = appViewModel,
+    )
 
     Column(
         modifier = Modifier
@@ -136,11 +136,21 @@ fun HardwareSheet(
             composableWithDefaultTransitions<HardwareRoute.Searching> {
                 HwSearchingSheet(onCancel = appViewModel::hideSheet)
             }
-            composableWithDefaultTransitions<HardwareRoute.Found> {
+            composableWithDefaultTransitions<HardwareRoute.Found> { backStackEntry ->
+                val route = backStackEntry.toRoute<HardwareRoute.Found>()
+                LaunchedEffect(route.deviceId, route.deviceModel) {
+                    viewModel.onFoundRoute(
+                        deviceId = route.deviceId,
+                        deviceModel = route.deviceModel,
+                    )
+                }
+                val deviceModel = uiState.deviceModel.ifBlank {
+                    route.deviceModel.ifBlank { stringResource(R.string.hardware__device_model_trezor) }
+                }
                 HwFoundSheet(
-                    deviceModel = uiState.deviceModel,
+                    deviceModel = deviceModel,
                     isConnecting = uiState.isConnecting,
-                    onConnect = viewModel::onConnectClick,
+                    onConnect = { viewModel.onConnectClick(route.deviceId) },
                     onCancel = appViewModel::hideSheet,
                 )
             }
@@ -174,6 +184,25 @@ fun HardwareSheet(
     }
 }
 
+@Composable
+private fun ConnectEffectHandler(
+    viewModel: HwConnectViewModel,
+    navController: NavHostController,
+    appViewModel: AppViewModel,
+) {
+    LaunchedEffect(Unit) {
+        viewModel.effects.collect { effect ->
+            when (effect) {
+                HwConnectEffect.NavigateToSearching -> navController.navigateTo(HardwareRoute.Searching)
+                HwConnectEffect.NavigateToFound -> navController.navigateTo(HardwareRoute.Found())
+                HwConnectEffect.NavigateToPairCode -> navController.navigateTo(HardwareRoute.PairCode)
+                HwConnectEffect.NavigateToPaired -> navController.navigateTo(HardwareRoute.Paired)
+                HwConnectEffect.Dismiss -> appViewModel.hideSheet()
+            }
+        }
+    }
+}
+
 sealed interface HardwareRoute {
     @Serializable
     data object Intro : HardwareRoute
@@ -182,7 +211,10 @@ sealed interface HardwareRoute {
     data object Searching : HardwareRoute
 
     @Serializable
-    data object Found : HardwareRoute
+    data class Found(
+        val deviceId: String? = null,
+        val deviceModel: String = "",
+    ) : HardwareRoute
 
     @Serializable
     data object Paired : HardwareRoute

@@ -227,6 +227,19 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scan should pass bluetooth flag to service`() = test {
+        val devices = listOf(mockDeviceInfo())
+        whenever(trezorService.scan(includeBluetooth = false)).thenReturn(devices)
+        sut = createSut()
+
+        val result = sut.scan(includeBluetooth = false)
+
+        assertTrue(result.isSuccess)
+        assertEquals(devices, result.getOrNull())
+        verify(trezorService).scan(includeBluetooth = false)
+    }
+
+    @Test
     fun `scan should exclude known devices from nearbyDevices state`() = test {
         val knownDevice = mockKnownDevice()
         val known = mockDeviceInfo()
@@ -841,6 +854,15 @@ class TrezorRepoTest : BaseUnitTest() {
         sut = createSut()
 
         assertFalse(sut.hasKnownDevices())
+    }
+
+    @Test
+    fun `hasKnownDevice should match stored device path`() = test {
+        val knownDevice = mockKnownDevice(path = "/dev/bus/usb/001/002")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        sut = createSut()
+
+        assertTrue(sut.hasKnownDevice("/dev/bus/usb/001/002"))
     }
 
     // endregion

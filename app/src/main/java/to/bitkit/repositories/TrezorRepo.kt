@@ -262,11 +262,11 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun scan(): Result<List<TrezorDeviceInfo>> = withContext(ioDispatcher) {
+    suspend fun scan(includeBluetooth: Boolean = true): Result<List<TrezorDeviceInfo>> = withContext(ioDispatcher) {
         runCatching {
             ensureInitialized()
             _state.update { it.copy(isScanning = true, error = null) }
-            val devices = trezorService.scan()
+            val devices = trezorService.scan(includeBluetooth = includeBluetooth)
             val knownIds = _state.value.knownDevices.map { it.id }.toSet()
             val nearby = devices.filter { it.id !in knownIds }
             _state.update { it.copy(isScanning = false, nearbyDevices = nearby.toImmutableList()) }
@@ -554,6 +554,11 @@ class TrezorRepo @Inject constructor(
     }
 
     fun hasKnownDevices(): Boolean = _state.value.knownDevices.isNotEmpty()
+
+    suspend fun hasKnownDevice(deviceId: String): Boolean = withContext(ioDispatcher) {
+        _state.value.knownDevices.any { it.matches(deviceId) } ||
+            loadKnownDevices().any { it.matches(deviceId) }
+    }
 
     suspend fun autoReconnect(
         walletIndex: Int = 0,
@@ -1014,6 +1019,8 @@ data class KnownDevice(
     /** Bitkit-side funds label set by the user while pairing; null until renamed within Bitkit. */
     val customLabel: String? = null,
 )
+
+private fun KnownDevice.matches(deviceId: String) = id == deviceId || path == deviceId
 
 private fun TrezorTransportType.toTransportType(): TransportType = when (this) {
     TrezorTransportType.BLUETOOTH -> TransportType.BLUETOOTH

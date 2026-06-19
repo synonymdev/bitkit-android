@@ -42,7 +42,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
     @Test
     fun `onIntroContinue searches then advances to found with the first discovered device`() = test {
         deviceState.value = TrezorState(nearbyDevices = persistentListOf(deviceInfo("dev1", model = "Safe 3")))
-        whenever(hwWalletRepo.scan()).thenReturn(Result.success(emptyList()))
+        whenever(hwWalletRepo.scan(includeBluetooth = true)).thenReturn(Result.success(emptyList()))
 
         sut.effects.test {
             sut.onIntroContinue()
@@ -51,9 +51,42 @@ class HwConnectViewModelTest : BaseUnitTest() {
             cancelAndIgnoreRemainingEvents()
         }
 
-        verify(hwWalletRepo).scan()
+        verify(hwWalletRepo).scan(includeBluetooth = true)
         assertEquals("dev1", sut.uiState.value.foundDeviceId)
         assertEquals("Trezor Safe 3", sut.uiState.value.deviceModel)
+    }
+
+    @Test
+    fun `onIntroContinue can search without bluetooth`() = test {
+        deviceState.value = TrezorState(nearbyDevices = persistentListOf(deviceInfo("usb1", model = "Safe 5")))
+        whenever(hwWalletRepo.scan(includeBluetooth = false)).thenReturn(Result.success(emptyList()))
+
+        sut.effects.test {
+            sut.onIntroContinue(includeBluetooth = false)
+            assertEquals(HwConnectEffect.NavigateToSearching, awaitItem())
+            assertEquals(HwConnectEffect.NavigateToFound, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        verify(hwWalletRepo).scan(includeBluetooth = false)
+        assertEquals("usb1", sut.uiState.value.foundDeviceId)
+    }
+
+    @Test
+    fun `onConnectClick scans usb before connecting a device seeded by route`() = test {
+        val connectedFeatures = features(model = "Safe 3")
+        whenever(hwWalletRepo.scan(includeBluetooth = false)).thenReturn(Result.success(emptyList()))
+        whenever(hwWalletRepo.connect("usb1")).thenReturn(Result.success(connectedFeatures))
+        sut.onFoundRoute(deviceId = "usb1", deviceModel = "Trezor")
+
+        sut.effects.test {
+            sut.onConnectClick()
+            assertEquals(HwConnectEffect.NavigateToPaired, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        verify(hwWalletRepo).scan(includeBluetooth = false)
+        verify(hwWalletRepo).connect("usb1")
     }
 
     @Test
@@ -122,7 +155,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
 
     private suspend fun givenDeviceFound() {
         deviceState.value = TrezorState(nearbyDevices = persistentListOf(deviceInfo("dev1", model = "Safe 3")))
-        whenever(hwWalletRepo.scan()).thenReturn(Result.success(emptyList()))
+        whenever(hwWalletRepo.scan(includeBluetooth = true)).thenReturn(Result.success(emptyList()))
         sut.onIntroContinue()
     }
 

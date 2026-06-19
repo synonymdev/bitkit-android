@@ -120,6 +120,9 @@ class TrezorTransport @Inject constructor(
     @Volatile
     private var requestUsbPermissionEnabled = true
 
+    @Volatile
+    private var bluetoothScanningEnabled = true
+
     private val _externalDisconnect = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val externalDisconnect: SharedFlow<String> = _externalDisconnect
 
@@ -232,6 +235,16 @@ class TrezorTransport @Inject constructor(
         }
     }
 
+    suspend fun <T> withBluetoothScanningEnabled(enabled: Boolean, block: suspend () -> T): T {
+        val previous = bluetoothScanningEnabled
+        bluetoothScanningEnabled = enabled
+        return try {
+            block()
+        } finally {
+            bluetoothScanningEnabled = previous
+        }
+    }
+
     override fun enumerateDevices(): List<NativeDeviceInfo> {
         val devices = mutableListOf<NativeDeviceInfo>()
 
@@ -254,13 +267,17 @@ class TrezorTransport @Inject constructor(
             Logger.error("USB enumerate failed", it, context = TAG)
         }
 
-        runCatching {
-            enumerateBleDevices()
-        }.onSuccess {
-            devices.addAll(it)
-            Logger.debug("BLE enumerate found '${it.size}' Trezor device(s)", context = TAG)
-        }.onFailure {
-            Logger.error("BLE enumerate failed", it, context = TAG)
+        if (bluetoothScanningEnabled) {
+            runCatching {
+                enumerateBleDevices()
+            }.onSuccess {
+                devices.addAll(it)
+                Logger.debug("BLE enumerate found '${it.size}' Trezor device(s)", context = TAG)
+            }.onFailure {
+                Logger.error("BLE enumerate failed", it, context = TAG)
+            }
+        } else {
+            Logger.debug("Skipped BLE enumerate while Bluetooth scanning is disabled", context = TAG)
         }
 
         val bridgeDevices = bridgeTransport.enumerateDevices()
