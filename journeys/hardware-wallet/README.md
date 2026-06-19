@@ -47,8 +47,9 @@ instead of UI interactions.
 ## Journeys
 
 Run in this order — `connect-home-tile.xml` pairs the emulator that the later journeys
-rely on, `suggestion-intro-sheet.xml` ends by re-pairing after a forget, and
-`detail-overview.xml` runs last because its final Remove step forgets the device.
+rely on, `suggestion-intro-sheet.xml` and `settings-hardware-wallets.xml` each end by
+re-pairing after a forget, and `detail-overview.xml` runs last because its final Remove step
+forgets the device.
 
 | Journey | Covers |
 | - | - |
@@ -56,6 +57,7 @@ rely on, `suggestion-intro-sheet.xml` ends by re-pairing after a forget, and
 | `activity-blue-icons.xml` | Hardware activity merge, blue icons, All Activity filters, detail fallback |
 | `usb-reconnect.xml` | Disconnect indicator, injected USB attach intent → silent auto-reconnect |
 | `suggestion-intro-sheet.xml` | Forget device, Hardware suggestion card, connect intro sheet |
+| `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, Add button sheet, per-row delete confirm + re-pair |
 | `detail-overview.xml` | Detail screen overview, Transfer placeholder, activity, Remove confirm + forget |
 
 To exercise the received-money sheet (not covered by a journey because it needs an

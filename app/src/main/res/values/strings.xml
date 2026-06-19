@@ -164,6 +164,10 @@
     <string name="fee__slow__description">±1-2 hours</string>
     <string name="fee__slow__shortDescription">±1h</string>
     <string name="fee__slow__title">Slow</string>
+    <string name="hardware__connection_badge_connected_bluetooth">Connected via Bluetooth</string>
+    <string name="hardware__connection_badge_connected_usb">Connected via USB</string>
+    <string name="hardware__connection_badge_disconnected_bluetooth">Disconnected via Bluetooth</string>
+    <string name="hardware__connection_badge_disconnected_usb">Disconnected via USB</string>
     <string name="hardware__intro_header">Add your &lt;accent&gt;hardware wallet&lt;/accent&gt;</string>
     <string name="hardware__intro_text">Connect your hardware device to watch or manage your long-term funds.</string>
     <string name="hardware__intro_title">Hardware Wallet</string>
@@ -860,6 +864,9 @@
     <string name="settings__general__unit_note">Tip: Quickly toggle between Bitcoin and {currency} by tapping on your wallet balance.</string>
     <string name="settings__general__unit_title">Default Unit</string>
     <string name="settings__general_title">General</string>
+    <string name="settings__hardware_wallets__add_button">Add Hardware Wallet</string>
+    <string name="settings__hardware_wallets__empty_text">Pair a hardware device to watch its balance and activity in Bitkit.</string>
+    <string name="settings__hardware_wallets__nav_title">Hardware Wallets</string>
     <string name="settings__language_system_default">System Settings</string>
     <string name="settings__language_title">Language</string>
     <string name="settings__payment_pref_contacts">Payments from contacts</string>

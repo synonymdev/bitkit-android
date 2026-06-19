@@ -162,6 +162,7 @@ import to.bitkit.ui.settings.backgroundPayments.BackgroundPaymentsIntroScreen
 import to.bitkit.ui.settings.backgroundPayments.BackgroundPaymentsSettings
 import to.bitkit.ui.settings.backups.ResetAndRestoreScreen
 import to.bitkit.ui.settings.general.DefaultUnitSettingsScreen
+import to.bitkit.ui.settings.general.HardwareWalletsSettingsScreen
 import to.bitkit.ui.settings.general.LocalCurrencySettingsScreen
 import to.bitkit.ui.settings.general.TagsSettingsScreen
 import to.bitkit.ui.settings.general.WidgetsSettingsScreen
@@ -660,7 +661,7 @@ private fun RootNavHost(
         contacts(navController, settingsViewModel, appViewModel)
         profile(navController, settingsViewModel)
         shop(navController, settingsViewModel, appViewModel)
-        generalSettingsSubScreens(navController, settingsViewModel)
+        generalSettingsSubScreens(navController, appViewModel, settingsViewModel)
         advancedSettingsSubScreens(navController)
         transactionSpeedSettings(navController)
         pinManagement(navController)
@@ -1371,6 +1372,7 @@ private fun NavGraphBuilder.shop(
 
 private fun NavGraphBuilder.generalSettingsSubScreens(
     navController: NavHostController,
+    appViewModel: AppViewModel,
     settingsViewModel: SettingsViewModel,
 ) {
     composableWithDefaultTransitions<Routes.WidgetsSettings> {
@@ -1379,6 +1381,12 @@ private fun NavGraphBuilder.generalSettingsSubScreens(
 
     composableWithDefaultTransitions<Routes.TagsSettings> {
         TagsSettingsScreen(navController)
+    }
+    composableWithDefaultTransitions<Routes.HardwareWalletsSettings> {
+        HardwareWalletsSettingsScreen(
+            navController = navController,
+            onClickAdd = { appViewModel.showSheet(Sheet.Hardware()) },
+        )
     }
     composableWithDefaultTransitions<Routes.BackgroundPaymentsSettings> {
         BackgroundPaymentsSettings(
@@ -1847,6 +1855,9 @@ sealed interface Routes {
 
     @Serializable
     data object TagsSettings : Routes
+
+    @Serializable
+    data object HardwareWalletsSettings : Routes
 
     @Serializable
     data object CoinSelectPreference : Routes
