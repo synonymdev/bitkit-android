@@ -127,7 +127,10 @@ class HwWalletRepo @Inject constructor(
     suspend fun hasKnownDevice(deviceId: String): Boolean = trezorRepo.hasKnownDevice(deviceId)
 
     /** Connects and pairs a discovered device, persisting it as a watch-only known device. */
-    suspend fun connect(deviceId: String): Result<TrezorFeatures> = trezorRepo.connect(deviceId)
+    suspend fun connect(deviceId: String): Result<TrezorFeatures> {
+        trezorRepo.resetWalletSelection()
+        return trezorRepo.connect(deviceId)
+    }
 
     /**
      * Persists the Bitkit-side funds label for a paired device. Applied to every entry sharing the

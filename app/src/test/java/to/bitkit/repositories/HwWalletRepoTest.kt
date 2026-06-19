@@ -773,6 +773,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         sut.connect("dev1")
 
+        verify(trezorRepo).resetWalletSelection()
         verify(trezorRepo).connect("dev1")
     }
 

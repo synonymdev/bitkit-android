@@ -828,9 +828,9 @@ class TrezorRepo @Inject constructor(
     }
 
     private suspend fun addOrUpdateKnownDevice(deviceInfo: TrezorDeviceInfo, features: TrezorFeatures) {
-        val existing = _state.value.knownDevices
-        val existingIds = existing.map { it.id }.toSet()
-        val knownDevices = existing + hwWalletStore.loadKnownDevices().filter { it.id !in existingIds }
+        val stored = hwWalletStore.loadKnownDevices()
+        val storedIds = stored.map { it.id }.toSet()
+        val knownDevices = stored + _state.value.knownDevices.filter { it.id !in storedIds }
         val previous = knownDevices.find { it.id == deviceInfo.id }
         val known = KnownDevice(
             id = deviceInfo.id,

@@ -160,7 +160,10 @@ fun HardwareSheet(
                     isConnecting = uiState.isConnecting,
                     errorMessage = uiState.errorMessage,
                     onConnect = { viewModel.onConnectClick(route.deviceId) },
-                    onCancel = appViewModel::hideSheet,
+                    onCancel = {
+                        viewModel.cancelConnect()
+                        appViewModel.hideSheet()
+                    },
                 )
             }
             composableWithDefaultTransitions<HardwareRoute.Paired> {
@@ -180,6 +183,7 @@ fun HardwareSheet(
     }
 
     BackHandler {
+        viewModel.cancelConnect()
         appViewModel.hideSheet()
     }
 

@@ -146,6 +146,7 @@ class TrezorRepoTest : BaseUnitTest() {
         model: String? = DEVICE_MODEL,
         transportType: TransportType = TransportType.USB,
         xpubs: Map<String, String> = emptyMap(),
+        customLabel: String? = null,
     ) = KnownDevice(
         id = id,
         name = name,
@@ -155,6 +156,7 @@ class TrezorRepoTest : BaseUnitTest() {
         model = model,
         lastConnectedAt = 123L,
         xpubs = xpubs,
+        customLabel = customLabel,
     )
 
     // region initialize
@@ -582,6 +584,26 @@ class TrezorRepoTest : BaseUnitTest() {
             ),
             captor.firstValue.single().xpubs,
         )
+    }
+
+    @Test
+    fun `connect preserves stored custom label over stale state label`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices())
+            .thenReturn(listOf(mockKnownDevice()))
+            .thenReturn(listOf(mockKnownDevice(customLabel = "Cold Storage")))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertEquals("Cold Storage", captor.lastValue.single().customLabel)
     }
 
     @Test

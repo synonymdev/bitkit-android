@@ -47,6 +47,7 @@ class HwConnectViewModel @Inject constructor(
     val effects = _effects.asSharedFlow()
 
     private var searchJob: Job? = null
+    private var connectJob: Job? = null
     private var labelInitialized = false
     private var includeBluetoothInScan = true
     private var scanUsbBeforeConnect = false
@@ -85,24 +86,62 @@ class HwConnectViewModel @Inject constructor(
     fun onConnectClick(deviceIdOverride: String? = null) {
         val state = _uiState.value
         val deviceId = deviceIdOverride ?: state.foundDeviceId ?: return
+        if (connectJob?.isActive == true) return
         val shouldScanUsbBeforeConnect = scanUsbBeforeConnect
         searchJob?.cancel()
         _uiState.update { it.copy(isConnecting = true, errorMessage = null) }
-        viewModelScope.launch {
+        connectJob = viewModelScope.launch {
+            var resolvedDeviceId = deviceId
+            var resolvedDeviceModel = state.deviceModel
             if (shouldScanUsbBeforeConnect) {
                 hwWalletRepo.scan(includeBluetooth = false)
-            }
-            hwWalletRepo.connect(deviceId)
-                .onSuccess { onConnected(deviceId, it) }
-                .onFailure {
-                    _uiState.update { state ->
-                        state.copy(
-                            isConnecting = false,
-                            errorMessage = context.getString(R.string.hardware__connect_error),
-                        )
+                    .onSuccess { devices ->
+                        devices.firstOrNull { it.id == deviceId || it.path == deviceId }?.let { device ->
+                            resolvedDeviceId = device.id
+                            resolvedDeviceModel = resolveHwWalletName(label = null, model = device.model)
+                            _uiState.update {
+                                it.copy(
+                                    foundDeviceId = resolvedDeviceId,
+                                    deviceModel = resolvedDeviceModel,
+                                )
+                            }
+                        }
                     }
-                }
+                    .onFailure {
+                        onConnectFailed(resolvedDeviceId, resolvedDeviceModel)
+                        return@launch
+                    }
+            }
+            hwWalletRepo.connect(resolvedDeviceId)
+                .onSuccess { onConnected(resolvedDeviceId, it) }
+                .onFailure { onConnectFailed(resolvedDeviceId, resolvedDeviceModel) }
+            connectJob = null
         }
+    }
+
+    private fun onConnectFailed(deviceId: String, deviceModel: String) {
+        _uiState.update {
+            it.copy(
+                isConnecting = false,
+                foundDeviceId = deviceId,
+                deviceModel = deviceModel,
+                errorMessage = context.getString(R.string.hardware__connect_error),
+            )
+        }
+        setEffect(
+            HwConnectEffect.NavigateToFound(
+                deviceId = deviceId,
+                deviceModel = deviceModel,
+            )
+        )
+        connectJob = null
+    }
+
+    fun cancelConnect() {
+        connectJob?.cancel()
+        connectJob = null
+        hwWalletRepo.cancelPairingCode()
+        _uiState.update { it.copy(isConnecting = false) }
     }
 
     fun onLabelChange(value: String) = _uiState.update { it.copy(labelInput = value.take(DEVICE_LABEL_MAX_LENGTH)) }
@@ -122,6 +161,9 @@ class HwConnectViewModel @Inject constructor(
     fun resetState() {
         searchJob?.cancel()
         searchJob = null
+        connectJob?.cancel()
+        connectJob = null
+        hwWalletRepo.cancelPairingCode()
         labelInitialized = false
         includeBluetoothInScan = true
         scanUsbBeforeConnect = false

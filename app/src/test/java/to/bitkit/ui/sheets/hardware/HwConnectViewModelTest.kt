@@ -119,6 +119,46 @@ class HwConnectViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onConnectClick uses scanned device id for usb route path`() = test {
+        val path = "/dev/bus/usb/001/002"
+        val connectedFeatures = features(model = "Safe 5")
+        val usbDevice = deviceInfo(
+            id = "core-usb-id",
+            model = "Safe 5",
+            transportType = TrezorTransportType.USB,
+            path = path,
+        )
+        whenever(hwWalletRepo.scan(includeBluetooth = false)).thenReturn(Result.success(listOf(usbDevice)))
+        whenever(hwWalletRepo.connect("core-usb-id")).thenReturn(Result.success(connectedFeatures))
+        sut.onFoundRoute(deviceId = path, deviceModel = "Trezor")
+
+        sut.effects.test {
+            sut.onConnectClick()
+            assertEquals(HwConnectEffect.NavigateToPaired, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        verify(hwWalletRepo).connect("core-usb-id")
+        assertEquals("core-usb-id", sut.uiState.value.foundDeviceId)
+    }
+
+    @Test
+    fun `onConnectClick returns to found when connect fails from pair code`() = test {
+        whenever(hwWalletRepo.scan(includeBluetooth = false)).thenReturn(Result.success(emptyList()))
+        whenever(hwWalletRepo.connect("usb1")).thenReturn(Result.failure(AppError("connect failed")))
+        sut.onFoundRoute(deviceId = "usb1", deviceModel = "Trezor Safe 5")
+
+        sut.effects.test {
+            sut.onConnectClick()
+            assertEquals(HwConnectEffect.NavigateToFound("usb1", "Trezor Safe 5"), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        assertFalse(sut.uiState.value.isConnecting)
+        assertEquals(CONNECT_ERROR, sut.uiState.value.errorMessage)
+    }
+
+    @Test
     fun `onConnectClick connects the found device and advances to paired`() = test {
         givenDeviceFound()
         val connectedFeatures = features(model = "Safe 3")
@@ -203,11 +243,16 @@ class HwConnectViewModelTest : BaseUnitTest() {
         sut.onIntroContinue()
     }
 
-    private fun deviceInfo(id: String, model: String?) = TrezorDeviceInfo(
+    private fun deviceInfo(
+        id: String,
+        model: String?,
+        transportType: TrezorTransportType = TrezorTransportType.BLUETOOTH,
+        path: String = "ble:$id",
+    ) = TrezorDeviceInfo(
         id = id,
-        transportType = TrezorTransportType.BLUETOOTH,
+        transportType = transportType,
         name = null,
-        path = "ble:$id",
+        path = path,
         label = null,
         model = model,
         isBootloader = false,
