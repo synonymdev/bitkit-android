@@ -221,7 +221,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS follow the patterns of the existing code in `app/src/test` when writing new unit tests
 - ALWAYS be mindful of thread safety when working with mutable lists & state
 - ALWAYS split screen composables into parent accepting viewmodel + inner private child accepting state and callbacks `Content()`
-- ALWAYS preview an in-sheet screen as `BottomSheetPreview { Content(modifier = Modifier.sheetHeight()) }` (see `SendErrorScreen.kt`); `Content` uses `modifier.fillMaxSize()` and never hardcodes a `SheetSize`
+- ALWAYS preview an in-sheet screen as `BottomSheetPreview { Content(modifier = Modifier.sheetHeight()) }`, passing the host's `SheetSize` when it isn't the default `LARGE`; see `SendErrorScreen.kt`
 - ALWAYS name lambda parameters in a composable function using present tense, NEVER use past tense
 - ALWAYS use `whenever { mock.suspendCall() }` for suspend stubs if not inside `test{}` fn blocks
 - ALWAYS use `whenever(mock.call())` for non-suspend stubs and for suspend stubs if inside `test{}` fn blocks
