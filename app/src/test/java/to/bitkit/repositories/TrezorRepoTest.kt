@@ -171,6 +171,18 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `initialize should reuse completed setup`() = test {
+        sut = createSut()
+
+        val firstResult = sut.initialize()
+        val secondResult = sut.initialize()
+
+        assertTrue(firstResult.isSuccess)
+        assertTrue(secondResult.isSuccess)
+        verify(trezorService, times(1)).initialize(anyOrNull())
+    }
+
+    @Test
     fun `initialize should set error on failure`() = test {
         whenever(trezorService.initialize(anyOrNull())).thenThrow(RuntimeException("init failed"))
         sut = createSut()
@@ -686,6 +698,20 @@ class TrezorRepoTest : BaseUnitTest() {
         verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
         verify(trezorService).clearCredentials(DEVICE_ID)
         verify(hwWalletStore).reset()
+    }
+
+    @Test
+    fun `resetState clears initialized setup gate`() = test {
+        val devices = listOf(mockDeviceInfo())
+        whenever(trezorService.scan()).thenReturn(devices)
+        sut = createSut()
+
+        sut.initialize()
+        sut.resetState()
+        val result = sut.scan()
+
+        assertTrue(result.isSuccess)
+        verify(trezorService, times(2)).initialize(anyOrNull())
     }
 
     // endregion

@@ -29,6 +29,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -43,6 +44,8 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import to.bitkit.data.HwWalletStore
@@ -96,6 +99,8 @@ class TrezorRepo @Inject constructor(
     val state = _state.asStateFlow()
 
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private var isSetup = CompletableDeferred<Unit>()
+    private val setupMutex = Mutex()
 
     @Volatile
     private var transportReconnectJob: Job? = null
@@ -162,6 +167,7 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun resetState() = withContext(ioDispatcher) {
+        resetSetup()
         transportReconnectJob?.cancel()
         transportReconnectJob = null
 
@@ -184,6 +190,7 @@ class TrezorRepo @Inject constructor(
         hwWalletStore.reset()
         _state.update {
             it.copy(
+                isInitialized = false,
                 isScanning = false,
                 isConnecting = false,
                 isAutoReconnecting = false,
@@ -230,15 +237,28 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun initialize(walletIndex: Int = 0): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
-            val credentialPath = "${Env.bitkitCoreStoragePath(walletIndex)}/trezor-credentials.json"
-            Logger.debug("Initializing Trezor with credential path: '$credentialPath'", context = TAG)
-            trezorService.initialize(credentialPath)
-            val known = loadKnownDevices()
-            _state.update { it.copy(isInitialized = true, knownDevices = known.toImmutableList(), error = null) }
-        }.onFailure { e ->
-            Logger.error("Trezor init failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+        setupMutex.withLock {
+            if (isSetup.isCancelled) {
+                isSetup = CompletableDeferred()
+            }
+            if (isSetup.isCompleted) {
+                if (runCatching { isSetup.await() }.isSuccess) return@withLock Result.success(Unit)
+                isSetup = CompletableDeferred()
+            }
+
+            runCatching {
+                val credentialPath = "${Env.bitkitCoreStoragePath(walletIndex)}/trezor-credentials.json"
+                Logger.debug("Initializing Trezor with credential path: '$credentialPath'", context = TAG)
+                trezorService.initialize(credentialPath)
+                val known = loadKnownDevices()
+                _state.update { it.copy(isInitialized = true, knownDevices = known.toImmutableList(), error = null) }
+                isSetup.complete(Unit)
+                Unit
+            }.onFailure { e ->
+                isSetup.completeExceptionally(e)
+                Logger.error("Trezor init failed", e, context = TAG)
+                _state.update { it.copy(error = e.message) }
+            }
         }
     }
 
@@ -552,9 +572,7 @@ class TrezorRepo @Inject constructor(
 
         _state.update { it.copy(isAutoReconnecting = true, error = null) }
         runCatching {
-            if (!_state.value.isInitialized) {
-                initialize(walletIndex).getOrThrow()
-            }
+            ensureInitialized(walletIndex)
             val cachedFeatures = if (trezorService.isConnected()) _state.value.connectedDevice else null
             if (cachedFeatures != null) {
                 cachedFeatures
@@ -607,11 +625,10 @@ class TrezorRepo @Inject constructor(
             TrezorDebugLog.log("RECONNECT", "=== connectKnownDevice START ===")
             TrezorDebugLog.log("RECONNECT", "deviceId=$deviceId")
             TrezorDebugLog.log("RECONNECT", "isInitialized=${_state.value.isInitialized}")
-            if (!_state.value.isInitialized) {
-                TrezorDebugLog.log("RECONNECT", "Initializing...")
-                initialize().getOrThrow()
-                TrezorDebugLog.log("RECONNECT", "Initialized OK")
-            }
+            val needsInitialization = !_state.value.isInitialized
+            if (needsInitialization) TrezorDebugLog.log("RECONNECT", "Initializing...")
+            ensureInitialized()
+            if (needsInitialization) TrezorDebugLog.log("RECONNECT", "Initialized OK")
             TrezorDebugLog.log("RECONNECT", "Scanning for devices...")
             val scannedDevices = trezorService.scan()
             TrezorDebugLog.log(
@@ -866,9 +883,7 @@ class TrezorRepo @Inject constructor(
         val deviceId = _state.value.connectedDeviceId
             ?: _state.value.knownDevices.firstOrNull()?.id
             ?: throw AppError("No device to reconnect")
-        if (!_state.value.isInitialized) {
-            initialize().getOrThrow()
-        }
+        ensureInitialized()
         val devices = trezorService.scan()
         val device = devices.find { it.id == deviceId }
             ?: throw AppError("Device not found during reconnect")
@@ -879,6 +894,13 @@ class TrezorRepo @Inject constructor(
     private suspend fun ensureInitialized(walletIndex: Int = 0) {
         if (!_state.value.isInitialized) {
             initialize(walletIndex).getOrThrow()
+        }
+    }
+
+    private suspend fun resetSetup() {
+        setupMutex.withLock {
+            isSetup.cancel()
+            isSetup = CompletableDeferred()
         }
     }
 
