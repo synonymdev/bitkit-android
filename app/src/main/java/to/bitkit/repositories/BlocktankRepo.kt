@@ -152,19 +152,22 @@ class BlocktankRepo @Inject constructor(
 
     private suspend fun refreshCjitEntries(): List<IcJitEntry> {
         repeat(CJIT_REFRESH_ATTEMPTS) { attempt ->
-            runCatching {
+            val entries = runCatching {
                 withTimeout(CJIT_REFRESH_TIMEOUT) {
                     coreService.blocktank.cjitEntries(refresh = true)
                 }
-            }.onSuccess { entries ->
+            }.mapCatching { entries ->
                 _blocktankState.update { it.copy(cjitEntries = entries.toImmutableList()) }
-                return entries
-            }.onFailure {
+                entries
+            }.getOrElse {
                 if (it is CancellationException && it !is TimeoutCancellationException) throw it
                 if (attempt == CJIT_REFRESH_ATTEMPTS - 1) {
                     Logger.warn("Failed to refresh CJIT entries; using cached state", it, context = TAG)
                 }
+                null
             }
+
+            entries?.let { return it }
             delay(CJIT_REFRESH_RETRY_DELAY)
         }
         return _blocktankState.value.cjitEntries
