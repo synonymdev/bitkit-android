@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.amountOnClose
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -30,17 +31,17 @@ class NotifyChannelReadyHandler @Inject constructor(
     suspend operator fun invoke(
         command: NotifyChannelReady.Command,
     ): Result<NotifyChannelReady.Result> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val channel = lightningRepo.getChannels()
                 ?.find { it.channelId == command.event.channelId }
-                ?: return@runCatching NotifyChannelReady.Result.Skip
+                ?: return@runSuspendCatching NotifyChannelReady.Result.Skip
 
             val cjitEntry = blocktankRepo.getCjitEntry(channel)
-                ?: return@runCatching NotifyChannelReady.Result.Skip
+                ?: return@runSuspendCatching NotifyChannelReady.Result.Skip
 
             val inserted = activityRepo.insertActivityFromCjit(cjitEntry = cjitEntry, channel = channel)
                 .getOrDefault(false)
-            if (!inserted) return@runCatching NotifyChannelReady.Result.Duplicate
+            if (!inserted) return@runSuspendCatching NotifyChannelReady.Result.Duplicate
 
             val sats = channel.amountOnClose.toLong()
 
