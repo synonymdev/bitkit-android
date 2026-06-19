@@ -164,6 +164,9 @@
     <string name="fee__slow__description">±1-2 hours</string>
     <string name="fee__slow__shortDescription">±1h</string>
     <string name="fee__slow__title">Slow</string>
+    <string name="hardware__bluetooth_permission_settings">Open Settings</string>
+    <string name="hardware__bluetooth_permission_text">Bitkit needs the nearby-devices (Bluetooth) permission to find your hardware wallet. Enable it in Settings, then try again.</string>
+    <string name="hardware__bluetooth_permission_title">Bluetooth access needed</string>
     <string name="hardware__connect_header">Searching for &lt;accent&gt;devices&lt;/accent&gt;</string>
     <string name="hardware__connect_text">Please connect your hardware wallet now via USB or Bluetooth.</string>
     <string name="hardware__connect_title">Connect Device</string>

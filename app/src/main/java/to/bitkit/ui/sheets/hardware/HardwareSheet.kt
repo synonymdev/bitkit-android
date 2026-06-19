@@ -1,15 +1,24 @@
 package to.bitkit.ui.sheets.hardware
 
 import android.Manifest
+import android.bluetooth.BluetoothAdapter
+import android.content.Intent
 import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
@@ -17,9 +26,13 @@ import androidx.navigation.compose.rememberNavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import kotlinx.serialization.Serializable
+import to.bitkit.R
+import to.bitkit.ext.isBluetoothEnabled
+import to.bitkit.ext.startActivityAppSettings
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.navigateTo
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
@@ -40,7 +53,9 @@ private val bluetoothPermissions: List<String>
  * Entry point for the hardware-wallet connect flow opened from the home suggestion card and the
  * Hardware Wallets settings Add button. Hosts the four connect steps (Intro -> Searching -> Found
  * -> Paired) plus the Pair Device step shown when the device asks for its one-time pairing code.
- * Continuing from the intro requests the runtime Bluetooth-scan permission before searching.
+ * Continuing from the intro gates searching on the nearby-devices permission and Bluetooth being on:
+ * it requests the permission, prompts to enable Bluetooth, or sends the user to Settings if the
+ * permission was permanently denied.
  */
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -49,18 +64,39 @@ fun HardwareSheet(
     appViewModel: AppViewModel,
     viewModel: HwConnectViewModel = hiltViewModel(),
 ) {
+    val context = LocalContext.current
     val navController = rememberNavController()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    // BLE discovery needs the runtime nearby-devices permission; request it before searching.
-    val blePermissions = rememberMultiplePermissionsState(bluetoothPermissions) { results ->
-        if (results.values.all { it }) viewModel.onIntroContinue()
+    var showBlePermissionDialog by remember { mutableStateOf(false) }
+    var blePermissionRequested by remember { mutableStateOf(false) }
+
+    val enableBluetoothLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        if (context.isBluetoothEnabled) viewModel.onIntroContinue()
     }
-    val onIntroContinue: () -> Unit = {
-        if (blePermissions.allPermissionsGranted) {
+
+    // BLE discovery needs both the runtime nearby-devices permission and Bluetooth turned on.
+    val proceedAfterPermission: () -> Unit = {
+        if (context.isBluetoothEnabled) {
             viewModel.onIntroContinue()
         } else {
-            blePermissions.launchMultiplePermissionRequest()
+            enableBluetoothLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+        }
+    }
+    val blePermissions = rememberMultiplePermissionsState(bluetoothPermissions) { results ->
+        if (results.values.all { it }) proceedAfterPermission()
+    }
+    val onIntroContinue: () -> Unit = {
+        when {
+            blePermissions.allPermissionsGranted -> proceedAfterPermission()
+            // Permanently denied (already asked, system won't re-prompt): send to Settings instead.
+            blePermissionRequested && !blePermissions.shouldShowRationale -> showBlePermissionDialog = true
+            else -> {
+                blePermissionRequested = true
+                blePermissions.launchMultiplePermissionRequest()
+            }
         }
     }
 
@@ -121,6 +157,19 @@ fun HardwareSheet(
                 )
             }
         }
+    }
+
+    if (showBlePermissionDialog) {
+        AppAlertDialog(
+            title = stringResource(R.string.hardware__bluetooth_permission_title),
+            text = stringResource(R.string.hardware__bluetooth_permission_text),
+            confirmText = stringResource(R.string.hardware__bluetooth_permission_settings),
+            onConfirm = {
+                showBlePermissionDialog = false
+                context.startActivityAppSettings()
+            },
+            onDismiss = { showBlePermissionDialog = false },
+        )
     }
 }
 
