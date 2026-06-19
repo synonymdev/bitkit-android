@@ -72,6 +72,7 @@ class HwWalletRepo @Inject constructor(
         private const val TAG = "HwWalletRepo"
         private const val WATCHER_ID_SEPARATOR = "|"
         private val WATCHER_START_RETRY_DELAY = 30.seconds
+        const val DEVICE_LABEL_MAX_LENGTH = 50
     }
 
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -130,7 +131,7 @@ class HwWalletRepo @Inject constructor(
         runCatching {
             val devices = hwWalletStore.loadKnownDevices()
             val target = requireNotNull(devices.find { it.id == deviceId }) { "Unknown hardware wallet '$deviceId'" }
-            val customLabel = label.trim().ifEmpty { null }
+            val customLabel = label.trim().take(DEVICE_LABEL_MAX_LENGTH).ifEmpty { null }
             val updated = devices.map {
                 if (it.walletKey == target.walletKey) it.copy(customLabel = customLabel) else it
             }

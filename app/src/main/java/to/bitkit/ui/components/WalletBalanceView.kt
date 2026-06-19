@@ -109,6 +109,8 @@ private fun RowScope.Content(
             Text13Up(
                 text = title,
                 color = Colors.White64,
+                maxLines = 1,
+                modifier = Modifier.weight(1f, fill = false),
             )
             titleTrailing()
         }

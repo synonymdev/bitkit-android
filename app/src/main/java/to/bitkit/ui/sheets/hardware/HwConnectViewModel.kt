@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
 import to.bitkit.repositories.resolveHwWalletName
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
@@ -64,7 +65,7 @@ class HwConnectViewModel @Inject constructor(
         }
     }
 
-    fun onLabelChange(value: String) = _uiState.update { it.copy(labelInput = value) }
+    fun onLabelChange(value: String) = _uiState.update { it.copy(labelInput = value.take(DEVICE_LABEL_MAX_LENGTH)) }
 
     fun onFinishClick() {
         val deviceId = _uiState.value.pairedDeviceId

@@ -96,6 +96,13 @@ class HwConnectViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onLabelChange caps the label input`() {
+        sut.onLabelChange("a".repeat(51))
+
+        assertEquals("a".repeat(50), sut.uiState.value.labelInput)
+    }
+
+    @Test
     fun `onFinishClick persists the edited label and dismisses`() = test {
         givenDeviceFound()
         val connectedFeatures = features(model = "Safe 3")

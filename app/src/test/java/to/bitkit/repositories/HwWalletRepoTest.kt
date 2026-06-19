@@ -788,6 +788,17 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `setDeviceLabel caps the persisted custom label`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val sut = createRepo()
+
+        val result = sut.setDeviceLabel("dev1", "a".repeat(51))
+
+        assertTrue(result.isSuccess)
+        verify(hwWalletStore).saveKnownDevices(listOf(device.copy(customLabel = "a".repeat(50))))
+    }
+
+    @Test
     fun `setDeviceLabel clears the custom label when blank`() = test {
         val labelled = device.copy(customLabel = "Old")
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(labelled))
