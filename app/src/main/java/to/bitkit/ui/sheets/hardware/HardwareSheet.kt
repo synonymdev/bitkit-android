@@ -1,5 +1,7 @@
 package to.bitkit.ui.sheets.hardware
 
+import android.Manifest
+import android.os.Build
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
@@ -12,6 +14,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.rememberMultiplePermissionsState
 import kotlinx.serialization.Serializable
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SheetSize
@@ -20,11 +24,25 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
 
+private val bluetoothPermissions: List<String>
+    get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        listOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+        )
+    } else {
+        listOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+        )
+    }
+
 /**
  * Entry point for the hardware-wallet connect flow opened from the home suggestion card and the
  * Hardware Wallets settings Add button. Hosts the four connect steps (Intro -> Searching -> Found
  * -> Paired) plus the Pair Device step shown when the device asks for its one-time pairing code.
+ * Continuing from the intro requests the runtime Bluetooth-scan permission before searching.
  */
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
 fun HardwareSheet(
     sheet: Sheet.Hardware,
@@ -33,6 +51,18 @@ fun HardwareSheet(
 ) {
     val navController = rememberNavController()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+    // BLE discovery needs the runtime nearby-devices permission; request it before searching.
+    val blePermissions = rememberMultiplePermissionsState(bluetoothPermissions) { results ->
+        if (results.values.all { it }) viewModel.onIntroContinue()
+    }
+    val onIntroContinue: () -> Unit = {
+        if (blePermissions.allPermissionsGranted) {
+            viewModel.onIntroContinue()
+        } else {
+            blePermissions.launchMultiplePermissionRequest()
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose { viewModel.resetState() }
@@ -62,7 +92,7 @@ fun HardwareSheet(
         ) {
             composableWithDefaultTransitions<HardwareRoute.Intro> {
                 HwIntroSheet(
-                    onContinue = viewModel::onIntroContinue,
+                    onContinue = onIntroContinue,
                     onCancel = appViewModel::hideSheet,
                 )
             }
