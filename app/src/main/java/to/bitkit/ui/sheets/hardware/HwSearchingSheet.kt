@@ -70,7 +70,7 @@ private fun Content(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("hw_searching_screen")
+            .testTag("HwSearchingScreen")
     ) {
         SheetTopBar(titleText = stringResource(R.string.hardware__connect_title))
         Column(

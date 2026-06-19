@@ -62,9 +62,9 @@ Remove step forgets the device.
 | `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, Add button sheet, per-row delete confirm + re-pair |
 | `detail-overview.xml` | Detail screen overview, Transfer placeholder, activity, Remove confirm + forget |
 
-Connect-flow testTags: `hardware_sheet`, `hw_intro_screen`, `hw_searching_screen`,
-`hw_found_screen`, `hw_paired_screen`, `hw_paired_label_field`, `hw_paired_finish`,
-`hw_pair_screen` (inline pair code, physical device only).
+Connect-flow testTags: `HardwareSheet`, `HwIntroScreen`, `HwSearchingScreen`,
+`HwFoundScreen`, `HwPairedScreen`, `HwPairedLabelField`, `HwPairedFinish`,
+`HwPairScreen` (inline pair code, physical device only).
 
 To exercise the received-money sheet (not covered by a journey because it needs an
 out-of-band transfer), fund the emulator wallet on regtest from `bitkit-docker`, e.g.

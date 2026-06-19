@@ -24,22 +24,22 @@
       Tap the "Add Hardware Wallet" button (testTag "AddHardwareWallet")
     </action>
     <action>
-      Verify a bottom sheet opens titled "Hardware Wallet" (testTag "hw_intro_screen"); tap the "Continue" button
+      Verify a bottom sheet opens titled "Hardware Wallet" (testTag "HwIntroScreen"); tap the "Continue" button
     </action>
     <action>
-      Verify the sheet advances to the "Connect Device" step (testTag "hw_searching_screen") headed "Searching for devices"
+      Verify the sheet advances to the "Connect Device" step (testTag "HwSearchingScreen") headed "Searching for devices"
     </action>
     <action>
-      Verify the sheet advances to the "Found Device" step (testTag "hw_found_screen") headed "Found Trezor" within 15 seconds, then tap "Connect"
+      Verify the sheet advances to the "Found Device" step (testTag "HwFoundScreen") headed "Found Trezor" within 15 seconds, then tap "Connect"
     </action>
     <action>
-      Verify the sheet advances to the "Device Connected" step (testTag "hw_paired_screen") headed "Paired Trezor", showing a balance and an editable "Label Funds" field, with no PIN or pairing prompt
+      Verify the sheet advances to the "Device Connected" step (testTag "HwPairedScreen") headed "Paired Trezor", showing a balance and an editable "Label Funds" field, with no PIN or pairing prompt
     </action>
     <action>
-      Clear the "Label Funds" field (testTag "hw_paired_label_field") and type "My Trezor"
+      Clear the "Label Funds" field (testTag "HwPairedLabelField") and type "My Trezor"
     </action>
     <action>
-      Tap the "Finish" button (testTag "hw_paired_finish") and verify the sheet closes back to the Hardware Wallets screen
+      Tap the "Finish" button (testTag "HwPairedFinish") and verify the sheet closes back to the Hardware Wallets screen
     </action>
     <action>
       Verify the Hardware Wallets screen now lists one paired device named "My Trezor" with a green connection indicator

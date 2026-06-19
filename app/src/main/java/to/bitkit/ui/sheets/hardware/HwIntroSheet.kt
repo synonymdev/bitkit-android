@@ -52,7 +52,7 @@ private fun Content(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("hw_intro_screen")
+            .testTag("HwIntroScreen")
     ) {
         SheetTopBar(titleText = stringResource(R.string.hardware__intro_title))
         HwDeviceIllustrations(

@@ -81,7 +81,7 @@ private fun Content(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("hw_pair_screen")
+            .testTag("HwPairScreen")
     ) {
         SheetTopBar(titleText = stringResource(R.string.hardware__pairing_title))
         Column(
