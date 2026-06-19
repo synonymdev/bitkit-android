@@ -1,19 +1,20 @@
 package to.bitkit.ui.sheets.hardware
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -34,6 +35,11 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+
+// Coin illustration proportions taken from the Figma "Hardware Funds Paired" frame (375 wide,
+// 256-wide bottom Visual) and the coin_stack_3 asset's intrinsic 756x926 size.
+private const val COINS_WIDTH_RATIO = 256f / 375f
+private const val COINS_ASPECT_RATIO = 756f / 926f
 
 @Composable
 fun HwPairedSheet(
@@ -63,7 +69,7 @@ private fun Content(
             .gradientBackground()
             .navigationBarsPadding()
             .imePadding()
-            .testTag("hw_paired_screen")
+            .testTag("HwPairedScreen")
     ) {
         SheetTopBar(titleText = stringResource(R.string.hardware__paired_title))
         Column(
@@ -91,33 +97,31 @@ private fun Content(
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("hw_paired_label_field")
+                    .testTag("HwPairedLabelField")
             )
         }
-        Box(
-            contentAlignment = Alignment.Center,
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
+                .clipToBounds()
         ) {
             Image(
-                painter = painterResource(R.drawable.hw_paired_coins),
+                painter = painterResource(R.drawable.coin_stack_3),
                 contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier.size(240.dp)
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .width(maxWidth * COINS_WIDTH_RATIO)
+                    .aspectRatio(COINS_ASPECT_RATIO)
             )
-        }
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp)
-        ) {
             PrimaryButton(
                 text = stringResource(R.string.hardware__paired_finish),
                 onClick = onFinish,
-                modifier = Modifier.testTag("hw_paired_finish")
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(start = 32.dp, end = 32.dp, bottom = 16.dp)
+                    .testTag("HwPairedFinish")
             )
-            VerticalSpacer(16.dp)
         }
     }
 }
