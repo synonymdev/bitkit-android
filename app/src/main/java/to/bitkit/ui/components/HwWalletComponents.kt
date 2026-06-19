@@ -23,10 +23,16 @@ import to.bitkit.ui.theme.Colors
  * HwWalletComponents - Reusable components and utilities for the Hardware Wallet UI.
  * */
 
-// Illustration proportions, taken from the Figma hardware wallet frames (256-wide Visual in a 375 frame).
+/** Illustration width as a fraction of the sheet width — the 256-wide Visual in the 375-wide Figma frame. */
 internal const val HW_ILLUSTRATION_SIZE_RATIO = 256f / 375f
+
+/** Trezor illustration left bleed past the frame, as a fraction of the sheet width (Figma device frames). */
 private const val HW_DEVICE_TREZOR_BLEED_RATIO = 84f / 375f
+
+/** Ledger illustration right bleed past the frame, as a fraction of the sheet width (Figma device frames). */
 private const val HW_DEVICE_LEDGER_BLEED_RATIO = 53f / 375f
+
+/** Vertical stagger between the two device illustrations, as a fraction of the sheet width. */
 private const val HW_DEVICE_STAGGER_RATIO = 12f / 375f
 
 @Composable

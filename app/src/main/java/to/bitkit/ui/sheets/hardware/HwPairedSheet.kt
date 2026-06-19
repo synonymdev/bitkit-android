@@ -37,7 +37,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
-// Width reuses the shared 256-wide Figma Visual ratio; aspect is the coin_stack_3 asset's intrinsic 756x926.
+/** Width reuses the shared 256-wide Figma Visual ratio; aspect is the coin_stack_3 asset's intrinsic 756x926. */
 private const val COINS_ASPECT_RATIO = 756f / 926f
 
 @Composable

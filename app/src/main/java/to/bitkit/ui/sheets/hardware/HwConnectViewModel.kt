@@ -32,6 +32,7 @@ class HwConnectViewModel @Inject constructor(
     private val hwWalletRepo: HwWalletRepo,
 ) : ViewModel() {
     companion object {
+        /** Delay between scan attempts while searching for a nearby device. */
         private val SCAN_INTERVAL = 2.seconds
     }
 

@@ -37,6 +37,7 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
 
+/** Runtime nearby-devices permissions needed to BLE-scan: SCAN + CONNECT on Android 12+, else fine location. */
 private val bluetoothPermissions: List<String>
     get() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         listOf(

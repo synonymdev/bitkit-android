@@ -37,16 +37,19 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
+/** Diameter of the loading visual (outer dashed ring). */
 private val ANIMATION_SIZE = 280.dp
 
-// Relative sizes from the Figma "Loading Animation" HW frame (311 outer ring): arrows 256, inner ring 207.
+/** Arrows width as a fraction of the loader — 256 in the 311-wide Figma "Loading Animation" HW ring. */
 private const val ARROWS_SIZE_RATIO = 256f / 311f
+
+/** Inner dashed-ring width as a fraction of the loader — 207 in the 311-wide Figma HW ring. */
 private const val INNER_RING_SIZE_RATIO = 207f / 311f
 
-// Figma "Loading Animation" HW variants Smart-Animate linearly through their keyframes:
-// the arrows rotate 90° per 1s step (a counter-clockwise turn every 4s) while the two dashed
-// rings counter-rotate ~180° per 1s step (a turn every ~2s).
+/** Arrows rotation period: the Figma HW variants step 90° per 1s, a counter-clockwise turn every 4s. */
 private const val ARROWS_SPIN_MS = 4000
+
+/** Dashed-ring rotation period: the two rings counter-rotate ~180° per 1s, a turn every ~2s. */
 private const val RING_SPIN_MS = 2000
 
 @Composable
