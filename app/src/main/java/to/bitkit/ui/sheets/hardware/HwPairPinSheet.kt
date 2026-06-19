@@ -34,6 +34,7 @@ import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -101,57 +102,64 @@ private fun Content(
         ) {
             BodyM(stringResource(R.string.hardware__pairing_text), color = Colors.White64)
             FillHeight()
-            // Submitting crossfades the entered code into the spinner in-place: the cells keep
-            // their footprint (alpha only) so the row never reflows, while the spinner scales in.
-            val submitProgress by animateFloatAsState(
-                targetValue = if (submitting) 1f else 0f,
-                animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
-                label = "pairCodeSubmit",
-            )
-            Box(contentAlignment = Alignment.Center) {
-                // Fixed-width cells so digits replace dots without the row shifting.
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.graphicsLayer {
-                        alpha = 1f - submitProgress
-                        val cellsScale = 1f - 0.08f * submitProgress
-                        scaleX = cellsScale
-                        scaleY = cellsScale
-                    }
-                ) {
-                    repeat(PAIRING_CODE_LENGTH) { index ->
-                        val digit = code.getOrNull(index)?.toString()
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.width(PAIRING_CELL_WIDTH)
-                        ) {
-                            Display(
-                                text = digit ?: "•",
-                                color = if (digit != null) Colors.White else Colors.White32,
-                            )
-                        }
-                    }
-                }
-                if (submitting) {
-                    GradientCircularProgressIndicator(
-                        strokeWidth = 2.dp,
-                        modifier = Modifier
-                            .size(32.dp)
-                            .graphicsLayer {
-                                alpha = submitProgress
-                                val spinnerScale = 0.8f + 0.2f * submitProgress
-                                scaleX = spinnerScale
-                                scaleY = spinnerScale
-                            }
-                    )
-                }
-            }
+            PinInput(submitting, code)
             FillHeight()
         }
         NumberPad(
             onPress = onKeyPress,
             enabled = !submitting,
         )
+        VerticalSpacer(16.dp)
+    }
+}
+
+@Composable
+private fun PinInput(
+    submitting: Boolean,
+    code: String,
+) {
+    val submitProgress by animateFloatAsState(
+        targetValue = if (submitting) 1f else 0f,
+        animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
+        label = "pairCodeSubmit",
+    )
+    Box(contentAlignment = Alignment.Center) {
+        // Fixed-width cells so digits replace dots without the row shifting.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.graphicsLayer {
+                alpha = 1f - submitProgress
+                val cellsScale = 1f - 0.08f * submitProgress
+                scaleX = cellsScale
+                scaleY = cellsScale
+            }
+        ) {
+            repeat(PAIRING_CODE_LENGTH) { index ->
+                val digit = code.getOrNull(index)?.toString()
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier.width(PAIRING_CELL_WIDTH)
+                ) {
+                    Display(
+                        text = digit ?: "•",
+                        color = if (digit != null) Colors.White else Colors.White32,
+                    )
+                }
+            }
+        }
+        if (submitting) {
+            GradientCircularProgressIndicator(
+                strokeWidth = 2.dp,
+                modifier = Modifier
+                    .size(32.dp)
+                    .graphicsLayer {
+                        alpha = submitProgress
+                        val spinnerScale = 0.8f + 0.2f * submitProgress
+                        scaleX = spinnerScale
+                        scaleY = spinnerScale
+                    }
+            )
+        }
     }
 }
 
