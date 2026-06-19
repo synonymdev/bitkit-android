@@ -110,7 +110,7 @@ private fun RowScope.Content(
                 text = title,
                 color = Colors.White64,
                 maxLines = 1,
-                modifier = Modifier.weight(1f, fill = false),
+                modifier = Modifier.weight(1f, fill = false)
             )
             titleTrailing()
         }
