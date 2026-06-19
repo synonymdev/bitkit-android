@@ -201,6 +201,20 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scan should initialize Trezor before scanning`() = test {
+        val devices = listOf(mockDeviceInfo())
+        whenever(trezorService.scan()).thenReturn(devices)
+        sut = createSut()
+
+        val result = sut.scan()
+
+        assertTrue(result.isSuccess)
+        assertTrue(sut.state.value.isInitialized)
+        verify(trezorService).initialize(anyOrNull())
+        verify(trezorService).scan()
+    }
+
+    @Test
     fun `scan should exclude known devices from nearbyDevices state`() = test {
         val knownDevice = mockKnownDevice()
         val known = mockDeviceInfo()

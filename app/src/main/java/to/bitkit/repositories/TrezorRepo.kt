@@ -244,6 +244,7 @@ class TrezorRepo @Inject constructor(
 
     suspend fun scan(): Result<List<TrezorDeviceInfo>> = withContext(ioDispatcher) {
         runCatching {
+            ensureInitialized()
             _state.update { it.copy(isScanning = true, error = null) }
             val devices = trezorService.scan()
             val knownIds = _state.value.knownDevices.map { it.id }.toSet()
@@ -258,6 +259,7 @@ class TrezorRepo @Inject constructor(
 
     suspend fun listDevices(): Result<List<TrezorDeviceInfo>> = withContext(ioDispatcher) {
         runCatching {
+            ensureInitialized()
             val devices = trezorService.listDevices()
             val knownIds = _state.value.knownDevices.map { it.id }.toSet()
             val nearby = devices.filter { it.id !in knownIds }
@@ -274,6 +276,7 @@ class TrezorRepo @Inject constructor(
         requestUsbPermission: Boolean = true,
     ): Result<TrezorFeatures> = withContext(ioDispatcher) {
         runCatching {
+            ensureInitialized()
             _state.update { it.copy(isConnecting = true, error = null) }
             TrezorDebugLog.log("CONNECT", "connect() called for deviceId=$deviceId")
             val features = connectWithThpRetry(
@@ -871,6 +874,12 @@ class TrezorRepo @Inject constructor(
             ?: throw AppError("Device not found during reconnect")
         val features = connectWithThpRetry(device.id, trezorUiHandler.currentSelection())
         _state.update { it.copy(connected = ConnectedTrezorDevice(id = deviceId, features = features)) }
+    }
+
+    private suspend fun ensureInitialized(walletIndex: Int = 0) {
+        if (!_state.value.isInitialized) {
+            initialize(walletIndex).getOrThrow()
+        }
     }
 
     suspend fun clearCredentials(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
