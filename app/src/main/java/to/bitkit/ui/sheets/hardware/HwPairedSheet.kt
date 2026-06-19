@@ -25,6 +25,7 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.HW_ILLUSTRATION_SIZE_RATIO
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
@@ -36,9 +37,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 
-// Coin illustration proportions taken from the Figma "Hardware Funds Paired" frame (375 wide,
-// 256-wide bottom Visual) and the coin_stack_3 asset's intrinsic 756x926 size.
-private const val COINS_WIDTH_RATIO = 256f / 375f
+// Width reuses the shared 256-wide Figma Visual ratio; aspect is the coin_stack_3 asset's intrinsic 756x926.
 private const val COINS_ASPECT_RATIO = 756f / 926f
 
 @Composable
@@ -111,7 +110,7 @@ private fun Content(
                 contentDescription = null,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .width(maxWidth * COINS_WIDTH_RATIO)
+                    .width(maxWidth * HW_ILLUSTRATION_SIZE_RATIO)
                     .aspectRatio(COINS_ASPECT_RATIO)
             )
             PrimaryButton(
