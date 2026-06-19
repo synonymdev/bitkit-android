@@ -22,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -42,7 +43,10 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 private const val PAIRING_CODE_LENGTH = 6
+private const val PAIRING_CHAR_COLLAPSED_SCALE_X = 0.15f
+private const val PAIRING_CHAR_COLLAPSED_SCALE_Y = 0.85f
 private val PAIRING_CELL_WIDTH = 32.dp
+private val PAIRING_CELL_SPACING = 8.dp
 
 @Composable
 fun HwPairCodeSheet(
@@ -123,22 +127,27 @@ private fun PinInput(
         animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
         label = "pairCodeSubmit",
     )
+    val cellStepPx = with(LocalDensity.current) {
+        (PAIRING_CELL_WIDTH + PAIRING_CELL_SPACING).toPx()
+    }
     Box(contentAlignment = Alignment.Center) {
         // Fixed-width cells so digits replace dots without the row shifting.
         Row(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.graphicsLayer {
-                alpha = 1f - submitProgress
-                val cellsScale = 1f - 0.08f * submitProgress
-                scaleX = cellsScale
-                scaleY = cellsScale
-            }
+            horizontalArrangement = Arrangement.spacedBy(PAIRING_CELL_SPACING),
         ) {
             repeat(PAIRING_CODE_LENGTH) { index ->
                 val digit = code.getOrNull(index)?.toString()
+                val centerOffset = (PAIRING_CODE_LENGTH - 1) / 2f - index
                 Box(
                     contentAlignment = Alignment.Center,
-                    modifier = Modifier.width(PAIRING_CELL_WIDTH)
+                    modifier = Modifier
+                        .width(PAIRING_CELL_WIDTH)
+                        .graphicsLayer {
+                            alpha = 1f - submitProgress
+                            translationX = centerOffset * cellStepPx * submitProgress
+                            scaleX = 1f - (1f - PAIRING_CHAR_COLLAPSED_SCALE_X) * submitProgress
+                            scaleY = 1f - (1f - PAIRING_CHAR_COLLAPSED_SCALE_Y) * submitProgress
+                        }
                 ) {
                     Display(
                         text = digit ?: "•",

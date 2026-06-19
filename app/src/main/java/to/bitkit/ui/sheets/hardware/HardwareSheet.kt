@@ -4,6 +4,7 @@ import android.Manifest
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
@@ -168,6 +169,10 @@ fun HardwareSheet(
                 )
             }
         }
+    }
+
+    BackHandler {
+        appViewModel.hideSheet()
     }
 
     if (showBlePermissionDialog) {
