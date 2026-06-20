@@ -30,7 +30,7 @@
       Tap the "Add Hardware Wallet" button near the bottom (testTag "AddHardwareWallet")
     </action>
     <action>
-      Verify a bottom sheet opens titled "Hardware Wallet" (testTag "HwIntroScreen") showing hardware device illustrations, then press Android back and verify the sheet closes back to the Hardware Wallets screen
+      Verify a bottom sheet opens titled "Hardware Wallet" (testTag "HardwareWalletIntroScreen") showing hardware device illustrations, then press Android back and verify the sheet closes back to the Hardware Wallets screen
     </action>
     <action>
       Tap the trash (delete) icon on the device row

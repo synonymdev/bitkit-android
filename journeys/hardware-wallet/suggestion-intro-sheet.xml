@@ -26,28 +26,28 @@
       Tap the "Hardware" suggestion card
     </action>
     <action>
-      Verify a bottom sheet opens titled "Hardware Wallet" (testTag "HwIntroScreen") showing hardware device illustrations
+      Verify a bottom sheet opens titled "Hardware Wallet" (testTag "HardwareWalletIntroScreen") showing hardware device illustrations
     </action>
     <action>
       Verify the headline reads "Add your hardware wallet" with the words "hardware wallet" in blue
     </action>
     <action>
-      Tap the "Continue" button and verify the sheet advances to the "Connect Device" step headed "Searching for devices", showing a loading animation and a "Cancel" button
+      Tap the "Continue" button (testTag "HardwareWalletIntroContinue") and verify the sheet advances to the "Connect Device" step (testTag "HardwareWalletSearchingScreen") headed "Searching for devices", showing a loading animation and a "Cancel" button (testTag "HardwareWalletSearchingCancel")
     </action>
     <action>
       If Android shows a Nearby devices/Bluetooth permission prompt or Bluetooth enable prompt, allow it and continue waiting on the Searching step
     </action>
     <action>
-      Verify the sheet advances to the "Found Device" step within 15 seconds, headed "Found Trezor" with a "Connect" button
+      Verify the sheet advances to the "Found Device" step (testTag "HardwareWalletFoundScreen") within 15 seconds, headed "Found Trezor" with a "Connect" button
     </action>
     <action>
-      Tap the "Connect" button
+      Tap the "Connect" button (testTag "HardwareWalletFoundConnect")
     </action>
     <action>
-      Verify the sheet advances to the "Device Connected" step headed "Paired Trezor" within 15 seconds, showing a balance and an editable "Label Funds" field defaulting to the device name, with no PIN or pairing prompt
+      Verify the sheet advances to the "Device Connected" step (testTag "HardwareWalletPairedScreen") headed "Paired Trezor" within 15 seconds, showing a balance and an editable "Label Funds" field (testTag "HardwareWalletLabelInput") defaulting to the device name, with no PIN or pairing prompt
     </action>
     <action>
-      Tap the "Finish" button and verify the sheet closes back to the home screen
+      Tap the "Finish" button (testTag "HardwareWalletPairedFinish") and verify the sheet closes back to the home screen
     </action>
     <action>
       Verify the hardware wallet tile reappears beneath the SAVINGS and SPENDING tiles with the device name and a green connection indicator

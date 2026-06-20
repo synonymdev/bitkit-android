@@ -67,10 +67,14 @@ Remove step forgets the device.
 | `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, Add button sheet/back dismiss, per-row delete confirm + re-pair |
 | `detail-overview.xml` | Detail screen overview, Transfer placeholder when funded, activity, Remove confirm + forget |
 
-Connect-flow testTags: `HardwareSheet`, `HwIntroScreen`, `HwSearchingScreen`,
-`HwFoundScreen`, `HwPairedScreen`, `HwPairedLabelField`, `HwPairedFinish`,
-`HwPairScreen` (inline pair code, physical device only), `HwSearchingError`, and
-`HwFoundError`.
+Connect-flow testTags: `HardwareWalletSheet`, `HardwareWalletIntroScreen`,
+`HardwareWalletIntroCancel`, `HardwareWalletIntroContinue`,
+`HardwareWalletSearchingScreen`, `HardwareWalletSearchingCancel`,
+`HardwareWalletFoundScreen`, `HardwareWalletFoundCancel`,
+`HardwareWalletFoundConnect`, `HardwareWalletPairedScreen`,
+`HardwareWalletLabelInput`, `HardwareWalletPairedFinish`,
+`HardwareWalletPairCodeScreen` (inline pair code, physical device only),
+`HwSearchingError`, and `HwFoundError`.
 
 The current Connect Hardware sheet starts USB discovery immediately after Continue. BLE is
 included only once Android nearby-devices permission is granted and Bluetooth is enabled.
