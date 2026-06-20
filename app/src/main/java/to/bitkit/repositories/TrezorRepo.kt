@@ -242,20 +242,24 @@ class TrezorRepo @Inject constructor(
                 isSetup = CompletableDeferred()
             }
             if (isSetup.isCompleted) {
-                if (runSuspendCatching { isSetup.await() }.isSuccess) return@withLock Result.success(Unit)
-                isSetup = CompletableDeferred()
+                isSetup.await()
+                return@withLock Result.success(Unit)
             }
 
+            val setup = isSetup
             runSuspendCatching {
                 val credentialPath = "${Env.bitkitCoreStoragePath(walletIndex)}/trezor-credentials.json"
                 Logger.debug("Initializing Trezor with credential path: '$credentialPath'", context = TAG)
                 trezorService.initialize(credentialPath)
                 val known = loadKnownDevices()
                 _state.update { it.copy(knownDevices = known.toImmutableList(), error = null) }
-                isSetup.complete(Unit)
+                setup.complete(Unit)
                 Unit
             }.onFailure { e ->
-                isSetup.completeExceptionally(e)
+                setup.completeExceptionally(e)
+                if (isSetup === setup) {
+                    isSetup = CompletableDeferred()
+                }
                 Logger.error("Trezor init failed", e, context = TAG)
                 _state.update { it.copy(error = e.message) }
             }
@@ -903,12 +907,6 @@ class TrezorRepo @Inject constructor(
     }
 
     private suspend fun awaitSetup(walletIndex: Int = 0) {
-        if (isSetup.isCancelled || !isSetup.isCompleted) {
-            initialize(walletIndex).getOrThrow()
-        }
-        val setup = runSuspendCatching { isSetup.await() }
-        if (setup.isSuccess) return
-
         initialize(walletIndex).getOrThrow()
         isSetup.await()
     }
