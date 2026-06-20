@@ -187,7 +187,6 @@ internal object TrezorPreviewData {
     )
 
     val connectedState = TrezorState(
-        isInitialized = true,
         connected = ConnectedTrezorDevice(
             id = "trezor-abc123",
             features = sampleFeatures,
@@ -195,7 +194,6 @@ internal object TrezorPreviewData {
     )
 
     val connectedStateWithResults = TrezorState(
-        isInitialized = true,
         connected = ConnectedTrezorDevice(
             id = "trezor-abc123",
             features = sampleFeatures,

@@ -162,13 +162,15 @@ class TrezorRepoTest : BaseUnitTest() {
     // region initialize
 
     @Test
-    fun `initialize should update state to initialized on success`() = test {
+    fun `initialize should load known devices on success`() = test {
+        val knownDevice = mockKnownDevice()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         sut = createSut()
 
         val result = sut.initialize()
 
         assertTrue(result.isSuccess)
-        assertTrue(sut.state.value.isInitialized)
+        assertEquals(listOf(knownDevice), sut.state.value.knownDevices)
         assertNull(sut.state.value.error)
     }
 
@@ -192,7 +194,6 @@ class TrezorRepoTest : BaseUnitTest() {
         val result = sut.initialize()
 
         assertTrue(result.isFailure)
-        assertFalse(sut.state.value.isInitialized)
         assertEquals("init failed", sut.state.value.error)
     }
 
@@ -223,7 +224,6 @@ class TrezorRepoTest : BaseUnitTest() {
         val result = sut.scan()
 
         assertTrue(result.isSuccess)
-        assertTrue(sut.state.value.isInitialized)
         verify(trezorService).initialize(anyOrNull())
         verify(trezorService).scan()
     }
@@ -1095,7 +1095,6 @@ class TrezorRepoTest : BaseUnitTest() {
         sut = createSut()
 
         val state = sut.state.value
-        assertFalse(state.isInitialized)
         assertFalse(state.isScanning)
         assertFalse(state.isConnecting)
         assertFalse(state.isAutoReconnecting)
