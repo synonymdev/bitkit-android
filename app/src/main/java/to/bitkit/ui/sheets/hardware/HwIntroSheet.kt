@@ -52,7 +52,7 @@ private fun Content(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("HwIntroScreen")
+            .testTag("HardwareWalletIntroScreen")
     ) {
         SheetTopBar(titleText = stringResource(R.string.hardware__intro_title))
         HwDeviceIllustrations(
@@ -76,12 +76,16 @@ private fun Content(
                 SecondaryButton(
                     text = stringResource(R.string.common__cancel),
                     onClick = onCancel,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("HardwareWalletIntroCancel")
                 )
                 PrimaryButton(
                     text = stringResource(R.string.common__continue),
                     onClick = onContinue,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("HardwareWalletIntroContinue")
                 )
             }
         }

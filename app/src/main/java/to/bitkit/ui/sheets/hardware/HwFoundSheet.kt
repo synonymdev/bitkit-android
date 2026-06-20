@@ -67,7 +67,7 @@ private fun Content(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("HwFoundScreen")
+            .testTag("HardwareWalletFoundScreen")
     ) {
         SheetTopBar(titleText = stringResource(R.string.hardware__found_title))
         Column(
@@ -110,14 +110,18 @@ private fun Content(
             SecondaryButton(
                 text = stringResource(R.string.common__cancel),
                 onClick = onCancel,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("HardwareWalletFoundCancel")
             )
             PrimaryButton(
                 text = stringResource(R.string.common__connect),
                 onClick = onConnect,
                 isLoading = isConnecting,
                 enabled = !isConnecting,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("HardwareWalletFoundConnect")
             )
         }
         VerticalSpacer(16.dp)

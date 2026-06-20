@@ -126,7 +126,7 @@ fun HardwareSheet(
         modifier = Modifier
             .fillMaxWidth()
             .sheetHeight(SheetSize.LARGE)
-            .testTag("HardwareSheet")
+            .testTag("HardwareWalletSheet")
     ) {
         NavHost(
             navController = navController,

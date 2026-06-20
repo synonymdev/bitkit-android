@@ -68,7 +68,7 @@ private fun Content(
             .gradientBackground()
             .navigationBarsPadding()
             .imePadding()
-            .testTag("HwPairedScreen")
+            .testTag("HardwareWalletPairedScreen")
     ) {
         SheetTopBar(titleText = stringResource(R.string.hardware__paired_title))
         Column(
@@ -96,7 +96,7 @@ private fun Content(
                 singleLine = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .testTag("HwPairedLabelField")
+                    .testTag("HardwareWalletLabelInput")
             )
         }
         BoxWithConstraints(
@@ -119,7 +119,7 @@ private fun Content(
             onClick = onFinish,
             modifier = Modifier
                 .padding(horizontal = 32.dp)
-                .testTag("HwPairedFinish")
+                .testTag("HardwareWalletPairedFinish")
         )
         VerticalSpacer(16.dp)
     }

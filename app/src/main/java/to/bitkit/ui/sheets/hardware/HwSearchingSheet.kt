@@ -78,7 +78,7 @@ private fun Content(
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("HwSearchingScreen")
+            .testTag("HardwareWalletSearchingScreen")
     ) {
         SheetTopBar(titleText = stringResource(R.string.hardware__connect_title))
         Column(
@@ -116,6 +116,7 @@ private fun Content(
             SecondaryButton(
                 text = stringResource(R.string.common__cancel),
                 onClick = onCancel,
+                modifier = Modifier.testTag("HardwareWalletSearchingCancel"),
             )
         }
         VerticalSpacer(16.dp)
