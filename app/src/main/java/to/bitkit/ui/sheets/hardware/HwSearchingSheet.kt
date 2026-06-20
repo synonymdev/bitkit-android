@@ -1,12 +1,15 @@
 package to.bitkit.ui.sheets.hardware
 
-import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.InfiniteTransition
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,7 +30,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.SecondaryButton
@@ -53,6 +55,9 @@ private const val ARROWS_SPIN_MS = 4000
 
 /** Dashed-ring rotation period: the two rings counter-rotate ~180° per 1s, a turn every ~2s. */
 private const val RING_SPIN_MS = 2000
+
+/** Message transition duration. */
+private const val MESSAGE_TRANSITION_MS = 200
 
 @Composable
 fun HwSearchingSheet(
@@ -88,16 +93,22 @@ private fun Content(
         ) {
             Display(stringResource(R.string.hardware__connect_header).withAccent(accentColor = Colors.Blue))
             VerticalSpacer(8.dp)
-            BodyM(stringResource(R.string.hardware__connect_text), color = Colors.White64)
-            AnimatedVisibility(visible = errorMessage != null) {
-                Column {
-                    VerticalSpacer(16.dp)
-                    BodyS(
-                        text = errorMessage.orEmpty(),
-                        color = Colors.Red,
-                        modifier = Modifier.testTag("HwSearchingError")
+            val defaultMessage = stringResource(R.string.hardware__connect_text)
+            AnimatedContent(
+                targetState = (errorMessage != null) to (errorMessage ?: defaultMessage),
+                transitionSpec = {
+                    fadeIn(tween(MESSAGE_TRANSITION_MS)).togetherWith(fadeOut(tween(MESSAGE_TRANSITION_MS)))
+                },
+                label = "HardwareWalletSearchingMessage",
+            ) { (isError, message) ->
+                BodyM(
+                    text = message,
+                    color = if (isError) Colors.Red else Colors.White64,
+                    minLines = 2,
+                    modifier = Modifier.testTag(
+                        if (isError) "HardwareWalletSearchingError" else "HardwareWalletSearchingText"
                     )
-                }
+                )
             }
         }
         Box(

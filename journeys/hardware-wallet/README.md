@@ -74,7 +74,7 @@ Connect-flow testTags: `HardwareWalletSheet`, `HardwareWalletIntroScreen`,
 `HardwareWalletFoundConnect`, `HardwareWalletPairedScreen`,
 `HardwareWalletLabelInput`, `HardwareWalletPairedFinish`,
 `HardwareWalletPairCodeScreen` (inline pair code, physical device only),
-`HwSearchingError`, and `HwFoundError`.
+`HardwareWalletSearchingError`, and `HwFoundError`.
 
 The current Connect Hardware sheet starts USB discovery immediately after Continue. BLE is
 included only once Android nearby-devices permission is granted and Bluetooth is enabled.
