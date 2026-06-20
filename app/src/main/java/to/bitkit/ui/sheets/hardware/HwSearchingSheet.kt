@@ -178,3 +178,16 @@ private fun Preview() {
         }
     }
 }
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewError() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                errorMessage = stringResource(R.string.hardware__search_error),
+                modifier = Modifier.sheetHeight()
+            )
+        }
+    }
+}
