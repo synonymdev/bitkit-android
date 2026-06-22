@@ -157,7 +157,7 @@ class HwConnectViewModel @Inject constructor(
         }
         viewModelScope.launch {
             hwWalletRepo.setDeviceLabel(deviceId, _uiState.value.labelInput)
-            setEffect(HwConnectEffect.Dismiss)
+            setEffect(HwConnectEffect.Finish)
         }
     }
 
@@ -269,4 +269,5 @@ sealed interface HwConnectEffect {
     data object NavigateToPairCode : HwConnectEffect
     data object NavigateToPaired : HwConnectEffect
     data object Dismiss : HwConnectEffect
+    data object Finish : HwConnectEffect
 }

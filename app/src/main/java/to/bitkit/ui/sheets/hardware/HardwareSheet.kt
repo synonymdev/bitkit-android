@@ -65,6 +65,7 @@ private val bluetoothPermissions: List<String>
 fun HardwareSheet(
     sheet: Sheet.Hardware,
     appViewModel: AppViewModel,
+    onFinish: () -> Unit = {},
     viewModel: HwConnectViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -120,6 +121,7 @@ fun HardwareSheet(
         viewModel = viewModel,
         navController = navController,
         appViewModel = appViewModel,
+        onFinish = onFinish,
     )
 
     Column(
@@ -206,6 +208,7 @@ private fun ConnectEffectHandler(
     viewModel: HwConnectViewModel,
     navController: NavHostController,
     appViewModel: AppViewModel,
+    onFinish: () -> Unit,
 ) {
     LaunchedEffect(Unit) {
         viewModel.effects.collect { effect ->
@@ -220,6 +223,10 @@ private fun ConnectEffectHandler(
                 HwConnectEffect.NavigateToPairCode -> navController.navigateTo(HardwareRoute.PairCode)
                 HwConnectEffect.NavigateToPaired -> navController.navigateTo(HardwareRoute.Paired)
                 HwConnectEffect.Dismiss -> appViewModel.hideSheet()
+                HwConnectEffect.Finish -> {
+                    appViewModel.hideSheet()
+                    onFinish()
+                }
             }
         }
     }

@@ -238,7 +238,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onFinishClick persists the edited label and dismisses`() = test {
+    fun `onFinishClick persists the edited label and finishes`() = test {
         givenDeviceFound()
         val connectedFeatures = features(model = "Safe 3")
         whenever(hwWalletRepo.connect("dev1")).thenReturn(Result.success(connectedFeatures))
@@ -248,7 +248,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
 
         sut.effects.test {
             sut.onFinishClick()
-            assertEquals(HwConnectEffect.Dismiss, awaitItem())
+            assertEquals(HwConnectEffect.Finish, awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
 
