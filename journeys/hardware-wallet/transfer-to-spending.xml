@@ -1,0 +1,43 @@
+<journey name="Hardware Wallet Transfer To Spending">
+  <description>
+    Drives the watch-only Transfer To Spending flow for a paired Trezor: Amount -> Sign With
+    Your Device -> Transaction Signed -> Processing Payment. The funding send is signed on the
+    Bridge emulator device, so no physical Trezor is required. Requires a paired Bridge emulator
+    (run connect-home-tile.xml first) whose native-segwit account holds spendable regtest funds,
+    and the bitkit-docker stack (Blocktank + regtest) running so the channel order can be created
+    and funded. Mirrors the on-chain Transfer To Spending flow, swapping local signing for the
+    device.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Tap the hardware wallet tile beneath the SAVINGS and SPENDING tiles, and verify the hardware wallet detail screen opens (testTag "HardwareWalletScreen")
+    </action>
+    <action>
+      Tap the "Transfer To Spending" button (testTag "HardwareTransferToSpending")
+    </action>
+    <action>
+      Verify the transfer amount screen opens (testTag "HardwareTransferAmount"), titled "TRANSFER TO SPENDING", showing an AVAILABLE row, the 25% and MAX quick buttons, and a number pad
+    </action>
+    <action>
+      Tap the "25%" quick button (testTag "HardwareTransferAmountQuarter") to set a valid amount below the available limit
+    </action>
+    <action>
+      Tap "Continue" (testTag "HardwareTransferAmountContinue") and wait for the Blocktank order to be created
+    </action>
+    <action>
+      Verify the sign screen opens (testTag "HardwareTransferSign"), titled "SIGN WITH YOUR DEVICE", showing the NETWORK FEES, SERVICE FEES, TO SPENDING and TOTAL cells, the Learn More and Advanced buttons, and the Trezor illustration
+    </action>
+    <action>
+      Tap "Open Trezor Connect" (testTag "HardwareTransferOpenTrezorConnect") and wait while the Bridge emulator composes, signs and broadcasts the funding transaction
+    </action>
+    <action>
+      Verify the transaction signed screen appears (testTag "HardwareTransferSigned"), titled "TRANSACTION SIGNED", showing the same fee cells and the checkmark illustration
+    </action>
+    <action>
+      Wait for the screen to auto-forward and verify the Processing Payment / setting-up progress screen appears
+    </action>
+  </actions>
+</journey>
