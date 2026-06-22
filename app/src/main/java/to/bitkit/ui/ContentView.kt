@@ -118,8 +118,11 @@ import to.bitkit.ui.screens.transfer.SavingsIntroScreen
 import to.bitkit.ui.screens.transfer.SavingsProgressScreen
 import to.bitkit.ui.screens.transfer.SettingUpScreen
 import to.bitkit.ui.screens.transfer.SpendingAdvancedScreen
+import to.bitkit.ui.screens.transfer.SpendingAmountHwScreen
 import to.bitkit.ui.screens.transfer.SpendingAmountScreen
 import to.bitkit.ui.screens.transfer.SpendingConfirmScreen
+import to.bitkit.ui.screens.transfer.SpendingHwSignScreen
+import to.bitkit.ui.screens.transfer.SpendingHwSignedScreen
 import to.bitkit.ui.screens.transfer.SpendingIntroScreen
 import to.bitkit.ui.screens.transfer.TransferIntroScreen
 import to.bitkit.ui.screens.transfer.external.ExternalAmountScreen
@@ -179,7 +182,6 @@ import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
-import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.sheets.BTCPayConnectionSheet
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
@@ -770,6 +772,44 @@ private fun RootNavHost(
                     },
                 )
             }
+            composableWithDefaultTransitions<Routes.SpendingAmountHw> { entry ->
+                val deviceId = entry.toRoute<Routes.SpendingAmountHw>().deviceId
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
+                SpendingAmountHwScreen(
+                    deviceId = deviceId,
+                    viewModel = transferViewModel,
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
+                    onBackClick = { navController.popBackStack() },
+                    onOrderCreated = { navController.navigateTo(Routes.SpendingHwSign(deviceId)) },
+                    toastException = { appViewModel.toast(it) },
+                    toast = { title, description ->
+                        appViewModel.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = title,
+                            description = description,
+                        )
+                    },
+                )
+            }
+            composableWithDefaultTransitions<Routes.SpendingHwSign> { entry ->
+                val deviceId = entry.toRoute<Routes.SpendingHwSign>().deviceId
+                SpendingHwSignScreen(
+                    deviceId = deviceId,
+                    viewModel = transferViewModel,
+                    onBackClick = { navController.popBackStack() },
+                    onCloseClick = { navController.navigateToHome() },
+                    onLearnMoreClick = { navController.navigateTo(Routes.TransferLiquidity) },
+                    onAdvancedClick = { navController.navigateTo(Routes.SpendingAdvanced) },
+                    onSigned = { navController.navigateTo(Routes.SpendingHwSigned) },
+                )
+            }
+            composableWithDefaultTransitions<Routes.SpendingHwSigned> {
+                SpendingHwSignedScreen(
+                    viewModel = transferViewModel,
+                    onContinue = { navController.navigateTo(Routes.SettingUp) },
+                    onCloseClick = { navController.navigateToHome() },
+                )
+            }
             composableWithDefaultTransitions<Routes.SpendingConfirm> {
                 val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingConfirmScreen(
@@ -786,7 +826,8 @@ private fun RootNavHost(
                 SpendingAdvancedScreen(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.popBackStack<Routes.SpendingConfirm>(inclusive = false) },
+                    // Pops back to whoever opened Advanced: SpendingConfirm or SpendingHwSign.
+                    onOrderCreated = { navController.popBackStack() },
                 )
             }
             composableWithDefaultTransitions<Routes.TransferLiquidity> {
@@ -998,18 +1039,11 @@ private fun NavGraphBuilder.home(
         )
     }
     composableWithDefaultTransitions<Routes.HardwareWallet> {
-        val scope = rememberCoroutineScope()
+        val deviceId = it.toRoute<Routes.HardwareWallet>().deviceId
         HardwareWalletScreen(
-            deviceId = it.toRoute<Routes.HardwareWallet>().deviceId,
+            deviceId = deviceId,
             onActivityItemClick = { id -> navController.navigateToActivityItem(id) },
-            onTransferToSpendingClick = {
-                scope.launch {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.WARNING,
-                        title = "Transfer to spending not yet implemented.",
-                    )
-                }
-            },
+            onTransferToSpendingClick = { navController.navigateTo(Routes.SpendingAmountHw(deviceId)) },
             onBackClick = { navController.popBackStack() },
         )
     }
@@ -1963,6 +1997,15 @@ sealed interface Routes {
 
     @Serializable
     data object SpendingAmount : Routes
+
+    @Serializable
+    data class SpendingAmountHw(val deviceId: String) : Routes
+
+    @Serializable
+    data class SpendingHwSign(val deviceId: String) : Routes
+
+    @Serializable
+    data object SpendingHwSigned : Routes
 
     @Serializable
     data object SpendingConfirm : Routes

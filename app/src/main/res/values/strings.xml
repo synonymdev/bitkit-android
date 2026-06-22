@@ -364,6 +364,11 @@
     <string name="lightning__transfer__custom_fee">Custom &lt;accent&gt;fee&lt;/accent&gt;</string>
     <string name="lightning__transfer__nav_title">Transfer Funds</string>
     <string name="lightning__transfer__swipe">Swipe To Transfer</string>
+    <string name="lightning__transfer_hw__open_connect">Open Trezor Connect</string>
+    <string name="lightning__transfer_hw__reconnect_error_description">Could not reach your Trezor. Reconnect the device and try again.</string>
+    <string name="lightning__transfer_hw__reconnect_error_title">Reconnect Hardware Device</string>
+    <string name="lightning__transfer_hw__sign_title">Sign with\n&lt;accent&gt;your device&lt;/accent&gt;</string>
+    <string name="lightning__transfer_hw__signed_title">Transaction\n&lt;accent&gt;signed&lt;/accent&gt;</string>
     <string name="lightning__transfer_in_progress">TRANSFER IN PROGRESS</string>
     <string name="lightning__transfer_ready_in">TRANSFER READY IN %s</string>
     <string name="lightning__transfer_intro__button">Get Started</string>

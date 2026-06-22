@@ -182,7 +182,7 @@ private fun HardwareWalletContent(
                                 )
                             },
                             hazeState = hazeState,
-                            modifier = Modifier.testTag("HwTransferToSpending")
+                            modifier = Modifier.testTag("HardwareTransferToSpending")
                         )
                     }
                 }
