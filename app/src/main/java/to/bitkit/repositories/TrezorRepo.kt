@@ -40,6 +40,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
@@ -49,6 +50,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.nowMs
@@ -83,6 +85,7 @@ class TrezorRepo @Inject constructor(
     private val trezorTransport: TrezorTransport,
     private val trezorUiHandler: TrezorUiHandler,
     private val hwWalletStore: HwWalletStore,
+    private val settingsStore: SettingsStore,
     private val clock: Clock,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
@@ -389,7 +392,7 @@ class TrezorRepo @Inject constructor(
             awaitSetup()
             trezorService.getTransactionHistory(
                 extendedKey = extendedKey,
-                electrumUrl = electrumUrlForNetwork(network),
+                electrumUrl = configuredElectrumUrl(),
                 network = network,
                 scriptType = scriptType,
             )
@@ -408,7 +411,7 @@ class TrezorRepo @Inject constructor(
             awaitSetup()
             trezorService.getAccountInfo(
                 extendedKey = extendedKey,
-                electrumUrl = electrumUrlForNetwork(network),
+                electrumUrl = configuredElectrumUrl(),
                 network = network,
                 scriptType = scriptType,
             )
@@ -426,7 +429,7 @@ class TrezorRepo @Inject constructor(
             awaitSetup()
             trezorService.getAddressInfo(
                 address = address,
-                electrumUrl = electrumUrlForNetwork(network),
+                electrumUrl = configuredElectrumUrl(),
                 network = network,
             )
         }.onFailure { e ->
@@ -450,7 +453,7 @@ class TrezorRepo @Inject constructor(
             val params = ComposeParams(
                 wallet = WalletParams(
                     extendedKey = extendedKey,
-                    electrumUrl = electrumUrlForNetwork(network),
+                    electrumUrl = configuredElectrumUrl(),
                     fingerprint = fingerprint,
                     network = network,
                     accountType = accountType,
@@ -483,13 +486,12 @@ class TrezorRepo @Inject constructor(
 
     suspend fun broadcastRawTx(
         serializedTx: String,
-        network: BitkitCoreNetwork,
     ): Result<String> = withContext(ioDispatcher) {
         runCatching {
             awaitSetup()
             trezorService.broadcastRawTx(
                 serializedTx = serializedTx,
-                electrumUrl = electrumUrlForNetwork(network),
+                electrumUrl = configuredElectrumUrl(),
             )
         }.onFailure {
             Logger.error("Trezor broadcastRawTx failed", it, context = TAG)
@@ -892,6 +894,8 @@ class TrezorRepo @Inject constructor(
     }
 
     private fun electrumUrlForNetwork(network: BitkitCoreNetwork): String = Env.electrumUrlForNetwork(network)
+
+    private suspend fun configuredElectrumUrl(): String = settingsStore.data.first().electrumServer
 
     private suspend fun ensureConnected() {
         if (trezorService.isConnected()) return

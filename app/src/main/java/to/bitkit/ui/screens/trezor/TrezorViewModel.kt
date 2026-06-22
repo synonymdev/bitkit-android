@@ -443,7 +443,7 @@ class TrezorViewModel @Inject constructor(
             val signedStep = state.sendStep as? SendStep.Signed ?: return@launch
             val rawTx = signedStep.signedTx.serializedTx
             _uiState.update { it.copy(send = it.send.copy(isBroadcasting = true)) }
-            trezorRepo.broadcastRawTx(serializedTx = rawTx, network = state.selectedNetwork)
+            trezorRepo.broadcastRawTx(serializedTx = rawTx)
                 .onSuccess { txid ->
                     TrezorDebugLog.log("BROADCAST", "SUCCESS txid=$txid")
                     _uiState.update {

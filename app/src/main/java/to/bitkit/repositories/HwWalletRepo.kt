@@ -201,7 +201,7 @@ class HwWalletRepo @Inject constructor(
                 psbtBase64 = success.psbt,
                 network = Env.network.toTrezorCoinType(),
             ).getOrThrow()
-            trezorRepo.broadcastRawTx(serializedTx = signed.serializedTx, network = network).getOrThrow()
+            trezorRepo.broadcastRawTx(serializedTx = signed.serializedTx).getOrThrow()
         }
     }
 

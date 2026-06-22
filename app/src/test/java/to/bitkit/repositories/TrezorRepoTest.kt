@@ -2,6 +2,9 @@ package to.bitkit.repositories
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.synonym.bitkitcore.CoinSelection
+import com.synonym.bitkitcore.ComposeOutput
+import com.synonym.bitkitcore.ComposeParams
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
@@ -27,8 +30,11 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.models.TransportType
+import to.bitkit.models.toCoreNetwork
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
 import to.bitkit.services.TrezorUiHandler
@@ -65,8 +71,10 @@ class TrezorRepoTest : BaseUnitTest() {
     private val trezorTransport = mock<TrezorTransport>()
     private val trezorUiHandler = mock<TrezorUiHandler>()
     private val hwWalletStore = mock<HwWalletStore>()
+    private val settingsStore = mock<SettingsStore>()
     private val prefs = mock<SharedPreferences>()
     private val prefsEditor = mock<SharedPreferences.Editor>()
+    private val settingsData = MutableStateFlow(SettingsData())
 
     private lateinit var sut: TrezorRepo
 
@@ -83,6 +91,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorTransport.hasUsbPermission(any())).thenReturn(true)
         whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(false))
         whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Standard)
+        whenever(settingsStore.data).thenReturn(settingsData)
         whenever(context.filesDir).thenReturn(tempFolder.root)
         whenever { hwWalletStore.loadKnownDevices() }.thenReturn(emptyList())
     }
@@ -93,6 +102,7 @@ class TrezorRepoTest : BaseUnitTest() {
         trezorTransport = trezorTransport,
         trezorUiHandler = trezorUiHandler,
         hwWalletStore = hwWalletStore,
+        settingsStore = settingsStore,
         clock = Clock.System,
         ioDispatcher = testDispatcher,
     )
@@ -865,6 +875,33 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertTrue(result.getOrNull()!!)
         assertNull(sut.state.value.error)
+    }
+
+    // endregion
+
+    // region composeTransaction
+
+    @Test
+    fun `composeTransaction should use configured electrum server`() = test {
+        val electrumServer = "ssl://custom.example:50002"
+        settingsData.value = SettingsData(electrumServer = electrumServer)
+        whenever(trezorService.getDeviceFingerprint()).thenReturn("fingerprint")
+        whenever(trezorService.composeTransaction(any())).thenReturn(emptyList())
+        sut = createSut()
+
+        val result = sut.composeTransaction(
+            extendedKey = "vpub",
+            outputs = listOf(ComposeOutput.Payment(address = TEST_ADDRESS, amountSats = 100uL)),
+            feeRates = listOf(1f),
+            network = Env.network.toCoreNetwork(),
+            accountType = null,
+            coinSelection = CoinSelection.BRANCH_AND_BOUND,
+        )
+
+        val params = argumentCaptor<ComposeParams>()
+        assertTrue(result.isSuccess)
+        verify(trezorService).composeTransaction(params.capture())
+        assertEquals(electrumServer, params.firstValue.wallet.electrumUrl)
     }
 
     // endregion
