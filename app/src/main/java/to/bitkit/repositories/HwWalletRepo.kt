@@ -1,6 +1,10 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.CoinSelection
+import com.synonym.bitkitcore.ComposeOutput
+import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
@@ -36,6 +40,9 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.create
 import to.bitkit.ext.rawId
+import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.DEFAULT_ADDRESS_TYPE
+import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.TransportType
@@ -43,6 +50,7 @@ import to.bitkit.models.safe
 import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
+import to.bitkit.models.toTrezorCoinType
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -59,6 +67,7 @@ import kotlin.time.ExperimentalTime
  * Built on top of [TrezorRepo], which owns the device list, connect orchestration
  * and the underlying watcher transport.
  */
+@Suppress("TooManyFunctions")
 @OptIn(ExperimentalTime::class)
 @Singleton
 class HwWalletRepo @Inject constructor(
@@ -130,6 +139,70 @@ class HwWalletRepo @Inject constructor(
     suspend fun connect(deviceId: String): Result<TrezorFeatures> {
         trezorRepo.resetWalletSelection()
         return trezorRepo.connect(deviceId)
+    }
+
+    /** Reconnects a known paired device so its session is live for on-device signing. */
+    suspend fun reconnect(deviceId: String): Result<TrezorFeatures> = trezorRepo.connectKnownDevice(deviceId)
+
+    /**
+     * Resolves the native-segwit funding account for a paired wallet: its account xpub, [AccountType]
+     * and the balance currently watched for that account. Used to compose the on-chain funding send the
+     * Trezor signs when transferring to spending. v1 funds from native segwit only.
+     */
+    suspend fun getFundingAccount(deviceId: String): Result<HwFundingAccount> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val devices = hwWalletStore.loadKnownDevices()
+            val target = requireNotNull(devices.find { it.id == deviceId }) { "Unknown hardware wallet '$deviceId'" }
+            val groupIds = devices.filter { it.walletKey == target.walletKey }.map { it.id }.toSet()
+            val xpub = requireNotNull(target.xpubs[DEFAULT_ADDRESS_TYPE_STRING]) {
+                "Hardware wallet '$deviceId' has no native-segwit account"
+            }
+            val balanceSats = _watcherData.value
+                .filterKeys { key ->
+                    key.substringAfter(WATCHER_ID_SEPARATOR) == DEFAULT_ADDRESS_TYPE_STRING &&
+                        key.toDeviceId() in groupIds
+                }
+                .values.fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
+            HwFundingAccount(
+                xpub = xpub,
+                accountType = DEFAULT_ADDRESS_TYPE.toAccountType(),
+                balanceSats = balanceSats,
+            )
+        }
+    }
+
+    /**
+     * Composes the on-chain funding payment from the device's native-segwit account, has the Trezor sign
+     * it and broadcasts it. The signing step prompts the user on the device. Returns the broadcast txid.
+     */
+    suspend fun signAndBroadcastFunding(
+        deviceId: String,
+        address: String,
+        sats: ULong,
+        satsPerVByte: ULong,
+    ): Result<String> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val account = getFundingAccount(deviceId).getOrThrow()
+            val network = Env.network.toCoreNetwork()
+            val composed = trezorRepo.composeTransaction(
+                extendedKey = account.xpub,
+                outputs = listOf(ComposeOutput.Payment(address = address, amountSats = sats)),
+                feeRates = listOf(satsPerVByte.toFloat()),
+                network = network,
+                accountType = account.accountType,
+                coinSelection = CoinSelection.BRANCH_AND_BOUND,
+            ).getOrThrow()
+            val success = composed.filterIsInstance<ComposeResult.Success>().firstOrNull()
+                ?: throw AppError(
+                    composed.filterIsInstance<ComposeResult.Error>().firstOrNull()?.error
+                        ?: "Failed to compose hardware transfer"
+                )
+            val signed = trezorRepo.signTxFromPsbt(
+                psbtBase64 = success.psbt,
+                network = Env.network.toTrezorCoinType(),
+            ).getOrThrow()
+            trezorRepo.broadcastRawTx(serializedTx = signed.serializedTx, network = network).getOrThrow()
+        }
     }
 
     /**
@@ -427,6 +500,13 @@ class HwWalletRepo @Inject constructor(
 
     private fun String.toDeviceId(): String = substringBefore(WATCHER_ID_SEPARATOR)
 }
+
+/** Native-segwit account used to fund a Trezor-signed transfer to spending. */
+data class HwFundingAccount(
+    val xpub: String,
+    val accountType: AccountType,
+    val balanceSats: ULong,
+)
 
 private data class WatcherSettings(
     val monitoredTypes: Set<String>,
