@@ -146,6 +146,7 @@ class TrezorRepoTest : BaseUnitTest() {
         model: String? = DEVICE_MODEL,
         transportType: TransportType = TransportType.USB,
         xpubs: Map<String, String> = emptyMap(),
+        customLabel: String? = null,
     ) = KnownDevice(
         id = id,
         name = name,
@@ -155,19 +156,34 @@ class TrezorRepoTest : BaseUnitTest() {
         model = model,
         lastConnectedAt = 123L,
         xpubs = xpubs,
+        customLabel = customLabel,
     )
 
     // region initialize
 
     @Test
-    fun `initialize should update state to initialized on success`() = test {
+    fun `initialize should load known devices on success`() = test {
+        val knownDevice = mockKnownDevice()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         sut = createSut()
 
         val result = sut.initialize()
 
         assertTrue(result.isSuccess)
-        assertTrue(sut.state.value.isInitialized)
+        assertEquals(listOf(knownDevice), sut.state.value.knownDevices)
         assertNull(sut.state.value.error)
+    }
+
+    @Test
+    fun `initialize should reuse completed setup`() = test {
+        sut = createSut()
+
+        val firstResult = sut.initialize()
+        val secondResult = sut.initialize()
+
+        assertTrue(firstResult.isSuccess)
+        assertTrue(secondResult.isSuccess)
+        verify(trezorService, times(1)).initialize(anyOrNull())
     }
 
     @Test
@@ -178,7 +194,6 @@ class TrezorRepoTest : BaseUnitTest() {
         val result = sut.initialize()
 
         assertTrue(result.isFailure)
-        assertFalse(sut.state.value.isInitialized)
         assertEquals("init failed", sut.state.value.error)
     }
 
@@ -198,6 +213,32 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(devices, result.getOrNull())
         assertEquals(devices, sut.state.value.nearbyDevices)
         assertFalse(sut.state.value.isScanning)
+    }
+
+    @Test
+    fun `scan should initialize Trezor before scanning`() = test {
+        val devices = listOf(mockDeviceInfo())
+        whenever(trezorService.scan()).thenReturn(devices)
+        sut = createSut()
+
+        val result = sut.scan()
+
+        assertTrue(result.isSuccess)
+        verify(trezorService).initialize(anyOrNull())
+        verify(trezorService).scan()
+    }
+
+    @Test
+    fun `scan should pass bluetooth flag to service`() = test {
+        val devices = listOf(mockDeviceInfo())
+        whenever(trezorService.scan(includeBluetooth = false)).thenReturn(devices)
+        sut = createSut()
+
+        val result = sut.scan(includeBluetooth = false)
+
+        assertTrue(result.isSuccess)
+        assertEquals(devices, result.getOrNull())
+        verify(trezorService).scan(includeBluetooth = false)
     }
 
     @Test
@@ -546,6 +587,26 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `connect preserves stored custom label over stale state label`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices())
+            .thenReturn(listOf(mockKnownDevice()))
+            .thenReturn(listOf(mockKnownDevice(customLabel = "Cold Storage")))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertEquals("Cold Storage", captor.lastValue.single().customLabel)
+    }
+
+    @Test
     fun `connect should retry once for retryable THP errors`() = test {
         val features = mockFeatures()
         val device = mockDeviceInfo()
@@ -672,6 +733,20 @@ class TrezorRepoTest : BaseUnitTest() {
         verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
         verify(trezorService).clearCredentials(DEVICE_ID)
         verify(hwWalletStore).reset()
+    }
+
+    @Test
+    fun `resetState clears initialized setup gate`() = test {
+        val devices = listOf(mockDeviceInfo())
+        whenever(trezorService.scan()).thenReturn(devices)
+        sut = createSut()
+
+        sut.initialize()
+        sut.resetState()
+        val result = sut.scan()
+
+        assertTrue(result.isSuccess)
+        verify(trezorService, times(2)).initialize(anyOrNull())
     }
 
     // endregion
@@ -801,6 +876,15 @@ class TrezorRepoTest : BaseUnitTest() {
         sut = createSut()
 
         assertFalse(sut.hasKnownDevices())
+    }
+
+    @Test
+    fun `hasKnownDevice should match stored device path`() = test {
+        val knownDevice = mockKnownDevice(path = "/dev/bus/usb/001/002")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        sut = createSut()
+
+        assertTrue(sut.hasKnownDevice("/dev/bus/usb/001/002"))
     }
 
     // endregion
@@ -1011,7 +1095,6 @@ class TrezorRepoTest : BaseUnitTest() {
         sut = createSut()
 
         val state = sut.state.value
-        assertFalse(state.isInitialized)
         assertFalse(state.isScanning)
         assertFalse(state.isConnecting)
         assertFalse(state.isAutoReconnecting)

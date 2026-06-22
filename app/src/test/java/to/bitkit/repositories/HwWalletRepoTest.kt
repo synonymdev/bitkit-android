@@ -4,6 +4,7 @@ import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WalletBalance
 import com.synonym.bitkitcore.WatcherEvent
@@ -34,12 +35,14 @@ import to.bitkit.models.toCoreNetwork
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
+@Suppress("LargeClass")
 class HwWalletRepoTest : BaseUnitTest() {
 
     private val trezorRepo = mock<TrezorRepo>()
@@ -751,6 +754,84 @@ class HwWalletRepoTest : BaseUnitTest() {
         timestamp = 1_700_000_000uL,
         confirmations = 3u,
     )
+
+    @Test
+    fun `scan delegates to trezorRepo`() = test {
+        whenever(trezorRepo.scan(includeBluetooth = false)).thenReturn(Result.success(emptyList()))
+        val sut = createRepo()
+
+        sut.scan(includeBluetooth = false)
+
+        verify(trezorRepo).scan(includeBluetooth = false)
+    }
+
+    @Test
+    fun `connect delegates to trezorRepo`() = test {
+        val features = mock<TrezorFeatures>()
+        whenever(trezorRepo.connect("dev1")).thenReturn(Result.success(features))
+        val sut = createRepo()
+
+        sut.connect("dev1")
+
+        verify(trezorRepo).resetWalletSelection()
+        verify(trezorRepo).connect("dev1")
+    }
+
+    @Test
+    fun `setDeviceLabel persists the trimmed custom label on the matching device`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val sut = createRepo()
+
+        val result = sut.setDeviceLabel("dev1", "  My Cold Wallet  ")
+
+        assertTrue(result.isSuccess)
+        verify(hwWalletStore).saveKnownDevices(listOf(device.copy(customLabel = "My Cold Wallet")))
+    }
+
+    @Test
+    fun `setDeviceLabel caps the persisted custom label`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val sut = createRepo()
+
+        val result = sut.setDeviceLabel("dev1", "a".repeat(51))
+
+        assertTrue(result.isSuccess)
+        verify(hwWalletStore).saveKnownDevices(listOf(device.copy(customLabel = "a".repeat(50))))
+    }
+
+    @Test
+    fun `setDeviceLabel clears the custom label when blank`() = test {
+        val labelled = device.copy(customLabel = "Old")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(labelled))
+        val sut = createRepo()
+
+        sut.setDeviceLabel("dev1", "   ")
+
+        verify(hwWalletStore).saveKnownDevices(listOf(labelled.copy(customLabel = null)))
+    }
+
+    @Test
+    fun `setDeviceLabel applies to every entry sharing the wallet identity`() = test {
+        val sharedXpubs = mapOf("nativeSegwit" to "zpubShared")
+        val ble = device.copy(id = "ble1", xpubs = sharedXpubs)
+        val usb = device.copy(id = "usb1", transportType = TransportType.USB, xpubs = sharedXpubs)
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(ble, usb))
+        val sut = createRepo()
+
+        sut.setDeviceLabel("usb1", "Shared")
+
+        verify(hwWalletStore).saveKnownDevices(
+            listOf(ble.copy(customLabel = "Shared"), usb.copy(customLabel = "Shared")),
+        )
+    }
+
+    @Test
+    fun `wallet name prefers the custom label over the device label`() = test {
+        storeData.value = HwWalletData(knownDevices = listOf(device.copy(customLabel = "My Cold Wallet")))
+        val sut = createRepo()
+
+        assertEquals("My Cold Wallet", sut.wallets.value.single().name)
+    }
 
     private suspend fun wheneverStartWatcher() = whenever(
         trezorRepo.startWatcher(

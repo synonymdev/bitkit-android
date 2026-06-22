@@ -14,6 +14,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class TrezorTransportTest {
 
@@ -42,6 +43,25 @@ class TrezorTransportTest {
         assertFalse(result.success)
         assertEquals("USB permission missing for '$path'", result.error)
         verify(usbManager, never()).requestPermission(eq(device), any<PendingIntent>())
+    }
+
+    @Test
+    fun `enumerateDevices can skip bluetooth scan`() {
+        whenever(context.applicationContext).thenReturn(context)
+        whenever(context.packageName).thenReturn("to.bitkit.dev")
+        whenever(context.getSystemService(Context.USB_SERVICE)).thenReturn(usbManager)
+        whenever(usbManager.deviceList).thenReturn(hashMapOf())
+        whenever(bridgeTransport.enumerateDevices()).thenReturn(emptyList())
+        val sut = createSut()
+
+        val result = runBlocking {
+            sut.withBluetoothScanningEnabled(false) {
+                sut.enumerateDevices()
+            }
+        }
+
+        assertTrue(result.isEmpty())
+        verify(context, never()).getSystemService(Context.BLUETOOTH_SERVICE)
     }
 
     private fun createSut() = TrezorTransport(

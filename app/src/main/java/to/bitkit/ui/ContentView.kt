@@ -468,7 +468,11 @@ fun ContentView(
                         Sheet.ChangePin -> ChangePinSheet(appViewModel)
                         Sheet.DisablePin -> DisablePinSheet(appViewModel)
                         is Sheet.Backup -> BackupSheet(sheet, onDismiss = { appViewModel.hideSheet() })
-                        is Sheet.Hardware -> HardwareSheet(sheet, appViewModel)
+                        is Sheet.Hardware -> HardwareSheet(
+                            sheet = sheet,
+                            appViewModel = appViewModel,
+                            onFinish = navigateToHomeWallet,
+                        )
                         is Sheet.Widgets -> {
                             WidgetsSheet(
                                 sheet = sheet,

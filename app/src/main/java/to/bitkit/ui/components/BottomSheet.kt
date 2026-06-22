@@ -109,9 +109,10 @@ private fun Preview() {
                     .gradientBackground()
                     .padding(horizontal = 16.dp)
             ) {
-                SheetTopBar("Sheet Title")
+                SheetTopBar("Page Title")
                 FillHeight()
-                PrimaryButton(text = "Primary Button", onClick = {})
+                PrimaryButton(text = "Button", onClick = {})
+                VerticalSpacer(24.dp)
             }
         }
     }

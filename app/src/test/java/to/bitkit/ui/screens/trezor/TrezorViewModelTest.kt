@@ -168,16 +168,6 @@ class TrezorViewModelTest : BaseUnitTest() {
     // region Async methods
 
     @Test
-    fun `initialize should call trezorRepo initialize`() = test {
-        whenever(trezorRepo.initialize()).thenReturn(Result.success(Unit))
-
-        sut.initialize()
-        advanceUntilIdle()
-
-        verify(trezorRepo).initialize()
-    }
-
-    @Test
     fun `scan should call trezorRepo scan`() = test {
         whenever(trezorRepo.scan()).thenReturn(Result.success(emptyList()))
 

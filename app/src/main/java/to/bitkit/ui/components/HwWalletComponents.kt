@@ -19,16 +19,26 @@ import to.bitkit.R
 import to.bitkit.models.TransportType
 import to.bitkit.ui.theme.Colors
 
-// Device illustration proportions, taken from the Figma hardware wallet frames.
-private const val HW_DEVICE_IMAGE_SIZE_RATIO = 256f / 375f
+/**
+ * HwWalletComponents - Reusable components and utilities for the Hardware Wallet UI.
+ * */
+
+/** Illustration width as a fraction of the sheet width — the 256-wide Visual in the 375-wide Figma frame. */
+internal const val HW_ILLUSTRATION_SIZE_RATIO = 256f / 375f
+
+/** Trezor illustration left bleed past the frame, as a fraction of the sheet width (Figma device frames). */
 private const val HW_DEVICE_TREZOR_BLEED_RATIO = 84f / 375f
+
+/** Ledger illustration right bleed past the frame, as a fraction of the sheet width (Figma device frames). */
 private const val HW_DEVICE_LEDGER_BLEED_RATIO = 53f / 375f
+
+/** Vertical stagger between the two device illustrations, as a fraction of the sheet width. */
 private const val HW_DEVICE_STAGGER_RATIO = 12f / 375f
 
 @Composable
 fun HwDeviceIllustrations(modifier: Modifier = Modifier) {
     BoxWithConstraints(modifier) {
-        val imageSize = maxWidth * HW_DEVICE_IMAGE_SIZE_RATIO
+        val imageSize = maxWidth * HW_ILLUSTRATION_SIZE_RATIO
         val staggerY = maxWidth * HW_DEVICE_STAGGER_RATIO
         TrezorImage(imageSize = imageSize, staggerY = staggerY)
         LedgerImage(

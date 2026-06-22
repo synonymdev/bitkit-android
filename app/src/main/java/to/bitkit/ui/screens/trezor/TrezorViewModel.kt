@@ -143,16 +143,6 @@ class TrezorViewModel @Inject constructor(
         }
     }
 
-    fun initialize() {
-        viewModelScope.launch(bgDispatcher) {
-            trezorRepo.initialize()
-                .onSuccess {
-                    ToastEventBus.send(type = Toast.ToastType.INFO, title = "Trezor initialized")
-                }
-                .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
     fun scan() {
         viewModelScope.launch(bgDispatcher) {
             trezorRepo.scan()

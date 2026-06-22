@@ -3058,7 +3058,28 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun onUsbDeviceAttached() = hwWalletRepo.onTransportRestored(TransportType.USB)
+    fun onUsbDeviceAttached(
+        deviceId: String? = null,
+        deviceModel: String = "",
+    ) {
+        hwWalletRepo.onTransportRestored(TransportType.USB)
+        deviceId ?: return
+
+        viewModelScope.launch {
+            if (hwWalletRepo.hasKnownDevice(deviceId)) return@launch
+            if (isHighPrioritySheet(_currentSheet.value)) return@launch
+            if (_currentSheet.value is Sheet.Hardware) return@launch
+
+            showSheet(
+                Sheet.Hardware(
+                    route = HardwareRoute.Found(
+                        deviceId = deviceId,
+                        deviceModel = deviceModel,
+                    ),
+                )
+            )
+        }
+    }
 
     fun submitPairingCode(code: String) = hwWalletRepo.submitPairingCode(code)
 
@@ -3074,6 +3095,10 @@ class AppViewModel @Inject constructor(
             isPairingCodeSheetQueued = true
             return
         }
+
+        // The Connect Hardware flow is itself a Hardware sheet and drives the pair-code step
+        // inline within its own NavHost; replacing it here would tear down that back stack.
+        if (_currentSheet.value is Sheet.Hardware) return
 
         isPairingCodeSheetQueued = false
         showSheet(Sheet.Hardware(route = HardwareRoute.PairCode))

@@ -777,6 +777,7 @@ private fun RowScope.HwDeviceCell(
         modifier = Modifier
             .clickableAlpha(onClick = { onClick(wallet.id) })
             .padding(vertical = 4.dp)
+            .padding(end = 8.dp)
             .testTag("ActivityHardware")
     ) {
         HorizontalSpacer(4.dp)

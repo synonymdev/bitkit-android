@@ -40,6 +40,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import to.bitkit.ext.bluetoothManager
 import to.bitkit.ext.usbManager
 import to.bitkit.models.TransportType
@@ -119,6 +121,9 @@ class TrezorTransport @Inject constructor(
 
     @Volatile
     private var requestUsbPermissionEnabled = true
+
+    @Volatile
+    private var bluetoothScanningEnabled = true
 
     private val _externalDisconnect = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val externalDisconnect: SharedFlow<String> = _externalDisconnect
@@ -202,6 +207,7 @@ class TrezorTransport @Inject constructor(
 
     private val bleConnections = ConcurrentHashMap<String, BleConnection>()
     private val discoveredBleDevices = ConcurrentHashMap<String, BluetoothDevice>()
+    private val optionScopeMutex = Mutex()
 
     private data class UsbOpenDevice(
         val connection: UsbDeviceConnection,
@@ -222,13 +228,29 @@ class TrezorTransport @Inject constructor(
         @Volatile var writeStatus: Int = BluetoothGatt.GATT_SUCCESS,
     )
 
-    suspend fun <T> withUsbPermissionRequestsEnabled(enabled: Boolean, block: suspend () -> T): T {
+    suspend fun <T> withUsbPermissionRequestsEnabled(
+        enabled: Boolean,
+        block: suspend () -> T,
+    ): T = optionScopeMutex.withLock {
         val previous = requestUsbPermissionEnabled
         requestUsbPermissionEnabled = enabled
-        return try {
+        try {
             block()
         } finally {
             requestUsbPermissionEnabled = previous
+        }
+    }
+
+    suspend fun <T> withBluetoothScanningEnabled(
+        enabled: Boolean,
+        block: suspend () -> T,
+    ): T = optionScopeMutex.withLock {
+        val previous = bluetoothScanningEnabled
+        bluetoothScanningEnabled = enabled
+        try {
+            block()
+        } finally {
+            bluetoothScanningEnabled = previous
         }
     }
 
@@ -254,13 +276,17 @@ class TrezorTransport @Inject constructor(
             Logger.error("USB enumerate failed", it, context = TAG)
         }
 
-        runCatching {
-            enumerateBleDevices()
-        }.onSuccess {
-            devices.addAll(it)
-            Logger.debug("BLE enumerate found '${it.size}' Trezor device(s)", context = TAG)
-        }.onFailure {
-            Logger.error("BLE enumerate failed", it, context = TAG)
+        if (bluetoothScanningEnabled) {
+            runCatching {
+                enumerateBleDevices()
+            }.onSuccess {
+                devices.addAll(it)
+                Logger.debug("BLE enumerate found '${it.size}' Trezor device(s)", context = TAG)
+            }.onFailure {
+                Logger.error("BLE enumerate failed", it, context = TAG)
+            }
+        } else {
+            Logger.debug("Skipped BLE enumerate while Bluetooth scanning is disabled", context = TAG)
         }
 
         val bridgeDevices = bridgeTransport.enumerateDevices()

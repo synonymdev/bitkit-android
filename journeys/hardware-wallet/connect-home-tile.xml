@@ -2,8 +2,8 @@
   <description>
     Pairs the Bridge Trezor emulator through the dev Trezor screen, then verifies the
     home-screen hardware wallet tile: name, connection indicator, balance, and the
-    not-yet-implemented overview notice. Requires the bitkit-docker Trezor User Env
-    running and a Bridge-enabled build (see README.md).
+    hardware wallet detail screen. Requires the bitkit-docker Trezor User Env running
+    and a Bridge-enabled build (see README.md).
   </description>
   <actions>
     <action>
@@ -40,7 +40,7 @@
       Tap the hardware wallet tile
     </action>
     <action>
-      Verify the hardware wallet detail screen opens, showing the device name with a blue bitcoin icon in the top bar and a balance header
+      Verify the hardware wallet detail screen opens (testTag "HardwareWalletScreen"), showing the device name with a blue bitcoin icon in the top bar and a balance header
     </action>
     <action>
       Navigate back to the wallet home screen

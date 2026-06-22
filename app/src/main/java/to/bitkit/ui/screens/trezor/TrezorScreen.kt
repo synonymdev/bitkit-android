@@ -102,10 +102,6 @@ private fun TrezorScreenContent(
 
     val permissionsState = rememberMultiplePermissionsState(bluetoothPermissions)
 
-    LaunchedEffect(Unit) {
-        viewModel.initialize()
-    }
-
     val onScanWithPermissions: () -> Unit = {
         if (permissionsState.allPermissionsGranted) {
             viewModel.scan()
@@ -130,7 +126,6 @@ private fun TrezorScreenContent(
         Content(
             trezorState = trezorState,
             uiState = uiState,
-            onInitialize = viewModel::initialize,
             onScan = onScanWithPermissions,
             onConnectNearby = viewModel::connect,
             onConnectKnown = viewModel::connectKnownDevice,
@@ -178,7 +173,6 @@ private fun TrezorScreenContent(
 private fun Content(
     trezorState: TrezorState,
     uiState: TrezorUiState,
-    onInitialize: () -> Unit = {},
     onScan: () -> Unit = {},
     onConnectNearby: (String) -> Unit = {},
     onConnectKnown: (String) -> Unit = {},
@@ -249,7 +243,6 @@ private fun Content(
 
                 ActionButtonsRow(
                     trezorState = trezorState,
-                    onInitialize = onInitialize,
                     onScan = onScan,
                     onDisconnect = onDisconnect,
                     permissionsGranted = permissionsGranted,
@@ -679,12 +672,8 @@ private fun StatusRow(trezorState: TrezorState) {
                     StatusBadge(text = "Connected", color = Colors.Green)
                 }
 
-                trezorState.isInitialized -> {
-                    StatusBadge(text = "Ready", color = Colors.Brand)
-                }
-
                 else -> {
-                    StatusBadge(text = "Not initialized", color = Colors.White32)
+                    StatusBadge(text = "Ready", color = Colors.Brand)
                 }
             }
         }
@@ -706,7 +695,6 @@ internal fun StatusBadge(text: String, color: Color) {
 @Composable
 private fun ActionButtonsRow(
     trezorState: TrezorState,
-    onInitialize: () -> Unit,
     onScan: () -> Unit,
     onDisconnect: () -> Unit,
     permissionsGranted: Boolean = true,
@@ -716,14 +704,7 @@ private fun ActionButtonsRow(
         modifier = Modifier.fillMaxWidth()
     ) {
         if (trezorState.isAutoReconnecting) return@Row
-        if (!trezorState.isInitialized) {
-            PrimaryButton(
-                text = "Initialize",
-                onClick = onInitialize,
-                size = ButtonSize.Small,
-                modifier = Modifier.weight(1f)
-            )
-        } else if (trezorState.connectedDevice != null) {
+        if (trezorState.connectedDevice != null) {
             SecondaryButton(
                 text = "Disconnect",
                 onClick = onDisconnect,
@@ -751,7 +732,7 @@ private fun ActionButtonsRow(
 
 @Preview
 @Composable
-private fun PreviewNotInitialized() {
+private fun PreviewReady() {
     AppThemeSurface {
         Content(
             trezorState = TrezorState(),
@@ -762,10 +743,10 @@ private fun PreviewNotInitialized() {
 
 @Preview
 @Composable
-private fun PreviewInitialized() {
+private fun PreviewScanning() {
     AppThemeSurface {
         Content(
-            trezorState = TrezorState(isInitialized = true),
+            trezorState = TrezorState(isScanning = true),
             uiState = TrezorUiState(),
         )
     }
@@ -777,7 +758,6 @@ private fun PreviewWithDevices() {
     AppThemeSurface {
         Content(
             trezorState = TrezorState(
-                isInitialized = true,
                 knownDevices = listOf(TrezorPreviewData.sampleKnownDevice).toImmutableList(),
                 nearbyDevices = listOf(TrezorPreviewData.sampleNearbyDevice).toImmutableList(),
                 connected = ConnectedTrezorDevice(

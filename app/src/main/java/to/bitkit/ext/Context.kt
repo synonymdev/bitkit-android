@@ -46,6 +46,9 @@ val Context.usbManager: UsbManager
 val Context.bluetoothManager: BluetoothManager
     get() = getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
 
+val Context.isBluetoothEnabled: Boolean
+    get() = bluetoothManager.adapter?.isEnabled == true
+
 val Context.powerManager: PowerManager
     get() = getSystemService(Context.POWER_SERVICE) as PowerManager
 
