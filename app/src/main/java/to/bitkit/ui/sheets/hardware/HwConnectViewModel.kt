@@ -38,6 +38,9 @@ class HwConnectViewModel @Inject constructor(
     companion object {
         /** Delay between scan attempts while searching for a nearby device. */
         private val SCAN_INTERVAL = 2.seconds
+
+        /** Prefix used by Android USB attach intents for [android.hardware.usb.UsbDevice.deviceName]. */
+        private const val USB_DEVICE_PATH_PREFIX = "/dev/"
     }
 
     private val _uiState = MutableStateFlow(HwConnectUiState())
@@ -80,7 +83,7 @@ class HwConnectViewModel @Inject constructor(
                 errorMessage = null,
             )
         }
-        scanUsbBeforeConnect = true
+        scanUsbBeforeConnect = deviceId.startsWith(USB_DEVICE_PATH_PREFIX)
     }
 
     fun onConnectClick(deviceIdOverride: String? = null) {

@@ -14,6 +14,7 @@ import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
@@ -102,11 +103,12 @@ class HwConnectViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onConnectClick scans usb before connecting a device seeded by route`() = test {
+    fun `onConnectClick scans usb before connecting a usb attach route path`() = test {
+        val devicePath = "/dev/bus/usb/001/002"
         val connectedFeatures = features(model = "Safe 3")
         whenever(hwWalletRepo.scan(includeBluetooth = false)).thenReturn(Result.success(emptyList()))
-        whenever(hwWalletRepo.connect("usb1")).thenReturn(Result.success(connectedFeatures))
-        sut.onFoundRoute(deviceId = "usb1", deviceModel = "Trezor")
+        whenever(hwWalletRepo.connect(devicePath)).thenReturn(Result.success(connectedFeatures))
+        sut.onFoundRoute(deviceId = devicePath, deviceModel = "Trezor")
 
         sut.effects.test {
             sut.onConnectClick()
@@ -115,7 +117,23 @@ class HwConnectViewModelTest : BaseUnitTest() {
         }
 
         verify(hwWalletRepo).scan(includeBluetooth = false)
-        verify(hwWalletRepo).connect("usb1")
+        verify(hwWalletRepo).connect(devicePath)
+    }
+
+    @Test
+    fun `onConnectClick does not usb rescan before connecting a bluetooth route device`() = test {
+        val connectedFeatures = features(model = "Safe 7")
+        whenever(hwWalletRepo.connect("ble-device-id")).thenReturn(Result.success(connectedFeatures))
+        sut.onFoundRoute(deviceId = "ble-device-id", deviceModel = "Trezor Safe 7")
+
+        sut.effects.test {
+            sut.onConnectClick()
+            assertEquals(HwConnectEffect.NavigateToPaired, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        verify(hwWalletRepo).connect("ble-device-id")
+        verify(hwWalletRepo, never()).scan(includeBluetooth = false)
     }
 
     @Test
