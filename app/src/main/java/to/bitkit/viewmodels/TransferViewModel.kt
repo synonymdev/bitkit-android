@@ -236,13 +236,27 @@ class TransferViewModel @Inject constructor(
     }
 
     /** Records a paid order and starts watching it, after the funding tx was broadcast (local or HW signed). */
-    private suspend fun fundPaidOrder(order: IBtOrder, txId: String) {
+    private suspend fun fundPaidOrder(
+        order: IBtOrder,
+        txId: String,
+        createTransferActivity: Boolean = false,
+        feeRate: ULong = 0uL,
+    ) {
         cacheStore.addPaidOrder(orderId = order.id, txId = txId)
         transferRepo.createTransfer(
             type = TransferType.TO_SPENDING,
             amountSats = order.clientBalanceSat.toLong(),
+            fundingTxId = txId,
             lspOrderId = order.id,
         )
+        if (createTransferActivity) {
+            transferRepo.createPendingToSpendingActivity(
+                order = order,
+                txId = txId,
+                fee = 0uL,
+                feeRate = feeRate,
+            )
+        }
         viewModelScope.launch { walletRepo.syncBalances() }
         viewModelScope.launch { watchOrder(order.id) }
     }
@@ -497,13 +511,20 @@ class TransferViewModel @Inject constructor(
                 }
             }
 
+            val satsPerVByte = hwFundingSatsPerVByte()
+
             hwWalletRepo.signAndBroadcastFunding(
                 deviceId = deviceId,
                 address = address,
                 sats = order.feeSat,
-                satsPerVByte = hwFundingSatsPerVByte(),
+                satsPerVByte = satsPerVByte,
             ).onSuccess { txId ->
-                fundPaidOrder(order, txId)
+                fundPaidOrder(
+                    order = order,
+                    txId = txId,
+                    createTransferActivity = true,
+                    feeRate = satsPerVByte,
+                )
                 _spendingUiState.update { it.copy(isSigning = false) }
                 setTransferEffect(TransferEffect.OnHwTxSigned)
             }.onFailure { e ->

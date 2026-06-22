@@ -17,6 +17,7 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -26,6 +27,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.BalanceState
 import to.bitkit.models.HwWallet
+import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
@@ -173,6 +175,20 @@ class TransferViewModelTest : BaseUnitTest() {
             eq(FEE_RATE),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
+        verify(transferRepo).createTransfer(
+            eq(TransferType.TO_SPENDING),
+            eq(order.clientBalanceSat.toLong()),
+            isNull<String>(),
+            eq(TXID),
+            eq(order.id),
+            isNull<UInt>(),
+        )
+        verify(transferRepo).createPendingToSpendingActivity(
+            eq(order),
+            eq(TXID),
+            eq(0uL),
+            eq(FEE_RATE),
+        )
         verify(hwWalletRepo, never()).reconnect(any())
     }
 

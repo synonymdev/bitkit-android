@@ -46,6 +46,10 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             whenever(hwWalletRepo.wallets).thenReturn(MutableStateFlow(persistentListOf()))
             wheneverBlocking { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
             wheneverBlocking { lightningRepo.getChannelFundableBalance() }.thenReturn(0uL)
+            whenever(transferRepo.resolveChannelIdForTransfer(any(), any())).thenAnswer { invocation ->
+                val transfer = invocation.getArgument<TransferEntity>(0)
+                transfer.channelId
+            }
             wheneverBlocking {
                 lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull())
             }.thenReturn(Result.success(1000uL))
@@ -205,6 +209,46 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             balance.totalLightningBalanceSats - amountSats,
             balanceState.totalLightningSats,
             "Lightning balance reduced - pending channel not ready"
+        )
+    }
+
+    @Test
+    fun `should move LSP order transfer to pending channel once LDK reports the balance`() = test {
+        val channelId = "lsp-pending-channel-id"
+        val amountSats = 50_000uL
+        val channelBalance = newChannelBalance(channelId, amountSats)
+        val balance = newBalanceDetails().copy(
+            lightningBalances = listOf(channelBalance),
+            totalLightningBalanceSats = amountSats,
+        )
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
+
+        val channel = mock<ChannelDetails> {
+            on { this.channelId } doReturn channelId
+            on { isChannelReady } doReturn false
+        }
+        val transfers = listOf(
+            newTransferEntity(
+                type = TransferType.TO_SPENDING,
+                amountSats = amountSats.toLong(),
+                channelId = null,
+                lspOrderId = "lsp-order-id",
+            )
+        )
+
+        whenever(lightningRepo.getChannels()).thenReturn(listOf(channel))
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
+        whenever(transferRepo.resolveChannelIdForTransfer(any(), any())).thenReturn(channelId)
+
+        val result = sut()
+
+        assertTrue(result.isSuccess)
+        val balanceState = result.getOrThrow()
+        assertEquals(amountSats, balanceState.balanceInTransferToSpending)
+        assertEquals(
+            0uL,
+            balanceState.totalLightningSats,
+            "Lightning balance reduced while the discovered LSP channel is still pending"
         )
     }
 

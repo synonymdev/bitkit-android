@@ -37,7 +37,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val channels = lightningRepo.getChannels().orEmpty()
             val activeTransfers = transferRepo.activeTransfers.first()
 
-            val paidOrdersSats = getOrderPaymentsSats(activeTransfers)
+            val paidOrdersSats = getOrderPaymentsSats(activeTransfers, channels, balanceDetails)
             val pendingChannelsSats = getPendingChannelsSats(activeTransfers, channels, balanceDetails)
 
             val toSavingsAmount = getTransferToSavingsSats(activeTransfers, channels, balanceDetails)
@@ -69,25 +69,41 @@ class DeriveBalanceStateUseCase @Inject constructor(
         }
     }
 
-    private fun getOrderPaymentsSats(transfers: List<TransferEntity>): ULong {
-        return transfers
-            .filter { it.type.isToSpending() && it.lspOrderId != null }
-            .sumOf { it.amountSats.toULong() }
-    }
-
-    private fun getPendingChannelsSats(
+    private suspend fun getOrderPaymentsSats(
         transfers: List<TransferEntity>,
         channels: List<ChannelDetails>,
         balances: BalanceDetails,
     ): ULong {
         var amount = 0uL
-        val pendingTransfers = transfers.filter { it.type.isToSpending() && it.channelId != null }
+        val paidOrders = transfers.filter { it.type.isToSpending() && it.lspOrderId != null }
+
+        for (transfer in paidOrders) {
+            val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
+            val channelBalance = channelId?.let { id ->
+                balances.lightningBalances.find { it.channelId() == id }
+            }
+            if (channelBalance == null) {
+                amount = amount.safe() + transfer.amountSats.toULong().safe()
+            }
+        }
+
+        return amount
+    }
+
+    private suspend fun getPendingChannelsSats(
+        transfers: List<TransferEntity>,
+        channels: List<ChannelDetails>,
+        balances: BalanceDetails,
+    ): ULong {
+        var amount = 0uL
+        val pendingTransfers = transfers.filter { it.type.isToSpending() }
 
         for (transfer in pendingTransfers) {
-            val channel = channels.find { it.channelId == transfer.channelId }
+            val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
+            val channel = channels.find { it.channelId == channelId }
             if (channel != null && !channel.isChannelReady) {
                 val channelBalance = balances.lightningBalances.find { it.channelId() == channel.channelId }
-                amount += channelBalance?.amountSats() ?: 0u
+                amount = amount.safe() + (channelBalance?.amountSats() ?: 0uL).safe()
             }
         }
 
@@ -105,7 +121,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
         for (transfer in toSavings) {
             val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
             val channelBalance = balanceDetails.lightningBalances.find { it.channelId() == channelId }
-            toSavingsAmount += channelBalance?.amountSats() ?: 0u
+            toSavingsAmount = toSavingsAmount.safe() + (channelBalance?.amountSats() ?: 0uL).safe()
         }
 
         return toSavingsAmount
@@ -134,7 +150,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
         for (transfer in transfers.filter { it.type == TransferType.COOP_CLOSE }) {
             val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
             val channelBalance = balanceDetails.lightningBalances.find { it.channelId() == channelId }
-            amount += channelBalance?.amountSats() ?: 0u
+            amount = amount.safe() + (channelBalance?.amountSats() ?: 0uL).safe()
         }
         return amount
     }
