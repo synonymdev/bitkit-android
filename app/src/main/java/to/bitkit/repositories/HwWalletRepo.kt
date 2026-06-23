@@ -42,6 +42,8 @@ import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HwFundingAccount
 import to.bitkit.models.HwFundingAddressType
+import to.bitkit.models.HwFundingBroadcastResult
+import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.KnownDevice
@@ -565,19 +567,4 @@ private data class HwWatcherData(
     val balanceSats: ULong,
     val transactions: ImmutableList<HistoryTransaction>,
     val activities: ImmutableList<Activity>,
-)
-
-data class HwFundingTransaction(
-    val psbt: String,
-    val miningFeeSats: ULong,
-    val feeRate: Float,
-    val totalSpent: ULong,
-    val satsPerVByte: ULong,
-)
-
-data class HwFundingBroadcastResult(
-    val txId: String,
-    val miningFeeSats: ULong,
-    val feeRate: ULong,
-    val totalSpent: ULong,
 )

@@ -28,13 +28,13 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.models.BalanceState
 import to.bitkit.models.HwFundingAccount
 import to.bitkit.models.HwFundingAddressType
+import to.bitkit.models.HwFundingBroadcastResult
+import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
-import to.bitkit.repositories.HwFundingBroadcastResult
-import to.bitkit.repositories.HwFundingTransaction
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
