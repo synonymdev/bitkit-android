@@ -134,10 +134,47 @@ class TrezorBridgeTransportTest {
         assertTrue(result.error.contains("shorter"))
     }
 
-    private fun createSut(enabled: Boolean = true): TrezorBridgeTransport {
+    @Test
+    fun `call uses longer read timeout than bridge management requests`() {
+        server.route = { request ->
+            when {
+                request.path == "/enumerate" -> {
+                    TestHttpResponse("""[{"path":"emulator:21324","session":null}]""")
+                }
+                request.path == "/acquire/emulator%3A21324/null" -> {
+                    TestHttpResponse("""{"session":"session-1"}""")
+                }
+                request.path == "/call/session-1" -> {
+                    TestHttpResponse(
+                        body = frame(18u.toUShort(), byteArrayOf(0x01)),
+                        delayMs = 200,
+                    )
+                }
+                else -> TestHttpResponse("{}", statusCode = 404)
+            }
+        }
+
+        val sut = createSut(readTimeoutMs = 50, callReadTimeoutMs = 1_000)
+        val device = sut.enumerateDevices().single()
+        assertTrue(sut.openDevice(device.path).success)
+
+        val result = sut.callMessage(device.path, 55u, byteArrayOf())
+
+        assertTrue(result.success)
+        assertEquals(18u.toUShort(), result.messageType)
+        assertEquals(listOf<Byte>(0x01), result.data.toList())
+    }
+
+    private fun createSut(
+        enabled: Boolean = true,
+        readTimeoutMs: Int = 30_000,
+        callReadTimeoutMs: Int = 120_000,
+    ): TrezorBridgeTransport {
         return TrezorBridgeTransport(
             baseUrl = "http://127.0.0.1:${server.port}",
             enabled = enabled,
+            readTimeoutMs = readTimeoutMs,
+            callReadTimeoutMs = callReadTimeoutMs,
         )
     }
 
@@ -159,6 +196,7 @@ class TrezorBridgeTransportTest {
     private data class TestHttpResponse(
         val body: String,
         val statusCode: Int = 200,
+        val delayMs: Long = 0L,
     )
 
     private class TestHttpServer {
@@ -213,6 +251,7 @@ class TrezorBridgeTransportTest {
             )
             requests.add("${request.method} ${request.path}")
             val response = route(request)
+            if (response.delayMs > 0) Thread.sleep(response.delayMs)
             val responseBytes = response.body.toByteArray()
             val responseHeaders = (
                 "HTTP/1.1 ${response.statusCode} OK\r\n" +

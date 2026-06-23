@@ -1,0 +1,37 @@
+<journey name="Hardware Wallet Transfer To Spending Node Warmup">
+  <description>
+    Verifies that starting a hardware-wallet transfer while the Lightning node is still
+    warming up does not fail or strand the CTA in loading. The flow should show the normal
+    loading/progress UI, continue once the node reaches the needed state, and land on the
+    sign screen. Requires a paired and funded hardware wallet.
+  </description>
+  <actions>
+    <action>
+      adb: adb shell am force-stop to.bitkit.dev
+    </action>
+    <action>
+      adb: adb shell monkey -p to.bitkit.dev -c android.intent.category.LAUNCHER 1
+    </action>
+    <action>
+      As soon as the wallet home screen is visible, tap the hardware wallet tile beneath the SAVINGS and SPENDING tiles
+    </action>
+    <action>
+      Tap the "Transfer To Spending" button (testTag "HardwareTransferToSpending")
+    </action>
+    <action>
+      Verify the transfer amount screen or loading/progress UI appears, and no reconnect, node-not-ready, or generic failure toast is shown while the node warms up
+    </action>
+    <action>
+      Tap the "25%" quick button (testTag "HardwareTransferAmountQuarter") if the amount screen is shown
+    </action>
+    <action>
+      Tap "Continue" (testTag "HardwareTransferAmountContinue") if the amount screen is shown, then wait for order creation and node warm-up to finish
+    </action>
+    <action>
+      Verify the sign screen opens (testTag "HardwareTransferSign"), titled "SIGN WITH YOUR DEVICE", and the Continue/Open Trezor Connect CTA is no longer loading
+    </action>
+    <action>
+      Navigate back without signing so this journey only covers node warm-up behavior
+    </action>
+  </actions>
+</journey>
