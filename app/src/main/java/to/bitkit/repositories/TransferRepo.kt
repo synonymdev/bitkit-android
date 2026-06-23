@@ -129,6 +129,7 @@ class TransferRepo @Inject constructor(
         }
     }
 
+    @Suppress("CyclomaticComplexMethod")
     suspend fun syncTransferStates(): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
             val activeTransfers = transferDao.getActiveTransfers().first()
@@ -143,6 +144,7 @@ class TransferRepo @Inject constructor(
 
             for (transfer in toSpending) {
                 val channelId = resolveChannelIdForTransfer(transfer, channels)
+                channelId?.let { persistResolvedChannel(transfer, it) }
                 val channel = channelId?.let { channels.find { c -> c.channelId == it } }
                 if (channel != null && channel.isChannelReady) {
                     markSettled(transfer.id)
@@ -230,9 +232,17 @@ class TransferRepo @Inject constructor(
         Logger.debug("Force close awaiting sweep detection for transfer: ${transfer.id}", context = TAG)
     }
 
+    private suspend fun persistResolvedChannel(transfer: TransferEntity, channelId: String) {
+        if (transfer.channelId == null) {
+            transferDao.update(transfer.copy(channelId = channelId))
+            Logger.debug("Persisted channel '$channelId' for transfer '${transfer.id}'", context = TAG)
+        }
+        transfer.fundingTxId?.let { markActivityAsTransfer(it, channelId) }
+    }
+
     private suspend fun markActivityAsTransfer(txid: String, channelId: String) {
         val activity = coreService.activity.getOnchainActivityByTxId(txid) ?: return
-        if (activity.isTransfer) return
+        if (activity.isTransfer && activity.channelId == channelId) return
         val updated = activity.copy(isTransfer = true, channelId = channelId)
         coreService.activity.update(activity.id, Activity.Onchain(updated))
         Logger.debug("Marked activity ${activity.id} as transfer for channel $channelId", context = TAG)
@@ -252,18 +262,24 @@ class TransferRepo @Inject constructor(
         Logger.debug("Marked activity ${activity.v1.id} as transfer for channel $channelId", context = TAG)
     }
 
-    /** Resolve channelId: for LSP orders: via order->fundingTx match, for manual: directly. */
+    /** Resolve channelId: direct transfer data first, then LSP order metadata, then funding tx fallback. */
     suspend fun resolveChannelIdForTransfer(
         transfer: TransferEntity,
         channels: List<ChannelDetails>,
     ): String? {
-        return transfer.lspOrderId
-            ?.let { orderId ->
-                val order = blocktankRepo.getOrder(orderId, refresh = false).getOrNull()
-                val fundingTxId = order?.channel?.fundingTx?.id ?: return null
-                return@let channels.find { it.fundingTxo?.txid == fundingTxId }?.channelId
-            }
-            ?: transfer.channelId
+        transfer.channelId?.let { return it }
+
+        val orderFundingTxId = transfer.lspOrderId?.let { orderId ->
+            blocktankRepo.getOrder(orderId, refresh = false).getOrNull()
+                ?.channel
+                ?.fundingTx
+                ?.id
+        }
+        val fundingTxId = orderFundingTxId ?: transfer.fundingTxId
+
+        return fundingTxId?.let { txid ->
+            channels.find { it.fundingTxo?.txid == txid }?.channelId
+        }
     }
 
     companion object {

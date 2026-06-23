@@ -11,6 +11,7 @@ import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorTransportType
+import com.synonym.bitkitcore.TrezorTransportWriteResult
 import com.synonym.bitkitcore.WalletSelection
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -41,6 +42,7 @@ import to.bitkit.services.TrezorTransport
 import to.bitkit.services.TrezorUiHandler
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -90,6 +92,9 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorTransport.externalDisconnect).thenReturn(MutableSharedFlow())
         whenever(trezorTransport.transportRestored).thenReturn(MutableSharedFlow())
         whenever(trezorTransport.hasUsbPermission(any())).thenReturn(true)
+        whenever(trezorTransport.disconnectDevice(any())).thenReturn(
+            TrezorTransportWriteResult(success = true, error = "")
+        )
         whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(false))
         whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Standard)
         whenever(settingsStore.data).thenReturn(settingsData)
@@ -158,6 +163,7 @@ class TrezorRepoTest : BaseUnitTest() {
         transportType: TransportType = TransportType.USB,
         xpubs: Map<String, String> = emptyMap(),
         customLabel: String? = null,
+        walletId: String = "wallet-id",
     ) = KnownDevice(
         id = id,
         name = name,
@@ -168,6 +174,7 @@ class TrezorRepoTest : BaseUnitTest() {
         lastConnectedAt = 123L,
         xpubs = xpubs,
         customLabel = customLabel,
+        walletId = walletId,
     )
 
     // region initialize
@@ -183,6 +190,23 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals(listOf(knownDevice), sut.state.value.knownDevices)
         assertNull(sut.state.value.error)
+    }
+
+    @Test
+    fun `initialize assigns wallet ids to restored devices missing them`() = test {
+        val knownDevice = mockKnownDevice(walletId = "")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        sut = createSut()
+
+        val result = sut.initialize()
+
+        assertTrue(result.isSuccess)
+        val savedCaptor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(savedCaptor.capture())
+        val saved = savedCaptor.firstValue.single()
+        assertEquals(knownDevice.id, saved.id)
+        assertNotNull(UUID.fromString(saved.walletId))
+        assertEquals(listOf(saved), sut.state.value.knownDevices)
     }
 
     @Test
@@ -552,6 +576,48 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(TransportType.USB, saved.transportType)
         assertEquals("Savings", saved.label)
         assertEquals("Safe 5", saved.model)
+        assertNotNull(UUID.fromString(saved.walletId))
+    }
+
+    @Test
+    fun `connect reuses wallet id from same xpub wallet`() = test {
+        val walletId = "hardware-wallet-id"
+        val nativeSegwitPath = "m/84'/1'/0'"
+        val previousDevice = mockKnownDevice(
+            id = "ble-device",
+            path = "ble:AA:BB",
+            transportType = TransportType.BLUETOOTH,
+            xpubs = mapOf("nativeSegwit" to "same-native-xpub"),
+            walletId = walletId,
+        )
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(previousDevice))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        ).thenAnswer {
+            val path = it.getArgument<String>(0)
+            if (path == nativeSegwitPath) {
+                mockPublicKeyResponse(xpub = "same-native-xpub", path = nativeSegwitPath)
+            } else {
+                throw AppError("xpub failed")
+            }
+        }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertEquals(setOf(walletId), captor.firstValue.map { it.walletId }.toSet())
     }
 
     @Test
@@ -1036,6 +1102,27 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(features, result.getOrNull())
         assertEquals(bleDeviceId, sut.state.value.connectedDeviceId())
         verify(trezorService).connect(eq(bleDeviceId), any())
+    }
+
+    @Test
+    fun `ensureConnected returns current selected device without reconnecting`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        whenever(trezorService.isConnected()).thenReturn(true)
+
+        val result = sut.ensureConnected(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        assertEquals(features, result.getOrNull())
+        verify(trezorService, times(1)).scan()
+        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
+        verify(trezorService, never()).disconnect()
     }
 
     // endregion

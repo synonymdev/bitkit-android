@@ -10,6 +10,7 @@ import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BalanceSource
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.LightningBalance
+import org.lightningdevkit.ldknode.OutPoint
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
@@ -250,6 +251,49 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             balanceState.totalLightningSats,
             "Lightning balance reduced while the discovered LSP channel is still pending"
         )
+    }
+
+    @Test
+    fun `should not double count LSP transfer when pending channel resolves before order refresh`() = test {
+        val channelId = "lsp-pending-channel-id"
+        val fundingTxId = "funding-tx-id"
+        val amountSats = 50_000uL
+        val channelBalance = newChannelBalance(channelId, amountSats)
+        val balance = newBalanceDetails().copy(
+            lightningBalances = listOf(channelBalance),
+            totalLightningBalanceSats = amountSats,
+        )
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
+
+        val channel = mock<ChannelDetails> {
+            on { this.channelId } doReturn channelId
+            on { isChannelReady } doReturn false
+            on { fundingTxo } doReturn OutPoint(txid = fundingTxId, vout = 0u)
+        }
+        val transfers = listOf(
+            newTransferEntity(
+                type = TransferType.TO_SPENDING,
+                amountSats = amountSats.toLong(),
+                channelId = null,
+                fundingTxId = fundingTxId,
+                lspOrderId = "lsp-order-id",
+            )
+        )
+
+        whenever(lightningRepo.getChannels()).thenReturn(listOf(channel))
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
+        whenever(transferRepo.resolveChannelIdForTransfer(any(), any())).thenAnswer { invocation ->
+            val transfer = invocation.getArgument<TransferEntity>(0)
+            val channels = invocation.getArgument<List<ChannelDetails>>(1)
+            channels.find { it.fundingTxo?.txid == transfer.fundingTxId }?.channelId
+        }
+
+        val result = sut()
+
+        assertTrue(result.isSuccess)
+        val balanceState = result.getOrThrow()
+        assertEquals(amountSats, balanceState.balanceInTransferToSpending)
+        assertEquals(0uL, balanceState.totalLightningSats)
     }
 
     @Test
@@ -522,13 +566,14 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         type: TransferType,
         amountSats: Long,
         channelId: String? = null,
+        fundingTxId: String? = null,
         lspOrderId: String? = null,
     ) = TransferEntity(
         id = "test-transfer-${System.currentTimeMillis()}",
         type = type,
         amountSats = amountSats,
         channelId = channelId,
-        fundingTxId = null,
+        fundingTxId = fundingTxId,
         lspOrderId = lspOrderId,
         isSettled = false,
         createdAt = System.currentTimeMillis(),

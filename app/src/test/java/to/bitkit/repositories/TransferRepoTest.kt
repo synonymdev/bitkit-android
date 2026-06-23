@@ -274,6 +274,51 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `syncTransferStates persists resolved channel and marks activity for TO_SPENDING transfer`() = test {
+        val transfer = TransferEntity(
+            id = ID_TRANSFER,
+            type = TransferType.TO_SPENDING,
+            amountSats = 50000L,
+            channelId = null,
+            fundingTxId = fundingTxo.txid,
+            lspOrderId = ID_ORDER,
+            isSettled = false,
+            createdAt = 1000L,
+        )
+        val channelDetails = createChannelDetails().copy(
+            channelId = ID_CHANNEL,
+            fundingTxo = fundingTxo,
+            isChannelReady = false,
+        )
+        val activity = OnchainActivity.create(
+            id = fundingTxo.txid,
+            txType = PaymentType.SENT,
+            txId = fundingTxo.txid,
+            value = 50_000uL,
+            fee = 0uL,
+            address = "bc1qtest",
+            timestamp = 1000uL,
+            isTransfer = true,
+            channelId = null,
+        )
+
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(listOf(channelDetails))
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(mock()))
+        whenever(blocktankRepo.getOrder(ID_ORDER, refresh = false)).thenReturn(Result.success(null))
+        whenever(activityService.getOnchainActivityByTxId(fundingTxo.txid)).thenReturn(activity)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao).update(transfer.copy(channelId = ID_CHANNEL))
+        verify(activityService).update(
+            eq(activity.id),
+            eq(Activity.Onchain(activity.copy(isTransfer = true, channelId = ID_CHANNEL))),
+        )
+    }
+
+    @Test
     fun `syncTransferStates does not settle TO_SPENDING transfer when channel not found`() = test {
         val transfer = TransferEntity(
             id = ID_TRANSFER,
@@ -777,6 +822,34 @@ class TransferRepoTest : BaseUnitTest() {
             amountSats = 50000L,
             channelId = null, // LSP flow - not set initially
             fundingTxId = null, // LSP flow - not set initially
+            lspOrderId = ID_ORDER,
+            isSettled = false,
+            createdAt = 1000L,
+        )
+
+        val channelDetails = mock<ChannelDetails>()
+        whenever(channelDetails.fundingTxo).thenReturn(fundingTxo)
+        whenever(channelDetails.channelId).thenReturn(ID_CHANNEL)
+
+        whenever(blocktankRepo.getOrder(ID_ORDER, refresh = false))
+            .thenReturn(Result.success(order))
+
+        val result = sut.resolveChannelIdForTransfer(transfer, listOf(channelDetails))
+
+        assertEquals(ID_CHANNEL, result)
+    }
+
+    @Test
+    fun `resolveChannelIdForTransfer finds channel via transfer funding tx when order lacks channel data`() = test {
+        val order = mock<IBtOrder>()
+        whenever(order.channel).thenReturn(null)
+
+        val transfer = TransferEntity(
+            id = ID_TRANSFER,
+            type = TransferType.TO_SPENDING,
+            amountSats = 50000L,
+            channelId = null,
+            fundingTxId = fundingTxo.txid,
             lspOrderId = ID_ORDER,
             isSettled = false,
             createdAt = 1000L,

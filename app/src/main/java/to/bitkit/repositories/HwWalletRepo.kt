@@ -72,6 +72,7 @@ import kotlin.time.ExperimentalTime
 @Singleton
 class HwWalletRepo @Inject constructor(
     private val trezorRepo: TrezorRepo,
+    private val activityRepo: ActivityRepo,
     private val hwWalletStore: HwWalletStore,
     private val settingsStore: SettingsStore,
     private val clock: Clock,
@@ -147,6 +148,8 @@ class HwWalletRepo @Inject constructor(
         forceSession: Boolean = false,
     ): Result<TrezorFeatures> = trezorRepo.connectKnownDevice(deviceId, forceSession = forceSession)
 
+    suspend fun ensureConnected(deviceId: String): Result<TrezorFeatures> = trezorRepo.ensureConnected(deviceId)
+
     suspend fun getFundingAccount(
         deviceId: String,
         addressType: HwFundingAddressType = HwFundingAddressType.DEFAULT,
@@ -172,39 +175,61 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    /** Composes, signs on the Trezor, and broadcasts the on-chain funding payment. */
-    suspend fun signAndBroadcastFunding(
+    /** Composes the exact on-chain funding payment before prompting for the Trezor signature. */
+    suspend fun composeFundingTransaction(
         deviceId: String,
         address: String,
         sats: ULong,
         satsPerVByte: ULong,
-    ): Result<String> = withContext(ioDispatcher) {
+    ): Result<HwFundingTransaction> = withContext(ioDispatcher) {
         runSuspendCatching {
             val account = getFundingAccount(deviceId).getOrThrow()
             val network = Env.network.toCoreNetwork()
+            val composed = trezorRepo.composeTransaction(
+                extendedKey = account.xpub,
+                outputs = listOf(ComposeOutput.Payment(address = address, amountSats = sats)),
+                feeRates = listOf(satsPerVByte.toFloat()),
+                network = network,
+                accountType = account.accountType,
+                coinSelection = CoinSelection.BRANCH_AND_BOUND,
+            ).getOrThrow()
+            val success = composed.filterIsInstance<ComposeResult.Success>().firstOrNull()
+                ?: throw AppError(
+                    composed.filterIsInstance<ComposeResult.Error>().firstOrNull()?.error
+                        ?: "Failed to compose hardware transfer"
+                )
+            HwFundingTransaction(
+                psbt = success.psbt,
+                miningFeeSats = success.fee,
+                feeRate = success.feeRate,
+                totalSpent = success.totalSpent,
+                satsPerVByte = satsPerVByte,
+            )
+        }
+    }
+
+    /** Signs a composed funding payment on the Trezor and broadcasts it. */
+    suspend fun signAndBroadcastFunding(
+        deviceId: String,
+        funding: HwFundingTransaction,
+    ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
+        runSuspendCatching {
             val signed = runSuspendCatching {
-                val composed = trezorRepo.composeTransaction(
-                    extendedKey = account.xpub,
-                    outputs = listOf(ComposeOutput.Payment(address = address, amountSats = sats)),
-                    feeRates = listOf(satsPerVByte.toFloat()),
-                    network = network,
-                    accountType = account.accountType,
-                    coinSelection = CoinSelection.BRANCH_AND_BOUND,
-                ).getOrThrow()
-                val success = composed.filterIsInstance<ComposeResult.Success>().firstOrNull()
-                    ?: throw AppError(
-                        composed.filterIsInstance<ComposeResult.Error>().firstOrNull()?.error
-                            ?: "Failed to compose hardware transfer"
-                    )
                 trezorRepo.signTxFromPsbt(
-                    psbtBase64 = success.psbt,
+                    psbtBase64 = funding.psbt,
                     network = Env.network.toTrezorCoinType(),
                 ).getOrThrow()
             }
             if (signed.isFailure) {
                 trezorRepo.disconnectStaleSession(deviceId)
             }
-            trezorRepo.broadcastRawTx(serializedTx = signed.getOrThrow().serializedTx).getOrThrow()
+            val txId = trezorRepo.broadcastRawTx(serializedTx = signed.getOrThrow().serializedTx).getOrThrow()
+            HwFundingBroadcastResult(
+                txId = txId,
+                miningFeeSats = funding.miningFeeSats,
+                feeRate = funding.satsPerVByte,
+                totalSpent = funding.totalSpent,
+            )
         }
     }
 
@@ -328,6 +353,9 @@ class HwWalletRepo @Inject constructor(
                 )
                 val updatedWatcherData = _watcherData.value + (watcherId to watcher)
                 _watcherData.update { updatedWatcherData }
+                activities.filterIsInstance<Activity.Onchain>().forEach {
+                    activityRepo.syncHardwareOnchainActivity(it.v1)
+                }
                 emitReceivedTxs(previous, event, updatedWatcherData)
             }
         }
@@ -537,4 +565,19 @@ private data class HwWatcherData(
     val balanceSats: ULong,
     val transactions: ImmutableList<HistoryTransaction>,
     val activities: ImmutableList<Activity>,
+)
+
+data class HwFundingTransaction(
+    val psbt: String,
+    val miningFeeSats: ULong,
+    val feeRate: Float,
+    val totalSpent: ULong,
+    val satsPerVByte: ULong,
+)
+
+data class HwFundingBroadcastResult(
+    val txId: String,
+    val miningFeeSats: ULong,
+    val feeRate: ULong,
+    val totalSpent: ULong,
 )

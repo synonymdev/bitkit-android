@@ -37,6 +37,8 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.HwFundingBroadcastResult
+import to.bitkit.repositories.HwFundingTransaction
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
@@ -55,7 +57,7 @@ import kotlin.time.ExperimentalTime
 const val RETRY_INTERVAL_MS = 1 * 60 * 1000L // 1 minutes in ms
 const val GIVE_UP_MS = 30 * 60 * 1000L // 30 minutes in ms
 
-@Suppress("TooManyFunctions", "LongParameterList")
+@Suppress("LargeClass", "TooManyFunctions", "LongParameterList")
 @OptIn(ExperimentalTime::class)
 @HiltViewModel
 class TransferViewModel @Inject constructor(
@@ -245,6 +247,7 @@ class TransferViewModel @Inject constructor(
         order: IBtOrder,
         txId: String,
         createTransferActivity: Boolean = false,
+        fee: ULong = 0uL,
         feeRate: ULong = 0uL,
     ) {
         cacheStore.addPaidOrder(orderId = order.id, txId = txId)
@@ -258,7 +261,7 @@ class TransferViewModel @Inject constructor(
             transferRepo.createPendingToSpendingActivity(
                 order = order,
                 txId = txId,
-                fee = 0uL,
+                fee = fee,
                 feeRate = feeRate,
             )
         }
@@ -503,12 +506,13 @@ class TransferViewModel @Inject constructor(
                 }
 
                 signTransferToSpendingWithHardware(order, deviceId, address)
-                    .onSuccess { (txId, satsPerVByte) ->
+                    .onSuccess { result ->
                         fundPaidOrder(
                             order = order,
-                            txId = txId,
+                            txId = result.txId,
                             createTransferActivity = true,
-                            feeRate = satsPerVByte,
+                            fee = result.miningFeeSats,
+                            feeRate = result.feeRate,
                         )
                         setTransferEffect(TransferEffect.OnHwTxSigned)
                     }
@@ -524,25 +528,73 @@ class TransferViewModel @Inject constructor(
         order: IBtOrder,
         deviceId: String,
         address: String,
-    ): Result<Pair<String, ULong>> {
+    ): Result<HwFundingBroadcastResult> {
         val result = runCatching {
-            withTimeout(HW_TRANSFER_SIGN_TIMEOUT) {
-                hwWalletRepo.reconnect(deviceId, forceSession = true)
-                    .getOrElse { throw HardwareReconnectError(it) }
-                val satsPerVByte = hwFundingSatsPerVByte()
-                val txId = hwWalletRepo.signAndBroadcastFunding(
-                    deviceId = deviceId,
-                    address = address,
-                    sats = order.feeSat,
-                    satsPerVByte = satsPerVByte,
-                ).getOrThrow()
-                txId to satsPerVByte
-            }
+            ensureHardwareConnected(deviceId)
+            val satsPerVByte = hwFundingSatsPerVByte()
+            val funding = composeHardwareFundingTransaction(
+                deviceId = deviceId,
+                address = address,
+                sats = order.feeSat,
+                satsPerVByte = satsPerVByte,
+            )
+            signAndBroadcastHardwareFunding(deviceId, funding)
         }
         result.exceptionOrNull()?.let {
             if (it is CancellationException && it !is TimeoutCancellationException) throw it
         }
         return result
+    }
+
+    private suspend fun ensureHardwareConnected(deviceId: String) {
+        runCatching {
+            withTimeout(HW_RECONNECT_TIMEOUT) {
+                hwWalletRepo.ensureConnected(deviceId).getOrThrow()
+            }
+        }.getOrElse {
+            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            throw HardwareReconnectError(it)
+        }
+    }
+
+    private suspend fun composeHardwareFundingTransaction(
+        deviceId: String,
+        address: String,
+        sats: ULong,
+        satsPerVByte: ULong,
+    ): HwFundingTransaction {
+        return runCatching {
+            withTimeout(HW_COMPOSE_TIMEOUT) {
+                hwWalletRepo.composeFundingTransaction(
+                    deviceId = deviceId,
+                    address = address,
+                    sats = sats,
+                    satsPerVByte = satsPerVByte,
+                ).getOrThrow()
+            }
+        }.getOrElse {
+            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            throw HardwareFundingError(it)
+        }
+    }
+
+    @Suppress("ThrowsCount")
+    private suspend fun signAndBroadcastHardwareFunding(
+        deviceId: String,
+        funding: HwFundingTransaction,
+    ): HwFundingBroadcastResult {
+        return runCatching {
+            withTimeout(HW_SIGN_TIMEOUT) {
+                hwWalletRepo.signAndBroadcastFunding(
+                    deviceId = deviceId,
+                    funding = funding,
+                ).getOrThrow()
+            }
+        }.getOrElse {
+            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            if (it is TimeoutCancellationException) throw HardwareSigningTimeoutError(it)
+            throw it
+        }
     }
 
     private suspend fun handleHardwareTransferFailure(e: Throwable, deviceId: String) {
@@ -551,9 +603,13 @@ class TransferViewModel @Inject constructor(
                 Logger.error("Failed to reconnect hardware device", e, context = TAG)
                 showHardwareReconnectError()
             }
-            is TimeoutCancellationException -> {
+            is HardwareSigningTimeoutError -> {
                 Logger.warn("Timed out hardware transfer signing for '$deviceId'", e, context = TAG)
-                showHardwareReconnectError()
+                showHardwareTimeoutError()
+            }
+            is HardwareFundingError -> {
+                Logger.warn("Failed to compose hardware transfer funding for '$deviceId'", e, context = TAG)
+                showHardwareFundingError(e)
             }
             else -> {
                 Logger.error("Hardware transfer failed", e, context = TAG)
@@ -567,6 +623,22 @@ class TransferViewModel @Inject constructor(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.lightning__transfer_hw__reconnect_error_title),
             description = context.getString(R.string.lightning__transfer_hw__reconnect_error_description),
+        )
+    }
+
+    private suspend fun showHardwareTimeoutError() {
+        ToastEventBus.send(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.common__error),
+            description = context.getString(R.string.wallet__toast_payment_failed_timeout),
+        )
+    }
+
+    private suspend fun showHardwareFundingError(e: Throwable) {
+        ToastEventBus.send(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.common__error),
+            description = e.cause?.message ?: e.message ?: context.getString(R.string.common__error_body),
         )
     }
 
@@ -784,11 +856,17 @@ class TransferViewModel @Inject constructor(
         private const val POLL_INTERVAL_MS = 2_500L
         private const val MAX_CONSECUTIVE_ERRORS = 5
 
-        /** Flat vbyte reserve for the funding tx; exact fee computed by the Trezor at sign time. */
-        private const val HW_FUNDING_TX_VBYTES = 200uL
+        /** Conservative vbyte reserve for multi-input hardware funding before exact compose runs. */
+        private const val HW_FUNDING_TX_VBYTES = 1_200uL
 
-        /** Upper bound for one hardware transfer signing attempt before the UI releases the button. */
-        private val HW_TRANSFER_SIGN_TIMEOUT = 45.seconds
+        /** Upper bound for reconnecting a known device before the UI asks for reconnect. */
+        private val HW_RECONNECT_TIMEOUT = 30.seconds
+
+        /** Upper bound for exact hardware funding composition before signing starts. */
+        private val HW_COMPOSE_TIMEOUT = 45.seconds
+
+        /** Upper bound for one hardware signing attempt before the UI releases the button. */
+        private val HW_SIGN_TIMEOUT = 120.seconds
         const val LN_SETUP_STEP_0 = 0
         const val LN_SETUP_STEP_1 = 1
         const val LN_SETUP_STEP_2 = 2
@@ -797,6 +875,8 @@ class TransferViewModel @Inject constructor(
 }
 
 private class HardwareReconnectError(cause: Throwable) : AppError(cause)
+private class HardwareFundingError(cause: Throwable) : AppError(cause)
+private class HardwareSigningTimeoutError(cause: Throwable) : AppError(cause)
 
 // region state
 data class TransferToSpendingUiState(

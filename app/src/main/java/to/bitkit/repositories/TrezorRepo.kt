@@ -69,6 +69,7 @@ import to.bitkit.services.TrezorWalletMode
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.File
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -501,8 +502,13 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun disconnect(): Result<Unit> = withContext(ioDispatcher) {
-        TrezorDebugLog.log("DISCONNECT", "disconnect() called, connectedDeviceId=${_state.value.connectedDeviceId()}")
-        val result = runCatching { trezorService.disconnect() }
+        val deviceId = _state.value.connectedDeviceId()
+        TrezorDebugLog.log("DISCONNECT", "disconnect() called, connectedDeviceId=$deviceId")
+        val result = runCatching {
+            trezorService.disconnect()
+            deviceId?.let { disconnectTransportDevice(it) }
+            Unit
+        }
         // Mirror the core: trezorService.disconnect() resets the session
         // passphrase to the standard wallet, so reset the UI handler's wallet
         // mode too. This keeps the THP path, the legacy PassphraseRequest
@@ -679,11 +685,22 @@ class TrezorRepo @Inject constructor(
         }
     }
 
+    suspend fun ensureConnected(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
+        val current = _state.value.connected
+        if (current?.id == deviceId && trezorService.isConnected()) {
+            return@withContext Result.success(current.features)
+        }
+        connectKnownDevice(deviceId, forceSession = false)
+    }
+
     suspend fun forgetDevice(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             TrezorDebugLog.log("FORGET", "forgetDevice called for: $deviceId")
             val disconnectResult = if (_state.value.connectedDeviceId() == deviceId) {
-                runCatching { trezorService.disconnect() }.also {
+                runCatching {
+                    trezorService.disconnect()
+                    disconnectTransportDevice(deviceId)
+                }.also {
                     // Clear any cached host passphrase so it can't be reused
                     // against a different device on a later connect.
                     trezorUiHandler.setWalletMode(TrezorWalletMode.STANDARD)
@@ -853,6 +870,7 @@ class TrezorRepo @Inject constructor(
         val storedIds = stored.map { it.id }.toSet()
         val knownDevices = stored + _state.value.knownDevices.filter { it.id !in storedIds }
         val previous = knownDevices.find { it.id == deviceInfo.id }
+        val xpubs = previous?.xpubs.orEmpty() + fetchAccountXpubs()
         val known = KnownDevice(
             id = deviceInfo.id,
             name = deviceInfo.name,
@@ -861,8 +879,9 @@ class TrezorRepo @Inject constructor(
             label = features.label ?: deviceInfo.label,
             model = features.model ?: deviceInfo.model,
             lastConnectedAt = clock.nowMs(),
-            xpubs = previous?.xpubs.orEmpty() + fetchAccountXpubs(),
+            xpubs = xpubs,
             customLabel = previous?.customLabel,
+            walletId = knownDevices.findHardwareWalletId(deviceInfo.id, xpubs),
         )
         val updated = knownDevices.filter { it.id != known.id } + known
         saveKnownDevices(updated)
@@ -891,7 +910,12 @@ class TrezorRepo @Inject constructor(
     }
 
     private suspend fun loadKnownDevices(): List<KnownDevice> = runCatching {
-        hwWalletStore.loadKnownDevices()
+        val devices = hwWalletStore.loadKnownDevices()
+        val migrated = devices.withHardwareWalletIds()
+        if (migrated != devices) {
+            hwWalletStore.saveKnownDevices(migrated)
+        }
+        migrated
     }.onFailure {
         Logger.error("Failed to load known devices", it, context = TAG)
     }.getOrDefault(emptyList())
@@ -978,12 +1002,22 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun disconnectStaleSession(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
-        val result = runSuspendCatching { trezorService.disconnect() }
+        val result = runSuspendCatching {
+            trezorService.disconnect()
+            disconnectTransportDevice(deviceId)
+        }
             .onFailure {
                 Logger.warn("Failed to disconnect stale Trezor session for '$deviceId'", it, context = TAG)
             }
         _state.update { it.copy(connected = null) }
         result
+    }
+
+    private suspend fun disconnectTransportDevice(deviceId: String) {
+        val knownDevice = (_state.value.knownDevices + loadKnownDevices())
+            .distinctBy { it.id }
+            .find { it.matches(deviceId) }
+        trezorTransport.disconnectDevice(knownDevice?.path ?: deviceId)
     }
 
     private suspend fun connectDevice(
@@ -1040,6 +1074,33 @@ data class ConnectedTrezorDevice(
 )
 
 private fun KnownDevice.matches(deviceId: String) = id == deviceId || path == deviceId
+
+private val KnownDevice.walletKey: String
+    get() = walletKey(xpubs, id)
+
+private fun walletKey(xpubs: Map<String, String>, fallback: String): String =
+    xpubs.values.sorted().joinToString().ifEmpty { fallback }
+
+private fun List<KnownDevice>.findHardwareWalletId(deviceId: String, xpubs: Map<String, String>): String {
+    val walletKey = walletKey(xpubs, deviceId)
+    return firstOrNull { it.id == deviceId }?.walletId?.takeIf { it.isNotBlank() }
+        ?: firstOrNull { it.walletKey == walletKey }?.walletId?.takeIf { it.isNotBlank() }
+        ?: newHardwareWalletId()
+}
+
+private fun List<KnownDevice>.withHardwareWalletIds(): List<KnownDevice> {
+    val existingByWallet = filter { it.walletId.isNotBlank() }
+        .associate { it.walletKey to it.walletId }
+    val generatedByWallet = mutableMapOf<String, String>()
+
+    return map {
+        val walletId = existingByWallet[it.walletKey]
+            ?: generatedByWallet.getOrPut(it.walletKey) { newHardwareWalletId() }
+        if (it.walletId == walletId) it else it.copy(walletId = walletId)
+    }
+}
+
+private fun newHardwareWalletId(): String = UUID.randomUUID().toString()
 
 private fun KnownDevice.toDeviceInfo() = TrezorDeviceInfo(
     id = id,

@@ -33,6 +33,8 @@ import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
+import to.bitkit.repositories.HwFundingBroadcastResult
+import to.bitkit.repositories.HwFundingTransaction
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
@@ -169,22 +171,37 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `onTransferToSpendingHwConfirm signs the funding send and records the paid order`() = test {
         val order = previewBtOrder()
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FEE_RATE,
+        )
+        val broadcast = HwFundingBroadcastResult(
+            txId = TXID,
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE,
+            totalSpent = order.feeSat + MINING_FEE,
+        )
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
-        whenever(hwWalletRepo.reconnect(DEVICE_ID, forceSession = true))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.success(mock<TrezorFeatures>()))
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
-        whenever(hwWalletRepo.signAndBroadcastFunding(any(), any(), any(), any())).thenReturn(Result.success(TXID))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+        whenever(hwWalletRepo.signAndBroadcastFunding(any(), any())).thenReturn(Result.success(broadcast))
 
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
 
-        verify(hwWalletRepo).signAndBroadcastFunding(
+        verify(hwWalletRepo).composeFundingTransaction(
             eq(DEVICE_ID),
             eq(order.payment?.onchain?.address.orEmpty()),
             eq(order.feeSat),
             eq(FEE_RATE),
         )
+        verify(hwWalletRepo).signAndBroadcastFunding(eq(DEVICE_ID), eq(funding))
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
         verify(transferRepo).createTransfer(
             eq(TransferType.TO_SPENDING),
@@ -197,10 +214,10 @@ class TransferViewModelTest : BaseUnitTest() {
         verify(transferRepo).createPendingToSpendingActivity(
             eq(order),
             eq(TXID),
-            eq(0uL),
+            eq(MINING_FEE),
             eq(FEE_RATE),
         )
-        verify(hwWalletRepo).reconnect(DEVICE_ID, forceSession = true)
+        verify(hwWalletRepo).ensureConnected(DEVICE_ID)
     }
 
     @Test
@@ -208,14 +225,15 @@ class TransferViewModelTest : BaseUnitTest() {
         val order = previewBtOrder()
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = false))))
-        whenever(hwWalletRepo.reconnect(DEVICE_ID, forceSession = true))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.failure(RuntimeException("no device")))
 
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
 
-        verify(hwWalletRepo).reconnect(DEVICE_ID, forceSession = true)
-        verify(hwWalletRepo, never()).signAndBroadcastFunding(any(), any(), any(), any())
+        verify(hwWalletRepo).ensureConnected(DEVICE_ID)
+        verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
+        verify(hwWalletRepo, never()).signAndBroadcastFunding(any(), any())
     }
 
     private fun hwWallet(deviceId: String, connected: Boolean) = HwWallet(
@@ -254,5 +272,6 @@ class TransferViewModelTest : BaseUnitTest() {
         const val XPUB = "zpub-test"
         const val TXID = "tx-abc"
         const val FEE_RATE = 2uL
+        const val MINING_FEE = 1_250uL
     }
 }
