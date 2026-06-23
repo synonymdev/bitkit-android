@@ -144,11 +144,6 @@ class HwWalletRepo @Inject constructor(
     /** Reconnects a known paired device so its session is live for on-device signing. */
     suspend fun reconnect(deviceId: String): Result<TrezorFeatures> = trezorRepo.connectKnownDevice(deviceId)
 
-    /**
-     * Resolves the native-segwit funding account for a paired wallet: its account xpub, [AccountType]
-     * and the balance currently watched for that account. Used to compose the on-chain funding send the
-     * Trezor signs when transferring to spending. v1 funds from native segwit only.
-     */
     suspend fun getFundingAccount(deviceId: String): Result<HwFundingAccount> = withContext(ioDispatcher) {
         runSuspendCatching {
             val devices = hwWalletStore.loadKnownDevices()
@@ -173,7 +168,7 @@ class HwWalletRepo @Inject constructor(
 
     /**
      * Composes the on-chain funding payment from the device's native-segwit account, has the Trezor sign
-     * it and broadcasts it. The signing step prompts the user on the device. Returns the broadcast txid.
+     * and broadcasts it. The signing step prompts the user on the device. Returns the broadcast txid.
      */
     suspend fun signAndBroadcastFunding(
         deviceId: String,
@@ -501,7 +496,6 @@ class HwWalletRepo @Inject constructor(
     private fun String.toDeviceId(): String = substringBefore(WATCHER_ID_SEPARATOR)
 }
 
-/** Native-segwit account used to fund a Trezor-signed transfer to spending. */
 data class HwFundingAccount(
     val xpub: String,
     val accountType: AccountType,

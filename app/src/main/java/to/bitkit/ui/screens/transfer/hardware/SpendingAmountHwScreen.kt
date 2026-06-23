@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens.transfer
+package to.bitkit.ui.screens.transfer.hardware
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn

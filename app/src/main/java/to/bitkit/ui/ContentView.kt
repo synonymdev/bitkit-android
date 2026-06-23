@@ -118,11 +118,8 @@ import to.bitkit.ui.screens.transfer.SavingsIntroScreen
 import to.bitkit.ui.screens.transfer.SavingsProgressScreen
 import to.bitkit.ui.screens.transfer.SettingUpScreen
 import to.bitkit.ui.screens.transfer.SpendingAdvancedScreen
-import to.bitkit.ui.screens.transfer.SpendingAmountHwScreen
 import to.bitkit.ui.screens.transfer.SpendingAmountScreen
 import to.bitkit.ui.screens.transfer.SpendingConfirmScreen
-import to.bitkit.ui.screens.transfer.SpendingHwSignScreen
-import to.bitkit.ui.screens.transfer.SpendingHwSignedScreen
 import to.bitkit.ui.screens.transfer.SpendingIntroScreen
 import to.bitkit.ui.screens.transfer.TransferIntroScreen
 import to.bitkit.ui.screens.transfer.external.ExternalAmountScreen
@@ -131,6 +128,9 @@ import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
+import to.bitkit.ui.screens.transfer.hardware.SpendingAmountHwScreen
+import to.bitkit.ui.screens.transfer.hardware.SpendingHwSignScreen
+import to.bitkit.ui.screens.transfer.hardware.SpendingHwSignedScreen
 import to.bitkit.ui.screens.trezor.TrezorScreen
 import to.bitkit.ui.screens.wallets.HardwareWalletScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
