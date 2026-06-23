@@ -781,14 +781,6 @@ private fun RootNavHost(
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
                     onOrderCreated = { navController.navigateTo(Routes.SpendingHwSign(deviceId)) },
-                    toastException = { appViewModel.toast(it) },
-                    toast = { title, description ->
-                        appViewModel.toast(
-                            type = Toast.ToastType.ERROR,
-                            title = title,
-                            description = description,
-                        )
-                    },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingHwSign> { entry ->

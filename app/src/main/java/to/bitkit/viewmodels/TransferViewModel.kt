@@ -460,12 +460,8 @@ class TransferViewModel @Inject constructor(
 
     // endregion
 
-    // region Spending HW (Trezor watch-only transfer to spending)
+    // region Hardware Wallet
 
-    /**
-     * Computes AVAILABLE/MAX for a Trezor transfer from the device's native-segwit account balance,
-     * reserving an on-chain fee for the funding send the device signs. Reuses the spending limit math.
-     */
     fun updateHwLimits(deviceId: String) {
         viewModelScope.launch {
             _spendingUiState.update { it.copy(isLoading = true) }

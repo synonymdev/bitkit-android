@@ -48,8 +48,8 @@ import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.CoinSelection
 import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
+import to.bitkit.models.KnownDevice
 import to.bitkit.repositories.ConnectedTrezorDevice
-import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorWalletMode
@@ -251,7 +251,7 @@ private fun Content(
                 if (trezorState.connected != null) {
                     WalletModeRow(
                         walletMode = walletMode,
-                        passphraseEntryCapable = trezorState.connectedDevice?.passphraseEntryCapable == true,
+                        passphraseEntryCapable = trezorState.connectedDevice()?.passphraseEntryCapable == true,
                         onSetWalletMode = onSetWalletMode,
                     )
                 }
@@ -270,7 +270,7 @@ private fun Content(
                         )
                         VerticalSpacer(8.dp)
                         trezorState.knownDevices.forEach { device ->
-                            val isConnected = trezorState.connectedDeviceId == device.id
+                            val isConnected = trezorState.connectedDeviceId() == device.id
                             KnownDeviceCard(
                                 device = device,
                                 isConnected = isConnected,
@@ -315,11 +315,11 @@ private fun Content(
 
                 // Connected Device Info
                 AnimatedVisibility(
-                    visible = trezorState.connectedDevice != null,
+                    visible = trezorState.connectedDevice() != null,
                     enter = fadeIn() + expandVertically(),
                     exit = fadeOut() + shrinkVertically(),
                 ) {
-                    trezorState.connectedDevice?.let { features ->
+                    trezorState.connectedDevice()?.let { features ->
                         Column {
                             VerticalSpacer(32.dp)
                             Caption13Up(
@@ -406,7 +406,7 @@ private fun Content(
                 VerticalSpacer(32.dp)
                 BalanceLookupSection(
                     uiState = uiState,
-                    isDeviceConnected = trezorState.connectedDevice != null,
+                    isDeviceConnected = trezorState.connectedDevice() != null,
                     onInputChange = onLookupInputChange,
                     onAccountTypeChange = onLookupAccountTypeChange,
                     onLookup = onLookup,
@@ -668,7 +668,7 @@ private fun StatusRow(trezorState: TrezorState) {
                     Caption("Connecting...", color = Colors.White64)
                 }
 
-                trezorState.connectedDevice != null -> {
+                trezorState.connectedDevice() != null -> {
                     StatusBadge(text = "Connected", color = Colors.Green)
                 }
 
@@ -704,7 +704,7 @@ private fun ActionButtonsRow(
         modifier = Modifier.fillMaxWidth()
     ) {
         if (trezorState.isAutoReconnecting) return@Row
-        if (trezorState.connectedDevice != null) {
+        if (trezorState.connectedDevice() != null) {
             SecondaryButton(
                 text = "Disconnect",
                 onClick = onDisconnect,

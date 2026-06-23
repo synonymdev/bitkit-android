@@ -30,6 +30,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.models.HwWalletReceivedTx
+import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.test.BaseUnitTest

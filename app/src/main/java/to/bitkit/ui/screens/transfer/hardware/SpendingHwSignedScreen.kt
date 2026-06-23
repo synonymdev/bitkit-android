@@ -18,6 +18,8 @@ import com.synonym.bitkitcore.IBtOrder
 import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.HardwareTransferIllustration
+import to.bitkit.ui.components.SIGNED_VISUAL_TOP_RATIO
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -34,8 +36,8 @@ private const val SIGNED_AUTO_NAV_DELAY_MS = 1_000L
 @Composable
 fun SpendingHwSignedScreen(
     viewModel: TransferViewModel,
-    onContinue: () -> Unit = {},
-    onCloseClick: () -> Unit = {},
+    onContinue: () -> Unit,
+    onCloseClick: () -> Unit,
 ) {
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
 
@@ -55,7 +57,7 @@ fun SpendingHwSignedScreen(
 @Composable
 private fun Content(
     order: IBtOrder,
-    onBackClick: () -> Unit,
+    onBackClick: () -> Unit = {},
 ) {
     ScreenColumn {
         AppTopBar(
@@ -95,7 +97,6 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             order = previewBtOrder(),
-            onBackClick = {},
         )
     }
 }

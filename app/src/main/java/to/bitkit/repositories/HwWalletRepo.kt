@@ -1,6 +1,5 @@
 package to.bitkit.repositories
 
-import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
@@ -41,10 +40,11 @@ import to.bitkit.env.Env
 import to.bitkit.ext.create
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
-import to.bitkit.models.DEFAULT_ADDRESS_TYPE
-import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
+import to.bitkit.models.HwFundingAccount
+import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
+import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.safe
 import to.bitkit.models.toAccountType
@@ -147,32 +147,32 @@ class HwWalletRepo @Inject constructor(
         forceSession: Boolean = false,
     ): Result<TrezorFeatures> = trezorRepo.connectKnownDevice(deviceId, forceSession = forceSession)
 
-    suspend fun getFundingAccount(deviceId: String): Result<HwFundingAccount> = withContext(ioDispatcher) {
+    suspend fun getFundingAccount(
+        deviceId: String,
+        addressType: HwFundingAddressType = HwFundingAddressType.DEFAULT,
+    ): Result<HwFundingAccount> = withContext(ioDispatcher) {
         runSuspendCatching {
             val devices = hwWalletStore.loadKnownDevices()
             val target = requireNotNull(devices.find { it.id == deviceId }) { "Unknown hardware wallet '$deviceId'" }
             val groupIds = devices.filter { it.walletKey == target.walletKey }.map { it.id }.toSet()
-            val xpub = requireNotNull(target.xpubs[DEFAULT_ADDRESS_TYPE_STRING]) {
-                "Hardware wallet '$deviceId' has no native-segwit account"
+            val xpub = requireNotNull(target.xpubs[addressType.settingsKey]) {
+                "Hardware wallet '$deviceId' has no '${addressType.settingsKey}' account"
             }
             val balanceSats = _watcherData.value
                 .filterKeys { key ->
-                    key.substringAfter(WATCHER_ID_SEPARATOR) == DEFAULT_ADDRESS_TYPE_STRING &&
+                    key.substringAfter(WATCHER_ID_SEPARATOR) == addressType.settingsKey &&
                         key.toDeviceId() in groupIds
                 }
                 .values.fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
-            HwFundingAccount(
+            HwFundingAccount.Trezor(
                 xpub = xpub,
-                accountType = DEFAULT_ADDRESS_TYPE.toAccountType(),
+                addressType = addressType,
                 balanceSats = balanceSats,
             )
         }
     }
 
-    /**
-     * Composes the on-chain funding payment from the device's native-segwit account, has the Trezor sign
-     * and broadcasts it. The signing step prompts the user on the device. Returns the broadcast txid.
-     */
+    /** Composes, signs on the Trezor, and broadcasts the on-chain funding payment. */
     suspend fun signAndBroadcastFunding(
         deviceId: String,
         address: String,
@@ -264,7 +264,7 @@ class HwWalletRepo @Inject constructor(
             .filter { it.xpubs.isNotEmpty() }
             .groupBy { it.walletKey }
             .map { (_, devices) ->
-                val connectedDevice = devices.find { it.id == trezorState.connectedDeviceId }
+                val connectedDevice = devices.find { it.id == trezorState.connectedDeviceId() }
                 val device = connectedDevice ?: devices.maxBy { it.lastConnectedAt }
                 val ids = devices.map { it.id }.toSet()
                 val deviceWatchers = watcherData.values.filter { it.deviceId in ids }
@@ -503,12 +503,6 @@ class HwWalletRepo @Inject constructor(
 
     private fun String.toDeviceId(): String = substringBefore(WATCHER_ID_SEPARATOR)
 }
-
-data class HwFundingAccount(
-    val xpub: String,
-    val accountType: AccountType,
-    val balanceSats: ULong,
-)
 
 private data class WatcherSettings(
     val monitoredTypes: Set<String>,

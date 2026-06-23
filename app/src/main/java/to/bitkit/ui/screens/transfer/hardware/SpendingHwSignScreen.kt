@@ -24,7 +24,9 @@ import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FeeInfo
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.HardwareTransferIllustration
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SIGN_VISUAL_TOP_RATIO
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -40,11 +42,11 @@ import to.bitkit.viewmodels.TransferViewModel
 fun SpendingHwSignScreen(
     deviceId: String,
     viewModel: TransferViewModel,
-    onBackClick: () -> Unit = {},
-    onCloseClick: () -> Unit = {},
-    onLearnMoreClick: () -> Unit = {},
-    onAdvancedClick: () -> Unit = {},
-    onSigned: () -> Unit = {},
+    onBackClick: () -> Unit,
+    onCloseClick: () -> Unit,
+    onLearnMoreClick: () -> Unit,
+    onAdvancedClick: () -> Unit,
+    onSigned: () -> Unit,
 ) {
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
 
@@ -55,7 +57,10 @@ fun SpendingHwSignScreen(
 
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
-            if (effect is TransferEffect.OnHwTxSigned) onSigned()
+            when (effect) {
+                TransferEffect.OnHwTxSigned -> onSigned()
+                else -> Unit
+            }
         }
     }
 

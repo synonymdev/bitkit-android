@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.Toast
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
@@ -46,6 +47,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -64,8 +66,6 @@ fun SpendingAmountHwScreen(
     isOffline: Boolean,
     onBackClick: () -> Unit = {},
     onOrderCreated: () -> Unit = {},
-    toastException: (Throwable) -> Unit,
-    toast: (title: String, description: String) -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
@@ -84,9 +84,13 @@ fun SpendingAmountHwScreen(
         viewModel.transferEffects.collect { effect ->
             when (effect) {
                 TransferEffect.OnOrderCreated -> onOrderCreated()
-                TransferEffect.OnHwTxSigned -> Unit
-                is TransferEffect.ToastError -> toast(effect.title, effect.description)
-                is TransferEffect.ToastException -> toastException(effect.e)
+                is TransferEffect.ToastError -> ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = effect.title,
+                    description = effect.description,
+                )
+                is TransferEffect.ToastException -> ToastEventBus.send(effect.e)
+                else -> Unit
             }
         }
     }
@@ -96,9 +100,10 @@ fun SpendingAmountHwScreen(
             when (it) {
                 AmountInputEffect.MaxExceeded -> {
                     amountInputViewModel.setSats(currentMaxAllowedToSend, currentCurrencies)
-                    toast(
-                        context.getString(R.string.lightning__spending_amount__error_max__title),
-                        context.getString(R.string.lightning__spending_amount__error_max__description)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.lightning__spending_amount__error_max__title),
+                        description = context.getString(R.string.lightning__spending_amount__error_max__description)
                             .replace("{amount}", currentMaxAllowedToSend.formatToModernDisplay()),
                     )
                 }
@@ -137,13 +142,13 @@ fun SpendingAmountHwScreen(
 @Suppress("ViewModelForwarding")
 @Composable
 private fun Content(
-    isNodeRunning: Boolean,
+    isNodeRunning: Boolean = true,
     uiState: TransferToSpendingUiState,
     amountInputViewModel: AmountInputViewModel,
-    onBackClick: () -> Unit,
-    onClickQuarter: () -> Unit,
-    onClickMaxAmount: () -> Unit,
-    onConfirmAmount: () -> Unit,
+    onBackClick: () -> Unit = {},
+    onClickQuarter: () -> Unit = {},
+    onClickMaxAmount: () -> Unit = {},
+    onConfirmAmount: () -> Unit = {},
     currencies: CurrencyState = LocalCurrencies.current,
 ) {
     ScreenColumn {
@@ -178,9 +183,9 @@ private fun NodeRunning(
     uiState: TransferToSpendingUiState,
     amountInputViewModel: AmountInputViewModel,
     currencies: CurrencyState,
-    onClickQuarter: () -> Unit,
-    onClickMaxAmount: () -> Unit,
-    onConfirmAmount: () -> Unit,
+    onClickQuarter: () -> Unit = {},
+    onClickMaxAmount: () -> Unit = {},
+    onConfirmAmount: () -> Unit = {},
 ) {
     LaunchedEffect(uiState.maxAllowedToSend) {
         amountInputViewModel.setMaxAmount(uiState.maxAllowedToSend)
@@ -279,14 +284,9 @@ private fun NodeRunning(
 private fun Preview() {
     AppThemeSurface {
         Content(
-            isNodeRunning = true,
             uiState = TransferToSpendingUiState(maxAllowedToSend = 158_234, balanceAfterFee = 158_234),
             amountInputViewModel = previewAmountInputViewModel(),
             currencies = CurrencyState(),
-            onBackClick = {},
-            onClickQuarter = {},
-            onClickMaxAmount = {},
-            onConfirmAmount = {},
         )
     }
 }

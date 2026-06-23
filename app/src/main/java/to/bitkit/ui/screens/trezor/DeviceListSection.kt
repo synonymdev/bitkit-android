@@ -21,8 +21,8 @@ import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorTransportType
 import to.bitkit.R
+import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
-import to.bitkit.repositories.KnownDevice
 import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.HorizontalSpacer

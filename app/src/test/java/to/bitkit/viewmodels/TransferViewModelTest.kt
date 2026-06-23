@@ -1,7 +1,6 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
-import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.ChannelLiquidityOptions
 import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
@@ -27,12 +26,13 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.BalanceState
+import to.bitkit.models.HwFundingAccount
+import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwWallet
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
-import to.bitkit.repositories.HwFundingAccount
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
@@ -146,7 +146,15 @@ class TransferViewModelTest : BaseUnitTest() {
         // walletRepo balance stays 0 to prove the limit comes from the hardware account, not on-chain savings.
         blocktankState.value = BlocktankState(info = btInfo(lspMaxClientBalance = LSP_MAX_CLIENT_BALANCE))
         whenever(hwWalletRepo.getFundingAccount(DEVICE_ID))
-            .thenReturn(Result.success(HwFundingAccount(XPUB, AccountType.NATIVE_SEGWIT, ON_CHAIN_BALANCE)))
+            .thenReturn(
+                Result.success(
+                    HwFundingAccount.Trezor(
+                        xpub = XPUB,
+                        addressType = HwFundingAddressType.NATIVE_SEGWIT,
+                        balanceSats = ON_CHAIN_BALANCE,
+                    ),
+                ),
+            )
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(1uL))
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))

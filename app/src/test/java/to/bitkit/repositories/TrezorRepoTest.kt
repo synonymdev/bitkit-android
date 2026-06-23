@@ -33,6 +33,7 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.services.TrezorService
@@ -527,8 +528,8 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(features, result.getOrNull())
-        assertEquals(features, sut.state.value.connectedDevice)
-        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+        assertEquals(features, sut.state.value.connectedDevice())
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId())
         assertFalse(sut.state.value.isConnecting)
     }
 
@@ -686,13 +687,13 @@ class TrezorRepoTest : BaseUnitTest() {
 
         sut.scan()
         sut.connect(DEVICE_ID)
-        assertEquals(features, sut.state.value.connectedDevice)
+        assertEquals(features, sut.state.value.connectedDevice())
 
         val result = sut.disconnect()
 
         assertTrue(result.isSuccess)
-        assertNull(sut.state.value.connectedDevice)
-        assertNull(sut.state.value.connectedDeviceId)
+        assertNull(sut.state.value.connectedDevice())
+        assertNull(sut.state.value.connectedDeviceId())
         assertNull(sut.state.value.lastAddress)
         assertNull(sut.state.value.lastPublicKey)
     }
@@ -732,8 +733,8 @@ class TrezorRepoTest : BaseUnitTest() {
         val result = sut.disconnect()
 
         assertTrue(result.isFailure)
-        assertNull(sut.state.value.connectedDevice)
-        assertNull(sut.state.value.connectedDeviceId)
+        assertNull(sut.state.value.connectedDevice())
+        assertNull(sut.state.value.connectedDeviceId())
         assertNull(sut.state.value.lastAddress)
         assertNull(sut.state.value.lastPublicKey)
         assertEquals("disconnect failed", sut.state.value.error)
@@ -754,7 +755,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(sut.state.value.knownDevices.isEmpty())
         assertTrue(sut.state.value.nearbyDevices.isEmpty())
-        assertNull(sut.state.value.connectedDevice)
+        assertNull(sut.state.value.connectedDevice())
         verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
         verify(trezorService).clearCredentials(DEVICE_ID)
         verify(hwWalletStore).reset()
@@ -970,7 +971,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(features, result.getOrNull())
-        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId())
         assertFalse(sut.state.value.isAutoReconnecting)
     }
 
@@ -993,7 +994,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(features, result.getOrNull())
-        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId())
     }
 
     @Test
@@ -1011,7 +1012,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(trezorService).disconnect()
-        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId())
     }
 
     @Test
@@ -1033,7 +1034,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(features, result.getOrNull())
-        assertEquals(bleDeviceId, sut.state.value.connectedDeviceId)
+        assertEquals(bleDeviceId, sut.state.value.connectedDeviceId())
         verify(trezorService).connect(eq(bleDeviceId), any())
     }
 
@@ -1100,7 +1101,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(addressResponse, result.getOrNull())
-        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId())
         verify(trezorService).scan()
         verify(trezorService).connect(eq(DEVICE_ID), any())
     }
@@ -1128,8 +1129,8 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertTrue(sut.state.value.knownDevices.isEmpty())
-        assertNull(sut.state.value.connectedDevice)
-        assertNull(sut.state.value.connectedDeviceId)
+        assertNull(sut.state.value.connectedDevice())
+        assertNull(sut.state.value.connectedDeviceId())
         assertNull(sut.state.value.error)
         verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
         verify(trezorService).clearCredentials(DEVICE_ID)
@@ -1155,8 +1156,8 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         assertTrue(sut.state.value.knownDevices.isEmpty())
-        assertNull(sut.state.value.connectedDevice)
-        assertNull(sut.state.value.connectedDeviceId)
+        assertNull(sut.state.value.connectedDevice())
+        assertNull(sut.state.value.connectedDeviceId())
         assertEquals("clear failed", result.exceptionOrNull()?.message)
         assertEquals("clear failed", sut.state.value.error)
         verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
@@ -1194,8 +1195,8 @@ class TrezorRepoTest : BaseUnitTest() {
         assertFalse(state.isAutoReconnecting)
         assertTrue(state.knownDevices.isEmpty())
         assertTrue(state.nearbyDevices.isEmpty())
-        assertNull(state.connectedDevice)
-        assertNull(state.connectedDeviceId)
+        assertNull(state.connectedDevice())
+        assertNull(state.connectedDeviceId())
         assertNull(state.lastAddress)
         assertNull(state.lastPublicKey)
         assertNull(state.error)
