@@ -449,6 +449,7 @@ class TrezorRepo @Inject constructor(
     ): Result<List<ComposeResult>> = withContext(ioDispatcher) {
         runCatching {
             awaitSetup()
+            ensureConnected()
             val fingerprint = trezorService.getDeviceFingerprint()
             val params = ComposeParams(
                 wallet = WalletParams(
@@ -632,7 +633,10 @@ class TrezorRepo @Inject constructor(
         return false
     }
 
-    suspend fun connectKnownDevice(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
+    suspend fun connectKnownDevice(
+        deviceId: String,
+        forceSession: Boolean = false,
+    ): Result<TrezorFeatures> = withContext(ioDispatcher) {
         if (_state.value.isConnecting) {
             return@withContext Result.failure(AppError("Connection already in progress"))
         }
@@ -643,6 +647,10 @@ class TrezorRepo @Inject constructor(
             TrezorDebugLog.log("RECONNECT", "Awaiting setup...")
             awaitSetup()
             TrezorDebugLog.log("RECONNECT", "Setup OK")
+            if (forceSession) {
+                TrezorDebugLog.log("RECONNECT", "Closing stale session before reconnect")
+                disconnectStaleSession(deviceId)
+            }
             TrezorDebugLog.log("RECONNECT", "Scanning for devices...")
             val knownDevices = (_state.value.knownDevices + loadKnownDevices()).distinctBy { it.id }
             val knownDevice = knownDevices.find { it.matches(deviceId) }
@@ -906,8 +914,11 @@ class TrezorRepo @Inject constructor(
             ?: _state.value.knownDevices.firstOrNull()?.id
             ?: throw AppError("No device to reconnect")
         awaitSetup()
+        val knownDevices = (_state.value.knownDevices + loadKnownDevices()).distinctBy { it.id }
+        val knownDevice = knownDevices.find { it.matches(deviceId) }
         val devices = trezorService.scan()
         val device = devices.find { it.id == deviceId }
+            ?: knownDevice?.takeIf { it.transportType == TransportType.BLUETOOTH }?.toDeviceInfo()
             ?: throw AppError("Device not found during reconnect")
         val features = connectWithThpRetry(device.id, trezorUiHandler.currentSelection())
         _state.update { it.copy(connected = ConnectedTrezorDevice(id = deviceId, features = features)) }
@@ -960,7 +971,7 @@ class TrezorRepo @Inject constructor(
             val result = runSuspendCatching {
                 connectDevice(deviceId, selection, requestUsbPermission)
             }.onFailure {
-                disconnectAfterFailedConnect(deviceId)
+                disconnectStaleSession(deviceId)
             }.getOrThrow()
             logCredentialFileState(deviceId, "AFTER 2nd attempt (success)")
             TrezorDebugLog.log("THPRetry", "Second attempt succeeded")
@@ -968,12 +979,13 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    private suspend fun disconnectAfterFailedConnect(deviceId: String) {
-        runSuspendCatching { trezorService.disconnect() }
+    suspend fun disconnectStaleSession(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
+        val result = runSuspendCatching { trezorService.disconnect() }
             .onFailure {
                 Logger.warn("Failed to disconnect stale Trezor session for '$deviceId'", it, context = TAG)
             }
         _state.update { it.copy(connected = null) }
+        result
     }
 
     private suspend fun connectDevice(

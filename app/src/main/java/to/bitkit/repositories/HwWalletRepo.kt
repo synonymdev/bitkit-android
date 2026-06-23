@@ -142,7 +142,10 @@ class HwWalletRepo @Inject constructor(
     }
 
     /** Reconnects a known paired device so its session is live for on-device signing. */
-    suspend fun reconnect(deviceId: String): Result<TrezorFeatures> = trezorRepo.connectKnownDevice(deviceId)
+    suspend fun reconnect(
+        deviceId: String,
+        forceSession: Boolean = false,
+    ): Result<TrezorFeatures> = trezorRepo.connectKnownDevice(deviceId, forceSession = forceSession)
 
     suspend fun getFundingAccount(deviceId: String): Result<HwFundingAccount> = withContext(ioDispatcher) {
         runSuspendCatching {
@@ -179,24 +182,29 @@ class HwWalletRepo @Inject constructor(
         runSuspendCatching {
             val account = getFundingAccount(deviceId).getOrThrow()
             val network = Env.network.toCoreNetwork()
-            val composed = trezorRepo.composeTransaction(
-                extendedKey = account.xpub,
-                outputs = listOf(ComposeOutput.Payment(address = address, amountSats = sats)),
-                feeRates = listOf(satsPerVByte.toFloat()),
-                network = network,
-                accountType = account.accountType,
-                coinSelection = CoinSelection.BRANCH_AND_BOUND,
-            ).getOrThrow()
-            val success = composed.filterIsInstance<ComposeResult.Success>().firstOrNull()
-                ?: throw AppError(
-                    composed.filterIsInstance<ComposeResult.Error>().firstOrNull()?.error
-                        ?: "Failed to compose hardware transfer"
-                )
-            val signed = trezorRepo.signTxFromPsbt(
-                psbtBase64 = success.psbt,
-                network = Env.network.toTrezorCoinType(),
-            ).getOrThrow()
-            trezorRepo.broadcastRawTx(serializedTx = signed.serializedTx).getOrThrow()
+            val signed = runSuspendCatching {
+                val composed = trezorRepo.composeTransaction(
+                    extendedKey = account.xpub,
+                    outputs = listOf(ComposeOutput.Payment(address = address, amountSats = sats)),
+                    feeRates = listOf(satsPerVByte.toFloat()),
+                    network = network,
+                    accountType = account.accountType,
+                    coinSelection = CoinSelection.BRANCH_AND_BOUND,
+                ).getOrThrow()
+                val success = composed.filterIsInstance<ComposeResult.Success>().firstOrNull()
+                    ?: throw AppError(
+                        composed.filterIsInstance<ComposeResult.Error>().firstOrNull()?.error
+                            ?: "Failed to compose hardware transfer"
+                    )
+                trezorRepo.signTxFromPsbt(
+                    psbtBase64 = success.psbt,
+                    network = Env.network.toTrezorCoinType(),
+                ).getOrThrow()
+            }
+            if (signed.isFailure) {
+                trezorRepo.disconnectStaleSession(deviceId)
+            }
+            trezorRepo.broadcastRawTx(serializedTx = signed.getOrThrow().serializedTx).getOrThrow()
         }
     }
 

@@ -6,6 +6,7 @@ import com.synonym.bitkitcore.ChannelLiquidityOptions
 import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtInfoOptions
+import com.synonym.bitkitcore.TrezorFeatures
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -162,6 +163,8 @@ class TransferViewModelTest : BaseUnitTest() {
         val order = previewBtOrder()
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
+        whenever(hwWalletRepo.reconnect(DEVICE_ID, forceSession = true))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
         whenever(hwWalletRepo.signAndBroadcastFunding(any(), any(), any(), any())).thenReturn(Result.success(TXID))
 
@@ -189,20 +192,21 @@ class TransferViewModelTest : BaseUnitTest() {
             eq(0uL),
             eq(FEE_RATE),
         )
-        verify(hwWalletRepo, never()).reconnect(any())
+        verify(hwWalletRepo).reconnect(DEVICE_ID, forceSession = true)
     }
 
     @Test
-    fun `onTransferToSpendingHwConfirm reconnects a disconnected device and aborts when it fails`() = test {
+    fun `onTransferToSpendingHwConfirm aborts when hardware reconnect fails`() = test {
         val order = previewBtOrder()
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = false))))
-        whenever(hwWalletRepo.reconnect(DEVICE_ID)).thenReturn(Result.failure(RuntimeException("no device")))
+        whenever(hwWalletRepo.reconnect(DEVICE_ID, forceSession = true))
+            .thenReturn(Result.failure(RuntimeException("no device")))
 
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
 
-        verify(hwWalletRepo).reconnect(DEVICE_ID)
+        verify(hwWalletRepo).reconnect(DEVICE_ID, forceSession = true)
         verify(hwWalletRepo, never()).signAndBroadcastFunding(any(), any(), any(), any())
     }
 

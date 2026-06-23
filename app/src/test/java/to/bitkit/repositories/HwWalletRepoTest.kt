@@ -704,6 +704,35 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `signAndBroadcastFunding disconnects stale session when compose fails`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        whenever(
+            trezorRepo.composeTransaction(
+                extendedKey = any(),
+                outputs = any(),
+                feeRates = any(),
+                network = any(),
+                accountType = anyOrNull(),
+                coinSelection = any(),
+            )
+        ).thenReturn(Result.failure(AppError("compose failed")))
+        whenever(trezorRepo.disconnectStaleSession("dev1")).thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.signAndBroadcastFunding(
+            deviceId = "dev1",
+            address = "bc1qtest",
+            sats = 25_000uL,
+            satsPerVByte = 2uL,
+        )
+
+        assertEquals(true, result.isFailure)
+        verify(trezorRepo).disconnectStaleSession("dev1")
+        verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
+        verify(trezorRepo, never()).broadcastRawTx(any())
+    }
+
+    @Test
     fun `forwards pairing code calls to the trezor repo`() = test {
         val sut = createRepo()
 

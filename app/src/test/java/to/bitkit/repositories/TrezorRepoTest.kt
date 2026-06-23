@@ -900,6 +900,7 @@ class TrezorRepoTest : BaseUnitTest() {
     fun `composeTransaction should use configured electrum server`() = test {
         val electrumServer = "ssl://custom.example:50002"
         settingsData.value = SettingsData(electrumServer = electrumServer)
+        whenever(trezorService.isConnected()).thenReturn(true)
         whenever(trezorService.getDeviceFingerprint()).thenReturn("fingerprint")
         whenever(trezorService.composeTransaction(any())).thenReturn(emptyList())
         sut = createSut()
@@ -992,6 +993,24 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(features, result.getOrNull())
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+    }
+
+    @Test
+    fun `connectKnownDevice should close stale session when forced`() = test {
+        val knownDevice = mockKnownDevice()
+        val device = mockDeviceInfo()
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.connectKnownDevice(DEVICE_ID, forceSession = true)
+
+        assertTrue(result.isSuccess)
+        verify(trezorService).disconnect()
         assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
     }
 
