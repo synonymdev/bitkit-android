@@ -1,19 +1,14 @@
 package to.bitkit.ui.screens.transfer.hardware
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -32,8 +27,8 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.TransferViewModel
 
-/** Dwell on the signed confirmation before forwarding, matching the transfer flow's checkmark beat. */
-private const val SIGNED_AUTO_NAV_DELAY_MS = 2500L
+/** Figma handoff delay before forwarding from signed confirmation. */
+private const val SIGNED_AUTO_NAV_DELAY_MS = 1_000L
 
 @Composable
 fun SpendingHwSignedScreen(
@@ -68,14 +63,9 @@ private fun Content(
             actions = { DrawerNavIcon() },
         )
         Box(modifier = Modifier.fillMaxSize()) {
-            Image(
-                painter = painterResource(id = R.drawable.check),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .padding(top = 120.dp)
-                    .size(220.dp)
+            HardwareTransferIllustration(
+                drawableRes = R.drawable.check,
+                topRatio = SIGNED_VISUAL_TOP_RATIO,
             )
 
             Column(

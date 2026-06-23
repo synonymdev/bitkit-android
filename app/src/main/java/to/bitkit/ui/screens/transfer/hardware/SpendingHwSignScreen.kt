@@ -1,23 +1,18 @@
 package to.bitkit.ui.screens.transfer.hardware
 
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -78,13 +73,13 @@ fun SpendingHwSignScreen(
 @Composable
 private fun Content(
     order: IBtOrder,
-    isAdvanced: Boolean,
-    isSigning: Boolean,
-    onBackClick: () -> Unit,
-    onLearnMoreClick: () -> Unit,
-    onAdvancedClick: () -> Unit,
-    onUseDefaultLspBalanceClick: () -> Unit,
-    onOpenConnect: () -> Unit,
+    isAdvanced: Boolean = false,
+    isSigning: Boolean = false,
+    onBackClick: () -> Unit = {},
+    onLearnMoreClick: () -> Unit = {},
+    onAdvancedClick: () -> Unit = {},
+    onUseDefaultLspBalanceClick: () -> Unit = {},
+    onOpenConnect: () -> Unit = {},
 ) {
     ScreenColumn {
         AppTopBar(
@@ -93,15 +88,9 @@ private fun Content(
             actions = { DrawerNavIcon() },
         )
         Box(modifier = Modifier.fillMaxSize()) {
-            Image(
-                painter = painterResource(id = R.drawable.trezor),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 48.dp)
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 96.dp)
+            HardwareTransferIllustration(
+                drawableRes = R.drawable.trezor,
+                topRatio = SIGN_VISUAL_TOP_RATIO,
             )
 
             Column(
@@ -198,13 +187,28 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             order = previewBtOrder(),
-            isAdvanced = false,
-            isSigning = false,
-            onBackClick = {},
-            onLearnMoreClick = {},
-            onAdvancedClick = {},
-            onUseDefaultLspBalanceClick = {},
-            onOpenConnect = {},
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewAdvanced() {
+    AppThemeSurface {
+        Content(
+            order = previewBtOrder(),
+            isAdvanced = true,
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewSigning() {
+    AppThemeSurface {
+        Content(
+            order = previewBtOrder(),
+            isSigning = true,
         )
     }
 }
