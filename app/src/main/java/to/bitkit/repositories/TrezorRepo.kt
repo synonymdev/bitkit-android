@@ -644,6 +644,8 @@ class TrezorRepo @Inject constructor(
             awaitSetup()
             TrezorDebugLog.log("RECONNECT", "Setup OK")
             TrezorDebugLog.log("RECONNECT", "Scanning for devices...")
+            val knownDevices = (_state.value.knownDevices + loadKnownDevices()).distinctBy { it.id }
+            val knownDevice = knownDevices.find { it.matches(deviceId) }
             val scannedDevices = trezorService.scan()
             TrezorDebugLog.log(
                 "RECONNECT",
@@ -652,6 +654,7 @@ class TrezorRepo @Inject constructor(
             // Honor the transport the user selected — connect to exactly the
             // entry they tapped instead of overriding Bluetooth with USB.
             val device = scannedDevices.find { it.id == deviceId }
+                ?: knownDevice?.takeIf { it.transportType == TransportType.BLUETOOTH }?.toDeviceInfo()
                 ?: throw AppError("Device not found nearby — is it powered on?")
             TrezorDebugLog.log("RECONNECT", "Found matching device: id=${device.id}, name=${device.name}")
             TrezorDebugLog.log("RECONNECT", "Calling connectWithThpRetry...")
@@ -952,13 +955,25 @@ class TrezorRepo @Inject constructor(
                 throw e
             }
             TrezorDebugLog.log("THPRetry", "Error is retryable, attempting second connect...")
-            Logger.warn("Connection failed for $deviceId, retrying", e, context = TAG)
+            Logger.warn("Failed to connect to '$deviceId', retrying", e, context = TAG)
             logCredentialFileState(deviceId, "BEFORE 2nd attempt")
-            val result = connectDevice(deviceId, selection, requestUsbPermission)
+            val result = runSuspendCatching {
+                connectDevice(deviceId, selection, requestUsbPermission)
+            }.onFailure {
+                disconnectAfterFailedConnect(deviceId)
+            }.getOrThrow()
             logCredentialFileState(deviceId, "AFTER 2nd attempt (success)")
             TrezorDebugLog.log("THPRetry", "Second attempt succeeded")
             result
         }
+    }
+
+    private suspend fun disconnectAfterFailedConnect(deviceId: String) {
+        runSuspendCatching { trezorService.disconnect() }
+            .onFailure {
+                Logger.warn("Failed to disconnect stale Trezor session for '$deviceId'", it, context = TAG)
+            }
+        _state.update { it.copy(connected = null) }
     }
 
     private suspend fun connectDevice(
@@ -1033,6 +1048,16 @@ data class KnownDevice(
 )
 
 private fun KnownDevice.matches(deviceId: String) = id == deviceId || path == deviceId
+
+private fun KnownDevice.toDeviceInfo() = TrezorDeviceInfo(
+    id = id,
+    transportType = transportType.toCoreTransportType(),
+    name = name,
+    path = path,
+    label = label,
+    model = model,
+    isBootloader = false,
+)
 
 private fun TrezorTransportType.toTransportType(): TransportType = when (this) {
     TrezorTransportType.BLUETOOTH -> TransportType.BLUETOOTH

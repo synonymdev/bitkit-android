@@ -635,6 +635,21 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `connect should disconnect stale session after retryable THP failures`() = test {
+        whenever(trezorService.connect(eq(DEVICE_ID), any()))
+            .thenThrow(RuntimeException("thp timeout"))
+            .thenThrow(RuntimeException("session timeout"))
+        sut = createSut()
+
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertNull(sut.state.value.connected)
+        verify(trezorService, times(2)).connect(eq(DEVICE_ID), any())
+        verify(trezorService).disconnect()
+    }
+
+    @Test
     fun `connect should not retry non-retryable errors`() = test {
         whenever(trezorService.connect(eq(DEVICE_ID), any())).thenThrow(RuntimeException("bad pin"))
         sut = createSut()
@@ -978,6 +993,29 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals(features, result.getOrNull())
         assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+    }
+
+    @Test
+    fun `connectKnownDevice should use stored bluetooth device when scan misses active connection`() = test {
+        val bleDeviceId = "ble:57:21:A7:F9:DD:AD"
+        val knownDevice = mockKnownDevice(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TransportType.BLUETOOTH,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.scan()).thenReturn(emptyList())
+        whenever(trezorService.connect(eq(bleDeviceId), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.connectKnownDevice(bleDeviceId)
+
+        assertTrue(result.isSuccess)
+        assertEquals(features, result.getOrNull())
+        assertEquals(bleDeviceId, sut.state.value.connectedDeviceId)
+        verify(trezorService).connect(eq(bleDeviceId), any())
     }
 
     // endregion
