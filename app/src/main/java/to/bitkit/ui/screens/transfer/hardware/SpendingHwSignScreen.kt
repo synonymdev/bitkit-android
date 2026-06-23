@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
@@ -101,8 +102,9 @@ private fun Content(
             ) {
                 VerticalSpacer(32.dp)
                 Display(
-                    stringResource(R.string.lightning__transfer_hw__sign_title)
-                        .withAccent(accentColor = Colors.Purple)
+                    text = stringResource(R.string.lightning__transfer_hw__sign_title)
+                        .withAccent(accentColor = Colors.Purple),
+                    modifier = Modifier.fillMaxWidth()
                 )
                 VerticalSpacer(16.dp)
 

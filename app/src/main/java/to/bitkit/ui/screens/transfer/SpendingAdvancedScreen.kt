@@ -176,7 +176,8 @@ private fun Content(
 
             Display(
                 text = stringResource(R.string.lightning__spending_advanced__title)
-                    .withAccent(accentColor = Colors.Purple)
+                    .withAccent(accentColor = Colors.Purple),
+                modifier = Modifier.fillMaxWidth()
             )
 
             FillHeight()
