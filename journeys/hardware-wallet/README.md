@@ -60,7 +60,8 @@ Remove step forgets the device.
 | Journey | Covers |
 | - | - |
 | `connect-home-tile.xml` | Dev-screen connect, home tile, indicator, balance, detail screen opens |
-| `activity-blue-icons.xml` | Hardware activity merge, blue icons, All Activity filters, current watch-only detail fallback |
+| `activity-blue-icons.xml` | Hardware activity in the unified list, blue icons, All Activity tab filters |
+| `activity-detail-hw-tags.xml` | Hardware activity detail tags (persist + survive tag filter) and Explore inputs/outputs |
 | `usb-reconnect.xml` | Disconnect indicator, injected USB attach intent → silent auto-reconnect; physical-device chooser path noted separately |
 | `suggestion-intro-sheet.xml` | Forget device, Hardware suggestion card, full connect flow (Intro → Searching → Found → Paired → Finish) re-pairs |
 | `connect-flow.xml` | Settings Add button → connect flow with an edited Label Funds → paired device count + name |

@@ -1,11 +1,11 @@
 <journey name="Hardware Wallet Activity Blue Icons">
   <description>
-    Verifies hardware wallet on-chain activity merged into the home list and the All
-    Activity screen with blue icon variants, filter behavior, and the current watch-only
-    activity detail fallback until Core-backed hardware activity support lands. Requires a
-    paired Bridge emulator whose wallet has at least one on-chain transaction (run
-    connect-home-tile.xml first; fund per README.md if the
-    deterministic wallet has no history).
+    Verifies hardware wallet on-chain activity in the home list and the All Activity screen
+    with blue icon variants and tab filter behavior. Hardware activities are now first-class
+    Bitkit Core activities (persisted by the watcher), so they appear in the unified list and
+    survive tab and tag filters like normal transactions. Requires a paired Bridge emulator
+    whose wallet has at least one on-chain transaction (run connect-home-tile.xml first; fund
+    per README.md if the deterministic wallet has no history).
   </description>
   <actions>
     <action>
@@ -33,7 +33,7 @@
       Tap the "Received" tab and verify blue-icon items with received arrows are listed, assuming the hardware wallet has incoming transactions
     </action>
     <action>
-      Apply any tag filter if a tag exists, and verify blue-icon hardware items disappear from the filtered list; skip this step if no tags exist
+      Tap back to the "All" tab and verify the blue-icon hardware items are listed again
     </action>
   </actions>
 </journey>
