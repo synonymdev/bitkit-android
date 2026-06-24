@@ -28,6 +28,7 @@ import to.bitkit.App
 import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.CoreService
@@ -258,9 +259,9 @@ class PrivatePaykitRepo @Inject constructor(
 
     suspend fun beginSavedContactPayment(publicKey: String): Result<PublicPaykitPaymentResult> =
         withContext(serializedDispatcher) {
-            runCatching {
+            runSuspendCatching {
                 val normalizedKey = knownSavedContact(publicKey)
-                    ?: return@runCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
+                    ?: return@runSuspendCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
 
                 val result = beginContactPayment(normalizedKey).getOrElse {
                     if (it is CancellationException) throw it
@@ -269,7 +270,7 @@ class PrivatePaykitRepo @Inject constructor(
                         it,
                         context = TAG,
                     )
-                    return@runCatching PublicPaykitPaymentResult.NoEndpoint
+                    return@runSuspendCatching publicPaykitRepo.beginPayment(normalizedKey).getOrThrow()
                 }
                 result
             }
@@ -407,7 +408,7 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun beginContactPayment(publicKey: String): Result<PublicPaykitPaymentResult> =
         withContext(serializedDispatcher) {
-            runCatching {
+            runSuspendCatching {
                 pubkyService.currentPublicKey() ?: throw PublicPaykitError.SessionNotActive
                 if (canPublishPrivateEndpoints()) {
                     publishLocalEndpoints(
@@ -434,7 +435,9 @@ class PrivatePaykitRepo @Inject constructor(
 
                 val privatePayable = privatePayableEndpoints(privateEndpoints, publicKey)
                 if (privatePayable.isNotEmpty()) {
-                    return@runCatching PublicPaykitPaymentResult.Opened(PublicPaykitRepo.paymentRequest(privatePayable))
+                    return@runSuspendCatching PublicPaykitPaymentResult.Opened(
+                        PublicPaykitRepo.paymentRequest(privatePayable),
+                    )
                 }
 
                 val publicEndpoints = resolution.payableEndpoints
@@ -442,7 +445,9 @@ class PrivatePaykitRepo @Inject constructor(
                     .mapNotNull { PublicPaykitRepo.parseEndpoint(it.identifier, it.payload) }
                 val publicPayable = publicPaykitRepo.payableEndpoints(publicEndpoints)
                 if (publicPayable.isNotEmpty()) {
-                    return@runCatching PublicPaykitPaymentResult.Opened(PublicPaykitRepo.paymentRequest(publicPayable))
+                    return@runSuspendCatching PublicPaykitPaymentResult.Opened(
+                        PublicPaykitRepo.paymentRequest(publicPayable),
+                    )
                 }
 
                 if (privateEndpoints.isEmpty() && publicEndpoints.isEmpty()) {
@@ -459,9 +464,9 @@ class PrivatePaykitRepo @Inject constructor(
         forceRefreshLightning: Boolean = false,
         requireImmediatePublication: Boolean = false,
     ): Result<Unit> = withContext(serializedDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val keys = publicKeys.mapNotNull { normalizedPublicKey(it) }.distinct()
-            if (keys.isEmpty()) return@runCatching
+            if (keys.isEmpty()) return@runSuspendCatching
 
             publicationMutex.withLock {
                 if (!canPublishPrivateEndpoints()) {
@@ -515,7 +520,7 @@ class PrivatePaykitRepo @Inject constructor(
         val updates = mutableListOf<PrivatePaymentListReservationUpdateInput>()
 
         for (publicKey in publicKeys) {
-            runCatching { paykitSdkService.ensureLinkWithPeer(publicKey) }.onFailure {
+            runSuspendCatching { paykitSdkService.ensureLinkWithPeer(publicKey) }.onFailure {
                 Logger.warn(
                     "Failed to prepare private Paykit link for '${redacted(publicKey)}' during '$reason'",
                     it,
@@ -598,9 +603,9 @@ class PrivatePaykitRepo @Inject constructor(
             .distinct()
 
     private suspend fun drainPendingPrivateMessages(reason: String, advancingLinksFor: List<String> = emptyList()) {
-        runCatching {
+        runSuspendCatching {
             advancingLinksFor.forEach { publicKey ->
-                runCatching { paykitSdkService.ensureLinkWithPeer(publicKey) }.onFailure {
+                runSuspendCatching { paykitSdkService.ensureLinkWithPeer(publicKey) }.onFailure {
                     Logger.warn(
                         "Failed to advance private Paykit link for '${redacted(publicKey)}' during '$reason'",
                         it,
@@ -645,7 +650,7 @@ class PrivatePaykitRepo @Inject constructor(
         publicKey: String,
         forceRefreshLightning: Boolean = false,
     ): Result<List<Endpoint>> = withContext(serializedDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val settings = settingsStore.data.first()
             val endpoints = mutableListOf<Endpoint>()
             if (PublicPaykitRepo.isOnchainPaymentOptionEnabled(settings)) {
@@ -682,15 +687,15 @@ class PrivatePaykitRepo @Inject constructor(
         publicKey: String,
         forceRefresh: Boolean = false,
     ): Result<StoredInvoice> = withContext(serializedDispatcher) {
-        runCatching {
-            if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runCatching it }
+        runSuspendCatching {
+            if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runSuspendCatching it }
 
             val bolt11 = lightningRepo.createInvoice(
                 amountSats = null,
                 description = "",
                 expirySeconds = privateInvoiceExpiry.inWholeSeconds.toUInt(),
             ).getOrThrow()
-            if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runCatching it }
+            if (!forceRefresh) reusablePrivateInvoice(publicKey)?.let { return@runSuspendCatching it }
 
             val decoded = (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice
                 ?: throw PublicPaykitError.InvalidPayload
@@ -837,7 +842,7 @@ class PrivatePaykitRepo @Inject constructor(
                     }
                 }
                 endpoint.methodId.isOnchain -> {
-                    val isUsed = runCatching { coreService.isAddressUsed(endpoint.value) }
+                    val isUsed = runSuspendCatching { coreService.isAddressUsed(endpoint.value) }
                         .onFailure {
                             Logger.warn(
                                 "Failed to check private Paykit endpoint usage for '${redacted(publicKey)}'",
@@ -854,6 +859,7 @@ class PrivatePaykitRepo @Inject constructor(
 
         if (staleLightningHashes.isNotEmpty()) {
             discardRemoteLightningEndpoints(publicKey, staleLightningHashes).onFailure {
+                if (it is CancellationException) throw it
                 Logger.warn(
                     "Failed to discard already-attempted private Paykit invoice for '${redacted(publicKey)}'",
                     it,
@@ -892,9 +898,9 @@ class PrivatePaykitRepo @Inject constructor(
             lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
     }
 
-    private suspend fun hasLocalSecretKeyForCurrentProfile(): Boolean = runCatching {
-        pubkyService.currentPublicKey() ?: return@runCatching false
-        val status = paykitSdkService.identityStatus() ?: return@runCatching false
+    private suspend fun hasLocalSecretKeyForCurrentProfile(): Boolean = runSuspendCatching {
+        pubkyService.currentPublicKey() ?: return@runSuspendCatching false
+        val status = paykitSdkService.identityStatus() ?: return@runSuspendCatching false
         status.privateLinkCapable
     }.getOrDefault(false)
 
@@ -944,12 +950,15 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     private suspend fun paymentHashForBolt11(bolt11: String): String? =
-        runCatching {
+        runSuspendCatching {
             (coreService.decode(bolt11) as? Scanner.Lightning)?.invoice?.paymentHash?.toHex()
         }.getOrNull()
 
     private suspend fun attemptedOutboundBolt11PaymentHashes(): Set<String> =
-        lightningRepo.getPayments().getOrDefault(emptyList())
+        lightningRepo.getPayments().getOrElse {
+            if (it is CancellationException) throw it
+            emptyList()
+        }
             .filter {
                 it.direction == PaymentDirection.OUTBOUND &&
                     it.status != PaymentStatus.FAILED &&
@@ -962,7 +971,10 @@ class PrivatePaykitRepo @Inject constructor(
         paymentHash in receivedSettledPaymentHashes()
 
     private suspend fun receivedSettledPaymentHashes(): Set<String> =
-        lightningRepo.getPayments().getOrDefault(emptyList())
+        lightningRepo.getPayments().getOrElse {
+            if (it is CancellationException) throw it
+            emptyList()
+        }
             .filter {
                 it.direction == PaymentDirection.INBOUND &&
                     it.status == PaymentStatus.SUCCEEDED &&

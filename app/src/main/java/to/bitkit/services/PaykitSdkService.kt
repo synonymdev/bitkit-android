@@ -138,6 +138,7 @@ class PaykitSdkService @Inject constructor(
         secret: String,
         includeLocalSecret: Boolean = true,
     ): PubkySessionBootstrapResult {
+        isSetup.await()
         val previousPublicKey = operationMutex.withLock { currentSdkStatePublicKeyLocked() }
         val result = PubkySessionBootstrap().importSession(
             sessionSecret = secret,
@@ -160,6 +161,7 @@ class PaykitSdkService @Inject constructor(
         homeserverPublicKey: String,
         signupCode: String?,
     ): PubkySessionBootstrapResult {
+        isSetup.await()
         val previousPublicKey = operationMutex.withLock { currentSdkStatePublicKeyLocked() }
         val result = PubkySessionBootstrap().signUp(
             localSecretKey = localSecretKey(secretKeyHex),
@@ -178,6 +180,7 @@ class PaykitSdkService @Inject constructor(
     }
 
     suspend fun signIn(secretKeyHex: String): PubkySessionBootstrapResult {
+        isSetup.await()
         val previousPublicKey = operationMutex.withLock { currentSdkStatePublicKeyLocked() }
         val result = PubkySessionBootstrap().signIn(localSecretKey(secretKeyHex))
         operationMutex.withLock {

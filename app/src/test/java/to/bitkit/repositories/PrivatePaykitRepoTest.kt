@@ -39,6 +39,7 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -309,11 +310,75 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             paykitSdkService.prepareAndResolveContactPayment(CONTACT_KEY, includePublicEndpoints = true)
         }.thenThrow(CancellationException("cancelled"))
 
-        val result = sut.beginSavedContactPayment(CONTACT_KEY)
+        assertFailsWith<CancellationException> {
+            sut.beginSavedContactPayment(CONTACT_KEY)
+        }
 
-        assertTrue(result.isFailure)
-        assertTrue(result.exceptionOrNull() is CancellationException)
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment does not fall back to public when private refresh is cancelled`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        clearInvocations(paykitSdkService, publicPaykitRepo)
+        whenever { paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any()) }
+            .thenThrow(CancellationException("cancelled"))
+
+        assertFailsWith<CancellationException> {
+            sut.beginSavedContactPayment(CONTACT_KEY)
+        }
+
+        verifyBlocking(paykitSdkService, never()) { prepareAndResolveContactPayment(any(), any()) }
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment does not fall back to public when endpoint build is cancelled`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        clearInvocations(paykitSdkService, publicPaykitRepo)
+        whenever { walletRepo.refreshReusableReceiveAddressIfReserved() }
+            .thenThrow(CancellationException("cancelled"))
+
+        assertFailsWith<CancellationException> {
+            sut.beginSavedContactPayment(CONTACT_KEY)
+        }
+
+        verifyBlocking(paykitSdkService, never()) { prepareAndResolveContactPayment(any(), any()) }
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment does not fall back to public when publish gate is cancelled`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        clearInvocations(paykitSdkService, publicPaykitRepo)
+        whenever(pubkyService.currentPublicKey()).thenThrow(CancellationException("cancelled"))
+
+        assertFailsWith<CancellationException> {
+            sut.beginSavedContactPayment(CONTACT_KEY)
+        }
+
+        verifyBlocking(paykitSdkService, never()) { prepareAndResolveContactPayment(any(), any()) }
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment falls back to public when unified resolution fails`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever {
+            paykitSdkService.prepareAndResolveContactPayment(CONTACT_KEY, includePublicEndpoints = true)
+        }.thenThrow(IllegalStateException("private unavailable"))
+        whenever(publicPaykitRepo.beginPayment(CONTACT_KEY)).thenReturn(
+            Result.success(PublicPaykitPaymentResult.Opened("public-fallback")),
+        )
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.Opened("public-fallback"), result)
+        verifyBlocking(publicPaykitRepo) { beginPayment(CONTACT_KEY) }
     }
 
     @Test
@@ -366,6 +431,64 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
 
         assertEquals(PublicPaykitPaymentResult.Opened("bcrt1qpublic"), result)
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment does not fall back to public when private payable check is cancelled`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever {
+            paykitSdkService.prepareAndResolveContactPayment(CONTACT_KEY, includePublicEndpoints = true)
+        }.thenReturn(
+            resolution(
+                resolvedEndpoint(
+                    methodId = MethodId.P2wpkh,
+                    value = PRIVATE_ADDRESS,
+                ),
+                resolvedEndpoint(
+                    methodId = MethodId.P2wpkh,
+                    value = "bcrt1qpublic",
+                    source = PaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT,
+                ),
+            ),
+        )
+        whenever { coreService.isAddressUsed(PRIVATE_ADDRESS) }
+            .thenThrow(CancellationException("cancelled"))
+
+        assertFailsWith<CancellationException> {
+            sut.beginSavedContactPayment(CONTACT_KEY)
+        }
+
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment does not fall back to public when private invoice decode is cancelled`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever {
+            paykitSdkService.prepareAndResolveContactPayment(CONTACT_KEY, includePublicEndpoints = true)
+        }.thenReturn(
+            resolution(
+                resolvedEndpoint(
+                    methodId = MethodId.Bolt11,
+                    value = PRIVATE_BOLT11,
+                ),
+                resolvedEndpoint(
+                    methodId = MethodId.P2wpkh,
+                    value = "bcrt1qpublic",
+                    source = PaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT,
+                ),
+            ),
+        )
+        whenever(coreService.decode(PRIVATE_BOLT11))
+            .thenThrow(CancellationException("cancelled"))
+
+        assertFailsWith<CancellationException> {
+            sut.beginSavedContactPayment(CONTACT_KEY)
+        }
+
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
 
