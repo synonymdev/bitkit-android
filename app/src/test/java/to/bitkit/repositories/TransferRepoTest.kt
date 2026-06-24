@@ -32,6 +32,7 @@ import to.bitkit.models.TransferType
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -58,6 +59,7 @@ class TransferRepoTest : BaseUnitTest() {
         private const val ID_ORDER = "test-order-id"
         private const val ID_CHANNEL = "test-channel-id"
         private const val ID_TRANSFER = "test-transfer-id"
+        private const val ID_HW_WALLET = "trezor:dev1"
         private val fundingTxo = OutPoint(txid = "test-funding-tx-id", vout = 0u)
     }
 
@@ -145,6 +147,33 @@ class TransferRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(transferDao).insert(any())
+    }
+
+    @Test
+    fun `createPendingToSpendingActivity passes hardware wallet id`() = test {
+        val order = previewBtOrder()
+        val fee = 123uL
+        val feeRate = 2uL
+
+        val result = sut.createPendingToSpendingActivity(
+            order = order,
+            txId = fundingTxo.txid,
+            fee = fee,
+            feeRate = feeRate,
+            walletId = ID_HW_WALLET,
+        )
+
+        assertTrue(result.isSuccess)
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            eq(fundingTxo.txid),
+            eq(order.payment?.onchain?.address.orEmpty()),
+            eq(order.feeSat),
+            eq(fee),
+            eq(feeRate),
+            eq(true),
+            eq(order.channel?.shortChannelId),
+            eq(ID_HW_WALLET),
+        )
     }
 
     @Test
@@ -291,7 +320,7 @@ class TransferRepoTest : BaseUnitTest() {
             fundingTxo = fundingTxo,
             isChannelReady = false,
         )
-        val activity = OnchainActivity.create(walletId = "wallet0",
+        val activity = OnchainActivity.create(
             id = fundingTxo.txid,
             txType = PaymentType.SENT,
             txId = fundingTxo.txid,
@@ -609,7 +638,7 @@ class TransferRepoTest : BaseUnitTest() {
             createdAt = 1000L,
         )
 
-        val sweepActivity = OnchainActivity.create(walletId = "wallet0",
+        val sweepActivity = OnchainActivity.create(
             id = "sweep-activity-id",
             txType = PaymentType.RECEIVED,
             txId = "sweep-txid",
@@ -636,6 +665,7 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(activityService.hasOnchainActivityForChannel(ID_CHANNEL)).thenReturn(true)
         whenever(
             activityService.get(
+                anyOrNull(),
                 anyOrNull(),
                 anyOrNull(),
                 anyOrNull(),
@@ -741,7 +771,7 @@ class TransferRepoTest : BaseUnitTest() {
             createdAt = 1000L,
         )
 
-        val sweepActivity = OnchainActivity.create(walletId = "wallet0",
+        val sweepActivity = OnchainActivity.create(
             id = "sweep-activity-id",
             txType = PaymentType.RECEIVED,
             txId = sweepTxid,

@@ -12,6 +12,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
+import to.bitkit.models.ActivityWalletType
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
@@ -36,6 +37,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
     private var timestampCounter = 0L
 
     private val testMetadata = PreActivityMetadata(
+        walletId = ActivityWalletType.BITKIT.id(),
         paymentId = "payment-123",
         createdAt = 1234567890uL,
         tags = listOf("tag1", "tag2"),
@@ -45,8 +47,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
         isReceive = false,
         feeRate = 10u,
         isTransfer = false,
-        channelId = "channel-123",
-        walletId = "wallet0",
+        channelId = "channel-123"
     )
 
     @Before
@@ -376,8 +377,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             id = id,
             address = address,
             isReceive = true,
-            tags = tags,
-            walletId = "wallet0",
+            tags = tags
         )
 
         assertTrue(result.isSuccess)
@@ -395,8 +395,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             address = address,
             isReceive = false,
             tags = emptyList(),
-            isTransfer = true,
-            walletId = "wallet0",
+            isTransfer = true
         )
 
         assertTrue(result.isSuccess)
@@ -416,8 +415,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             tags = listOf("important"),
             feeRate = 10u,
             isTransfer = true,
-            channelId = "channel-123",
-            walletId = "wallet0",
+            channelId = "channel-123"
         )
 
         assertTrue(result.isSuccess)
@@ -434,8 +432,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             address = address,
             isReceive = true,
             tags = emptyList(),
-            isTransfer = false,
-            walletId = "wallet0",
+            isTransfer = false
         )
 
         assertTrue(result.isFailure)
@@ -460,8 +457,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             address = address,
             isReceive = true,
             tags = tags,
-            feeRate = null,
-            walletId = "wallet0",
+            feeRate = null
         )
 
         assertTrue(result.isSuccess)
@@ -484,8 +480,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             address = address,
             isReceive = true,
             tags = tags,
-            channelId = null,
-            walletId = "wallet0",
+            channelId = null
         )
 
         assertTrue(result.isSuccess)
@@ -503,8 +498,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             id = id,
             address = address,
             isReceive = true,
-            tags = tags,
-            walletId = "wallet0",
+            tags = tags
         )
 
         assertTrue(result.isFailure)
@@ -600,8 +594,7 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             id = id,
             address = address,
             isReceive = true,
-            tags = tags,
-            walletId = "wallet0",
+            tags = tags
         )
 
         assertTrue(result.isSuccess)

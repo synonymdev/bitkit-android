@@ -12,18 +12,21 @@ import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.mockingDetails
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.create
+import to.bitkit.models.ActivityWalletType
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -34,8 +37,8 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val settingsStore = mock<SettingsStore>()
-    private val hwWalletRepo = mock<HwWalletRepo>()
     private val transferRepo = mock<TransferRepo>()
+    private val hardwareWalletId = ActivityWalletType.TREZOR.idPrefixed("dev1")
 
     companion object Fixtures {
         const val ACTIVITY_ID = "test-activity-1"
@@ -48,7 +51,6 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.wallet__activity_error_load_failed)).thenReturn("Failed to load activity")
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever(activityRepo.activitiesChanged).thenReturn(MutableStateFlow(System.currentTimeMillis()))
-        whenever(hwWalletRepo.activities).thenReturn(MutableStateFlow(persistentListOf()))
         runBlocking {
             whenever(transferRepo.findLspOrderIdByFundingTxId(any())).thenReturn(Result.success(null))
         }
@@ -59,15 +61,14 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
             activityRepo = activityRepo,
             blocktankRepo = blocktankRepo,
             settingsStore = settingsStore,
-            hwWalletRepo = hwWalletRepo,
             transferRepo = transferRepo,
         )
     }
 
     @Test
-    fun `loadActivity falls back to hardware wallet activity when missing from the database`() = test {
+    fun `loadActivity resolves a hardware wallet activity and tags it via its wallet id`() = test {
         val hwActivity = Activity.Onchain(
-            OnchainActivity.create(walletId = "wallet0",
+            OnchainActivity.create(
                 id = ACTIVITY_ID,
                 txType = PaymentType.RECEIVED,
                 txId = ACTIVITY_ID,
@@ -76,51 +77,39 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
                 address = "",
                 timestamp = 1_700_000_000uL,
                 confirmed = true,
+                walletId = hardwareWalletId,
             )
         )
-        whenever { activityRepo.getActivity(ACTIVITY_ID) }.thenReturn(Result.success(null))
-        whenever(hwWalletRepo.activities).thenReturn(MutableStateFlow(persistentListOf<Activity>(hwActivity)))
+        whenever { activityRepo.getActivity(ACTIVITY_ID, hardwareWalletId) }.thenReturn(Result.success(hwActivity))
+        whenever { activityRepo.getActivityTags(ACTIVITY_ID, hardwareWalletId) }.thenReturn(Result.success(emptyList()))
+        whenever {
+            activityRepo.addTagsToActivity(ACTIVITY_ID, listOf("tag1"), hardwareWalletId)
+        }.thenReturn(Result.success(Unit))
+        whenever { settingsStore.addLastUsedTag("tag1") }.thenReturn(Unit)
 
-        sut.loadActivity(ACTIVITY_ID)
+        sut.loadActivity(ACTIVITY_ID, hardwareWalletId)
+        val loadState = sut.uiState.value.activityLoadState
+        assertTrue(loadState is ActivityDetailViewModel.ActivityLoadState.Success)
+        val activity = loadState.activity
+        assertTrue(activity is Activity.Onchain)
+        assertEquals(ACTIVITY_ID, activity.v1.id)
+        assertEquals(hardwareWalletId, activity.v1.walletId)
 
-        val state = sut.uiState.value
-        val loadState = state.activityLoadState as ActivityDetailViewModel.ActivityLoadState.Success
-        assertEquals(hwActivity, loadState.activity)
-        assertTrue(state.isHardwareActivity)
+        sut.addTag("tag1")
+
+        verify(activityRepo, atLeastOnce()).getActivity(ACTIVITY_ID, hardwareWalletId)
+        verify(activityRepo).addTagsToActivity(ACTIVITY_ID, listOf("tag1"), hardwareWalletId)
+        verify(activityRepo, atLeastOnce()).getActivityTags(ACTIVITY_ID, hardwareWalletId)
     }
 
     @Test
-    fun `hardware wallet activity updates while loaded`() = test {
-        val initialActivity = createTestActivity(ACTIVITY_ID, confirmed = false)
-        val updatedActivity = createTestActivity(ACTIVITY_ID, confirmed = true)
-        val hardwareActivities = MutableStateFlow(persistentListOf<Activity>(initialActivity))
-
-        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.success(null))
-        whenever(hwWalletRepo.activities).thenReturn(hardwareActivities)
-
-        sut.loadActivity(ACTIVITY_ID)
-
-        val initialState = sut.uiState.value.activityLoadState
-        assertTrue(initialState is ActivityDetailViewModel.ActivityLoadState.Success)
-        assertEquals(initialActivity, initialState.activity)
-
-        hardwareActivities.value = persistentListOf(updatedActivity)
-
-        val updatedState = sut.uiState.value.activityLoadState
-        assertTrue(updatedState is ActivityDetailViewModel.ActivityLoadState.Success)
-        assertEquals(updatedActivity, updatedState.activity)
-        assertTrue(sut.uiState.value.isHardwareActivity)
-    }
-
-    @Test
-    fun `loadActivity reports not found when missing from database and hardware wallets`() = test {
-        whenever { activityRepo.getActivity(ACTIVITY_ID) }.thenReturn(Result.success(null))
+    fun `loadActivity reports not found when missing from the database`() = test {
+        whenever { activityRepo.getActivity(eq(ACTIVITY_ID), anyOrNull()) }.thenReturn(Result.success(null))
 
         sut.loadActivity(ACTIVITY_ID)
 
         val state = sut.uiState.value
         assertTrue(state.activityLoadState is ActivityDetailViewModel.ActivityLoadState.Error)
-        assertFalse(state.isHardwareActivity)
     }
 
     @Test
@@ -181,8 +170,8 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         val activitiesChangedFlow = MutableStateFlow(System.currentTimeMillis())
 
         whenever(activityRepo.activitiesChanged).thenReturn(activitiesChangedFlow)
-        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.success(initialActivity))
-        whenever(activityRepo.getActivityTags(ACTIVITY_ID)).thenReturn(Result.success(emptyList()))
+        whenever(activityRepo.getActivity(eq(ACTIVITY_ID), anyOrNull())).thenReturn(Result.success(initialActivity))
+        whenever(activityRepo.getActivityTags(eq(ACTIVITY_ID), anyOrNull())).thenReturn(Result.success(emptyList()))
 
         // Load activity
         sut.loadActivity(ACTIVITY_ID)
@@ -190,16 +179,20 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         // Verify initial state loaded
         val initialState = sut.uiState.value.activityLoadState
         assertTrue(initialState is ActivityDetailViewModel.ActivityLoadState.Success)
-        assertEquals(initialActivity, initialState.activity)
+        assertTrue(initialState.activity is Activity.Onchain)
+        assertEquals(initialActivity.v1.id, initialState.activity.v1.id)
+        assertEquals(initialActivity.v1.confirmed, initialState.activity.v1.confirmed)
 
         // Simulate activity update
-        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.success(updatedActivity))
+        whenever(activityRepo.getActivity(eq(ACTIVITY_ID), anyOrNull())).thenReturn(Result.success(updatedActivity))
         activitiesChangedFlow.value += 1
 
         // Verify ViewModel reflects updated activity
         val updatedState = sut.uiState.value.activityLoadState
         assertTrue(updatedState is ActivityDetailViewModel.ActivityLoadState.Success)
-        assertEquals(updatedActivity, updatedState.activity)
+        assertTrue(updatedState.activity is Activity.Onchain)
+        assertEquals(updatedActivity.v1.id, updatedState.activity.v1.id)
+        assertEquals(updatedActivity.v1.confirmed, updatedState.activity.v1.confirmed)
     }
 
     @Test
@@ -208,8 +201,8 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         val activitiesChangedFlow = MutableStateFlow(System.currentTimeMillis())
 
         whenever(activityRepo.activitiesChanged).thenReturn(activitiesChangedFlow)
-        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.success(activity))
-        whenever(activityRepo.getActivityTags(ACTIVITY_ID)).thenReturn(Result.success(emptyList()))
+        whenever(activityRepo.getActivity(eq(ACTIVITY_ID), anyOrNull())).thenReturn(Result.success(activity))
+        whenever(activityRepo.getActivityTags(eq(ACTIVITY_ID), anyOrNull())).thenReturn(Result.success(emptyList()))
 
         // Load activity
         sut.loadActivity(ACTIVITY_ID)
@@ -232,25 +225,29 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         val activitiesChangedFlow = MutableStateFlow(System.currentTimeMillis())
 
         whenever(activityRepo.activitiesChanged).thenReturn(activitiesChangedFlow)
-        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.success(activity))
-        whenever(activityRepo.getActivityTags(ACTIVITY_ID)).thenReturn(Result.success(emptyList()))
+        whenever(activityRepo.getActivity(eq(ACTIVITY_ID), anyOrNull())).thenReturn(Result.success(activity))
+        whenever(activityRepo.getActivityTags(eq(ACTIVITY_ID), anyOrNull())).thenReturn(Result.success(emptyList()))
 
         // Load activity
         sut.loadActivity(ACTIVITY_ID)
 
         // Simulate reload failure
-        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.failure(Exception("Network error")))
+        whenever(activityRepo.getActivity(eq(ACTIVITY_ID), anyOrNull()))
+            .thenReturn(Result.failure(Exception("Network error")))
         activitiesChangedFlow.value += 1
 
         // Verify last known state is preserved
         val state = sut.uiState.value.activityLoadState
         assertTrue(state is ActivityDetailViewModel.ActivityLoadState.Success)
-        assertEquals(activity, state.activity)
+        assertTrue(state.activity is Activity.Onchain)
+        assertEquals(activity.v1.id, state.activity.v1.id)
+        assertEquals(activity.v1.confirmed, state.activity.v1.confirmed)
     }
 
     @Test
     fun `loadActivity handles error gracefully`() = test {
-        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.failure(Exception("Database error")))
+        whenever(activityRepo.getActivity(eq(ACTIVITY_ID), anyOrNull()))
+            .thenReturn(Result.failure(Exception("Database error")))
 
         sut.loadActivity(ACTIVITY_ID)
 
@@ -263,7 +260,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         confirmed: Boolean = false,
     ): Activity.Onchain {
         return Activity.Onchain(
-            v1 = OnchainActivity.create(walletId = "wallet0",
+            v1 = OnchainActivity.create(
                 id = id,
                 txType = PaymentType.RECEIVED,
                 txId = "tx-$id",
