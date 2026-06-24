@@ -167,7 +167,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
     ): ULong {
         val channelIds = channels.map { it.channelId }.toSet()
         val transferChannelIds = mutableSetOf<String>()
-        for (transfer in transfers) {
+        for (transfer in transfers.filter { it.type.isToSavings() }) {
             transferRepo.resolveChannelIdForTransfer(transfer, channels)?.let { transferChannelIds.add(it) }
         }
 
