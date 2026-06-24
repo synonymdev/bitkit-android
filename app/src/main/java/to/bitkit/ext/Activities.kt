@@ -5,12 +5,28 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
-import to.bitkit.models.WalletScope
+import to.bitkit.models.ActivityWalletType
+
+val DEFAULT_WALLET_ID: String get() = ActivityWalletType.BITKIT.id()
 
 fun Activity.rawId(): String = when (this) {
     is Activity.Lightning -> v1.id
     is Activity.Onchain -> v1.id
 }
+
+fun Activity.walletId(): String = when (this) {
+    is Activity.Lightning -> v1.walletId
+    is Activity.Onchain -> v1.walletId
+}
+
+fun Activity.scopedId(): String = "${walletId()}:${rawId()}"
+
+fun Activity.activityKey(): String = when (this) {
+    is Activity.Lightning -> "lightning_${scopedId()}"
+    is Activity.Onchain -> "onchain_${scopedId()}"
+}
+
+fun Activity.isHardwareWalletActivity(): Boolean = ActivityWalletType.TREZOR.owns(walletId())
 
 fun Activity.txType(): PaymentType = when (this) {
     is Activity.Lightning -> v1.txType
@@ -34,6 +50,21 @@ fun Activity.totalValue() = when (this) {
         PaymentType.SENT -> v1.value + v1.fee
         else -> v1.value
     }
+}
+
+fun Activity.value() = when (this) {
+    is Activity.Lightning -> v1.value
+    is Activity.Onchain -> v1.value
+}
+
+fun Activity.fee() = when (this) {
+    is Activity.Lightning -> v1.fee
+    is Activity.Onchain -> v1.fee
+}
+
+fun Activity.message() = when (this) {
+    is Activity.Lightning -> v1.message
+    is Activity.Onchain -> ""
 }
 
 fun Activity.isBoosted() = when (this) {
@@ -78,6 +109,21 @@ fun Activity.paymentState(): PaymentState? = when (this) {
     is Activity.Onchain -> null
 }
 
+fun Activity.txId(): String? = when (this) {
+    is Activity.Lightning -> null
+    is Activity.Onchain -> v1.txId
+}
+
+fun Activity.confirmed(): Boolean? = when (this) {
+    is Activity.Lightning -> null
+    is Activity.Onchain -> v1.confirmed
+}
+
+fun Activity.feeRate(): ULong = when (this) {
+    is Activity.Lightning -> 0u
+    is Activity.Onchain -> v1.feeRate
+}
+
 fun Activity.Onchain.boostType() = when (this.v1.txType) {
     PaymentType.SENT -> BoostType.RBF
     PaymentType.RECEIVED -> BoostType.CPFP
@@ -91,11 +137,15 @@ fun Activity.timestamp() = when (this) {
     }
 }
 
+fun Activity.rawTimestamp() = when (this) {
+    is Activity.Lightning -> v1.timestamp
+    is Activity.Onchain -> v1.timestamp
+}
+
 enum class BoostType { RBF, CPFP }
 
 @Suppress("LongParameterList")
 fun LightningActivity.Companion.create(
-    walletId: String = WalletScope.default,
     id: String,
     txType: PaymentType,
     status: PaymentState,
@@ -109,6 +159,7 @@ fun LightningActivity.Companion.create(
     createdAt: ULong? = timestamp,
     updatedAt: ULong? = createdAt,
     seenAt: ULong? = null,
+    walletId: String = DEFAULT_WALLET_ID,
 ) = LightningActivity(
     walletId = walletId,
     id = id,
@@ -128,7 +179,6 @@ fun LightningActivity.Companion.create(
 
 @Suppress("LongParameterList")
 fun OnchainActivity.Companion.create(
-    walletId: String = WalletScope.default,
     id: String,
     txType: PaymentType,
     txId: String,
@@ -149,6 +199,7 @@ fun OnchainActivity.Companion.create(
     createdAt: ULong? = timestamp,
     updatedAt: ULong? = createdAt,
     seenAt: ULong? = null,
+    walletId: String = DEFAULT_WALLET_ID,
 ) = OnchainActivity(
     walletId = walletId,
     id = id,

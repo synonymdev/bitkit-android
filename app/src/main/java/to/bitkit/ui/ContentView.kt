@@ -996,7 +996,7 @@ private fun NavGraphBuilder.home(
             isGeoBlocked = isGeoBlocked,
             onchainActivities = onchainActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
-            onActivityItemClick = { navController.navigateToActivityItem(it) },
+            onActivityItemClick = { id, walletId -> navController.navigateToActivityItem(id, walletId) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSpendingClick = {
                 navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
@@ -1015,7 +1015,7 @@ private fun NavGraphBuilder.home(
             channels = lightningState.channels,
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
-            onActivityItemClick = { navController.navigateToActivityItem(it) },
+            onActivityItemClick = { id, walletId -> navController.navigateToActivityItem(id, walletId) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSavingsClick = {
                 if (!hasSeenSavingsIntro) {
@@ -1035,7 +1035,7 @@ private fun NavGraphBuilder.home(
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         HardwareWalletScreen(
             deviceId = deviceId,
-            onActivityItemClick = { id -> navController.navigateToActivityItem(id) },
+            onActivityItemClick = { id, walletId -> navController.navigateToActivityItem(id, walletId) },
             onTransferToSpendingClick = { selectedDeviceId ->
                 navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, selectedDeviceId)
             },
@@ -1052,7 +1052,7 @@ private fun NavGraphBuilder.allActivity(
         AllActivityScreen(
             viewModel = activityListViewModel,
             onBack = { navController.popBackStack() },
-            onActivityItemClick = { id -> navController.navigateToActivityItem(id) },
+            onActivityItemClick = { id, walletId -> navController.navigateToActivityItem(id, walletId) },
         )
     }
 }
@@ -1210,7 +1210,7 @@ private fun NavGraphBuilder.contacts(
             ContactActivityScreen(
                 viewModel = viewModel,
                 onBackClick = { navController.popBackStack() },
-                onActivityItemClick = { navController.navigateToActivityItem(it) },
+                onActivityItemClick = { id, walletId -> navController.navigateToActivityItem(id, walletId) },
             )
         }
     }
@@ -1594,7 +1594,7 @@ private fun NavGraphBuilder.activityItem(
         ActivityDetailScreen(
             listViewModel = activityListViewModel,
             route = it.toRoute(),
-            onExploreClick = { id -> navController.navigateToActivityExplore(id) },
+            onExploreClick = { id, walletId -> navController.navigateToActivityExplore(id, walletId) },
             onAssignContactClick = { id -> navController.navigateTo(Routes.ActivityAssignContact(id)) },
             onChannelClick = { channelId ->
                 navController.navigateTo(Routes.ChannelDetail(channelId))
@@ -1851,9 +1851,11 @@ fun NavController.navigateToTransferIntro() = navigateTo(Routes.TransferIntro)
 
 fun NavController.navigateToTransferFunding() = navigateTo(Routes.Funding)
 
-fun NavController.navigateToActivityItem(id: String) = navigateTo(Routes.ActivityDetail(id))
+fun NavController.navigateToActivityItem(id: String, walletId: String? = null) =
+    navigateTo(Routes.ActivityDetail(id, walletId))
 
-fun NavController.navigateToActivityExplore(id: String) = navigateTo(Routes.ActivityExplore(id))
+fun NavController.navigateToActivityExplore(id: String, walletId: String? = null) =
+    navigateTo(Routes.ActivityExplore(id, walletId))
 
 fun NavController.navigateToLogDetail(fileName: String) = navigateTo(Routes.LogDetail(fileName))
 
@@ -2074,13 +2076,13 @@ sealed interface Routes {
     data class LnurlChannel(val uri: String, val callback: String, val k1: String) : Routes
 
     @Serializable
-    data class ActivityDetail(val id: String) : Routes
+    data class ActivityDetail(val id: String, val walletId: String? = null) : Routes
 
     @Serializable
     data class ActivityAssignContact(val id: String) : Routes
 
     @Serializable
-    data class ActivityExplore(val id: String) : Routes
+    data class ActivityExplore(val id: String, val walletId: String? = null) : Routes
 
     @Serializable
     data object BuyIntro : Routes

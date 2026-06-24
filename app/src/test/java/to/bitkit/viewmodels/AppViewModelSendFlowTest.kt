@@ -38,6 +38,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
+import to.bitkit.models.ActivityWalletType
 import to.bitkit.models.BalanceState
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.PubkyProfile
@@ -279,16 +280,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `hardware received tx details navigate directly to hardware activity`() = test {
         val txId = "hardware-tx"
+        val walletId = ActivityWalletType.TREZOR.idPrefixed("dev1")
 
         sut.mainScreenEffect.test {
             advanceUntilIdle()
-            hwReceivedTxs.emit(HwWalletReceivedTx(txid = txId, sats = 21uL))
+            hwReceivedTxs.emit(HwWalletReceivedTx(txid = txId, sats = 21uL, walletId = walletId))
             advanceUntilIdle()
 
             assertEquals(txId, sut.transactionSheet.value.activityId)
+            assertEquals(walletId, sut.transactionSheet.value.activityWalletId)
             sut.onClickActivityDetail()
 
-            assertEquals(MainScreenEffect.Navigate(Routes.ActivityDetail(txId)), awaitItem())
+            assertEquals(MainScreenEffect.Navigate(Routes.ActivityDetail(txId, walletId)), awaitItem())
         }
         verify(activityRepo, never()).findActivityByPaymentId(any(), any(), any(), any())
     }

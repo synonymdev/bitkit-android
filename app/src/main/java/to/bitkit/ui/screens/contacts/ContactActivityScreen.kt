@@ -37,7 +37,7 @@ import to.bitkit.ui.theme.Colors
 fun ContactActivityScreen(
     viewModel: ContactActivityViewModel,
     onBackClick: () -> Unit,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (String, String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
@@ -54,7 +54,7 @@ private fun Content(
     uiState: ContactActivityUiState,
     onBackClick: () -> Unit,
     onRetryClick: () -> Unit,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (String, String) -> Unit,
 ) {
     ScreenColumn {
         AppTopBar(
@@ -118,7 +118,7 @@ private fun ErrorState(
 private fun ContactActivityList(
     profile: PubkyProfile?,
     activities: ImmutableList<Activity>?,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (String, String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val name = profile?.name
@@ -154,7 +154,7 @@ private fun Preview() {
             ),
             onBackClick = {},
             onRetryClick = {},
-            onActivityItemClick = {},
+            onActivityItemClick = { _, _ -> },
         )
     }
 }
@@ -170,7 +170,7 @@ private fun PreviewEmpty() {
             ),
             onBackClick = {},
             onRetryClick = {},
-            onActivityItemClick = {},
+            onActivityItemClick = { _, _ -> },
         )
     }
 }
@@ -186,7 +186,7 @@ private fun PreviewError() {
             ),
             onBackClick = {},
             onRetryClick = {},
-            onActivityItemClick = {},
+            onActivityItemClick = { _, _ -> },
         )
     }
 }

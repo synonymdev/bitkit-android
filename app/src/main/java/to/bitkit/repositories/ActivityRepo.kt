@@ -34,9 +34,9 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.IoDispatcher
+import to.bitkit.ext.DEFAULT_WALLET_ID
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.contact
-import to.bitkit.ext.create
 import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.nowMillis
@@ -178,8 +178,8 @@ class ActivityRepo @Inject constructor(
     private suspend fun findClosedChannelForTransaction(txid: String): String? =
         coreService.activity.findClosedChannelForTransaction(txid, null)
 
-    suspend fun getOnchainActivityByTxId(txid: String): OnchainActivity? =
-        coreService.activity.getOnchainActivityByTxId(txid)
+    suspend fun getOnchainActivityByTxId(txid: String, walletId: String? = null): OnchainActivity? =
+        coreService.activity.getOnchainActivityByTxId(txid, walletId)
 
     /**
      * Checks if a transaction is inbound (received) by looking up the payment direction.
@@ -214,23 +214,40 @@ class ActivityRepo @Inject constructor(
         notifyActivitiesChanged()
     }
 
-    suspend fun syncHardwareOnchainActivity(activity: OnchainActivity): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun persistHardwareActivities(
+        activities: List<Activity>,
+        transactionDetails: List<BitkitCoreTransactionDetails>,
+    ): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
-            val existing = coreService.activity.getOnchainActivityByTxId(activity.txId) ?: return@runCatching
-            val confirmTimestamp = existing.confirmTimestamp ?: activity.confirmTimestamp ?: activity.timestamp
-                .takeIf { activity.confirmed }
-            val updated = existing.copy(
-                confirmed = existing.confirmed || activity.confirmed,
-                confirmTimestamp = confirmTimestamp,
-                doesExist = if (activity.confirmed) true else existing.doesExist,
-                fee = if (existing.fee == 0uL && activity.fee > 0uL) activity.fee else existing.fee,
-                updatedAt = maxOf(existing.updatedAt ?: 0uL, activity.updatedAt ?: activity.timestamp),
-            )
-            if (updated == existing) return@runCatching
-            coreService.activity.update(existing.id, Activity.Onchain(updated))
-            notifyActivitiesChanged()
+            val mergedActivities = activities.map { mergeExistingTransferMetadata(it) }
+            if (mergedActivities.isNotEmpty()) coreService.activity.upsertList(mergedActivities)
+            if (transactionDetails.isNotEmpty()) coreService.activity.upsertTransactionDetailsList(transactionDetails)
+            if (mergedActivities.isNotEmpty() || transactionDetails.isNotEmpty()) notifyActivitiesChanged()
         }.onFailure {
-            Logger.error("Failed to sync hardware activity '${activity.txId}'", it, context = TAG)
+            Logger.error("Failed to persist hardware activities", it, context = TAG)
+        }
+    }
+
+    private suspend fun mergeExistingTransferMetadata(activity: Activity): Activity {
+        val onchain = activity as? Activity.Onchain ?: return activity
+        val existing = getOnchainActivityByTxId(onchain.v1.txId, onchain.v1.walletId) ?: return activity
+        if (!existing.isTransfer && existing.channelId == null) return activity
+
+        return Activity.Onchain(
+            onchain.v1.copy(
+                isTransfer = onchain.v1.isTransfer || existing.isTransfer,
+                channelId = onchain.v1.channelId ?: existing.channelId,
+            )
+        )
+    }
+
+    suspend fun deleteActivitiesForWallet(walletId: String): Result<Unit> = withContext(bgDispatcher) {
+        runCatching {
+            val deleted = coreService.activity.deleteByWalletId(walletId)
+            notifyActivitiesChanged()
+            Logger.info("Deleted '$deleted' activities for hardware wallet '$walletId'", context = TAG)
+        }.onFailure {
+            Logger.error("Failed to delete activities for hardware wallet '$walletId'", it, context = TAG)
         }
     }
 
@@ -258,22 +275,25 @@ class ActivityRepo @Inject constructor(
         return coreService.activity.shouldShowReceivedSheet(txid, value)
     }
 
-    suspend fun isActivitySeen(activityId: String): Boolean {
-        return coreService.activity.isActivitySeen(activityId)
+    suspend fun isActivitySeen(activityId: String, walletId: String? = null): Boolean {
+        return coreService.activity.isActivitySeen(activityId, walletId)
     }
 
-    suspend fun markActivityAsSeen(activityId: String) {
-        coreService.activity.markActivityAsSeen(activityId)
+    suspend fun markActivityAsSeen(activityId: String, walletId: String? = null) {
+        coreService.activity.markActivityAsSeen(activityId, walletId = walletId)
         notifyActivitiesChanged()
     }
 
-    suspend fun markOnchainActivityAsSeen(txid: String) {
-        coreService.activity.markOnchainActivityAsSeen(txid)
+    suspend fun markOnchainActivityAsSeen(txid: String, walletId: String? = null) {
+        coreService.activity.markOnchainActivityAsSeen(txid, walletId = walletId)
         notifyActivitiesChanged()
     }
 
-    suspend fun getTransactionDetails(txid: String): Result<BitkitCoreTransactionDetails?> = runCatching {
-        coreService.activity.getTransactionDetails(txid)
+    suspend fun getTransactionDetails(
+        txid: String,
+        walletId: String? = null,
+    ): Result<BitkitCoreTransactionDetails?> = runCatching {
+        coreService.activity.getTransactionDetails(txid, walletId)
     }
 
     suspend fun getBoostTxDoesExist(boostTxIds: List<String>): Map<String, Boolean> {
@@ -328,6 +348,7 @@ class ActivityRepo @Inject constructor(
     }
 
     suspend fun getActivities(
+        walletId: String? = null,
         filter: ActivityFilter? = null,
         txType: PaymentType? = null,
         tags: List<String>? = null,
@@ -338,7 +359,7 @@ class ActivityRepo @Inject constructor(
         sortDirection: SortDirection? = null,
     ): Result<List<Activity>> = withContext(bgDispatcher) {
         runCatching {
-            coreService.activity.get(filter, txType, tags, search, minDate, maxDate, limit, sortDirection)
+            coreService.activity.get(walletId, filter, txType, tags, search, minDate, maxDate, limit, sortDirection)
         }.onFailure {
             Logger.error(
                 "getActivities error. Parameters:" +
@@ -356,9 +377,9 @@ class ActivityRepo @Inject constructor(
         }
     }
 
-    suspend fun getActivity(id: String): Result<Activity?> = withContext(bgDispatcher) {
+    suspend fun getActivity(id: String, walletId: String? = null): Result<Activity?> = withContext(bgDispatcher) {
         runCatching {
-            coreService.activity.getActivity(id)
+            coreService.activity.getActivity(id, walletId)
         }.onFailure {
             Logger.error("getActivity error for ID: $id", it, context = TAG)
         }
@@ -530,12 +551,6 @@ class ActivityRepo @Inject constructor(
             Logger.debug("Activity $id updated with success. new data: $activity", context = TAG)
             val tags = coreService.activity.tags(activityIdToDelete)
             addTagsToActivity(activityId = id, tags = tags)
-        }.onFailure {
-            Logger.error(
-                "updateActivity error: id:$id, activityIdToDelete:$activityIdToDelete activity:$activity",
-                it,
-                context = TAG,
-            )
         }
     }
 
@@ -654,7 +669,8 @@ class ActivityRepo @Inject constructor(
             val now = nowTimestamp().epochSecond.toULong()
             insertActivity(
                 Activity.Lightning(
-                    LightningActivity.create(
+                    LightningActivity(
+                        walletId = DEFAULT_WALLET_ID,
                         id = id,
                         txType = PaymentType.RECEIVED,
                         status = PaymentState.SUCCEEDED,
@@ -685,15 +701,14 @@ class ActivityRepo @Inject constructor(
     suspend fun addTagsToActivity(
         activityId: String,
         tags: List<String>,
+        walletId: String? = null,
     ): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
-            checkNotNull(coreService.activity.getActivity(activityId)) { "Activity with ID $activityId not found" }
-
-            val existingTags = coreService.activity.tags(activityId)
+            val existingTags = coreService.activity.tags(activityId, walletId)
             val newTags = tags.filter { it.isNotBlank() && it !in existingTags }
 
             if (newTags.isNotEmpty()) {
-                coreService.activity.appendTags(activityId, newTags).getOrThrow()
+                coreService.activity.appendTags(activityId, newTags, walletId).getOrThrow()
                 notifyActivitiesChanged()
                 Logger.info("Added ${newTags.size} new tags to activity $activityId", context = TAG)
             } else {
@@ -727,12 +742,14 @@ class ActivityRepo @Inject constructor(
     /**
      * Removes tags from an activity
      */
-    suspend fun removeTagsFromActivity(activityId: String, tags: List<String>): Result<Unit> =
+    suspend fun removeTagsFromActivity(
+        activityId: String,
+        tags: List<String>,
+        walletId: String? = null,
+    ): Result<Unit> =
         withContext(bgDispatcher) {
             runCatching {
-                checkNotNull(coreService.activity.getActivity(activityId)) { "Activity with ID $activityId not found" }
-
-                coreService.activity.dropTags(activityId, tags)
+                coreService.activity.dropTags(activityId, tags, walletId)
                 notifyActivitiesChanged()
                 Logger.info("Removed ${tags.size} tags from activity $activityId", context = TAG)
             }.onFailure {
@@ -743,9 +760,12 @@ class ActivityRepo @Inject constructor(
     /**
      * Gets all tags for an activity
      */
-    suspend fun getActivityTags(activityId: String): Result<List<String>> = withContext(bgDispatcher) {
+    suspend fun getActivityTags(
+        activityId: String,
+        walletId: String? = null,
+    ): Result<List<String>> = withContext(bgDispatcher) {
         runCatching {
-            coreService.activity.tags(activityId)
+            coreService.activity.tags(activityId, walletId)
         }.onFailure {
             Logger.error("getActivityTags error for activity $activityId", it, context = TAG)
         }

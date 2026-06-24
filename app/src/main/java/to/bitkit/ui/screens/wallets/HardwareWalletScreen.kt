@@ -39,7 +39,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableSet
 import to.bitkit.R
-import to.bitkit.ext.rawId
+import to.bitkit.ext.scopedId
 import to.bitkit.models.HwWallet
 import to.bitkit.models.TransportType
 import to.bitkit.ui.components.BalanceHeaderView
@@ -62,7 +62,7 @@ import to.bitkit.ui.theme.TopBarGradient
 @Composable
 fun HardwareWalletScreen(
     deviceId: String,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (String, String) -> Unit,
     onTransferToSpendingClick: (String) -> Unit,
     onBackClick: () -> Unit,
     viewModel: HwWalletViewModel = hiltViewModel(),
@@ -95,7 +95,7 @@ fun HardwareWalletScreen(
 private fun HardwareWalletContent(
     wallet: HwWallet,
     showRemoveDialog: Boolean,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (String, String) -> Unit,
     onTransferToSpendingClick: (String) -> Unit,
     onRemoveClick: () -> Unit,
     onConfirmRemove: () -> Unit,
@@ -109,7 +109,8 @@ private fun HardwareWalletContent(
 
     // Every activity here belongs to the watch-only device, so render them all with the blue
     // hardware icon, matching the home list.
-    val hardwareIds = remember(wallet.activities) { wallet.activities.map { it.rawId() }.toImmutableSet() }
+    val activityItems = remember(wallet.activities) { wallet.activities }
+    val hardwareIds = remember(activityItems) { activityItems.map { it.scopedId() }.toImmutableSet() }
 
     val hazeState = rememberHazeState()
 
@@ -189,7 +190,7 @@ private fun HardwareWalletContent(
                 }
 
                 activityListGroupedItems(
-                    items = wallet.activities,
+                    items = activityItems,
                     onActivityItemClick = onActivityItemClick,
                     onEmptyActivityRowClick = {},
                     showFooter = false,
@@ -264,7 +265,7 @@ private fun Preview() {
             HardwareWalletContent(
                 wallet = previewWallet(),
                 showRemoveDialog = false,
-                onActivityItemClick = {},
+                onActivityItemClick = { _, _ -> },
                 onTransferToSpendingClick = { _ -> },
                 onRemoveClick = {},
                 onConfirmRemove = {},
@@ -284,7 +285,7 @@ private fun PreviewNoActivity() {
             HardwareWalletContent(
                 wallet = previewWallet(activities = persistentListOf()),
                 showRemoveDialog = false,
-                onActivityItemClick = {},
+                onActivityItemClick = { _, _ -> },
                 onTransferToSpendingClick = { _ -> },
                 onRemoveClick = {},
                 onConfirmRemove = {},
@@ -304,7 +305,7 @@ private fun PreviewEmpty() {
             HardwareWalletContent(
                 wallet = previewWallet(balanceSats = 0uL, activities = persistentListOf()),
                 showRemoveDialog = false,
-                onActivityItemClick = {},
+                onActivityItemClick = { _, _ -> },
                 onTransferToSpendingClick = { _ -> },
                 onRemoveClick = {},
                 onConfirmRemove = {},
@@ -324,7 +325,7 @@ private fun PreviewRemoveDialog() {
             HardwareWalletContent(
                 wallet = previewWallet(),
                 showRemoveDialog = true,
-                onActivityItemClick = {},
+                onActivityItemClick = { _, _ -> },
                 onTransferToSpendingClick = { _ -> },
                 onRemoveClick = {},
                 onConfirmRemove = {},

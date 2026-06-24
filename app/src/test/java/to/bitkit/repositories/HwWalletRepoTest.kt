@@ -89,8 +89,8 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(trezorRepo.state).thenReturn(trezorState)
         whenever(trezorRepo.watcherEvents).thenReturn(watcherEvents)
         whenever(trezorRepo.deriveWalletId(any())).thenAnswer { invocation ->
-            val xpubs = invocation.getArgument<Map<String, String>>(0)
-            "derived-${xpubs.values.sorted().joinToString()}"
+            val xpubs = invocation.getArgument<Collection<String>>(0)
+            "derived-${xpubs.sorted().joinToString()}"
         }
         whenever { activityRepo.persistHardwareActivities(any(), any()) }.thenReturn(Result.success(Unit))
         whenever { activityRepo.deleteActivitiesForWallet(any()) }.thenReturn(Result.success(Unit))

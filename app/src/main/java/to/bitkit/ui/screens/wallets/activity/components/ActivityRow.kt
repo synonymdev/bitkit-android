@@ -29,13 +29,20 @@ import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
 import to.bitkit.ext.DatePattern
+import to.bitkit.ext.confirmed
+import to.bitkit.ext.doesExist
+import to.bitkit.ext.feeRate
 import to.bitkit.ext.formatted
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
+import to.bitkit.ext.message
+import to.bitkit.ext.paymentState
 import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.totalValue
+import to.bitkit.ext.txId
 import to.bitkit.ext.txType
+import to.bitkit.ext.walletId
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.PubkyProfile
@@ -65,7 +72,7 @@ import java.time.ZoneId
 @Composable
 fun ActivityRow(
     item: Activity,
-    onClick: (String) -> Unit,
+    onClick: (String, String) -> Unit,
     testTag: String,
     title: String? = null,
     isHardware: Boolean = false,
@@ -76,20 +83,15 @@ fun ActivityRow(
     }
     val feeRates = blocktankInfo?.onchain?.feeRates
 
-    val status: PaymentState? = when (item) {
-        is Activity.Lightning -> item.v1.status
-        is Activity.Onchain -> null
-    }
+    val status = item.paymentState()
     val isLightning = item is Activity.Lightning
     val timestamp = item.timestamp()
-    val txType: PaymentType = item.txType()
+    val txType = item.txType()
     val isSent = item.isSent()
     val amountPrefix = if (isSent) "-" else "+"
-    val confirmed: Boolean? = when (item) {
-        is Activity.Lightning -> null
-        is Activity.Onchain -> item.v1.confirmed
-    }
+    val confirmed = item.confirmed()
     val isTransfer = item.isTransfer()
+    val txId = item.txId()
     val activityListViewModel = activityListViewModel
     var isCpfpChild by remember { mutableStateOf(false) }
     val resolvedTitle = title.takeIf {
@@ -99,9 +101,9 @@ fun ActivityRow(
         shouldUseContactActivityTitle(item, status, isTransfer, isCpfpChild)
     }
 
-    LaunchedEffect(item) {
-        isCpfpChild = if (item is Activity.Onchain && activityListViewModel != null) {
-            activityListViewModel.isCpfpChildTransaction(item.v1.txId)
+    LaunchedEffect(txId) {
+        isCpfpChild = if (txId != null && activityListViewModel != null) {
+            activityListViewModel.isCpfpChildTransaction(txId)
         } else {
             false
         }
@@ -111,7 +113,7 @@ fun ActivityRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickableAlpha { onClick(item.rawId()) }
+            .clickableAlpha { onClick(item.rawId(), item.walletId()) }
             .background(color = Colors.Gray6, shape = Shapes.medium)
             .padding(16.dp)
             .testTag(testTag)
@@ -137,37 +139,36 @@ fun ActivityRow(
                 title = resolvedTitle,
             )
             val context = LocalContext.current
-            val subtitleText = when (item) {
-                is Activity.Lightning -> item.v1.message.ifEmpty { formattedTime(timestamp) }
-                is Activity.Onchain -> {
-                    when {
-                        !item.v1.doesExist -> stringResource(R.string.wallet__activity_removed)
+            val subtitleText = if (isLightning) {
+                item.message().ifEmpty { formattedTime(timestamp) }
+            } else {
+                when {
+                    !item.doesExist() -> stringResource(R.string.wallet__activity_removed)
 
-                        isCpfpChild -> stringResource(R.string.wallet__activity_boost_fee_description)
+                    isCpfpChild -> stringResource(R.string.wallet__activity_boost_fee_description)
 
-                        isTransfer && isSent -> if (item.v1.confirmed) {
-                            stringResource(R.string.wallet__activity_transfer_spending_done)
-                        } else {
-                            val duration = context.getFeeShortDescription(item.v1.feeRate, feeRates)
-                            stringResource(R.string.wallet__activity_transfer_spending_pending)
-                                .replace("{duration}", duration)
-                        }
+                    isTransfer && isSent -> if (confirmed == true) {
+                        stringResource(R.string.wallet__activity_transfer_spending_done)
+                    } else {
+                        val duration = context.getFeeShortDescription(item.feeRate(), feeRates)
+                        stringResource(R.string.wallet__activity_transfer_spending_pending)
+                            .replace("{duration}", duration)
+                    }
 
-                        isTransfer && !isSent -> if (item.v1.confirmed) {
-                            stringResource(R.string.wallet__activity_transfer_savings_done)
-                        } else {
-                            val duration = context.getFeeShortDescription(item.v1.feeRate, feeRates)
-                            stringResource(R.string.wallet__activity_transfer_savings_pending)
-                                .replace("{duration}", duration)
-                        }
+                    isTransfer && !isSent -> if (confirmed == true) {
+                        stringResource(R.string.wallet__activity_transfer_savings_done)
+                    } else {
+                        val duration = context.getFeeShortDescription(item.feeRate(), feeRates)
+                        stringResource(R.string.wallet__activity_transfer_savings_pending)
+                            .replace("{duration}", duration)
+                    }
 
-                        confirmed == true -> formattedTime(timestamp)
+                    confirmed == true -> formattedTime(timestamp)
 
-                        else -> {
-                            val feeDescription = context.getFeeShortDescription(item.v1.feeRate, feeRates)
-                            stringResource(R.string.wallet__activity_confirms_in)
-                                .replace("{feeRateDescription}", feeDescription)
-                        }
+                    else -> {
+                        val feeDescription = context.getFeeShortDescription(item.feeRate(), feeRates)
+                        stringResource(R.string.wallet__activity_confirms_in)
+                            .replace("{feeRateDescription}", feeDescription)
                     }
                 }
             }
@@ -193,9 +194,9 @@ private fun shouldUseContactActivityTitle(
 ): Boolean {
     if (isTransfer || isCpfpChild) return false
 
-    return when (activity) {
-        is Activity.Lightning -> status == PaymentState.SUCCEEDED
-        is Activity.Onchain -> activity.v1.doesExist
+    return when {
+        activity is Activity.Lightning -> status == PaymentState.SUCCEEDED
+        else -> activity.doesExist()
     }
 }
 
@@ -387,7 +388,7 @@ private fun Preview(@PreviewParameter(ActivityItemsPreviewProvider::class) item:
     AppThemeSurface {
         ActivityRow(
             item = item,
-            onClick = {},
+            onClick = { _, _ -> },
             testTag = "Activity-",
         )
     }

@@ -73,7 +73,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
             on { paymentHash } doReturn "hash123"
             on { paymentId } doReturn "paymentId123"
         }
-        whenever(activityRepo.isActivitySeen(any())).thenReturn(false)
+        whenever(activityRepo.isActivitySeen(any(), anyOrNull())).thenReturn(false)
         val command = NotifyPaymentReceived.Command.Lightning(event = event)
 
         val result = sut(command)
@@ -85,7 +85,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertEquals(NewTransactionSheetDirection.RECEIVED, paymentResult.sheet.direction)
         assertEquals("hash123", paymentResult.sheet.paymentHashOrTxId)
         assertEquals(1000L, paymentResult.sheet.sats)
-        verify(activityRepo).markActivityAsSeen("paymentId123")
+        verify(activityRepo).markActivityAsSeen("paymentId123", null)
     }
 
     @Test
@@ -95,7 +95,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
             on { paymentHash } doReturn "hash123"
             on { paymentId } doReturn "paymentId123"
         }
-        whenever(activityRepo.isActivitySeen(any())).thenReturn(false)
+        whenever(activityRepo.isActivitySeen(any(), anyOrNull())).thenReturn(false)
         val command = NotifyPaymentReceived.Command.Lightning(
             event = event,
             includeNotification = true,
@@ -133,7 +133,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertEquals(NewTransactionSheetDirection.RECEIVED, paymentResult.sheet.direction)
         assertEquals("txid456", paymentResult.sheet.paymentHashOrTxId)
         assertEquals(5000L, paymentResult.sheet.sats)
-        verify(activityRepo).markOnchainActivityAsSeen("txid456")
+        verify(activityRepo).markOnchainActivityAsSeen("txid456", null)
     }
 
     @Test
@@ -172,7 +172,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         inOrder(activityRepo) {
             verify(activityRepo).handleOnchainTransactionReceived("txid789", details)
             verify(activityRepo).shouldShowReceivedSheet("txid789", 7500uL)
-            verify(activityRepo).markOnchainActivityAsSeen("txid789")
+            verify(activityRepo).markOnchainActivityAsSeen("txid789", null)
         }
     }
 
@@ -190,7 +190,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
 
         sut(command)
 
-        verify(activityRepo, never()).markOnchainActivityAsSeen(any())
+        verify(activityRepo, never()).markOnchainActivityAsSeen(any(), anyOrNull())
     }
 
     @Test
@@ -200,14 +200,14 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
             on { paymentHash } doReturn "hash123"
             on { paymentId } doReturn "paymentId123"
         }
-        whenever(activityRepo.isActivitySeen(any())).thenReturn(false)
+        whenever(activityRepo.isActivitySeen(any(), anyOrNull())).thenReturn(false)
         val command = NotifyPaymentReceived.Command.Lightning(event = event)
 
         sut(command)
 
         verify(activityRepo, never()).handleOnchainTransactionReceived(any(), any())
         verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
-        verify(activityRepo, never()).markOnchainActivityAsSeen(any())
+        verify(activityRepo, never()).markOnchainActivityAsSeen(any(), anyOrNull())
     }
 
     @Test
@@ -217,7 +217,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
             on { paymentHash } doReturn "hash123"
             on { paymentId } doReturn "paymentId123"
         }
-        whenever(activityRepo.isActivitySeen("paymentId123")).thenReturn(true)
+        whenever(activityRepo.isActivitySeen("paymentId123", null)).thenReturn(true)
         val command = NotifyPaymentReceived.Command.Lightning(event = event)
 
         val result = sut(command)
@@ -225,7 +225,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         val paymentResult = result.getOrThrow()
         assertTrue(paymentResult is NotifyPaymentReceived.Result.Skip)
-        verify(activityRepo, never()).markActivityAsSeen(any())
+        verify(activityRepo, never()).markActivityAsSeen(any(), anyOrNull())
     }
 
     @Test

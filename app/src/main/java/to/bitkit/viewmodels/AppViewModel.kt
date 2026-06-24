@@ -85,7 +85,6 @@ import to.bitkit.ext.claimableAtHeight
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.isFixedAmount
-import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
@@ -96,6 +95,7 @@ import to.bitkit.ext.setClipboardText
 import to.bitkit.ext.toHex
 import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.totalValue
+import to.bitkit.ext.walletId
 import to.bitkit.ext.watchUntil
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.FeeRate
@@ -335,6 +335,7 @@ class AppViewModel @Inject constructor(
                         direction = NewTransactionSheetDirection.RECEIVED,
                         paymentHashOrTxId = tx.txid,
                         activityId = tx.txid,
+                        activityWalletId = tx.walletId,
                         sats = tx.sats.toLong(),
                     ),
                 )
@@ -2442,8 +2443,9 @@ class AppViewModel @Inject constructor(
 
     fun onClickActivityDetail() {
         _transactionSheet.value.activityId?.let {
+            val walletId = _transactionSheet.value.activityWalletId
             hideNewTransactionSheet()
-            mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(it)))
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(it, walletId)))
             return
         }
 
@@ -2460,7 +2462,7 @@ class AppViewModel @Inject constructor(
             ).onSuccess { activity ->
                 hideNewTransactionSheet()
                 _transactionSheet.update { it.copy(isLoadingDetails = false) }
-                val nextRoute = Routes.ActivityDetail(activity.rawId())
+                val nextRoute = Routes.ActivityDetail(activity.rawId(), activity.walletId())
                 mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)
@@ -2484,7 +2486,7 @@ class AppViewModel @Inject constructor(
             ).onSuccess { activity ->
                 hideSheet()
                 _successSendUiState.update { it.copy(isLoadingDetails = false) }
-                val nextRoute = Routes.ActivityDetail(activity.rawId())
+                val nextRoute = Routes.ActivityDetail(activity.rawId(), activity.walletId())
                 mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)
@@ -2877,12 +2879,10 @@ class AppViewModel @Inject constructor(
     }
 
     fun toast(error: Throwable) {
-        if (error.isTrezorUserCancellation()) return
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.common__error),
-            description = error.message?.takeIf { it.isNotBlank() }
-                ?: context.getString(R.string.common__error_body),
+            description = error.message ?: context.getString(R.string.common__error_body)
         )
     }
 

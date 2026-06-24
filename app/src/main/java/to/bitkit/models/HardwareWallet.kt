@@ -37,6 +37,7 @@ data class HwWalletBalance(
 data class HwWalletReceivedTx(
     val txid: String,
     val sats: ULong,
+    val walletId: String,
 )
 
 sealed interface HwFundingAccount {
