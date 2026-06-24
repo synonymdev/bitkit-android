@@ -34,9 +34,9 @@ import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.json
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
-import to.bitkit.models.PrivatePaykitContactLinkBackupV1
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.services.LightningService
+import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import javax.inject.Provider
@@ -56,6 +56,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
+    private val paykitSdkService = mock<PaykitSdkService>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val privatePaykitAddressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
@@ -227,9 +228,21 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `full restore should fail when private Paykit contact links fail to restore`() = test {
+    fun `full restore should continue when Paykit SDK state fails to restore`() = test {
         stubWalletBackup()
         whenever { privatePaykitRepo.restoreBackup(anyOrNull()) }
+            .thenReturn(Result.failure(BackupRepoTestError("restore failed")))
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        assertTrue(result.isSuccess)
+        verify(settingsStore).update(any())
+    }
+
+    @Test
+    fun `full restore should fail when backed up Paykit SDK state fails to restore`() = test {
+        stubWalletBackup(paykitSdkBackupState = "sdk-state")
+        whenever { privatePaykitRepo.restoreBackup("sdk-state") }
             .thenReturn(Result.failure(BackupRepoTestError("restore failed")))
 
         val result = sut.performFullRestoreFromLatestBackup()
@@ -251,13 +264,13 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     private fun stubWalletBackup(
-        privatePaykitContactLinks: Map<String, PrivatePaykitContactLinkBackupV1>? = null,
+        paykitSdkBackupState: String? = null,
     ) {
         val walletBackup = WalletBackupV1(
             createdAt = 123,
             transfers = emptyList(),
             privatePaykitHighestReservedReceiveIndexByAddressType = mapOf("nativeSegwit" to 5),
-            privatePaykitContactLinks = privatePaykitContactLinks,
+            paykitSdkBackupState = paykitSdkBackupState,
         )
         whenever { vssBackupClient.getObject(BackupCategory.WALLET.name) }
             .thenReturn(
@@ -296,6 +309,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever(activityRepo.activitiesChanged).thenReturn(MutableStateFlow(0L))
         whenever(pubkyRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
+        whenever(paykitSdkService.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(privatePaykitRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(privatePaykitAddressReservationRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(preActivityMetadataRepo.preActivityMetadataChanged).thenReturn(MutableStateFlow(0L))
@@ -313,6 +327,7 @@ class BackupRepoTest : BaseUnitTest() {
         blocktankRepo = blocktankRepo,
         activityRepo = activityRepo,
         pubkyRepo = pubkyRepo,
+        paykitSdkService = paykitSdkService,
         privatePaykitRepo = Provider { privatePaykitRepo },
         privatePaykitAddressReservationRepo = Provider { privatePaykitAddressReservationRepo },
         preActivityMetadataRepo = preActivityMetadataRepo,

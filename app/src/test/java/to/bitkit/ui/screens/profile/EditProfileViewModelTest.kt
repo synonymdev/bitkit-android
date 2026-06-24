@@ -9,7 +9,9 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
@@ -56,8 +58,11 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        verify(pubkyRepo).deleteProfileWithSessionRetry()
-        verify(privatePaykitRepo).closeAndClear(markProfileRecoveryPending = true)
+        inOrder(privatePaykitRepo, pubkyRepo).apply {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(pubkyRepo).deleteProfileWithSessionRetry()
+            verify(privatePaykitRepo).closeAndClear()
+        }
     }
 
     @Test
@@ -74,8 +79,11 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        verify(pubkyRepo).deleteProfileWithSessionRetry()
-        verify(privatePaykitRepo).closeAndClear(markProfileRecoveryPending = true)
+        inOrder(privatePaykitRepo, pubkyRepo).apply {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(pubkyRepo).deleteProfileWithSessionRetry()
+            verify(privatePaykitRepo).closeAndClear()
+        }
     }
 
     @Test
@@ -114,8 +122,42 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertEquals(EditProfileEffect.DisconnectSuccess, awaitItem())
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        verify(pubkyRepo).signOut()
-        verify(privatePaykitRepo).closeAndClear(markProfileRecoveryPending = true)
+        inOrder(privatePaykitRepo, pubkyRepo).apply {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(pubkyRepo).signOut()
+            verify(privatePaykitRepo).closeAndClear()
+        }
+    }
+
+    @Test
+    fun `disconnectProfile keeps profile connected when private cleanup fails`() = test {
+        val sut = createSut()
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
+            .thenReturn(Result.failure(TestAppError("cleanup failed")))
+        advanceUntilIdle()
+
+        sut.disconnectProfile()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isSaving)
+        verify(pubkyRepo, never()).signOut()
+        verify(privatePaykitRepo, never()).closeAndClear()
+    }
+
+    @Test
+    fun `deleteProfile should show retry dialog when private cleanup fails`() = test {
+        val sut = createSut()
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
+            .thenReturn(Result.failure(TestAppError("cleanup failed")))
+        advanceUntilIdle()
+
+        sut.deleteProfile()
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.showDeleteFailureDialog)
+        assertFalse(sut.uiState.value.isSaving)
+        verify(pubkyRepo, never()).deleteProfileWithSessionRetry()
+        verify(privatePaykitRepo, never()).closeAndClear()
     }
 
     @Test
@@ -138,9 +180,9 @@ class EditProfileViewModelTest : BaseUnitTest() {
         whenever(context.getString(any<Int>())).thenReturn("")
         whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
-        whenever { privatePaykitRepo.removePublishedEndpointsBestEffort(any()) }
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
             .thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.closeAndClear(any()) }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
 
         return EditProfileViewModel(
             context = context,

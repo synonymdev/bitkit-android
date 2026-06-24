@@ -3,16 +3,19 @@ package to.bitkit.repositories
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import coil3.ImageLoader
-import com.synonym.paykit.FfiPaymentEntry
+import com.synonym.paykit.ContactProfileResolution
+import com.synonym.paykit.PaykitProfile
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -28,7 +31,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.hasPublicPaykitPublicationState
@@ -77,7 +79,6 @@ class PubkyRepo @Inject constructor(
     private val imageLoader: ImageLoader,
     private val pubkyStore: PubkyStore,
     private val settingsStore: SettingsStore,
-    private val privatePaykitCacheStore: PrivatePaykitCacheStore,
     private val httpClient: HttpClient,
 ) {
     companion object {
@@ -237,10 +238,9 @@ class PubkyRepo @Inject constructor(
             }
         } else {
             runCatching {
-                val newSession = pubkyService.signIn(storedSecretKeyHex)
-                keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, newSession)
+                pubkyService.signIn(storedSecretKeyHex)
                 notifyBackupStateChanged()
-                val publicKey = pubkyService.importSession(newSession).ensurePubkyPrefix()
+                val publicKey = pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix()
                 Logger.info("Re-signed in and restored session for '$publicKey'", context = TAG)
                 InitResult.Restored(publicKey)
             }.getOrElse {
@@ -275,15 +275,14 @@ class PubkyRepo @Inject constructor(
         val attemptId = _activeAuthAttemptId.value ?: return Result.failure(PubkyAuthAttemptInactive())
         return runCatching {
             withContext(ioDispatcher) {
-                val sessionSecret = pubkyService.completeAuth()
+                pubkyService.completeAuth()
                 ensureAuthAttemptActive(attemptId)
-                val pk = pubkyService.importSession(sessionSecret).ensurePubkyPrefix()
+                val pk = requireNotNull(pubkyService.currentPublicKey()?.ensurePubkyPrefix()) {
+                    "No active Pubky session"
+                }
                 ensureAuthAttemptActive(attemptId)
 
-                runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
-                keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
                 settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
-                privatePaykitCacheStore.update { it.copy(profileRecoveryPending = false) }
                 notifyBackupStateChanged()
 
                 pk
@@ -389,37 +388,10 @@ class PubkyRepo @Inject constructor(
 
     // region Payment endpoints
 
-    suspend fun getPaymentList(publicKey: String): Result<List<FfiPaymentEntry>> = withContext(ioDispatcher) {
-        runCatching {
-            pubkyService.getPaymentList(publicKey.ensurePubkyPrefix())
-        }
-    }
-
-    suspend fun setPaymentEndpoint(methodId: String, endpointData: String): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
-            pubkyService.setPaymentEndpoint(methodId, endpointData)
-        }
-    }
-
-    suspend fun removePaymentEndpoint(methodId: String): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
-            pubkyService.removePaymentEndpoint(methodId)
-        }
-    }
-
     suspend fun removeBitkitPaymentEndpoints(): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
-            val currentPublicKey = _publicKey.value ?: pubkyService.currentPublicKey()?.ensurePubkyPrefix()
-                ?: return@runCatching
-            val managedMethodIds = MethodId.entries
-                .filter { it.isBitkitManaged }
-                .map { it.rawValue }
-                .toSet()
-
-            pubkyService.getPaymentList(currentPublicKey)
-                .map { it.methodId }
-                .filter { it in managedMethodIds }
-                .forEach { pubkyService.removePaymentEndpoint(it) }
+            pubkyService.removeBitkitPaymentEndpoints()
+            Unit
         }
     }
 
@@ -441,10 +413,8 @@ class PubkyRepo @Inject constructor(
         try {
             runCatching {
                 withContext(ioDispatcher) {
-                    fetchBitkitProfile(pk) ?: run {
-                        val ffiProfile = pubkyService.getProfile(pk)
-                        PubkyProfile.fromFfi(pk, ffiProfile)
-                    }
+                    resolveContactProfile(pk).getOrThrow()
+                        ?: throw AppError("Profile not found")
                 }
             }.onSuccess { loadedProfile ->
                 if (_publicKey.value != pk) {
@@ -462,21 +432,9 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    private suspend fun fetchBitkitProfile(publicKey: String): PubkyProfile? = runCatching {
-        val strippedKey = publicKey.removePrefix(PUBKY_PREFIX)
-        val uri = "$PUBKY_SCHEME$strippedKey${Env.profilePath}"
-        val json = pubkyService.fetchFileString(uri)
-        PubkyProfileData.decode(json).toPubkyProfile(publicKey)
-    }.onFailure {
-        Logger.debug("Falling back to FFI, no bitkit profile found", context = TAG)
-    }.getOrNull()
-
     suspend fun fetchRemoteProfile(publicKey: String): Result<PubkyProfile?> = runCatching {
         withContext(ioDispatcher) {
-            fetchBitkitProfile(publicKey) ?: run {
-                val ffiProfile = pubkyService.getProfile(publicKey)
-                PubkyProfile.fromFfi(publicKey, ffiProfile)
-            }
+            resolveContactProfile(publicKey).getOrThrow()
         }
     }
 
@@ -508,56 +466,42 @@ class PubkyRepo @Inject constructor(
 
             val homegate = fetchHomegateSignupCode()
 
-            val session = runCatching {
+            runCatching {
                 pubkyService.signUp(secretKeyHex, homegate.homeserverPubky, homegate.signupCode)
             }.getOrElse {
                 Logger.warn("Retrying sign in after sign up failed", it, context = TAG)
                 pubkyService.signIn(secretKeyHex)
             }
 
-            keychain.upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, secretKeyHex)
-            keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, session)
-            notifyBackupStateChanged()
-            pubkyService.importSession(session)
+            val imageUrl = avatarBytes?.let { uploadAvatar(it).getOrNull() }
+            writeProfile(name, bio, links, tags, imageUrl)
 
-            val imageUrl = avatarBytes?.let { uploadAvatar(it, secretKeyHex).getOrNull() }
-            writeProfile(session, name, bio, links, tags, imageUrl)
-
+            val createdProfile = PubkyProfile(
+                publicKey = publicKeyZ32,
+                name = name,
+                bio = bio,
+                imageUrl = imageUrl,
+                links = links,
+                tags = tags,
+                status = null,
+            )
             _publicKey.update { publicKeyZ32 }
             _authState.update { PubkyAuthState.Authenticated }
+            _profile.update { createdProfile }
+            cacheMetadata(createdProfile)
             Logger.info("Created identity for '$publicKeyZ32'", context = TAG)
             loadProfile()
             loadContacts()
         }
     }
 
-    suspend fun uploadAvatar(imageBytes: ByteArray, secretKeyHex: String): Result<String> = runCatching {
-        withContext(ioDispatcher) {
-            val compressed = compressAvatar(imageBytes)
-            val path = "${Env.blobsBasePath}${System.currentTimeMillis()}.jpg"
-            pubkyService.putWithSecretKey(secretKeyHex, path, compressed)
-            val strippedKey = pubkyService.publicKeyFromSecret(secretKeyHex).removePrefix(PUBKY_PREFIX)
-            "$PUBKY_SCHEME$strippedKey$path"
-        }
-    }
-
     suspend fun uploadAvatar(imageBytes: ByteArray): Result<String> = runCatching {
         withContext(ioDispatcher) {
-            val publicKey = requireNotNull(_publicKey.value) {
-                "No public key available"
-            }
-            val secretKeyHex = managedSecretKeyFor(publicKey)
-            if (secretKeyHex != null) {
-                return@withContext uploadAvatar(imageBytes, secretKeyHex).getOrThrow()
-            }
-
-            val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
+            requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
             val compressed = compressAvatar(imageBytes)
-            val path = "${Env.blobsBasePath}${System.currentTimeMillis()}.jpg"
-            pubkyService.sessionPut(session, path, compressed)
-            "$PUBKY_SCHEME${publicKey.removePrefix(PUBKY_PREFIX)}$path"
+            pubkyService.uploadProfileAvatar(compressed, contentType = "image/jpeg")
         }
     }
 
@@ -569,10 +513,10 @@ class PubkyRepo @Inject constructor(
         imageUrl: String?,
     ): Result<Unit> = runCatching {
         withContext(ioDispatcher) {
-            val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
+            requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
-            writeProfile(session, name, bio, links, tags, imageUrl)
+            writeProfile(name, bio, links, tags, imageUrl)
             val pk = requireNotNull(_publicKey.value) { "No public key available" }
             val profile = PubkyProfile(
                 publicKey = pk,
@@ -600,12 +544,12 @@ class PubkyRepo @Inject constructor(
 
     suspend fun deleteProfile(): Result<Unit> = runCatching {
         withContext(ioDispatcher) {
-            val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
+            requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
                 "No session available"
             }
-            deleteAllContacts(session)
+            deleteAllContacts()
             runCatching {
-                pubkyService.sessionDelete(session, Env.profilePath)
+                pubkyService.deletePaykitProfile()
             }.getOrElse {
                 if (!it.isMissingPubkyData()) {
                     throw it
@@ -616,21 +560,22 @@ class PubkyRepo @Inject constructor(
         signOut().getOrThrow()
     }
 
-    private suspend fun deleteAllContacts(session: String) {
-        val contactPaths = runCatching {
-            pubkyService.sessionList(session, Env.contactsBasePath)
+    private suspend fun deleteAllContacts() {
+        val records = runCatching {
+            pubkyService.contactRecords()
         }.getOrElse {
-            if (it.isMissingPubkyDirectory()) return
-            throw it
+            if (!it.isMissingPubkyData()) throw it
+            emptyList()
         }
-        contactPaths.forEach { path ->
-            val contactKey = path.substringAfterLast("/")
+        records.forEach { record ->
             runCatching {
-                pubkyService.sessionDelete(session, "${Env.contactsBasePath}$contactKey")
+                pubkyService.removeContact(record.publicKey)
             }.onFailure {
-                Logger.warn("Failed to delete contact '$contactKey'", it, context = TAG)
+                Logger.warn("Failed to delete contact '${record.publicKey}'", it, context = TAG)
             }
         }
+        pubkyStore.update { it.copy(contactProfileOverrides = emptyMap()) }
+        notifyBackupStateChanged()
         _contacts.update { emptyList() }
         markContactsLoaded()
         Logger.info("Deleted all contacts", context = TAG)
@@ -638,7 +583,6 @@ class PubkyRepo @Inject constructor(
 
     @Suppress("LongParameterList")
     private suspend fun writeProfile(
-        sessionSecret: String,
         name: String,
         bio: String,
         links: List<PubkyProfileLink>,
@@ -654,7 +598,7 @@ class PubkyRepo @Inject constructor(
             tags = tags,
             status = null,
         ).toProfileData()
-        pubkyService.sessionPut(sessionSecret, Env.profilePath, data.encode())
+        pubkyService.publishPaykitProfile(data.toPaykitProfile())
     }
 
     private fun compressAvatar(imageBytes: ByteArray): ByteArray {
@@ -688,35 +632,18 @@ class PubkyRepo @Inject constructor(
         try {
             runCatching {
                 withContext(ioDispatcher) {
-                    val session = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
-                        ?: return@withContext emptyList()
-
-                    val contactPaths = runCatching {
-                        pubkyService.sessionList(session, Env.contactsBasePath)
-                    }.getOrElse {
-                        if (it.isMissingPubkyDirectory()) {
-                            Logger.debug(
-                                "Treating missing contacts directory as empty for '$pk'",
-                                context = TAG,
-                            )
-                            return@withContext emptyList()
-                        }
-                        throw it
-                    }
-                    val strippedOwnerKey = pk.removePrefix(PUBKY_PREFIX)
+                    val records = pubkyService.contactRecords()
+                    val overrides = pubkyStore.data.first().contactProfileOverrides
 
                     coroutineScope {
-                        contactPaths.map { path ->
-                            val contactKey = path.substringAfterLast("/")
+                        records.map { record ->
                             async {
                                 runCatching {
-                                    val uri = "$PUBKY_SCHEME$strippedOwnerKey${Env.contactsBasePath}$contactKey"
-                                    val json = pubkyService.fetchFileString(uri)
-                                    PubkyProfileData.decode(json).toPubkyProfile(contactKey)
+                                    contactProfile(record.publicKey, record.label, record.profile, overrides)
                                 }.onFailure {
-                                    Logger.warn("Failed to load contact '$contactKey'", it, context = TAG)
+                                    Logger.warn("Failed to load contact '${record.publicKey}'", it, context = TAG)
                                 }.getOrElse {
-                                    PubkyProfile.placeholder(contactKey)
+                                    PubkyProfile.placeholder(record.publicKey.ensurePubkyPrefix())
                                 }
                             }
                         }.awaitAll().sortedBy { it.name.lowercase() }
@@ -741,10 +668,10 @@ class PubkyRepo @Inject constructor(
     suspend fun fetchContactProfile(publicKey: String): Result<PubkyProfile> {
         val prefixedKey = runCatching { requireAddableContactPublicKey(publicKey) }
             .getOrElse { return Result.failure(it) }
-        return fetchRemoteProfile(prefixedKey)
+        return resolveContactProfile(prefixedKey)
             .map { it ?: PubkyProfile.placeholder(prefixedKey) }
             .recoverCatching {
-                if (!it.isMissingPubkyData()) {
+                if (it is CancellationException) {
                     throw it
                 }
                 Logger.warn("Falling back to placeholder contact '$prefixedKey'", it, context = TAG)
@@ -754,19 +681,14 @@ class PubkyRepo @Inject constructor(
 
     suspend fun addContact(publicKey: String, existingProfile: PubkyProfile? = null): Result<Unit> = runCatching {
         withContext(ioDispatcher) {
-            val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
-                "No session available"
-            }
             val prefixedKey = requireAddableContactPublicKey(
                 publicKey = publicKey,
                 allowExisting = existingProfile != null,
             )
-            val profile = existingProfile?.copy(publicKey = prefixedKey) ?: run {
-                val ffiProfile = pubkyService.getProfile(prefixedKey)
-                PubkyProfile.fromFfi(prefixedKey, ffiProfile)
-            }
-            val data = profile.toProfileData().encode()
-            pubkyService.sessionPut(session, "${Env.contactsBasePath}$prefixedKey", data)
+            val profile = existingProfile?.copy(publicKey = prefixedKey)
+                ?: resolveContactProfile(prefixedKey).getOrThrow()
+                ?: PubkyProfile.placeholder(prefixedKey)
+            pubkyService.saveContact(prefixedKey, profile.name)
             _contacts.update { current ->
                 (current.filter { it.publicKey != prefixedKey } + profile)
                     .sortedBy { it.name.lowercase() }
@@ -786,9 +708,6 @@ class PubkyRepo @Inject constructor(
         tags: List<String>,
     ): Result<Unit> = runCatching {
         withContext(ioDispatcher) {
-            val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
-                "No session available"
-            }
             val prefixedKey = publicKey.ensurePubkyPrefix()
             val updatedProfile = PubkyProfile(
                 publicKey = prefixedKey,
@@ -799,8 +718,8 @@ class PubkyRepo @Inject constructor(
                 tags = tags,
                 status = null,
             )
-            val data = updatedProfile.toProfileData().encode()
-            pubkyService.sessionPut(session, "${Env.contactsBasePath}$prefixedKey", data)
+            pubkyService.saveContact(prefixedKey, name)
+            upsertContactProfileOverride(updatedProfile)
             _contacts.update { current ->
                 current.map { if (it.publicKey == prefixedKey) updatedProfile else it }
                     .sortedBy { it.name.lowercase() }
@@ -812,11 +731,9 @@ class PubkyRepo @Inject constructor(
 
     suspend fun removeContact(publicKey: String): Result<Unit> = runCatching {
         withContext(ioDispatcher) {
-            val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
-                "No session available"
-            }
             val prefixedKey = publicKey.ensurePubkyPrefix()
-            pubkyService.sessionDelete(session, "${Env.contactsBasePath}$prefixedKey")
+            pubkyService.removeContact(prefixedKey)
+            removeContactProfileOverride(prefixedKey)
             _contacts.update { current -> current.filter { it.publicKey != prefixedKey } }
             markContactsLoaded()
             Logger.info("Removed contact '$prefixedKey'", context = TAG)
@@ -825,18 +742,14 @@ class PubkyRepo @Inject constructor(
 
     suspend fun importContacts(publicKeys: List<String>): Result<Unit> = runCatching {
         withContext(ioDispatcher) {
-            val session = requireNotNull(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)) {
-                "No session available"
-            }
             val imported = coroutineScope {
                 publicKeys.map { contactPk ->
                     val prefixedKey = contactPk.ensurePubkyPrefix()
                     async {
                         runCatching {
-                            val ffiProfile = pubkyService.getProfile(prefixedKey)
-                            val profile = PubkyProfile.fromFfi(prefixedKey, ffiProfile)
-                            val data = profile.toProfileData().encode()
-                            pubkyService.sessionPut(session, "${Env.contactsBasePath}$prefixedKey", data)
+                            val profile = resolveContactProfile(prefixedKey).getOrThrow()
+                                ?: PubkyProfile.placeholder(prefixedKey)
+                            pubkyService.saveContact(prefixedKey, profile.name)
                             profile
                         }.onFailure {
                             Logger.warn("Failed to import contact '$prefixedKey'", it, context = TAG)
@@ -866,17 +779,13 @@ class PubkyRepo @Inject constructor(
                     val prefixedKey = contactPk.ensurePubkyPrefix()
                     async {
                         runCatching {
-                            val ffiProfile = pubkyService.getProfile(prefixedKey)
-                            PubkyProfile.fromFfi(prefixedKey, ffiProfile)
+                            resolveContactProfile(prefixedKey).getOrThrow() ?: PubkyProfile.placeholder(prefixedKey)
                         }.getOrElse { PubkyProfile.placeholder(prefixedKey) }
                     }
                 }.awaitAll().sortedBy { it.name.lowercase() }
             }
 
-            val ownProfile = runCatching {
-                val ffiProfile = pubkyService.getProfile(pk)
-                PubkyProfile.fromFfi(pk, ffiProfile)
-            }.getOrNull()
+            val ownProfile = resolveContactProfile(pk).getOrNull()
 
             _pendingImportProfile.update { ownProfile }
             _pendingImportContacts.update { contacts }
@@ -929,32 +838,40 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    suspend fun snapshotContactProfileOverrides(): Result<Map<String, PubkyProfileData>?> = runCatching {
+        withContext(ioDispatcher) {
+            pubkyStore.data.first().contactProfileOverrides.takeUnless { it.isEmpty() }
+        }
+    }
+
     suspend fun restoreSessionBackupState(backup: PubkySessionBackupV1?): Result<Unit> = runCatching {
         withContext(ioDispatcher) {
-            if (backup == null) {
-                notifyBackupStateChanged()
-                return@withContext
-            }
-
             ensureServiceInitialized()
 
             initializeMutex.withLock {
-                pubkyService.forceSignOut()
+                pubkyService.clearSessionAccess()
                 clearAuthenticatedState()
                 runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
                 runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
 
-                when (backup.kind) {
+                when (backup?.kind) {
+                    null -> Unit
+
                     PubkySessionBackupKind.LocalSeed -> {
                         val secretKeyHex = deriveLocalSecretKeyFromWalletSeed()
-                        keychain.upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, secretKeyHex)
+                        pubkyService.signIn(secretKeyHex)
+                        val publicKey = pubkyService.publicKeyFromSecret(secretKeyHex).ensurePubkyPrefix()
+                        _publicKey.update { publicKey }
+                        _authState.update { PubkyAuthState.Authenticated }
                     }
 
                     PubkySessionBackupKind.ExternalSession -> {
                         val sessionSecret = requireNotNull(backup.sessionSecret?.takeIf { it.isNotBlank() }) {
                             "Missing session secret in backup"
                         }
-                        keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
+                        val publicKey = pubkyService.importExternalSession(sessionSecret).ensurePubkyPrefix()
+                        _publicKey.update { publicKey }
+                        _authState.update { PubkyAuthState.Authenticated }
                     }
                 }
 
@@ -963,15 +880,23 @@ class PubkyRepo @Inject constructor(
         }
     }
 
+    suspend fun restoreContactProfileOverrides(overrides: Map<String, PubkyProfileData>?): Result<Unit> = runCatching {
+        withContext(ioDispatcher) {
+            pubkyStore.update {
+                it.copy(contactProfileOverrides = overrides ?: emptyMap())
+            }
+            notifyBackupStateChanged()
+        }
+    }
+
     suspend fun refreshSessionIfPossible(): Result<Boolean> = runCatching {
         withContext(ioDispatcher) {
             val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
                 ?: return@withContext false
 
-            val sessionSecret = pubkyService.signIn(storedSecretKeyHex)
-            val publicKey = pubkyService.importSession(sessionSecret).ensurePubkyPrefix()
+            pubkyService.signIn(storedSecretKeyHex)
+            val publicKey = pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix()
 
-            keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, sessionSecret)
             notifyBackupStateChanged()
             _publicKey.update { publicKey }
             _authState.update { PubkyAuthState.Authenticated }
@@ -1019,6 +944,91 @@ class PubkyRepo @Inject constructor(
         imageLoader.diskCache?.let { cache ->
             imageUris.forEach { cache.remove(it) }
         }
+    }
+
+    private suspend fun contactProfile(
+        publicKey: String,
+        label: String?,
+        paykitProfile: PaykitProfile?,
+        overrides: Map<String, PubkyProfileData>,
+    ): PubkyProfile {
+        val prefixedKey = publicKey.ensurePubkyPrefix()
+        overrides[prefixedKey]?.let {
+            return it.toPubkyProfile(prefixedKey)
+        }
+        paykitProfile?.let {
+            return PubkyProfile.fromPaykitProfile(prefixedKey, it)
+        }
+        resolveContactProfile(prefixedKey).getOrNull()?.let {
+            return it
+        }
+        return PubkyProfile.forDisplay(
+            publicKey = prefixedKey,
+            name = label,
+            imageUrl = null,
+        )
+    }
+
+    private suspend fun resolveContactProfile(publicKey: String): Result<PubkyProfile?> = runCatching {
+        withContext(ioDispatcher) {
+            val prefixedKey = publicKey.ensurePubkyPrefix()
+            var lastError: Throwable? = null
+
+            repeat(2) { attempt ->
+                val result = runCatching {
+                    val profile = pubkyService.resolveContactProfile(
+                        publicKey = prefixedKey,
+                        allowPubkyProfileFallback = true,
+                    )?.let(::profileFromResolution)
+                    if (profile != null || attempt == 1) {
+                        return@withContext profile
+                    }
+                }
+                result.exceptionOrNull()?.let { error ->
+                    if (error is CancellationException) throw error
+                    lastError = error
+                }
+
+                if (attempt == 0) {
+                    Logger.warn("Retrying contact profile resolution for '$prefixedKey'", lastError, context = TAG)
+                    delay(250)
+                }
+            }
+
+            lastError?.let { throw it }
+            null
+        }
+    }
+
+    private fun profileFromResolution(resolution: ContactProfileResolution): PubkyProfile {
+        val prefixedKey = resolution.publicKey.ensurePubkyPrefix()
+        resolution.paykitProfile?.let {
+            return PubkyProfile.fromPaykitProfile(prefixedKey, it)
+        }
+        resolution.pubkyProfile?.let {
+            return PubkyProfile.fromPubkyProfile(prefixedKey, it)
+        }
+        return PubkyProfile.forDisplay(
+            publicKey = prefixedKey,
+            name = resolution.displayName,
+            imageUrl = resolution.imageUri,
+        )
+    }
+
+    private suspend fun upsertContactProfileOverride(profile: PubkyProfile) {
+        val prefixedKey = profile.publicKey.ensurePubkyPrefix()
+        pubkyStore.update { data ->
+            data.copy(contactProfileOverrides = data.contactProfileOverrides + (prefixedKey to profile.toProfileData()))
+        }
+        notifyBackupStateChanged()
+    }
+
+    private suspend fun removeContactProfileOverride(publicKey: String) {
+        val prefixedKey = publicKey.ensurePubkyPrefix()
+        pubkyStore.update { data ->
+            data.copy(contactProfileOverrides = data.contactProfileOverrides - prefixedKey)
+        }
+        notifyBackupStateChanged()
     }
 
     private suspend fun cacheMetadata(profile: PubkyProfile) {
@@ -1116,15 +1126,6 @@ class PubkyRepo @Inject constructor(
 
     private fun String.ensurePubkyPrefix(): String =
         if (startsWith(PUBKY_PREFIX)) this else "$PUBKY_PREFIX$this"
-
-    private fun Throwable.isMissingPubkyDirectory(): Boolean {
-        if (isMissingPubkyData()) {
-            return true
-        }
-
-        val fullMessage = buildErrorMessage()
-        return fullMessage.contains("directory not found", ignoreCase = true)
-    }
 
     private fun Throwable.isMissingPubkyData(): Boolean {
         val fullMessage = buildErrorMessage()

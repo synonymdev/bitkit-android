@@ -227,22 +227,34 @@ class EditProfileViewModel @Inject constructor(
     fun disconnectProfile() {
         viewModelScope.launch {
             _uiState.update { it.copy(showDeleteFailureDialog = false, isSaving = true) }
-            privatePaykitRepo.removePublishedEndpointsBestEffort(TAG)
-            privatePaykitRepo.closeAndClear(markProfileRecoveryPending = true)
-            pubkyRepo.signOut()
-                .onSuccess {
-                    _uiState.update { it.copy(isSaving = false) }
-                    _effects.emit(EditProfileEffect.DisconnectSuccess)
-                }
-                .onFailure {
-                    Logger.error("Failed to disconnect profile", it, context = TAG)
-                    _uiState.update { it.copy(isSaving = false) }
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.profile__disconnect_error),
-                        description = it.message,
-                    )
-                }
+            val cleanupResult = privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
+            if (cleanupResult.isFailure) {
+                val error = requireNotNull(
+                    cleanupResult.exceptionOrNull(),
+                ) { "Private Paykit cleanup failed without an error" }
+                _uiState.update { it.copy(isSaving = false) }
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.profile__disconnect_error),
+                    description = error.message,
+                )
+                return@launch
+            }
+            val result = pubkyRepo.signOut()
+            if (result.isSuccess) {
+                privatePaykitRepo.closeAndClear()
+                _uiState.update { it.copy(isSaving = false) }
+                _effects.emit(EditProfileEffect.DisconnectSuccess)
+            } else {
+                val error = requireNotNull(result.exceptionOrNull()) { "Disconnect failed without an error" }
+                Logger.error("Failed to disconnect profile", error, context = TAG)
+                _uiState.update { it.copy(isSaving = false) }
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.profile__disconnect_error),
+                    description = error.message,
+                )
+            }
         }
     }
 
@@ -254,26 +266,33 @@ class EditProfileViewModel @Inject constructor(
                 isSaving = true,
             )
         }
-        privatePaykitRepo.removePublishedEndpointsBestEffort(TAG)
-        privatePaykitRepo.closeAndClear(markProfileRecoveryPending = true)
-        pubkyRepo.deleteProfileWithSessionRetry()
-            .onSuccess {
-                _uiState.update { it.copy(isSaving = false) }
-                ToastEventBus.send(
-                    type = Toast.ToastType.SUCCESS,
-                    title = context.getString(R.string.profile__delete_success),
+        val cleanupResult = privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
+        if (cleanupResult.isFailure) {
+            val error = requireNotNull(
+                cleanupResult.exceptionOrNull(),
+            ) { "Private Paykit cleanup failed without an error" }
+            _uiState.update { it.copy(showDeleteFailureDialog = true, isSaving = false) }
+            return
+        }
+        val result = pubkyRepo.deleteProfileWithSessionRetry()
+        if (result.isSuccess) {
+            privatePaykitRepo.closeAndClear()
+            _uiState.update { it.copy(isSaving = false) }
+            ToastEventBus.send(
+                type = Toast.ToastType.SUCCESS,
+                title = context.getString(R.string.profile__delete_success),
+            )
+            _effects.emit(EditProfileEffect.DeleteSuccess)
+        } else {
+            val error = requireNotNull(result.exceptionOrNull()) { "Profile delete failed without an error" }
+            Logger.error("Failed to delete profile", error, context = TAG)
+            _uiState.update {
+                it.copy(
+                    isSaving = false,
+                    showDeleteFailureDialog = true,
                 )
-                _effects.emit(EditProfileEffect.DeleteSuccess)
             }
-            .onFailure {
-                Logger.error("Failed to delete profile", it, context = TAG)
-                _uiState.update {
-                    it.copy(
-                        isSaving = false,
-                        showDeleteFailureDialog = true,
-                    )
-                }
-            }
+        }
     }
 }
 

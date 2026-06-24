@@ -22,6 +22,7 @@ import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.services.CoreService
+import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.NetworkValidationHelper
 import to.bitkit.utils.encodeToUrl
@@ -40,6 +41,7 @@ sealed class PublicPaykitError(message: String) : AppError(message) {
     data object RouteHintsUnavailable : PublicPaykitError("Reachable Lightning payment endpoint is not available yet")
     data object SessionNotActive : PublicPaykitError("No active Paykit session")
     data object WalletNotReady : PublicPaykitError("Wallet is not ready to publish Paykit endpoints")
+    data object PublicationFailed : PublicPaykitError("Failed to publish Paykit payment endpoints")
 }
 
 sealed interface PublicPaykitPaymentResult {
@@ -57,6 +59,7 @@ class PublicPaykitRepo @Inject constructor(
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
     private val coreService: CoreService,
+    private val paykitSdkService: PaykitSdkService,
     private val settingsStore: SettingsStore,
     private val clock: Clock,
 ) {
@@ -69,7 +72,7 @@ class PublicPaykitRepo @Inject constructor(
             encodeDefaults = false
         }
 
-        private val payablePreferenceOrder = listOf(
+        internal val payablePreferenceOrder = listOf(
             MethodId.Bolt11,
             MethodId.Lnurl,
             MethodId.P2tr,
@@ -78,7 +81,6 @@ class PublicPaykitRepo @Inject constructor(
             MethodId.P2pkh,
         )
 
-        private val managedMethodIds = MethodId.entries.filter { it.isBitkitManaged }
         private val publicBolt11Expiry = 24.hours
         private val publicBolt11RefreshWindow = 30.minutes
 
@@ -219,8 +221,8 @@ class PublicPaykitRepo @Inject constructor(
     private suspend fun fetchPublicEndpoints(publicKey: String): Result<List<Endpoint>> = withContext(ioDispatcher) {
         runCatching {
             val normalizedKey = PubkyPublicKeyFormat.normalized(publicKey) ?: publicKey
-            pubkyRepo.getPaymentList(normalizedKey).getOrThrow()
-                .mapNotNull { parseEndpoint(it.methodId, it.endpointData) }
+            paykitSdkService.resolvePublicContactPayment(counterparty = normalizedKey).payableEndpoints
+                .mapNotNull { parseEndpoint(it.identifier, it.payload) }
                 .associateBy { it.methodId }
                 .values
                 .sortedBy { endpoint -> payablePreferenceOrder.indexOf(endpoint.methodId) }
@@ -228,35 +230,16 @@ class PublicPaykitRepo @Inject constructor(
     }
 
     private suspend fun removePublishedEndpoints() {
-        publishMutex.withLock {
-            val currentMethodIds = currentPublishedMethodIds()
-            managedMethodIds
-                .filter { it.rawValue in currentMethodIds }
-                .forEach { pubkyRepo.removePaymentEndpoint(it.rawValue).getOrThrow() }
-            clearPublicBolt11Metadata()
-        }
+        applyPublishedEndpoints(emptyList())
+        clearPublicBolt11Metadata()
     }
 
     private suspend fun applyPublishedEndpoints(desiredEndpoints: List<Endpoint>) {
         publishMutex.withLock {
             requireCurrentPublicKey()
-            val desiredMethodIds = desiredEndpoints.map { it.methodId.rawValue }.toSet()
-
-            desiredEndpoints.forEach {
-                pubkyRepo.setPaymentEndpoint(it.methodId.rawValue, it.rawPayload).getOrThrow()
-            }
-
-            val publishedMethodIds = currentPublishedMethodIds()
-            managedMethodIds
-                .filter { it.rawValue in publishedMethodIds && it.rawValue !in desiredMethodIds }
-                .forEach { pubkyRepo.removePaymentEndpoint(it.rawValue).getOrThrow() }
+            val report = paykitSdkService.syncPublicEndpoints(desiredEndpoints)
+            if (report.failed.isNotEmpty()) throw PublicPaykitError.PublicationFailed
         }
-    }
-
-    private suspend fun currentPublishedMethodIds(): Set<String> {
-        return pubkyRepo.getPaymentList(requireCurrentPublicKey()).getOrThrow()
-            .map { it.methodId }
-            .toSet()
     }
 
     private suspend fun requireCurrentPublicKey(): String {

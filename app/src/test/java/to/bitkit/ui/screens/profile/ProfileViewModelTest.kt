@@ -7,7 +7,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -33,8 +35,25 @@ class ProfileViewModelTest : BaseUnitTest() {
 
             assertEquals(ProfileEffect.SignedOut, awaitItem())
         }
-        verify(privatePaykitRepo).closeAndClear(markProfileRecoveryPending = true)
-        verify(pubkyRepo).signOut()
+        inOrder(privatePaykitRepo, pubkyRepo).apply {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(pubkyRepo).signOut()
+            verify(privatePaykitRepo).closeAndClear()
+        }
+    }
+
+    @Test
+    fun `signOut keeps profile connected when private cleanup fails`() = test {
+        val sut = createSut()
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
+            .thenReturn(Result.failure(RuntimeException("cleanup failed")))
+        advanceUntilIdle()
+
+        sut.signOut()
+        advanceUntilIdle()
+
+        verify(pubkyRepo, never()).signOut()
+        verify(privatePaykitRepo, never()).closeAndClear()
     }
 
     private fun createSut(): ProfileViewModel {
@@ -43,9 +62,9 @@ class ProfileViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyalice"))
         whenever(pubkyRepo.isLoadingProfile).thenReturn(MutableStateFlow(false))
         whenever { pubkyRepo.loadProfile() }.thenReturn(Unit)
-        whenever { privatePaykitRepo.removePublishedEndpointsBestEffort(any()) }
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
             .thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.closeAndClear(any()) }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
 
         return ProfileViewModel(
             context = context,
