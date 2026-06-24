@@ -18,6 +18,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.toLdkNetwork
@@ -156,19 +157,19 @@ class PublicPaykitRepo @Inject constructor(
     private val publishMutex = Mutex()
 
     suspend fun beginPayment(publicKey: String): Result<PublicPaykitPaymentResult> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val endpoints = fetchPublicEndpoints(publicKey).getOrThrow()
-            if (endpoints.isEmpty()) return@runCatching PublicPaykitPaymentResult.NoEndpoint
+            if (endpoints.isEmpty()) return@runSuspendCatching PublicPaykitPaymentResult.NoEndpoint
 
             val payable = endpoints.filter { isPayable(it) }
-            if (payable.isEmpty()) return@runCatching PublicPaykitPaymentResult.NotOpened
+            if (payable.isEmpty()) return@runSuspendCatching PublicPaykitPaymentResult.NotOpened
 
             PublicPaykitPaymentResult.Opened(paymentRequest(payable))
         }
     }
 
     suspend fun hasPayablePublicEndpoint(publicKey: String): Result<Boolean> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             fetchPublicEndpoints(publicKey).getOrThrow().any { isPayable(it) }
         }
     }
@@ -178,11 +179,11 @@ class PublicPaykitRepo @Inject constructor(
     }
 
     suspend fun syncPublishedEndpoints(publish: Boolean): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             if (!publish) {
                 removePublishedEndpoints()
                 settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
-                return@runCatching
+                return@runSuspendCatching
             }
 
             val desired = buildWalletEndpoints(refresh = true)
@@ -195,7 +196,7 @@ class PublicPaykitRepo @Inject constructor(
         forceRefreshLightning: Boolean = false,
         requireEndpoint: Boolean = false,
     ): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val desired = buildWalletEndpoints(
                 refresh = false,
                 forceRefreshLightning = forceRefreshLightning,
@@ -207,10 +208,10 @@ class PublicPaykitRepo @Inject constructor(
     }
 
     suspend fun refreshPublishedBolt11ForPayment(paymentHash: String): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val settings = settingsStore.data.first()
-            if (!settings.sharesPublicPaykitEndpoints) return@runCatching
-            if (settings.publicPaykitBolt11PaymentHash != paymentHash) return@runCatching
+            if (!settings.sharesPublicPaykitEndpoints) return@runSuspendCatching
+            if (settings.publicPaykitBolt11PaymentHash != paymentHash) return@runSuspendCatching
 
             clearPublicBolt11Metadata()
             val desired = buildWalletEndpoints(refresh = true)
@@ -219,7 +220,7 @@ class PublicPaykitRepo @Inject constructor(
     }
 
     private suspend fun fetchPublicEndpoints(publicKey: String): Result<List<Endpoint>> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val normalizedKey = PubkyPublicKeyFormat.normalized(publicKey) ?: publicKey
             paykitSdkService.resolvePublicContactPayment(counterparty = normalizedKey).payableEndpoints
                 .mapNotNull { parseEndpoint(it.identifier, it.payload) }
@@ -362,10 +363,11 @@ class PublicPaykitRepo @Inject constructor(
         return nowMillis >= refreshAtMillis
     }
 
-    private suspend fun isPayable(endpoint: Endpoint): Boolean = runCatching {
+    private suspend fun isPayable(endpoint: Endpoint): Boolean = runSuspendCatching {
         when (endpoint.methodId) {
             MethodId.Bolt11 -> {
-                val scan = coreService.decode(endpoint.paymentRequest) as? Scanner.Lightning ?: return@runCatching false
+                val scan = coreService.decode(endpoint.paymentRequest) as? Scanner.Lightning
+                    ?: return@runSuspendCatching false
                 !scan.invoice.isExpired &&
                     !NetworkValidationHelper.isNetworkMismatch(scan.invoice.networkType.toLdkNetwork(), Env.network)
             }
@@ -375,7 +377,8 @@ class PublicPaykitRepo @Inject constructor(
             MethodId.P2sh,
             MethodId.P2pkh,
             -> {
-                val scan = coreService.decode(endpoint.paymentRequest) as? Scanner.OnChain ?: return@runCatching false
+                val scan = coreService.decode(endpoint.paymentRequest) as? Scanner.OnChain
+                    ?: return@runSuspendCatching false
                 val address = validateBitcoinAddress(scan.invoice.address)
                 !NetworkValidationHelper.isNetworkMismatch(address.network.toLdkNetwork(), Env.network)
             }

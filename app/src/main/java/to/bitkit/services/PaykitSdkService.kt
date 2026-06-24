@@ -56,6 +56,7 @@ import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.ext.fromHex
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.Endpoint
@@ -491,7 +492,7 @@ class PaykitSdkService @Inject constructor(
     }
 
     private suspend fun currentSdkStatePublicKeyLocked(): String? {
-        return runCatching { handle().identityStatus()?.publicKey }
+        return runSuspendCatching { handle().identityStatus()?.publicKey }
             .getOrElse {
                 keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)
                 resetRuntime()
