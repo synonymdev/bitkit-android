@@ -755,6 +755,16 @@ private fun RootNavHost(
                     onBackClick = { navController.popBackStack() },
                 )
             }
+            composableWithDefaultTransitions<Routes.SpendingIntroHw> { entry ->
+                val deviceId = entry.toRoute<Routes.SpendingIntroHw>().deviceId
+                SpendingIntroScreen(
+                    onContinueClick = {
+                        navController.navigateToTransferSpendingAmountHw(deviceId)
+                        settingsViewModel.setHasSeenSpendingIntro(true)
+                    },
+                    onBackClick = { navController.popBackStack() },
+                )
+            }
             composableWithDefaultTransitions<Routes.SpendingAmount> {
                 val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingAmountScreen(
@@ -842,11 +852,7 @@ private fun RootNavHost(
 
                 FundingScreen(
                     onTransfer = {
-                        if (!hasSeenSpendingIntro) {
-                            navController.navigateToTransferSpendingIntro()
-                        } else {
-                            navController.navigateToTransferSpendingAmount()
-                        }
+                        navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
                     },
                     onFund = {
                         scope.launch {
@@ -991,11 +997,7 @@ private fun NavGraphBuilder.home(
             onActivityItemClick = { navController.navigateToActivityItem(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSpendingClick = {
-                if (!hasSeenSpendingIntro) {
-                    navController.navigateToTransferSpendingIntro()
-                } else {
-                    navController.navigateToTransferSpendingAmount()
-                }
+                navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
             },
             onBackClick = { navController.popBackStack() },
             forceCloseRemainingDuration = forceCloseRemainingDuration,
@@ -1021,22 +1023,19 @@ private fun NavGraphBuilder.home(
                 }
             },
             onTransferFromSavingsClick = {
-                if (!hasSeenSpendingIntro) {
-                    navController.navigateToTransferSpendingIntro()
-                } else {
-                    navController.navigateToTransferSpendingAmount()
-                }
+                navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
             },
             onBackClick = { navController.popBackStack() },
         )
     }
     composableWithDefaultTransitions<Routes.HardwareWallet> {
         val deviceId = it.toRoute<Routes.HardwareWallet>().deviceId
+        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         HardwareWalletScreen(
             deviceId = deviceId,
             onActivityItemClick = { id -> navController.navigateToActivityItem(id) },
             onTransferToSpendingClick = { selectedDeviceId ->
-                navController.navigateTo(Routes.SpendingAmountHw(selectedDeviceId))
+                navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, selectedDeviceId)
             },
             onBackClick = { navController.popBackStack() },
         )
@@ -1829,6 +1828,42 @@ fun NavController.navigateToTransferSpendingIntro() = navigateTo(Routes.Spending
 
 fun NavController.navigateToTransferSpendingAmount() = navigateTo(Routes.SpendingAmount)
 
+fun NavController.navigateToTransferSpendingIntroHw(deviceId: String) = navigateTo(Routes.SpendingIntroHw(deviceId))
+
+fun NavController.navigateToTransferSpendingAmountHw(deviceId: String) = navigateTo(Routes.SpendingAmountHw(deviceId))
+
+fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean) {
+    when (transferSpendingStartRoute(hasSeenSpendingIntro)) {
+        Routes.SpendingIntro -> navigateToTransferSpendingIntro()
+        Routes.SpendingAmount -> navigateToTransferSpendingAmount()
+        else -> Unit
+    }
+}
+
+fun NavController.navigateToTransferSpendingStart(
+    hasSeenSpendingIntro: Boolean,
+    deviceId: String,
+) {
+    when (val route = transferSpendingStartRoute(hasSeenSpendingIntro, deviceId)) {
+        is Routes.SpendingIntroHw -> navigateToTransferSpendingIntroHw(route.deviceId)
+        is Routes.SpendingAmountHw -> navigateToTransferSpendingAmountHw(route.deviceId)
+        else -> Unit
+    }
+}
+
+internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean): Routes = when {
+    hasSeenSpendingIntro -> Routes.SpendingAmount
+    else -> Routes.SpendingIntro
+}
+
+internal fun transferSpendingStartRoute(
+    hasSeenSpendingIntro: Boolean,
+    deviceId: String,
+): Routes = when {
+    hasSeenSpendingIntro -> Routes.SpendingAmountHw(deviceId)
+    else -> Routes.SpendingIntroHw(deviceId)
+}
+
 fun NavController.navigateToTransferIntro() = navigateTo(Routes.TransferIntro)
 
 fun NavController.navigateToTransferFunding() = navigateTo(Routes.Funding)
@@ -1988,6 +2023,9 @@ sealed interface Routes {
 
     @Serializable
     data object SpendingIntro : Routes
+
+    @Serializable
+    data class SpendingIntroHw(val deviceId: String) : Routes
 
     @Serializable
     data object SpendingAmount : Routes
