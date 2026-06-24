@@ -8,6 +8,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Defaults
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.channelId
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
@@ -173,6 +174,6 @@ class DeriveBalanceStateUseCase @Inject constructor(
 
     companion object {
         const val TAG = "DeriveBalanceStateUseCase"
-        const val FALLBACK_FEE_PERCENT = 0.1
+        const val FALLBACK_FEE_PERCENT = Defaults.fallbackFeePercent
     }
 }

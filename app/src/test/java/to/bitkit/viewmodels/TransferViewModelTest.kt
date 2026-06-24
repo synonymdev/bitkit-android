@@ -27,6 +27,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.env.Defaults
 import to.bitkit.models.BalanceState
 import to.bitkit.models.HwFundingAccount
 import to.bitkit.models.HwFundingAddressType
@@ -45,7 +46,6 @@ import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.transfer.previewBtOrder
-import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
@@ -195,7 +195,7 @@ class TransferViewModelTest : BaseUnitTest() {
         sut.updateHwLimits(DEVICE_ID)
         advanceUntilIdle()
 
-        val fallbackReserve = (ON_CHAIN_BALANCE.toDouble() * DeriveBalanceStateUseCase.FALLBACK_FEE_PERCENT).toULong()
+        val fallbackReserve = (ON_CHAIN_BALANCE.toDouble() * Defaults.fallbackFeePercent).toULong()
         verify(blocktankRepo).estimateOrderFee(eq(ON_CHAIN_BALANCE.safe() - fallbackReserve.safe()), any(), any())
     }
 

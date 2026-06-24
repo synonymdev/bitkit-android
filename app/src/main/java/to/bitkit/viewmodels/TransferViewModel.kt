@@ -31,6 +31,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingTransaction
@@ -44,7 +45,6 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
-import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -654,7 +654,7 @@ class TransferViewModel @Inject constructor(
 
     private fun hwFundingFallbackFeeReserve(balanceSats: ULong): ULong {
         val minReserve = HW_FUNDING_FALLBACK_SATS_PER_VBYTE.safe() * HW_FUNDING_TX_VBYTES.safe()
-        val fallback = (balanceSats.toDouble() * DeriveBalanceStateUseCase.FALLBACK_FEE_PERCENT).toULong()
+        val fallback = (balanceSats.toDouble() * Defaults.fallbackFeePercent).toULong()
         return maxOf(minReserve, fallback)
     }
 
