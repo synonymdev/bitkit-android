@@ -93,6 +93,7 @@ fun SpendingAdvancedScreen(
         viewModel.transferEffects.collect { effect ->
             when (effect) {
                 TransferEffect.OnOrderCreated -> currentOnOrderCreated()
+                TransferEffect.OnHwTxSigned -> Unit
                 is TransferEffect.ToastException -> {
                     isLoading = false
                     app.toast(effect.e)
@@ -106,8 +107,6 @@ fun SpendingAdvancedScreen(
                         description = effect.description,
                     )
                 }
-
-                else -> Unit
             }
         }
     }
