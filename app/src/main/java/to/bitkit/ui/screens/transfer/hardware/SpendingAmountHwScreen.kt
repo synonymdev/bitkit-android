@@ -1,4 +1,4 @@
-package to.bitkit.ui.screens.transfer
+package to.bitkit.ui.screens.transfer.hardware
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.Toast
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
@@ -46,6 +47,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -58,13 +60,12 @@ import to.bitkit.viewmodels.previewAmountInputViewModel
 
 @Suppress("ViewModelForwarding")
 @Composable
-fun SpendingAmountScreen(
+fun SpendingAmountHwScreen(
+    deviceId: String,
     viewModel: TransferViewModel,
     isOffline: Boolean,
     onBackClick: () -> Unit = {},
     onOrderCreated: () -> Unit = {},
-    toastException: (Throwable) -> Unit,
-    toast: (title: String, description: String) -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
@@ -75,16 +76,20 @@ fun SpendingAmountScreen(
     val currentMaxAllowedToSend by rememberUpdatedState(uiState.maxAllowedToSend)
     val currentCurrencies by rememberUpdatedState(currencies)
 
-    LaunchedEffect(isOffline) {
-        viewModel.updateLimits()
+    LaunchedEffect(deviceId, isOffline) {
+        viewModel.updateHwLimits(deviceId)
     }
 
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
             when (effect) {
                 TransferEffect.OnOrderCreated -> onOrderCreated()
-                is TransferEffect.ToastError -> toast(effect.title, effect.description)
-                is TransferEffect.ToastException -> toastException(effect.e)
+                is TransferEffect.ToastError -> ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = effect.title,
+                    description = effect.description,
+                )
+                is TransferEffect.ToastException -> ToastEventBus.send(effect.e)
                 else -> Unit
             }
         }
@@ -95,9 +100,10 @@ fun SpendingAmountScreen(
             when (it) {
                 AmountInputEffect.MaxExceeded -> {
                     amountInputViewModel.setSats(currentMaxAllowedToSend, currentCurrencies)
-                    toast(
-                        context.getString(R.string.lightning__spending_amount__error_max__title),
-                        context.getString(R.string.lightning__spending_amount__error_max__description)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.lightning__spending_amount__error_max__title),
+                        description = context.getString(R.string.lightning__spending_amount__error_max__description)
                             .replace("{amount}", currentMaxAllowedToSend.formatToModernDisplay()),
                     )
                 }
@@ -136,13 +142,13 @@ fun SpendingAmountScreen(
 @Suppress("ViewModelForwarding")
 @Composable
 private fun Content(
-    isNodeRunning: Boolean,
+    isNodeRunning: Boolean = true,
     uiState: TransferToSpendingUiState,
     amountInputViewModel: AmountInputViewModel,
-    onBackClick: () -> Unit,
-    onClickQuarter: () -> Unit,
-    onClickMaxAmount: () -> Unit,
-    onConfirmAmount: () -> Unit,
+    onBackClick: () -> Unit = {},
+    onClickQuarter: () -> Unit = {},
+    onClickMaxAmount: () -> Unit = {},
+    onConfirmAmount: () -> Unit = {},
     currencies: CurrencyState = LocalCurrencies.current,
 ) {
     ScreenColumn {
@@ -153,7 +159,7 @@ private fun Content(
         )
 
         if (isNodeRunning) {
-            SpendingAmountNodeRunning(
+            NodeRunning(
                 uiState = uiState,
                 amountInputViewModel = amountInputViewModel,
                 currencies = currencies,
@@ -173,13 +179,13 @@ private fun Content(
 
 @Suppress("ViewModelForwarding")
 @Composable
-private fun SpendingAmountNodeRunning(
+private fun NodeRunning(
     uiState: TransferToSpendingUiState,
     amountInputViewModel: AmountInputViewModel,
     currencies: CurrencyState,
-    onClickQuarter: () -> Unit,
-    onClickMaxAmount: () -> Unit,
-    onConfirmAmount: () -> Unit,
+    onClickQuarter: () -> Unit = {},
+    onClickMaxAmount: () -> Unit = {},
+    onConfirmAmount: () -> Unit = {},
 ) {
     LaunchedEffect(uiState.maxAllowedToSend) {
         amountInputViewModel.setMaxAmount(uiState.maxAllowedToSend)
@@ -189,7 +195,7 @@ private fun SpendingAmountNodeRunning(
         modifier = Modifier
             .padding(horizontal = 16.dp)
             .fillMaxSize()
-            .testTag("SpendingAmount")
+            .testTag("HardwareTransferAmount")
     ) {
         val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
 
@@ -209,7 +215,7 @@ private fun SpendingAmountNodeRunning(
             showSecondaryField = false,
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("SpendingAmountNumberField")
+                .testTag("HardwareTransferAmountNumberField")
         )
 
         FillHeight()
@@ -219,34 +225,34 @@ private fun SpendingAmountNodeRunning(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier
                 .padding(vertical = 8.dp)
-                .testTag("SendAmountNumberPad")
+                .testTag("HardwareTransferAmountNumberPad")
         ) {
             Column {
                 Text13Up(
                     text = stringResource(R.string.wallet__send_available),
                     color = Colors.White64,
-                    modifier = Modifier.testTag("SpendingAmountAvailable")
+                    modifier = Modifier.testTag("HardwareTransferAmountAvailable")
                 )
                 VerticalSpacer(8.dp)
-                MoneySSB(sats = uiState.balanceAfterFee, modifier = Modifier.testTag("SpendingAmountUnit"))
+                MoneySSB(sats = uiState.balanceAfterFee, modifier = Modifier.testTag("HardwareTransferAmountUnit"))
             }
             FillWidth()
             UnitButton(
                 color = Colors.Purple,
                 onClick = { amountInputViewModel.switchUnit(currencies) },
-                modifier = Modifier.testTag("SpendingNumberPadUnit")
+                modifier = Modifier.testTag("HardwareTransferAmountUnitButton")
             )
             NumberPadActionButton(
                 text = stringResource(R.string.lightning__spending_amount__quarter),
                 color = Colors.Purple,
                 onClick = onClickQuarter,
-                modifier = Modifier.testTag("SpendingAmountQuarter")
+                modifier = Modifier.testTag("HardwareTransferAmountQuarter")
             )
             NumberPadActionButton(
                 text = stringResource(R.string.common__max),
                 color = Colors.Purple,
                 onClick = onClickMaxAmount,
-                modifier = Modifier.testTag("SpendingAmountMax")
+                modifier = Modifier.testTag("HardwareTransferAmountMax")
             )
         }
 
@@ -264,7 +270,7 @@ private fun SpendingAmountNodeRunning(
             onClick = onConfirmAmount,
             enabled = !uiState.isLoading && amountUiState.sats <= uiState.maxAllowedToSend,
             isLoading = uiState.isLoading,
-            modifier = Modifier.testTag("SpendingAmountContinue")
+            modifier = Modifier.testTag("HardwareTransferAmountContinue")
         )
 
         VerticalSpacer(16.dp)
@@ -278,31 +284,9 @@ private fun SpendingAmountNodeRunning(
 private fun Preview() {
     AppThemeSurface {
         Content(
-            isNodeRunning = true,
             uiState = TransferToSpendingUiState(maxAllowedToSend = 158_234, balanceAfterFee = 158_234),
             amountInputViewModel = previewAmountInputViewModel(),
             currencies = CurrencyState(),
-            onBackClick = {},
-            onClickQuarter = {},
-            onClickMaxAmount = {},
-            onConfirmAmount = {},
-        )
-    }
-}
-
-@Preview(showSystemUi = true)
-@Composable
-private fun PreviewInitializing() {
-    AppThemeSurface {
-        Content(
-            isNodeRunning = false,
-            uiState = TransferToSpendingUiState(),
-            amountInputViewModel = previewAmountInputViewModel(),
-            currencies = CurrencyState(),
-            onBackClick = {},
-            onClickQuarter = {},
-            onClickMaxAmount = {},
-            onConfirmAmount = {},
         )
     }
 }

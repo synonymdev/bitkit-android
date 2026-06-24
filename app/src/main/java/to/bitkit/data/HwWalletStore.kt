@@ -11,7 +11,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.HwWalletDataSerializer
 import to.bitkit.di.IoDispatcher
-import to.bitkit.repositories.KnownDevice
+import to.bitkit.models.KnownDevice
 import javax.inject.Inject
 import javax.inject.Singleton
 

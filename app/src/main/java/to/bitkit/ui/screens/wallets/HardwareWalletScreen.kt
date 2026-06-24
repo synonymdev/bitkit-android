@@ -63,7 +63,7 @@ import to.bitkit.ui.theme.TopBarGradient
 fun HardwareWalletScreen(
     deviceId: String,
     onActivityItemClick: (String) -> Unit,
-    onTransferToSpendingClick: () -> Unit,
+    onTransferToSpendingClick: (String) -> Unit,
     onBackClick: () -> Unit,
     viewModel: HwWalletViewModel = hiltViewModel(),
 ) {
@@ -96,13 +96,14 @@ private fun HardwareWalletContent(
     wallet: HwWallet,
     showRemoveDialog: Boolean,
     onActivityItemClick: (String) -> Unit,
-    onTransferToSpendingClick: () -> Unit,
+    onTransferToSpendingClick: (String) -> Unit,
     onRemoveClick: () -> Unit,
     onConfirmRemove: () -> Unit,
     onDismissRemoveDialog: () -> Unit,
     onBackClick: () -> Unit,
 ) {
     val hasFunds = wallet.balanceSats > 0uL
+    val hasFundingFunds = wallet.fundingBalanceSats > 0uL
     val hasActivity = wallet.activities.isNotEmpty()
     val showEmptyState = !hasFunds && !hasActivity
 
@@ -169,10 +170,10 @@ private fun HardwareWalletContent(
             if (!showEmptyState) {
                 item { VerticalSpacer(32.dp) }
 
-                if (hasFunds) {
+                if (hasFundingFunds) {
                     item {
                         SecondaryButton(
-                            onClick = onTransferToSpendingClick,
+                            onClick = { onTransferToSpendingClick(wallet.id) },
                             text = stringResource(R.string.wallet__transfer_to_spending),
                             icon = {
                                 Icon(
@@ -182,7 +183,7 @@ private fun HardwareWalletContent(
                                 )
                             },
                             hazeState = hazeState,
-                            modifier = Modifier.testTag("HwTransferToSpending")
+                            modifier = Modifier.testTag("HardwareTransferToSpending")
                         )
                     }
                 }
@@ -264,7 +265,7 @@ private fun Preview() {
                 wallet = previewWallet(),
                 showRemoveDialog = false,
                 onActivityItemClick = {},
-                onTransferToSpendingClick = {},
+                onTransferToSpendingClick = { _ -> },
                 onRemoveClick = {},
                 onConfirmRemove = {},
                 onDismissRemoveDialog = {},
@@ -284,7 +285,7 @@ private fun PreviewNoActivity() {
                 wallet = previewWallet(activities = persistentListOf()),
                 showRemoveDialog = false,
                 onActivityItemClick = {},
-                onTransferToSpendingClick = {},
+                onTransferToSpendingClick = { _ -> },
                 onRemoveClick = {},
                 onConfirmRemove = {},
                 onDismissRemoveDialog = {},
@@ -304,7 +305,7 @@ private fun PreviewEmpty() {
                 wallet = previewWallet(balanceSats = 0uL, activities = persistentListOf()),
                 showRemoveDialog = false,
                 onActivityItemClick = {},
-                onTransferToSpendingClick = {},
+                onTransferToSpendingClick = { _ -> },
                 onRemoveClick = {},
                 onConfirmRemove = {},
                 onDismissRemoveDialog = {},
@@ -324,7 +325,7 @@ private fun PreviewRemoveDialog() {
                 wallet = previewWallet(),
                 showRemoveDialog = true,
                 onActivityItemClick = {},
-                onTransferToSpendingClick = {},
+                onTransferToSpendingClick = { _ -> },
                 onRemoveClick = {},
                 onConfirmRemove = {},
                 onDismissRemoveDialog = {},

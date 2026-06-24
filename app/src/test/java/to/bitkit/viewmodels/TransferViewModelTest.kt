@@ -5,28 +5,48 @@ import com.synonym.bitkitcore.ChannelLiquidityOptions
 import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtInfoOptions
+import com.synonym.bitkitcore.TrezorFeatures
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.NodeStatus
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.env.Defaults
 import to.bitkit.models.BalanceState
+import to.bitkit.models.HwFundingAccount
+import to.bitkit.models.HwFundingAddressType
+import to.bitkit.models.HwFundingBroadcastResult
+import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.HwWallet
+import to.bitkit.models.TransferType
+import to.bitkit.models.TransportType
+import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.screens.transfer.previewBtOrder
+import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
 import kotlin.time.Clock
@@ -39,6 +59,7 @@ class TransferViewModelTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val lightningRepo = mock<LightningRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
+    private val hwWalletRepo = mock<HwWalletRepo>()
     private val walletRepo = mock<WalletRepo>()
     private val settingsStore = mock<SettingsStore>()
     private val cacheStore = mock<CacheStore>()
@@ -66,6 +87,7 @@ class TransferViewModelTest : BaseUnitTest() {
             context = context,
             lightningRepo = lightningRepo,
             blocktankRepo = blocktankRepo,
+            hwWalletRepo = hwWalletRepo,
             walletRepo = walletRepo,
             settingsStore = settingsStore,
             cacheStore = cacheStore,
@@ -126,6 +148,199 @@ class TransferViewModelTest : BaseUnitTest() {
         assertEquals(0L, sut.spendingUiState.value.maxAllowedToSend)
     }
 
+    @Test
+    fun `updateHwLimits sources the available amount from the hardware account balance`() = test {
+        // walletRepo balance stays 0 to prove the limit comes from the hardware account, not on-chain savings.
+        blocktankState.value = BlocktankState(info = btInfo(lspMaxClientBalance = LSP_MAX_CLIENT_BALANCE))
+        whenever(hwWalletRepo.getFundingAccount(DEVICE_ID))
+            .thenReturn(
+                Result.success(
+                    HwFundingAccount.Trezor(
+                        xpub = XPUB,
+                        addressType = HwFundingAddressType.NATIVE_SEGWIT,
+                        balanceSats = ON_CHAIN_BALANCE,
+                    ),
+                ),
+            )
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(1uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(feeResponse))
+
+        sut.updateHwLimits(DEVICE_ID)
+        advanceUntilIdle()
+
+        assertEquals(OPTION_MAX_CLIENT_BALANCE.toLong(), sut.spendingUiState.value.maxAllowedToSend)
+    }
+
+    @Test
+    fun `updateHwLimits reserves fallback fee when fee rate lookup fails`() = test {
+        blocktankState.value = BlocktankState(info = btInfo(lspMaxClientBalance = LSP_MAX_CLIENT_BALANCE))
+        whenever(hwWalletRepo.getFundingAccount(DEVICE_ID))
+            .thenReturn(
+                Result.success(
+                    HwFundingAccount.Trezor(
+                        xpub = XPUB,
+                        addressType = HwFundingAddressType.NATIVE_SEGWIT,
+                        balanceSats = ON_CHAIN_BALANCE,
+                    ),
+                ),
+            )
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("fee unavailable")))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(feeResponse))
+
+        sut.updateHwLimits(DEVICE_ID)
+        advanceUntilIdle()
+
+        val fallbackReserve = (ON_CHAIN_BALANCE.toDouble() * Defaults.fallbackFeePercent).toULong()
+        verify(blocktankRepo).estimateOrderFee(eq(ON_CHAIN_BALANCE.safe() - fallbackReserve.safe()), any(), any())
+    }
+
+    @Test
+    fun `onTransferToSpendingHwConfirm signs the funding send and records the paid order`() = test {
+        val order = previewBtOrder()
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FEE_RATE,
+        )
+        val broadcast = HwFundingBroadcastResult(
+            txId = TXID,
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE,
+            totalSpent = order.feeSat + MINING_FEE,
+        )
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+        whenever(hwWalletRepo.signAndBroadcastFunding(any(), any())).thenReturn(Result.success(broadcast))
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).composeFundingTransaction(
+            eq(DEVICE_ID),
+            eq(order.payment?.onchain?.address.orEmpty()),
+            eq(order.feeSat),
+            eq(FEE_RATE),
+        )
+        verify(hwWalletRepo).signAndBroadcastFunding(eq(DEVICE_ID), eq(funding))
+        verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
+        verify(transferRepo).createTransfer(
+            eq(TransferType.TO_SPENDING),
+            eq(order.clientBalanceSat.toLong()),
+            isNull<String>(),
+            eq(TXID),
+            eq(order.id),
+            isNull<UInt>(),
+        )
+        verify(transferRepo).createPendingToSpendingActivity(
+            eq(order),
+            eq(TXID),
+            eq(MINING_FEE),
+            eq(FEE_RATE),
+        )
+        verify(hwWalletRepo).ensureConnected(DEVICE_ID)
+    }
+
+    @Test
+    fun `onTransferToSpendingHwConfirm composes with fallback fee rate when fee lookup fails`() = test {
+        val order = previewBtOrder()
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FALLBACK_FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FALLBACK_FEE_RATE,
+        )
+        val broadcast = HwFundingBroadcastResult(
+            txId = TXID,
+            miningFeeSats = MINING_FEE,
+            feeRate = FALLBACK_FEE_RATE,
+            totalSpent = order.feeSat + MINING_FEE,
+        )
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("fee unavailable")))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+        whenever(hwWalletRepo.signAndBroadcastFunding(any(), any())).thenReturn(Result.success(broadcast))
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).composeFundingTransaction(
+            eq(DEVICE_ID),
+            eq(order.payment?.onchain?.address.orEmpty()),
+            eq(order.feeSat),
+            eq(FALLBACK_FEE_RATE),
+        )
+    }
+
+    @Test
+    fun `onTransferToSpendingHwConfirm aborts when hardware reconnect fails`() = test {
+        val order = previewBtOrder()
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = false))))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+            .thenReturn(Result.failure(RuntimeException("no device")))
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).ensureConnected(DEVICE_ID)
+        verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
+        verify(hwWalletRepo, never()).signAndBroadcastFunding(any(), any())
+    }
+
+    @Test
+    fun `onTransferToSpendingHwConfirm disconnects stale session when signing times out`() = test {
+        val order = previewBtOrder()
+        val timeout = runCatching { withTimeout(0) { Unit } }.exceptionOrNull() as TimeoutCancellationException
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FEE_RATE,
+        )
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+        whenever(hwWalletRepo.signAndBroadcastFunding(any(), any())).thenReturn(Result.failure(timeout))
+        whenever(hwWalletRepo.disconnectStaleSession(DEVICE_ID)).thenReturn(Result.success(Unit))
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).disconnectStaleSession(DEVICE_ID)
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+    }
+
+    private fun hwWallet(deviceId: String, connected: Boolean) = HwWallet(
+        id = deviceId,
+        name = "Trezor",
+        model = "Safe 3",
+        transportType = TransportType.USB,
+        isConnected = connected,
+        balanceSats = 0uL,
+        activities = persistentListOf(),
+        deviceIds = persistentSetOf(deviceId),
+    )
+
     private fun liquidityOptions(maxClientBalanceSat: ULong) = ChannelLiquidityOptions(
         defaultLspBalanceSat = LSP_BALANCE,
         minLspBalanceSat = LSP_BALANCE,
@@ -147,5 +362,11 @@ class TransferViewModelTest : BaseUnitTest() {
         const val NETWORK_FEE = 2_112uL
         const val SERVICE_FEE = 286uL
         const val LSP_FEE = 2_398uL // NETWORK_FEE + SERVICE_FEE
+        const val DEVICE_ID = "dev1"
+        const val XPUB = "zpub-test"
+        const val TXID = "tx-abc"
+        const val FEE_RATE = 2uL
+        const val FALLBACK_FEE_RATE = 1uL
+        const val MINING_FEE = 1_250uL
     }
 }

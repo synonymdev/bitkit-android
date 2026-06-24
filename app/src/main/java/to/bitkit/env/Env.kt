@@ -263,6 +263,9 @@ object Defaults {
     /** Recommended transaction base fee in sats */
     const val recommendedBaseFee = 256u
 
+    /** Fallback fee percentage used when fee estimates are temporarily unavailable. */
+    const val fallbackFeePercent = 0.1
+
     /**
      * Minimum value in sats for an output. Outputs below the dust limit may not be processed because the fees
      * required to include them in a block would be greater than the value of the transaction itself.

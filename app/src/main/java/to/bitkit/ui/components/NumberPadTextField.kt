@@ -81,6 +81,7 @@ private fun MoneyAmount(
         }
         Row(
             verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
         ) {
             if (!isSymbolSuffix) {
                 Display(
@@ -101,7 +102,8 @@ private fun MoneyAmount(
                             append(placeholder)
                         }
                     }
-                }
+                },
+                modifier = if (isSymbolSuffix) Modifier else Modifier.weight(1f)
             )
             if (isSymbolSuffix) {
                 Display(

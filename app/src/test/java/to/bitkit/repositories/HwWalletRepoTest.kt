@@ -2,9 +2,11 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.TrezorFeatures
+import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WalletBalance
 import com.synonym.bitkitcore.WatcherEvent
@@ -12,6 +14,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
@@ -29,9 +32,12 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWalletReceivedTx
+import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.toCoreNetwork
+import to.bitkit.models.toTrezorCoinType
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
@@ -46,6 +52,7 @@ import kotlin.time.Instant
 class HwWalletRepoTest : BaseUnitTest() {
 
     private val trezorRepo = mock<TrezorRepo>()
+    private val activityRepo = mock<ActivityRepo>()
     private val hwWalletStore = mock<HwWalletStore>()
     private val settingsStore = mock<SettingsStore>()
     private val clock = mock<Clock>()
@@ -76,10 +83,20 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(trezorRepo.state).thenReturn(trezorState)
         whenever(trezorRepo.watcherEvents).thenReturn(watcherEvents)
+        runBlocking {
+            whenever(activityRepo.syncHardwareOnchainActivity(any())).thenReturn(Result.success(Unit))
+        }
         whenever(clock.now()).thenReturn(Instant.fromEpochSeconds(1_700_000_000))
     }
 
-    private fun createRepo() = HwWalletRepo(trezorRepo, hwWalletStore, settingsStore, clock, testDispatcher)
+    private fun createRepo() = HwWalletRepo(
+        trezorRepo = trezorRepo,
+        activityRepo = activityRepo,
+        hwWalletStore = hwWalletStore,
+        settingsStore = settingsStore,
+        clock = clock,
+        ioDispatcher = testDispatcher,
+    )
 
     @Test
     fun `lists a known device with zero balance before any watcher event`() = test {
@@ -141,6 +158,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(1, wallet.activities.size)
         assertEquals(1, sut.activities.value.size)
         assertEquals(Activity.Onchain::class, wallet.activities.single()::class)
+        verify(activityRepo).syncHardwareOnchainActivity((wallet.activities.single() as Activity.Onchain).v1)
     }
 
     @Test
@@ -166,7 +184,9 @@ class HwWalletRepoTest : BaseUnitTest() {
             )
         )
 
-        assertEquals(150uL, sut.wallets.value.single().balanceSats)
+        val wallet = sut.wallets.value.single()
+        assertEquals(150uL, wallet.balanceSats)
+        assertEquals(100uL, wallet.fundingBalanceSats)
         assertEquals(150uL, sut.totalSats.value)
     }
 
@@ -509,6 +529,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         val wallet = sut.wallets.value.single()
         assertEquals(421_900uL, wallet.balanceSats)
+        assertEquals(421_900uL, wallet.fundingBalanceSats)
         assertEquals(421_900uL, sut.totalSats.value)
         assertEquals(1, wallet.activities.size)
         assertEquals(setOf("ble1", "usb1"), wallet.deviceIds)
@@ -701,6 +722,118 @@ class HwWalletRepoTest : BaseUnitTest() {
         sut.onAppForegrounded()
 
         verify(trezorRepo).onAppForegrounded()
+    }
+
+    @Test
+    fun `composeFundingTransaction returns composed fee data`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val composeResult = ComposeResult.Success(
+            psbt = "psbt",
+            fee = 1_250uL,
+            feeRate = 2.0f,
+            totalSpent = 26_250uL,
+        )
+        whenever(
+            trezorRepo.composeTransaction(
+                extendedKey = any(),
+                outputs = any(),
+                feeRates = any(),
+                network = any(),
+                accountType = anyOrNull(),
+                coinSelection = any(),
+            )
+        ).thenReturn(Result.success(listOf(composeResult)))
+        val sut = createRepo()
+
+        val result = sut.composeFundingTransaction(
+            deviceId = "dev1",
+            address = "bc1qtest",
+            sats = 25_000uL,
+            satsPerVByte = 2uL,
+        )
+
+        assertEquals(true, result.isSuccess)
+        assertEquals("psbt", result.getOrThrow().psbt)
+        assertEquals(1_250uL, result.getOrThrow().miningFeeSats)
+        assertEquals(26_250uL, result.getOrThrow().totalSpent)
+        assertEquals(2uL, result.getOrThrow().satsPerVByte)
+    }
+
+    @Test
+    fun `composeFundingTransaction does not sign when compose fails`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        whenever(
+            trezorRepo.composeTransaction(
+                extendedKey = any(),
+                outputs = any(),
+                feeRates = any(),
+                network = any(),
+                accountType = anyOrNull(),
+                coinSelection = any(),
+            )
+        ).thenReturn(Result.failure(AppError("compose failed")))
+        val sut = createRepo()
+
+        val result = sut.composeFundingTransaction(
+            deviceId = "dev1",
+            address = "bc1qtest",
+            sats = 25_000uL,
+            satsPerVByte = 2uL,
+        )
+
+        assertEquals(true, result.isFailure)
+        verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
+        verify(trezorRepo, never()).broadcastRawTx(any())
+        verify(trezorRepo, never()).disconnectStaleSession(any())
+    }
+
+    @Test
+    fun `signAndBroadcastFunding returns txid and composed fee data`() = test {
+        val signedTx = TrezorSignedTx(
+            signatures = emptyList(),
+            serializedTx = "rawtx",
+            txid = "signed-txid",
+        )
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = 1_250uL,
+            feeRate = 3.0f,
+            totalSpent = 26_250uL,
+            satsPerVByte = 2uL,
+        )
+        whenever(trezorRepo.signTxFromPsbt("psbt", Env.network.toTrezorCoinType()))
+            .thenReturn(Result.success(signedTx))
+        whenever(trezorRepo.broadcastRawTx("rawtx")).thenReturn(Result.success("broadcast-txid"))
+        val sut = createRepo()
+
+        val result = sut.signAndBroadcastFunding("dev1", funding)
+
+        assertEquals(true, result.isSuccess)
+        assertEquals("broadcast-txid", result.getOrThrow().txId)
+        assertEquals(1_250uL, result.getOrThrow().miningFeeSats)
+        assertEquals(3uL, result.getOrThrow().feeRate)
+        assertEquals(26_250uL, result.getOrThrow().totalSpent)
+    }
+
+    @Test
+    fun `signAndBroadcastFunding disconnects stale session when sign fails`() = test {
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = 1_250uL,
+            feeRate = 2.0f,
+            totalSpent = 26_250uL,
+            satsPerVByte = 2uL,
+        )
+        whenever(trezorRepo.signTxFromPsbt("psbt", Env.network.toTrezorCoinType()))
+            .thenReturn(Result.failure(AppError("sign failed")))
+        whenever(trezorRepo.disconnectStaleSession("dev1")).thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.signAndBroadcastFunding("dev1", funding)
+
+        assertEquals(true, result.isFailure)
+        verify(trezorRepo).disconnectStaleSession("dev1")
+        verify(trezorRepo, never()).broadcastRawTx(any())
     }
 
     @Test
