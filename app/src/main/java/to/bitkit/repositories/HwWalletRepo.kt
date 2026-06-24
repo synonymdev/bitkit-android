@@ -37,7 +37,9 @@ import to.bitkit.env.Env
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.scopedId
 import to.bitkit.ext.timestamp
+import to.bitkit.ext.walletId
 import to.bitkit.models.HwFundingAccount
 import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwFundingBroadcastResult
@@ -288,7 +290,14 @@ class HwWalletRepo @Inject constructor(
             val remaining = hwWalletStore.loadKnownDevices().map { it.id }.toSet()
             failures.firstOrNull()?.let { throw it }
             check(ids.none { it in remaining }) { "Hardware wallet '$deviceId' still present after removal" }
-        }.onFailure {
+
+            target?.walletId?.takeIf { it.isNotBlank() }
+        }.fold(
+            onSuccess = {
+                if (it == null) Result.success(Unit) else activityRepo.deleteActivitiesForWallet(it)
+            },
+            onFailure = { Result.failure(it) },
+        ).onFailure {
             watcherSyncRequests.tryEmit(Unit)
         }
     }
@@ -361,19 +370,23 @@ class HwWalletRepo @Inject constructor(
         scope.launch {
             trezorRepo.watcherEvents.collect { (watcherId, event) ->
                 if (event !is WatcherEvent.TransactionsChanged) return@collect
+                val walletId = activeWatcherWalletIds[watcherId] ?: return@collect
+                val activities = event.activities.filter { it.walletId() == walletId }
+                val transactionDetails = event.transactionDetails.filter { it.walletId == walletId }
+
                 val previous = _watcherData.value[watcherId]
-                val activities = event.activities.toImmutableList()
                 val watcher = HwWatcherData(
                     deviceId = watcherId.toDeviceId(),
                     addressType = watcherId.toAddressTypeKey(),
                     balanceSats = event.balance.total,
-                    activities = activities,
+                    activities = activities.toImmutableList(),
                 )
-                _watcherData.update { it + (watcherId to watcher) }
-                val updatedWatcherData = _watcherData.value
-                activities.filterIsInstance<Activity.Onchain>().forEach {
-                    activityRepo.syncHardwareOnchainActivity(it.v1)
-                }
+                val updatedWatcherData = _watcherData.value + (watcherId to watcher)
+                _watcherData.update { updatedWatcherData }
+
+                activityRepo.persistHardwareActivities(activities, transactionDetails)
+                    .getOrElse { return@collect }
+
                 emitReceivedTxs(previous, activities, updatedWatcherData)
             }
         }
@@ -389,17 +402,18 @@ class HwWalletRepo @Inject constructor(
         watcherData: Map<String, HwWatcherData>,
     ) {
         if (previous == null) return
-        val knownTxIds = previous.activities.mapNotNull { activity ->
-            (activity as? Activity.Onchain)?.v1?.txId
-        }.toSet()
+        val knownActivityIds = previous.activities.map { it.scopedId() }.toSet()
         val mergedActivities = watcherData.values.toList().toMergedActivities()
-        activities.filterIsInstance<Activity.Onchain>()
-            .filter { it.v1.txType == PaymentType.RECEIVED }
-            .forEach { onchain ->
-                val txid = onchain.v1.txId
-                if (txid in knownTxIds || !emittedReceivedTxIds.add(txid)) return@forEach
-                val sats = mergedActivities.findOnchain(txid)?.v1?.value ?: onchain.v1.value
-                _receivedTxs.emit(HwWalletReceivedTx(txid = txid, sats = sats))
+        activities
+            .filterIsInstance<Activity.Onchain>()
+            .filter {
+                it.v1.txType == PaymentType.RECEIVED &&
+                    it.scopedId() !in knownActivityIds &&
+                    emittedReceivedTxIds.add(it.scopedId())
+            }
+            .forEach {
+                val sats = mergedActivities.findOnchain(it.v1.txId, it.v1.walletId)?.v1?.value ?: it.v1.value
+                _receivedTxs.emit(HwWalletReceivedTx(txid = it.v1.txId, sats = sats, walletId = it.v1.walletId))
             }
     }
 
@@ -551,8 +565,8 @@ class HwWalletRepo @Inject constructor(
         )
     }
 
-    private fun List<Activity>.findOnchain(txid: String) = filterIsInstance<Activity.Onchain>()
-        .firstOrNull { it.v1.txId == txid }
+    private fun List<Activity>.findOnchain(txid: String, walletId: String) = filterIsInstance<Activity.Onchain>()
+        .firstOrNull { it.v1.txId == txid && it.v1.walletId == walletId }
 
     private data class WatcherSpec(
         val deviceId: String,
