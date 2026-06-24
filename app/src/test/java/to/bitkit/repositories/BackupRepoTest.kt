@@ -240,15 +240,15 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `full restore should fail when backed up Paykit SDK state fails to restore`() = test {
+    fun `full restore should continue when backed up Paykit SDK state fails to restore`() = test {
         stubWalletBackup(paykitSdkBackupState = "sdk-state")
         whenever { privatePaykitRepo.restoreBackup("sdk-state") }
             .thenReturn(Result.failure(BackupRepoTestError("restore failed")))
 
         val result = sut.performFullRestoreFromLatestBackup()
 
-        assertTrue(result.isFailure)
-        verify(settingsStore, never()).update(any())
+        assertTrue(result.isSuccess)
+        verify(settingsStore).update(any())
     }
 
     @Test

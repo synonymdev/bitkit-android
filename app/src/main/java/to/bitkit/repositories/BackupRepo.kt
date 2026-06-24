@@ -620,12 +620,8 @@ class BackupRepo @Inject constructor(
         val addressReservationRepo = privatePaykitAddressReservationRepo.get()
         addressReservationRepo.restoreBackup(parsed.privatePaykitHighestReservedReceiveIndexByAddressType).getOrThrow()
         val privateRepo = privatePaykitRepo.get()
-        if (parsed.paykitSdkBackupState != null) {
-            privateRepo.restoreBackup(parsed.paykitSdkBackupState).getOrThrow()
-        } else {
-            privateRepo.restoreBackup(null).onFailure {
-                Logger.warn("Failed to clear missing Paykit SDK backup state", it, context = TAG)
-            }
+        privateRepo.restoreBackup(parsed.paykitSdkBackupState).onFailure {
+            Logger.warn("Failed to restore Paykit SDK backup state", it, context = TAG)
         }
         addressReservationRepo.reconcileReservedIndexesWithLdk().getOrThrow()
         Logger.debug("Restored ${parsed.transfers.size} transfers", context = TAG)

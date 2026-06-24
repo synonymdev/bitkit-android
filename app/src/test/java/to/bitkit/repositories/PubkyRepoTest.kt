@@ -728,6 +728,28 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, "derived_secret") }
+        verifyBlocking(keychain) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+    }
+
+    @Test
+    fun `restoreSessionBackupState should keep local secret when local seed sign in fails`() = test {
+        val seed = byteArrayOf(1, 2, 3)
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
+        whenever(keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)).thenReturn(null)
+        whenever(pubkyService.mnemonicToSeed("test mnemonic", null)).thenReturn(seed)
+        whenever(pubkyService.deriveSecretKey(seed)).thenReturn("derived_secret")
+        whenever(pubkyService.signIn("derived_secret")).thenThrow(RuntimeException("offline"))
+
+        val result = sut.restoreSessionBackupState(
+            PubkySessionBackupV1(kind = PubkySessionBackupKind.LocalSeed),
+        )
+
+        assertTrue(result.isFailure)
+        verifyBlocking(keychain) { upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, "derived_secret") }
+        verifyBlocking(keychain) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.isAuthenticated.value)
     }
 
     @Test

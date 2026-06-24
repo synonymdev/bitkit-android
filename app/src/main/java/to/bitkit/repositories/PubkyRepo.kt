@@ -880,6 +880,7 @@ class PubkyRepo @Inject constructor(
 
                     PubkySessionBackupKind.LocalSeed -> {
                         val secretKeyHex = deriveLocalSecretKeyFromWalletSeed()
+                        keychain.upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, secretKeyHex)
                         pubkyService.signIn(secretKeyHex)
                         val publicKey = pubkyService.publicKeyFromSecret(secretKeyHex).ensurePubkyPrefix()
                         _publicKey.update { publicKey }
