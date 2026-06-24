@@ -13,6 +13,7 @@ import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.TrezorTransportWriteResult
 import com.synonym.bitkitcore.WalletSelection
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -44,6 +45,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -1122,6 +1124,22 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(features, result.getOrNull())
         assertEquals(bleDeviceId, sut.state.value.connectedDeviceId())
         verify(trezorService).connect(eq(bleDeviceId), any())
+    }
+
+    @Test
+    fun `connectKnownDevice should rethrow cancellation and clear connecting state`() = test {
+        val cancellation = CancellationException("cancelled")
+        whenever(trezorService.scan()).thenAnswer { throw cancellation }
+        sut = createSut()
+
+        sut.initialize()
+        val thrown = assertFailsWith<CancellationException> {
+            sut.connectKnownDevice(DEVICE_ID)
+        }
+
+        assertEquals(cancellation.message, thrown.message)
+        assertFalse(sut.state.value.isConnecting)
+        assertNull(sut.state.value.error)
     }
 
     @Test

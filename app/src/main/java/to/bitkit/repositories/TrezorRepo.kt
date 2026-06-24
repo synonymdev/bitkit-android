@@ -645,42 +645,48 @@ class TrezorRepo @Inject constructor(
         if (_state.value.isConnecting) {
             return@withContext Result.failure(AppError("Connection already in progress"))
         }
-        runCatching {
-            _state.update { it.copy(isConnecting = true, error = null) }
-            Logger.debug("Started known-device reconnect for '$deviceId'", context = TAG)
-            Logger.debug("Awaiting setup for reconnect", context = TAG)
-            awaitSetup()
-            Logger.debug("Completed setup for reconnect", context = TAG)
-            if (forceSession) {
-                Logger.debug("Closing stale session before reconnect for '$deviceId'", context = TAG)
-                disconnectStaleSession(deviceId)
+        var startedConnecting = false
+        try {
+            runSuspendCatching {
+                startedConnecting = true
+                _state.update { it.copy(isConnecting = true, error = null) }
+                Logger.debug("Started known-device reconnect for '$deviceId'", context = TAG)
+                Logger.debug("Awaiting setup for reconnect", context = TAG)
+                awaitSetup()
+                Logger.debug("Completed setup for reconnect", context = TAG)
+                if (forceSession) {
+                    Logger.debug("Closing stale session before reconnect for '$deviceId'", context = TAG)
+                    disconnectStaleSession(deviceId)
+                }
+                Logger.debug("Scanning for reconnect devices", context = TAG)
+                val knownDevices = (_state.value.knownDevices + loadKnownDevices()).distinctBy { it.id }
+                val knownDevice = knownDevices.find { it.matches(deviceId) }
+                val scannedDevices = trezorService.scan()
+                Logger.debug(
+                    "Found '${scannedDevices.size}' reconnect devices '${scannedDevices.map { it.id }}'",
+                    context = TAG,
+                )
+                // Honor the transport the user selected — connect to exactly the
+                // entry they tapped instead of overriding Bluetooth with USB.
+                val device = scannedDevices.find { it.id == deviceId }
+                    ?: knownDevice?.takeIf { it.transportType == TransportType.BLUETOOTH }?.toDeviceInfo()
+                    ?: throw AppError("Device not found nearby — is it powered on?")
+                Logger.debug("Found reconnect device '${device.id}'", context = TAG)
+                Logger.debug("Calling THP reconnect for '${device.id}'", context = TAG)
+                val features = connectWithThpRetry(device.id, trezorUiHandler.currentSelection())
+                Logger.debug("Connected known device '${device.id}'", context = TAG)
+                addOrUpdateKnownDevice(device, features)
+                _state.update { it.copy(connected = ConnectedTrezorDevice(id = device.id, features = features)) }
+                Logger.info("Reconnected known device '${device.id}'", context = TAG)
+                features
+            }.onFailure { e ->
+                Logger.error("Connect known device failed", e, context = TAG)
+                _state.update { it.copy(error = e.message) }
             }
-            Logger.debug("Scanning for reconnect devices", context = TAG)
-            val knownDevices = (_state.value.knownDevices + loadKnownDevices()).distinctBy { it.id }
-            val knownDevice = knownDevices.find { it.matches(deviceId) }
-            val scannedDevices = trezorService.scan()
-            Logger.debug(
-                "Found '${scannedDevices.size}' reconnect devices '${scannedDevices.map { it.id }}'",
-                context = TAG,
-            )
-            // Honor the transport the user selected — connect to exactly the
-            // entry they tapped instead of overriding Bluetooth with USB.
-            val device = scannedDevices.find { it.id == deviceId }
-                ?: knownDevice?.takeIf { it.transportType == TransportType.BLUETOOTH }?.toDeviceInfo()
-                ?: throw AppError("Device not found nearby — is it powered on?")
-            Logger.debug("Found reconnect device '${device.id}'", context = TAG)
-            Logger.debug("Calling THP reconnect for '${device.id}'", context = TAG)
-            val features = connectWithThpRetry(device.id, trezorUiHandler.currentSelection())
-            Logger.debug("Connected known device '${device.id}'", context = TAG)
-            addOrUpdateKnownDevice(device, features)
-            _state.update {
-                it.copy(isConnecting = false, connected = ConnectedTrezorDevice(id = device.id, features = features))
+        } finally {
+            if (startedConnecting) {
+                _state.update { it.copy(isConnecting = false) }
             }
-            Logger.info("Reconnected known device '${device.id}'", context = TAG)
-            features
-        }.onFailure { e ->
-            Logger.error("Connect known device failed", e, context = TAG)
-            _state.update { it.copy(isConnecting = false, error = e.message) }
         }
     }
 
