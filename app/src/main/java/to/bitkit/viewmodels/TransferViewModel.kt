@@ -44,6 +44,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -653,7 +654,8 @@ class TransferViewModel @Inject constructor(
 
     private fun hwFundingFallbackFeeReserve(balanceSats: ULong): ULong {
         val minReserve = HW_FUNDING_FALLBACK_SATS_PER_VBYTE.safe() * HW_FUNDING_TX_VBYTES.safe()
-        return maxOf(minReserve, balanceSats / HW_FUNDING_FEE_FALLBACK_DIVISOR)
+        val fallback = (balanceSats.toDouble() * DeriveBalanceStateUseCase.FALLBACK_FEE_PERCENT).toULong()
+        return maxOf(minReserve, fallback)
     }
 
     private suspend fun hwFundingSatsPerVByte(): ULong =
@@ -876,9 +878,6 @@ class TransferViewModel @Inject constructor(
 
         /** Minimum fallback fee rate when fee estimates are temporarily unavailable. */
         private const val HW_FUNDING_FALLBACK_SATS_PER_VBYTE = 1uL
-
-        /** Reserves 10% of the account when fee estimates are temporarily unavailable. */
-        private const val HW_FUNDING_FEE_FALLBACK_DIVISOR = 10uL
 
         /** Upper bound for reconnecting a known device before the UI asks for reconnect. */
         private val HW_RECONNECT_TIMEOUT = 30.seconds

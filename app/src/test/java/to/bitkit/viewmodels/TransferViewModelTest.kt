@@ -35,6 +35,7 @@ import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
+import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
 import to.bitkit.repositories.HwWalletRepo
@@ -44,6 +45,7 @@ import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.transfer.previewBtOrder
+import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
@@ -193,7 +195,8 @@ class TransferViewModelTest : BaseUnitTest() {
         sut.updateHwLimits(DEVICE_ID)
         advanceUntilIdle()
 
-        verify(blocktankRepo).estimateOrderFee(eq(HW_AVAILABLE_WITH_FALLBACK_RESERVE), any(), any())
+        val fallbackReserve = (ON_CHAIN_BALANCE.toDouble() * DeriveBalanceStateUseCase.FALLBACK_FEE_PERCENT).toULong()
+        verify(blocktankRepo).estimateOrderFee(eq(ON_CHAIN_BALANCE.safe() - fallbackReserve.safe()), any(), any())
     }
 
     @Test
@@ -365,6 +368,5 @@ class TransferViewModelTest : BaseUnitTest() {
         const val FEE_RATE = 2uL
         const val FALLBACK_FEE_RATE = 1uL
         const val MINING_FEE = 1_250uL
-        const val HW_AVAILABLE_WITH_FALLBACK_RESERVE = 9_000_000uL
     }
 }
