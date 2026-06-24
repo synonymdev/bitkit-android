@@ -1035,7 +1035,9 @@ private fun NavGraphBuilder.home(
         HardwareWalletScreen(
             deviceId = deviceId,
             onActivityItemClick = { id -> navController.navigateToActivityItem(id) },
-            onTransferToSpendingClick = { navController.navigateTo(Routes.SpendingAmountHw(deviceId)) },
+            onTransferToSpendingClick = { selectedDeviceId ->
+                navController.navigateTo(Routes.SpendingAmountHw(selectedDeviceId))
+            },
             onBackClick = { navController.popBackStack() },
         )
     }

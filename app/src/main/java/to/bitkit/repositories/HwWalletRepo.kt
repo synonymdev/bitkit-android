@@ -57,6 +57,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.ceil
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -164,11 +165,12 @@ class HwWalletRepo @Inject constructor(
                 "Hardware wallet '$deviceId' has no '${addressType.settingsKey}' account"
             }
             val balanceSats = _watcherData.value
-                .filterKeys { key ->
-                    key.substringAfter(WATCHER_ID_SEPARATOR) == addressType.settingsKey &&
-                        key.toDeviceId() in groupIds
+                .values
+                .filter {
+                    it.addressType == addressType.settingsKey &&
+                        it.deviceId in groupIds
                 }
-                .values.fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
+                .fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
             HwFundingAccount.Trezor(
                 xpub = xpub,
                 addressType = addressType,
@@ -229,11 +231,13 @@ class HwWalletRepo @Inject constructor(
             HwFundingBroadcastResult(
                 txId = txId,
                 miningFeeSats = funding.miningFeeSats,
-                feeRate = funding.satsPerVByte,
+                feeRate = ceil(funding.feeRate.toDouble()).toULong(),
                 totalSpent = funding.totalSpent,
             )
         }
     }
+
+    suspend fun disconnectStaleSession(deviceId: String): Result<Unit> = trezorRepo.disconnectStaleSession(deviceId)
 
     /**
      * Persists the Bitkit-side funds label for a paired device. Applied to every entry sharing the
@@ -295,6 +299,9 @@ class HwWalletRepo @Inject constructor(
                 val device = connectedDevice ?: devices.maxBy { it.lastConnectedAt }
                 val ids = devices.map { it.id }.toSet()
                 val deviceWatchers = watcherData.values.filter { it.deviceId in ids }
+                val fundingBalanceSats = deviceWatchers
+                    .filter { it.addressType == HwFundingAddressType.DEFAULT.settingsKey }
+                    .fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
                 HwWallet(
                     id = device.id,
                     name = device.displayName,
@@ -305,6 +312,7 @@ class HwWalletRepo @Inject constructor(
                     activities = deviceWatchers
                         .toMergedActivities()
                         .toImmutableList(),
+                    fundingBalanceSats = fundingBalanceSats,
                     deviceIds = ids.toImmutableSet(),
                 )
             }
@@ -349,6 +357,7 @@ class HwWalletRepo @Inject constructor(
                     .toImmutableList()
                 val watcher = HwWatcherData(
                     deviceId = watcherId.toDeviceId(),
+                    addressType = watcherId.toAddressTypeKey(),
                     balanceSats = event.balance.total,
                     transactions = event.transactions.toImmutableList(),
                     activities = activities,
@@ -532,6 +541,8 @@ class HwWalletRepo @Inject constructor(
     }
 
     private fun String.toDeviceId(): String = substringBefore(WATCHER_ID_SEPARATOR)
+
+    private fun String.toAddressTypeKey(): String = substringAfter(WATCHER_ID_SEPARATOR)
 }
 
 private data class WatcherSettings(
@@ -564,6 +575,7 @@ private val KnownDevice.displayName: String
 
 private data class HwWatcherData(
     val deviceId: String,
+    val addressType: String,
     val balanceSats: ULong,
     val transactions: ImmutableList<HistoryTransaction>,
     val activities: ImmutableList<Activity>,

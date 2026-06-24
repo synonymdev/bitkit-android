@@ -828,6 +828,26 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `resetState disconnects connected transport session`() = test {
+        val knownDevice = mockKnownDevice()
+        val device = mockDeviceInfo()
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        sut.resetState()
+
+        verify(trezorService).disconnect()
+        verify(trezorTransport).disconnectDevice(DEVICE_PATH)
+        assertNull(sut.state.value.connectedDevice())
+    }
+
+    @Test
     fun `resetState clears initialized setup gate`() = test {
         val devices = listOf(mockDeviceInfo())
         whenever(trezorService.scan()).thenReturn(devices)

@@ -9,8 +9,10 @@ import com.synonym.bitkitcore.TrezorFeatures
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.NodeStatus
@@ -42,6 +44,7 @@ import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.transfer.previewBtOrder
+import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
 import kotlin.time.Clock
@@ -169,6 +172,31 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `updateHwLimits reserves fallback fee when fee rate lookup fails`() = test {
+        blocktankState.value = BlocktankState(info = btInfo(lspMaxClientBalance = LSP_MAX_CLIENT_BALANCE))
+        whenever(hwWalletRepo.getFundingAccount(DEVICE_ID))
+            .thenReturn(
+                Result.success(
+                    HwFundingAccount.Trezor(
+                        xpub = XPUB,
+                        addressType = HwFundingAddressType.NATIVE_SEGWIT,
+                        balanceSats = ON_CHAIN_BALANCE,
+                    ),
+                ),
+            )
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("fee unavailable")))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(feeResponse))
+
+        sut.updateHwLimits(DEVICE_ID)
+        advanceUntilIdle()
+
+        verify(blocktankRepo).estimateOrderFee(eq(HW_AVAILABLE_WITH_FALLBACK_RESERVE), any(), any())
+    }
+
+    @Test
     fun `onTransferToSpendingHwConfirm signs the funding send and records the paid order`() = test {
         val order = previewBtOrder()
         val funding = HwFundingTransaction(
@@ -221,6 +249,42 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onTransferToSpendingHwConfirm composes with fallback fee rate when fee lookup fails`() = test {
+        val order = previewBtOrder()
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FALLBACK_FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FALLBACK_FEE_RATE,
+        )
+        val broadcast = HwFundingBroadcastResult(
+            txId = TXID,
+            miningFeeSats = MINING_FEE,
+            feeRate = FALLBACK_FEE_RATE,
+            totalSpent = order.feeSat + MINING_FEE,
+        )
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull()))
+            .thenReturn(Result.failure(AppError("fee unavailable")))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+        whenever(hwWalletRepo.signAndBroadcastFunding(any(), any())).thenReturn(Result.success(broadcast))
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).composeFundingTransaction(
+            eq(DEVICE_ID),
+            eq(order.payment?.onchain?.address.orEmpty()),
+            eq(order.feeSat),
+            eq(FALLBACK_FEE_RATE),
+        )
+    }
+
+    @Test
     fun `onTransferToSpendingHwConfirm aborts when hardware reconnect fails`() = test {
         val order = previewBtOrder()
         whenever(hwWalletRepo.wallets)
@@ -234,6 +298,33 @@ class TransferViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo).ensureConnected(DEVICE_ID)
         verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
         verify(hwWalletRepo, never()).signAndBroadcastFunding(any(), any())
+    }
+
+    @Test
+    fun `onTransferToSpendingHwConfirm disconnects stale session when signing times out`() = test {
+        val order = previewBtOrder()
+        val timeout = runCatching { withTimeout(0) { Unit } }.exceptionOrNull() as TimeoutCancellationException
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FEE_RATE,
+        )
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+        whenever(hwWalletRepo.signAndBroadcastFunding(any(), any())).thenReturn(Result.failure(timeout))
+        whenever(hwWalletRepo.disconnectStaleSession(DEVICE_ID)).thenReturn(Result.success(Unit))
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).disconnectStaleSession(DEVICE_ID)
+        verify(cacheStore, never()).addPaidOrder(any(), any())
     }
 
     private fun hwWallet(deviceId: String, connected: Boolean) = HwWallet(
@@ -272,6 +363,8 @@ class TransferViewModelTest : BaseUnitTest() {
         const val XPUB = "zpub-test"
         const val TXID = "tx-abc"
         const val FEE_RATE = 2uL
+        const val FALLBACK_FEE_RATE = 1uL
         const val MINING_FEE = 1_250uL
+        const val HW_AVAILABLE_WITH_FALLBACK_RESERVE = 9_000_000uL
     }
 }

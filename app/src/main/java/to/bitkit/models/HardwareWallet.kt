@@ -20,6 +20,7 @@ data class HwWallet(
     val isConnected: Boolean,
     val balanceSats: ULong,
     val activities: ImmutableList<Activity>,
+    val fundingBalanceSats: ULong = balanceSats,
     val deviceIds: ImmutableSet<String> = persistentSetOf(id),
 )
 

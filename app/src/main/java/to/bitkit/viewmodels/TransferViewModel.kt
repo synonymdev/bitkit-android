@@ -479,7 +479,7 @@ class TransferViewModel @Inject constructor(
             awaitNodeRunning()
             updateTransferValues(0uL)
 
-            val availableAmount = account.balanceSats.safe() - hwFundingFeeReserve().safe()
+            val availableAmount = account.balanceSats.safe() - hwFundingFeeReserve(account.balanceSats).safe()
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
             if (initialLspFees == null) {
@@ -592,7 +592,10 @@ class TransferViewModel @Inject constructor(
             }
         }.getOrElse {
             if (it is CancellationException && it !is TimeoutCancellationException) throw it
-            if (it is TimeoutCancellationException) throw HardwareSigningTimeoutError(it)
+            if (it is TimeoutCancellationException) {
+                hwWalletRepo.disconnectStaleSession(deviceId)
+                throw HardwareSigningTimeoutError(it)
+            }
             throw it
         }
     }
@@ -642,11 +645,23 @@ class TransferViewModel @Inject constructor(
         )
     }
 
-    private suspend fun hwFundingFeeReserve(): ULong = hwFundingSatsPerVByte().safe() * HW_FUNDING_TX_VBYTES.safe()
+    private suspend fun hwFundingFeeReserve(balanceSats: ULong): ULong {
+        val satsPerVByte = fetchHwFundingSatsPerVByte().getOrNull()
+            ?: return hwFundingFallbackFeeReserve(balanceSats)
+        return satsPerVByte.safe() * HW_FUNDING_TX_VBYTES.safe()
+    }
 
-    private suspend fun hwFundingSatsPerVByte(): ULong {
+    private fun hwFundingFallbackFeeReserve(balanceSats: ULong): ULong {
+        val minReserve = HW_FUNDING_FALLBACK_SATS_PER_VBYTE.safe() * HW_FUNDING_TX_VBYTES.safe()
+        return maxOf(minReserve, balanceSats / HW_FUNDING_FEE_FALLBACK_DIVISOR)
+    }
+
+    private suspend fun hwFundingSatsPerVByte(): ULong =
+        fetchHwFundingSatsPerVByte().getOrDefault(HW_FUNDING_FALLBACK_SATS_PER_VBYTE)
+
+    private suspend fun fetchHwFundingSatsPerVByte(): Result<ULong> {
         val speed = settingsStore.data.first().defaultTransactionSpeed
-        return lightningRepo.getFeeRateForSpeed(speed).getOrNull() ?: 0uL
+        return lightningRepo.getFeeRateForSpeed(speed)
     }
 
     // endregion
@@ -858,6 +873,12 @@ class TransferViewModel @Inject constructor(
 
         /** Conservative vbyte reserve for multi-input hardware funding before exact compose runs. */
         private const val HW_FUNDING_TX_VBYTES = 1_200uL
+
+        /** Minimum fallback fee rate when fee estimates are temporarily unavailable. */
+        private const val HW_FUNDING_FALLBACK_SATS_PER_VBYTE = 1uL
+
+        /** Reserves 10% of the account when fee estimates are temporarily unavailable. */
+        private const val HW_FUNDING_FEE_FALLBACK_DIVISOR = 10uL
 
         /** Upper bound for reconnecting a known device before the UI asks for reconnect. */
         private val HW_RECONNECT_TIMEOUT = 30.seconds

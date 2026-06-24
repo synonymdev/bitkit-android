@@ -180,8 +180,7 @@ class TrezorRepo @Inject constructor(
             .distinctBy { it.id }
 
         if (_state.value.connected != null) {
-            runCatching { trezorService.disconnect() }
-                .onFailure { Logger.warn("Failed to disconnect Trezor while resetting", it, context = TAG) }
+            runSuspendCatching { disconnect().getOrThrow() }
         }
 
         knownDevices.forEach { device ->

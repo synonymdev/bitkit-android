@@ -184,7 +184,9 @@ class HwWalletRepoTest : BaseUnitTest() {
             )
         )
 
-        assertEquals(150uL, sut.wallets.value.single().balanceSats)
+        val wallet = sut.wallets.value.single()
+        assertEquals(150uL, wallet.balanceSats)
+        assertEquals(100uL, wallet.fundingBalanceSats)
         assertEquals(150uL, sut.totalSats.value)
     }
 
@@ -527,6 +529,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         val wallet = sut.wallets.value.single()
         assertEquals(421_900uL, wallet.balanceSats)
+        assertEquals(421_900uL, wallet.fundingBalanceSats)
         assertEquals(421_900uL, sut.totalSats.value)
         assertEquals(1, wallet.activities.size)
         assertEquals(setOf("ble1", "usb1"), wallet.deviceIds)
@@ -794,7 +797,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         val funding = HwFundingTransaction(
             psbt = "psbt",
             miningFeeSats = 1_250uL,
-            feeRate = 2.0f,
+            feeRate = 3.0f,
             totalSpent = 26_250uL,
             satsPerVByte = 2uL,
         )
@@ -808,7 +811,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(true, result.isSuccess)
         assertEquals("broadcast-txid", result.getOrThrow().txId)
         assertEquals(1_250uL, result.getOrThrow().miningFeeSats)
-        assertEquals(2uL, result.getOrThrow().feeRate)
+        assertEquals(3uL, result.getOrThrow().feeRate)
         assertEquals(26_250uL, result.getOrThrow().totalSpent)
     }
 
