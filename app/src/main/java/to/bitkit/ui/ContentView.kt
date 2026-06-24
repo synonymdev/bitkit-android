@@ -759,7 +759,7 @@ private fun RootNavHost(
                 val deviceId = entry.toRoute<Routes.SpendingIntroHw>().deviceId
                 SpendingIntroScreen(
                     onContinueClick = {
-                        navController.navigateToTransferSpendingAmountHw(deviceId)
+                        navController.navigateTo(Routes.SpendingAmountHw(deviceId))
                         settingsViewModel.setHasSeenSpendingIntro(true)
                     },
                     onBackClick = { navController.popBackStack() },
@@ -1824,32 +1824,13 @@ fun NavController.navigateToTransferSavingsIntro() = navigateTo(Routes.SavingsIn
 
 fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.SavingsAvailability)
 
-fun NavController.navigateToTransferSpendingIntro() = navigateTo(Routes.SpendingIntro)
-
-fun NavController.navigateToTransferSpendingAmount() = navigateTo(Routes.SpendingAmount)
-
-fun NavController.navigateToTransferSpendingIntroHw(deviceId: String) = navigateTo(Routes.SpendingIntroHw(deviceId))
-
-fun NavController.navigateToTransferSpendingAmountHw(deviceId: String) = navigateTo(Routes.SpendingAmountHw(deviceId))
-
-fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean) {
-    when (transferSpendingStartRoute(hasSeenSpendingIntro)) {
-        Routes.SpendingIntro -> navigateToTransferSpendingIntro()
-        Routes.SpendingAmount -> navigateToTransferSpendingAmount()
-        else -> Unit
-    }
-}
+fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean) =
+    navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro))
 
 fun NavController.navigateToTransferSpendingStart(
     hasSeenSpendingIntro: Boolean,
     deviceId: String,
-) {
-    when (val route = transferSpendingStartRoute(hasSeenSpendingIntro, deviceId)) {
-        is Routes.SpendingIntroHw -> navigateToTransferSpendingIntroHw(route.deviceId)
-        is Routes.SpendingAmountHw -> navigateToTransferSpendingAmountHw(route.deviceId)
-        else -> Unit
-    }
-}
+) = navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro, deviceId))
 
 internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean): Routes = when {
     hasSeenSpendingIntro -> Routes.SpendingAmount
