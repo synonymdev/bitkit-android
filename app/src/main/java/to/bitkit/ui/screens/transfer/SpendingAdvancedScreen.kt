@@ -93,6 +93,7 @@ fun SpendingAdvancedScreen(
         viewModel.transferEffects.collect { effect ->
             when (effect) {
                 TransferEffect.OnOrderCreated -> currentOnOrderCreated()
+                TransferEffect.OnHwTxSigned -> Unit
                 is TransferEffect.ToastException -> {
                     isLoading = false
                     app.toast(effect.e)
@@ -175,7 +176,8 @@ private fun Content(
 
             Display(
                 text = stringResource(R.string.lightning__spending_advanced__title)
-                    .withAccent(accentColor = Colors.Purple)
+                    .withAccent(accentColor = Colors.Purple),
+                modifier = Modifier.fillMaxWidth()
             )
 
             FillHeight()

@@ -28,10 +28,11 @@ import to.bitkit.ext.rawId
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.TransferRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
-@Suppress("TooManyFunctions")
+@Suppress("LongParameterList", "TooManyFunctions")
 @HiltViewModel
 class ActivityDetailViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -40,6 +41,7 @@ class ActivityDetailViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val blocktankRepo: BlocktankRepo,
     private val hwWalletRepo: HwWalletRepo,
+    private val transferRepo: TransferRepo,
 ) : ViewModel() {
     private val _txDetails = MutableStateFlow<TransactionDetails?>(null)
     val txDetails = _txDetails.asStateFlow()
@@ -255,6 +257,14 @@ class ActivityDetailViewModel @Inject constructor(
                 orders.firstOrNull { order ->
                     order.payment?.onchain?.transactions?.any { it.txId == txId } == true
                 }?.let { return@withContext it }
+
+                val orderId = transferRepo.findLspOrderIdByFundingTxId(txId).getOrNull()
+                if (orderId != null) {
+                    orders.find { it.id == orderId }?.let { return@withContext it }
+                    blocktankRepo.getOrder(orderId, refresh = false).getOrNull()?.let {
+                        return@withContext it
+                    }
+                }
             }
 
             null

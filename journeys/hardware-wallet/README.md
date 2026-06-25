@@ -66,6 +66,9 @@ Remove step forgets the device.
 | `connect-flow.xml` | Settings Add button → connect flow with an edited Label Funds → paired device count + name |
 | `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, Add button sheet/back dismiss, per-row delete confirm + re-pair |
 | `detail-overview.xml` | Detail screen overview, Transfer placeholder when funded, activity, Remove confirm + forget |
+| `transfer-to-spending.xml` | Happy-path transfer amount → sign → processing flow with a valid amount below the cap |
+| `transfer-to-spending-max-lsp-cap.xml` | MAX when Trezor balance is higher than remaining LSP headroom; verifies MAX uses AVAILABLE and reaches sign without insufficient funds |
+| `transfer-to-spending-node-warmup.xml` | Transfer started during app/node warm-up; verifies loading recovers into the sign screen |
 
 Connect-flow testTags: `HardwareWalletSheet`, `HardwareWalletIntroScreen`,
 `HardwareWalletIntroCancel`, `HardwareWalletIntroContinue`,
@@ -94,3 +97,9 @@ To exercise the received-money sheet (not covered by a journey because it needs 
 out-of-band transfer), fund the emulator wallet on regtest from `bitkit-docker`, e.g.
 send to an address generated via Dev Settings → Trezor → Get Address, then mine a block
 with `./bitcoin-cli`.
+
+For transfer-to-spending QA, explicitly cover the LSP cap boundary: the hardware wallet
+balance can be much larger than the displayed AVAILABLE amount because MAX is capped by
+Blocktank channel headroom. After signing, decode the funding transaction and compare the
+activity DB row: the on-chain activity fee should be the composed mining fee, while the
+funding output should equal the final Blocktank `order.feeSat`.

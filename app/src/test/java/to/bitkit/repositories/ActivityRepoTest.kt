@@ -15,6 +15,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -259,6 +260,77 @@ class ActivityRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(testActivity, result.getOrThrow())
+    }
+
+    @Test
+    fun `syncHardwareOnchainActivity confirms existing transfer and preserves metadata`() = test {
+        val existing = createOnchainActivity(
+            id = "transfer-txid",
+            txId = "transfer-txid",
+            value = 50_000uL,
+            fee = 0uL,
+            feeRate = 2uL,
+            address = "bc1qlsp",
+            confirmed = false,
+            timestamp = 1_000uL,
+            isTransfer = true,
+            channelId = "channel-1",
+            isBoosted = true,
+            boostTxIds = listOf("boost-txid"),
+            contact = "contact",
+        ).v1
+        val watcher = OnchainActivity.create(
+            id = "transfer-txid",
+            txType = PaymentType.SENT,
+            txId = "transfer-txid",
+            value = 49_000uL,
+            fee = 1_250uL,
+            address = "",
+            timestamp = 2_000uL,
+            confirmed = true,
+        )
+        whenever(coreService.activity.getOnchainActivityByTxId("transfer-txid")).thenReturn(existing)
+
+        val result = sut.syncHardwareOnchainActivity(watcher)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<Activity>()
+        verify(coreService.activity).update(eq("transfer-txid"), captor.capture())
+        val updated = (captor.firstValue as Activity.Onchain).v1
+        assertTrue(updated.confirmed)
+        assertEquals(2_000uL, updated.confirmTimestamp)
+        assertEquals(true, updated.doesExist)
+        assertEquals(50_000uL, updated.value)
+        assertEquals(1_250uL, updated.fee)
+        assertEquals(2uL, updated.feeRate)
+        assertEquals("bc1qlsp", updated.address)
+        assertEquals(true, updated.isTransfer)
+        assertEquals("channel-1", updated.channelId)
+        assertEquals(true, updated.isBoosted)
+        assertEquals(listOf("boost-txid"), updated.boostTxIds)
+        assertEquals("contact", updated.contact)
+    }
+
+    @Test
+    fun `syncHardwareOnchainActivity ignores hardware tx that is not in main activities`() = test {
+        val watcher = OnchainActivity.create(
+            id = "hardware-only-txid",
+            txType = PaymentType.RECEIVED,
+            txId = "hardware-only-txid",
+            value = 10_000uL,
+            fee = 0uL,
+            address = "",
+            timestamp = 2_000uL,
+            confirmed = true,
+        )
+        whenever(coreService.activity.getOnchainActivityByTxId("hardware-only-txid")).thenReturn(null)
+
+        val result = sut.syncHardwareOnchainActivity(watcher)
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity, never()).update(any(), any())
+        verify(coreService.activity, never()).insert(any())
+        verify(coreService.activity, never()).upsert(any())
     }
 
     @Test

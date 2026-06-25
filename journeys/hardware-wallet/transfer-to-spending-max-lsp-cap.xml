@@ -1,0 +1,44 @@
+<journey name="Hardware Wallet Transfer To Spending MAX LSP Cap">
+  <description>
+    Verifies that a funded hardware wallet whose balance is larger than the current
+    Blocktank/LSP headroom is capped by the transferable spending limit, not by the
+    device balance. Requires a paired Bridge emulator or physical Trezor with a hardware
+    balance larger than the available transfer limit, and at least one existing channel or
+    pending order consuming most of the regtest LSP cap.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Verify the hardware wallet tile shows a balance larger than the AVAILABLE amount expected in the transfer flow
+    </action>
+    <action>
+      Tap the hardware wallet tile beneath the SAVINGS and SPENDING tiles, and verify the hardware wallet detail screen opens (testTag "HardwareWalletScreen")
+    </action>
+    <action>
+      Tap the "Transfer To Spending" button (testTag "HardwareTransferToSpending")
+    </action>
+    <action>
+      Verify the transfer amount screen opens (testTag "HardwareTransferAmount"), titled "TRANSFER TO SPENDING", and the AVAILABLE amount is lower than the hardware wallet balance because it is capped by LSP headroom
+    </action>
+    <action>
+      Tap the "MAX" quick button (testTag "HardwareTransferAmountMax")
+    </action>
+    <action>
+      Verify the amount field matches the AVAILABLE amount exactly and does not use the full hardware wallet balance
+    </action>
+    <action>
+      Tap "Continue" (testTag "HardwareTransferAmountContinue") and wait for the Blocktank order to be created
+    </action>
+    <action>
+      Verify the sign screen opens (testTag "HardwareTransferSign"), showing NETWORK FEES, SERVICE FEES, TO SPENDING and TOTAL, without an insufficient-funds toast
+    </action>
+    <action>
+      Tap "Open Trezor Connect" (testTag "HardwareTransferOpenTrezorConnect") and approve every hardware-wallet prompt
+    </action>
+    <action>
+      Verify the transaction signed screen appears (testTag "HardwareTransferSigned") and then advances to Processing Payment / setting-up progress
+    </action>
+  </actions>
+</journey>

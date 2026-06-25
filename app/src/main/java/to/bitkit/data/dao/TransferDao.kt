@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import to.bitkit.data.entities.TransferEntity
 
 @Dao
+@Suppress("TooManyFunctions")
 interface TransferDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(transfer: TransferEntity)
@@ -34,6 +35,9 @@ interface TransferDao {
 
     @Query("SELECT * FROM transfers WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): TransferEntity?
+
+    @Query("SELECT * FROM transfers WHERE fundingTxId = :fundingTxId LIMIT 1")
+    suspend fun getByFundingTxId(fundingTxId: String): TransferEntity?
 
     @Query("UPDATE transfers SET isSettled = 1, settledAt = :settledAt WHERE id = :id")
     suspend fun markSettled(id: String, settledAt: Long)
