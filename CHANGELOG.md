@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Improved LNURL-pay invoice validation. #1048
+- Improved LNURL-pay payment handling. #1051
 
 ## [2.3.0] - 2026-06-05
 
