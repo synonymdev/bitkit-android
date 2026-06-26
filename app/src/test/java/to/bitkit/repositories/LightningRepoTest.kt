@@ -6,6 +6,11 @@ import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.ILspNode
+import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.LnurlException
+import com.synonym.bitkitcore.LnurlPayData
+import com.synonym.bitkitcore.NetworkType
+import com.synonym.bitkitcore.Scanner
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
@@ -31,6 +36,7 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.spy
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
@@ -55,6 +61,7 @@ import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.utils.UrlValidator
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -140,6 +147,29 @@ class LightningRepoTest : BaseUnitTest() {
         return requireNotNull(capturedHandler)
     }
 
+    private fun lnurlPayData() = LnurlPayData(
+        uri = "lnurl1test",
+        callback = "https://example.com/callback",
+        minSendable = 1_000uL,
+        maxSendable = 100_000uL,
+        metadataStr = "[[\"text/plain\",\"test\"]]",
+        commentAllowed = null,
+        allowsNostr = false,
+        nostrPubkey = null,
+    )
+
+    private fun lightningInvoice(bolt11: String) = LightningInvoice(
+        bolt11 = bolt11,
+        paymentHash = byteArrayOf(1, 2, 3),
+        amountSatoshis = 42uL,
+        timestampSeconds = 0uL,
+        expirySeconds = 3_600uL,
+        isExpired = false,
+        description = "test",
+        networkType = NetworkType.REGTEST,
+        payeeNodeId = null,
+    )
+
     @Test
     fun `start should transition through correct states`() = test {
         sut.setInitNodeLifecycleState()
@@ -216,6 +246,49 @@ class LightningRepoTest : BaseUnitTest() {
         )
         assertTrue(result.isSuccess)
         assertEquals(testInvoice, result.getOrNull())
+    }
+
+    @Test
+    fun `fetchLnurlInvoice delegates to core and decodes after success`() = test {
+        val data = lnurlPayData()
+        val invoice = lightningInvoice("lnbc1")
+        whenever(coreService.getLnurlInvoiceForPayData(data, 42_000uL, "thanks")).thenReturn("lnbc1")
+        whenever(coreService.decode("lnbc1")).thenReturn(Scanner.Lightning(invoice))
+
+        val result = sut.fetchLnurlInvoice(data, 42_000uL, "thanks")
+
+        assertTrue(result.isSuccess)
+        assertEquals(invoice, result.getOrThrow())
+        verify(coreService).getLnurlInvoiceForPayData(data, 42_000uL, "thanks")
+        verify(coreService).decode("lnbc1")
+    }
+
+    @Test
+    fun `fetchLnurlInvoice maps core validation error and skips decode`() = test {
+        val data = lnurlPayData()
+        whenever(coreService.getLnurlInvoiceForPayData(data, 42_000uL, null))
+            .thenAnswer { throw LnurlException.AmountMismatch(42_000uL, 43_000uL) }
+
+        val result = sut.fetchLnurlInvoice(data, 42_000uL)
+
+        assertTrue(result.isFailure)
+        assertIs<LnurlPayInvoiceMismatchError>(result.exceptionOrNull())
+        verify(coreService).getLnurlInvoiceForPayData(data, 42_000uL, null)
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `fetchLnurlInvoice maps wrapped core validation error and skips decode`() = test {
+        val data = lnurlPayData()
+        whenever(coreService.getLnurlInvoiceForPayData(data, 42_000uL, null))
+            .thenAnswer { throw AppError(LnurlException.AmountMismatch(42_000uL, 43_000uL)) }
+
+        val result = sut.fetchLnurlInvoice(data, 42_000uL)
+
+        assertTrue(result.isFailure)
+        assertIs<LnurlPayInvoiceMismatchError>(result.exceptionOrNull())
+        verify(coreService).getLnurlInvoiceForPayData(data, 42_000uL, null)
+        verify(coreService, never()).decode(any())
     }
 
     @Test
