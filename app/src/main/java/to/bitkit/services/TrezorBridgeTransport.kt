@@ -24,6 +24,8 @@ import javax.inject.Singleton
 class TrezorBridgeTransport(
     private val baseUrl: String,
     private val enabled: Boolean,
+    private val readTimeoutMs: Int = READ_TIMEOUT_MS,
+    private val callReadTimeoutMs: Int = CALL_READ_TIMEOUT_MS,
 ) {
     @Inject
     constructor() : this(
@@ -40,6 +42,13 @@ class TrezorBridgeTransport(
         private const val HEADER_SIZE = 6
         private const val CONNECT_TIMEOUT_MS = 5_000
         private const val READ_TIMEOUT_MS = 30_000
+        private const val CALL_READ_TIMEOUT_MS = 120_000
+
+        /**
+         * Trezor protobuf MessageType_SignTx. This is the only call that waits
+         * for on-device signing.
+         */
+        private const val SIGN_TX_MESSAGE_TYPE = 15
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -139,7 +148,8 @@ class TrezorBridgeTransport(
 
         return runCatching {
             val request = encodeFrame(messageType, data)
-            val response = post("/call/${encode(session)}", request)
+            val timeoutMs = if (messageType == SIGN_TX_MESSAGE_TYPE.toUShort()) callReadTimeoutMs else readTimeoutMs
+            val response = post("/call/${encode(session)}", request, readTimeoutMs = timeoutMs)
             decodeFrame(response)
         }.getOrElse {
             Logger.warn("Failed to call Trezor Bridge message for '$path'", it, context = TAG)
@@ -182,11 +192,11 @@ class TrezorBridgeTransport(
         )
     }
 
-    private fun post(path: String, body: String? = null): String {
+    private fun post(path: String, body: String? = null, readTimeoutMs: Int = this.readTimeoutMs): String {
         val connection = URL("$bridgeUrl$path").openConnection() as HttpURLConnection
         connection.requestMethod = "POST"
         connection.connectTimeout = CONNECT_TIMEOUT_MS
-        connection.readTimeout = READ_TIMEOUT_MS
+        connection.readTimeout = readTimeoutMs
         connection.doInput = true
 
         if (body != null) {

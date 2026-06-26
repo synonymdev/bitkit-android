@@ -85,9 +85,11 @@ class TrezorService @Inject constructor(
         }
     }
 
-    suspend fun scan(): List<TrezorDeviceInfo> {
+    suspend fun scan(includeBluetooth: Boolean = true): List<TrezorDeviceInfo> {
         return ServiceQueue.CORE.background {
-            trezorScan()
+            transport.withBluetoothScanningEnabled(includeBluetooth) {
+                trezorScan()
+            }
         }
     }
 

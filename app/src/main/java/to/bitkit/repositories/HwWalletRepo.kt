@@ -1,9 +1,14 @@
 package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.CoinSelection
+import com.synonym.bitkitcore.ComposeOutput
+import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.TrezorDeviceInfo
+import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.collections.immutable.ImmutableList
@@ -34,17 +39,25 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.create
 import to.bitkit.ext.rawId
+import to.bitkit.ext.runSuspendCatching
+import to.bitkit.models.HwFundingAccount
+import to.bitkit.models.HwFundingAddressType
+import to.bitkit.models.HwFundingBroadcastResult
+import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
+import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.safe
 import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
+import to.bitkit.models.toTrezorCoinType
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.ceil
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
@@ -57,10 +70,12 @@ import kotlin.time.ExperimentalTime
  * Built on top of [TrezorRepo], which owns the device list, connect orchestration
  * and the underlying watcher transport.
  */
+@Suppress("TooManyFunctions")
 @OptIn(ExperimentalTime::class)
 @Singleton
 class HwWalletRepo @Inject constructor(
     private val trezorRepo: TrezorRepo,
+    private val activityRepo: ActivityRepo,
     private val hwWalletStore: HwWalletStore,
     private val settingsStore: SettingsStore,
     private val clock: Clock,
@@ -70,6 +85,7 @@ class HwWalletRepo @Inject constructor(
         private const val TAG = "HwWalletRepo"
         private const val WATCHER_ID_SEPARATOR = "|"
         private val WATCHER_START_RETRY_DELAY = 30.seconds
+        const val DEVICE_LABEL_MAX_LENGTH = 50
     }
 
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -111,6 +127,134 @@ class HwWalletRepo @Inject constructor(
 
     fun cancelPairingCode() = trezorRepo.cancelPairingCode()
 
+    /** Device discovery and connection state used by the Connect Hardware flow. */
+    val deviceState: StateFlow<TrezorState> = trezorRepo.state
+
+    /** Scans for nearby unpaired devices; results land in [deviceState]'s nearbyDevices. */
+    suspend fun scan(
+        includeBluetooth: Boolean = true,
+    ): Result<List<TrezorDeviceInfo>> = trezorRepo.scan(
+        includeBluetooth = includeBluetooth,
+    )
+
+    suspend fun hasKnownDevice(deviceId: String): Boolean = trezorRepo.hasKnownDevice(deviceId)
+
+    /** Connects and pairs a discovered device, persisting it as a watch-only known device. */
+    suspend fun connect(deviceId: String): Result<TrezorFeatures> {
+        trezorRepo.resetWalletSelection()
+        return trezorRepo.connect(deviceId)
+    }
+
+    /** Reconnects a known paired device so its session is live for on-device signing. */
+    suspend fun reconnect(
+        deviceId: String,
+        forceSession: Boolean = false,
+    ): Result<TrezorFeatures> = trezorRepo.connectKnownDevice(deviceId, forceSession = forceSession)
+
+    suspend fun ensureConnected(deviceId: String): Result<TrezorFeatures> = trezorRepo.ensureConnected(deviceId)
+
+    suspend fun getFundingAccount(
+        deviceId: String,
+        addressType: HwFundingAddressType = HwFundingAddressType.DEFAULT,
+    ): Result<HwFundingAccount> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val devices = hwWalletStore.loadKnownDevices()
+            val target = requireNotNull(devices.find { it.id == deviceId }) { "Unknown hardware wallet '$deviceId'" }
+            val groupIds = devices.filter { it.walletKey == target.walletKey }.map { it.id }.toSet()
+            val xpub = requireNotNull(target.xpubs[addressType.settingsKey]) {
+                "Hardware wallet '$deviceId' has no '${addressType.settingsKey}' account"
+            }
+            val balanceSats = _watcherData.value
+                .values
+                .filter {
+                    it.addressType == addressType.settingsKey &&
+                        it.deviceId in groupIds
+                }
+                .fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
+            HwFundingAccount.Trezor(
+                xpub = xpub,
+                addressType = addressType,
+                balanceSats = balanceSats,
+            )
+        }
+    }
+
+    /** Composes the exact on-chain funding payment before prompting for the Trezor signature. */
+    suspend fun composeFundingTransaction(
+        deviceId: String,
+        address: String,
+        sats: ULong,
+        satsPerVByte: ULong,
+    ): Result<HwFundingTransaction> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val account = getFundingAccount(deviceId).getOrThrow()
+            val network = Env.network.toCoreNetwork()
+            val composed = trezorRepo.composeTransaction(
+                extendedKey = account.xpub,
+                outputs = listOf(ComposeOutput.Payment(address = address, amountSats = sats)),
+                feeRates = listOf(satsPerVByte.toFloat()),
+                network = network,
+                accountType = account.accountType,
+                coinSelection = CoinSelection.BRANCH_AND_BOUND,
+            ).getOrThrow()
+            val success = composed.filterIsInstance<ComposeResult.Success>().firstOrNull()
+                ?: throw AppError(
+                    composed.filterIsInstance<ComposeResult.Error>().firstOrNull()?.error
+                        ?: "Failed to compose hardware transfer"
+                )
+            HwFundingTransaction(
+                psbt = success.psbt,
+                miningFeeSats = success.fee,
+                feeRate = success.feeRate,
+                totalSpent = success.totalSpent,
+                satsPerVByte = satsPerVByte,
+            )
+        }
+    }
+
+    /** Signs a composed funding payment on the Trezor and broadcasts it. */
+    suspend fun signAndBroadcastFunding(
+        deviceId: String,
+        funding: HwFundingTransaction,
+    ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val signed = runSuspendCatching {
+                trezorRepo.signTxFromPsbt(
+                    psbtBase64 = funding.psbt,
+                    network = Env.network.toTrezorCoinType(),
+                ).getOrThrow()
+            }
+            if (signed.isFailure) {
+                trezorRepo.disconnectStaleSession(deviceId)
+            }
+            val txId = trezorRepo.broadcastRawTx(serializedTx = signed.getOrThrow().serializedTx).getOrThrow()
+            HwFundingBroadcastResult(
+                txId = txId,
+                miningFeeSats = funding.miningFeeSats,
+                feeRate = ceil(funding.feeRate.toDouble()).toULong(),
+                totalSpent = funding.totalSpent,
+            )
+        }
+    }
+
+    suspend fun disconnectStaleSession(deviceId: String): Result<Unit> = trezorRepo.disconnectStaleSession(deviceId)
+
+    /**
+     * Persists the Bitkit-side funds label for a paired device. Applied to every entry sharing the
+     * same wallet identity so the same device paired over both transports renames consistently.
+     */
+    suspend fun setDeviceLabel(deviceId: String, label: String): Result<Unit> = withContext(ioDispatcher) {
+        runCatching {
+            val devices = hwWalletStore.loadKnownDevices()
+            val target = requireNotNull(devices.find { it.id == deviceId }) { "Unknown hardware wallet '$deviceId'" }
+            val customLabel = label.trim().take(DEVICE_LABEL_MAX_LENGTH).ifEmpty { null }
+            val updated = devices.map {
+                if (it.walletKey == target.walletKey) it.copy(customLabel = customLabel) else it
+            }
+            hwWalletStore.saveKnownDevices(updated)
+        }
+    }
+
     /**
      * Removes a paired hardware wallet: stops its watchers and forgets every device entry
      * that tracks the same wallet. The same physical device paired over both bluetooth and
@@ -151,10 +295,13 @@ class HwWalletRepo @Inject constructor(
             .filter { it.xpubs.isNotEmpty() }
             .groupBy { it.walletKey }
             .map { (_, devices) ->
-                val connectedDevice = devices.find { it.id == trezorState.connectedDeviceId }
+                val connectedDevice = devices.find { it.id == trezorState.connectedDeviceId() }
                 val device = connectedDevice ?: devices.maxBy { it.lastConnectedAt }
                 val ids = devices.map { it.id }.toSet()
                 val deviceWatchers = watcherData.values.filter { it.deviceId in ids }
+                val fundingBalanceSats = deviceWatchers
+                    .filter { it.addressType == HwFundingAddressType.DEFAULT.settingsKey }
+                    .fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
                 HwWallet(
                     id = device.id,
                     name = device.displayName,
@@ -165,6 +312,7 @@ class HwWalletRepo @Inject constructor(
                     activities = deviceWatchers
                         .toMergedActivities()
                         .toImmutableList(),
+                    fundingBalanceSats = fundingBalanceSats,
                     deviceIds = ids.toImmutableSet(),
                 )
             }
@@ -209,12 +357,16 @@ class HwWalletRepo @Inject constructor(
                     .toImmutableList()
                 val watcher = HwWatcherData(
                     deviceId = watcherId.toDeviceId(),
+                    addressType = watcherId.toAddressTypeKey(),
                     balanceSats = event.balance.total,
                     transactions = event.transactions.toImmutableList(),
                     activities = activities,
                 )
                 val updatedWatcherData = _watcherData.value + (watcherId to watcher)
                 _watcherData.update { updatedWatcherData }
+                activities.filterIsInstance<Activity.Onchain>().forEach {
+                    activityRepo.syncHardwareOnchainActivity(it.v1)
+                }
                 emitReceivedTxs(previous, event, updatedWatcherData)
             }
         }
@@ -389,6 +541,8 @@ class HwWalletRepo @Inject constructor(
     }
 
     private fun String.toDeviceId(): String = substringBefore(WATCHER_ID_SEPARATOR)
+
+    private fun String.toAddressTypeKey(): String = substringAfter(WATCHER_ID_SEPARATOR)
 }
 
 private data class WatcherSettings(
@@ -405,19 +559,23 @@ private val KnownDevice.walletKey: String
     get() = xpubs.values.sorted().joinToString().ifEmpty { id }
 
 /**
- * The label is the user-set name stored on the device itself; without one (or with the
- * factory default that just mirrors the model), fall back to the vendor-prefixed model
- * (e.g. "Safe 7" reads as "Trezor Safe 7").
+ * Resolves the name shown for a hardware wallet: the Bitkit-side custom label if the user set one,
+ * otherwise the device's own label; without one (or with the factory default that just mirrors the
+ * model) it falls back to the vendor-prefixed model (e.g. "Safe 7" reads as "Trezor Safe 7").
  */
+fun resolveHwWalletName(label: String?, model: String?, customLabel: String? = null): String {
+    customLabel?.takeIf { it.isNotBlank() }?.let { return it }
+    label?.takeIf { it != model }?.let { return it }
+    val resolvedModel = model ?: return "Trezor"
+    return if (resolvedModel.startsWith("Trezor")) resolvedModel else "Trezor $resolvedModel"
+}
+
 private val KnownDevice.displayName: String
-    get() {
-        label?.takeIf { it != model }?.let { return it }
-        val model = model ?: return "Trezor"
-        return if (model.startsWith("Trezor")) model else "Trezor $model"
-    }
+    get() = resolveHwWalletName(label = label, model = model, customLabel = customLabel)
 
 private data class HwWatcherData(
     val deviceId: String,
+    val addressType: String,
     val balanceSats: ULong,
     val transactions: ImmutableList<HistoryTransaction>,
     val activities: ImmutableList<Activity>,

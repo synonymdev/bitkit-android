@@ -85,6 +85,7 @@ fun SpendingAmountScreen(
                 TransferEffect.OnOrderCreated -> onOrderCreated()
                 is TransferEffect.ToastError -> toast(effect.title, effect.description)
                 is TransferEffect.ToastException -> toastException(effect.e)
+                else -> Unit
             }
         }
     }
@@ -196,7 +197,8 @@ private fun SpendingAmountNodeRunning(
 
         Display(
             text = stringResource(R.string.lightning__spending_amount__title)
-                .withAccent(accentColor = Colors.Purple)
+                .withAccent(accentColor = Colors.Purple),
+            modifier = Modifier.fillMaxWidth()
         )
 
         FillHeight()

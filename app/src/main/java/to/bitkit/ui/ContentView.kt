@@ -128,6 +128,9 @@ import to.bitkit.ui.screens.transfer.external.ExternalConnectionScreen
 import to.bitkit.ui.screens.transfer.external.ExternalNodeViewModel
 import to.bitkit.ui.screens.transfer.external.ExternalSuccessScreen
 import to.bitkit.ui.screens.transfer.external.LnurlChannelScreen
+import to.bitkit.ui.screens.transfer.hardware.SpendingAmountHwScreen
+import to.bitkit.ui.screens.transfer.hardware.SpendingHwSignScreen
+import to.bitkit.ui.screens.transfer.hardware.SpendingHwSignedScreen
 import to.bitkit.ui.screens.trezor.TrezorScreen
 import to.bitkit.ui.screens.wallets.HardwareWalletScreen
 import to.bitkit.ui.screens.wallets.HomeScreen
@@ -179,7 +182,6 @@ import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
-import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.sheets.BTCPayConnectionSheet
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
@@ -468,7 +470,11 @@ fun ContentView(
                         Sheet.ChangePin -> ChangePinSheet(appViewModel)
                         Sheet.DisablePin -> DisablePinSheet(appViewModel)
                         is Sheet.Backup -> BackupSheet(sheet, onDismiss = { appViewModel.hideSheet() })
-                        is Sheet.Hardware -> HardwareSheet(sheet, appViewModel)
+                        is Sheet.Hardware -> HardwareSheet(
+                            sheet = sheet,
+                            appViewModel = appViewModel,
+                            onFinish = navigateToHomeWallet,
+                        )
                         is Sheet.Widgets -> {
                             WidgetsSheet(
                                 sheet = sheet,
@@ -749,6 +755,16 @@ private fun RootNavHost(
                     onBackClick = { navController.popBackStack() },
                 )
             }
+            composableWithDefaultTransitions<Routes.SpendingIntroHw> { entry ->
+                val deviceId = entry.toRoute<Routes.SpendingIntroHw>().deviceId
+                SpendingIntroScreen(
+                    onContinueClick = {
+                        navController.navigateTo(Routes.SpendingAmountHw(deviceId))
+                        settingsViewModel.setHasSeenSpendingIntro(true)
+                    },
+                    onBackClick = { navController.popBackStack() },
+                )
+            }
             composableWithDefaultTransitions<Routes.SpendingAmount> {
                 val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingAmountScreen(
@@ -764,6 +780,36 @@ private fun RootNavHost(
                             description = description,
                         )
                     },
+                )
+            }
+            composableWithDefaultTransitions<Routes.SpendingAmountHw> { entry ->
+                val deviceId = entry.toRoute<Routes.SpendingAmountHw>().deviceId
+                val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
+                SpendingAmountHwScreen(
+                    deviceId = deviceId,
+                    viewModel = transferViewModel,
+                    isOffline = connectivityState != ConnectivityState.CONNECTED,
+                    onBackClick = { navController.popBackStack() },
+                    onOrderCreated = { navController.navigateTo(Routes.SpendingHwSign(deviceId)) },
+                )
+            }
+            composableWithDefaultTransitions<Routes.SpendingHwSign> { entry ->
+                val deviceId = entry.toRoute<Routes.SpendingHwSign>().deviceId
+                SpendingHwSignScreen(
+                    deviceId = deviceId,
+                    viewModel = transferViewModel,
+                    onBackClick = { navController.popBackStack() },
+                    onCloseClick = { navController.navigateToHome() },
+                    onLearnMoreClick = { navController.navigateTo(Routes.TransferLiquidity) },
+                    onAdvancedClick = { navController.navigateTo(Routes.SpendingAdvanced) },
+                    onSigned = { navController.navigateTo(Routes.SpendingHwSigned) },
+                )
+            }
+            composableWithDefaultTransitions<Routes.SpendingHwSigned> {
+                SpendingHwSignedScreen(
+                    viewModel = transferViewModel,
+                    onContinue = { navController.navigateTo(Routes.SettingUp) },
+                    onCloseClick = { navController.navigateToHome() },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingConfirm> {
@@ -782,7 +828,8 @@ private fun RootNavHost(
                 SpendingAdvancedScreen(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.popBackStack<Routes.SpendingConfirm>(inclusive = false) },
+                    // Pops back to whoever opened Advanced: SpendingConfirm or SpendingHwSign.
+                    onOrderCreated = { navController.popBackStack() },
                 )
             }
             composableWithDefaultTransitions<Routes.TransferLiquidity> {
@@ -805,11 +852,7 @@ private fun RootNavHost(
 
                 FundingScreen(
                     onTransfer = {
-                        if (!hasSeenSpendingIntro) {
-                            navController.navigateToTransferSpendingIntro()
-                        } else {
-                            navController.navigateToTransferSpendingAmount()
-                        }
+                        navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
                     },
                     onFund = {
                         scope.launch {
@@ -954,11 +997,7 @@ private fun NavGraphBuilder.home(
             onActivityItemClick = { navController.navigateToActivityItem(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSpendingClick = {
-                if (!hasSeenSpendingIntro) {
-                    navController.navigateToTransferSpendingIntro()
-                } else {
-                    navController.navigateToTransferSpendingAmount()
-                }
+                navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
             },
             onBackClick = { navController.popBackStack() },
             forceCloseRemainingDuration = forceCloseRemainingDuration,
@@ -984,27 +1023,19 @@ private fun NavGraphBuilder.home(
                 }
             },
             onTransferFromSavingsClick = {
-                if (!hasSeenSpendingIntro) {
-                    navController.navigateToTransferSpendingIntro()
-                } else {
-                    navController.navigateToTransferSpendingAmount()
-                }
+                navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
             },
             onBackClick = { navController.popBackStack() },
         )
     }
     composableWithDefaultTransitions<Routes.HardwareWallet> {
-        val scope = rememberCoroutineScope()
+        val deviceId = it.toRoute<Routes.HardwareWallet>().deviceId
+        val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         HardwareWalletScreen(
-            deviceId = it.toRoute<Routes.HardwareWallet>().deviceId,
+            deviceId = deviceId,
             onActivityItemClick = { id -> navController.navigateToActivityItem(id) },
-            onTransferToSpendingClick = {
-                scope.launch {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.WARNING,
-                        title = "Transfer to spending not yet implemented.",
-                    )
-                }
+            onTransferToSpendingClick = { selectedDeviceId ->
+                navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, selectedDeviceId)
             },
             onBackClick = { navController.popBackStack() },
         )
@@ -1793,9 +1824,26 @@ fun NavController.navigateToTransferSavingsIntro() = navigateTo(Routes.SavingsIn
 
 fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.SavingsAvailability)
 
-fun NavController.navigateToTransferSpendingIntro() = navigateTo(Routes.SpendingIntro)
+fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean) =
+    navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro))
 
-fun NavController.navigateToTransferSpendingAmount() = navigateTo(Routes.SpendingAmount)
+fun NavController.navigateToTransferSpendingStart(
+    hasSeenSpendingIntro: Boolean,
+    deviceId: String,
+) = navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro, deviceId))
+
+internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean): Routes = when {
+    hasSeenSpendingIntro -> Routes.SpendingAmount
+    else -> Routes.SpendingIntro
+}
+
+internal fun transferSpendingStartRoute(
+    hasSeenSpendingIntro: Boolean,
+    deviceId: String,
+): Routes = when {
+    hasSeenSpendingIntro -> Routes.SpendingAmountHw(deviceId)
+    else -> Routes.SpendingIntroHw(deviceId)
+}
 
 fun NavController.navigateToTransferIntro() = navigateTo(Routes.TransferIntro)
 
@@ -1958,7 +2006,19 @@ sealed interface Routes {
     data object SpendingIntro : Routes
 
     @Serializable
+    data class SpendingIntroHw(val deviceId: String) : Routes
+
+    @Serializable
     data object SpendingAmount : Routes
+
+    @Serializable
+    data class SpendingAmountHw(val deviceId: String) : Routes
+
+    @Serializable
+    data class SpendingHwSign(val deviceId: String) : Routes
+
+    @Serializable
+    data object SpendingHwSigned : Routes
 
     @Serializable
     data object SpendingConfirm : Routes

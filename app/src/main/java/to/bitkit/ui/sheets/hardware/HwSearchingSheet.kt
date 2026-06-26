@@ -1,0 +1,204 @@
+package to.bitkit.ui.sheets.hardware
+
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.InfiniteTransition
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.dp
+import to.bitkit.R
+import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
+
+/** Diameter of the loading visual (outer dashed ring). */
+private val ANIMATION_SIZE = 280.dp
+
+/** Arrows width as a fraction of the loader — 256 in the 311-wide Figma "Loading Animation" HW ring. */
+private const val ARROWS_SIZE_RATIO = 256f / 311f
+
+/** Inner dashed-ring width as a fraction of the loader — 207 in the 311-wide Figma HW ring. */
+private const val INNER_RING_SIZE_RATIO = 207f / 311f
+
+/** Arrows rotation period: the Figma HW variants step 90° per 1s, a counter-clockwise turn every 4s. */
+private const val ARROWS_SPIN_MS = 4000
+
+/** Dashed-ring rotation period: the two rings counter-rotate ~180° per 1s, a turn every ~2s. */
+private const val RING_SPIN_MS = 2000
+
+/** Message transition duration. */
+private const val MESSAGE_TRANSITION_MS = 200
+
+@Composable
+fun HwSearchingSheet(
+    modifier: Modifier = Modifier,
+    errorMessage: String? = null,
+    onCancel: () -> Unit = {},
+) {
+    Content(
+        errorMessage = errorMessage,
+        onCancel = onCancel,
+        modifier = modifier
+    )
+}
+
+@Composable
+private fun Content(
+    modifier: Modifier = Modifier,
+    errorMessage: String? = null,
+    onCancel: () -> Unit = {},
+) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .gradientBackground()
+            .navigationBarsPadding()
+            .testTag("HardwareWalletSearchingScreen")
+    ) {
+        SheetTopBar(titleText = stringResource(R.string.hardware__connect_title))
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp)
+        ) {
+            Display(stringResource(R.string.hardware__connect_header).withAccent(accentColor = Colors.Blue))
+            VerticalSpacer(8.dp)
+            val defaultMessage = stringResource(R.string.hardware__connect_text)
+            AnimatedContent(
+                targetState = (errorMessage != null) to (errorMessage ?: defaultMessage),
+                transitionSpec = {
+                    fadeIn(tween(MESSAGE_TRANSITION_MS)).togetherWith(fadeOut(tween(MESSAGE_TRANSITION_MS)))
+                },
+                label = "HardwareWalletSearchingMessage",
+            ) { (isError, message) ->
+                BodyM(
+                    text = message,
+                    color = if (isError) Colors.Red else Colors.White64,
+                    minLines = 2,
+                    modifier = Modifier.testTag(
+                        if (isError) "HardwareWalletSearchingError" else "HardwareWalletSearchingText"
+                    )
+                )
+            }
+        }
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            SearchingAnimation()
+        }
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp)
+        ) {
+            SecondaryButton(
+                text = stringResource(R.string.common__cancel),
+                onClick = onCancel,
+                modifier = Modifier.testTag("HardwareWalletSearchingCancel"),
+            )
+        }
+        VerticalSpacer(16.dp)
+    }
+}
+
+@Composable
+private fun SearchingAnimation(
+    modifier: Modifier = Modifier,
+) {
+    val transition = rememberInfiniteTransition(label = "hw_searching")
+    val arrowsRotation by transition.animateRotation(ARROWS_SPIN_MS, clockwise = false, label = "arrows")
+    val outerRingRotation by transition.animateRotation(RING_SPIN_MS, clockwise = false, label = "outer_ring")
+    val innerRingRotation by transition.animateRotation(RING_SPIN_MS, clockwise = true, label = "inner_ring")
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier.size(ANIMATION_SIZE)
+    ) {
+        Image(
+            painter = painterResource(R.drawable.hw_searching_ring),
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize()
+                .rotate(outerRingRotation)
+        )
+        Image(
+            painter = painterResource(R.drawable.hw_searching_ring_inner),
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize(INNER_RING_SIZE_RATIO)
+                .rotate(innerRingRotation)
+        )
+        Image(
+            painter = painterResource(R.drawable.hw_searching_arrows),
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize(ARROWS_SIZE_RATIO)
+                .rotate(arrowsRotation)
+        )
+    }
+}
+
+@Composable
+private fun InfiniteTransition.animateRotation(durationMillis: Int, clockwise: Boolean, label: String) =
+    animateFloat(
+        initialValue = 0f,
+        targetValue = if (clockwise) 360f else -360f,
+        animationSpec = infiniteRepeatable(tween(durationMillis = durationMillis, easing = LinearEasing)),
+        label = label,
+    )
+
+@Preview(showSystemUi = true)
+@Composable
+private fun Preview() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(modifier = Modifier.sheetHeight())
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewError() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                errorMessage = stringResource(R.string.hardware__search_error),
+                modifier = Modifier.sheetHeight()
+            )
+        }
+    }
+}

@@ -22,6 +22,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -30,10 +31,12 @@ import to.bitkit.ui.utils.withAccent
 @Composable
 fun HwIntroSheet(
     modifier: Modifier = Modifier,
-    onDismiss: () -> Unit = {},
+    onContinue: () -> Unit = {},
+    onCancel: () -> Unit = {},
 ) {
     Content(
-        onDismiss = onDismiss,
+        onContinue = onContinue,
+        onCancel = onCancel,
         modifier = modifier
     )
 }
@@ -41,14 +44,15 @@ fun HwIntroSheet(
 @Composable
 private fun Content(
     modifier: Modifier = Modifier,
-    onDismiss: () -> Unit = {},
+    onContinue: () -> Unit = {},
+    onCancel: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("hw_intro_screen")
+            .testTag("HardwareWalletIntroScreen")
     ) {
         SheetTopBar(titleText = stringResource(R.string.hardware__intro_title))
         HwDeviceIllustrations(
@@ -71,27 +75,30 @@ private fun Content(
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.common__cancel),
-                    onClick = onDismiss,
-                    modifier = Modifier.weight(1f)
+                    onClick = onCancel,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("HardwareWalletIntroCancel")
                 )
                 PrimaryButton(
                     text = stringResource(R.string.common__continue),
-                    onClick = {},
-                    enabled = false,
-                    modifier = Modifier.weight(1f)
+                    onClick = onContinue,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("HardwareWalletIntroContinue")
                 )
             }
-            VerticalSpacer(16.dp)
         }
+        VerticalSpacer(16.dp)
     }
 }
 
 @Preview(showSystemUi = true)
 @Composable
-private fun PreviewIntro() {
+private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content()
+            Content(modifier = Modifier.sheetHeight())
         }
     }
 }

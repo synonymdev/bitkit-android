@@ -168,16 +168,6 @@ class TrezorViewModelTest : BaseUnitTest() {
     // region Async methods
 
     @Test
-    fun `initialize should call trezorRepo initialize`() = test {
-        whenever(trezorRepo.initialize()).thenReturn(Result.success(Unit))
-
-        sut.initialize()
-        advanceUntilIdle()
-
-        verify(trezorRepo).initialize()
-    }
-
-    @Test
     fun `scan should call trezorRepo scan`() = test {
         whenever(trezorRepo.scan()).thenReturn(Result.success(emptyList()))
 
@@ -272,14 +262,14 @@ class TrezorViewModelTest : BaseUnitTest() {
         sut.broadcastSignedTx()
         advanceUntilIdle()
 
-        verify(trezorRepo, never()).broadcastRawTx(any(), any())
+        verify(trezorRepo, never()).broadcastRawTx(any())
     }
 
     @Test
     fun `broadcastSignedTx should not restore signed step after reset`() = test {
         loadSignedTx()
         val broadcastResult = CompletableDeferred<Result<String>>()
-        whenever(trezorRepo.broadcastRawTx(any(), any()))
+        whenever(trezorRepo.broadcastRawTx(any()))
             .doSuspendableAnswer { broadcastResult.await() }
 
         sut.broadcastSignedTx()
@@ -303,7 +293,7 @@ class TrezorViewModelTest : BaseUnitTest() {
         val broadcastResults = ArrayDeque(
             listOf(firstBroadcastResult, secondBroadcastResult)
         )
-        whenever(trezorRepo.broadcastRawTx(any(), any()))
+        whenever(trezorRepo.broadcastRawTx(any()))
             .doSuspendableAnswer { broadcastResults.removeFirst().await() }
 
         sut.broadcastSignedTx()

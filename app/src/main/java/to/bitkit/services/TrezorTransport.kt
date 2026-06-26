@@ -40,6 +40,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import to.bitkit.ext.bluetoothManager
 import to.bitkit.ext.usbManager
 import to.bitkit.models.TransportType
@@ -119,6 +121,9 @@ class TrezorTransport @Inject constructor(
 
     @Volatile
     private var requestUsbPermissionEnabled = true
+
+    @Volatile
+    private var bluetoothScanningEnabled = true
 
     private val _externalDisconnect = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val externalDisconnect: SharedFlow<String> = _externalDisconnect
@@ -202,6 +207,7 @@ class TrezorTransport @Inject constructor(
 
     private val bleConnections = ConcurrentHashMap<String, BleConnection>()
     private val discoveredBleDevices = ConcurrentHashMap<String, BluetoothDevice>()
+    private val optionScopeMutex = Mutex()
 
     private data class UsbOpenDevice(
         val connection: UsbDeviceConnection,
@@ -222,13 +228,29 @@ class TrezorTransport @Inject constructor(
         @Volatile var writeStatus: Int = BluetoothGatt.GATT_SUCCESS,
     )
 
-    suspend fun <T> withUsbPermissionRequestsEnabled(enabled: Boolean, block: suspend () -> T): T {
+    suspend fun <T> withUsbPermissionRequestsEnabled(
+        enabled: Boolean,
+        block: suspend () -> T,
+    ): T = optionScopeMutex.withLock {
         val previous = requestUsbPermissionEnabled
         requestUsbPermissionEnabled = enabled
-        return try {
+        try {
             block()
         } finally {
             requestUsbPermissionEnabled = previous
+        }
+    }
+
+    suspend fun <T> withBluetoothScanningEnabled(
+        enabled: Boolean,
+        block: suspend () -> T,
+    ): T = optionScopeMutex.withLock {
+        val previous = bluetoothScanningEnabled
+        bluetoothScanningEnabled = enabled
+        try {
+            block()
+        } finally {
+            bluetoothScanningEnabled = previous
         }
     }
 
@@ -254,13 +276,17 @@ class TrezorTransport @Inject constructor(
             Logger.error("USB enumerate failed", it, context = TAG)
         }
 
-        runCatching {
-            enumerateBleDevices()
-        }.onSuccess {
-            devices.addAll(it)
-            Logger.debug("BLE enumerate found '${it.size}' Trezor device(s)", context = TAG)
-        }.onFailure {
-            Logger.error("BLE enumerate failed", it, context = TAG)
+        if (bluetoothScanningEnabled) {
+            runCatching {
+                enumerateBleDevices()
+            }.onSuccess {
+                devices.addAll(it)
+                Logger.debug("BLE enumerate found '${it.size}' Trezor device(s)", context = TAG)
+            }.onFailure {
+                Logger.error("BLE enumerate failed", it, context = TAG)
+            }
+        } else {
+            Logger.debug("Skipped BLE enumerate while Bluetooth scanning is disabled", context = TAG)
         }
 
         val bridgeDevices = bridgeTransport.enumerateDevices()
@@ -292,6 +318,17 @@ class TrezorTransport @Inject constructor(
             bridgeTransport.closeDevice(path)
         } else if (isBleDevice(path)) {
             closeBleDevice(path)
+        } else {
+            closeUsbDevice(path)
+        }
+    }
+
+    fun disconnectDevice(path: String): TrezorTransportWriteResult {
+        TrezorDebugLog.log("DISCONNECT", "disconnectDevice: $path")
+        return if (bridgeTransport.isBridgeDevice(path)) {
+            bridgeTransport.closeDevice(path)
+        } else if (isBleDevice(path)) {
+            disconnectBleDevice(path)
         } else {
             closeUsbDevice(path)
         }
@@ -863,8 +900,19 @@ class TrezorTransport @Inject constructor(
         return null
     }
 
+    @Suppress("ReturnCount")
     @SuppressLint("MissingPermission")
     private fun openBleDevice(path: String): TrezorTransportWriteResult {
+        bleConnections[path]?.takeIf { it.isConnected && it.writeCharacteristic != null }?.let {
+            val staleCount = it.readQueue.size
+            if (staleCount > 0) {
+                it.readQueue.clear()
+                TrezorDebugLog.log("OPEN", "Drained $staleCount stale notifications from read queue")
+            }
+            Logger.info("Reused open BLE device '$path'", context = TAG)
+            return TrezorTransportWriteResult(success = true, error = "")
+        }
+
         val address = path.removePrefix("ble:")
         // Prefer a handle from a recent scan, but fall back to resolving the
         // address directly so we can reconnect to a known device without a
@@ -873,7 +921,7 @@ class TrezorTransport @Inject constructor(
             ?: runCatching { bluetoothAdapter?.getRemoteDevice(address) }.getOrNull()
             ?: return TrezorTransportWriteResult(success = false, error = "Device not found: $path")
 
-        closeBleDevice(path)
+        bleConnections[path]?.takeIf { !it.isConnected }?.let { disconnectBleDevice(path) }
 
         val bondError = waitForBonding(device, address)
         if (bondError != null) return bondError
@@ -891,13 +939,13 @@ class TrezorTransport @Inject constructor(
         bleConnections[path] = connection
 
         if (!connectionLatch.await(CONNECTION_TIMEOUT_MS, TimeUnit.MILLISECONDS)) {
-            closeBleDevice(path)
+            disconnectBleDevice(path)
             return TrezorTransportWriteResult(success = false, error = "Connection timeout")
         }
 
         val updatedConnection = bleConnections[path]
         if (updatedConnection == null || !updatedConnection.isConnected) {
-            closeBleDevice(path)
+            disconnectBleDevice(path)
             return TrezorTransportWriteResult(success = false, error = "Failed to connect")
         }
 
@@ -919,6 +967,19 @@ class TrezorTransport @Inject constructor(
     @Suppress("TooGenericExceptionCaught")
     @SuppressLint("MissingPermission")
     private fun closeBleDevice(path: String): TrezorTransportWriteResult {
+        val connection = bleConnections[path]
+            ?: return TrezorTransportWriteResult(success = true, error = "")
+
+        connection.readQueue.clear()
+        connection.writeLatch?.countDown()
+        connection.connectionLatch?.countDown()
+        Logger.info("Closed BLE device session '$path'", context = TAG)
+        return TrezorTransportWriteResult(success = true, error = "")
+    }
+
+    @Suppress("TooGenericExceptionCaught")
+    @SuppressLint("MissingPermission")
+    private fun disconnectBleDevice(path: String): TrezorTransportWriteResult {
         val connection = bleConnections[path]
             ?: return TrezorTransportWriteResult(success = true, error = "")
 
@@ -1290,6 +1351,6 @@ class TrezorTransport @Inject constructor(
 
     fun closeAllConnections() {
         usbConnections.keys.toList().forEach { path -> closeUsbDevice(path) }
-        bleConnections.keys.toList().forEach { path -> closeBleDevice(path) }
+        bleConnections.keys.toList().forEach { path -> disconnectBleDevice(path) }
     }
 }

@@ -68,42 +68,47 @@ private const val ALPHA_PRESSED = 0.2f
 private val pressHaptic = HapticFeedbackType.VirtualKey
 private val errorHaptic = HapticFeedbackType.Reject
 
+typealias OnKeyPress = (key: String) -> Unit
+
+/** Pad dimming when disabled — white keys render at White64. */
+private const val DISABLED_ALPHA = 0.64f
+
 /**
  * Numeric keyboard.
  */
 @Composable
 fun NumberPad(
-    onPress: (String) -> Unit,
+    onPress: OnKeyPress,
     modifier: Modifier = Modifier,
     type: NumberPadType = NumberPadType.SIMPLE,
     availableHeight: Dp = defaultHeight,
     decimalSeparator: String = KEY_DECIMAL,
     errorKey: String? = null,
+    enabled: Boolean = true,
     includeNavigationBarsPadding: Boolean = false,
     onDeleteLongPress: (() -> Unit)? = null,
 ) {
     val focusRequester = remember { FocusRequester() }
     LaunchedEffect(Unit) {
-        // Composing mid sheet/nav transition can drop the initial request, leaving
-        // hardware keyboard input dead; retry briefly until the focus node takes it.
+        // Composing mid-transition can drop the initial request, leaving input dead;
+        // retry briefly until the focus node takes it.
         repeat(FOCUS_RETRY_COUNT) {
             if (runCatching { focusRequester.requestFocus() }.isSuccess) return@LaunchedEffect
             delay(FOCUS_RETRY_DELAY)
         }
     }
-    val safeAreaModifier = if (includeNavigationBarsPadding) {
-        modifier.navigationBarsPadding()
-    } else {
-        modifier
-    }
+    // Disabled: no-op input and dim the keys to White64.
+    val onPressIfEnabled: OnKeyPress = if (enabled) onPress else { _ -> }
 
     BoxWithConstraints(
-        modifier = safeAreaModifier
+        modifier = modifier
+            .let { if (includeNavigationBarsPadding) it.navigationBarsPadding() else it }
+            .alpha(if (enabled) 1f else DISABLED_ALPHA)
             .focusRequester(focusRequester)
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val mapped = mapHardwareKey(keyEvent.key, type) ?: return@onPreviewKeyEvent false
-                onPress(mapped)
+                onPressIfEnabled(mapped)
                 true
             }
             .focusable()
@@ -123,7 +128,7 @@ fun NumberPad(
             items((1..9).map { "$it" }) { number ->
                 NumberPadKeyButton(
                     text = number,
-                    onPress = onPress,
+                    onPress = onPressIfEnabled,
                     height = buttonHeight,
                     hasError = errorKey == number,
                 )
@@ -138,7 +143,7 @@ fun NumberPad(
 
                     NumberPadType.INTEGER -> NumberPadKeyButton(
                         text = KEY_000,
-                        onPress = onPress,
+                        onPress = onPressIfEnabled,
                         height = buttonHeight,
                         hasError = errorKey == KEY_000,
                         testTag = "N000",
@@ -146,7 +151,7 @@ fun NumberPad(
 
                     NumberPadType.DECIMAL -> NumberPadKeyButton(
                         text = decimalSeparator,
-                        onPress = onPress,
+                        onPress = onPressIfEnabled,
                         height = buttonHeight,
                         key = KEY_DECIMAL,
                         hasError = errorKey == KEY_DECIMAL,
@@ -157,14 +162,14 @@ fun NumberPad(
             item {
                 NumberPadKeyButton(
                     text = "0",
-                    onPress = onPress,
+                    onPress = onPressIfEnabled,
                     height = buttonHeight,
                     hasError = errorKey == "0",
                 )
             }
             item {
                 NumberPadDeleteButton(
-                    onPress = { onPress(KEY_DELETE) },
+                    onPress = { onPressIfEnabled(KEY_DELETE) },
                     onLongPress = onDeleteLongPress,
                     height = buttonHeight,
                     modifier = Modifier.testTag("NRemove"),
@@ -227,7 +232,7 @@ private fun mapHardwareKey(key: Key, type: NumberPadType): String? {
 @Composable
 fun NumberPadKeyButton(
     text: String,
-    onPress: (String) -> Unit,
+    onPress: OnKeyPress,
     height: Dp,
     modifier: Modifier = Modifier,
     key: String = text,

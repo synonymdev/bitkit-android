@@ -19,9 +19,9 @@ import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WalletBalance
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.repositories.ConnectedTrezorDevice
-import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 
@@ -187,7 +187,6 @@ internal object TrezorPreviewData {
     )
 
     val connectedState = TrezorState(
-        isInitialized = true,
         connected = ConnectedTrezorDevice(
             id = "trezor-abc123",
             features = sampleFeatures,
@@ -195,7 +194,6 @@ internal object TrezorPreviewData {
     )
 
     val connectedStateWithResults = TrezorState(
-        isInitialized = true,
         connected = ConnectedTrezorDevice(
             id = "trezor-abc123",
             features = sampleFeatures,

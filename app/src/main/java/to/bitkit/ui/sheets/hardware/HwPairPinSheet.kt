@@ -1,5 +1,8 @@
 package to.bitkit.ui.sheets.hardware
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -17,6 +21,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -26,15 +32,21 @@ import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.KEY_DELETE
 import to.bitkit.ui.components.NumberPad
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
 private const val PAIRING_CODE_LENGTH = 6
+private const val PAIRING_CHAR_COLLAPSED_SCALE_X = 0.15f
+private const val PAIRING_CHAR_COLLAPSED_SCALE_Y = 0.85f
 private val PAIRING_CELL_WIDTH = 32.dp
+private val PAIRING_CELL_SPACING = 8.dp
 
 @Composable
 fun HwPairCodeSheet(
@@ -53,6 +65,7 @@ fun HwPairCodeSheet(
 
     Content(
         code = code,
+        submitting = submitted,
         onKeyPress = { key ->
             when {
                 key == KEY_DELETE -> code = code.dropLast(1)
@@ -72,15 +85,16 @@ fun HwPairCodeSheet(
 @Composable
 private fun Content(
     code: String,
-    onKeyPress: (String) -> Unit,
     modifier: Modifier = Modifier,
+    submitting: Boolean = false,
+    onKeyPress: (String) -> Unit = {},
 ) {
     Column(
         modifier = modifier
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("hw_pair_screen")
+            .testTag("HardwareWalletPairCodeScreen")
     ) {
         SheetTopBar(titleText = stringResource(R.string.hardware__pairing_title))
         Column(
@@ -92,26 +106,69 @@ private fun Content(
         ) {
             BodyM(stringResource(R.string.hardware__pairing_text), color = Colors.White64)
             FillHeight()
-            // Fixed-width cells so digits replace dots without the row shifting.
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                repeat(PAIRING_CODE_LENGTH) { index ->
-                    val digit = code.getOrNull(index)?.toString()
-                    Box(
-                        contentAlignment = Alignment.Center,
-                        modifier = Modifier.width(PAIRING_CELL_WIDTH)
-                    ) {
-                        Display(
-                            text = digit ?: "•",
-                            color = if (digit != null) Colors.White else Colors.White32,
-                        )
-                    }
-                }
-            }
+            PinInput(submitting, code)
             FillHeight()
         }
         NumberPad(
             onPress = onKeyPress,
+            enabled = !submitting,
         )
+        VerticalSpacer(16.dp)
+    }
+}
+
+@Composable
+private fun PinInput(
+    submitting: Boolean,
+    code: String,
+) {
+    val submitProgress by animateFloatAsState(
+        targetValue = if (submitting) 1f else 0f,
+        animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing),
+        label = "pairCodeSubmit",
+    )
+    val cellStepPx = with(LocalDensity.current) {
+        (PAIRING_CELL_WIDTH + PAIRING_CELL_SPACING).toPx()
+    }
+    Box(contentAlignment = Alignment.Center) {
+        // Fixed-width cells so digits replace dots without the row shifting.
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(PAIRING_CELL_SPACING),
+        ) {
+            repeat(PAIRING_CODE_LENGTH) { index ->
+                val digit = code.getOrNull(index)?.toString()
+                val centerOffset = (PAIRING_CODE_LENGTH - 1) / 2f - index
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .width(PAIRING_CELL_WIDTH)
+                        .graphicsLayer {
+                            alpha = 1f - submitProgress
+                            translationX = centerOffset * cellStepPx * submitProgress
+                            scaleX = 1f - (1f - PAIRING_CHAR_COLLAPSED_SCALE_X) * submitProgress
+                            scaleY = 1f - (1f - PAIRING_CHAR_COLLAPSED_SCALE_Y) * submitProgress
+                        }
+                ) {
+                    Display(
+                        text = digit ?: "•",
+                        color = if (digit != null) Colors.White else Colors.White32,
+                    )
+                }
+            }
+        }
+        if (submitting) {
+            GradientCircularProgressIndicator(
+                strokeWidth = 2.dp,
+                modifier = Modifier
+                    .size(32.dp)
+                    .graphicsLayer {
+                        alpha = submitProgress
+                        val spinnerScale = 0.8f + 0.2f * submitProgress
+                        scaleX = spinnerScale
+                        scaleY = spinnerScale
+                    }
+            )
+        }
     }
 }
 
@@ -122,7 +179,21 @@ private fun Preview() {
         BottomSheetPreview {
             Content(
                 code = "123",
-                onKeyPress = {},
+                modifier = Modifier.sheetHeight()
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewSubmitting() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                code = "123",
+                submitting = true,
+                modifier = Modifier.sheetHeight()
             )
         }
     }

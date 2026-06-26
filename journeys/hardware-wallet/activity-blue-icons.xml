@@ -1,9 +1,10 @@
 <journey name="Hardware Wallet Activity Blue Icons">
   <description>
     Verifies hardware wallet on-chain activity merged into the home list and the All
-    Activity screen with blue icon variants, filter behavior, and the activity detail
-    fallback. Requires a paired Bridge emulator whose wallet has at least one on-chain
-    transaction (run connect-home-tile.xml first; fund per README.md if the
+    Activity screen with blue icon variants, filter behavior, and the current watch-only
+    activity detail fallback until Core-backed hardware activity support lands. Requires a
+    paired Bridge emulator whose wallet has at least one on-chain transaction (run
+    connect-home-tile.xml first; fund per README.md if the
     deterministic wallet has no history).
   </description>
   <actions>

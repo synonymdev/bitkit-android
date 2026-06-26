@@ -48,8 +48,8 @@ import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.CoinSelection
 import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
+import to.bitkit.models.KnownDevice
 import to.bitkit.repositories.ConnectedTrezorDevice
-import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorState
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorWalletMode
@@ -102,10 +102,6 @@ private fun TrezorScreenContent(
 
     val permissionsState = rememberMultiplePermissionsState(bluetoothPermissions)
 
-    LaunchedEffect(Unit) {
-        viewModel.initialize()
-    }
-
     val onScanWithPermissions: () -> Unit = {
         if (permissionsState.allPermissionsGranted) {
             viewModel.scan()
@@ -130,7 +126,6 @@ private fun TrezorScreenContent(
         Content(
             trezorState = trezorState,
             uiState = uiState,
-            onInitialize = viewModel::initialize,
             onScan = onScanWithPermissions,
             onConnectNearby = viewModel::connect,
             onConnectKnown = viewModel::connectKnownDevice,
@@ -178,7 +173,6 @@ private fun TrezorScreenContent(
 private fun Content(
     trezorState: TrezorState,
     uiState: TrezorUiState,
-    onInitialize: () -> Unit = {},
     onScan: () -> Unit = {},
     onConnectNearby: (String) -> Unit = {},
     onConnectKnown: (String) -> Unit = {},
@@ -249,7 +243,6 @@ private fun Content(
 
                 ActionButtonsRow(
                     trezorState = trezorState,
-                    onInitialize = onInitialize,
                     onScan = onScan,
                     onDisconnect = onDisconnect,
                     permissionsGranted = permissionsGranted,
@@ -258,7 +251,7 @@ private fun Content(
                 if (trezorState.connected != null) {
                     WalletModeRow(
                         walletMode = walletMode,
-                        passphraseEntryCapable = trezorState.connectedDevice?.passphraseEntryCapable == true,
+                        passphraseEntryCapable = trezorState.connectedDevice()?.passphraseEntryCapable == true,
                         onSetWalletMode = onSetWalletMode,
                     )
                 }
@@ -277,7 +270,7 @@ private fun Content(
                         )
                         VerticalSpacer(8.dp)
                         trezorState.knownDevices.forEach { device ->
-                            val isConnected = trezorState.connectedDeviceId == device.id
+                            val isConnected = trezorState.connectedDeviceId() == device.id
                             KnownDeviceCard(
                                 device = device,
                                 isConnected = isConnected,
@@ -322,11 +315,11 @@ private fun Content(
 
                 // Connected Device Info
                 AnimatedVisibility(
-                    visible = trezorState.connectedDevice != null,
+                    visible = trezorState.connectedDevice() != null,
                     enter = fadeIn() + expandVertically(),
                     exit = fadeOut() + shrinkVertically(),
                 ) {
-                    trezorState.connectedDevice?.let { features ->
+                    trezorState.connectedDevice()?.let { features ->
                         Column {
                             VerticalSpacer(32.dp)
                             Caption13Up(
@@ -413,7 +406,7 @@ private fun Content(
                 VerticalSpacer(32.dp)
                 BalanceLookupSection(
                     uiState = uiState,
-                    isDeviceConnected = trezorState.connectedDevice != null,
+                    isDeviceConnected = trezorState.connectedDevice() != null,
                     onInputChange = onLookupInputChange,
                     onAccountTypeChange = onLookupAccountTypeChange,
                     onLookup = onLookup,
@@ -675,16 +668,12 @@ private fun StatusRow(trezorState: TrezorState) {
                     Caption("Connecting...", color = Colors.White64)
                 }
 
-                trezorState.connectedDevice != null -> {
+                trezorState.connectedDevice() != null -> {
                     StatusBadge(text = "Connected", color = Colors.Green)
                 }
 
-                trezorState.isInitialized -> {
-                    StatusBadge(text = "Ready", color = Colors.Brand)
-                }
-
                 else -> {
-                    StatusBadge(text = "Not initialized", color = Colors.White32)
+                    StatusBadge(text = "Ready", color = Colors.Brand)
                 }
             }
         }
@@ -706,7 +695,6 @@ internal fun StatusBadge(text: String, color: Color) {
 @Composable
 private fun ActionButtonsRow(
     trezorState: TrezorState,
-    onInitialize: () -> Unit,
     onScan: () -> Unit,
     onDisconnect: () -> Unit,
     permissionsGranted: Boolean = true,
@@ -716,14 +704,7 @@ private fun ActionButtonsRow(
         modifier = Modifier.fillMaxWidth()
     ) {
         if (trezorState.isAutoReconnecting) return@Row
-        if (!trezorState.isInitialized) {
-            PrimaryButton(
-                text = "Initialize",
-                onClick = onInitialize,
-                size = ButtonSize.Small,
-                modifier = Modifier.weight(1f)
-            )
-        } else if (trezorState.connectedDevice != null) {
+        if (trezorState.connectedDevice() != null) {
             SecondaryButton(
                 text = "Disconnect",
                 onClick = onDisconnect,
@@ -751,7 +732,7 @@ private fun ActionButtonsRow(
 
 @Preview
 @Composable
-private fun PreviewNotInitialized() {
+private fun PreviewReady() {
     AppThemeSurface {
         Content(
             trezorState = TrezorState(),
@@ -762,10 +743,10 @@ private fun PreviewNotInitialized() {
 
 @Preview
 @Composable
-private fun PreviewInitialized() {
+private fun PreviewScanning() {
     AppThemeSurface {
         Content(
-            trezorState = TrezorState(isInitialized = true),
+            trezorState = TrezorState(isScanning = true),
             uiState = TrezorUiState(),
         )
     }
@@ -777,7 +758,6 @@ private fun PreviewWithDevices() {
     AppThemeSurface {
         Content(
             trezorState = TrezorState(
-                isInitialized = true,
                 knownDevices = listOf(TrezorPreviewData.sampleKnownDevice).toImmutableList(),
                 nearbyDevices = listOf(TrezorPreviewData.sampleNearbyDevice).toImmutableList(),
                 connected = ConnectedTrezorDevice(

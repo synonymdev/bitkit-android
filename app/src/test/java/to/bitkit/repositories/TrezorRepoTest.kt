@@ -2,13 +2,18 @@ package to.bitkit.repositories
 
 import android.content.Context
 import android.content.SharedPreferences
+import com.synonym.bitkitcore.CoinSelection
+import com.synonym.bitkitcore.ComposeOutput
+import com.synonym.bitkitcore.ComposeParams
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
 import com.synonym.bitkitcore.TrezorTransportType
+import com.synonym.bitkitcore.TrezorTransportWriteResult
 import com.synonym.bitkitcore.WalletSelection
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,14 +32,20 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.SettingsData
+import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
+import to.bitkit.models.toCoreNetwork
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
 import to.bitkit.services.TrezorUiHandler
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -65,8 +76,10 @@ class TrezorRepoTest : BaseUnitTest() {
     private val trezorTransport = mock<TrezorTransport>()
     private val trezorUiHandler = mock<TrezorUiHandler>()
     private val hwWalletStore = mock<HwWalletStore>()
+    private val settingsStore = mock<SettingsStore>()
     private val prefs = mock<SharedPreferences>()
     private val prefsEditor = mock<SharedPreferences.Editor>()
+    private val settingsData = MutableStateFlow(SettingsData())
 
     private lateinit var sut: TrezorRepo
 
@@ -81,8 +94,12 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorTransport.externalDisconnect).thenReturn(MutableSharedFlow())
         whenever(trezorTransport.transportRestored).thenReturn(MutableSharedFlow())
         whenever(trezorTransport.hasUsbPermission(any())).thenReturn(true)
+        whenever(trezorTransport.disconnectDevice(any())).thenReturn(
+            TrezorTransportWriteResult(success = true, error = "")
+        )
         whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(false))
         whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Standard)
+        whenever(settingsStore.data).thenReturn(settingsData)
         whenever(context.filesDir).thenReturn(tempFolder.root)
         whenever { hwWalletStore.loadKnownDevices() }.thenReturn(emptyList())
     }
@@ -93,6 +110,7 @@ class TrezorRepoTest : BaseUnitTest() {
         trezorTransport = trezorTransport,
         trezorUiHandler = trezorUiHandler,
         hwWalletStore = hwWalletStore,
+        settingsStore = settingsStore,
         clock = Clock.System,
         ioDispatcher = testDispatcher,
     )
@@ -146,6 +164,8 @@ class TrezorRepoTest : BaseUnitTest() {
         model: String? = DEVICE_MODEL,
         transportType: TransportType = TransportType.USB,
         xpubs: Map<String, String> = emptyMap(),
+        customLabel: String? = null,
+        walletId: String = "wallet-id",
     ) = KnownDevice(
         id = id,
         name = name,
@@ -155,19 +175,52 @@ class TrezorRepoTest : BaseUnitTest() {
         model = model,
         lastConnectedAt = 123L,
         xpubs = xpubs,
+        customLabel = customLabel,
+        walletId = walletId,
     )
 
     // region initialize
 
     @Test
-    fun `initialize should update state to initialized on success`() = test {
+    fun `initialize should load known devices on success`() = test {
+        val knownDevice = mockKnownDevice()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         sut = createSut()
 
         val result = sut.initialize()
 
         assertTrue(result.isSuccess)
-        assertTrue(sut.state.value.isInitialized)
+        assertEquals(listOf(knownDevice), sut.state.value.knownDevices)
         assertNull(sut.state.value.error)
+    }
+
+    @Test
+    fun `initialize assigns wallet ids to restored devices missing them`() = test {
+        val knownDevice = mockKnownDevice(walletId = "")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        sut = createSut()
+
+        val result = sut.initialize()
+
+        assertTrue(result.isSuccess)
+        val savedCaptor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(savedCaptor.capture())
+        val saved = savedCaptor.firstValue.single()
+        assertEquals(knownDevice.id, saved.id)
+        assertNotNull(UUID.fromString(saved.walletId))
+        assertEquals(listOf(saved), sut.state.value.knownDevices)
+    }
+
+    @Test
+    fun `initialize should reuse completed setup`() = test {
+        sut = createSut()
+
+        val firstResult = sut.initialize()
+        val secondResult = sut.initialize()
+
+        assertTrue(firstResult.isSuccess)
+        assertTrue(secondResult.isSuccess)
+        verify(trezorService, times(1)).initialize(anyOrNull())
     }
 
     @Test
@@ -178,7 +231,6 @@ class TrezorRepoTest : BaseUnitTest() {
         val result = sut.initialize()
 
         assertTrue(result.isFailure)
-        assertFalse(sut.state.value.isInitialized)
         assertEquals("init failed", sut.state.value.error)
     }
 
@@ -198,6 +250,32 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(devices, result.getOrNull())
         assertEquals(devices, sut.state.value.nearbyDevices)
         assertFalse(sut.state.value.isScanning)
+    }
+
+    @Test
+    fun `scan should initialize Trezor before scanning`() = test {
+        val devices = listOf(mockDeviceInfo())
+        whenever(trezorService.scan()).thenReturn(devices)
+        sut = createSut()
+
+        val result = sut.scan()
+
+        assertTrue(result.isSuccess)
+        verify(trezorService).initialize(anyOrNull())
+        verify(trezorService).scan()
+    }
+
+    @Test
+    fun `scan should pass bluetooth flag to service`() = test {
+        val devices = listOf(mockDeviceInfo())
+        whenever(trezorService.scan(includeBluetooth = false)).thenReturn(devices)
+        sut = createSut()
+
+        val result = sut.scan(includeBluetooth = false)
+
+        assertTrue(result.isSuccess)
+        assertEquals(devices, result.getOrNull())
+        verify(trezorService).scan(includeBluetooth = false)
     }
 
     @Test
@@ -476,8 +554,8 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(features, result.getOrNull())
-        assertEquals(features, sut.state.value.connectedDevice)
-        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+        assertEquals(features, sut.state.value.connectedDevice())
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId())
         assertFalse(sut.state.value.isConnecting)
     }
 
@@ -500,6 +578,48 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(TransportType.USB, saved.transportType)
         assertEquals("Savings", saved.label)
         assertEquals("Safe 5", saved.model)
+        assertNotNull(UUID.fromString(saved.walletId))
+    }
+
+    @Test
+    fun `connect reuses wallet id from same xpub wallet`() = test {
+        val walletId = "hardware-wallet-id"
+        val nativeSegwitPath = "m/84'/1'/0'"
+        val previousDevice = mockKnownDevice(
+            id = "ble-device",
+            path = "ble:AA:BB",
+            transportType = TransportType.BLUETOOTH,
+            xpubs = mapOf("nativeSegwit" to "same-native-xpub"),
+            walletId = walletId,
+        )
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(previousDevice))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        ).thenAnswer {
+            val path = it.getArgument<String>(0)
+            if (path == nativeSegwitPath) {
+                mockPublicKeyResponse(xpub = "same-native-xpub", path = nativeSegwitPath)
+            } else {
+                throw AppError("xpub failed")
+            }
+        }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertEquals(setOf(walletId), captor.firstValue.map { it.walletId }.toSet())
     }
 
     @Test
@@ -546,6 +666,26 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `connect preserves stored custom label over stale state label`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices())
+            .thenReturn(listOf(mockKnownDevice()))
+            .thenReturn(listOf(mockKnownDevice(customLabel = "Cold Storage")))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertEquals("Cold Storage", captor.lastValue.single().customLabel)
+    }
+
+    @Test
     fun `connect should retry once for retryable THP errors`() = test {
         val features = mockFeatures()
         val device = mockDeviceInfo()
@@ -561,6 +701,21 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals(features, result.getOrNull())
         verify(trezorService, times(2)).connect(eq(DEVICE_ID), any())
+    }
+
+    @Test
+    fun `connect should disconnect stale session after retryable THP failures`() = test {
+        whenever(trezorService.connect(eq(DEVICE_ID), any()))
+            .thenThrow(RuntimeException("thp timeout"))
+            .thenThrow(RuntimeException("session timeout"))
+        sut = createSut()
+
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertNull(sut.state.value.connected)
+        verify(trezorService, times(2)).connect(eq(DEVICE_ID), any())
+        verify(trezorService).disconnect()
     }
 
     @Test
@@ -600,13 +755,13 @@ class TrezorRepoTest : BaseUnitTest() {
 
         sut.scan()
         sut.connect(DEVICE_ID)
-        assertEquals(features, sut.state.value.connectedDevice)
+        assertEquals(features, sut.state.value.connectedDevice())
 
         val result = sut.disconnect()
 
         assertTrue(result.isSuccess)
-        assertNull(sut.state.value.connectedDevice)
-        assertNull(sut.state.value.connectedDeviceId)
+        assertNull(sut.state.value.connectedDevice())
+        assertNull(sut.state.value.connectedDeviceId())
         assertNull(sut.state.value.lastAddress)
         assertNull(sut.state.value.lastPublicKey)
     }
@@ -646,8 +801,8 @@ class TrezorRepoTest : BaseUnitTest() {
         val result = sut.disconnect()
 
         assertTrue(result.isFailure)
-        assertNull(sut.state.value.connectedDevice)
-        assertNull(sut.state.value.connectedDeviceId)
+        assertNull(sut.state.value.connectedDevice())
+        assertNull(sut.state.value.connectedDeviceId())
         assertNull(sut.state.value.lastAddress)
         assertNull(sut.state.value.lastPublicKey)
         assertEquals("disconnect failed", sut.state.value.error)
@@ -668,10 +823,44 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(sut.state.value.knownDevices.isEmpty())
         assertTrue(sut.state.value.nearbyDevices.isEmpty())
-        assertNull(sut.state.value.connectedDevice)
+        assertNull(sut.state.value.connectedDevice())
         verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
         verify(trezorService).clearCredentials(DEVICE_ID)
         verify(hwWalletStore).reset()
+    }
+
+    @Test
+    fun `resetState disconnects connected transport session`() = test {
+        val knownDevice = mockKnownDevice()
+        val device = mockDeviceInfo()
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        sut.resetState()
+
+        verify(trezorService).disconnect()
+        verify(trezorTransport).disconnectDevice(DEVICE_PATH)
+        assertNull(sut.state.value.connectedDevice())
+    }
+
+    @Test
+    fun `resetState clears initialized setup gate`() = test {
+        val devices = listOf(mockDeviceInfo())
+        whenever(trezorService.scan()).thenReturn(devices)
+        sut = createSut()
+
+        sut.initialize()
+        sut.resetState()
+        val result = sut.scan()
+
+        assertTrue(result.isSuccess)
+        verify(trezorService, times(2)).initialize(anyOrNull())
     }
 
     // endregion
@@ -794,6 +983,34 @@ class TrezorRepoTest : BaseUnitTest() {
 
     // endregion
 
+    // region composeTransaction
+
+    @Test
+    fun `composeTransaction should use configured electrum server`() = test {
+        val electrumServer = "ssl://custom.example:50002"
+        settingsData.value = SettingsData(electrumServer = electrumServer)
+        whenever(trezorService.isConnected()).thenReturn(true)
+        whenever(trezorService.getDeviceFingerprint()).thenReturn("fingerprint")
+        whenever(trezorService.composeTransaction(any())).thenReturn(emptyList())
+        sut = createSut()
+
+        val result = sut.composeTransaction(
+            extendedKey = "vpub",
+            outputs = listOf(ComposeOutput.Payment(address = TEST_ADDRESS, amountSats = 100uL)),
+            feeRates = listOf(1f),
+            network = Env.network.toCoreNetwork(),
+            accountType = null,
+            coinSelection = CoinSelection.BRANCH_AND_BOUND,
+        )
+
+        val params = argumentCaptor<ComposeParams>()
+        assertTrue(result.isSuccess)
+        verify(trezorService).composeTransaction(params.capture())
+        assertEquals(electrumServer, params.firstValue.wallet.electrumUrl)
+    }
+
+    // endregion
+
     // region hasKnownDevices
 
     @Test
@@ -801,6 +1018,15 @@ class TrezorRepoTest : BaseUnitTest() {
         sut = createSut()
 
         assertFalse(sut.hasKnownDevices())
+    }
+
+    @Test
+    fun `hasKnownDevice should match stored device path`() = test {
+        val knownDevice = mockKnownDevice(path = "/dev/bus/usb/001/002")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        sut = createSut()
+
+        assertTrue(sut.hasKnownDevice("/dev/bus/usb/001/002"))
     }
 
     // endregion
@@ -833,7 +1059,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(features, result.getOrNull())
-        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId())
         assertFalse(sut.state.value.isAutoReconnecting)
     }
 
@@ -856,7 +1082,85 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(features, result.getOrNull())
-        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId())
+    }
+
+    @Test
+    fun `connectKnownDevice should close stale session when forced`() = test {
+        val knownDevice = mockKnownDevice()
+        val device = mockDeviceInfo()
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.connectKnownDevice(DEVICE_ID, forceSession = true)
+
+        assertTrue(result.isSuccess)
+        verify(trezorService).disconnect()
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId())
+    }
+
+    @Test
+    fun `connectKnownDevice should use stored bluetooth device when scan misses active connection`() = test {
+        val bleDeviceId = "ble:57:21:A7:F9:DD:AD"
+        val knownDevice = mockKnownDevice(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TransportType.BLUETOOTH,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.scan()).thenReturn(emptyList())
+        whenever(trezorService.connect(eq(bleDeviceId), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.connectKnownDevice(bleDeviceId)
+
+        assertTrue(result.isSuccess)
+        assertEquals(features, result.getOrNull())
+        assertEquals(bleDeviceId, sut.state.value.connectedDeviceId())
+        verify(trezorService).connect(eq(bleDeviceId), any())
+    }
+
+    @Test
+    fun `connectKnownDevice should rethrow cancellation and clear connecting state`() = test {
+        val cancellation = CancellationException("cancelled")
+        whenever(trezorService.scan()).thenAnswer { throw cancellation }
+        sut = createSut()
+
+        sut.initialize()
+        val thrown = assertFailsWith<CancellationException> {
+            sut.connectKnownDevice(DEVICE_ID)
+        }
+
+        assertEquals(cancellation.message, thrown.message)
+        assertFalse(sut.state.value.isConnecting)
+        assertNull(sut.state.value.error)
+    }
+
+    @Test
+    fun `ensureConnected returns current selected device without reconnecting`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        whenever(trezorService.isConnected()).thenReturn(true)
+
+        val result = sut.ensureConnected(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        assertEquals(features, result.getOrNull())
+        verify(trezorService, times(1)).scan()
+        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
+        verify(trezorService, never()).disconnect()
     }
 
     // endregion
@@ -922,7 +1226,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(addressResponse, result.getOrNull())
-        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId)
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId())
         verify(trezorService).scan()
         verify(trezorService).connect(eq(DEVICE_ID), any())
     }
@@ -950,8 +1254,8 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertTrue(sut.state.value.knownDevices.isEmpty())
-        assertNull(sut.state.value.connectedDevice)
-        assertNull(sut.state.value.connectedDeviceId)
+        assertNull(sut.state.value.connectedDevice())
+        assertNull(sut.state.value.connectedDeviceId())
         assertNull(sut.state.value.error)
         verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
         verify(trezorService).clearCredentials(DEVICE_ID)
@@ -977,8 +1281,8 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         assertTrue(sut.state.value.knownDevices.isEmpty())
-        assertNull(sut.state.value.connectedDevice)
-        assertNull(sut.state.value.connectedDeviceId)
+        assertNull(sut.state.value.connectedDevice())
+        assertNull(sut.state.value.connectedDeviceId())
         assertEquals("clear failed", result.exceptionOrNull()?.message)
         assertEquals("clear failed", sut.state.value.error)
         verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
@@ -1011,14 +1315,13 @@ class TrezorRepoTest : BaseUnitTest() {
         sut = createSut()
 
         val state = sut.state.value
-        assertFalse(state.isInitialized)
         assertFalse(state.isScanning)
         assertFalse(state.isConnecting)
         assertFalse(state.isAutoReconnecting)
         assertTrue(state.knownDevices.isEmpty())
         assertTrue(state.nearbyDevices.isEmpty())
-        assertNull(state.connectedDevice)
-        assertNull(state.connectedDeviceId)
+        assertNull(state.connectedDevice())
+        assertNull(state.connectedDeviceId())
         assertNull(state.lastAddress)
         assertNull(state.lastPublicKey)
         assertNull(state.error)

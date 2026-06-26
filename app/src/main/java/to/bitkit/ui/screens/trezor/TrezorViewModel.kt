@@ -31,10 +31,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.models.KnownDevice
 import to.bitkit.models.Toast
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toTrezorCoinType
-import to.bitkit.repositories.KnownDevice
 import to.bitkit.repositories.TrezorRepo
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorWalletMode
@@ -138,16 +138,6 @@ class TrezorViewModel @Inject constructor(
                 .onSuccess {
                     val label = it.label ?: it.model ?: "Trezor"
                     ToastEventBus.send(type = Toast.ToastType.INFO, title = "Reconnected to $label")
-                }
-                .onFailure { ToastEventBus.send(it) }
-        }
-    }
-
-    fun initialize() {
-        viewModelScope.launch(bgDispatcher) {
-            trezorRepo.initialize()
-                .onSuccess {
-                    ToastEventBus.send(type = Toast.ToastType.INFO, title = "Trezor initialized")
                 }
                 .onFailure { ToastEventBus.send(it) }
         }
@@ -453,7 +443,7 @@ class TrezorViewModel @Inject constructor(
             val signedStep = state.sendStep as? SendStep.Signed ?: return@launch
             val rawTx = signedStep.signedTx.serializedTx
             _uiState.update { it.copy(send = it.send.copy(isBroadcasting = true)) }
-            trezorRepo.broadcastRawTx(serializedTx = rawTx, network = state.selectedNetwork)
+            trezorRepo.broadcastRawTx(serializedTx = rawTx)
                 .onSuccess { txid ->
                     TrezorDebugLog.log("BROADCAST", "SUCCESS txid=$txid")
                     _uiState.update {

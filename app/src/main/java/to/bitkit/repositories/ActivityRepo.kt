@@ -213,6 +213,26 @@ class ActivityRepo @Inject constructor(
         notifyActivitiesChanged()
     }
 
+    suspend fun syncHardwareOnchainActivity(activity: OnchainActivity): Result<Unit> = withContext(bgDispatcher) {
+        runCatching {
+            val existing = coreService.activity.getOnchainActivityByTxId(activity.txId) ?: return@runCatching
+            val confirmTimestamp = existing.confirmTimestamp ?: activity.confirmTimestamp ?: activity.timestamp
+                .takeIf { activity.confirmed }
+            val updated = existing.copy(
+                confirmed = existing.confirmed || activity.confirmed,
+                confirmTimestamp = confirmTimestamp,
+                doesExist = if (activity.confirmed) true else existing.doesExist,
+                fee = if (existing.fee == 0uL && activity.fee > 0uL) activity.fee else existing.fee,
+                updatedAt = maxOf(existing.updatedAt ?: 0uL, activity.updatedAt ?: activity.timestamp),
+            )
+            if (updated == existing) return@runCatching
+            coreService.activity.update(existing.id, Activity.Onchain(updated))
+            notifyActivitiesChanged()
+        }.onFailure {
+            Logger.error("Failed to sync hardware activity '${activity.txId}'", it, context = TAG)
+        }
+    }
+
     suspend fun handleOnchainTransactionReplaced(txid: String, conflicts: List<String>) {
         coreService.activity.handleOnchainTransactionReplaced(txid, conflicts)
         notifyActivitiesChanged()
