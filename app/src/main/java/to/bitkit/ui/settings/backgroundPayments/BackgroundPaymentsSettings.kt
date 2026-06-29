@@ -22,8 +22,6 @@ import to.bitkit.ui.components.NotificationPreview
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.components.settings.SettingsButtonRow
-import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.scaffold.AppTopBar
@@ -55,7 +53,6 @@ fun BackgroundPaymentsSettings(
         keepActive = keepActive,
         onBack = onBack,
         onSystemSettingsClick = context::openNotificationSettings,
-        toggleNotificationDetails = settingsViewModel::toggleNotificationDetails,
         onKeepActiveClick = { settingsViewModel.setKeepBitkitActiveInBackground(!keepActive) },
     )
 }
@@ -67,7 +64,6 @@ private fun Content(
     keepActive: Boolean,
     onBack: () -> Unit,
     onSystemSettingsClick: () -> Unit,
-    toggleNotificationDetails: () -> Unit,
     onKeepActiveClick: () -> Unit,
 ) {
     Column(
@@ -123,27 +119,6 @@ private fun Content(
                 modifier = Modifier.padding(vertical = 16.dp),
             )
 
-            NotificationPreview(
-                enabled = hasPermission,
-                title = stringResource(R.string.notification__received__title),
-                description = "₿ 21 000",
-                showDetails = showDetails,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            VerticalSpacer(32.dp)
-
-            Text13Up(
-                text = stringResource(R.string.settings__bg__privacy_header),
-                color = Colors.White64
-            )
-
-            SettingsButtonRow(
-                stringResource(R.string.settings__bg__include_amount),
-                value = SettingsButtonValue.BooleanValue(showDetails),
-                onClick = toggleNotificationDetails,
-            )
-
             VerticalSpacer(32.dp)
 
             Text13Up(
@@ -157,6 +132,23 @@ private fun Content(
                 stringResource(R.string.settings__bg__customize),
                 icon = { Image(painter = painterResource(R.drawable.ic_bell), contentDescription = null) },
                 onClick = onSystemSettingsClick,
+            )
+
+            VerticalSpacer(32.dp)
+
+            Text13Up(
+                text = stringResource(R.string.common__preview),
+                color = Colors.White64
+            )
+
+            VerticalSpacer(16.dp)
+
+            NotificationPreview(
+                enabled = hasPermission,
+                title = stringResource(R.string.notification__received__title),
+                description = "₿ 21 000 ($21.00)",
+                showDetails = showDetails,
+                modifier = Modifier.fillMaxWidth()
             )
         }
     }
@@ -172,7 +164,6 @@ private fun Preview1() {
             keepActive = true,
             onBack = {},
             onSystemSettingsClick = {},
-            toggleNotificationDetails = {},
             onKeepActiveClick = {},
         )
     }
@@ -188,7 +179,6 @@ private fun Preview2() {
             keepActive = false,
             onBack = {},
             onSystemSettingsClick = {},
-            toggleNotificationDetails = {},
             onKeepActiveClick = {},
         )
     }
