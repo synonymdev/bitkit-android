@@ -64,15 +64,6 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    val showNotificationDetails = settingsStore.data.map { it.showNotificationDetails }
-        .asStateFlow(initialValue = false)
-
-    fun toggleNotificationDetails() {
-        viewModelScope.launch {
-            settingsStore.update { it.copy(showNotificationDetails = !it.showNotificationDetails) }
-        }
-    }
-
     val keepBitkitActiveInBackground = settingsStore.data.map { it.keepBitkitActiveInBackground }
         .asStateFlow(initialValue = false)
 

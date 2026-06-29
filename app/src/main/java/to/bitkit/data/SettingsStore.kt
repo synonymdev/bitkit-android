@@ -142,7 +142,6 @@ data class SettingsData(
     val enableSendAmountWarning: Boolean = false,
     val backupVerified: Boolean = false,
     val notificationsGranted: Boolean = false,
-    val showNotificationDetails: Boolean = true,
     val keepBitkitActiveInBackground: Boolean = false,
     val dismissedSuggestions: List<String> = emptyList(),
     val balanceWarningIgnoredMillis: Long = 0,

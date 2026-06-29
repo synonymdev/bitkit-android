@@ -1,6 +1,5 @@
 package to.bitkit.ui.components
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -18,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
@@ -34,7 +32,6 @@ fun NotificationPreview(
     enabled: Boolean,
     title: String,
     description: String,
-    showDetails: Boolean,
     modifier: Modifier = Modifier,
     time: String = "5m",
 ) {
@@ -66,13 +63,7 @@ fun NotificationPreview(
                     Caption(text = time, color = Colors.White64)
                 }
 
-                val bodyText = when (showDetails) {
-                    true -> description
-                    else -> stringResource(R.string.notification__received__body_hidden)
-                }
-                AnimatedContent(targetState = bodyText) { text ->
-                    BodyS(text = text, color = Colors.White80)
-                }
+                BodyS(text = description, color = Colors.White80)
             }
 
             Icon(
@@ -110,14 +101,12 @@ private fun Preview() {
                 enabled = true,
                 title = "Payment Received",
                 description = "₿ 21 000 ($21.00)",
-                showDetails = true,
                 modifier = Modifier.fillMaxWidth()
             )
             NotificationPreview(
                 enabled = false,
                 title = "Payment Received",
                 description = "₿ 21 000 ($21.00)",
-                showDetails = false,
                 modifier = Modifier.fillMaxWidth()
             )
         }

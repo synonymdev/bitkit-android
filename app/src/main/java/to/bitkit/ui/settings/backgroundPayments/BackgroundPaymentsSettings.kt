@@ -39,7 +39,6 @@ fun BackgroundPaymentsSettings(
 ) {
     val context = LocalContext.current
     val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
-    val showNotificationDetails by settingsViewModel.showNotificationDetails.collectAsStateWithLifecycle()
     val keepActive by settingsViewModel.keepBitkitActiveInBackground.collectAsStateWithLifecycle()
 
     RequestNotificationPermissions(
@@ -49,7 +48,6 @@ fun BackgroundPaymentsSettings(
 
     Content(
         hasPermission = notificationsGranted,
-        showDetails = showNotificationDetails,
         keepActive = keepActive,
         onBack = onBack,
         onSystemSettingsClick = context::openNotificationSettings,
@@ -60,7 +58,6 @@ fun BackgroundPaymentsSettings(
 @Composable
 private fun Content(
     hasPermission: Boolean,
-    showDetails: Boolean,
     keepActive: Boolean,
     onBack: () -> Unit,
     onSystemSettingsClick: () -> Unit,
@@ -147,7 +144,6 @@ private fun Content(
                 enabled = hasPermission,
                 title = stringResource(R.string.notification__received__title),
                 description = "₿ 21 000 ($21.00)",
-                showDetails = showDetails,
                 modifier = Modifier.fillMaxWidth()
             )
         }
@@ -160,7 +156,6 @@ private fun Preview1() {
     AppThemeSurface {
         Content(
             hasPermission = true,
-            showDetails = true,
             keepActive = true,
             onBack = {},
             onSystemSettingsClick = {},
@@ -175,7 +170,6 @@ private fun Preview2() {
     AppThemeSurface {
         Content(
             hasPermission = false,
-            showDetails = false,
             keepActive = false,
             onBack = {},
             onSystemSettingsClick = {},

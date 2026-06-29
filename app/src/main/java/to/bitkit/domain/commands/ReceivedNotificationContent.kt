@@ -28,11 +28,7 @@ class ReceivedNotificationContent @Inject constructor(
     suspend fun build(sats: Long): NotificationDetails {
         val settings = settingsStore.data.first()
         val title = context.getString(R.string.notification__received__title)
-        val body = if (settings.showNotificationDetails) {
-            formatAmount(sats, settings)
-        } else {
-            context.getString(R.string.notification__received__body_hidden)
-        }
+        val body = formatAmount(sats, settings)
         return NotificationDetails(title, body)
     }
 
