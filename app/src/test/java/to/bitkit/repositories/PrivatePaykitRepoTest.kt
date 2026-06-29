@@ -430,7 +430,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `disableSharingAndPruneUnsavedContactState defers cleanup when endpoint removal fails`() = test {
+    fun `disableSharingAndPruneUnsavedContactState fails and defers cleanup when endpoint removal fails`() = test {
         restoreContactBackup()
         rememberSavedContact()
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(SECRET_KEY_HEX)
@@ -440,7 +440,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         val result = sut.disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
 
-        assertTrue(result.isSuccess)
+        assertTrue(result.isFailure)
         assertTrue(cacheData.value.cleanupPending)
         assertNotNull(sut.backupSnapshot().getOrThrow()?.get(CONTACT_KEY))
     }
@@ -573,6 +573,22 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `prepareSavedContacts fails immediate publication when private key is unavailable`() = test {
+        startForegroundWithSharingEnabled()
+        whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+
+        val result = sut.prepareSavedContacts(
+            publicKeys = listOf(CONTACT_KEY),
+            requireImmediatePublication = true,
+        )
+
+        assertEquals(PrivatePaykitError.PrivateUnavailable, result.exceptionOrNull())
+        verify(pubkyService, never()).restoreEncryptedLink(any(), any())
+        verify(pubkyService, never()).setPrivatePayments(any(), any())
+    }
+
+    @Test
     fun `enableSharingAndPrepareSavedContacts restores pending cleanup marker when prepare fails`() = test {
         startForegroundWithSharingEnabled()
         cacheData.value = PrivatePaykitCacheData(cleanupPending = true)
@@ -691,7 +707,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `prepareSavedContacts defers fresh link when immediate publication is requested`() = test {
+    fun `prepareSavedContacts fails fresh link when immediate publication is requested`() = test {
         startForegroundWithSharingEnabled()
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(SECRET_KEY_HEX)
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
@@ -702,7 +718,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             requireImmediatePublication = true,
         )
 
-        assertTrue(result.isSuccess)
+        assertEquals(PrivatePaykitError.PrivateUnavailable, result.exceptionOrNull())
         verify(pubkyService, never()).setPrivatePayments(any(), any())
     }
 

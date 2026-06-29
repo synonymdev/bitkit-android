@@ -2,7 +2,10 @@ package to.bitkit.ui
 
 import android.app.NotificationManager
 import android.content.Intent
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
 import android.os.Bundle
+import android.os.Looper
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
@@ -15,6 +18,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
+import androidx.core.content.IntentCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -63,6 +67,12 @@ import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
+private const val TREZOR_WEBUSB_VENDOR_ID = 0x1209
+private const val TREZOR_WEBUSB_FIRMWARE_PRODUCT_ID = 0x53C1
+private const val TREZOR_WEBUSB_BOOTLOADER_PRODUCT_ID = 0x53C0
+private const val TREZOR_LEGACY_VENDOR_ID = 0x534C
+private const val TREZOR_LEGACY_PRODUCT_ID = 0x0001
+
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
     private companion object {
@@ -93,7 +103,7 @@ class MainActivity : FragmentActivity() {
         val consumedLaunchIntent = savedInstanceState?.getString(KEY_CONSUMED_LAUNCH_INTENT)
         val currentLaunchIntent = intent.launchKey()
         if (currentLaunchIntent == null || currentLaunchIntent != consumedLaunchIntent) {
-            appViewModel.handleDeeplinkIntent(intent)
+            handleLaunchIntent(intent)
         }
 
         installSplashScreen()
@@ -207,10 +217,44 @@ class MainActivity : FragmentActivity() {
     }
 
     override fun onNewIntent(intent: Intent) {
+        if (!isMainThread()) {
+            runOnUiThread { onNewIntent(intent) }
+            return
+        }
+
         super.onNewIntent(intent)
         setIntent(intent)
+        handleLaunchIntent(intent)
+    }
+
+    private fun handleLaunchIntent(intent: Intent) {
+        if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
+            handleUsbAttachIntent(intent)
+            return
+        }
+
         appViewModel.handleDeeplinkIntent(intent)
     }
+
+    /**
+     * The OS delivers the USB attach event as an activity intent (via the app picker),
+     * not as a broadcast, so it is forwarded from here to trigger the silent reconnect.
+     */
+    private fun handleUsbAttachIntent(intent: Intent) {
+        val device = intent.usbDevice()
+        if (device == null) {
+            appViewModel.onUsbDeviceAttached()
+            return
+        }
+        if (!device.isSupportedTrezorDevice()) return
+
+        appViewModel.onUsbDeviceAttached(
+            deviceId = device.deviceName.takeUnless { device.isTrezorBootloader() },
+            deviceModel = getString(R.string.hardware__device_model_trezor),
+        )
+    }
+
+    private fun isMainThread() = Looper.myLooper() == Looper.getMainLooper()
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
@@ -249,9 +293,22 @@ internal fun Intent?.launchKey(): String? {
         Intent.ACTION_VIEW -> data?.toString()?.let {
             SamRockSetupRequest.sanitizedLaunchKey(it) ?: it
         }
+        UsbManager.ACTION_USB_DEVICE_ATTACHED -> listOfNotNull(action, usbDevice()?.deviceName).joinToString(":")
         else -> null
     }
 }
+
+private fun Intent.usbDevice(): UsbDevice? =
+    IntentCompat.getParcelableExtra(this, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
+
+private fun UsbDevice.isSupportedTrezorDevice() = isTrezorFirmwareDevice() || isTrezorBootloader()
+
+private fun UsbDevice.isTrezorFirmwareDevice() =
+    (vendorId == TREZOR_WEBUSB_VENDOR_ID && productId == TREZOR_WEBUSB_FIRMWARE_PRODUCT_ID) ||
+        (vendorId == TREZOR_LEGACY_VENDOR_ID && productId == TREZOR_LEGACY_PRODUCT_ID)
+
+private fun UsbDevice.isTrezorBootloader() =
+    vendorId == TREZOR_WEBUSB_VENDOR_ID && productId == TREZOR_WEBUSB_BOOTLOADER_PRODUCT_ID
 
 @Composable
 private fun OnboardingNav(

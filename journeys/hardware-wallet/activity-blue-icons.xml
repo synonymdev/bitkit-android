@@ -1,0 +1,39 @@
+<journey name="Hardware Wallet Activity Blue Icons">
+  <description>
+    Verifies hardware wallet on-chain activity merged into the home list and the All
+    Activity screen with blue icon variants, filter behavior, and the current watch-only
+    activity detail fallback until Core-backed hardware activity support lands. Requires a
+    paired Bridge emulator whose wallet has at least one on-chain transaction (run
+    connect-home-tile.xml first; fund per README.md if the
+    deterministic wallet has no history).
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Verify the recent activity list contains at least one item whose circular icon is blue instead of orange
+    </action>
+    <action>
+      Tap the first activity item with a blue icon
+    </action>
+    <action>
+      Verify an activity detail screen opens showing a blue icon and an on-chain amount
+    </action>
+    <action>
+      Navigate back, then tap "Show All" beneath the activity list
+    </action>
+    <action>
+      Verify the All Activity list also contains items with blue icons
+    </action>
+    <action>
+      Tap the "Sent" tab and verify no blue-icon item with a received (downward) arrow is listed
+    </action>
+    <action>
+      Tap the "Received" tab and verify blue-icon items with received arrows are listed, assuming the hardware wallet has incoming transactions
+    </action>
+    <action>
+      Apply any tag filter if a tag exists, and verify blue-icon hardware items disappear from the filtered list; skip this step if no tags exist
+    </action>
+  </actions>
+</journey>

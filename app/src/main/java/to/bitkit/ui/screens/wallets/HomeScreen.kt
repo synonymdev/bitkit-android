@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -99,7 +100,9 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.materials.ExperimentalHazeMaterialsApi
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import to.bitkit.R
@@ -113,12 +116,15 @@ import to.bitkit.env.Env
 import to.bitkit.models.ActivityBannerType
 import to.bitkit.models.BalanceState
 import to.bitkit.models.BannerItem
+import to.bitkit.models.HwWallet
 import to.bitkit.models.MoneyType
 import to.bitkit.models.Suggestion
+import to.bitkit.models.TransportType
 import to.bitkit.models.WidgetSize
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.effectiveSize
+import to.bitkit.models.toBalance
 import to.bitkit.models.widget.ArticleModel
 import to.bitkit.models.widget.BlockModel
 import to.bitkit.ui.LocalBalances
@@ -128,8 +134,10 @@ import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.Headline24
 import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.HwWalletConnectionIcon
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.StatusBarSpacer
@@ -168,6 +176,7 @@ import to.bitkit.ui.screens.widgets.headlines.HeadlineCard
 import to.bitkit.ui.screens.widgets.headlines.HeadlineCardSmall
 import to.bitkit.ui.screens.widgets.price.PriceCard
 import to.bitkit.ui.screens.widgets.price.PriceCardSmall
+import to.bitkit.ui.screens.widgets.suggestions.SuggestionsPreviewGrid
 import to.bitkit.ui.screens.widgets.weather.WeatherCard
 import to.bitkit.ui.screens.widgets.weather.WeatherCardSmall
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -225,6 +234,7 @@ fun HomeScreen(
     val bgPaymentsIntroSeen: Boolean by settingsViewModel.bgPaymentsIntroSeen.collectAsStateWithLifecycle()
     val quickPayIntroSeen by settingsViewModel.quickPayIntroSeen.collectAsStateWithLifecycle()
     val latestActivities by activityListViewModel.latestActivities.collectAsStateWithLifecycle()
+    val hardwareIds by activityListViewModel.hardwareIds.collectAsStateWithLifecycle()
 
     val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
 
@@ -232,7 +242,7 @@ fun HomeScreen(
     DisposableEffect(lifecycle) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> appViewModel.checkTimedSheets()
+                Lifecycle.Event.ON_RESUME -> appViewModel.onHomeResumed()
                 Lifecycle.Event.ON_PAUSE -> appViewModel.onLeftHome()
                 else -> Unit
             }
@@ -264,6 +274,7 @@ fun HomeScreen(
         showProfileButton = isPaykitEnabled,
         onClickProfile = navigateToProfile,
         latestActivities = latestActivities,
+        hardwareIds = hardwareIds,
         onRefresh = {
             activityListViewModel.resync()
             walletViewModel.onPullToRefresh()
@@ -276,6 +287,10 @@ fun HomeScreen(
             when (suggestion) {
                 Suggestion.BUY -> {
                     rootNavController.navigateTo(Routes.BuyIntro)
+                }
+
+                Suggestion.HARDWARE -> {
+                    appViewModel.showSheet(Sheet.Hardware())
                 }
 
                 Suggestion.LIGHTNING -> {
@@ -367,6 +382,7 @@ fun HomeScreen(
         onNavigateToActivityItem = { rootNavController.navigateToActivityItem(it) },
         onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
         onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },
+        onClickHardwareWallet = { walletNavController.navigateTo(Routes.HardwareWallet(it)) },
         onCalculatorInputActiveChanged = onCalculatorInputActiveChanged,
     )
 }
@@ -383,6 +399,7 @@ private fun Content(
     showProfileButton: Boolean = false,
     onClickProfile: () -> Unit = {},
     latestActivities: ImmutableList<Activity>?,
+    hardwareIds: ImmutableSet<String> = persistentSetOf(),
     onRefresh: () -> Unit = {},
     onRemoveSuggestion: (Suggestion) -> Unit = {},
     onClickSuggestion: (Suggestion) -> Unit = {},
@@ -403,6 +420,7 @@ private fun Content(
     onNavigateToActivityItem: (String) -> Unit = {},
     onNavigateToSavings: () -> Unit = {},
     onNavigateToSpending: () -> Unit = {},
+    onClickHardwareWallet: (String) -> Unit = {},
     onCalculatorInputActiveChanged: (Boolean) -> Unit = {},
     hazeState: HazeState = rememberHazeState(),
     balances: BalanceState = LocalBalances.current,
@@ -522,6 +540,7 @@ private fun Content(
                     isRefreshing = isRefreshing,
                     homeUiState = homeUiState,
                     latestActivities = paginatedActivities,
+                    hardwareIds = hardwareIds,
                     balances = balances,
                     isSmallScreen = isSmallScreen,
                     onRefresh = onRefresh,
@@ -530,6 +549,7 @@ private fun Content(
                     onNavigateToActivityItem = onNavigateToActivityItem,
                     onNavigateToSavings = onNavigateToSavings,
                     onNavigateToSpending = onNavigateToSpending,
+                    onClickHardwareWallet = onClickHardwareWallet,
                 )
 
                 1 -> WidgetsPage(
@@ -562,6 +582,7 @@ private fun WalletPage(
     isRefreshing: Boolean,
     homeUiState: HomeUiState,
     latestActivities: ImmutableList<Activity>?,
+    hardwareIds: ImmutableSet<String> = persistentSetOf(),
     balances: BalanceState,
     isSmallScreen: Boolean,
     onRefresh: () -> Unit,
@@ -570,6 +591,7 @@ private fun WalletPage(
     onNavigateToActivityItem: (String) -> Unit,
     onNavigateToSavings: () -> Unit,
     onNavigateToSpending: () -> Unit,
+    onClickHardwareWallet: (String) -> Unit,
 ) {
     val heightStatusBar = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
     val pullToRefreshState = rememberPullToRefreshState()
@@ -602,7 +624,7 @@ private fun WalletPage(
             VerticalSpacer(16.dp)
 
             BalanceHeaderView(
-                sats = balances.totalSats.toLong(),
+                sats = balances.totalWithHardwareSats.toLong(),
                 showEyeIcon = true,
                 testTag = "TotalBalance",
                 modifier = Modifier
@@ -610,7 +632,13 @@ private fun WalletPage(
                     .testTag("TotalBalance")
             )
             VerticalSpacer(32.dp)
-            BalancesSection(balances, onNavigateToSavings, onNavigateToSpending)
+            BalancesSection(
+                balances = balances,
+                hardwareWallets = homeUiState.hardwareWallets,
+                onNavigateToSavings = onNavigateToSavings,
+                onNavigateToSpending = onNavigateToSpending,
+                onClickHardwareWallet = onClickHardwareWallet,
+            )
             VerticalSpacer(32.dp)
 
             if (!homeUiState.showEmptyState) {
@@ -643,6 +671,7 @@ private fun WalletPage(
                         items = latestActivities,
                         onAllActivityClick = onNavigateToAllActivity,
                         onActivityItemClick = onNavigateToActivityItem,
+                        hardwareIds = hardwareIds,
                     )
 
                     FillHeight()
@@ -670,33 +699,92 @@ private fun WalletPage(
 @Composable
 private fun BalancesSection(
     balances: BalanceState,
+    hardwareWallets: ImmutableList<HwWallet>,
     onNavigateToSavings: () -> Unit,
     onNavigateToSpending: () -> Unit,
+    onClickHardwareWallet: (String) -> Unit,
 ) {
-    Row(
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+        ) {
+            WalletBalanceView(
+                title = stringResource(R.string.wallet__savings__title),
+                sats = balances.totalOnchainSats.toLong(),
+                icon = painterResource(id = R.drawable.ic_btc_circle),
+                modifier = Modifier
+                    .clickableAlpha(onClick = onNavigateToSavings)
+                    .padding(vertical = 4.dp)
+                    .testTag("ActivitySavings")
+            )
+            VerticalDivider(color = Colors.Gray4)
+            HorizontalSpacer(16.dp)
+            WalletBalanceView(
+                title = stringResource(R.string.wallet__spending__title),
+                sats = balances.totalLightningSats.toLong(),
+                icon = painterResource(id = R.drawable.ic_ln_circle),
+                modifier = Modifier
+                    .clickableAlpha(onClick = onNavigateToSpending)
+                    .padding(vertical = 4.dp)
+                    .testTag("ActivitySpending")
+            )
+        }
+
+        HwDevices(wallets = hardwareWallets, onClick = onClickHardwareWallet)
+    }
+}
+
+/**
+ * Hardware wallets flow into a 2-column grid below the Savings/Spending tiles:
+ * a second device fills the bottom-right column, additional devices wrap onto new rows.
+ */
+@Composable
+private fun HwDevices(
+    wallets: ImmutableList<HwWallet>,
+    onClick: (String) -> Unit,
+) {
+    wallets.chunked(2).forEach { rowWallets ->
+        VerticalSpacer(16.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+        ) {
+            HwDeviceCell(wallet = rowWallets[0], onClick = onClick)
+            VerticalDivider(color = Colors.Gray4)
+            HorizontalSpacer(16.dp)
+            val second = rowWallets.getOrNull(1)
+            if (second != null) {
+                HwDeviceCell(wallet = second, onClick = onClick)
+            } else {
+                FillWidth()
+            }
+        }
+    }
+}
+
+@Composable
+private fun RowScope.HwDeviceCell(
+    wallet: HwWallet,
+    onClick: (String) -> Unit,
+) {
+    WalletBalanceView(
+        title = wallet.name,
+        sats = wallet.balanceSats.toLong(),
+        icon = painterResource(id = R.drawable.ic_btc_circle_blue),
         modifier = Modifier
-            .fillMaxWidth()
-            .height(IntrinsicSize.Min)
+            .clickableAlpha(onClick = { onClick(wallet.id) })
+            .padding(vertical = 4.dp)
+            .padding(end = 8.dp)
+            .testTag("ActivityHardware")
     ) {
-        WalletBalanceView(
-            title = stringResource(R.string.wallet__savings__title),
-            sats = balances.totalOnchainSats.toLong(),
-            icon = painterResource(id = R.drawable.ic_btc_circle),
-            modifier = Modifier
-                .clickableAlpha(onClick = onNavigateToSavings)
-                .padding(vertical = 4.dp)
-                .testTag("ActivitySavings")
-        )
-        VerticalDivider(color = Colors.Gray4)
-        HorizontalSpacer(16.dp)
-        WalletBalanceView(
-            title = stringResource(R.string.wallet__spending__title),
-            sats = balances.totalLightningSats.toLong(),
-            icon = painterResource(id = R.drawable.ic_ln_circle),
-            modifier = Modifier
-                .clickableAlpha(onClick = onNavigateToSpending)
-                .padding(vertical = 4.dp)
-                .testTag("ActivitySpending")
+        HorizontalSpacer(4.dp)
+        HwWalletConnectionIcon(
+            transportType = wallet.transportType,
+            isConnected = wallet.isConnected,
+            modifier = Modifier.size(16.dp)
         )
     }
 }
@@ -1174,15 +1262,20 @@ private fun WidgetCardContent(
         }
 
         WidgetType.SUGGESTIONS -> {
-            if (homeUiState.suggestions.isEmpty()) {
-                WidgetEditPlaceholder(small = false)
-            } else {
-                SuggestionsSection(
+            when {
+                homeUiState.suggestions.isNotEmpty() -> SuggestionsSection(
                     suggestions = homeUiState.suggestions,
                     onRemoveSuggestion = onRemoveSuggestion,
                     onClickSuggestion = onClickSuggestion,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                homeUiState.isEditingWidgets -> SuggestionsPreviewGrid(
+                    onSuggestionClick = {},
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                else -> WidgetEditPlaceholder(small = false)
             }
         }
     }
@@ -1387,6 +1480,33 @@ private val previewWeather = WeatherModel(
 private val previewLatestActivities = previewActivityItems.take(3).toImmutableList()
 private val previewBanners = ActivityBannerType.entries.map { BannerItem(type = it, title = "") }.toImmutableList()
 private val previewSuggestions = Suggestion.entries.take(4).toImmutableList()
+private val previewHardwareWalletBt = HwWallet(
+    id = "trezor-1",
+    name = "Trezor Safe 5",
+    model = "Safe 5",
+    transportType = TransportType.BLUETOOTH,
+    isConnected = true,
+    balanceSats = 10_562_411uL,
+    activities = persistentListOf(),
+)
+private val previewHardwareWalletUsb = HwWallet(
+    id = "trezor-2",
+    name = "Trezor Model T",
+    model = "Model T",
+    transportType = TransportType.USB,
+    isConnected = false,
+    balanceSats = 2_735_180uL,
+    activities = persistentListOf(),
+)
+private val previewHardwareWalletThird = HwWallet(
+    id = "trezor-3",
+    name = "Trezor Safe 3",
+    model = "Safe 3",
+    transportType = TransportType.BLUETOOTH,
+    isConnected = true,
+    balanceSats = 500_000uL,
+    activities = persistentListOf(),
+)
 
 @Preview(showSystemUi = true)
 @Composable
@@ -1401,6 +1521,78 @@ private fun PreviewWithActivity() {
                 drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
                 latestActivities = previewLatestActivities,
                 balances = previewBalances,
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewWithHardwareWallet() {
+    AppThemeSurface {
+        Box {
+            Content(
+                isRefreshing = false,
+                homeUiState = HomeUiState(
+                    hardwareWallets = persistentListOf(previewHardwareWalletBt),
+                ),
+                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+                latestActivities = previewLatestActivities,
+                balances = previewBalances.copy(hardwareWallets = listOf(previewHardwareWalletBt.toBalance())),
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewWithTwoHardwareWallets() {
+    AppThemeSurface {
+        Box {
+            Content(
+                isRefreshing = false,
+                homeUiState = HomeUiState(
+                    hardwareWallets = persistentListOf(previewHardwareWalletBt, previewHardwareWalletUsb),
+                ),
+                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+                latestActivities = previewLatestActivities,
+                balances = previewBalances.copy(
+                    hardwareWallets = listOf(
+                        previewHardwareWalletBt.toBalance(),
+                        previewHardwareWalletUsb.toBalance(),
+                    )
+                ),
+            )
+            TabBar()
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewWithThreeHardwareWallets() {
+    AppThemeSurface {
+        Box {
+            Content(
+                isRefreshing = false,
+                homeUiState = HomeUiState(
+                    hardwareWallets = persistentListOf(
+                        previewHardwareWalletBt,
+                        previewHardwareWalletUsb,
+                        previewHardwareWalletThird,
+                    ),
+                ),
+                drawerState = rememberDrawerState(initialValue = DrawerValue.Closed),
+                latestActivities = previewLatestActivities,
+                balances = previewBalances.copy(
+                    hardwareWallets = listOf(
+                        previewHardwareWalletBt.toBalance(),
+                        previewHardwareWalletUsb.toBalance(),
+                        previewHardwareWalletThird.toBalance(),
+                    )
+                ),
             )
             TabBar()
         }

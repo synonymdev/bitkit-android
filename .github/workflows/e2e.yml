@@ -57,7 +57,14 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
 
       - name: Decode google-services.json
-        run: echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/google-services.json
+        run: |
+          set -euo pipefail
+          if [ -z "${GOOGLE_SERVICES_JSON_BASE64:-}" ]; then
+            echo "GOOGLE_SERVICES_JSON_BASE64 is empty; using checked-in placeholder."
+            exit 0
+          fi
+          mkdir -p app/src/debug
+          printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/src/debug/google-services.json
         env:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
 
@@ -100,7 +107,14 @@ jobs:
         uses: gradle/actions/setup-gradle@v5
 
       - name: Decode google-services.json
-        run: echo "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/google-services.json
+        run: |
+          set -euo pipefail
+          if [ -z "${GOOGLE_SERVICES_JSON_BASE64:-}" ]; then
+            echo "GOOGLE_SERVICES_JSON_BASE64 is empty; using checked-in placeholder."
+            exit 0
+          fi
+          mkdir -p app/src/debug
+          printf '%s' "$GOOGLE_SERVICES_JSON_BASE64" | base64 -d > app/src/debug/google-services.json
         env:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
 
@@ -112,6 +126,8 @@ jobs:
           E2E: true
           E2E_BACKEND: network
           GEO: false
+          TREZOR_BRIDGE: true
+          TREZOR_BRIDGE_URL: http://10.0.2.2:21325
         run: ./gradlew assembleDevDebug
 
       - name: Rename APK
@@ -306,6 +322,7 @@ jobs:
         shard:
           - { name: multi_address_2_regtest, grep: "@multi_address_2" }
           - { name: pubky_paykit, grep: "@pubky" }
+          - { name: hardware_wallet, grep: "@hardware_wallet" }
 
     name: e2e-tests-staging - ${{ matrix.shard.name }}
 
@@ -375,6 +392,13 @@ jobs:
       - name: Install dependencies
         working-directory: bitkit-e2e-tests
         run: npm ci
+
+      - name: Pull Trezor emulator image
+        if: matrix.shard.name == 'hardware_wallet'
+        working-directory: bitkit-e2e-tests
+        run: |
+          cd docker
+          docker compose --profile trezor pull --quiet trezor-user-env
 
       - name: Run E2E Tests 1 (${{ matrix.shard.name }})
         continue-on-error: true

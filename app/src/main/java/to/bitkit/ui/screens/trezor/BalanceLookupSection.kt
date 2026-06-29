@@ -19,6 +19,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.AccountInfoResult
+import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.AccountUtxo
 import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.SingleAddressInfoResult
@@ -40,6 +41,7 @@ internal fun BalanceLookupSection(
     uiState: TrezorUiState,
     isDeviceConnected: Boolean,
     onInputChange: (String) -> Unit,
+    onAccountTypeChange: (AccountType?) -> Unit,
     onLookup: () -> Unit,
     onSendAddressChange: (String) -> Unit,
     onSendAmountChange: (String) -> Unit,
@@ -72,6 +74,13 @@ internal fun BalanceLookupSection(
             ),
             maxLines = 3,
             modifier = Modifier.fillMaxWidth(),
+        )
+
+        VerticalSpacer(8.dp)
+
+        AccountTypeSelectorRow(
+            selectedAccountType = uiState.lookupSelectedAccountType,
+            onAccountTypeChange = onAccountTypeChange,
         )
 
         VerticalSpacer(16.dp)
@@ -264,6 +273,7 @@ private fun PreviewBalanceLookupEmpty() {
             uiState = TrezorUiState(),
             isDeviceConnected = false,
             onInputChange = {},
+            onAccountTypeChange = {},
             onLookup = {},
             onSendAddressChange = {},
             onSendAmountChange = {},
@@ -287,6 +297,7 @@ private fun PreviewBalanceLookupWithAccountInfo() {
             uiState = TrezorPreviewData.uiStateWithAccountInfo,
             isDeviceConnected = true,
             onInputChange = {},
+            onAccountTypeChange = {},
             onLookup = {},
             onSendAddressChange = {},
             onSendAmountChange = {},
@@ -310,6 +321,7 @@ private fun PreviewBalanceLookupWithAddressInfo() {
             uiState = TrezorPreviewData.uiStateWithAddressInfo,
             isDeviceConnected = false,
             onInputChange = {},
+            onAccountTypeChange = {},
             onLookup = {},
             onSendAddressChange = {},
             onSendAmountChange = {},
@@ -338,6 +350,7 @@ private fun PreviewBalanceLookupLoading() {
             ),
             isDeviceConnected = false,
             onInputChange = {},
+            onAccountTypeChange = {},
             onLookup = {},
             onSendAddressChange = {},
             onSendAmountChange = {},

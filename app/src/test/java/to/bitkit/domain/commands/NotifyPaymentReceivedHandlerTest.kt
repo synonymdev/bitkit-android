@@ -56,11 +56,13 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         )
 
         sut = NotifyPaymentReceivedHandler(
-            context = context,
             ioDispatcher = testDispatcher,
             activityRepo = activityRepo,
-            currencyRepo = currencyRepo,
-            settingsStore = settingsStore,
+            receivedNotificationContent = ReceivedNotificationContent(
+                context = context,
+                currencyRepo = currencyRepo,
+                settingsStore = settingsStore,
+            ),
         )
     }
 

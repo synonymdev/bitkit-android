@@ -3,6 +3,7 @@ set dotenv-filename := ".env"
 set windows-shell := ["sh", "-cu"]
 
 gradle := "./gradlew"
+ndk_ver := "28.1.13356709"
 
 default:
     @just list
@@ -12,7 +13,7 @@ list:
         "list" \
         "init" \
         "compile" \
-        "run" \
+        "run [docker]" \
         "build [TASK]" \
         "release" \
         "install" \
@@ -45,12 +46,31 @@ init:
 compile:
     {{ gradle }} compileDevDebugKotlin
 
-run:
+run mode="" logs="":
     #!/usr/bin/env sh
     set -eu
 
     app_id="to.bitkit.dev"
     app_dir="app/build/outputs/apk/dev/debug"
+    mode="{{ mode }}"
+    logs="{{ logs }}"
+    attach_logs=false
+
+    if [ "$mode" = "logs" ]; then
+        attach_logs=true
+        mode=""
+    fi
+    if [ -n "$logs" ]; then
+        if [ "$logs" != "logs" ]; then
+            echo "usage: just run [docker] [logs]" >&2
+            exit 1
+        fi
+        attach_logs=true
+    fi
+    if [ -n "$mode" ] && [ "$mode" != "docker" ]; then
+        echo "usage: just run [docker] [logs]" >&2
+        exit 1
+    fi
 
     if ! command -v adb >/dev/null 2>&1; then
         echo "adb is required to run the app." >&2
@@ -90,8 +110,19 @@ run:
     fi
 
     echo "Using $device_name ($device_id)"
+
+    build_env=""
+    if [ "$mode" = "docker" ]; then
+        echo "Forwarding bitkit-docker ports via adb reverse..."
+        adb -s "$device_id" reverse tcp:60001 tcp:60001  # local Electrum
+        adb -s "$device_id" reverse tcp:6288 tcp:6288     # local homegate
+        adb -s "$device_id" reverse tcp:9735 tcp:9735     # local lnd peer
+        adb -s "$device_id" reverse tcp:3000 tcp:3000     # local lnurl-server
+        build_env="E2E=true"
+    fi
+
     echo "Building Debug app..."
-    {{ gradle }} assembleDevDebug
+    env $build_env {{ gradle }} assembleDevDebug
 
     app_path="$(
         find "$app_dir" -maxdepth 1 -name '*-universal.apk' -type f \
@@ -119,6 +150,11 @@ run:
     adb -s "$device_id" shell am force-stop "$app_id"
     adb -s "$device_id" shell monkey -p "$app_id" -c android.intent.category.LAUNCHER 1 >/dev/null
 
+    if [ "$attach_logs" != "true" ]; then
+        echo "Launched $app_id"
+        exit 0
+    fi
+
     pid="$(
         adb -s "$device_id" shell pidof -s "$app_id" 2>/dev/null \
             | tr -d '\r' \
@@ -137,7 +173,15 @@ build task="assembleDevDebug":
     {{ gradle }} {{ task }}
 
 release:
-    {{ gradle }} assembleMainnetRelease bundleMainnetRelease
+    #!/usr/bin/env sh
+    set -eu
+    symbols_dir="app/build/outputs/native-debug-symbols/mainnetRelease"
+    rm -f "$symbols_dir"/native-debug-symbols*.zip
+    NDK_VERSION={{ ndk_ver }} {{ gradle }} assembleMainnetRelease bundleMainnetRelease
+    NDK_VERSION={{ ndk_ver }} {{ gradle }} :app:syncNativeDebugSymbolArtifacts
+    scripts/create-native-debug-symbols.sh
+    symbols="$(find "$symbols_dir" -maxdepth 1 -name 'native-debug-symbols-*.zip' -type f | sort | tail -n 1)"
+    echo "Attach this exact file to GitHub releases, upload it to Play Console for this release, and verify Play lists it: $symbols"
 
 install:
     {{ gradle }} installDevDebug

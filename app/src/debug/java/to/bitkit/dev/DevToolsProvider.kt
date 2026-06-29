@@ -62,7 +62,9 @@ private sealed interface DevCommand {
         fun parse(method: String, arg: String?): DevCommand? = when (method) {
             CreateInvoice.METHOD -> CreateInvoice.parse(arg)
             ProbeInvoice.METHOD -> ProbeInvoice.parse(arg)
+            ProbeNode.METHOD -> ProbeNode.parse(arg)
             ProbeReadiness.METHOD -> ProbeReadiness
+            ResetScores.METHOD -> ResetScores
             else -> null
         }
     }
@@ -126,11 +128,65 @@ private sealed interface DevCommand {
         }
     }
 
+    data class ProbeNode(val args: Args) : DevCommand {
+        companion object {
+            const val METHOD = "probeNode"
+            fun parse(arg: String?) = ProbeNode(arg.deserialize<Args>())
+        }
+
+        @Serializable
+        data class Args(
+            val targetName: String? = null,
+            val nodeId: String,
+            val amountMsat: ULong? = null,
+            val amountSats: ULong? = null,
+            val timeoutSeconds: Long = 90,
+        )
+
+        override suspend fun execute(deps: DevToolsProvider.Dependencies): DevResult {
+            val amountSats = args.amountSats ?: args.amountMsat?.let { msatCeilOf(it) }
+                ?: return DevResult.Error("Probe node requires amountSats or amountMsat")
+            val timeout = args.timeoutSeconds.coerceAtLeast(1).seconds
+
+            Logger.info(
+                "Sending keysend probe for target '${args.targetName ?: "unknown"}' nodeId='${args.nodeId}' amountSats='$amountSats'",
+                context = TAG,
+            )
+
+            return deps.lightningRepo().sendProbeForNode(args.nodeId, amountSats)
+                .fold(
+                    onSuccess = {
+                        deps.lightningRepo().waitForProbeOutcome(it.paymentIds, timeout)
+                            .fold(
+                                onSuccess = { outcome -> outcome.toDevResult(it.paymentIds) },
+                                onFailure = { error -> DevResult.ProbeFailure.from(error, it.paymentIds) },
+                            )
+                    },
+                    onFailure = { DevResult.ProbeFailure.from(it) },
+                )
+        }
+    }
+
     data object ProbeReadiness : DevCommand {
         const val METHOD = "probeReadiness"
 
         override suspend fun execute(deps: DevToolsProvider.Dependencies): DevResult =
             DevResult.ProbeReadiness.from(deps.lightningRepo().probeReadiness())
+    }
+
+    data object ResetScores : DevCommand {
+        const val METHOD = "resetScores"
+
+        override suspend fun execute(deps: DevToolsProvider.Dependencies): DevResult {
+            Logger.info("Resetting pathfinding scores via devtools", context = TAG)
+            return deps.lightningRepo().resetPathfindingScores().fold(
+                onSuccess = { DevResult.Ack(timestamp = it) },
+                onFailure = {
+                    Logger.error("Failed to reset pathfinding scores", it, context = TAG)
+                    DevResult.Error(it.message)
+                },
+            )
+        }
     }
 }
 
@@ -142,6 +198,8 @@ private sealed interface DevResult {
     }
 
     @Serializable data class Invoice(val bolt11: String) : DevResult
+
+    @Serializable data class Ack(val success: Boolean = true, val timestamp: Long? = null) : DevResult
 
     @Serializable
     data class ProbeSuccess(
@@ -184,6 +242,7 @@ private sealed interface DevResult {
         val graphNodeCount: Int? = null,
         val graphChannelCount: Int? = null,
         val latestRgsSyncTimestamp: ULong? = null,
+        val latestPathfindingScoresSyncTimestamp: ULong? = null,
     ) : DevResult {
         companion object {
             fun from(readiness: NodeProbeReadiness) = ProbeReadiness(
@@ -201,6 +260,7 @@ private sealed interface DevResult {
                 graphNodeCount = readiness.graphNodeCount,
                 graphChannelCount = readiness.graphChannelCount,
                 latestRgsSyncTimestamp = readiness.latestRgsSyncTimestamp,
+                latestPathfindingScoresSyncTimestamp = readiness.latestPathfindingScoresSyncTimestamp,
             )
         }
     }

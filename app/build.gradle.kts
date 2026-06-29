@@ -1,6 +1,9 @@
 import com.android.build.gradle.internal.api.BaseVariantOutputImpl
 import com.android.build.gradle.internal.tasks.FinalizeBundleTask
 import io.gitlab.arturbosch.detekt.Detekt
+import org.gradle.api.artifacts.MinimalExternalModuleDependency
+import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.Sync
 import org.gradle.api.tasks.testing.logging.TestExceptionFormat
 import org.gradle.api.tasks.testing.logging.TestLogEvent
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
@@ -38,6 +41,21 @@ val keystoreProperties by lazy {
     keystoreProperties
 }
 
+val localProperties by lazy {
+    Properties().apply {
+        val localPropertiesFile = rootProject.file("local.properties")
+        if (localPropertiesFile.exists()) {
+            localPropertiesFile.inputStream().use { load(it) }
+        }
+    }
+}
+
+fun localProp(key: String): String? {
+    return System.getenv(key)
+        ?: providers.gradleProperty(key).orNull
+        ?: localProperties.getProperty(key)
+}
+
 // Android resource qualifier format for androidResources.localeFilters
 val androidLocales = listOf(
     "en", "ar", "b+es+419", "ca", "cs", "de", "el", "es", "es-rES", "fr", "it", "nl", "pl", "pt", "pt-rBR", "ru"
@@ -48,8 +66,9 @@ val bcp47Locales = listOf(
 )
 val e2eBackendEnv = System.getenv("E2E_BACKEND") ?: "local"
 val e2eHomegateUrlEnv = System.getenv("E2E_HOMEGATE_URL") ?: "http://127.0.0.1:6288"
-val trezorBridgeEnv = System.getenv("TREZOR_BRIDGE")?.toBoolean()?.toString() ?: "false"
-val trezorBridgeUrlEnv = System.getenv("TREZOR_BRIDGE_URL") ?: "http://10.0.2.2:21325"
+val trezorBridgeEnv = localProp("TREZOR_BRIDGE")?.toBoolean()?.toString() ?: "false"
+val trezorBridgeUrlEnv = localProp("TREZOR_BRIDGE_URL") ?: "http://10.0.2.2:21325"
+val requestedNdkVersion = System.getenv("NDK_VERSION")?.takeIf { it.isNotBlank() }
 val androidTestAnnotationPackage = "to.bitkit.test.annotations"
 val androidTestTaskPrefix = "connectedDevDebug"
 val androidTestTaskSuffix = "AndroidTest"
@@ -145,6 +164,7 @@ val bitkitAndroidTestAnnotation = bitkitAndroidTestAnnotationName?.let {
 android {
     namespace = "to.bitkit"
     compileSdk = 36
+    requestedNdkVersion?.let { ndkVersion = it }
     defaultConfig {
         applicationId = "to.bitkit"
         minSdk = 28
@@ -230,6 +250,7 @@ android {
             )
             signingConfig = signingConfigs.getByName("release")
             ndk {
+                debugSymbolLevel = "FULL"
                 // noinspection ChromeOsAbiSupport
                 abiFilters += listOf("armeabi-v7a", "arm64-v8a")
             }
@@ -315,6 +336,31 @@ composeCompiler {
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 
+val nativeDebugSymbols by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+}
+
+fun Provider<MinimalExternalModuleDependency>.nativeDebugSymbolsArtifact(): String {
+    val dependency = get()
+    val version = dependency.versionConstraint.requiredVersion
+        .ifBlank { dependency.versionConstraint.preferredVersion }
+
+    require(version.isNotBlank()) {
+        "Native debug symbols dependency '${dependency.module}' must declare an explicit version."
+    }
+
+    return "${dependency.module.group}:${dependency.module.name}:$version:native-debug-symbols@zip"
+}
+
+val syncNativeDebugSymbolArtifacts by tasks.registering(Sync::class) {
+    group = "build"
+    description = "Downloads native debug symbol archives for release native dependencies."
+
+    from(nativeDebugSymbols)
+    into(layout.buildDirectory.dir("intermediates/native-debug-symbol-artifacts"))
+}
+
 dependencies {
     implementation(fileTree("libs") { include("*.aar", "*.jar") })
     implementation(libs.jna) { artifact { type = "aar" } }
@@ -340,6 +386,9 @@ dependencies {
     implementation(libs.bitkit.core)
     implementation(libs.paykit)
     implementation(libs.vss.client)
+    nativeDebugSymbols(libs.bitkit.core.nativeDebugSymbolsArtifact())
+    nativeDebugSymbols(libs.ldk.node.android.nativeDebugSymbolsArtifact())
+    nativeDebugSymbols(libs.vss.client.nativeDebugSymbolsArtifact())
     // Firebase
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.messaging)

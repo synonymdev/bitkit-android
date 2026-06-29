@@ -10,11 +10,15 @@ This repository contains the **native Android app** for Bitkit.
 
 #### 1. Firebase Configuration
 
-Download `google-services.json` from the Firebase Console for each of the following build flavor groups,:
-- dev/tnet/mainnetDebug: Place in `app/google-services.json`
+Dev and testnet debug builds use a checked-in placeholder at `app/google-services.json` so a fresh clone can compile without private Firebase files.
+
+Download `google-services.json` from the Firebase Console when you need real Firebase integration for push notifications testing:
+- Debug builds: Place in `app/src/debug/google-services.json`
 - mainnetRelease: Place in `app/src/mainnetRelease/google-services.json`
 
-> **Note**: Each flavor requires its own Firebase project configuration. The mainnet flavor will fail to build without its dedicated `google-services.json` file.
+The debug file above is ignored by Git and takes precedence over the checked-in placeholder. To use real Firebase integration across debug variants, make sure it includes each application ID you build.
+
+> **Note**: Placeholder config is only for local dev and testnet debug builds. FCM token registration and push notifications require real Firebase configuration. The mainnet release flavor should always use the real `mainnetRelease/google-services.json` file.
 
 #### 2. GitHub Packages setup
 
@@ -55,6 +59,17 @@ Set up local env:
 - Uncomment only the values you need in the fresh `.env` file, such as `GITHUB_ACTOR`, `GITHUB_TOKEN`, `TX_TOKEN`, and E2E build settings.
 
 Run `just list` to see available commands. The common ones are `just init`, `just compile`, `just run`, `just build`, `just release`, `just test`, `just lint`, and `just translations pull`. `just run` prefers a physical device and falls back to an emulator.
+
+### Trezor Bridge In Android Studio
+
+When testing the Trezor Bridge emulator from bitkit-docker through Android Studio, add these gitignored local values to `local.properties`:
+
+```properties
+TREZOR_BRIDGE=true
+TREZOR_BRIDGE_URL=http://10.0.2.2:21325
+```
+
+CLI builds can still pass the same values as environment variables.
 
 ### Lint
 
@@ -175,6 +190,22 @@ To build the mainnet flavor for release run:
 ```sh
 just release
 ```
+
+`just release` builds the mainnet APK, Play Store AAB, resolves upstream native debug symbol artifacts, and validates the native debug symbols archive.
+
+Release artifacts:
+
+- APK: `app/build/outputs/apk/mainnet/release/`
+- AAB: `app/build/outputs/bundle/mainnetRelease/`
+- Native debug symbols: `app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols-{versionCode}.zip`
+
+The native debug symbols archive must come from the same `just release` build as the APK/AAB being published. Keep the build-numbered filename, e.g. `native-debug-symbols-182.zip`, so it matches the APK/AAB build number. Native Rust dependencies publish stripped release AARs for app size and separate `native-debug-symbols` classifier artifacts for crash symbolication; `just release` merges those upstream symbol artifacts into the final archive and refuses placeholder symbols from stripped packaged `.so` files.
+
+For Play Store releases, upload the AAB as usual, then upload `native-debug-symbols-{versionCode}.zip` for that exact version/build in Play Console: App bundle explorer → Downloads → Assets. Verify Play lists the native debug symbols after upload.
+
+Keep the release-built `native-debug-symbols-{versionCode}.zip` in GitHub releases or internal release storage. Play Console may only show delete/replace controls after upload, which is enough for release verification.
+
+For GitHub releases, attach `native-debug-symbols-{versionCode}.zip` alongside the APK so native crashes from GitHub-distributed builds can be symbolicated later.
 
 #### Android App Bundle (AAB)
 

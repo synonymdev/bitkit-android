@@ -210,15 +210,19 @@ just release
 
 Expected APK path: `app/build/outputs/apk/mainnet/release/bitkit-mainnet-release-{newVersionCode}-universal.apk`
 Expected AAB path: `app/build/outputs/bundle/mainnetRelease/bitkit-mainnet-release-{newVersionCode}.aab`
+Expected native debug symbols path: `app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols-{newVersionCode}.zip`
 
-Verify both files exist. If the build fails, stop and report the error to the user.
+Verify all three files exist. The native debug symbols file must be from the same `just release` build as the APK/AAB. Keep the build-numbered filename, e.g. `native-debug-symbols-{newVersionCode}.zip`, so it matches the APK/AAB build number. `just release` resolves upstream native debug symbol artifacts from the Rust dependency packages, merges them into the final archive, and refuses placeholder symbols from stripped packaged `.so` files.
 
-### 8. Upload APK to Draft Release
+### 8. Upload APK and Native Symbols to Draft Release
 
 ```bash
 gh release upload v{newVersionName} \
-  app/build/outputs/apk/mainnet/release/bitkit-mainnet-release-{newVersionCode}-universal.apk
+  app/build/outputs/apk/mainnet/release/bitkit-mainnet-release-{newVersionCode}-universal.apk \
+  app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols-{newVersionCode}.zip
 ```
+
+For the Play Store release, upload the AAB as usual, then upload `native-debug-symbols-{newVersionCode}.zip` for the exact version/build in Play Console: App bundle explorer → Downloads → Assets. Verify Play lists the native debug symbols after upload. Keep the release-built archive in GitHub releases or internal release storage; Play Console may only show delete/replace controls after upload, which is enough for release verification.
 
 ### 9. Return to Master
 
@@ -236,6 +240,7 @@ Release branch: release-{newVersionName}
 Tag: v{newVersionName}
 Draft release: {release URL}
 APK uploaded: bitkit-mainnet-release-{newVersionCode}-universal.apk
+Native debug symbols uploaded: native-debug-symbols-{newVersionCode}.zip
 Store release notes: .ai/release-notes-{newVersionName}.md
 
 Next steps:

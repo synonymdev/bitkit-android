@@ -15,6 +15,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -26,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.ConnectionIssuesView
@@ -47,12 +49,12 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.TransferEffect
 import to.bitkit.viewmodels.TransferToSpendingUiState
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
-import kotlin.math.min
 
 @Suppress("ViewModelForwarding")
 @Composable
@@ -70,6 +72,8 @@ fun SpendingAmountScreen(
     val isNodeRunning by viewModel.isNodeRunning.collectAsStateWithLifecycle()
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    val currentMaxAllowedToSend by rememberUpdatedState(uiState.maxAllowedToSend)
+    val currentCurrencies by rememberUpdatedState(currencies)
 
     LaunchedEffect(isOffline) {
         viewModel.updateLimits()
@@ -81,6 +85,22 @@ fun SpendingAmountScreen(
                 TransferEffect.OnOrderCreated -> onOrderCreated()
                 is TransferEffect.ToastError -> toast(effect.title, effect.description)
                 is TransferEffect.ToastException -> toastException(effect.e)
+                else -> Unit
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        amountInputViewModel.effect.collect {
+            when (it) {
+                AmountInputEffect.MaxExceeded -> {
+                    amountInputViewModel.setSats(currentMaxAllowedToSend, currentCurrencies)
+                    toast(
+                        context.getString(R.string.lightning__spending_amount__error_max__title),
+                        context.getString(R.string.lightning__spending_amount__error_max__description)
+                            .replace("{amount}", currentMaxAllowedToSend.formatToModernDisplay()),
+                    )
+                }
             }
         }
     }
@@ -93,23 +113,10 @@ fun SpendingAmountScreen(
             currencies = currencies,
             onBackClick = onBackClick,
             onClickQuarter = {
-                val quarter = uiState.balanceAfterFeeQuarter()
-                val max = uiState.maxAllowedToSend
-                if (quarter > max) {
-                    toast(
-                        context.getString(R.string.lightning__spending_amount__error_max__title),
-                        context.getString(R.string.lightning__spending_amount__error_max__description)
-                            .replace("{amount}", "$max"),
-                    )
-                }
-                val cappedQuarter = min(quarter, max)
-                viewModel.updateLimits(cappedQuarter)
-                amountInputViewModel.setSats(cappedQuarter, currencies)
+                amountInputViewModel.setSats(uiState.quarterAmount, currencies)
             },
             onClickMaxAmount = {
-                val newAmountSats = uiState.maxAllowedToSend
-                viewModel.updateLimits(newAmountSats)
-                amountInputViewModel.setSats(newAmountSats, currencies)
+                amountInputViewModel.setSats(uiState.maxAllowedToSend, currencies)
             },
             onConfirmAmount = { viewModel.onConfirmAmount(amountUiState.sats) },
         )
@@ -174,6 +181,10 @@ private fun SpendingAmountNodeRunning(
     onClickMaxAmount: () -> Unit,
     onConfirmAmount: () -> Unit,
 ) {
+    LaunchedEffect(uiState.maxAllowedToSend) {
+        amountInputViewModel.setMaxAmount(uiState.maxAllowedToSend)
+    }
+
     Column(
         modifier = Modifier
             .padding(horizontal = 16.dp)
@@ -186,7 +197,8 @@ private fun SpendingAmountNodeRunning(
 
         Display(
             text = stringResource(R.string.lightning__spending_amount__title)
-                .withAccent(accentColor = Colors.Purple)
+                .withAccent(accentColor = Colors.Purple),
+            modifier = Modifier.fillMaxWidth()
         )
 
         FillHeight()
@@ -244,6 +256,7 @@ private fun SpendingAmountNodeRunning(
         NumberPad(
             viewModel = amountInputViewModel,
             currencies = currencies,
+            enabled = !uiState.isLoading,
         )
 
         PrimaryButton(

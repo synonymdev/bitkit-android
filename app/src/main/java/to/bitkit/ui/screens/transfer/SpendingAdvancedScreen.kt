@@ -17,6 +17,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
@@ -27,6 +28,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ext.mockOrder
 import to.bitkit.models.Toast
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.appViewModel
@@ -46,6 +48,7 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.TransferEffect
 import to.bitkit.viewmodels.TransferToSpendingUiState
@@ -64,12 +67,15 @@ fun SpendingAdvancedScreen(
 ) {
     val currentOnOrderCreated by rememberUpdatedState(onOrderCreated)
     val app = appViewModel ?: return
+    val context = LocalContext.current
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
     val order = state.order ?: return
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     var isLoading by remember { mutableStateOf(false) }
 
     val transferValues by viewModel.transferValues.collectAsStateWithLifecycle()
+    val currentMaxLspBalance by rememberUpdatedState(transferValues.maxLspBalance)
+    val currentCurrencies by rememberUpdatedState(currencies)
 
     LaunchedEffect(order.clientBalanceSat) {
         viewModel.updateTransferValues(order.clientBalanceSat)
@@ -79,10 +85,15 @@ fun SpendingAdvancedScreen(
         viewModel.onReceivingAmountChange(amountUiState.sats)
     }
 
+    LaunchedEffect(transferValues.maxLspBalance) {
+        amountInputViewModel.setMaxAmount(transferValues.maxLspBalance.toLong())
+    }
+
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
             when (effect) {
                 TransferEffect.OnOrderCreated -> currentOnOrderCreated()
+                TransferEffect.OnHwTxSigned -> Unit
                 is TransferEffect.ToastException -> {
                     isLoading = false
                     app.toast(effect.e)
@@ -94,6 +105,23 @@ fun SpendingAdvancedScreen(
                         type = Toast.ToastType.ERROR,
                         title = effect.title,
                         description = effect.description,
+                    )
+                }
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        amountInputViewModel.effect.collect {
+            when (it) {
+                AmountInputEffect.MaxExceeded -> {
+                    amountInputViewModel.setSats(currentMaxLspBalance.toLong(), currentCurrencies)
+                    app.toast(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(R.string.lightning__spending_advanced__error_max__title),
+                        description = context.getString(R.string.lightning__spending_advanced__error_max__description)
+                            .replace("{amount}", currentMaxLspBalance.formatToModernDisplay()),
+                        visibilityTime = Toast.VISIBILITY_TIME_SHORT,
                     )
                 }
             }
@@ -148,7 +176,8 @@ private fun Content(
 
             Display(
                 text = stringResource(R.string.lightning__spending_advanced__title)
-                    .withAccent(accentColor = Colors.Purple)
+                    .withAccent(accentColor = Colors.Purple),
+                modifier = Modifier.fillMaxWidth()
             )
 
             FillHeight()

@@ -74,7 +74,7 @@ fun WidgetsIntroScreen(
                 fullWidth = false,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("WidgetsOnboarding-view-organize")
+                    .testTag("WidgetsOnboardingViewOrganize")
             )
             PrimaryButton(
                 text = stringResource(R.string.widgets__add),

@@ -43,6 +43,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.rememberNotificationToggleClick
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.SettingsViewModel
 
@@ -89,6 +90,12 @@ fun ReceiveConfirmScreen(
         } ?: sats.toString()
     }
 
+    val onNotificationSwitchClick = rememberNotificationToggleClick(
+        isGranted = notificationsGranted,
+        onPermissionResult = { granted -> settingsViewModel.setNotificationPreference(granted) },
+        onOpenSystemSettings = { context.openNotificationSettings() },
+    )
+
     Content(
         receiveSats = entry.receiveAmountSats,
         networkFeeFormatted = networkFeeFormatted,
@@ -96,7 +103,7 @@ fun ReceiveConfirmScreen(
         receiveAmountFormatted = receiveAmountFormatted,
         onLearnMoreClick = onLearnMore,
         isAdditional = isAdditional,
-        onSystemSettingsClick = { context.openNotificationSettings() },
+        onSystemSettingsClick = onNotificationSwitchClick,
         hasNotificationPermission = notificationsGranted,
         onContinueClick = { onContinue(entry.invoice) },
         onBackClick = onBack,
@@ -162,6 +169,7 @@ private fun Content(
                 isChecked = hasNotificationPermission,
                 colors = AppSwitchDefaults.colorsPurple,
                 onClick = onSystemSettingsClick,
+                switchTestTag = "ReceiveConfirmNotificationSwitch",
                 modifier = Modifier.fillMaxWidth()
             )
 

@@ -154,6 +154,7 @@ private fun Content(
                 isChecked = hasNotificationPermission,
                 colors = AppSwitchDefaults.colorsPurple,
                 onClick = onSwitchClick,
+                switchTestTag = "ReceiveLiquidityNotificationSwitch",
                 modifier = Modifier.fillMaxWidth()
             )
 

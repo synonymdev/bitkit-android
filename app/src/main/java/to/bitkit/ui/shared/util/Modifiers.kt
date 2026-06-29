@@ -9,6 +9,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
@@ -57,8 +58,10 @@ fun Modifier.blockPointerInputPassthrough(): Modifier {
 fun Modifier.screen(
     noBackground: Boolean = false,
     insets: WindowInsets? = WindowInsets.systemBars,
+    clipToBounds: Boolean = true,
 ): Modifier = this
     .fillMaxSize()
+    .then(if (clipToBounds) Modifier.clipToBounds() else Modifier)
     .then(if (noBackground) Modifier else Modifier.background(MaterialTheme.colorScheme.background))
     .then(if (insets == null) Modifier else Modifier.windowInsetsPadding(insets))
 

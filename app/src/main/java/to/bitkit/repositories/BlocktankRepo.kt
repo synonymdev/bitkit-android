@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.BtOrderState2
+import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.ChannelLiquidityOptions
 import com.synonym.bitkitcore.ChannelLiquidityParams
 import com.synonym.bitkitcore.CreateCjitOptions
@@ -18,10 +19,12 @@ import com.synonym.bitkitcore.giftPay
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -41,6 +44,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -125,10 +129,48 @@ class BlocktankRepo @Inject constructor(
     }
 
     suspend fun getCjitEntry(channel: ChannelDetails): IcJitEntry? = withContext(bgDispatcher) {
-        return@withContext _blocktankState.value.cjitEntries.firstOrNull { order ->
-            order.channelSizeSat == channel.channelValueSats &&
-                order.lspNode.pubkey == channel.counterpartyNodeId
+        val fundingTxo = channel.fundingTxo ?: return@withContext null
+
+        fun List<IcJitEntry>.matching(): IcJitEntry? = firstOrNull { entry ->
+            val fundingTx = entry.channel?.fundingTx ?: return@firstOrNull false
+            fundingTx.id == fundingTxo.txid && fundingTx.vout == fundingTxo.vout.toULong()
         }
+
+        val cached = _blocktankState.value.cjitEntries
+        cached.matching()?.let { return@withContext it }
+
+        // A ChannelReady can only be a CJIT if a live cached entry is still awaiting its channel; otherwise skip
+        // the server round-trip so a non-CJIT transfer confirmation isn't delayed by a slow Blocktank API.
+        val hasPendingCjit = cached.any {
+            it.channel == null && it.state != CJitStateEnum.EXPIRED && it.state != CJitStateEnum.FAILED
+        }
+        if (cached.isNotEmpty() && !hasPendingCjit) return@withContext null
+
+        // Match against the freshly fetched list so a concurrent refreshOrders() can't clobber state before we read.
+        return@withContext refreshCjitEntries().matching()
+    }
+
+    private suspend fun refreshCjitEntries(): List<IcJitEntry> {
+        repeat(CJIT_REFRESH_ATTEMPTS) { attempt ->
+            val entries = runCatching {
+                withTimeout(CJIT_REFRESH_TIMEOUT) {
+                    coreService.blocktank.cjitEntries(refresh = true)
+                }
+            }.mapCatching { entries ->
+                _blocktankState.update { it.copy(cjitEntries = entries.toImmutableList()) }
+                entries
+            }.getOrElse {
+                if (it is CancellationException && it !is TimeoutCancellationException) throw it
+                if (attempt == CJIT_REFRESH_ATTEMPTS - 1) {
+                    Logger.warn("Failed to refresh CJIT entries; using cached state", it, context = TAG)
+                }
+                null
+            }
+
+            entries?.let { return it }
+            delay(CJIT_REFRESH_RETRY_DELAY)
+        }
+        return _blocktankState.value.cjitEntries
     }
 
     suspend fun refreshInfo() = withContext(bgDispatcher) {
@@ -553,6 +595,9 @@ class BlocktankRepo @Inject constructor(
         private const val PEER_CONNECTION_DELAY_MS = 2_000L
         private val TIMEOUT_GIFT_CODE = 30.seconds
         private val GIFT_PAYMENT_RECEIVE_TIMEOUT = 45.seconds
+        private const val CJIT_REFRESH_ATTEMPTS = 3
+        private val CJIT_REFRESH_TIMEOUT = 5.seconds
+        private val CJIT_REFRESH_RETRY_DELAY = 1.seconds
     }
 }
 

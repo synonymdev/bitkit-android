@@ -19,6 +19,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.PrimaryDisplay
@@ -50,11 +52,14 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 
 const val KEY_DELETE = "delete"
 const val KEY_000 = "000"
 const val KEY_DECIMAL = "."
 private val defaultHeight = 300.dp
+private const val FOCUS_RETRY_COUNT = 10
+private val FOCUS_RETRY_DELAY = 50.milliseconds
 private val idealButtonHeight = 75.dp
 private val minButtonHeight = 50.dp
 private const val ROWS = 4
@@ -63,35 +68,47 @@ private const val ALPHA_PRESSED = 0.2f
 private val pressHaptic = HapticFeedbackType.VirtualKey
 private val errorHaptic = HapticFeedbackType.Reject
 
+typealias OnKeyPress = (key: String) -> Unit
+
+/** Pad dimming when disabled — white keys render at White64. */
+private const val DISABLED_ALPHA = 0.64f
+
 /**
  * Numeric keyboard.
  */
 @Composable
 fun NumberPad(
-    onPress: (String) -> Unit,
+    onPress: OnKeyPress,
     modifier: Modifier = Modifier,
     type: NumberPadType = NumberPadType.SIMPLE,
     availableHeight: Dp = defaultHeight,
     decimalSeparator: String = KEY_DECIMAL,
     errorKey: String? = null,
+    enabled: Boolean = true,
     includeNavigationBarsPadding: Boolean = false,
     onDeleteLongPress: (() -> Unit)? = null,
 ) {
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
-    val safeAreaModifier = if (includeNavigationBarsPadding) {
-        modifier.navigationBarsPadding()
-    } else {
-        modifier
+    LaunchedEffect(Unit) {
+        // Composing mid-transition can drop the initial request, leaving input dead;
+        // retry briefly until the focus node takes it.
+        repeat(FOCUS_RETRY_COUNT) {
+            if (runCatching { focusRequester.requestFocus() }.isSuccess) return@LaunchedEffect
+            delay(FOCUS_RETRY_DELAY)
+        }
     }
+    // Disabled: no-op input and dim the keys to White64.
+    val onPressIfEnabled: OnKeyPress = if (enabled) onPress else { _ -> }
 
     BoxWithConstraints(
-        modifier = safeAreaModifier
+        modifier = modifier
+            .let { if (includeNavigationBarsPadding) it.navigationBarsPadding() else it }
+            .alpha(if (enabled) 1f else DISABLED_ALPHA)
             .focusRequester(focusRequester)
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val mapped = mapHardwareKey(keyEvent.key, type) ?: return@onPreviewKeyEvent false
-                onPress(mapped)
+                onPressIfEnabled(mapped)
                 true
             }
             .focusable()
@@ -111,7 +128,7 @@ fun NumberPad(
             items((1..9).map { "$it" }) { number ->
                 NumberPadKeyButton(
                     text = number,
-                    onPress = onPress,
+                    onPress = onPressIfEnabled,
                     height = buttonHeight,
                     hasError = errorKey == number,
                 )
@@ -126,7 +143,7 @@ fun NumberPad(
 
                     NumberPadType.INTEGER -> NumberPadKeyButton(
                         text = KEY_000,
-                        onPress = onPress,
+                        onPress = onPressIfEnabled,
                         height = buttonHeight,
                         hasError = errorKey == KEY_000,
                         testTag = "N000",
@@ -134,7 +151,7 @@ fun NumberPad(
 
                     NumberPadType.DECIMAL -> NumberPadKeyButton(
                         text = decimalSeparator,
-                        onPress = onPress,
+                        onPress = onPressIfEnabled,
                         height = buttonHeight,
                         key = KEY_DECIMAL,
                         hasError = errorKey == KEY_DECIMAL,
@@ -145,14 +162,14 @@ fun NumberPad(
             item {
                 NumberPadKeyButton(
                     text = "0",
-                    onPress = onPress,
+                    onPress = onPressIfEnabled,
                     height = buttonHeight,
                     hasError = errorKey == "0",
                 )
             }
             item {
                 NumberPadDeleteButton(
-                    onPress = { onPress(KEY_DELETE) },
+                    onPress = { onPressIfEnabled(KEY_DELETE) },
                     onLongPress = onDeleteLongPress,
                     height = buttonHeight,
                     modifier = Modifier.testTag("NRemove"),
@@ -170,6 +187,7 @@ fun NumberPad(
     viewModel: AmountInputViewModel,
     modifier: Modifier = Modifier,
     currencies: CurrencyState = LocalCurrencies.current,
+    enabled: Boolean = true,
     type: NumberPadType = viewModel.getNumberPadType(currencies),
     availableHeight: Dp = defaultHeight,
     decimalSeparator: String = KEY_DECIMAL,
@@ -177,8 +195,8 @@ fun NumberPad(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     NumberPad(
-        onPress = { key -> viewModel.handleNumberPadInput(key, currencies) },
-        modifier = modifier,
+        onPress = { key -> if (enabled) viewModel.handleNumberPadInput(key, currencies) },
+        modifier = modifier.alpha(if (enabled) 1f else 0.5f),
         type = type,
         availableHeight = availableHeight,
         decimalSeparator = decimalSeparator,
@@ -214,7 +232,7 @@ private fun mapHardwareKey(key: Key, type: NumberPadType): String? {
 @Composable
 fun NumberPadKeyButton(
     text: String,
-    onPress: (String) -> Unit,
+    onPress: OnKeyPress,
     height: Dp,
     modifier: Modifier = Modifier,
     key: String = text,

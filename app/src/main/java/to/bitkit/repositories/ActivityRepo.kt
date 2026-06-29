@@ -213,6 +213,26 @@ class ActivityRepo @Inject constructor(
         notifyActivitiesChanged()
     }
 
+    suspend fun syncHardwareOnchainActivity(activity: OnchainActivity): Result<Unit> = withContext(bgDispatcher) {
+        runCatching {
+            val existing = coreService.activity.getOnchainActivityByTxId(activity.txId) ?: return@runCatching
+            val confirmTimestamp = existing.confirmTimestamp ?: activity.confirmTimestamp ?: activity.timestamp
+                .takeIf { activity.confirmed }
+            val updated = existing.copy(
+                confirmed = existing.confirmed || activity.confirmed,
+                confirmTimestamp = confirmTimestamp,
+                doesExist = if (activity.confirmed) true else existing.doesExist,
+                fee = if (existing.fee == 0uL && activity.fee > 0uL) activity.fee else existing.fee,
+                updatedAt = maxOf(existing.updatedAt ?: 0uL, activity.updatedAt ?: activity.timestamp),
+            )
+            if (updated == existing) return@runCatching
+            coreService.activity.update(existing.id, Activity.Onchain(updated))
+            notifyActivitiesChanged()
+        }.onFailure {
+            Logger.error("Failed to sync hardware activity '${activity.txId}'", it, context = TAG)
+        }
+    }
+
     suspend fun handleOnchainTransactionReplaced(txid: String, conflicts: List<String>) {
         coreService.activity.handleOnchainTransactionReplaced(txid, conflicts)
         notifyActivitiesChanged()
@@ -612,20 +632,29 @@ class ActivityRepo @Inject constructor(
     }
 
     /**
-     * Inserts a new activity for a fulfilled (channel ready) CJIT order
+     * Inserts a new activity for a fulfilled (channel ready) CJIT order.
+     *
+     * Returns `true` when a new activity was inserted and `false` when one already existed for the
+     * channel. Callers use this to deduplicate repeated channel ready events so the same CJIT receive
+     * is not reported twice.
      */
     suspend fun insertActivityFromCjit(
         cjitEntry: IcJitEntry?,
         channel: ChannelDetails,
-    ): Result<Unit> = withContext(bgDispatcher) {
+    ): Result<Boolean> = withContext(bgDispatcher) {
         runCatching {
             requireNotNull(cjitEntry)
+            val id = channel.fundingTxo?.txid.orEmpty()
+            if (coreService.activity.getActivity(id) != null) {
+                Logger.debug("Skipping CJIT activity insert: already exists for '$id'", context = TAG)
+                return@runCatching false
+            }
             val amount = channel.amountOnClose
             val now = nowTimestamp().epochSecond.toULong()
             insertActivity(
                 Activity.Lightning(
                     LightningActivity(
-                        id = channel.fundingTxo?.txid.orEmpty(),
+                        id = id,
                         txType = PaymentType.RECEIVED,
                         status = PaymentState.SUCCEEDED,
                         value = amount,
@@ -641,6 +670,7 @@ class ActivityRepo @Inject constructor(
                     )
                 )
             ).getOrThrow()
+            true
         }.onFailure {
             Logger.error("insertActivity error", it, context = TAG)
         }

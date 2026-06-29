@@ -246,7 +246,8 @@ fun ActivityDetailScreen(
                         onChannelClick = onChannelClick,
                         detailViewModel = detailViewModel,
                         isCpfpChild = isCpfpChild,
-                        showContactActions = isPaykitEnabled,
+                        isHardware = uiState.isHardwareActivity,
+                        showContactActions = isPaykitEnabled && !uiState.isHardwareActivity,
                         boostTxDoesExist = boostTxDoesExist,
                         onCopy = { text ->
                             app.toast(
@@ -328,6 +329,7 @@ private fun ActivityDetailContent(
     onChannelClick: ((String) -> Unit)?,
     detailViewModel: ActivityDetailViewModel? = null,
     isCpfpChild: Boolean = false,
+    isHardware: Boolean = false,
     showContactActions: Boolean = true,
     boostTxDoesExist: ImmutableMap<String, Boolean> = persistentMapOf(),
     onCopy: (String) -> Unit,
@@ -403,6 +405,7 @@ private fun ActivityDetailContent(
                 activity = item,
                 size = 48.dp,
                 isCpfpChild = isCpfpChild,
+                isHardware = isHardware,
             )
         }
 
@@ -595,51 +598,60 @@ private fun ActivityDetailContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (showContactActions) {
-                    PrimaryButton(
-                        text = stringResource(
-                            if (assignedContact != null) {
-                                R.string.wallet__activity_detach
-                            } else {
-                                R.string.wallet__activity_assign
-                            }
-                        ),
-                        size = ButtonSize.Small,
-                        onClick = if (assignedContact != null) onDetachClick else onAssignClick,
-                        enabled = !isSelfSend,
-                        icon = {
-                            Icon(
-                                painter = painterResource(
-                                    if (assignedContact != null) R.drawable.ic_user_minus else R.drawable.ic_user_plus
-                                ),
-                                contentDescription = null,
-                                tint = accentColor,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                PrimaryButton(
-                    text = stringResource(R.string.wallet__activity_tag),
-                    size = ButtonSize.Small,
-                    onClick = onAddTagClick,
-                    icon = {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_tag),
-                            contentDescription = null,
-                            tint = accentColor,
-                            modifier = Modifier.size(16.dp)
+            val showTagAction = !isHardware
+            if (showContactActions || showTagAction) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (showContactActions) {
+                        PrimaryButton(
+                            text = stringResource(
+                                if (assignedContact != null) {
+                                    R.string.wallet__activity_detach
+                                } else {
+                                    R.string.wallet__activity_assign
+                                }
+                            ),
+                            size = ButtonSize.Small,
+                            onClick = if (assignedContact != null) onDetachClick else onAssignClick,
+                            enabled = !isSelfSend,
+                            icon = {
+                                Icon(
+                                    painter = painterResource(
+                                        if (assignedContact != null) {
+                                            R.drawable.ic_user_minus
+                                        } else {
+                                            R.drawable.ic_user_plus
+                                        }
+                                    ),
+                                    contentDescription = null,
+                                    tint = accentColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            modifier = Modifier.weight(1f)
                         )
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("ActivityTag")
-                )
+                    }
+                    if (showTagAction) {
+                        PrimaryButton(
+                            text = stringResource(R.string.wallet__activity_tag),
+                            size = ButtonSize.Small,
+                            onClick = onAddTagClick,
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_tag),
+                                    contentDescription = null,
+                                    tint = accentColor,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("ActivityTag")
+                        )
+                    }
+                }
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -660,7 +672,7 @@ private fun ActivityDetailContent(
                         }
                     }
                 }
-                val shouldEnable = shouldEnableBoostButton(item, isCpfpChild, boostTxDoesExist)
+                val shouldEnable = shouldEnableBoostButton(item, isCpfpChild, isHardware, boostTxDoesExist)
                 PrimaryButton(
                     text = stringResource(
                         if (hasCompletedBoost) {
@@ -690,41 +702,40 @@ private fun ActivityDetailContent(
                             }
                         )
                 )
-                if (isTransfer && channelId != null && onChannelClick != null) {
-                    PrimaryButton(
-                        text = stringResource(R.string.lightning__connection),
-                        size = ButtonSize.Small,
-                        onClick = { onChannelClick(channelId) },
-                        icon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_lightning),
-                                contentDescription = null,
-                                tint = accentColor,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("ChannelButton")
-                    )
-                } else {
-                    PrimaryButton(
-                        text = stringResource(R.string.wallet__activity_explore),
-                        size = ButtonSize.Small,
-                        onClick = { onExploreClick(item.rawId()) },
-                        icon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_git_branch),
-                                contentDescription = null,
-                                tint = accentColor,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("ActivityTxDetails")
-                    )
-                }
+                PrimaryButton(
+                    text = stringResource(R.string.wallet__activity_explore),
+                    size = ButtonSize.Small,
+                    onClick = { onExploreClick(item.rawId()) },
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_git_branch),
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("ActivityTxDetails")
+                )
+            }
+            if (isTransfer && channelId != null && onChannelClick != null) {
+                PrimaryButton(
+                    text = stringResource(R.string.lightning__connection),
+                    size = ButtonSize.Small,
+                    onClick = { onChannelClick(channelId) },
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_lightning),
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("ChannelButton")
+                )
             }
         }
     }
@@ -1068,8 +1079,10 @@ private fun PreviewSheetSmallScreen() {
 private fun shouldEnableBoostButton(
     item: Activity,
     isCpfpChild: Boolean,
+    isHardware: Boolean,
     boostTxDoesExist: ImmutableMap<String, Boolean>,
 ): Boolean {
+    if (isHardware) return false
     if (item !is Activity.Onchain) return false
 
     val activity = item.v1

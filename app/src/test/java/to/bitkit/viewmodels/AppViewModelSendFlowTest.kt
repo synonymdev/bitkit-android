@@ -36,12 +36,15 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.BalanceState
+import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.TransportType
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -50,6 +53,7 @@ import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PaymentPendingException
@@ -73,6 +77,7 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
+import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.utils.AppError
 import to.bitkit.utils.timedsheets.TimedSheetManager
@@ -94,6 +99,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val lightningRepo = mock<LightningRepo>()
     private val walletRepo = mock<WalletRepo>()
+    private val hwWalletRepo = mock<HwWalletRepo>()
     private val settingsStore = mock<SettingsStore>()
     private val currencyRepo = mock<CurrencyRepo>()
     private val connectivityRepo = mock<ConnectivityRepo>()
@@ -105,6 +111,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val blocktankRepo = mock<BlocktankRepo>()
     private val appUpdaterService = mock<AppUpdaterService>()
     private val notifyPaymentReceivedHandler = mock<NotifyPaymentReceivedHandler>()
+    private val notifyChannelReadyHandler = mock<NotifyChannelReadyHandler>()
     private val cacheStore = mock<CacheStore>()
     private val transferRepo = mock<TransferRepo>()
     private val migrationService = mock<MigrationService>()
@@ -121,6 +128,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val toastManager = mock<ToastQueueManager>()
 
     private val balanceState = MutableStateFlow(BalanceState())
+    private val hwReceivedTxs = MutableSharedFlow<HwWalletReceivedTx>()
+    private val needsPairingCode = MutableStateFlow(false)
     private val settingsData = MutableStateFlow(SettingsData())
     private val isPaykitEnabled = MutableStateFlow(false)
     private val walletState = MutableStateFlow(WalletState())
@@ -138,6 +147,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut = createViewModel()
     }
 
+    @Suppress("LongMethod")
     private fun stubRepositories() {
         whenever(context.getString(any())).thenReturn("")
         whenever(context.getSystemService(Context.CLIPBOARD_SERVICE)).thenReturn(clipboardManager)
@@ -145,10 +155,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(mock()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
+        whenever(hwWalletRepo.receivedTxs).thenReturn(hwReceivedTxs)
+        whenever(hwWalletRepo.needsPairingCode).thenReturn(needsPairingCode)
         whenever(coreService.activity).thenReturn(activityService)
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(walletRepo.walletExists()).thenReturn(true)
+        whenever(backupRepo.isRestoring).thenReturn(MutableStateFlow(false))
         stubSettingsStore()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
@@ -219,6 +232,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         lightningRepo = lightningRepo,
         pendingPaymentRepo = pendingPaymentRepo,
         walletRepo = walletRepo,
+        hwWalletRepo = hwWalletRepo,
         backupRepo = backupRepo,
         settingsStore = settingsStore,
         currencyRepo = currencyRepo,
@@ -227,6 +241,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         blocktankRepo = blocktankRepo,
         appUpdaterService = appUpdaterService,
         notifyPaymentReceivedHandler = notifyPaymentReceivedHandler,
+        notifyChannelReadyHandler = notifyChannelReadyHandler,
         cacheStore = cacheStore,
         transferRepo = transferRepo,
         migrationService = migrationService,
@@ -243,6 +258,89 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         widgetsRepo = widgetsRepo,
         pubkyRepo = pubkyRepo,
     )
+
+    @Test
+    fun `onUsbDeviceAttached forwards to the hardware wallet repo`() = test {
+        sut.onUsbDeviceAttached()
+
+        verify(hwWalletRepo).onTransportRestored(TransportType.USB)
+    }
+
+    @Test
+    fun `onHomeResumed forwards app foreground to the hardware wallet repo`() = test {
+        sut.onHomeResumed()
+
+        verify(hwWalletRepo).onAppForegrounded()
+    }
+
+    @Test
+    fun `hardware received tx details navigate directly to hardware activity`() = test {
+        val txId = "hardware-tx"
+
+        sut.mainScreenEffect.test {
+            advanceUntilIdle()
+            hwReceivedTxs.emit(HwWalletReceivedTx(txid = txId, sats = 21uL))
+            advanceUntilIdle()
+
+            assertEquals(txId, sut.transactionSheet.value.activityId)
+            sut.onClickActivityDetail()
+
+            assertEquals(MainScreenEffect.Navigate(Routes.ActivityDetail(txId)), awaitItem())
+        }
+        verify(activityRepo, never()).findActivityByPaymentId(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `pairing code request shows and hides the pair device sheet`() = test {
+        needsPairingCode.value = true
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Hardware(route = HardwareRoute.PairCode), sut.currentSheet.value)
+
+        needsPairingCode.value = false
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `pairing code request does not interrupt a high priority sheet`() = test {
+        sut.showSheet(Sheet.Pin())
+        advanceUntilIdle()
+
+        needsPairingCode.value = true
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Pin(), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `pairing code request shows after high priority sheet closes`() = test {
+        sut.showSheet(Sheet.Pin())
+        advanceUntilIdle()
+
+        needsPairingCode.value = true
+        advanceUntilIdle()
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Hardware(route = HardwareRoute.PairCode), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `submitPairingCode forwards to the hardware wallet repo`() = test {
+        sut.submitPairingCode("123456")
+
+        verify(hwWalletRepo).submitPairingCode("123456")
+    }
+
+    @Test
+    fun `cancelPairingCode forwards to the hardware wallet repo`() = test {
+        sut.cancelPairingCode()
+
+        verify(hwWalletRepo).cancelPairingCode()
+    }
 
     @Test
     fun `canSwitchWallet is false when not unified`() = test {

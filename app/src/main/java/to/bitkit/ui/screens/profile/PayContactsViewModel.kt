@@ -153,19 +153,19 @@ class PayContactsViewModel @Inject constructor(
                 error.addSuppressed(rollbackError)
             }
         }
+        privateCleanupError?.let { error ->
+            if (previous.sharesPrivatePaykitEndpoints) {
+                restorePrivateContactPayments(contacts, error)
+            } else {
+                updatePrivateContactsPreference(isEnabled = false, error = error)
+            }
+        }
 
         val cleanupError = publicCleanupError ?: privateCleanupError
         publicCleanupError?.let { publicError ->
             privateCleanupError?.let { privateError -> publicError.addSuppressed(privateError) }
         }
         cleanupError?.let {
-            if (privateCleanupError != null) {
-                privatePaykitRepo.setContactSharingCleanupPending(true)
-                    .onFailure { markerError ->
-                        it.addSuppressed(markerError)
-                        return Result.failure(it)
-                    }
-            }
             return Result.failure(it)
         }
 
@@ -174,6 +174,36 @@ class PayContactsViewModel @Inject constructor(
 
         return Result.success(Unit)
     }
+
+    private suspend fun restorePrivateContactPayments(
+        contacts: List<String>,
+        error: Throwable,
+    ) {
+        val preferenceRestored = updatePrivateContactsPreference(isEnabled = true, error = error)
+        if (!preferenceRestored) return
+
+        privatePaykitRepo.prepareSavedContacts(
+            publicKeys = contacts,
+            requireImmediatePublication = true,
+        ).onFailure {
+            error.addSuppressed(it)
+            updatePrivateContactsPreference(isEnabled = false, error = error)
+            return
+        }
+
+        privatePaykitRepo.setContactSharingCleanupPending(false)
+            .onFailure {
+                error.addSuppressed(it)
+                updatePrivateContactsPreference(isEnabled = false, error = error)
+            }
+    }
+
+    private suspend fun updatePrivateContactsPreference(
+        isEnabled: Boolean,
+        error: Throwable,
+    ): Boolean = runCatching {
+        settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = isEnabled) }
+    }.onFailure(error::addSuppressed).isSuccess
 
     private fun syncErrorMessage(error: Throwable): String = when (error) {
         PublicPaykitError.InvalidPayload -> context.getString(R.string.profile__pay_contacts_error_invalid_payload)

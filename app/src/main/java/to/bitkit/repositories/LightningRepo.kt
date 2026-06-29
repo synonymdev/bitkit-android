@@ -63,6 +63,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
+import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
@@ -101,6 +102,7 @@ import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
 
 @Singleton
 @Suppress("LongParameterList", "TooManyFunctions", "LargeClass")
@@ -361,15 +363,7 @@ class LightningRepo @Inject constructor(
                     Logger.warn("Network graph is stale, resetting and restarting...", context = TAG)
 
                     lightningService.stop()
-                    lightningService.resetNetworkGraph(walletIndex)
-
-                    runCatching {
-                        vssBackupClientLdk.setup(walletIndex).getOrThrow()
-                        vssBackupClientLdk.deleteObject("network_graph").getOrThrow()
-                        Logger.info("Cleared stale network graph from VSS (first delete)", context = TAG)
-                    }.onFailure {
-                        Logger.warn("Failed to clear graph from VSS (first delete)", it, context = TAG)
-                    }
+                    clearNetworkGraph(walletIndex)
 
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopped) }
                     shouldRestartForGraphReset = true
@@ -482,6 +476,28 @@ class LightningRepo @Inject constructor(
                     _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
                 }
             }
+        }
+    }
+
+    suspend fun resetNetworkGraph(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
+        Logger.warn("Resetting network graph (manual)", context = TAG)
+        runCatching {
+            if (lightningService.node != null) {
+                lightningService.stop()
+            }
+            // Propagate VSS failures: a manual reset that leaves the graph in VSS is ineffective.
+            clearNetworkGraph(walletIndex).getOrThrow()
+        }
+    }
+
+    private suspend fun clearNetworkGraph(walletIndex: Int): Result<Unit> {
+        lightningService.resetNetworkGraph(walletIndex)
+        return runCatching {
+            vssBackupClientLdk.setup(walletIndex).getOrThrow()
+            vssBackupClientLdk.deleteObject("network_graph").getOrThrow()
+            Logger.info("Cleared network graph from VSS", context = TAG)
+        }.onFailure {
+            Logger.warn("Failed to clear network graph from VSS", it, context = TAG)
         }
     }
 
@@ -1622,8 +1638,48 @@ class LightningRepo @Inject constructor(
             graphNodeCount = graph?.nodeCount,
             graphChannelCount = graph?.channelCount,
             latestRgsSyncTimestamp = graph?.latestRgsSyncTimestamp,
+            latestPathfindingScoresSyncTimestamp = state.nodeStatus?.latestPathfindingScoresSyncTimestamp,
             syncHealthy = state.isSyncHealthy,
         )
+    }
+
+    /**
+     * Returns the device epoch seconds captured after the VSS deletes and before the node restart,
+     * so callers can require any scores sync timestamp to be strictly newer to prove a post-reset download.
+     */
+    @OptIn(ExperimentalTime::class)
+    suspend fun resetPathfindingScores(walletIndex: Int = 0): Result<Long> = withContext(bgDispatcher) {
+        Logger.info("Resetting pathfinding scores", context = TAG)
+
+        waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
+        stop().onFailure {
+            Logger.error("Failed to stop node during pathfinding scores reset", it, context = TAG)
+            return@withContext Result.failure(it)
+        }
+
+        runCatching {
+            val lifecycleState = _lightningState.value.nodeLifecycleState
+            check(lifecycleState == NodeLifecycleState.Stopped) {
+                "Node lifecycle changed to '$lifecycleState' during pathfinding scores reset"
+            }
+            vssBackupClientLdk.setup(walletIndex).getOrThrow()
+            vssBackupClientLdk.deleteObject(VSS_KEY_SCORER).getOrThrow()
+            vssBackupClientLdk.deleteObject(VSS_KEY_EXTERNAL_SCORES_CACHE).getOrThrow()
+        }.onFailure {
+            Logger.error("Failed to delete pathfinding scores from VSS", it, context = TAG)
+            start(walletIndex = walletIndex, shouldRetry = false).onFailure { startError ->
+                Logger.error("Failed to restart node after pathfinding scores reset failure", startError, context = TAG)
+            }
+            return@withContext Result.failure(it)
+        }
+
+        val resetAtSecs = nowMillis() / 1000
+
+        start(walletIndex = walletIndex, shouldRetry = false)
+            .map { resetAtSecs }
+            .onSuccess {
+                Logger.info("Pathfinding scores reset at '$resetAtSecs'", context = TAG)
+            }
     }
     // endregion
 
@@ -1644,6 +1700,8 @@ class LightningRepo @Inject constructor(
     companion object {
         private const val TAG = "LightningRepo"
         private const val LENGTH_CHANNEL_ID_PREVIEW = 10
+        private const val VSS_KEY_SCORER = "scorer"
+        private const val VSS_KEY_EXTERNAL_SCORES_CACHE = "external_pathfinding_scores_cache"
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
@@ -1720,6 +1778,7 @@ data class ProbeReadiness(
     val graphNodeCount: Int?,
     val graphChannelCount: Int?,
     val latestRgsSyncTimestamp: ULong?,
+    val latestPathfindingScoresSyncTimestamp: ULong?,
     val syncHealthy: Boolean,
 ) {
     val ready: Boolean

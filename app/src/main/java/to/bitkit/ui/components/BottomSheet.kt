@@ -1,6 +1,5 @@
 package to.bitkit.ui.components
 
-import android.annotation.SuppressLint
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,7 +77,6 @@ fun BottomSheet(
     )
 }
 
-@SuppressLint("ModifierParameter")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BottomSheetPreview(
@@ -111,9 +109,10 @@ private fun Preview() {
                     .gradientBackground()
                     .padding(horizontal = 16.dp)
             ) {
-                SheetTopBar("Sheet Title")
+                SheetTopBar("Page Title")
                 FillHeight()
-                PrimaryButton(text = "Primary Button", onClick = {})
+                PrimaryButton(text = "Button", onClick = {})
+                VerticalSpacer(24.dp)
             }
         }
     }

@@ -8,12 +8,15 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Defaults
 import to.bitkit.ext.amountSats
 import to.bitkit.ext.channelId
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.BalanceState
 import to.bitkit.models.TransferType
 import to.bitkit.models.safe
+import to.bitkit.models.toBalance
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.utils.Logger
@@ -27,6 +30,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
     private val lightningRepo: LightningRepo,
     private val transferRepo: TransferRepo,
     private val settingsStore: SettingsStore,
+    private val hwWalletRepo: HwWalletRepo,
 ) {
     suspend operator fun invoke(): Result<BalanceState> = withContext(bgDispatcher) {
         runCatching {
@@ -34,7 +38,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val channels = lightningRepo.getChannels().orEmpty()
             val activeTransfers = transferRepo.activeTransfers.first()
 
-            val paidOrdersSats = getOrderPaymentsSats(activeTransfers)
+            val paidOrdersSats = getOrderPaymentsSats(activeTransfers, channels, balanceDetails)
             val pendingChannelsSats = getPendingChannelsSats(activeTransfers, channels, balanceDetails)
 
             val toSavingsAmount = getTransferToSavingsSats(activeTransfers, channels, balanceDetails)
@@ -54,6 +58,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
                 maxSendOnchainSats = getMaxSendAmount(balanceDetails),
                 balanceInTransferToSavings = toSavingsAmount.safe() - coopCloseSavingsSats.safe(),
                 balanceInTransferToSpending = toSpendingAmount,
+                hardwareWallets = hwWalletRepo.wallets.value.map { it.toBalance() },
             )
 
             val height = lightningRepo.lightningState.value.block()?.height
@@ -65,25 +70,41 @@ class DeriveBalanceStateUseCase @Inject constructor(
         }
     }
 
-    private fun getOrderPaymentsSats(transfers: List<TransferEntity>): ULong {
-        return transfers
-            .filter { it.type.isToSpending() && it.lspOrderId != null }
-            .sumOf { it.amountSats.toULong() }
-    }
-
-    private fun getPendingChannelsSats(
+    private suspend fun getOrderPaymentsSats(
         transfers: List<TransferEntity>,
         channels: List<ChannelDetails>,
         balances: BalanceDetails,
     ): ULong {
         var amount = 0uL
-        val pendingTransfers = transfers.filter { it.type.isToSpending() && it.channelId != null }
+        val paidOrders = transfers.filter { it.type.isToSpending() && it.lspOrderId != null }
+
+        for (transfer in paidOrders) {
+            val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
+            val channelBalance = channelId?.let { id ->
+                balances.lightningBalances.find { it.channelId() == id }
+            }
+            if (channelBalance == null) {
+                amount = amount.safe() + transfer.amountSats.toULong().safe()
+            }
+        }
+
+        return amount
+    }
+
+    private suspend fun getPendingChannelsSats(
+        transfers: List<TransferEntity>,
+        channels: List<ChannelDetails>,
+        balances: BalanceDetails,
+    ): ULong {
+        var amount = 0uL
+        val pendingTransfers = transfers.filter { it.type.isToSpending() }
 
         for (transfer in pendingTransfers) {
-            val channel = channels.find { it.channelId == transfer.channelId }
+            val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
+            val channel = channels.find { it.channelId == channelId }
             if (channel != null && !channel.isChannelReady) {
                 val channelBalance = balances.lightningBalances.find { it.channelId() == channel.channelId }
-                amount += channelBalance?.amountSats() ?: 0u
+                amount = amount.safe() + (channelBalance?.amountSats() ?: 0uL).safe()
             }
         }
 
@@ -101,7 +122,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
         for (transfer in toSavings) {
             val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
             val channelBalance = balanceDetails.lightningBalances.find { it.channelId() == channelId }
-            toSavingsAmount += channelBalance?.amountSats() ?: 0u
+            toSavingsAmount = toSavingsAmount.safe() + (channelBalance?.amountSats() ?: 0uL).safe()
         }
 
         return toSavingsAmount
@@ -130,7 +151,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
         for (transfer in transfers.filter { it.type == TransferType.COOP_CLOSE }) {
             val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
             val channelBalance = balanceDetails.lightningBalances.find { it.channelId() == channelId }
-            amount += channelBalance?.amountSats() ?: 0u
+            amount = amount.safe() + (channelBalance?.amountSats() ?: 0uL).safe()
         }
         return amount
     }
@@ -153,6 +174,6 @@ class DeriveBalanceStateUseCase @Inject constructor(
 
     companion object {
         const val TAG = "DeriveBalanceStateUseCase"
-        const val FALLBACK_FEE_PERCENT = 0.1
+        const val FALLBACK_FEE_PERCENT = Defaults.fallbackFeePercent
     }
 }

@@ -57,6 +57,7 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.PinnedTabsScaffold
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.screens.wallets.HwWalletViewModel
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.activity.components.TabItem
 import to.bitkit.ui.settingsViewModel
@@ -79,6 +80,7 @@ fun SettingsScreen(
     navController: NavController,
     advancedViewModel: AdvancedSettingsViewModel = hiltViewModel(),
     languageViewModel: LanguageViewModel = hiltViewModel(),
+    hwWalletViewModel: HwWalletViewModel = hiltViewModel(),
 ) {
     val app = appViewModel ?: return
     val settings = settingsViewModel ?: return
@@ -94,6 +96,7 @@ fun SettingsScreen(
     val notificationsGranted by settings.notificationsGranted.collectAsStateWithLifecycle()
     val isPubkyAuthenticated by settings.isPubkyAuthenticated.collectAsStateWithLifecycle()
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
+    val hardwareWallets by hwWalletViewModel.wallets.collectAsStateWithLifecycle()
     val languageUiState by languageViewModel.uiState.collectAsStateWithLifecycle()
 
     // Security tab state
@@ -130,6 +133,7 @@ fun SettingsScreen(
             notificationsGranted = notificationsGranted,
             isPubkyAuthenticated = isPubkyAuthenticated,
             isPaykitEnabled = isPaykitEnabled,
+            hardwareWalletCount = hardwareWallets.size,
         ),
         securityState = SecurityTabState(
             isPinEnabled = isPinEnabled,
@@ -166,6 +170,7 @@ fun SettingsScreen(
                         navController.navigateTo(Routes.BackgroundPaymentsIntro)
                     }
                 }
+                SettingsEvent.HardwareWalletsClick -> navController.navigateTo(Routes.HardwareWalletsSettings)
                 SettingsEvent.BackupWalletClick -> app.showSheet(Sheet.Backup())
                 SettingsEvent.DataBackupsClick -> navController.navigateTo(Routes.BackupSettings)
                 SettingsEvent.ResetWalletClick ->
@@ -364,6 +369,13 @@ private fun GeneralTabContent(
             ),
             onClick = { onEvent(SettingsEvent.BgPaymentsClick) },
             modifier = Modifier.testTag("BackgroundPaymentSettings")
+        )
+        SettingsButtonRow(
+            title = stringResource(R.string.settings__hardware_wallets__nav_title),
+            icon = { SettingsIcon(R.drawable.ic_device_mobile_speaker) },
+            value = SettingsButtonValue.StringValue(state.hardwareWalletCount.toString()),
+            onClick = { onEvent(SettingsEvent.HardwareWalletsClick) },
+            modifier = Modifier.testTag("HardwareWalletsSettings")
         )
 
         VerticalSpacer(32.dp)
@@ -647,6 +659,7 @@ sealed interface SettingsEvent {
     data object PaymentPreferenceClick : SettingsEvent
     data object QuickPayClick : SettingsEvent
     data object BgPaymentsClick : SettingsEvent
+    data object HardwareWalletsClick : SettingsEvent
 
     // Security
     data object BackupWalletClick : SettingsEvent
@@ -689,6 +702,7 @@ data class GeneralTabState(
     val notificationsGranted: Boolean = false,
     val isPubkyAuthenticated: Boolean = false,
     val isPaykitEnabled: Boolean = false,
+    val hardwareWalletCount: Int = 0,
 )
 
 @Immutable

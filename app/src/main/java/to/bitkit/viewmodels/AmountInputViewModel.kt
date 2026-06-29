@@ -6,8 +6,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -52,7 +55,15 @@ class AmountInputViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AmountInputUiState())
     val uiState: StateFlow<AmountInputUiState> = _uiState.asStateFlow()
 
+    private val _effect = MutableSharedFlow<AmountInputEffect>(extraBufferCapacity = 1)
+    val effect: SharedFlow<AmountInputEffect> = _effect.asSharedFlow()
+
+    private var maxAmount: Long = MAX_AMOUNT
     private var rawInputText: String = ""
+
+    fun setMaxAmount(amount: Long) {
+        maxAmount = if (amount > 0) amount.coerceAtMost(MAX_AMOUNT) else MAX_AMOUNT
+    }
 
     fun handleNumberPadInput(
         key: String,
@@ -74,7 +85,7 @@ class AmountInputViewModel @Inject constructor(
         if (primaryDisplay == PrimaryDisplay.BITCOIN && isModern) {
             val newAmount = convertToSats(newText, primaryDisplay, isModern = true)
 
-            if (newAmount <= MAX_AMOUNT) {
+            if (key == KEY_DELETE || newAmount <= maxAmount) {
                 rawInputText = newText
                 _uiState.update {
                     it.copy(
@@ -84,14 +95,14 @@ class AmountInputViewModel @Inject constructor(
                     )
                 }
             } else {
-                // Block input when limit exceeded
+                emitMaxExceeded()
                 triggerErrorState(key)
             }
         } else {
             // For decimal input, check limits before updating state
             if (newText.isNotEmpty()) {
                 val newAmount = convertToSats(newText, primaryDisplay, isModern)
-                if (newAmount <= MAX_AMOUNT) {
+                if (key == KEY_DELETE || newAmount <= maxAmount) {
                     // Update both raw input and display text
                     rawInputText = newText
                     _uiState.update {
@@ -106,7 +117,7 @@ class AmountInputViewModel @Inject constructor(
                         )
                     }
                 } else {
-                    // Block input when limit exceeded
+                    emitMaxExceeded()
                     triggerErrorState(key)
                 }
             } else {
@@ -251,7 +262,14 @@ class AmountInputViewModel @Inject constructor(
 
     fun clearInput() {
         rawInputText = ""
+        maxAmount = MAX_AMOUNT
         _uiState.update { AmountInputUiState() }
+    }
+
+    private fun emitMaxExceeded() {
+        if (maxAmount < MAX_AMOUNT) {
+            _effect.tryEmit(AmountInputEffect.MaxExceeded)
+        }
     }
 
     private fun triggerErrorState(key: String) {
@@ -411,6 +429,10 @@ data class AmountInputUiState(
     val text: String = "",
     val errorKey: String? = null,
 )
+
+sealed interface AmountInputEffect {
+    data object MaxExceeded : AmountInputEffect
+}
 
 @SuppressLint("ViewModelConstructorInComposable")
 @Composable

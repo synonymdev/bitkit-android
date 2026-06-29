@@ -1,0 +1,156 @@
+name: Release Internal
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  TERM: xterm-256color
+  FORCE_COLOR: 1
+  NDK_VERSION: 28.1.13356709
+
+jobs:
+  build-internal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    environment: release-internal
+
+    permissions:
+      contents: read
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'adopt'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Setup Android NDK
+        run: |
+          set -euo pipefail
+          android_sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$android_sdk_root"
+          sdkmanager_path="$android_sdk_root/cmdline-tools/latest/bin/sdkmanager"
+          test -x "$sdkmanager_path"
+          yes | "$sdkmanager_path" --licenses >/dev/null || true
+          "$sdkmanager_path" --install "ndk;$NDK_VERSION"
+
+      - name: Decode mainnet release google-services.json
+        env:
+          MAINNET_RELEASE_GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.MAINNET_RELEASE_GOOGLE_SERVICES_JSON_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$MAINNET_RELEASE_GOOGLE_SERVICES_JSON_BASE64"
+          mkdir -p app/src/mainnetRelease
+          printf '%s' "$MAINNET_RELEASE_GOOGLE_SERVICES_JSON_BASE64" | base64 --decode > app/src/mainnetRelease/google-services.json
+
+      - name: Decode internal keystore
+        env:
+          INTERNAL_KEYSTORE_BASE64: ${{ secrets.INTERNAL_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$INTERNAL_KEYSTORE_BASE64"
+          umask 077
+          keystore_path="$RUNNER_TEMP/internal.keystore"
+          printf '%s' "$INTERNAL_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          echo "KEYSTORE_FILE=$keystore_path" >> "$GITHUB_ENV"
+
+      - name: Build internal release APK
+        env:
+          GPR_USER: ${{ secrets.GPR_USER || github.actor }}
+          GPR_TOKEN: ${{ secrets.GPR_TOKEN || github.token }}
+          GITHUB_TOKEN: ${{ secrets.GPR_TOKEN || github.token }}
+          KEYSTORE_PASSWORD: ${{ secrets.INTERNAL_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.INTERNAL_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.INTERNAL_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ./gradlew assembleMainnetRelease --no-daemon --stacktrace
+          ./gradlew :app:syncNativeDebugSymbolArtifacts --no-daemon --stacktrace
+          scripts/create-native-debug-symbols.sh
+
+      - name: Verify native libraries are stripped
+        run: |
+          set -euo pipefail
+          android_sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$android_sdk_root"
+          llvm_readelf_candidates=("$android_sdk_root/ndk/$NDK_VERSION"/toolchains/llvm/prebuilt/*/bin/llvm-readelf)
+          llvm_readelf_path="${llvm_readelf_candidates[0]}"
+          test -x "$llvm_readelf_path"
+
+          native_count=0
+          extract_root="$(mktemp -d)"
+          trap 'rm -rf "$extract_root"' EXIT
+          while IFS= read -r -d '' artifact_path; do
+            extract_dir="$extract_root/$(basename "$artifact_path")"
+            mkdir -p "$extract_dir"
+            unzip -q "$artifact_path" 'lib/*/*.so' -d "$extract_dir" 2>/dev/null || true
+            while IFS= read -r -d '' native_path; do
+              native_count=$((native_count + 1))
+              if "$llvm_readelf_path" -S "$native_path" | grep -q '\.debug_'; then
+                native_entry="${native_path#"$extract_dir"/}"
+                echo "Native library contains debug sections: $artifact_path:$native_entry"
+                exit 1
+              fi
+            done < <(find "$extract_dir" -name '*.so' -print0)
+          done < <(find app/build/outputs/apk/mainnet/release -type f -name '*.apk' -print0)
+          test "$native_count" -gt 0
+
+      - name: Verify internal release signature
+        run: |
+          set -euo pipefail
+          android_sdk_root="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$android_sdk_root"
+          apksigner_path="$(find "$android_sdk_root/build-tools" -name apksigner -type f | sort -V | tail -n 1)"
+          test -n "$apksigner_path"
+
+          apk_count=0
+          while IFS= read -r -d '' apk_path; do
+            apk_count=$((apk_count + 1))
+            "$apksigner_path" verify --verbose --print-certs "$apk_path"
+          done < <(find app/build/outputs/apk/mainnet/release -name 'bitkit-mainnet-release-*.apk' -print0)
+          test "$apk_count" -gt 0
+
+      - name: Collect internal artifacts
+        id: artifacts
+        run: |
+          set -euo pipefail
+          artifact_dir="$RUNNER_TEMP/internal-release"
+          mkdir -p "$artifact_dir"
+          mapfile -d '' apk_paths < <(find app/build/outputs/apk/mainnet/release -name 'bitkit-mainnet-release-*.apk' -print0)
+          mapfile -d '' symbol_paths < <(find app/build/outputs/native-debug-symbols/mainnetRelease -name 'native-debug-symbols-*.zip' -print0)
+          test "${#apk_paths[@]}" -gt 0
+          test "${#symbol_paths[@]}" -gt 0
+
+          for apk_path in "${apk_paths[@]}"; do
+            cp "$apk_path" "$artifact_dir/"
+          done
+          for symbol_path in "${symbol_paths[@]}"; do
+            cp "$symbol_path" "$artifact_dir/"
+          done
+
+          apk_file="$(basename "${apk_paths[0]}")"
+          build_number="${apk_file#bitkit-mainnet-release-}"
+          build_number="${build_number%%-*}"
+          [[ "$build_number" =~ ^[0-9]+$ ]]
+
+          (cd "$artifact_dir" && sha256sum -- *.apk native-debug-symbols-*.zip > SHA256SUMS.txt)
+          echo "artifact_name=bitkit-release-internal-$build_number-$GITHUB_RUN_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
+
+      - name: Upload internal artifacts
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.artifacts.outputs.artifact_name }}
+          path: ${{ steps.artifacts.outputs.artifact_dir }}
+          retention-days: 30

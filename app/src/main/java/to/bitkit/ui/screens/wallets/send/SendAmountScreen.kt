@@ -56,6 +56,7 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputUiState
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.LnurlParams
@@ -73,12 +74,29 @@ fun SendAmountScreen(
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
+    balances: BalanceState = LocalBalances.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
     val app = appViewModel
     val context = LocalContext.current
     val amountInputUiState: AmountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentOnEvent by rememberUpdatedState(onEvent)
+
+    val maxExceededMessage = run {
+        val lnurl = uiState.lnurl
+        val lnurlPayMaxExceeded = lnurl is LnurlParams.LnurlPay &&
+            lnurl.data.maxSendableSat().toLong() <
+            (balances.maxSendLightningSats.safe() - uiState.estimatedRoutingFee.safe()).toLong()
+        when {
+            lnurl is LnurlParams.LnurlWithdraw ->
+                R.string.wallet__lnurl_w_error_max__title to R.string.wallet__lnurl_w_error_max__description
+            lnurlPayMaxExceeded ->
+                R.string.wallet__lnurl_pay__error_max__title to R.string.wallet__lnurl_pay__error_max__description
+            else ->
+                R.string.wallet__send_amount_exceeded__title to R.string.wallet__send_amount_exceeded__description
+        }
+    }
+    val currentMaxExceededMessage by rememberUpdatedState(maxExceededMessage)
 
     LaunchedEffect(Unit) {
         if (uiState.amount > 0u) {
@@ -88,6 +106,23 @@ fun SendAmountScreen(
 
     LaunchedEffect(amountInputUiState.sats) {
         currentOnEvent(SendEvent.AmountChange(amountInputUiState.sats.toULong()))
+    }
+
+    LaunchedEffect(Unit) {
+        amountInputViewModel.effect.collect {
+            when (it) {
+                AmountInputEffect.MaxExceeded -> {
+                    val (titleRes, descriptionRes) = currentMaxExceededMessage
+                    app?.toast(
+                        type = Toast.ToastType.WARNING,
+                        title = context.getString(titleRes),
+                        description = context.getString(descriptionRes),
+                        visibilityTime = Toast.VISIBILITY_TIME_SHORT,
+                        testTag = "SendAmountExceededToast",
+                    )
+                }
+            }
+        }
     }
 
     LaunchedEffect(uiState.decodedInvoice, uiState.payMethod) {
@@ -201,6 +236,15 @@ private fun SendAmountNodeRunning(
                 val routingFee = uiState.estimatedRoutingFee
                 (maxLightning.safe() - routingFee.safe()).toLong()
             }
+        }
+
+        val maxAllowed = when (val lnurl = uiState.lnurl) {
+            is LnurlParams.LnurlPay -> minOf(lnurl.data.maxSendableSat().toLong(), availableAmount)
+            else -> availableAmount
+        }
+
+        LaunchedEffect(maxAllowed) {
+            amountInputViewModel.setMaxAmount(maxAllowed)
         }
 
         Column(

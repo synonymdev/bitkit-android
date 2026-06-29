@@ -59,6 +59,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.DatePattern
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.ext.resolveDisplayShortChannelId
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.Toast
 import to.bitkit.models.msatFloorOf
@@ -219,6 +220,15 @@ private fun ChannelDetailContent(
         }
 
         val order = blocktankOrder ?: cjitEntry
+
+        val linkedOrderScid = when (order) {
+            is IBtOrder -> order.channel?.shortChannelId
+            is IcJitEntry -> order.channel?.shortChannelId
+            else -> null
+        }
+        val displayShortChannelId = remember(channel, linkedOrderScid) {
+            resolveDisplayShortChannelId(channel.details.shortChannelId, linkedOrderScid)
+        }
 
         val capacity = channel.details.channelValueSats.toLong()
         val localBalance = channel.details.amountOnClose.toLong()
@@ -429,18 +439,20 @@ private fun ChannelDetailContent(
                     )
                 }
 
-                SectionRow(
-                    name = stringResource(R.string.lightning__channel_id),
-                    valueContent = {
-                        CaptionB(
-                            text = channel.details.channelId,
-                            maxLines = 1,
-                            overflow = TextOverflow.MiddleEllipsis,
-                            textAlign = TextAlign.End,
-                        )
-                    },
-                    onClick = { onCopyText(channel.details.channelId) }
-                )
+                displayShortChannelId?.let { scid ->
+                    SectionRow(
+                        name = stringResource(R.string.lightning__channel_id),
+                        valueContent = {
+                            CaptionB(
+                                text = scid,
+                                maxLines = 1,
+                                overflow = TextOverflow.MiddleEllipsis,
+                                textAlign = TextAlign.End,
+                            )
+                        },
+                        onClick = { onCopyText(scid) }
+                    )
+                }
 
                 channel.details.fundingTxo?.let { fundingTxo ->
                     val channelPoint = "${fundingTxo.txid}:${fundingTxo.vout}"

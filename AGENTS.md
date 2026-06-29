@@ -153,7 +153,7 @@ fun updateState(action: Action) {
 
 ```kotlin
 suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
-  runCatching {
+  runSuspendCatching {
     apiService.fetchData()
   }.onFailure {
     Logger.error("Failed", it, context = TAG)
@@ -178,11 +178,13 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS check existing code patterns before implementing new features
 - USE existing extensions and utilities rather than creating new ones
 - ALWAYS use or create `Context` extension properties in `ext/Context.kt` instead of raw `context.getSystemService()` casts
+- NEVER use `System.currentTimeMillis()`, use time helpers from `ext/DateTime.kt` instead (e.g. `nowMillis()`, `Clock.nowMs()`) — they accept a `Clock` and are unit-testable
 - ALWAYS apply the YAGNI (You Ain't Gonna Need It) principle for new code
 - ALWAYS reuse existing constants
 - ALWAYS ensure a method exist before calling it
 - ALWAYS remove unused code after refactors
 - ALWAYS follow Material3 design guidelines for UI components
+- When building from a Figma frame, reuse only scaffolding (sheet host, `SheetTopBar`, buttons, typography); NEVER swap a design-specific illustration/animation for a lookalike. Export the frame's assets via the Figma MCP and read animation timing/easing/direction from prototype reactions (`use_figma` → `node.reactions`)
 - ALWAYS ensure proper error handling in coroutines
 - ALWAYS acknowledge datastore async operations run synchronously in a suspend context
 - NEVER use `runBlocking` in suspend functions
@@ -195,6 +197,8 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS log errors at the final handling layer where the error is acted upon, not in intermediate layers that just propagate it
 - ALWAYS use the Result API instead of try-catch
 - NEVER wrap methods returning `Result<T>` in try-catch
+- ALWAYS use `runSuspendCatching` (from `ext/Coroutines.kt`) instead of `runCatching` when the block calls suspend functions or runs in a coroutine — it re-throws `CancellationException` so structured-concurrency cancellation is preserved; plain `runCatching` catches `Throwable` and swallows it. NEVER log a `CancellationException` as an error
+- EXCEPTION: when a `TimeoutCancellationException` from `withTimeout` must be treated as a retriable failure, use `runCatching` with an explicit `if (it is CancellationException && it !is TimeoutCancellationException) throw it` guard (e.g. `BlocktankRepo.refreshCjitEntries`)
 - PREFER to use `it` instead of explicit named parameters in lambdas e.g. `fn().onSuccess { log(it) }.onFailure { log(it) }`
 - NEVER inject ViewModels as dependencies - Only android activities and composable functions can use viewmodels
 - ALWAYS co-locate screen-specific ViewModels in the same package as their screen; only place ViewModels in `viewmodels/` when shared across multiple screens
@@ -212,11 +216,14 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - USE `docs/` as target dir of saved files when asked to create documentation for new features
 - NEVER write code in the documentation files
 - NEVER add code comments to private functions, classes, etc
+- ALWAYS use `/** */` to document constants
 - ALWAYS use `_uiState.update { }`, NEVER use `_stateFlow.value =`
 - ALWAYS add the warranted changes in unit tests to keep the unit tests succeeding
 - ALWAYS follow the patterns of the existing code in `app/src/test` when writing new unit tests
 - ALWAYS be mindful of thread safety when working with mutable lists & state
 - ALWAYS split screen composables into parent accepting viewmodel + inner private child accepting state and callbacks `Content()`
+- ALWAYS preview an in-sheet screen as `BottomSheetPreview { Content(modifier = Modifier.sheetHeight()) }`, passing the host's `SheetSize` when it isn't the default `LARGE`; see `SendErrorScreen.kt`
+- ALWAYS write Compose `testTag`s in PascalCase (e.g. `HwPairedFinish`), never snake_case
 - ALWAYS name lambda parameters in a composable function using present tense, NEVER use past tense
 - ALWAYS use `whenever { mock.suspendCall() }` for suspend stubs if not inside `test{}` fn blocks
 - ALWAYS use `whenever(mock.call())` for non-suspend stubs and for suspend stubs if inside `test{}` fn blocks
@@ -229,6 +236,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS add new localizable string resources in alphabetical order in `strings.xml`
 - NEVER add string resources for strings used only in dev settings screens and previews and never localize acronyms
 - ALWAYS use template in `.github/pull_request_template.md` for PR descriptions
+- ALWAYS reference test files in PR descriptions/QA Notes by bare file name only (e.g. `HwWalletRepoTest.kt`), NEVER the full path; only when two referenced test files share the same name, prefix the shortest leading path segment(s) that disambiguate them (e.g. `repositories/FooTest.kt` vs `viewmodels/FooTest.kt`)
 - ALWAYS wrap `ULong` numbers with `USat` in arithmetic operations, to guard against overflows
 - PREFER to use one-liners with `run {}` when applicable, e.g. `override fun someCall(value: String) = run { this.value = value }`
 - ALWAYS add imports instead of inline fully-qualified names
