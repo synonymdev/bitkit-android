@@ -42,6 +42,7 @@ fun BackgroundPaymentsSettings(
     val context = LocalContext.current
     val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
     val showNotificationDetails by settingsViewModel.showNotificationDetails.collectAsStateWithLifecycle()
+    val keepActive by settingsViewModel.keepBitkitActiveInBackground.collectAsStateWithLifecycle()
 
     RequestNotificationPermissions(
         onPermissionChange = settingsViewModel::setNotificationPreference,
@@ -51,9 +52,11 @@ fun BackgroundPaymentsSettings(
     Content(
         hasPermission = notificationsGranted,
         showDetails = showNotificationDetails,
+        keepActive = keepActive,
         onBack = onBack,
         onSystemSettingsClick = context::openNotificationSettings,
         toggleNotificationDetails = settingsViewModel::toggleNotificationDetails,
+        onKeepActiveClick = { settingsViewModel.setKeepBitkitActiveInBackground(!keepActive) },
     )
 }
 
@@ -61,9 +64,11 @@ fun BackgroundPaymentsSettings(
 private fun Content(
     hasPermission: Boolean,
     showDetails: Boolean,
+    keepActive: Boolean,
     onBack: () -> Unit,
     onSystemSettingsClick: () -> Unit,
     toggleNotificationDetails: () -> Unit,
+    onKeepActiveClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier.screen()
@@ -104,6 +109,19 @@ private fun Content(
                     color = Colors.Red,
                 )
             }
+
+            SettingsSwitchRow(
+                title = stringResource(R.string.settings__bg__keep_active_title),
+                isChecked = keepActive,
+                onClick = onKeepActiveClick,
+                enabled = hasPermission,
+            )
+
+            BodyM(
+                text = stringResource(R.string.settings__bg__keep_active_desc),
+                color = Colors.White64,
+                modifier = Modifier.padding(vertical = 16.dp),
+            )
 
             NotificationPreview(
                 enabled = hasPermission,
@@ -151,9 +169,11 @@ private fun Preview1() {
         Content(
             hasPermission = true,
             showDetails = true,
+            keepActive = true,
             onBack = {},
             onSystemSettingsClick = {},
             toggleNotificationDetails = {},
+            onKeepActiveClick = {},
         )
     }
 }
@@ -165,9 +185,11 @@ private fun Preview2() {
         Content(
             hasPermission = false,
             showDetails = false,
+            keepActive = false,
             onBack = {},
             onSystemSettingsClick = {},
             toggleNotificationDetails = {},
+            onKeepActiveClick = {},
         )
     }
 }

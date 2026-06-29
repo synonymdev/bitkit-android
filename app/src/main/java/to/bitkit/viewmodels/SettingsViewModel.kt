@@ -73,6 +73,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    val keepBitkitActiveInBackground = settingsStore.data.map { it.keepBitkitActiveInBackground }
+        .asStateFlow(initialValue = false)
+
+    fun setKeepBitkitActiveInBackground(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(keepBitkitActiveInBackground = value) }
+        }
+    }
+
     fun setHasSeenSpendingIntro(value: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it.copy(hasSeenSpendingIntro = value) }

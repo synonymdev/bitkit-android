@@ -117,6 +117,7 @@ class MainActivity : FragmentActivity() {
                 val scope = rememberCoroutineScope()
                 val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
                 val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
+                val keepActive by settingsViewModel.keepBitkitActiveInBackground.collectAsStateWithLifecycle()
                 val walletExists by walletViewModel.walletState
                     .map { it.walletExists }
                     .collectAsStateWithLifecycle(initialValue = walletViewModel.walletExists)
@@ -128,11 +129,14 @@ class MainActivity : FragmentActivity() {
                     walletExists,
                     isRecoveryMode,
                     notificationsGranted,
+                    keepActive,
                     restoreState,
                 ) {
-                    val canStartService = walletExists && notificationsGranted && restoreState.isIdle()
+                    val canStartService = walletExists && notificationsGranted && keepActive && restoreState.isIdle()
                     if (canStartService && !isRecoveryMode) {
                         tryStartForegroundService()
+                    } else if (!keepActive) {
+                        stopForegroundService()
                     }
                 }
 
@@ -264,9 +268,7 @@ class MainActivity : FragmentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         if (!settingsViewModel.notificationsGranted.value) {
-            runCatching {
-                stopService(Intent(this, LightningNodeService::class.java))
-            }
+            stopForegroundService()
         }
     }
 
@@ -283,6 +285,14 @@ class MainActivity : FragmentActivity() {
             )
         }.onFailure { error ->
             Logger.error("Failed to start LightningNodeService", error, context = "MainActivity")
+        }
+    }
+
+    private fun stopForegroundService() {
+        runCatching {
+            stopService(Intent(this, LightningNodeService::class.java))
+        }.onFailure { error ->
+            Logger.error("Failed to stop LightningNodeService", error, context = "MainActivity")
         }
     }
 }

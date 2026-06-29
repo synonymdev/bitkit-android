@@ -238,8 +238,14 @@ class LightningNodeService : Service() {
     override fun onDestroy() {
         Logger.debug("onDestroy", context = TAG)
         nodeServiceFgState.setForegroundServiceRunning(false)
+        // Only stop the node when no activity is active; in the foreground WalletViewModel owns the
+        // node lifecycle, so toggling off the foreground service must leave the node running.
         // Safe to call even if already stopped — guarded by lifecycleMutex + isStoppedOrStopping()
-        serviceScope.launch { lightningRepo.stop() }
+        if (App.currentActivity?.value == null) {
+            serviceScope.launch { lightningRepo.stop() }
+        } else {
+            Logger.debug("Skipping node stop on foreground service destroy: activity is active", context = TAG)
+        }
         super.onDestroy()
     }
 
