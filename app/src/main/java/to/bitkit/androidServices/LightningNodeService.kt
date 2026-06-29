@@ -35,6 +35,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NotificationDetails
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.services.NodeEventHandler
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.ui.ID_NOTIFICATION_NODE
 import to.bitkit.ui.MainActivity
@@ -80,18 +81,20 @@ class LightningNodeService : Service() {
 
     private var hasStartedNode = false
 
+    private val nodeEventHandler: NodeEventHandler = { event ->
+        Logger.debug("LDK-node event received in $TAG: ${jsonLogOf(event)}", context = TAG)
+        handlePaymentReceived(event)
+        if (event is Event.ChannelReady) handleChannelReady(event)
+        handlePendingPaymentResolved(event)
+    }
+
     private fun setupService() {
         if (hasStartedNode) return
         hasStartedNode = true
 
         serviceScope.launch {
             lightningRepo.start(
-                eventHandler = { event ->
-                    Logger.debug("LDK-node event received in $TAG: ${jsonLogOf(event)}", context = TAG)
-                    handlePaymentReceived(event)
-                    if (event is Event.ChannelReady) handleChannelReady(event)
-                    handlePendingPaymentResolved(event)
-                }
+                eventHandler = nodeEventHandler,
             ).onSuccess {
                 walletRepo.setWalletExistsState()
                 walletRepo.refreshBip21()
@@ -238,6 +241,8 @@ class LightningNodeService : Service() {
     override fun onDestroy() {
         Logger.debug("onDestroy", context = TAG)
         nodeServiceFgState.setForegroundServiceRunning(false)
+        // Drop our event handler so it isn't retained by the repo singleton across service restarts.
+        lightningRepo.removeEventHandler(nodeEventHandler)
         // Only stop the node when no activity is active; in the foreground WalletViewModel owns the
         // node lifecycle, so toggling off the foreground service must leave the node running.
         // Safe to call even if already stopped — guarded by lifecycleMutex + isStoppedOrStopping()
