@@ -31,7 +31,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
@@ -118,9 +117,7 @@ class MainActivity : FragmentActivity() {
                 val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
                 val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
                 val keepActive by settingsViewModel.keepBitkitActiveInBackground.collectAsStateWithLifecycle()
-                val walletExists by walletViewModel.walletState
-                    .map { it.walletExists }
-                    .collectAsStateWithLifecycle(initialValue = walletViewModel.walletExists)
+                val walletExists = walletViewModel.walletExists
                 val isShowingMigrationLoading by walletViewModel.isShowingMigrationLoading.collectAsStateWithLifecycle()
                 val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
                 val hazeState = rememberHazeState(blurEnabled = true)
