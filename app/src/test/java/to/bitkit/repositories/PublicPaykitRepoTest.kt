@@ -65,6 +65,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(NOW_MILLIS))
         whenever(paykitSdkService.syncPublicEndpoints(any())).thenReturn(syncReport())
+        whenever { walletRepo.refreshReusableReceiveAddress() }.thenReturn(Result.success(Unit))
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsFlow.value = transform(settingsFlow.value)
@@ -94,6 +95,28 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             listOf(MethodId.Bolt11, MethodId.P2tr),
             captor.firstValue.map { it.methodId },
         )
+    }
+
+    @Test
+    fun `syncPublishedEndpoints creates reusable onchain endpoint when cached address is blank`() = test {
+        settingsFlow.value = SettingsData(
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+        )
+        walletState.value = WalletState()
+        whenever { walletRepo.refreshReusableReceiveAddress() }.thenAnswer {
+            walletState.value = WalletState(onchainAddress = "bc1qfresh")
+            Result.success(Unit)
+        }
+
+        val result = sut.syncPublishedEndpoints(publish = true)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<Endpoint>>()
+        verifyBlocking(walletRepo) { refreshReusableReceiveAddress() }
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(captor.capture()) }
+        assertEquals(listOf(MethodId.P2wpkh), captor.firstValue.map { it.methodId })
+        assertEquals("bc1qfresh", captor.firstValue.single().value)
     }
 
     @Test

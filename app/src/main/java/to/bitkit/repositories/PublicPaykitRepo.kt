@@ -268,7 +268,7 @@ class PublicPaykitRepo @Inject constructor(
             }.getOrThrow()
         }
         if (includeOnchain) {
-            walletRepo.refreshReusableReceiveAddressIfReserved().getOrThrow()
+            walletRepo.refreshReusableReceiveAddress().getOrThrow()
         }
 
         val state = walletRepo.walletState.value
