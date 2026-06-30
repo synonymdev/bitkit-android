@@ -429,7 +429,9 @@ class LightningRepo @Inject constructor(
         result
     }
 
-    fun removeEventHandler(handler: NodeEventHandler) = run { _eventHandlers.remove(handler) }
+    fun removeEventHandler(handler: NodeEventHandler) {
+        _eventHandlers.remove(handler)
+    }
 
     private suspend fun onEvent(event: Event) {
         handleLdkEvent(event)
