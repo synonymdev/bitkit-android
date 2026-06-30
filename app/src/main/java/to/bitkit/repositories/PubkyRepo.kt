@@ -1003,13 +1003,13 @@ class PubkyRepo @Inject constructor(
 
             repeat(2) { attempt ->
                 val result = runSuspendCatching {
-                    val profile = pubkyService.resolveContactProfile(
+                    pubkyService.resolveContactProfile(
                         publicKey = prefixedKey,
                         allowPubkyProfileFallback = true,
                     )?.let(::profileFromResolution)
-                    if (profile != null || attempt == 1) {
-                        return@withContext profile
-                    }
+                }
+                if (result.isSuccess && (result.getOrNull() != null || attempt == 1)) {
+                    return@withContext result.getOrNull()
                 }
                 result.exceptionOrNull()?.let { error ->
                     lastError = error

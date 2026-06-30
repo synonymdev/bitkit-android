@@ -702,41 +702,40 @@ private fun ActivityDetailContent(
                             }
                         )
                 )
-                if (isTransfer && channelId != null && onChannelClick != null) {
-                    PrimaryButton(
-                        text = stringResource(R.string.lightning__connection),
-                        size = ButtonSize.Small,
-                        onClick = { onChannelClick(channelId) },
-                        icon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_lightning),
-                                contentDescription = null,
-                                tint = accentColor,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("ChannelButton")
-                    )
-                } else {
-                    PrimaryButton(
-                        text = stringResource(R.string.wallet__activity_explore),
-                        size = ButtonSize.Small,
-                        onClick = { onExploreClick(item.rawId()) },
-                        icon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_git_branch),
-                                contentDescription = null,
-                                tint = accentColor,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("ActivityTxDetails")
-                    )
-                }
+                PrimaryButton(
+                    text = stringResource(R.string.wallet__activity_explore),
+                    size = ButtonSize.Small,
+                    onClick = { onExploreClick(item.rawId()) },
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_git_branch),
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("ActivityTxDetails")
+                )
+            }
+            if (isTransfer && channelId != null && onChannelClick != null) {
+                PrimaryButton(
+                    text = stringResource(R.string.lightning__connection),
+                    size = ButtonSize.Small,
+                    onClick = { onChannelClick(channelId) },
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_lightning),
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("ChannelButton")
+                )
             }
         }
     }

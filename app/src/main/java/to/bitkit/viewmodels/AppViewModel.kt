@@ -127,6 +127,7 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentNotification
 import to.bitkit.repositories.PendingPaymentRepo
@@ -2145,8 +2146,7 @@ class AppViewModel @Inject constructor(
                 lnurlPay != null -> {
                     QuickPayData.LnurlPay(
                         sats = amountSats,
-                        callback = lnurlPay.callback,
-                        amountMsats = lnurlPay.callbackAmountMsats(amountSats),
+                        data = lnurlPay,
                     )
                 }
 
@@ -2269,7 +2269,7 @@ class AppViewModel @Inject constructor(
         if (isLnurlPay) {
             val amountMsats = lnurl.data.callbackAmountMsats(amount)
             lightningRepo.fetchLnurlInvoice(
-                callbackUrl = lnurl.data.callback,
+                data = lnurl.data,
                 amountMsats = amountMsats,
                 comment = _sendUiState.value.comment.takeIf { it.isNotEmpty() },
             ).onSuccess { invoice ->
@@ -2277,7 +2277,8 @@ class AppViewModel @Inject constructor(
                     it.copy(decodedInvoice = invoice)
                 }
             }.onFailure {
-                toast(Exception(context.getString(R.string.wallet__error_lnurl_invoice_fetch)))
+                val message = getLnurlInvoiceFetchErrorMessage(it)
+                toast(Exception(message))
                 hideSheet()
                 return
             }
@@ -2376,6 +2377,11 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun getLnurlInvoiceFetchErrorMessage(error: Throwable): String = when (error) {
+        is LnurlPayInvoiceMismatchError -> context.getString(R.string.lightning__order_state__payment_canceled)
+        else -> context.getString(R.string.wallet__error_lnurl_invoice_fetch)
     }
 
     fun onConfirmWithdraw() {
@@ -3398,7 +3404,7 @@ sealed interface QuickPayData {
     data class Bolt11(override val sats: ULong, val bolt11: String) : QuickPayData
 
     @Stable
-    data class LnurlPay(override val sats: ULong, val callback: String, val amountMsats: ULong) : QuickPayData
+    data class LnurlPay(override val sats: ULong, val data: LnurlPayData) : QuickPayData
 }
 // endregion
 

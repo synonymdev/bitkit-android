@@ -20,6 +20,7 @@ import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.LegacyRnCloseRecoveryScanResult
 import com.synonym.bitkitcore.LegacyRnCloseRecoverySweepPreview
 import com.synonym.bitkitcore.LightningActivity
+import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
@@ -102,6 +103,7 @@ import kotlin.random.Random
 import com.synonym.bitkitcore.TransactionDetails as BitkitCoreTransactionDetails
 import com.synonym.bitkitcore.TxInput as BitkitCoreTxInput
 import com.synonym.bitkitcore.TxOutput as BitkitCoreTxOutput
+import com.synonym.bitkitcore.getLnurlInvoiceForPayData as coreGetLnurlInvoiceForPayData
 import com.synonym.bitkitcore.getTransactionDetails as getBitkitCoreTransactionDetails
 
 // region Core
@@ -212,6 +214,14 @@ class CoreService @Inject constructor(
 
     suspend fun decode(input: String): Scanner = ServiceQueue.CORE.background {
         com.synonym.bitkitcore.decode(input)
+    }
+
+    suspend fun getLnurlInvoiceForPayData(
+        data: LnurlPayData,
+        amountMsats: ULong,
+        comment: String? = null,
+    ): String = ServiceQueue.CORE.background {
+        coreGetLnurlInvoiceForPayData(data, amountMsats, comment)
     }
 
     companion object {

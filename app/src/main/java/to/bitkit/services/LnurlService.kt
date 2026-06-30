@@ -39,30 +39,6 @@ class LnurlService @Inject constructor(
         Logger.warn("Failed to request LNURL withdraw", it, context = TAG)
     }
 
-    suspend fun fetchLnurlInvoice(
-        callbackUrl: String,
-        amountMsats: ULong,
-        comment: String? = null,
-    ): Result<LnurlPayResponse> = runCatching {
-        Logger.debug("Fetching LNURL pay invoice from: $callbackUrl", context = TAG)
-
-        val response = client.get(callbackUrl) {
-            url {
-                parameters["amount"] = "$amountMsats"
-                comment?.takeIf { it.isNotBlank() }?.let {
-                    parameters["comment"] = it
-                }
-            }
-        }
-        Logger.debug("Http call: $response", context = TAG)
-
-        if (!response.status.isSuccess()) {
-            throw HttpError("fetchLnurlInvoice error: '${response.status.description}'", response.status.value)
-        }
-
-        return@runCatching response.body<LnurlPayResponse>()
-    }
-
     suspend fun requestLnurlChannel(url: String): Result<LnurlChannelResponse> = runCatching {
         Logger.debug("Requesting LNURL channel request via: '$url'", context = TAG)
 
@@ -99,12 +75,6 @@ data class LnurlWithdrawResponse(
     val minWithdrawable: Long? = null,
     val maxWithdrawable: Long? = null,
     val balanceCheck: String? = null,
-)
-
-@Serializable
-data class LnurlPayResponse(
-    val pr: String,
-    val routes: List<String>,
 )
 
 @Serializable
