@@ -243,14 +243,7 @@ class LightningNodeService : Service() {
         nodeServiceFgState.setForegroundServiceRunning(false)
         // Drop our event handler so it isn't retained by the repo singleton across service restarts.
         lightningRepo.removeEventHandler(nodeEventHandler)
-        // Only stop the node when no activity is active; in the foreground WalletViewModel owns the
-        // node lifecycle, so toggling off the foreground service must leave the node running.
-        // Safe to call even if already stopped — guarded by lifecycleMutex + isStoppedOrStopping()
-        if (App.currentActivity?.value == null) {
-            serviceScope.launch { lightningRepo.stop() }
-        } else {
-            Logger.debug("Skipping node stop on foreground service destroy: activity is active", context = TAG)
-        }
+        stopNodeIfBackgrounded()
         super.onDestroy()
     }
 
@@ -258,8 +251,16 @@ class LightningNodeService : Service() {
     override fun onTimeout(startId: Int, fgsType: Int) {
         Logger.warn("Reached foreground service timeout for type '$fgsType'", context = TAG)
         stopForegroundService(startId)
-        serviceScope.launch { lightningRepo.stop() }
+        stopNodeIfBackgrounded()
         super.onTimeout(startId, fgsType)
+    }
+
+    private fun stopNodeIfBackgrounded() {
+        if (App.currentActivity?.value == null) {
+            serviceScope.launch { lightningRepo.stop() }
+        } else {
+            Logger.debug("Skipping node stop: activity is active", context = TAG)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
