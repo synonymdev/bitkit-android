@@ -12,6 +12,7 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
 import to.bitkit.ext.WatchResult
+import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.watchUntil
 import to.bitkit.repositories.LightningRepo
@@ -48,8 +49,8 @@ class QuickPayViewModel @Inject constructor(
                 is QuickPayData.LnurlPay -> {
                     Logger.info("QuickPay: fetching LNURL Pay invoice from callback")
                     val invoice = lightningRepo.fetchLnurlInvoice(
-                        callbackUrl = data.callback,
-                        amountMsats = data.amountMsats,
+                        data = data.data,
+                        amountMsats = data.data.callbackAmountMsats(data.sats),
                     )
                         .getOrElse { error ->
                             _uiState.update {

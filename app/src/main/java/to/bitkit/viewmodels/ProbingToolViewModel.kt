@@ -13,21 +13,27 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.minSendableSat
+import to.bitkit.ext.nowMs
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.Toast
-import to.bitkit.models.satsToMsat
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.ProbeError
 import to.bitkit.repositories.ProbeOutcome
 import to.bitkit.services.CoreService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 @HiltViewModel
 class ProbingToolViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -77,6 +83,7 @@ class ProbingToolViewModel @Inject constructor(
 
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true, probeResult = null) }
+            val startTime = Clock.System.nowMs()
 
             try {
                 val state = _uiState.value
@@ -145,7 +152,6 @@ class ProbingToolViewModel @Inject constructor(
                     }
                 }
 
-                val startTime = System.currentTimeMillis()
                 val dispatch = if (isNodeIdTarget) {
                     lightningRepo.sendProbeForNode(requireNotNull(nodeId), requireNotNull(amountSats))
                 } else {
@@ -159,6 +165,8 @@ class ProbingToolViewModel @Inject constructor(
                             .onFailure { handleProbeFailure(startTime, it) }
                     }
                     .onFailure { handleProbeFailure(startTime, it) }
+            } catch (error: LnurlPayInvoiceMismatchError) {
+                handleProbeFailure(startTime, error)
             } finally {
                 _uiState.update { it.copy(isLoading = false) }
             }
@@ -221,22 +229,30 @@ class ProbingToolViewModel @Inject constructor(
         return lightning?.invoice?.amountSatoshis == 0uL
     }
 
-    private suspend fun extractBolt11Invoice(input: String, amountSats: ULong?): String? = runCatching {
-        when (val decoded = coreService.decode(input)) {
-            is Scanner.Lightning -> decoded.invoice.bolt11
-            is Scanner.OnChain -> {
-                val lightningParam = decoded.invoice.params?.get("lightning") ?: return@runCatching null
-                (coreService.decode(lightningParam) as? Scanner.Lightning)?.invoice?.bolt11
-            }
+    private suspend fun extractBolt11Invoice(input: String, amountSats: ULong?): String? {
+        return runSuspendCatching {
+            when (val decoded = coreService.decode(input)) {
+                is Scanner.Lightning -> decoded.invoice.bolt11
+                is Scanner.OnChain -> {
+                    val lightningParam = decoded.invoice.params?.get("lightning") ?: return@runSuspendCatching null
+                    (coreService.decode(lightningParam) as? Scanner.Lightning)?.invoice?.bolt11
+                }
 
-            is Scanner.LnurlPay -> {
-                val amount = amountSats ?: return@runCatching null
-                lightningRepo.fetchLnurlInvoice(decoded.data.callback, satsToMsat(amount)).getOrThrow().bolt11
-            }
+                is Scanner.LnurlPay -> {
+                    val amount = amountSats ?: return@runSuspendCatching null
+                    lightningRepo.fetchLnurlInvoice(
+                        data = decoded.data,
+                        amountMsats = decoded.data.callbackAmountMsats(amount),
+                    ).getOrThrow().bolt11
+                }
 
-            else -> null
+                else -> null
+            }
+        }.getOrElse {
+            if (it is LnurlPayInvoiceMismatchError) throw it
+            null
         }
-    }.getOrNull()
+    }
 
     private suspend fun handleProbeOutcome(
         startTime: Long,
@@ -244,7 +260,7 @@ class ProbingToolViewModel @Inject constructor(
         invoice: String?,
         amountSats: ULong?,
     ) {
-        val durationMs = System.currentTimeMillis() - startTime
+        val durationMs = Clock.System.nowMs() - startTime
         when (outcome) {
             is ProbeOutcome.Success -> {
                 Logger.info(
@@ -288,7 +304,7 @@ class ProbingToolViewModel @Inject constructor(
     }
 
     private suspend fun handleProbeFailure(startTime: Long, error: Throwable) {
-        val durationMs = System.currentTimeMillis() - startTime
+        val durationMs = Clock.System.nowMs() - startTime
         Logger.error("Failed probe in '${durationMs}ms'", error, context = TAG)
 
         val friendlyMessage = getFriendlyErrorMessage(error)
