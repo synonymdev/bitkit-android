@@ -401,18 +401,18 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
     }
 
     @Test
-    fun `should subtract orphan coop close balance from lightning while keeping new channel balance`() = test {
+    fun `should subtract lingering coop close claimable from lightning while keeping new channel balance`() = test {
         val closedChannelId = "closed-channel-id"
         val newChannelId = "new-channel-id"
         val closedChannelSats = 1_531_123uL
         val newChannelSats = 62_158uL
-        val orphanClosingBalance = newClosingChannelBalance(closedChannelId, closedChannelSats)
+        val lingeringClosingBalance = newClosingChannelBalance(closedChannelId, closedChannelSats)
         val newChannelBalance = newChannelBalance(newChannelId, newChannelSats)
 
         val balance = newBalanceDetails().copy(
             totalOnchainBalanceSats = closedChannelSats,
             totalLightningBalanceSats = 1_593_281uL,
-            lightningBalances = listOf(orphanClosingBalance, newChannelBalance),
+            lightningBalances = listOf(lingeringClosingBalance, newChannelBalance),
         )
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
 
@@ -435,7 +435,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
     }
 
     @Test
-    fun `should not subtract orphan non coop close balance from lightning`() = test {
+    fun `should keep non coop close claimable in lightning`() = test {
         val channelId = "force-closed-channel-id"
         val amountSats = 40_000uL
         val closingChannelBalance = newClosingChannelBalance(

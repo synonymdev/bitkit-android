@@ -45,14 +45,14 @@ class DeriveBalanceStateUseCase @Inject constructor(
 
             val toSavingsAmount = getTransferToSavingsSats(activeTransfers, channels, balanceDetails)
             val coopCloseSavingsSats = getCoopCloseTransferSats(activeTransfers, channels, balanceDetails)
-            val orphanCoopCloseSats = getOrphanCoopCloseSats(activeTransfers, channels, balanceDetails)
+            val lingeringCoopCloseSats = getLingeringCoopCloseSats(activeTransfers, channels, balanceDetails)
             val toSpendingAmount = paidOrdersSats.safe() + pendingChannelsSats.safe()
 
             val totalOnchainSats = balanceDetails.totalOnchainBalanceSats
             val channelFundableBalance = getMaxChannelFundableAmount(lightningRepo.getChannelFundableBalance())
             val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
             val afterClosingChannels = afterPendingChannels.safe() - toSavingsAmount.safe()
-            val totalLightningSats = afterClosingChannels.safe() - orphanCoopCloseSats.safe()
+            val totalLightningSats = afterClosingChannels.safe() - lingeringCoopCloseSats.safe()
 
             val balanceState = BalanceState(
                 totalOnchainSats = totalOnchainSats,
@@ -160,7 +160,7 @@ class DeriveBalanceStateUseCase @Inject constructor(
         return amount
     }
 
-    private suspend fun getOrphanCoopCloseSats(
+    private suspend fun getLingeringCoopCloseSats(
         transfers: List<TransferEntity>,
         channels: List<ChannelDetails>,
         balanceDetails: BalanceDetails,
@@ -175,11 +175,11 @@ class DeriveBalanceStateUseCase @Inject constructor(
         val claimableBalances = balanceDetails.lightningBalances
             .filterIsInstance<LightningBalance.ClaimableAwaitingConfirmations>()
         for (balance in claimableBalances) {
-            val isOrphanCoopClose = balance.source == BalanceSource.COOP_CLOSE &&
+            val isLingeringCoopClose = balance.source == BalanceSource.COOP_CLOSE &&
                 balance.channelId !in channelIds &&
                 balance.channelId !in transferChannelIds
 
-            if (isOrphanCoopClose) {
+            if (isLingeringCoopClose) {
                 amount = amount.safe() + balance.amountSatoshis.safe()
             }
         }
