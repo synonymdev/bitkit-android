@@ -135,7 +135,7 @@ class MainActivity : FragmentActivity() {
                     val canStartService = walletExists && notificationsGranted && keepActive && restoreState.isIdle()
                     if (canStartService && !isRecoveryMode) {
                         tryStartForegroundService()
-                    } else if (!keepActive) {
+                    } else {
                         stopForegroundService()
                     }
                 }

@@ -246,6 +246,7 @@ fun ContentView(
 
     val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
     val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
+    val keepActiveInBackground by settingsViewModel.keepBitkitActiveInBackground.collectAsStateWithLifecycle()
     val walletExists = walletUiState.walletExists
 
     val requestNotificationPermission = rememberRequestNotificationPermission(
@@ -273,11 +274,10 @@ fun ContentView(
                 }
 
                 Lifecycle.Event.ON_STOP -> {
-                    if (walletExists && !isRecoveryMode && !notificationsGranted) {
-                        // App backgrounded without notification permission - stop node
+                    val keptAliveByService = notificationsGranted && keepActiveInBackground
+                    if (walletExists && !isRecoveryMode && !keptAliveByService) {
                         walletViewModel.stop()
                     }
-                    // If notificationsGranted=true, service keeps node running
                 }
 
                 else -> Unit
