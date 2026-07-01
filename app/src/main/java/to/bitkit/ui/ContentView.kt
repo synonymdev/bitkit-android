@@ -274,7 +274,9 @@ fun ContentView(
                 }
 
                 Lifecycle.Event.ON_STOP -> {
-                    val keptAliveByService = notificationsGranted && keepActiveInBackground
+                    val keptAliveByService = notificationsGranted &&
+                        keepActiveInBackground &&
+                        appViewModel.isForegroundServiceRunning()
                     if (walletExists && !isRecoveryMode && !keptAliveByService) {
                         walletViewModel.stop()
                     }

@@ -143,6 +143,7 @@ import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
+import to.bitkit.services.NodeServiceFgState
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -200,6 +201,7 @@ class AppViewModel @Inject constructor(
     private val transferRepo: TransferRepo,
     private val migrationService: MigrationService,
     private val coreService: CoreService,
+    private val nodeServiceFgState: NodeServiceFgState,
     private val pubkyRepo: PubkyRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
@@ -2734,6 +2736,8 @@ class AppViewModel @Inject constructor(
         cacheStore.clearBackgroundReceive()
         showTransactionSheet(details)
     }
+
+    fun isForegroundServiceRunning(): Boolean = nodeServiceFgState.isForegroundServiceRunning
     // endregion
 
     // region Sheets
