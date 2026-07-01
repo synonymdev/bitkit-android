@@ -11,6 +11,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
@@ -18,10 +19,12 @@ import to.bitkit.models.HwWallet
 import to.bitkit.models.Toast
 import to.bitkit.models.TransportType
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -59,6 +62,7 @@ class HwWalletViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.walletsLoaded).thenReturn(MutableStateFlow(true))
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
         whenever(context.getString(R.string.hardware__remove_error)).thenReturn("Could not remove")
+        whenever(context.getString(R.string.hardware__rename_error)).thenReturn("Could not rename")
     }
 
     private fun createSut() = HwWalletViewModel(context, hwWalletRepo)
@@ -115,6 +119,88 @@ class HwWalletViewModelTest : BaseUnitTest() {
         sut.removeDevice("dev1")
         advanceUntilIdle()
 
+        assertEquals(Toast.ToastType.ERROR, toasts.single().type)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `onRenameClick opens the rename sheet with the current name`() = test {
+        val sut = createSut()
+
+        sut.onRenameClick(wallet)
+
+        assertEquals(wallet, sut.uiState.value.isPendingRename)
+        assertEquals(wallet.name, sut.uiState.value.labelInput)
+        assertFalse(sut.uiState.value.isSavingLabel)
+        assertFalse(sut.uiState.value.isRenameSaved)
+    }
+
+    @Test
+    fun `onLabelChange caps the rename input`() = test {
+        val sut = createSut()
+
+        sut.onLabelChange("a".repeat(DEVICE_LABEL_MAX_LENGTH + 1))
+
+        assertEquals("a".repeat(DEVICE_LABEL_MAX_LENGTH), sut.uiState.value.labelInput)
+    }
+
+    @Test
+    fun `onDismissRenameSheet clears the rename state`() = test {
+        val sut = createSut()
+        sut.onRenameClick(wallet)
+
+        sut.onDismissRenameSheet()
+
+        assertNull(sut.uiState.value.isPendingRename)
+        assertEquals("", sut.uiState.value.labelInput)
+        assertFalse(sut.uiState.value.isSavingLabel)
+        assertFalse(sut.uiState.value.isRenameSaved)
+    }
+
+    @Test
+    fun `saveDeviceLabel delegates to the repo and marks the rename saved`() = test {
+        whenever { hwWalletRepo.setDeviceLabel("dev1", "My Cold Wallet") }.thenReturn(Result.success(Unit))
+        val sut = createSut()
+        sut.onRenameClick(wallet)
+        sut.onLabelChange("My Cold Wallet")
+
+        sut.saveDeviceLabel()
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).setDeviceLabel("dev1", "My Cold Wallet")
+        assertEquals(wallet, sut.uiState.value.isPendingRename)
+        assertEquals("My Cold Wallet", sut.uiState.value.labelInput)
+        assertFalse(sut.uiState.value.isSavingLabel)
+        assertEquals(true, sut.uiState.value.isRenameSaved)
+    }
+
+    @Test
+    fun `saveDeviceLabel ignores blank labels`() = test {
+        val sut = createSut()
+        sut.onRenameClick(wallet)
+        sut.onLabelChange("   ")
+
+        sut.saveDeviceLabel()
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, never()).setDeviceLabel("dev1", "   ")
+        assertEquals(wallet, sut.uiState.value.isPendingRename)
+    }
+
+    @Test
+    fun `saveDeviceLabel sends an error toast on failure`() = test {
+        whenever { hwWalletRepo.setDeviceLabel("dev1", "My Cold Wallet") }.thenReturn(Result.failure(AppError("nope")))
+        val sut = createSut()
+        sut.onRenameClick(wallet)
+        sut.onLabelChange("My Cold Wallet")
+
+        val toasts = mutableListOf<Toast>()
+        val collectJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        sut.saveDeviceLabel()
+        advanceUntilIdle()
+
+        assertEquals(wallet, sut.uiState.value.isPendingRename)
+        assertFalse(sut.uiState.value.isSavingLabel)
         assertEquals(Toast.ToastType.ERROR, toasts.single().type)
         collectJob.cancel()
     }
