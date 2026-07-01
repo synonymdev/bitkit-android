@@ -1083,6 +1083,7 @@ class PubkyRepo @Inject constructor(
             Logger.warn("Ignoring stale managed secret key for '$publicKey'", context = TAG)
         }
         runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+            .onSuccess { notifyBackupStateChanged() }
         null
     }
 

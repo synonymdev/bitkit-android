@@ -409,6 +409,21 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hasSecretKey should mark backup state changed when stale local secret is removed`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val staleSecret = "stale_secret"
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(staleSecret)
+        whenever(pubkyService.publicKeyFromSecret(staleSecret)).thenReturn(VALID_CONTACT_KEY_A.removePrefix("pubky"))
+        val backupVersion = sut.backupStateVersion.value
+
+        val result = sut.hasSecretKey()
+
+        assertFalse(result)
+        assertEquals(backupVersion + 1, sut.backupStateVersion.value)
+        verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+    }
+
+    @Test
     fun `signOut should clear state and keychain`() = test {
         authenticateForTesting()
         clearInvocations(pubkyStore)
