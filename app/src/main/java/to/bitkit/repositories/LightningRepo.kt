@@ -1732,8 +1732,7 @@ private fun Throwable.toLnurlPayInvoiceError(): Throwable {
 
 private fun Throwable.isLnurlPayValidationError(): Boolean = when (this) {
     is LnurlException.InvalidAmount,
-    is LnurlException.AmountMismatch,
-    is LnurlException.MetadataMismatch -> true
+    is LnurlException.AmountMismatch -> true
 
     else -> false
 }
