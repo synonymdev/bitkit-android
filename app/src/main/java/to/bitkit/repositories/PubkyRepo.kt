@@ -507,6 +507,7 @@ class PubkyRepo @Inject constructor(
             _authState.update { PubkyAuthState.Authenticated }
             _profile.update { createdProfile }
             cacheMetadata(createdProfile)
+            notifyBackupStateChanged()
             Logger.info("Created identity for '$publicKeyZ32'", context = TAG)
             loadProfile()
             loadContacts()
@@ -547,6 +548,7 @@ class PubkyRepo @Inject constructor(
             )
             _profile.update { profile }
             cacheMetadata(profile)
+            notifyBackupStateChanged()
         }
     }
 

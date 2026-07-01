@@ -391,6 +391,24 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `saveProfile should mark backup state changed`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY, secret = "test_session", profileName = "Alice")
+        val backupVersion = sut.backupStateVersion.value
+
+        val result = sut.saveProfile(
+            name = "Alice Updated",
+            bio = "Updated bio",
+            links = emptyList(),
+            tags = emptyList(),
+            imageUrl = null,
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(backupVersion + 1, sut.backupStateVersion.value)
+        verifyBlocking(pubkyService) { publishPaykitProfile(any()) }
+    }
+
+    @Test
     fun `signOut should clear state and keychain`() = test {
         authenticateForTesting()
         clearInvocations(pubkyStore)
