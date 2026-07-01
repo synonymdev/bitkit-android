@@ -72,6 +72,7 @@ import to.bitkit.services.ActivityService
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
+import to.bitkit.services.NodeServiceFgState
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
@@ -116,6 +117,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val transferRepo = mock<TransferRepo>()
     private val migrationService = mock<MigrationService>()
     private val coreService = mock<CoreService>()
+    private val nodeServiceFgState = NodeServiceFgState()
     private val activityService = mock<ActivityService>()
     private val keychain = mock<Keychain>()
     private val pubkyRepo = mock<PubkyRepo>()
@@ -246,6 +248,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         transferRepo = transferRepo,
         migrationService = migrationService,
         coreService = coreService,
+        nodeServiceFgState = nodeServiceFgState,
         publicPaykitRepo = publicPaykitRepo,
         privatePaykitRepo = privatePaykitRepo,
         samRockRepo = samRockRepo,
