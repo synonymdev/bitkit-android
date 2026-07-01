@@ -31,7 +31,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.synonym.bitkitcore.Activity
 import to.bitkit.R
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.ui.components.BodyMSB
@@ -64,13 +63,14 @@ fun BoostTransactionSheet(
     onMaxFee: () -> Unit,
     onMinFee: () -> Unit,
     onDismiss: () -> Unit,
-    item: Activity.Onchain,
+    activityId: String,
+    walletId: String,
 ) {
     val haptic = LocalHapticFeedback.current
 
     // Setup activity when component is first created
-    LaunchedEffect(Unit) {
-        viewModel.setupActivity(item)
+    LaunchedEffect(activityId, walletId) {
+        viewModel.setupActivity(activityId, walletId)
     }
 
     // Handle effects

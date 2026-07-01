@@ -62,6 +62,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
+import to.bitkit.ext.DEFAULT_WALLET_ID
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
@@ -88,7 +89,6 @@ import to.bitkit.services.LnurlWithdrawResponse
 import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
-import to.bitkit.models.WalletScope
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
@@ -1179,7 +1179,7 @@ class LightningRepo @Inject constructor(
         val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount)
 
         val preActivityMetadata = PreActivityMetadata(
-            walletId = WalletScope.default,
+            walletId = DEFAULT_WALLET_ID,
             paymentId = txId,
             createdAt = nowTimestamp().toEpochMilli().toULong(),
             tags = tags,

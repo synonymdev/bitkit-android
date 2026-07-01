@@ -1,6 +1,7 @@
 package to.bitkit.ui.sheets
 
 import android.content.Context
+import app.cash.turbine.ReceiveTurbine
 import app.cash.turbine.test
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.FeeRates
@@ -57,7 +58,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
     private val totalFee = 1000UL
     private val testValue = 50000UL
 
-    private val onchainActivity = OnchainActivity.create(walletId = "wallet0",
+    private val onchainActivity = OnchainActivity.create(
         id = "test_id",
         txType = PaymentType.SENT,
         txId = mockTxId,
@@ -110,6 +111,19 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
         }
     }
 
+    private suspend fun setupActivity(activity: Activity.Onchain) {
+        whenever(activityRepo.getActivity(activity.v1.id, activity.v1.walletId)).thenReturn(Result.success(activity))
+        sut.setupActivity(activity.v1.id, activity.v1.walletId)
+    }
+
+    private suspend fun ReceiveTurbine<BoostTransactionUiState>.awaitLoadedState(): BoostTransactionUiState {
+        var state = awaitItem()
+        while (state.loading) {
+            state = awaitItem()
+        }
+        return state
+    }
+
     @Test
     fun `setupActivity should set loading state initially`() = runTest {
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(feeRate))
@@ -118,7 +132,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
         sut.uiState.test {
             awaitItem() // initial state
-            sut.setupActivity(activitySent)
+            setupActivity(activitySent)
 
             val loadingState = awaitItem()
             assertTrue(loadingState.loading)
@@ -132,7 +146,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(totalFee))
 
-        sut.setupActivity(activitySent)
+        setupActivity(activitySent)
 
         verify(lightningRepo).getFeeRateForSpeed(eq(TransactionSpeed.Fast), anyOrNull())
         verify(lightningRepo).calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
@@ -145,7 +159,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.calculateCpfpFeeRate(eq(mockTxId)))
             .thenReturn(Result.success(feeRate))
 
-        sut.setupActivity(receivedActivity)
+        setupActivity(receivedActivity)
 
         verify(lightningRepo).calculateCpfpFeeRate(eq(mockTxId))
         verify(lightningRepo, never()).getFeeRateForSpeed(any(), anyOrNull())
@@ -176,7 +190,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(totalFee))
 
-        sut.setupActivity(activitySent)
+        setupActivity(activitySent)
 
         sut.boostTransactionEffect.test {
             sut.onChangeAmount(increase = true)
@@ -190,7 +204,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(totalFee))
 
-        sut.setupActivity(activitySent)
+        setupActivity(activitySent)
 
         sut.boostTransactionEffect.test {
             sut.onChangeAmount(increase = false)
@@ -203,7 +217,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.failure(Exception("error")))
 
         sut.boostTransactionEffect.test {
-            sut.setupActivity(activitySent)
+            setupActivity(activitySent)
             assertEquals(BoostTransactionEffects.OnBoostFailed, awaitItem())
         }
     }
@@ -225,7 +239,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
         whenever(activityRepo.updateActivity(any(), any(), any())).thenReturn(Result.success(Unit))
 
-        sut.setupActivity(receivedActivity)
+        setupActivity(receivedActivity)
 
         sut.boostTransactionEffect.test {
             sut.onConfirmBoost()
@@ -248,9 +262,8 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
         sut.uiState.test {
             awaitItem()
-            sut.setupActivity(activitySent)
-            awaitItem()
-            val state = awaitItem()
+            setupActivity(activitySent)
+            val state = awaitLoadedState()
             assertEquals(fastFeeTime, state.estimateTime)
         }
     }
@@ -263,9 +276,8 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
         sut.uiState.test {
             awaitItem()
-            sut.setupActivity(activitySent)
-            awaitItem()
-            val state = awaitItem()
+            setupActivity(activitySent)
+            val state = awaitLoadedState()
             assertEquals(normalFeeTime, state.estimateTime)
         }
     }
@@ -279,9 +291,8 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
         sut.uiState.test {
             awaitItem() // initial state
-            sut.setupActivity(lowFeeActivity)
-            awaitItem() // loading state
-            val state = awaitItem()
+            setupActivity(lowFeeActivity)
+            val state = awaitLoadedState()
             assertEquals(flowFeeTime, state.estimateTime)
         }
     }
@@ -295,9 +306,8 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
 
         sut.uiState.test {
             awaitItem() // initial state
-            sut.setupActivity(lowFeeActivity)
-            awaitItem() // loading state
-            val state = awaitItem()
+            setupActivity(lowFeeActivity)
+            val state = awaitLoadedState()
             assertEquals(minFeeTime, state.estimateTime)
         }
     }
