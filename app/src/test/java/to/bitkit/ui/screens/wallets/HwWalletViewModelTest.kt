@@ -175,6 +175,27 @@ class HwWalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `saveDeviceLabel ignores stale success after a different rename sheet opens`() = test {
+        lateinit var sut: HwWalletViewModel
+        whenever { hwWalletRepo.setDeviceLabel("dev1", "My Cold Wallet") }.thenAnswer {
+            sut.onDismissRenameSheet()
+            sut.onRenameClick(otherWallet)
+            Unit
+        }
+        sut = createSut()
+        sut.onRenameClick(wallet)
+        sut.onLabelChange("My Cold Wallet")
+
+        sut.saveDeviceLabel()
+        advanceUntilIdle()
+
+        assertEquals(otherWallet, sut.uiState.value.isPendingRename)
+        assertEquals(otherWallet.name, sut.uiState.value.labelInput)
+        assertFalse(sut.uiState.value.isSavingLabel)
+        assertFalse(sut.uiState.value.isRenameSaved)
+    }
+
+    @Test
     fun `saveDeviceLabel ignores blank labels`() = test {
         val sut = createSut()
         sut.onRenameClick(wallet)

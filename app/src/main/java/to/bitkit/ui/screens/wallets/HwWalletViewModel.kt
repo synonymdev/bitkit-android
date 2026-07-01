@@ -32,26 +32,34 @@ class HwWalletViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HwWalletDetailUiState())
     val uiState: StateFlow<HwWalletDetailUiState> = _uiState.asStateFlow()
 
+    private var renameSessionId = 0L
+
     fun onRemoveClick(wallet: HwWallet) = _uiState.update { it.copy(isPendingRemoval = wallet) }
 
     fun onDismissRemoveDialog() = _uiState.update { it.copy(isPendingRemoval = null) }
 
-    fun onRenameClick(wallet: HwWallet) = _uiState.update {
-        it.copy(
-            isPendingRename = wallet,
-            labelInput = wallet.name.take(DEVICE_LABEL_MAX_LENGTH),
-            isSavingLabel = false,
-            isRenameSaved = false,
-        )
+    fun onRenameClick(wallet: HwWallet) {
+        renameSessionId += 1
+        _uiState.update {
+            it.copy(
+                isPendingRename = wallet,
+                labelInput = wallet.name.take(DEVICE_LABEL_MAX_LENGTH),
+                isSavingLabel = false,
+                isRenameSaved = false,
+            )
+        }
     }
 
-    fun onDismissRenameSheet() = _uiState.update {
-        it.copy(
-            isPendingRename = null,
-            labelInput = "",
-            isSavingLabel = false,
-            isRenameSaved = false,
-        )
+    fun onDismissRenameSheet() {
+        renameSessionId += 1
+        _uiState.update {
+            it.copy(
+                isPendingRename = null,
+                labelInput = "",
+                isSavingLabel = false,
+                isRenameSaved = false,
+            )
+        }
     }
 
     fun onLabelChange(value: String) = _uiState.update { it.copy(labelInput = value.take(DEVICE_LABEL_MAX_LENGTH)) }
@@ -60,28 +68,48 @@ class HwWalletViewModel @Inject constructor(
         val state = _uiState.value
         val wallet = state.isPendingRename ?: return
         if (state.labelInput.trim().isEmpty() || state.isSavingLabel) return
+        val sessionId = renameSessionId
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isSavingLabel = true) }
+            _uiState.update {
+                if (it.matchesRenameSession(wallet.id, sessionId)) it.copy(isSavingLabel = true) else it
+            }
             hwWalletRepo.setDeviceLabel(wallet.id, state.labelInput)
                 .onSuccess {
                     _uiState.update {
-                        it.copy(
-                            isSavingLabel = false,
-                            isRenameSaved = true,
-                        )
+                        if (it.matchesRenameSession(wallet.id, sessionId)) {
+                            it.copy(
+                                isSavingLabel = false,
+                                isRenameSaved = true,
+                            )
+                        } else {
+                            it
+                        }
                     }
                 }
                 .onFailure {
-                    _uiState.update { it.copy(isSavingLabel = false) }
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = context.getString(R.string.hardware__rename_error),
-                    )
+                    var shouldSendToast = false
+                    _uiState.update {
+                        if (it.matchesRenameSession(wallet.id, sessionId)) {
+                            shouldSendToast = true
+                            it.copy(isSavingLabel = false)
+                        } else {
+                            it
+                        }
+                    }
+                    if (shouldSendToast) {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = context.getString(R.string.hardware__rename_error),
+                        )
+                    }
                 }
         }
     }
+
+    private fun HwWalletDetailUiState.matchesRenameSession(deviceId: String, sessionId: Long) =
+        renameSessionId == sessionId && isPendingRename?.id == deviceId
 
     fun removeDevice(deviceId: String) {
         viewModelScope.launch {
