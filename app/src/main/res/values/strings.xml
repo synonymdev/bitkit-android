@@ -575,8 +575,7 @@
     <string name="profile__auth_error_title">Authorization Failed</string>
     <string name="profile__avatar_read_error">Failed to read selected image</string>
     <string name="profile__choice_create">Create profile with Bitkit</string>
-    <string name="profile__choice_description">Create a new pubky and profile in Bitkit, or import an existing profile with Pubky Ring.</string>
-    <string name="profile__choice_import">Import with Pubky Ring</string>
+    <string name="profile__choice_description">Create a new pubky and profile in Bitkit.</string>
     <string name="profile__choice_loading_profile">Loading your profile…</string>
     <string name="profile__choice_title">Join the\n&lt;accent&gt;pubky web&lt;/accent&gt;</string>
     <string name="profile__choice_waiting_ring">Waiting for Pubky Ring…</string>

@@ -32,6 +32,7 @@ class PubkyChoiceViewModel @Inject constructor(
 ) : ViewModel() {
     companion object {
         private const val TAG = "PubkyChoiceViewModel"
+        private const val IS_RING_AUTH_ENABLED = false
         internal const val PUBKY_RING_PACKAGE = "to.pubky.ring"
     }
 
@@ -69,6 +70,15 @@ class PubkyChoiceViewModel @Inject constructor(
 
     fun startRingAuth() {
         viewModelScope.launch {
+            if (!IS_RING_AUTH_ENABLED) {
+                ToastEventBus.send(
+                    type = Toast.ToastType.INFO,
+                    title = context.getString(R.string.coming_soon__title),
+                    description = context.getString(R.string.coming_soon__description),
+                )
+                return@launch
+            }
+
             if (_uiState.value.isWaitingForRing) {
                 approvalJob?.cancel()
                 approvalJob = null

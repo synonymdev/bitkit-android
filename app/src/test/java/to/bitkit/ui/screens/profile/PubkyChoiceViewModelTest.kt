@@ -37,6 +37,8 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(context.packageManager).thenReturn(packageManager)
+        whenever(context.getString(R.string.coming_soon__description)).thenReturn("Coming soon")
+        whenever(context.getString(R.string.coming_soon__title)).thenReturn("Coming soon")
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
         whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization Failed")
         whenever(pubkyRepo.pendingImportContacts).thenReturn(pendingImportContacts)
@@ -99,10 +101,8 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `startRingAuth shows dialog when Ring is not installed`() = test {
+    fun `startRingAuth shows coming soon without starting auth when Ring is disabled`() = test {
         createSut()
-        whenever(packageManager.getLaunchIntentForPackage(PubkyChoiceViewModel.PUBKY_RING_PACKAGE))
-            .thenReturn(null)
 
         val effects = mutableListOf<PubkyChoiceEffect>()
         val toasts = mutableListOf<Toast>()
@@ -112,9 +112,13 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
         sut.startRingAuth()
         advanceUntilIdle()
 
-        assertTrue(sut.uiState.value.showRingNotInstalledDialog)
+        assertFalse(sut.uiState.value.showRingNotInstalledDialog)
         assertTrue(effects.isEmpty())
-        assertTrue(toasts.isEmpty())
+        assertTrue(toasts.isNotEmpty())
+        assertEquals(Toast.ToastType.INFO, toasts.last().type)
+        assertEquals("Coming soon", toasts.last().title)
+        assertEquals("Coming soon", toasts.last().description)
+        verify(packageManager, never()).getLaunchIntentForPackage(PubkyChoiceViewModel.PUBKY_RING_PACKAGE)
         verify(pubkyRepo, never()).startAuthentication()
 
         effectsJob.cancel()
