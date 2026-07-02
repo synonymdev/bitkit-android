@@ -89,18 +89,9 @@ class ReceivedNotificationContentTest : BaseUnitTest() {
         assertEquals(expected, result.body)
     }
 
-    @Test
-    fun `hides the amount when notification details are disabled`() = test {
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(showNotificationDetails = false)))
-
-        val result = sut.build(48_064L)
-
-        assertEquals(context.getString(R.string.notification__received__body_hidden), result.body)
-    }
-
     private fun stubSettings(primaryDisplay: PrimaryDisplay) {
         whenever(settingsStore.data).thenReturn(
-            flowOf(SettingsData(showNotificationDetails = true, primaryDisplay = primaryDisplay)),
+            flowOf(SettingsData(primaryDisplay = primaryDisplay)),
         )
     }
 }
