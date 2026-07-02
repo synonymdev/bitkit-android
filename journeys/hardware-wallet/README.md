@@ -64,7 +64,7 @@ Remove step forgets the device.
 | `usb-reconnect.xml` | Disconnect indicator, injected USB attach intent → silent auto-reconnect; physical-device chooser path noted separately |
 | `suggestion-intro-sheet.xml` | Forget device, Hardware suggestion card, full connect flow (Intro → Searching → Found → Paired → Finish) re-pairs |
 | `connect-flow.xml` | Settings Add button → connect flow with an edited Label Funds → paired device count + name |
-| `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, Add button sheet/back dismiss, per-row delete confirm + re-pair |
+| `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, rename sheet, Add button sheet/back dismiss, per-row delete confirm + re-pair |
 | `detail-overview.xml` | Detail screen overview, Transfer placeholder when funded, activity, Remove confirm + forget |
 | `transfer-to-spending.xml` | Happy-path transfer amount → sign → processing flow with a valid amount below the cap |
 | `transfer-to-spending-max-lsp-cap.xml` | MAX when Trezor balance is higher than remaining LSP headroom; verifies MAX uses AVAILABLE and reaches sign without insufficient funds |
@@ -78,6 +78,9 @@ Connect-flow testTags: `HardwareWalletSheet`, `HardwareWalletIntroScreen`,
 `HardwareWalletLabelInput`, `HardwareWalletPairedFinish`,
 `HardwareWalletPairCodeScreen` (inline pair code, physical device only),
 `HardwareWalletSearchingError`, and `HwFoundError`.
+
+Settings rename testTags: `HardwareWalletsScreen`, `RenameHardwareWalletInput`,
+and `RenameHardwareWalletSave`.
 
 The current Connect Hardware sheet starts USB discovery immediately after Continue. BLE is
 included only once Android nearby-devices permission is granted and Bluetooth is enabled.
