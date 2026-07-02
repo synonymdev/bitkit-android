@@ -109,10 +109,10 @@ class DeriveBalanceStateUseCase @Inject constructor(
         }
 
         for (transfer in orderPayments) {
-            val txTotalSats = transfer.txTotalSats?.takeIf { it > 0 }?.toULong() ?: continue
-            val preTransferOnchainSats = transfer.preTransferOnchainSats?.takeIf { it > 0 }?.toULong() ?: continue
+            val txTotalSats = transfer.txTotalSats?.takeIf { it > 0 }?.toULong()
+            val preTransferOnchainSats = transfer.preTransferOnchainSats?.takeIf { it > 0 }?.toULong()
 
-            if (currentOnchainSats >= preTransferOnchainSats) {
+            if (txTotalSats != null && preTransferOnchainSats != null && currentOnchainSats >= preTransferOnchainSats) {
                 amount = amount.safe() + txTotalSats.safe()
             }
         }
