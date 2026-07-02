@@ -97,6 +97,7 @@ fun PubkyChoiceScreen(
         uiState = uiState,
         onBackClick = onBackClick,
         onCreateProfile = onNavigateToCreateProfile,
+        onImportWithRing = { viewModel.startRingAuth() },
         onCancelAuth = { viewModel.cancelAuth() },
         onDownloadRing = {
             viewModel.dismissRingNotInstalledDialog()
@@ -111,6 +112,7 @@ private fun Content(
     uiState: PubkyChoiceUiState,
     onBackClick: () -> Unit,
     onCreateProfile: () -> Unit,
+    onImportWithRing: () -> Unit,
     onCancelAuth: () -> Unit,
     onDownloadRing: () -> Unit,
     onDismissDialog: () -> Unit,
@@ -177,6 +179,13 @@ private fun Content(
                         text = stringResource(R.string.profile__choice_create),
                         onClick = onCreateProfile,
                         modifier = Modifier.testTag("PubkyChoiceCreate")
+                    )
+                    VerticalSpacer(8.dp)
+                    OptionCard(
+                        iconResId = R.drawable.ic_lock_key,
+                        text = stringResource(R.string.profile__choice_import),
+                        onClick = onImportWithRing,
+                        modifier = Modifier.testTag("PubkyChoiceImport")
                     )
                 }
             }
@@ -270,6 +279,7 @@ private fun Preview() {
             uiState = PubkyChoiceUiState(),
             onBackClick = {},
             onCreateProfile = {},
+            onImportWithRing = {},
             onCancelAuth = {},
             onDownloadRing = {},
             onDismissDialog = {},
