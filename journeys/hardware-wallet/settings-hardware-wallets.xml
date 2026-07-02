@@ -27,6 +27,18 @@
       Verify the paired device is listed with its name, a bitcoin balance prefixed with the ₿ symbol, and a green connection indicator on the left
     </action>
     <action>
+      Tap the paired device name on the Hardware Wallets screen
+    </action>
+    <action>
+      Verify the "Rename Hardware Wallet" bottom sheet opens (testTag "RenameHardwareWalletInput") with the current name prefilled
+    </action>
+    <action>
+      Clear the Name field, type "Renamed Trezor", tap "Save" (testTag "RenameHardwareWalletSave"), and verify the sheet closes
+    </action>
+    <action>
+      Verify the Hardware Wallets screen now lists the paired device as "Renamed Trezor"
+    </action>
+    <action>
       Tap the "Add Hardware Wallet" button near the bottom (testTag "AddHardwareWallet")
     </action>
     <action>

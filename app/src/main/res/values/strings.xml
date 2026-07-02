@@ -193,6 +193,7 @@
     <string name="hardware__remove_dialog_text">Don\'t worry, your funds are safe and your coins won\'t be deleted. Bitkit will simply stop displaying the amounts in the wallet.</string>
     <string name="hardware__remove_dialog_title">Remove %1$s</string>
     <string name="hardware__remove_error">Could not remove the hardware wallet. Please try again.</string>
+    <string name="hardware__rename_error">Could not rename the hardware wallet. Please try again.</string>
     <string name="hardware__search_error">Could not search for hardware wallets. Check your connection and try again.</string>
     <string name="lightning__availability__text">Funds transfer to savings is usually instant, but settlement may take up to &lt;accent&gt;14 days&lt;/accent&gt; under certain network conditions.</string>
     <string name="lightning__availability__title">Funds\n&lt;accent&gt;availability&lt;/accent&gt;</string>
@@ -890,7 +891,9 @@
     <string name="settings__general_title">General</string>
     <string name="settings__hardware_wallets__add_button">Add Hardware Wallet</string>
     <string name="settings__hardware_wallets__empty_text">Pair a hardware device to watch its balance and activity in Bitkit.</string>
+    <string name="settings__hardware_wallets__name_label">Name</string>
     <string name="settings__hardware_wallets__nav_title">Hardware Wallets</string>
+    <string name="settings__hardware_wallets__rename_title">Rename Hardware Wallet</string>
     <string name="settings__language_system_default">System Settings</string>
     <string name="settings__language_title">Language</string>
     <string name="settings__payment_pref_contacts">Payments from contacts</string>
