@@ -12,6 +12,17 @@ class BalanceStateTest {
     }
 
     @Test
+    fun `totalSats includes balances in transfer`() {
+        val state = BalanceState(
+            totalOnchainSats = 100uL,
+            totalLightningSats = 50uL,
+            balanceInTransferToSavings = 10uL,
+            balanceInTransferToSpending = 15uL,
+        )
+        assertEquals(175uL, state.totalSats)
+    }
+
+    @Test
     fun `totalHardwareSats sums all hardware wallet balances`() {
         val state = BalanceState(
             hardwareWallets = listOf(
@@ -27,9 +38,10 @@ class BalanceStateTest {
         val state = BalanceState(
             totalOnchainSats = 100uL,
             totalLightningSats = 50uL,
+            balanceInTransferToSpending = 15uL,
             hardwareWallets = listOf(HwWalletBalance(id = "dev1", sats = 25uL)),
         )
-        assertEquals(175uL, state.totalWithHardwareSats)
+        assertEquals(190uL, state.totalWithHardwareSats)
     }
 
     @Test
@@ -45,5 +57,14 @@ class BalanceStateTest {
             hardwareWallets = listOf(HwWalletBalance(id = "dev1", sats = 10uL)),
         )
         assertEquals(ULong.MAX_VALUE, state.totalWithHardwareSats)
+    }
+
+    @Test
+    fun `totalSats saturates instead of overflowing`() {
+        val state = BalanceState(
+            totalOnchainSats = ULong.MAX_VALUE,
+            balanceInTransferToSpending = 10uL,
+        )
+        assertEquals(ULong.MAX_VALUE, state.totalSats)
     }
 }
