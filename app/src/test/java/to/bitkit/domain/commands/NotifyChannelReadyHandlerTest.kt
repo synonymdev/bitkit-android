@@ -46,7 +46,7 @@ class NotifyChannelReadyHandlerTest : BaseUnitTest() {
     fun setUp() {
         whenever(context.getString(R.string.notification__received__title)).thenReturn("Payment Received")
         whenever(context.getString(any(), any())).thenReturn("Received amount")
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(showNotificationDetails = true)))
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(
             Result.success(
                 ConvertedAmount(
@@ -154,30 +154,6 @@ class NotifyChannelReadyHandlerTest : BaseUnitTest() {
         assertNotNull(showNotification.notification)
         assertEquals("Payment Received", showNotification.notification.title)
         verify(activityRepo).insertActivityFromCjit(cjitEntry, channel)
-    }
-
-    @Test
-    fun `notification hides details when showNotificationDetails is false`() = test {
-        val event = mock<Event.ChannelReady> {
-            on { channelId } doReturn "channel-1"
-        }
-        val channel = createChannelDetails().copy(
-            channelId = "channel-1",
-            outboundCapacityMsat = 3000_000u,
-        )
-        val cjitEntry = IcJitEntry.mock()
-        whenever(lightningRepo.getChannels()).thenReturn(listOf(channel))
-        whenever(blocktankRepo.getCjitEntry(channel)).thenReturn(cjitEntry)
-        whenever(activityRepo.insertActivityFromCjit(any(), any())).thenReturn(Result.success(true))
-        whenever(settingsStore.data).thenReturn(flowOf(SettingsData(showNotificationDetails = false)))
-        whenever(context.getString(R.string.notification__received__body_hidden)).thenReturn("Hidden")
-
-        val result = sut(NotifyChannelReady.Command(event = event, includeNotification = true))
-
-        assertTrue(result.isSuccess)
-        val showNotification = result.getOrThrow()
-        assertTrue(showNotification is NotifyChannelReady.Result.ShowNotification)
-        assertEquals("Hidden", showNotification.notification.body)
     }
 
     @Test

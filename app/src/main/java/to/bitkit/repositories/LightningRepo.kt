@@ -431,6 +431,10 @@ class LightningRepo @Inject constructor(
         result
     }
 
+    fun removeEventHandler(handler: NodeEventHandler) {
+        _eventHandlers.remove(handler)
+    }
+
     private suspend fun onEvent(event: Event) {
         handleLdkEvent(event)
         recordProbeOutcome(event)

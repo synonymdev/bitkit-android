@@ -31,7 +31,6 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
@@ -117,9 +116,8 @@ class MainActivity : FragmentActivity() {
                 val scope = rememberCoroutineScope()
                 val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
                 val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
-                val walletExists by walletViewModel.walletState
-                    .map { it.walletExists }
-                    .collectAsStateWithLifecycle(initialValue = walletViewModel.walletExists)
+                val keepActive by settingsViewModel.keepBitkitActiveInBackground.collectAsStateWithLifecycle()
+                val walletExists = walletViewModel.walletExists
                 val isShowingMigrationLoading by walletViewModel.isShowingMigrationLoading.collectAsStateWithLifecycle()
                 val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
                 val hazeState = rememberHazeState(blurEnabled = true)
@@ -128,11 +126,14 @@ class MainActivity : FragmentActivity() {
                     walletExists,
                     isRecoveryMode,
                     notificationsGranted,
+                    keepActive,
                     restoreState,
                 ) {
-                    val canStartService = walletExists && notificationsGranted && restoreState.isIdle()
+                    val canStartService = walletExists && notificationsGranted && keepActive && restoreState.isIdle()
                     if (canStartService && !isRecoveryMode) {
                         tryStartForegroundService()
+                    } else {
+                        stopForegroundService()
                     }
                 }
 
@@ -264,9 +265,7 @@ class MainActivity : FragmentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         if (!settingsViewModel.notificationsGranted.value) {
-            runCatching {
-                stopService(Intent(this, LightningNodeService::class.java))
-            }
+            stopForegroundService()
         }
     }
 
@@ -283,6 +282,14 @@ class MainActivity : FragmentActivity() {
             )
         }.onFailure { error ->
             Logger.error("Failed to start LightningNodeService", error, context = "MainActivity")
+        }
+    }
+
+    private fun stopForegroundService() {
+        runCatching {
+            stopService(Intent(this, LightningNodeService::class.java))
+        }.onFailure { error ->
+            Logger.error("Failed to stop LightningNodeService", error, context = "MainActivity")
         }
     }
 }

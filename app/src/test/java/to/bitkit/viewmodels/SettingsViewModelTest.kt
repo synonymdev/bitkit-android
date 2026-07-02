@@ -159,6 +159,24 @@ class SettingsViewModelTest : BaseUnitTest() {
         verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
     }
 
+    @Test
+    fun `keepBitkitActiveInBackground defaults to false`() = test {
+        assertFalse(sut.keepBitkitActiveInBackground.value)
+    }
+
+    @Test
+    fun `setKeepBitkitActiveInBackground persists the new value`() = test {
+        sut.setKeepBitkitActiveInBackground(true)
+        advanceUntilIdle()
+
+        assertTrue(settingsData.value.keepBitkitActiveInBackground)
+
+        sut.setKeepBitkitActiveInBackground(false)
+        advanceUntilIdle()
+
+        assertFalse(settingsData.value.keepBitkitActiveInBackground)
+    }
+
     private fun createViewModel() = SettingsViewModel(
         settingsStore = settingsStore,
         pubkyRepo = pubkyRepo,
