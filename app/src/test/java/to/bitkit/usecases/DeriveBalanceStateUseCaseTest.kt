@@ -401,6 +401,66 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
     }
 
     @Test
+    fun `should subtract lingering coop close claimable from lightning while keeping new channel balance`() = test {
+        val closedChannelId = "closed-channel-id"
+        val newChannelId = "new-channel-id"
+        val closedChannelSats = 1_531_123uL
+        val newChannelSats = 62_158uL
+        val lingeringClosingBalance = newClosingChannelBalance(closedChannelId, closedChannelSats)
+        val newChannelBalance = newChannelBalance(newChannelId, newChannelSats)
+
+        val balance = newBalanceDetails().copy(
+            totalOnchainBalanceSats = closedChannelSats,
+            totalLightningBalanceSats = 1_593_281uL,
+            lightningBalances = listOf(lingeringClosingBalance, newChannelBalance),
+        )
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
+
+        val newChannel = mock<ChannelDetails> {
+            on { channelId } doReturn newChannelId
+            on { isChannelReady } doReturn true
+        }
+
+        whenever(lightningRepo.getChannels()).thenReturn(listOf(newChannel))
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+
+        val result = sut()
+
+        assertTrue(result.isSuccess)
+        val balanceState = result.getOrThrow()
+        assertEquals(closedChannelSats, balanceState.totalOnchainSats)
+        assertEquals(newChannelSats, balanceState.totalLightningSats)
+        assertEquals(0uL, balanceState.balanceInTransferToSavings)
+        assertEquals(0uL, balanceState.balanceInTransferToSpending)
+    }
+
+    @Test
+    fun `should keep non coop close claimable in lightning`() = test {
+        val channelId = "force-closed-channel-id"
+        val amountSats = 40_000uL
+        val closingChannelBalance = newClosingChannelBalance(
+            id = channelId,
+            sats = amountSats,
+            source = BalanceSource.COUNTERPARTY_FORCE_CLOSED,
+        )
+
+        val balance = newBalanceDetails().copy(
+            lightningBalances = listOf(closingChannelBalance),
+            totalLightningBalanceSats = amountSats,
+        )
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
+
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
+
+        val result = sut()
+
+        assertTrue(result.isSuccess)
+        val balanceState = result.getOrThrow()
+        assertEquals(amountSats, balanceState.totalLightningSats)
+    }
+
+    @Test
     fun `should calculate zero max send onchain when spendable balance is zero`() = test {
         val balance = newBalanceDetails().copy(totalOnchainBalanceSats = 50_000u)
         wheneverBlocking { lightningRepo.getBalancesAsync() }.thenReturn(Result.success(balance))
@@ -554,12 +614,16 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         inboundHtlcRoundedMsat = 0u,
     )
 
-    private fun newClosingChannelBalance(id: String, sats: ULong) = LightningBalance.ClaimableAwaitingConfirmations(
+    private fun newClosingChannelBalance(
+        id: String,
+        sats: ULong,
+        source: BalanceSource = BalanceSource.COOP_CLOSE,
+    ) = LightningBalance.ClaimableAwaitingConfirmations(
         channelId = id,
         counterpartyNodeId = "node-id",
         amountSatoshis = sats,
         confirmationHeight = 344u,
-        source = BalanceSource.COOP_CLOSE,
+        source = source,
     )
 
     private fun newTransferEntity(
