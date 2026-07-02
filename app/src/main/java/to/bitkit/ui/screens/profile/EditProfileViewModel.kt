@@ -227,19 +227,7 @@ class EditProfileViewModel @Inject constructor(
     fun disconnectProfile() {
         viewModelScope.launch {
             _uiState.update { it.copy(showDeleteFailureDialog = false, isSaving = true) }
-            val cleanupResult = privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
-            if (cleanupResult.isFailure) {
-                val error = requireNotNull(
-                    cleanupResult.exceptionOrNull(),
-                ) { "Private Paykit cleanup failed without an error" }
-                _uiState.update { it.copy(isSaving = false) }
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__disconnect_error),
-                    description = error.message,
-                )
-                return@launch
-            }
+            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
             val result = pubkyRepo.signOut()
             if (result.isSuccess) {
                 privatePaykitRepo.closeAndClear()
@@ -266,14 +254,7 @@ class EditProfileViewModel @Inject constructor(
                 isSaving = true,
             )
         }
-        val cleanupResult = privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
-        if (cleanupResult.isFailure) {
-            val error = requireNotNull(
-                cleanupResult.exceptionOrNull(),
-            ) { "Private Paykit cleanup failed without an error" }
-            _uiState.update { it.copy(showDeleteFailureDialog = true, isSaving = false) }
-            return
-        }
+        privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
         val result = pubkyRepo.deleteProfileWithSessionRetry()
         if (result.isSuccess) {
             privatePaykitRepo.closeAndClear()

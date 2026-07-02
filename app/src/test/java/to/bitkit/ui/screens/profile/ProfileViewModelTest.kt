@@ -9,7 +9,6 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -43,17 +42,20 @@ class ProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `signOut keeps profile connected when private cleanup fails`() = test {
+    fun `signOut continues when private cleanup fails`() = test {
         val sut = createSut()
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
             .thenReturn(Result.failure(RuntimeException("cleanup failed")))
         advanceUntilIdle()
 
-        sut.signOut()
-        advanceUntilIdle()
+        sut.effects.test {
+            sut.signOut()
+            advanceUntilIdle()
 
-        verify(pubkyRepo, never()).signOut()
-        verify(privatePaykitRepo, never()).closeAndClear()
+            assertEquals(ProfileEffect.SignedOut, awaitItem())
+        }
+        verify(pubkyRepo).signOut()
+        verify(privatePaykitRepo).closeAndClear()
     }
 
     private fun createSut(): ProfileViewModel {
@@ -62,6 +64,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow("pubkyalice"))
         whenever(pubkyRepo.isLoadingProfile).thenReturn(MutableStateFlow(false))
         whenever { pubkyRepo.loadProfile() }.thenReturn(Unit)
+        whenever { pubkyRepo.signOut() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))

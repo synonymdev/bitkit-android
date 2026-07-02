@@ -66,6 +66,54 @@ class Keychain @Inject constructor(
         }
     }
 
+    internal fun <T> accessBlocking(block: BlockingAccess.() -> T): T =
+        BlockingAccess().block()
+
+    internal inner class BlockingAccess {
+        @Suppress("TooGenericExceptionCaught")
+        fun load(key: String): ByteArray? {
+            try {
+                return blockingSnapshot[key.indexedBlocking]?.fromBase64()?.let {
+                    keyStore.decrypt(it)
+                }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                emitLoadDiagnosticsOnce(key, t)
+                throw KeychainError.FailedToLoad(key, cause = t)
+            }
+        }
+
+        @Suppress("TooGenericExceptionCaught")
+        fun upsert(key: String, value: ByteArray) {
+            try {
+                val encryptedValue = keyStore.encrypt(value)
+                kotlinx.coroutines.runBlocking {
+                    keychain.edit { it[key.indexedBlocking] = encryptedValue.toBase64() }
+                }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                throw KeychainError.FailedToSave(key, cause = t)
+            }
+            Logger.info("Upserted value for key '$key'", context = TAG)
+        }
+
+        @Suppress("TooGenericExceptionCaught")
+        fun delete(key: String) {
+            try {
+                kotlinx.coroutines.runBlocking {
+                    keychain.edit { it.remove(key.indexedBlocking) }
+                }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                throw KeychainError.FailedToDelete(key, cause = t)
+            }
+            Logger.debug("Deleted value for key '$key'", context = TAG)
+        }
+    }
+
     suspend fun saveString(key: String, value: String) = save(key, value.toByteArray())
 
     @Suppress("TooGenericExceptionCaught", "ThrowsCount")
@@ -88,21 +136,6 @@ class Keychain @Inject constructor(
         try {
             val encryptedValue = keyStore.encrypt(value.toByteArray())
             keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
-        } catch (c: CancellationException) {
-            throw c
-        } catch (t: Throwable) {
-            throw KeychainError.FailedToSave(key, cause = t)
-        }
-        Logger.info("Upserted value for key '$key'", context = TAG)
-    }
-
-    @Suppress("TooGenericExceptionCaught")
-    fun upsert(key: String, value: ByteArray) {
-        try {
-            val encryptedValue = keyStore.encrypt(value)
-            runBlocking(this.coroutineContext) {
-                keychain.edit { it[key.indexed] = encryptedValue.toBase64() }
-            }
         } catch (c: CancellationException) {
             throw c
         } catch (t: Throwable) {
@@ -139,6 +172,17 @@ class Keychain @Inject constructor(
     private val String.indexed: Preferences.Key<String>
         get() {
             val walletIndex = runBlocking { db.configDao().getAll().first() }.firstOrNull()?.walletIndex ?: 0
+            return "${this}_$walletIndex".let(::stringPreferencesKey)
+        }
+
+    private val blockingSnapshot: Preferences
+        get() = kotlinx.coroutines.runBlocking { keychain.data.first() }
+
+    private val String.indexedBlocking: Preferences.Key<String>
+        get() {
+            val walletIndex = kotlinx.coroutines.runBlocking {
+                db.configDao().getAll().first()
+            }.firstOrNull()?.walletIndex ?: 0
             return "${this}_$walletIndex".let(::stringPreferencesKey)
         }
 

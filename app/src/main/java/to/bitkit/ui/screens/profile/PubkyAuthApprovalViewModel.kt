@@ -1,7 +1,6 @@
 package to.bitkit.ui.screens.profile
 
 import android.content.Context
-import android.net.Uri
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -43,7 +42,17 @@ class PubkyAuthApprovalViewModel @Inject constructor(
 
     fun load(authUrl: String) {
         viewModelScope.launch {
-            val caps = extractCaps(authUrl)
+            val details = pubkyRepo.parseAuthUrl(authUrl).getOrElse {
+                Logger.error("Failed to parse auth request", it, context = TAG)
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.profile__auth_error_title),
+                    description = it.message,
+                )
+                _effects.emit(PubkyAuthApprovalEffect.Dismiss)
+                return@launch
+            }
+            val caps = details.capabilities.orEmpty()
             val permissions = PubkyAuthRequest.parseCapabilities(caps)
             val serviceNames = permissions.mapNotNull { PubkyAuthRequest.extractServiceName(it.path) }.distinct()
             val unknownService = context.getString(R.string.profile__auth_approval_service_unknown)
@@ -54,6 +63,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
                 it.copy(
                     state = ApprovalState.Authorize,
                     serviceName = serviceName,
+                    requestedCapabilities = caps,
                     permissions = permissions.toImmutableList(),
                     profile = profile,
                 )
@@ -70,7 +80,20 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     fun confirmAuthorize(authUrl: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(state = ApprovalState.Authorizing) }
-            pubkyRepo.approveAuth(authUrl)
+            val capabilities = _uiState.value.requestedCapabilities.ifBlank {
+                pubkyRepo.parseAuthUrl(authUrl).getOrElse {
+                    Logger.error("Failed to parse auth request", it, context = TAG)
+                    _uiState.update { state -> state.copy(state = ApprovalState.Authorize) }
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__auth_error_title),
+                        description = it.message,
+                    )
+                    return@launch
+                }.capabilities.orEmpty()
+            }
+
+            pubkyRepo.approveAuth(authUrl, capabilities)
                 .onSuccess {
                     Logger.info("Auth approved for '${_uiState.value.serviceName}'", context = TAG)
                     _uiState.update { it.copy(state = ApprovalState.Success) }
@@ -90,22 +113,19 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     fun dismiss() {
         viewModelScope.launch { _effects.emit(PubkyAuthApprovalEffect.Dismiss) }
     }
-
-    private fun extractCaps(authUrl: String): String {
-        val uri = Uri.parse(authUrl)
-        return uri.getQueryParameter("caps").orEmpty()
-    }
 }
 
 @Stable
 data class PubkyAuthApprovalUiState(
-    val state: ApprovalState = ApprovalState.Authorize,
+    val state: ApprovalState = ApprovalState.Loading,
     val serviceName: String = "",
+    val requestedCapabilities: String = "",
     val permissions: ImmutableList<PubkyAuthPermission> = persistentListOf(),
     val profile: PubkyProfile? = null,
 )
 
 sealed interface ApprovalState {
+    data object Loading : ApprovalState
     data object Authorize : ApprovalState
     data object Authorizing : ApprovalState
     data object Success : ApprovalState

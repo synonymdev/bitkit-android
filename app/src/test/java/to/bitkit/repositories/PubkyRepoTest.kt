@@ -178,6 +178,34 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `approveAuth should forward requested capabilities`() = test {
+        val authUrl = "pubkyauth://signin?caps=/pub/bitkit.to/:rw"
+        val capabilities = "/pub/bitkit.to/:rw"
+        val secretKey = "local_secret"
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
+
+        val result = sut.approveAuth(authUrl, capabilities)
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(pubkyService) { approveAuth(authUrl, capabilities, secretKey) }
+    }
+
+    @Test
+    fun `completeAuthentication should clear session when auth is canceled after completion`() = test {
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        whenever(pubkyService.completeAuth()).thenAnswer {
+            runBlocking { sut.cancelAuthentication() }
+            Unit
+        }
+
+        sut.startAuthentication()
+        val result = sut.completeAuthentication()
+
+        assertTrue(result.isFailure)
+        verifyBlocking(pubkyService) { clearSessionAccess() }
+    }
+
+    @Test
     fun `cancelAuthentication should reset state to idle`() = test {
         whenever(pubkyService.startAuth()).thenReturn("auth_uri")
         sut.startAuthentication()
@@ -1125,6 +1153,29 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertEquals("Extracted", sut.contacts.value.first().name)
         assertEquals(contactKey, sut.contacts.value.first().publicKey)
+    }
+
+    @Test
+    fun `loadContacts should use contact label when paykit profile has blank name`() = test {
+        authenticateForTesting()
+        val contactKey = "pubkyblankprofile"
+        whenever(pubkyService.contactRecords())
+            .thenReturn(
+                listOf(
+                    createContactRecord(
+                        contactKey,
+                        label = "Extracted",
+                        profile = createPaykitProfile(name = "", bio = "Bio", image = "pubky://avatar"),
+                    ),
+                ),
+            )
+
+        sut.loadContacts()
+
+        val contact = sut.contacts.value.first()
+        assertEquals("Extracted", contact.name)
+        assertEquals("Bio", contact.bio)
+        assertEquals("pubky://avatar", contact.imageUrl)
     }
 
     private suspend fun authenticateForTesting(

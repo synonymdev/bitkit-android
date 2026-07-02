@@ -5,12 +5,14 @@ import android.graphics.BitmapFactory
 import coil3.ImageLoader
 import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.PaykitProfile
+import com.synonym.paykit.PubkyAuthDetails
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -280,10 +282,12 @@ class PubkyRepo @Inject constructor(
 
     suspend fun completeAuthentication(): Result<Unit> {
         val attemptId = _activeAuthAttemptId.value ?: return Result.failure(PubkyAuthAttemptInactive())
+        var didCompleteAuth = false
         return try {
-            runSuspendCatching {
+            val result = runSuspendCatching {
                 withContext(ioDispatcher) {
                     pubkyService.completeAuth()
+                    didCompleteAuth = true
                     ensureAuthAttemptActive(attemptId)
                     val pk = requireNotNull(pubkyService.currentPublicKey()?.ensurePubkyPrefix()) {
                         "No active Pubky session"
@@ -295,12 +299,17 @@ class PubkyRepo @Inject constructor(
 
                     pk
                 }
-            }.onFailure {
+            }
+
+            if (result.isFailure) {
+                clearCompletedAuthSessionIfNeeded(didCompleteAuth)
                 if (_activeAuthAttemptId.value == attemptId) {
                     _activeAuthAttemptId.update { null }
                 }
                 restoreAuthStateAfterAuthFlow()
-            }.onSuccess { pk ->
+            }
+
+            result.onSuccess { pk ->
                 if (_activeAuthAttemptId.value == attemptId) {
                     _activeAuthAttemptId.update { null }
                 }
@@ -311,11 +320,23 @@ class PubkyRepo @Inject constructor(
                 loadContacts()
             }.map { }
         } catch (e: CancellationException) {
+            clearCompletedAuthSessionIfNeeded(didCompleteAuth)
             if (_activeAuthAttemptId.value == attemptId) {
                 _activeAuthAttemptId.update { null }
             }
             restoreAuthStateAfterAuthFlow()
             throw e
+        }
+    }
+
+    private suspend fun clearCompletedAuthSessionIfNeeded(didCompleteAuth: Boolean) {
+        if (!didCompleteAuth) return
+        runSuspendCatching {
+            withContext(NonCancellable + ioDispatcher) {
+                pubkyService.clearSessionAccess()
+            }
+        }.onFailure {
+            Logger.warn("Failed to clear canceled Pubky auth session", it, context = TAG)
         }
     }
 
@@ -829,12 +850,18 @@ class PubkyRepo @Inject constructor(
         managedSecretKeyFor(publicKey) != null
     }.getOrDefault(false)
 
-    suspend fun approveAuth(authUrl: String): Result<Unit> = runSuspendCatching {
+    suspend fun parseAuthUrl(authUrl: String): Result<PubkyAuthDetails> = runSuspendCatching {
+        withContext(ioDispatcher) {
+            pubkyService.parseAuthUrl(authUrl)
+        }
+    }
+
+    suspend fun approveAuth(authUrl: String, expectedCapabilities: String): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
             val secretKeyHex = requireNotNull(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)) {
                 "No secret key available — use Ring to manage authorizations"
             }
-            pubkyService.approveAuth(authUrl, secretKeyHex)
+            pubkyService.approveAuth(authUrl, expectedCapabilities, secretKeyHex)
         }
     }
 
@@ -986,10 +1013,10 @@ class PubkyRepo @Inject constructor(
             return it.toPubkyProfile(prefixedKey)
         }
         paykitProfile?.let {
-            return PubkyProfile.fromPaykitProfile(prefixedKey, it)
+            return PubkyProfile.fromPaykitProfile(prefixedKey, it).withNameFallback(label)
         }
         resolveContactProfile(prefixedKey).getOrNull()?.let {
-            return it
+            return it.withNameFallback(label)
         }
         return PubkyProfile.forDisplay(
             publicKey = prefixedKey,

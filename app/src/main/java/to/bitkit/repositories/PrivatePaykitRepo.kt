@@ -87,7 +87,10 @@ class PrivatePaykitRepo @Inject constructor(
     private val retryScope = CoroutineScope(serializedDispatcher + SupervisorJob())
     private val knownSavedContactKeys = mutableSetOf<String>()
     private var state: PrivatePaykitState? = null
+    private val pendingMessageDrainRetryLock = Any()
+    private val pendingMessageDrainRetryKeys = mutableSetOf<String>()
     private var pendingMessageDrainRetryJob: Job? = null
+    private var pendingMessageDrainRetryGeneration = 0
 
     private data class PrivatePublicationPreparation(
         val updates: List<PrivatePaymentListReservationUpdateInput>,
@@ -237,7 +240,11 @@ class PrivatePaykitRepo @Inject constructor(
 
     suspend fun removePublishedEndpointsForCleanup(context: String): Result<Unit> = withContext(serializedDispatcher) {
         removePublishedEndpoints()
+            .onSuccess {
+                updateContactSharingCleanupPending(false)
+            }
             .onFailure {
+                updateContactSharingCleanupPending(true)
                 Logger.warn("Failed to remove private Paykit endpoints during '$context'", it, context = TAG)
             }
     }
@@ -245,8 +252,7 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun closeAndClear(): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
             publicationMutex.withLock {
-                pendingMessageDrainRetryJob?.cancel()
-                pendingMessageDrainRetryJob = null
+                clearPendingMessageDrainRetries()
                 knownSavedContactKeys.clear()
                 state = PrivatePaykitState()
                 cacheStore.reset()
@@ -392,8 +398,7 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun restoreBackup(backup: String?): Result<Unit> =
         withContext(serializedDispatcher) {
             runSuspendCatching {
-                pendingMessageDrainRetryJob?.cancel()
-                pendingMessageDrainRetryJob = null
+                clearPendingMessageDrainRetries()
                 state = PrivatePaykitState()
                 knownSavedContactKeys.clear()
                 if (backup == null) {
@@ -623,12 +628,47 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     private fun schedulePendingPrivateMessageDrainRetries(reason: String, publicKeys: List<String>) {
-        pendingMessageDrainRetryJob?.cancel()
-        pendingMessageDrainRetryJob = retryScope.launch {
-            for (retryDelay in privateMessageDrainRetryDelays) {
-                delay(retryDelay)
-                drainPendingPrivateMessages("$reason retry", advancingLinksFor = publicKeys)
+        val retryKeys = publicKeys.mapNotNull(::normalizedPublicKey).toSet()
+        if (retryKeys.isEmpty()) return
+
+        synchronized(pendingMessageDrainRetryLock) {
+            pendingMessageDrainRetryKeys.addAll(retryKeys)
+            pendingMessageDrainRetryGeneration += 1
+            val retryGeneration = pendingMessageDrainRetryGeneration
+            pendingMessageDrainRetryJob?.cancel()
+
+            pendingMessageDrainRetryJob = retryScope.launch {
+                for (retryDelay in privateMessageDrainRetryDelays) {
+                    delay(retryDelay)
+                    drainPendingPrivateMessageRetryKeys("$reason retry")
+                }
+                finishPendingMessageDrainRetries(retryGeneration)
             }
+        }
+    }
+
+    private suspend fun drainPendingPrivateMessageRetryKeys(reason: String) {
+        val retryKeys = synchronized(pendingMessageDrainRetryLock) {
+            pendingMessageDrainRetryKeys.toList()
+        }
+        if (retryKeys.isEmpty()) return
+        drainPendingPrivateMessages(reason, advancingLinksFor = retryKeys)
+    }
+
+    private fun finishPendingMessageDrainRetries(generation: Int) {
+        synchronized(pendingMessageDrainRetryLock) {
+            if (generation != pendingMessageDrainRetryGeneration) return
+            pendingMessageDrainRetryJob = null
+            pendingMessageDrainRetryKeys.clear()
+        }
+    }
+
+    private fun clearPendingMessageDrainRetries() {
+        synchronized(pendingMessageDrainRetryLock) {
+            pendingMessageDrainRetryJob?.cancel()
+            pendingMessageDrainRetryJob = null
+            pendingMessageDrainRetryKeys.clear()
+            pendingMessageDrainRetryGeneration += 1
         }
     }
 

@@ -77,19 +77,7 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _isSigningOut.update { true }
             _showSignOutDialog.update { false }
-            val cleanupResult = privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
-            if (cleanupResult.isFailure) {
-                val error = requireNotNull(
-                    cleanupResult.exceptionOrNull(),
-                ) { "Private Paykit cleanup failed without an error" }
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__sign_out_title),
-                    description = error.message,
-                )
-                _isSigningOut.update { false }
-                return@launch
-            }
+            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
             val result = pubkyRepo.signOut()
             if (result.isSuccess) {
                 privatePaykitRepo.closeAndClear()

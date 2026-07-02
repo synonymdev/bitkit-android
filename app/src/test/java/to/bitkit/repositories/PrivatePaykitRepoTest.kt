@@ -213,6 +213,32 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `cleanup removal marks cleanup pending when private endpoint removal fails`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+        )
+        sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
+        whenever { paykitSdkService.clearPrivatePaymentList(CONTACT_KEY) }.thenReturn(
+            privateListDeliveryReport(
+                failedToQueue = listOf(
+                    PrivatePaymentListSyncChange(
+                        counterparty = CONTACT_KEY,
+                        outboundMessageId = null,
+                        error = "failed",
+                    ),
+                ),
+            ),
+        )
+
+        val result = sut.removePublishedEndpointsForCleanup("test")
+
+        assertTrue(result.isFailure)
+        assertEquals(true, cacheData.value.cleanupPending)
+    }
+
+    @Test
     fun `closeAndClear clears SDK state`() = test {
         val result = sut.closeAndClear()
 

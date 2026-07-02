@@ -106,8 +106,12 @@ class PubkyService @Inject constructor(
         PaykitSdkService.parseAuthUrl(url)
     }
 
-    suspend fun approveAuth(authUrl: String, secretKeyHex: String) = ServiceQueue.CORE.background {
-        paykitSdkService.approveAuth(authUrl, secretKeyHex)
+    suspend fun approveAuth(
+        authUrl: String,
+        expectedCapabilities: String,
+        secretKeyHex: String,
+    ) = ServiceQueue.CORE.background {
+        paykitSdkService.approveAuth(authUrl, expectedCapabilities, secretKeyHex)
     }
 
     // endregion

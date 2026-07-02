@@ -49,7 +49,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.lightningdevkit.ldknode.Network
@@ -237,11 +236,11 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun approveAuth(authUrl: String, secretKeyHex: String) {
+    suspend fun approveAuth(authUrl: String, expectedCapabilities: String, secretKeyHex: String) {
         isSetup.await()
         PubkySessionBootstrap().approveAuth(
             authUrl = authUrl,
-            expectedCapabilities = requiredCapabilities(),
+            expectedCapabilities = expectedCapabilities,
             localSecretKey = localSecretKey(secretKeyHex),
         )
     }
@@ -607,7 +606,9 @@ private class PaykitSdkStateBlobStore(
     private val lock = Any()
 
     override fun loadStateBlob(): SdkStateBlobSnapshot? = synchronized(lock) {
-        val data = keychain.load(Keychain.Key.PAYKIT_SDK_STATE.name) ?: return@synchronized null
+        val data = keychain.accessBlocking {
+            load(Keychain.Key.PAYKIT_SDK_STATE.name)
+        } ?: return@synchronized null
         decodeSdkStateBlobSnapshot(data)
     }
 
@@ -615,7 +616,9 @@ private class PaykitSdkStateBlobStore(
         blob: SdkStateBlob,
         expectedRevision: String?,
     ): String = synchronized(lock) {
-        val currentRevision = keychain.load(Keychain.Key.PAYKIT_SDK_STATE.name)
+        val currentRevision = keychain.accessBlocking {
+            load(Keychain.Key.PAYKIT_SDK_STATE.name)
+        }
             ?.let { decodeSdkStateBlobSnapshot(it).revision }
         if (currentRevision != expectedRevision) {
             throw PaykitException.Storage(
@@ -626,7 +629,9 @@ private class PaykitSdkStateBlobStore(
 
         val nextRevision = UUID.randomUUID().toString()
         val snapshot = SdkStateBlobSnapshot(blob = blob, revision = nextRevision)
-        keychain.upsert(Keychain.Key.PAYKIT_SDK_STATE.name, encodeSdkStateBlobSnapshot(snapshot))
+        keychain.accessBlocking {
+            upsert(Keychain.Key.PAYKIT_SDK_STATE.name, encodeSdkStateBlobSnapshot(snapshot))
+        }
         nextRevision
     }
 }
@@ -665,10 +670,10 @@ private class PaykitSdkSessionProvider(
     override fun publicStorageAvailable(): Boolean = true
 
     override fun clearSessionAccess() {
-        runBlocking {
-            clearLiveSessionAccess()
-            keychain.delete(Keychain.Key.PAYKIT_SESSION.name)
-            keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+        clearLiveSessionAccess()
+        keychain.accessBlocking {
+            delete(Keychain.Key.PAYKIT_SESSION.name)
+            delete(Keychain.Key.PUBKY_SECRET_KEY.name)
         }
     }
 
