@@ -79,8 +79,8 @@ class ProfileViewModel @Inject constructor(
             _showSignOutDialog.update { false }
             privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
             val result = pubkyRepo.signOut()
+            privatePaykitRepo.closeAndClear()
             if (result.isSuccess) {
-                privatePaykitRepo.closeAndClear()
                 _effects.emit(ProfileEffect.SignedOut)
             } else {
                 val error = requireNotNull(result.exceptionOrNull()) { "Sign out failed without an error" }

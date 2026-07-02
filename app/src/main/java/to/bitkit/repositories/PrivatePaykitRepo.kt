@@ -497,7 +497,8 @@ class PrivatePaykitRepo @Inject constructor(
                     updates = preparation.updates,
                     clearUnlistedLinkedPeers = false,
                 )
-                val firstError = preparation.firstError ?: applyPrivatePaymentListDeliveryReport(report, reason)
+                val deliveryError = applyPrivatePaymentListDeliveryReport(report, reason)
+                val firstError = preparation.firstError ?: deliveryError
                 val retryKeys = privatePaymentListDeliveryRetryKeys(report)
                 drainPendingPrivateMessages(reason, advancingLinksFor = retryKeys)
                 if (retryKeys.isNotEmpty()) {
@@ -1061,12 +1062,11 @@ class PrivatePaykitRepo @Inject constructor(
         preserveCleanupMarkers: Boolean = true,
     ) {
         val currentState = state ?: PrivatePaykitState()
-        val stored = cacheStore.data.first()
         cacheStore.update {
             currentState.cacheState(
-                cleanupPending = if (preserveCleanupMarkers) stored.cleanupPending else false,
+                cleanupPending = if (preserveCleanupMarkers) it.cleanupPending else false,
                 deletedContactCleanupPendingPublicKeys = if (preserveCleanupMarkers) {
-                    stored.deletedContactCleanupPendingPublicKeys
+                    it.deletedContactCleanupPendingPublicKeys
                 } else {
                     emptySet()
                 },

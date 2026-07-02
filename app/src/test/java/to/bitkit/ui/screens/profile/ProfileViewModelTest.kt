@@ -14,6 +14,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -45,7 +46,7 @@ class ProfileViewModelTest : BaseUnitTest() {
     fun `signOut continues when private cleanup fails`() = test {
         val sut = createSut()
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
-            .thenReturn(Result.failure(RuntimeException("cleanup failed")))
+            .thenReturn(Result.failure(ProfileTestAppError("cleanup failed")))
         advanceUntilIdle()
 
         sut.effects.test {
@@ -55,6 +56,18 @@ class ProfileViewModelTest : BaseUnitTest() {
             assertEquals(ProfileEffect.SignedOut, awaitItem())
         }
         verify(pubkyRepo).signOut()
+        verify(privatePaykitRepo).closeAndClear()
+    }
+
+    @Test
+    fun `signOut clears local Paykit state when Pubky sign out fails`() = test {
+        val sut = createSut()
+        whenever { pubkyRepo.signOut() }.thenReturn(Result.failure(ProfileTestAppError("sign out failed")))
+        advanceUntilIdle()
+
+        sut.signOut()
+        advanceUntilIdle()
+
         verify(privatePaykitRepo).closeAndClear()
     }
 
@@ -76,3 +89,5 @@ class ProfileViewModelTest : BaseUnitTest() {
         )
     }
 }
+
+private class ProfileTestAppError(message: String) : AppError(message)

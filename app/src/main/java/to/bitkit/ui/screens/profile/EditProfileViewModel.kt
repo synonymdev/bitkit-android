@@ -229,8 +229,8 @@ class EditProfileViewModel @Inject constructor(
             _uiState.update { it.copy(showDeleteFailureDialog = false, isSaving = true) }
             privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
             val result = pubkyRepo.signOut()
+            privatePaykitRepo.closeAndClear()
             if (result.isSuccess) {
-                privatePaykitRepo.closeAndClear()
                 _uiState.update { it.copy(isSaving = false) }
                 _effects.emit(EditProfileEffect.DisconnectSuccess)
             } else {

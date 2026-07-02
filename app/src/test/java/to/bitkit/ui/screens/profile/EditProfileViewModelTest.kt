@@ -148,6 +148,19 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `disconnectProfile clears local Paykit state when Pubky sign out fails`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.signOut()).thenReturn(Result.failure(TestAppError("sign out failed")))
+        advanceUntilIdle()
+
+        sut.disconnectProfile()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isSaving)
+        verify(privatePaykitRepo).closeAndClear()
+    }
+
+    @Test
     fun `deleteProfile should continue when private cleanup fails`() = test {
         val sut = createSut()
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }

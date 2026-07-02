@@ -190,7 +190,7 @@ class PubkyRepo @Inject constructor(
                 is InitResult.Restored -> {
                     _publicKey.update { result.publicKey }
                     _authState.update { PubkyAuthState.Authenticated }
-                    Logger.info("Restored paykit session for '${result.publicKey}'", context = TAG)
+                    Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
                     loadProfile()
                     loadContacts()
                 }
@@ -244,7 +244,7 @@ class PubkyRepo @Inject constructor(
                 pubkyService.signIn(storedSecretKeyHex)
                 notifyBackupStateChanged()
                 val publicKey = pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix()
-                Logger.info("Re-signed in and restored session for '$publicKey'", context = TAG)
+                Logger.info("Re-signed in and restored session for '${redacted(publicKey)}'", context = TAG)
                 InitResult.Restored(publicKey)
             }.getOrElse {
                 Logger.error("Failed re-sign-in recovery", it, context = TAG)
@@ -315,7 +315,7 @@ class PubkyRepo @Inject constructor(
                 }
                 _publicKey.update { pk }
                 _authState.update { PubkyAuthState.Authenticated }
-                Logger.info("Completed pubky auth for '$pk'", context = TAG)
+                Logger.info("Completed pubky auth for '${redacted(pk)}'", context = TAG)
                 loadProfile()
                 loadContacts()
             }.map { }
@@ -457,7 +457,7 @@ class PubkyRepo @Inject constructor(
                 }
             }.onSuccess { loadedProfile ->
                 if (_publicKey.value != pk) {
-                    Logger.debug("Skipped stale profile load for '$pk'", context = TAG)
+                    Logger.debug("Skipped stale profile load for '${redacted(pk)}'", context = TAG)
                     return@onSuccess
                 }
                 _profile.update { loadedProfile }
@@ -529,7 +529,7 @@ class PubkyRepo @Inject constructor(
             _profile.update { createdProfile }
             cacheMetadata(createdProfile)
             notifyBackupStateChanged()
-            Logger.info("Created identity for '$publicKeyZ32'", context = TAG)
+            Logger.info("Created identity for '${redacted(publicKeyZ32)}'", context = TAG)
             loadProfile()
             loadContacts()
         }
@@ -612,7 +612,7 @@ class PubkyRepo @Inject constructor(
             runSuspendCatching {
                 pubkyService.removeContact(record.publicKey)
             }.onFailure {
-                Logger.warn("Failed to delete contact '${record.publicKey}'", it, context = TAG)
+                Logger.warn("Failed to delete contact '${redacted(record.publicKey)}'", it, context = TAG)
             }
         }
         pubkyStore.update { it.copy(contactProfileOverrides = emptyMap()) }
@@ -682,7 +682,11 @@ class PubkyRepo @Inject constructor(
                                 runSuspendCatching {
                                     contactProfile(record.publicKey, record.label, record.profile, overrides)
                                 }.onFailure {
-                                    Logger.warn("Failed to load contact '${record.publicKey}'", it, context = TAG)
+                                    Logger.warn(
+                                        "Failed to load contact '${redacted(record.publicKey)}'",
+                                        it,
+                                        context = TAG,
+                                    )
                                 }.getOrElse {
                                     PubkyProfile.placeholder(record.publicKey.ensurePubkyPrefix())
                                 }
@@ -692,7 +696,7 @@ class PubkyRepo @Inject constructor(
                 }
             }.onSuccess { loadedContacts ->
                 if (_publicKey.value != pk) {
-                    Logger.debug("Skipped stale contacts load for '$pk'", context = TAG)
+                    Logger.debug("Skipped stale contacts load for '${redacted(pk)}'", context = TAG)
                     return@onSuccess
                 }
                 _contacts.update { loadedContacts }
@@ -715,7 +719,7 @@ class PubkyRepo @Inject constructor(
                 if (it is CancellationException) {
                     throw it
                 }
-                Logger.warn("Falling back to placeholder contact '$prefixedKey'", it, context = TAG)
+                Logger.warn("Falling back to placeholder contact '${redacted(prefixedKey)}'", it, context = TAG)
                 PubkyProfile.placeholder(prefixedKey)
             }
     }
@@ -738,7 +742,7 @@ class PubkyRepo @Inject constructor(
                     .sortedBy { it.name.lowercase() }
             }
             markContactsLoaded()
-            Logger.info("Added contact '$prefixedKey'", context = TAG)
+            Logger.info("Added contact '${redacted(prefixedKey)}'", context = TAG)
         }
     }
 
@@ -769,7 +773,7 @@ class PubkyRepo @Inject constructor(
                     .sortedBy { it.name.lowercase() }
             }
             markContactsLoaded()
-            Logger.info("Updated contact '$prefixedKey'", context = TAG)
+            Logger.info("Updated contact '${redacted(prefixedKey)}'", context = TAG)
         }
     }
 
@@ -780,7 +784,7 @@ class PubkyRepo @Inject constructor(
             removeContactProfileOverride(prefixedKey)
             _contacts.update { current -> current.filter { it.publicKey != prefixedKey } }
             markContactsLoaded()
-            Logger.info("Removed contact '$prefixedKey'", context = TAG)
+            Logger.info("Removed contact '${redacted(prefixedKey)}'", context = TAG)
         }
     }
 
@@ -796,7 +800,7 @@ class PubkyRepo @Inject constructor(
                             pubkyService.saveContact(prefixedKey, profile.name)
                             profile
                         }.onFailure {
-                            Logger.warn("Failed to import contact '$prefixedKey'", it, context = TAG)
+                            Logger.warn("Failed to import contact '${redacted(prefixedKey)}'", it, context = TAG)
                         }.getOrNull()
                     }
                 }.awaitAll().filterNotNull()
@@ -1045,7 +1049,11 @@ class PubkyRepo @Inject constructor(
                 }
 
                 if (attempt == 0) {
-                    Logger.warn("Retrying contact profile resolution for '$prefixedKey'", lastError, context = TAG)
+                    Logger.warn(
+                        "Retrying contact profile resolution for '${redacted(prefixedKey)}'",
+                        lastError,
+                        context = TAG,
+                    )
                     delay(250)
                 }
             }
@@ -1099,7 +1107,7 @@ class PubkyRepo @Inject constructor(
         val derivedPublicKey = runCatching {
             pubkyService.publicKeyFromSecret(secretKeyHex).ensurePubkyPrefix()
         }.onFailure {
-            Logger.warn("Ignoring invalid managed secret key for '$publicKey'", it, context = TAG)
+            Logger.warn("Ignoring invalid managed secret key for '${redacted(publicKey)}'", it, context = TAG)
         }.getOrNull()
 
         if (derivedPublicKey == publicKey) {
@@ -1107,7 +1115,7 @@ class PubkyRepo @Inject constructor(
         }
 
         if (derivedPublicKey != null) {
-            Logger.warn("Ignoring stale managed secret key for '$publicKey'", context = TAG)
+            Logger.warn("Ignoring stale managed secret key for '${redacted(publicKey)}'", context = TAG)
         }
         runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
             .onSuccess { notifyBackupStateChanged() }
@@ -1182,6 +1190,8 @@ class PubkyRepo @Inject constructor(
 
     private fun String.ensurePubkyPrefix(): String =
         if (startsWith(PUBKY_PREFIX)) this else "$PUBKY_PREFIX$this"
+
+    private fun redacted(publicKey: String): String = PubkyPublicKeyFormat.redacted(publicKey)
 
     private fun Throwable.isMissingPubkyData(): Boolean {
         val fullMessage = buildErrorMessage()
