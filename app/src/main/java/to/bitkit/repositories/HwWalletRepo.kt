@@ -36,6 +36,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.create
+import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HwFundingAccount
@@ -225,7 +226,10 @@ class HwWalletRepo @Inject constructor(
                 ).getOrThrow()
             }
             if (signed.isFailure) {
-                trezorRepo.disconnectStaleSession(deviceId)
+                val failure = signed.exceptionOrNull()
+                if (failure?.isTrezorUserCancellation() != true) {
+                    trezorRepo.disconnectStaleSession(deviceId)
+                }
             }
             val txId = trezorRepo.broadcastRawTx(serializedTx = signed.getOrThrow().serializedTx).getOrThrow()
             HwFundingBroadcastResult(

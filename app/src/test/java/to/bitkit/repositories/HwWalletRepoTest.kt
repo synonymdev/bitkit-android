@@ -6,6 +6,7 @@ import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.TrezorFeatures
+import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.WalletBalance
 import com.synonym.bitkitcore.WatcherEvent
@@ -848,6 +849,26 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo).disconnectStaleSession("dev1")
+        verify(trezorRepo, never()).broadcastRawTx(any())
+    }
+
+    @Test
+    fun `signAndBroadcastFunding keeps session when user cancels on device`() = test {
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = 1_250uL,
+            feeRate = 2.0f,
+            totalSpent = 26_250uL,
+            satsPerVByte = 2uL,
+        )
+        whenever(trezorRepo.signTxFromPsbt("psbt", Env.network.toTrezorCoinType()))
+            .thenReturn(Result.failure(TrezorException.UserCancelled()))
+        val sut = createRepo()
+
+        val result = sut.signAndBroadcastFunding("dev1", funding)
+
+        assertEquals(true, result.isFailure)
+        verify(trezorRepo, never()).disconnectStaleSession(any())
         verify(trezorRepo, never()).broadcastRawTx(any())
     }
 

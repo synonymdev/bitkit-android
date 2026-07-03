@@ -33,6 +33,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
+import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.Toast
@@ -624,6 +625,10 @@ class TransferViewModel @Inject constructor(
                 showHardwareFundingError(e)
             }
             else -> {
+                if (e.isTrezorUserCancellation()) {
+                    Logger.info("Hardware transfer cancelled on device for '$deviceId'", context = TAG)
+                    return
+                }
                 Logger.error("Hardware transfer failed", e, context = TAG)
                 ToastEventBus.send(e)
             }

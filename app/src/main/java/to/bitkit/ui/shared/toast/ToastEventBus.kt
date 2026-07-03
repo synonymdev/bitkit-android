@@ -2,6 +2,7 @@ package to.bitkit.ui.shared.toast
 
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.models.Toast
 
 object ToastEventBus {
@@ -23,11 +24,12 @@ object ToastEventBus {
     }
 
     suspend fun send(error: Throwable) {
+        if (error.isTrezorUserCancellation()) return
         _events.emit(
             Toast(
                 type = Toast.ToastType.ERROR,
                 title = "Error",
-                description = error.message ?: "Unknown error",
+                description = error.message?.takeIf { it.isNotBlank() } ?: "Unknown error",
                 autoHide = true,
                 visibilityTime = Toast.VISIBILITY_TIME_DEFAULT,
             )
