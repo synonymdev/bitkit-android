@@ -1124,6 +1124,7 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(features, result.getOrNull())
         assertEquals(bleDeviceId, sut.state.value.connectedDeviceId())
         verify(trezorService).connect(eq(bleDeviceId), any())
+        verify(trezorService).scan()
     }
 
     @Test
@@ -1161,6 +1162,36 @@ class TrezorRepoTest : BaseUnitTest() {
         verify(trezorService, times(1)).scan()
         verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
         verify(trezorService, never()).disconnect()
+    }
+
+    @Test
+    fun `ensureConnected retries bluetooth reconnect until scan finds the device`() = test {
+        val bleDeviceId = "ble:57:21:A7:F9:DD:AD"
+        val knownDevice = mockKnownDevice(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TransportType.BLUETOOTH,
+        )
+        val device = mockDeviceInfo(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TrezorTransportType.BLUETOOTH,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(emptyList(), emptyList(), listOf(device))
+        whenever(trezorService.connect(eq(bleDeviceId), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.ensureConnected(bleDeviceId)
+
+        assertTrue(result.isSuccess)
+        assertEquals(features, result.getOrNull())
+        verify(trezorService, times(3)).scan()
+        verify(trezorService).connect(eq(bleDeviceId), any())
+        verify(trezorService, never()).connect(eq(bleDeviceId), any(), eq(false))
     }
 
     // endregion

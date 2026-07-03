@@ -151,6 +151,8 @@ class HwWalletRepo @Inject constructor(
 
     suspend fun ensureConnected(deviceId: String): Result<TrezorFeatures> = trezorRepo.ensureConnected(deviceId)
 
+    suspend fun isKnownBluetoothDevice(deviceId: String): Boolean = trezorRepo.isKnownBluetoothDevice(deviceId)
+
     suspend fun getFundingAccount(
         deviceId: String,
         addressType: HwFundingAddressType = HwFundingAddressType.DEFAULT,

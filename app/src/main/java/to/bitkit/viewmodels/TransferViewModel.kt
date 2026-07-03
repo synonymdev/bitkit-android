@@ -494,6 +494,14 @@ class TransferViewModel @Inject constructor(
     }
 
     /** Pays for the order by composing and signing the funding send on the Trezor, then watches it. */
+    fun warmUpHardwareConnection(deviceId: String) {
+        viewModelScope.launch {
+            if (hwWalletRepo.isKnownBluetoothDevice(deviceId)) {
+                hwWalletRepo.onAppForegrounded()
+            }
+        }
+    }
+
     fun onTransferToSpendingHwConfirm(order: IBtOrder, deviceId: String) {
         if (hwTransferSignJob?.isActive == true) return
 
@@ -605,7 +613,7 @@ class TransferViewModel @Inject constructor(
         when (e) {
             is HardwareReconnectError -> {
                 Logger.error("Failed to reconnect hardware device", e, context = TAG)
-                showHardwareReconnectError()
+                showHardwareReconnectError(deviceId)
             }
             is HardwareSigningTimeoutError -> {
                 Logger.warn("Timed out hardware transfer signing for '$deviceId'", e, context = TAG)
@@ -622,7 +630,14 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private suspend fun showHardwareReconnectError() {
+    private suspend fun showHardwareReconnectError(deviceId: String) {
+        if (hwWalletRepo.isKnownBluetoothDevice(deviceId)) {
+            ToastEventBus.send(
+                type = Toast.ToastType.INFO,
+                title = context.getString(R.string.hardware__connect_error),
+            )
+            return
+        }
         ToastEventBus.send(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.lightning__transfer_hw__reconnect_error_title),

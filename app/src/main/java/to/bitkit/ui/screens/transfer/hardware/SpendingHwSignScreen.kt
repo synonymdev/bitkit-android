@@ -55,6 +55,10 @@ fun SpendingHwSignScreen(
         return
     }
 
+    LaunchedEffect(deviceId) {
+        viewModel.warmUpHardwareConnection(deviceId)
+    }
+
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
             when (effect) {

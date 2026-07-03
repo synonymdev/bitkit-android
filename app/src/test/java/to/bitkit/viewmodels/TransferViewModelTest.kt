@@ -294,6 +294,7 @@ class TransferViewModelTest : BaseUnitTest() {
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = false))))
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.failure(RuntimeException("no device")))
+        whenever(hwWalletRepo.isKnownBluetoothDevice(DEVICE_ID)).thenReturn(false)
 
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
