@@ -221,6 +221,7 @@ private fun ActivityExploreContent(
             is Activity.Onchain -> {
                 OnchainDetails(
                     onchain = item,
+                    isHardware = isHardware,
                     onCopy = onCopy,
                     txDetails = txDetails,
                     boostTxDoesExist = boostTxDoesExist,
@@ -283,6 +284,7 @@ private fun LightningDetails(
 @Composable
 private fun ColumnScope.OnchainDetails(
     onchain: Activity.Onchain,
+    isHardware: Boolean,
     onCopy: (String) -> Unit,
     txDetails: TransactionDetails?,
     boostTxDoesExist: Map<String, Boolean> = emptyMap(),
@@ -324,6 +326,14 @@ private fun ColumnScope.OnchainDetails(
                     }
                 }
             },
+        )
+    } else if (!isHardware) {
+        CircularProgressIndicator(
+            strokeWidth = 2.dp,
+            modifier = Modifier
+                .padding(vertical = 16.dp)
+                .size(16.dp)
+                .align(Alignment.CenterHorizontally)
         )
     }
 
