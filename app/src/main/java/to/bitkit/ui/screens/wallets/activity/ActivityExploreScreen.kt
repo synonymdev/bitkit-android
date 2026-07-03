@@ -164,6 +164,7 @@ fun ActivityExploreScreen(
                 val toastMessage = stringResource(R.string.common__copied)
                 ActivityExploreContent(
                     item = item,
+                    isHardware = uiState.isHardwareActivity,
                     txDetails = txDetails,
                     boostTxDoesExist = boostTxDoesExist,
                     onCopy = { text ->
@@ -187,6 +188,7 @@ fun ActivityExploreScreen(
 @Composable
 private fun ActivityExploreContent(
     item: Activity,
+    isHardware: Boolean = false,
     txDetails: TransactionDetails? = null,
     boostTxDoesExist: Map<String, Boolean> = emptyMap(),
     onCopy: (String) -> Unit = {},
@@ -210,7 +212,7 @@ private fun ActivityExploreContent(
                 showBitcoinSymbol = false,
                 modifier = Modifier.weight(1f),
             )
-            ActivityIcon(activity = item, size = 48.dp)
+            ActivityIcon(activity = item, size = 48.dp, isHardware = isHardware)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -322,14 +324,6 @@ private fun ColumnScope.OnchainDetails(
                     }
                 }
             },
-        )
-    } else {
-        CircularProgressIndicator(
-            strokeWidth = 2.dp,
-            modifier = Modifier
-                .padding(vertical = 16.dp)
-                .size(16.dp)
-                .align(Alignment.CenterHorizontally)
         )
     }
 
