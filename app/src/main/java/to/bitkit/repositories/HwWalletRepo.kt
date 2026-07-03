@@ -106,6 +106,8 @@ class HwWalletRepo @Inject constructor(
 
     fun onAppForegrounded() = trezorRepo.onAppForegrounded()
 
+    fun warmUpKnownDevice(deviceId: String) = trezorRepo.warmUpKnownDevice(deviceId)
+
     suspend fun resetState() = withContext(ioDispatcher) {
         activeWatchers.toList().forEach { watcherId ->
             trezorRepo.stopWatcher(watcherId)

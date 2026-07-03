@@ -468,6 +468,75 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `warmUpKnownDevice connects to the requested bluetooth device`() = test {
+        val bleDeviceId = "ble:57:21:A7:F9:DD:AD"
+        val knownDevice = mockKnownDevice(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TransportType.BLUETOOTH,
+        )
+        val device = mockDeviceInfo(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TrezorTransportType.BLUETOOTH,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(bleDeviceId), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        sut.warmUpKnownDevice(bleDeviceId)
+        advanceUntilIdle()
+
+        assertEquals(bleDeviceId, sut.state.value.connectedDeviceId())
+        verify(trezorService).connect(eq(bleDeviceId), any())
+    }
+
+    @Test
+    fun `warmUpKnownDevice skips non-bluetooth devices`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        sut = createSut()
+
+        sut.initialize()
+        sut.warmUpKnownDevice(DEVICE_ID)
+        advanceUntilIdle()
+
+        verify(trezorService, never()).scan()
+    }
+
+    @Test
+    fun `warmUpKnownDevice skips when device is already connected`() = test {
+        val bleDeviceId = "ble:57:21:A7:F9:DD:AD"
+        val knownDevice = mockKnownDevice(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TransportType.BLUETOOTH,
+        )
+        val device = mockDeviceInfo(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TrezorTransportType.BLUETOOTH,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.isConnected()).thenReturn(false, true)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(bleDeviceId), any())).thenReturn(features)
+        sut = createSut()
+        sut.initialize()
+        sut.warmUpKnownDevice(bleDeviceId)
+        advanceUntilIdle()
+
+        sut.warmUpKnownDevice(bleDeviceId)
+        advanceUntilIdle()
+
+        verify(trezorService, times(1)).scan()
+    }
+
+    @Test
     fun `onTransportRestored skips usb device without permission`() = test {
         val device = mockDeviceInfo()
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))

@@ -496,11 +496,7 @@ class TransferViewModel @Inject constructor(
 
     /** Pays for the order by composing and signing the funding send on the Trezor, then watches it. */
     fun warmUpHardwareConnection(deviceId: String) {
-        viewModelScope.launch {
-            if (hwWalletRepo.isKnownBluetoothDevice(deviceId)) {
-                hwWalletRepo.onAppForegrounded()
-            }
-        }
+        hwWalletRepo.warmUpKnownDevice(deviceId)
     }
 
     fun onTransferToSpendingHwConfirm(order: IBtOrder, deviceId: String) {

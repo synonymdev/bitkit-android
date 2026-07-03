@@ -28,12 +28,15 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -99,8 +102,8 @@ class TrezorRepo @Inject constructor(
         private const val WALLET_MODE_RECONNECT_DELAY_MS = 1_000L
         private const val TRANSPORT_RESTORED_MAX_ATTEMPTS = 4
         private val TRANSPORT_RESTORED_RECONNECT_DELAY = 2.seconds
-        private const val CONNECT_ATTEMPT_POLL_COUNT = 20
         private val CONNECT_ATTEMPT_POLL_INTERVAL = 250.milliseconds
+        private val CONNECT_ATTEMPT_MAX_WAIT = 28.seconds
     }
 
     private val _state = MutableStateFlow(TrezorState())
@@ -646,7 +649,7 @@ class TrezorRepo @Inject constructor(
         forceSession: Boolean = false,
         allowBleFallback: Boolean = true,
     ): Result<TrezorFeatures> = withContext(ioDispatcher) {
-        if (_state.value.isConnecting) {
+        if (isConnectInProgress()) {
             return@withContext Result.failure(AppError("Connection already in progress"))
         }
         var startedConnecting = false
@@ -688,8 +691,8 @@ class TrezorRepo @Inject constructor(
 
     suspend fun ensureConnected(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
         connectedFeatures(deviceId)?.let { return@withContext Result.success(it) }
-        if (_state.value.isConnecting || needsPinEntry.value) {
-            waitForConnectAttempt(deviceId)
+        if (isConnectInProgress()) {
+            awaitInFlightConnect(deviceId)
             connectedFeatures(deviceId)?.let { return@withContext Result.success(it) }
         }
         if (isKnownBluetoothDevice(deviceId)) {
@@ -708,11 +711,11 @@ class TrezorRepo @Inject constructor(
         repeat(TRANSPORT_RESTORED_MAX_ATTEMPTS) { attempt ->
             if (attempt > 0) {
                 delay(TRANSPORT_RESTORED_RECONNECT_DELAY * attempt)
+            }
+            connectedFeatures(deviceId)?.let { return Result.success(it) }
+            if (isConnectInProgress()) {
+                awaitInFlightConnect(deviceId)
                 connectedFeatures(deviceId)?.let { return Result.success(it) }
-                if (isConnectInProgress()) {
-                    waitForConnectAttempt(deviceId)
-                    connectedFeatures(deviceId)?.let { return Result.success(it) }
-                }
             }
             val allowBleFallback = attempt == TRANSPORT_RESTORED_MAX_ATTEMPTS - 1
             val result = connectKnownDevice(
@@ -736,11 +739,22 @@ class TrezorRepo @Inject constructor(
         return if (current?.id == deviceId && trezorService.isConnected()) current.features else null
     }
 
+    private suspend fun awaitInFlightConnect(deviceId: String) {
+        transportReconnectJob?.takeIf { it.isActive }?.join()
+        waitForConnectAttempt(deviceId)
+    }
+
     private suspend fun waitForConnectAttempt(deviceId: String) {
-        repeat(CONNECT_ATTEMPT_POLL_COUNT) {
-            delay(CONNECT_ATTEMPT_POLL_INTERVAL)
-            if (connectedFeatures(deviceId) != null) return
-            if (!_state.value.isConnecting && !needsPinEntry.value) return
+        runCatching {
+            withTimeout(CONNECT_ATTEMPT_MAX_WAIT) {
+                while (true) {
+                    if (connectedFeatures(deviceId) != null) return@withTimeout
+                    if (!isConnectInProgress()) return@withTimeout
+                    delay(CONNECT_ATTEMPT_POLL_INTERVAL)
+                }
+            }
+        }.onFailure {
+            if (it is CancellationException && it !is TimeoutCancellationException) throw it
         }
     }
 
@@ -897,6 +911,21 @@ class TrezorRepo @Inject constructor(
 
             Logger.info("Attempting bluetooth auto-reconnect after app foregrounded", context = TAG)
             launchTransportReconnect(TransportType.BLUETOOTH)
+        }
+    }
+
+    /** Pre-connects one known BLE Trezor before the transfer sign screen asks for it. */
+    fun warmUpKnownDevice(deviceId: String) {
+        scope.launch {
+            if (connectedFeatures(deviceId) != null) return@launch
+            if (isConnectInProgress()) return@launch
+            if (!hasKnownDevice(deviceId)) return@launch
+            if (!isKnownBluetoothDevice(deviceId)) return@launch
+
+            Logger.info("Warming up known bluetooth device '$deviceId'", context = TAG)
+            ensureConnected(deviceId).onFailure {
+                Logger.debug("Warm up connect failed for '$deviceId'", context = TAG)
+            }
         }
     }
 

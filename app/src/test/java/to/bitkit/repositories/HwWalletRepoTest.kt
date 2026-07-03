@@ -741,6 +741,15 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `forwards warm up known device to the trezor repo`() = test {
+        val sut = createRepo()
+
+        sut.warmUpKnownDevice("dev1")
+
+        verify(trezorRepo).warmUpKnownDevice("dev1")
+    }
+
+    @Test
     fun `composeFundingTransaction returns composed fee data`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
         val composeResult = ComposeResult.Success(
