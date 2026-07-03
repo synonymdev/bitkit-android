@@ -54,6 +54,7 @@ import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.Suggestion
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
+import to.bitkit.models.WalletScope
 import to.bitkit.models.WidgetType
 import to.bitkit.models.WidgetWithPosition
 import to.bitkit.models.toSettingsString
@@ -948,12 +949,20 @@ class MigrationService @Inject constructor(
             val onchain = activityRepo.getOnchainActivityByTxId(activityId)
             if (onchain != null) {
                 applied++
-                ActivityTags(activityId = onchain.id, tags = tagList)
+                ActivityTags(
+                    walletId = WalletScope.default,
+                    activityId = onchain.id,
+                    tags = tagList,
+                )
             } else {
                 val activity = activityRepo.getActivity(activityId).getOrNull()
                 if (activity != null) {
                     applied++
-                    ActivityTags(activityId = activityId, tags = tagList)
+                    ActivityTags(
+                        walletId = WalletScope.default,
+                        activityId = activityId,
+                        tags = tagList,
+                    )
                 } else {
                     Logger.warn("Activity not found for tags: id=$activityId", context = TAG)
                     null
@@ -1005,6 +1014,7 @@ class MigrationService @Inject constructor(
 
             Activity.Lightning(
                 LightningActivity(
+                    walletId = WalletScope.default,
                     id = item.id,
                     txType = txType,
                     status = status,
@@ -1960,6 +1970,7 @@ class MigrationService @Inject constructor(
                 val activityTimestamp = if (timestampSecs > 0u) timestampSecs else now
 
                 val newOnchain = OnchainActivity(
+                    walletId = WalletScope.default,
                     id = item.id,
                     txType = if (item.txType == "sent") PaymentType.SENT else PaymentType.RECEIVED,
                     txId = txId,

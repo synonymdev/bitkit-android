@@ -4,12 +4,10 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
-import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
-import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -352,14 +350,11 @@ class HwWalletRepo @Inject constructor(
             trezorRepo.watcherEvents.collect { (watcherId, event) ->
                 if (event !is WatcherEvent.TransactionsChanged) return@collect
                 val previous = _watcherData.value[watcherId]
-                val activities = event.transactions
-                    .map { it.toOnchainActivity(clock, previous?.activities.orEmpty()) }
-                    .toImmutableList()
+                val activities = event.activities.toImmutableList()
                 val watcher = HwWatcherData(
                     deviceId = watcherId.toDeviceId(),
                     addressType = watcherId.toAddressTypeKey(),
                     balanceSats = event.balance.total,
-                    transactions = event.transactions.toImmutableList(),
                     activities = activities,
                 )
                 val updatedWatcherData = _watcherData.value + (watcherId to watcher)
@@ -367,7 +362,7 @@ class HwWalletRepo @Inject constructor(
                 activities.filterIsInstance<Activity.Onchain>().forEach {
                     activityRepo.syncHardwareOnchainActivity(it.v1)
                 }
-                emitReceivedTxs(previous, event, updatedWatcherData)
+                emitReceivedTxs(previous, activities, updatedWatcherData)
             }
         }
     }
@@ -378,21 +373,21 @@ class HwWalletRepo @Inject constructor(
      */
     private suspend fun emitReceivedTxs(
         previous: HwWatcherData?,
-        event: WatcherEvent.TransactionsChanged,
+        activities: List<Activity>,
         watcherData: Map<String, HwWatcherData>,
     ) {
         if (previous == null) return
-        val knownTxIds = previous.activities.map { it.rawId() }.toSet()
+        val knownTxIds = previous.activities.mapNotNull { activity ->
+            (activity as? Activity.Onchain)?.v1?.txId
+        }.toSet()
         val mergedActivities = watcherData.values.toList().toMergedActivities()
-        event.transactions
-            .filter {
-                it.direction == TxDirection.RECEIVED &&
-                    it.txid !in knownTxIds &&
-                    emittedReceivedTxIds.add(it.txid)
-            }
-            .forEach {
-                val sats = mergedActivities.findOnchain(it.txid)?.v1?.value ?: it.amount
-                _receivedTxs.emit(HwWalletReceivedTx(txid = it.txid, sats = sats))
+        activities.filterIsInstance<Activity.Onchain>()
+            .filter { it.v1.txType == PaymentType.RECEIVED }
+            .forEach { onchain ->
+                val txid = onchain.v1.txId
+                if (txid in knownTxIds || !emittedReceivedTxIds.add(txid)) return@forEach
+                val sats = mergedActivities.findOnchain(txid)?.v1?.value ?: onchain.v1.value
+                _receivedTxs.emit(HwWalletReceivedTx(txid = txid, sats = sats))
             }
     }
 
@@ -421,7 +416,13 @@ class HwWalletRepo @Inject constructor(
                     device.xpubs
                         .filterKeys { it in watcherSettings.monitoredTypes }
                         .map { (addressType, xpub) ->
-                            WatcherSpec(device.id, addressType, xpub, watcherSettings.electrumUrl)
+                            WatcherSpec(
+                                deviceId = device.id,
+                                addressType = addressType,
+                                xpub = xpub,
+                                electrumUrl = watcherSettings.electrumUrl,
+                                walletId = device.walletId,
+                            )
                         }
                 }.distinctBy { it.addressType to it.xpub }
                 val filteredIds = filtered.map { it.watcherId }.toSet()
@@ -437,6 +438,7 @@ class HwWalletRepo @Inject constructor(
                         network = Env.network.toCoreNetwork(),
                         accountType = spec.addressType.toAddressType()?.toAccountType(),
                         electrumUrl = spec.electrumUrl,
+                        walletId = spec.walletId,
                     ).onSuccess {
                         activeWatchers += spec.watcherId
                         activeWatcherElectrumUrls[spec.watcherId] = spec.electrumUrl
@@ -473,59 +475,14 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    private fun HistoryTransaction.toOnchainActivity(clock: Clock, previousActivities: List<Activity>): Activity {
-        val activityTimestamp = timestamp ?: previousActivities.findOnchain(txid)?.v1?.timestamp
-            ?: clock.now().epochSeconds.toULong()
-        return listOf(this).toOnchainActivity(
-            timestamp = activityTimestamp,
-            sourceActivities = previousActivities,
-        )
-    }
-
     private fun List<HwWatcherData>.toMergedActivities(): List<Activity> {
-        val sourceActivities = flatMap { it.activities }
-        return flatMap { it.transactions }
-            .groupBy { it.txid }
-            .values
-            .map { transactions ->
-                val timestamp = transactions.mapNotNull { it.timestamp }.minOrNull()
-                    ?: sourceActivities.findOnchain(transactions.first().txid)?.v1?.timestamp
-                    ?: 0uL
-                transactions.toOnchainActivity(timestamp, sourceActivities)
+        val byId = linkedMapOf<String, Activity>()
+        sortedBy { "${it.deviceId}|${it.addressType}" }
+            .flatMap { it.activities }
+            .forEach { activity ->
+                byId[activity.rawId()] = activity
             }
-    }
-
-    private fun List<HistoryTransaction>.toOnchainActivity(
-        timestamp: ULong,
-        sourceActivities: List<Activity>,
-    ): Activity {
-        val first = first()
-        val received = fold(0uL) { acc, tx -> acc.safe() + tx.received.safe() }
-        val sent = fold(0uL) { acc, tx -> acc.safe() + tx.sent.safe() }
-        val fee = mapNotNull { it.fee }.maxOrNull() ?: 0uL
-        val type = when {
-            received > sent -> PaymentType.RECEIVED
-            else -> PaymentType.SENT
-        }
-        val value = when (type) {
-            PaymentType.RECEIVED -> received.safe() - sent.safe()
-            PaymentType.SENT -> (sent.safe() - received.safe()).safe() - fee.safe()
-        }
-        val confirmations = maxOf { it.confirmations }
-        val sourceActivity = sourceActivities.findOnchain(first.txid)
-        return Activity.Onchain(
-            OnchainActivity.create(
-                id = first.txid,
-                txType = type,
-                txId = first.txid,
-                value = value,
-                fee = fee,
-                address = "",
-                timestamp = timestamp,
-                confirmed = confirmations > 0u,
-                confirmTimestamp = sourceActivity?.v1?.confirmTimestamp,
-            )
-        )
+        return byId.values.toList()
     }
 
     private fun List<Activity>.findOnchain(txid: String) = filterIsInstance<Activity.Onchain>()
@@ -536,6 +493,7 @@ class HwWalletRepo @Inject constructor(
         val addressType: String,
         val xpub: String,
         val electrumUrl: String,
+        val walletId: String,
     ) {
         val watcherId: String get() = "$deviceId$WATCHER_ID_SEPARATOR$addressType"
     }
@@ -577,6 +535,5 @@ private data class HwWatcherData(
     val deviceId: String,
     val addressType: String,
     val balanceSats: ULong,
-    val transactions: ImmutableList<HistoryTransaction>,
     val activities: ImmutableList<Activity>,
 )

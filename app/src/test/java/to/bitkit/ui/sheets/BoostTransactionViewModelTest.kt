@@ -57,7 +57,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
     private val totalFee = 1000UL
     private val testValue = 50000UL
 
-    private val onchainActivity = OnchainActivity.create(
+    private val onchainActivity = OnchainActivity.create(walletId = "wallet0",
         id = "test_id",
         txType = PaymentType.SENT,
         txId = mockTxId,

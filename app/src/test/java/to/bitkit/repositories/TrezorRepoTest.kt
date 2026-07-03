@@ -95,7 +95,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorTransport.transportRestored).thenReturn(MutableSharedFlow())
         whenever(trezorTransport.hasUsbPermission(any())).thenReturn(true)
         whenever(trezorTransport.disconnectDevice(any())).thenReturn(
-            TrezorTransportWriteResult(success = true, error = "")
+            TrezorTransportWriteResult(success = true, error = "", errorCode = null)
         )
         whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(false))
         whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Standard)

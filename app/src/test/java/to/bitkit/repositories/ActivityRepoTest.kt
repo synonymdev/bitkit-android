@@ -63,7 +63,7 @@ class ActivityRepoTest : BaseUnitTest() {
         on { v1 } doReturn testActivityV1
     }
 
-    private val baseOnchainActivity = OnchainActivity.create(
+    private val baseOnchainActivity = OnchainActivity.create(walletId = "wallet0",
         id = "base_activity_id",
         txType = PaymentType.SENT,
         txId = "base_tx_id",
@@ -279,7 +279,7 @@ class ActivityRepoTest : BaseUnitTest() {
             boostTxIds = listOf("boost-txid"),
             contact = "contact",
         ).v1
-        val watcher = OnchainActivity.create(
+        val watcher = OnchainActivity.create(walletId = "wallet0",
             id = "transfer-txid",
             txType = PaymentType.SENT,
             txId = "transfer-txid",
@@ -313,7 +313,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
     @Test
     fun `syncHardwareOnchainActivity ignores hardware tx that is not in main activities`() = test {
-        val watcher = OnchainActivity.create(
+        val watcher = OnchainActivity.create(walletId = "wallet0",
             id = "hardware-only-txid",
             txType = PaymentType.RECEIVED,
             txId = "hardware-only-txid",

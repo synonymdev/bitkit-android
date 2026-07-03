@@ -97,24 +97,24 @@ class TrezorBridgeTransport(
             val session = json.decodeFromString<BridgeSession>(response).session
             openSessions[path] = session
             Logger.info("Opened Trezor Bridge device '$path'", context = TAG)
-            TrezorTransportWriteResult(success = true, error = "")
+            TrezorTransportWriteResult(success = true, error = "", errorCode = null)
         }.getOrElse {
             Logger.warn("Failed to open Trezor Bridge device '$path'", it, context = TAG)
-            TrezorTransportWriteResult(success = false, error = it.message ?: "Bridge open failed")
+            TrezorTransportWriteResult(success = false, error = it.message ?: "Bridge open failed", errorCode = null)
         }
     }
 
     fun closeDevice(path: String): TrezorTransportWriteResult {
         val session = openSessions.remove(path)
-            ?: return TrezorTransportWriteResult(success = true, error = "")
+            ?: return TrezorTransportWriteResult(success = true, error = "", errorCode = null)
 
         return runCatching {
             post("/release/${encode(session)}")
             Logger.info("Closed Trezor Bridge device '$path'", context = TAG)
-            TrezorTransportWriteResult(success = true, error = "")
+            TrezorTransportWriteResult(success = true, error = "", errorCode = null)
         }.getOrElse {
             Logger.warn("Failed to close Trezor Bridge device '$path'", it, context = TAG)
-            TrezorTransportWriteResult(success = false, error = it.message ?: "Bridge close failed")
+            TrezorTransportWriteResult(success = false, error = it.message ?: "Bridge close failed", errorCode = null)
         }
     }
 
@@ -123,6 +123,7 @@ class TrezorBridgeTransport(
             success = false,
             data = byteArrayOf(),
             error = "Trezor Bridge uses callMessage for '$path'",
+            errorCode = null,
         )
     }
 
@@ -130,6 +131,7 @@ class TrezorBridgeTransport(
         return TrezorTransportWriteResult(
             success = false,
             error = "Trezor Bridge uses callMessage for '$path' and ignored '${data.size}' bytes",
+            errorCode = null,
         )
     }
 
@@ -144,6 +146,7 @@ class TrezorBridgeTransport(
                 messageType = 0u.toUShort(),
                 data = byteArrayOf(),
                 error = "Trezor Bridge device not open: $path",
+                errorCode = null,
             )
 
         return runCatching {
@@ -158,6 +161,7 @@ class TrezorBridgeTransport(
                 messageType = 0u.toUShort(),
                 data = byteArrayOf(),
                 error = it.message ?: "Bridge call failed",
+                errorCode = null,
             )
         }
     }
@@ -189,6 +193,7 @@ class TrezorBridgeTransport(
             messageType = messageType,
             data = bytes.copyOfRange(HEADER_SIZE, HEADER_SIZE + length),
             error = "",
+            errorCode = null,
         )
     }
 

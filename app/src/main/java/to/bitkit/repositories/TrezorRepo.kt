@@ -69,7 +69,7 @@ import to.bitkit.services.TrezorWalletMode
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import java.io.File
-import java.util.UUID
+import to.bitkit.models.HwWalletId
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -742,11 +742,13 @@ class TrezorRepo @Inject constructor(
         gapLimit: UInt = 20u,
         accountType: AccountType? = null,
         electrumUrl: String = electrumUrlForNetwork(network),
+        walletId: String,
     ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             awaitSetup()
             val params = WatcherParams(
                 watcherId = watcherId,
+                walletId = walletId,
                 extendedKey = extendedKey,
                 electrumUrl = electrumUrl,
                 network = network,
@@ -1090,8 +1092,12 @@ private fun List<KnownDevice>.findHardwareWalletId(deviceId: String, xpubs: Map<
     val walletKey = walletKey(xpubs, deviceId)
     return firstOrNull { it.id == deviceId }?.walletId?.takeIf { it.isNotBlank() }
         ?: firstOrNull { it.walletKey == walletKey }?.walletId?.takeIf { it.isNotBlank() }
-        ?: newHardwareWalletId()
+        ?: runCatching { HwWalletId.derive(xpubs) }.getOrElse { newHardwareWalletId() }
 }
+
+private fun newHardwareWalletId(): String = runCatching {
+    HwWalletId.derive(mapOf("fallback" to java.util.UUID.randomUUID().toString()))
+}.getOrElse { java.util.UUID.randomUUID().toString() }
 
 private fun List<KnownDevice>.withHardwareWalletIds(): List<KnownDevice> {
     val existingByWallet = filter { it.walletId.isNotBlank() }
@@ -1100,12 +1106,16 @@ private fun List<KnownDevice>.withHardwareWalletIds(): List<KnownDevice> {
 
     return map {
         val walletId = existingByWallet[it.walletKey]
-            ?: generatedByWallet.getOrPut(it.walletKey) { newHardwareWalletId() }
+            ?: generatedByWallet.getOrPut(it.walletKey) {
+                if (it.xpubs.isNotEmpty()) {
+                    runCatching { HwWalletId.derive(it.xpubs) }.getOrElse { newHardwareWalletId() }
+                } else {
+                    newHardwareWalletId()
+                }
+            }
         if (it.walletId == walletId) it else it.copy(walletId = walletId)
     }
 }
-
-private fun newHardwareWalletId(): String = UUID.randomUUID().toString()
 
 private fun KnownDevice.toDeviceInfo() = TrezorDeviceInfo(
     id = id,

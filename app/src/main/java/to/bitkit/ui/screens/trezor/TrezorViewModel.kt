@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
+import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
@@ -31,6 +32,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.models.HwWalletId
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.Toast
 import to.bitkit.models.toCoreNetwork
@@ -68,7 +70,7 @@ class TrezorViewModel @Inject constructor(
                         it.copy(
                             watcher = it.watcher.copy(
                                 balance = event.balance,
-                                transactions = event.transactions.toImmutableList(),
+                                activities = event.activities.toImmutableList(),
                                 transactionCount = event.txCount,
                                 blockHeight = event.blockHeight,
                                 accountType = event.accountType,
@@ -712,12 +714,15 @@ class TrezorViewModel @Inject constructor(
                     )
                 )
             }
+            val walletId = runCatching { HwWalletId.derive(mapOf("watcher" to key)) }
+                .getOrDefault("trezor:watcher")
             val result = trezorRepo.startWatcher(
                 watcherId = watcherId,
                 extendedKey = key,
                 network = state.selectedNetwork,
                 gapLimit = gapLimit,
                 accountType = state.watcher.selectedAccountType,
+                walletId = walletId,
             )
 
             if (result.isSuccess) {
@@ -776,7 +781,7 @@ class TrezorViewModel @Inject constructor(
                                 activeWatcherId = null,
                                 connectionStatus = WatcherConnectionStatus.IDLE,
                                 balance = null,
-                                transactions = persistentListOf(),
+                                activities = persistentListOf(),
                                 transactionCount = 0u,
                                 blockHeight = 0u,
                                 accountType = null,
@@ -956,8 +961,8 @@ data class TrezorUiState(
     val watcherBalance: WalletBalance?
         get() = watcher.balance
 
-    val watcherTransactions: ImmutableList<HistoryTransaction>
-        get() = watcher.transactions
+    val watcherActivities: ImmutableList<Activity>
+        get() = watcher.activities
 
     val watcherTransactionCount: UInt
         get() = watcher.transactionCount
@@ -1035,7 +1040,7 @@ data class TrezorWatcherState(
     val activeWatcherId: String? = null,
     val connectionStatus: WatcherConnectionStatus = WatcherConnectionStatus.IDLE,
     val balance: WalletBalance? = null,
-    val transactions: ImmutableList<HistoryTransaction> = persistentListOf(),
+    val activities: ImmutableList<Activity> = persistentListOf(),
     val transactionCount: UInt = 0u,
     val blockHeight: UInt = 0u,
     val accountType: AccountType? = null,
