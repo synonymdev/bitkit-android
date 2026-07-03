@@ -327,7 +327,7 @@ private fun ColumnScope.OnchainDetails(
                 }
             },
         )
-    } else if (!isHardware) {
+    } else if (!isHardware && !onchain.v1.isTransfer) {
         CircularProgressIndicator(
             strokeWidth = 2.dp,
             modifier = Modifier
