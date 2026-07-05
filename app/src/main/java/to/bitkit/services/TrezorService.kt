@@ -50,6 +50,7 @@ import to.bitkit.async.ServiceQueue
 import javax.inject.Inject
 import javax.inject.Singleton
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
+import com.synonym.bitkitcore.deriveWalletId as deriveCoreWalletId
 
 @Suppress("TooManyFunctions")
 @Singleton
@@ -300,5 +301,9 @@ class TrezorService @Inject constructor(
         ServiceQueue.CORE.background {
             onchainStopAllWatchers()
         }
+    }
+
+    fun deriveWalletId(deviceType: String, xpubs: Collection<String>): String {
+        return deriveCoreWalletId(deviceType = deviceType, xpubs = xpubs.toList())
     }
 }
