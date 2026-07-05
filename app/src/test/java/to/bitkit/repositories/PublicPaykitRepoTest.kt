@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
+import com.synonym.paykit.ContactPaymentResolutionPrivateState
 import com.synonym.paykit.EndpointSyncChange
 import com.synonym.paykit.EndpointSyncReport
 import com.synonym.paykit.PaymentEndpointSource
@@ -208,6 +209,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     )
 
     private fun resolution(vararg endpoints: PaykitResolvedPaymentEndpoint) = PaykitContactPaymentResolution(
+        privateState = ContactPaymentResolutionPrivateState.NO_PRIVATE_ENDPOINT,
         payableEndpoints = endpoints.toList(),
     )
 

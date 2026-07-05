@@ -1,6 +1,5 @@
 package to.bitkit.services
 
-import com.synonym.bitkitcore.mnemonicToSeed
 import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PaykitProfile
@@ -53,13 +52,8 @@ class PubkyService @Inject constructor(
 
     // region Key derivation
 
-    suspend fun mnemonicToSeed(mnemonic: String, passphrase: String?): ByteArray =
-        ServiceQueue.CORE.background {
-            mnemonicToSeed(mnemonicPhrase = mnemonic, passphrase = passphrase ?: "")
-        }
-
-    suspend fun deriveSecretKey(seed: ByteArray): String = ServiceQueue.CORE.background {
-        PaykitSdkService.deriveSecretKey(seed)
+    suspend fun deriveSecretKey(mnemonic: String): String = ServiceQueue.CORE.background {
+        PaykitSdkService.deriveSecretKey(mnemonic)
     }
 
     suspend fun publicKeyFromSecret(secretKeyHex: String): String = ServiceQueue.CORE.background {

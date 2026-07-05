@@ -4,7 +4,10 @@ import android.app.Activity
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
+import com.synonym.paykit.ContactPaymentResolutionPrivateState
 import com.synonym.paykit.IdentityStatus
+import com.synonym.paykit.LinkedPeerRecord
+import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.PaymentEndpointSource
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
@@ -14,6 +17,8 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.runCurrent
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -23,6 +28,7 @@ import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.App
@@ -110,6 +116,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             .thenReturn(Result.success(PRIVATE_ADDRESS))
         whenever { paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any()) }
             .thenReturn(privateListDeliveryReport(queuedCounterparties = listOf(CONTACT_KEY)))
+        whenever { paykitSdkService.linkedPeers() }.thenReturn(emptyList())
+        whenever { paykitSdkService.pendingOutboundPrivateCounterparties() }.thenReturn(emptyList())
         whenever { paykitSdkService.clearPrivatePaymentList(any()) }.thenReturn(privateListDeliveryReport())
         whenever { publicPaykitRepo.beginPayment(any()) }
             .thenReturn(Result.success(PublicPaykitPaymentResult.Opened("bitcoin:bcrt1qpublic")))
@@ -169,6 +177,26 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
         verifyBlocking(paykitSdkService) { syncPrivatePaymentListsWithReservations(any(), eq(false)) }
         assertEquals(true, cacheData.value.contacts.getValue(CONTACT_KEY).hasPublishedPrivatePaymentList)
+    }
+
+    @Test
+    fun `private message drain keeps retrying while link is still pending`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+        )
+        whenever { paykitSdkService.linkedPeers() }
+            .thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKING)))
+
+        val result = sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
+
+        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        advanceTimeBy(257_000)
+        runCurrent()
+
+        verifyBlocking(paykitSdkService, atLeast(8)) { ensureLinkWithPeer(CONTACT_KEY) }
+        sut.closeAndClear()
     }
 
     @Test
@@ -475,6 +503,29 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `beginSavedContactPayment does not use public endpoint while private recovery is pending`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever {
+            paykitSdkService.prepareAndResolveContactPayment(CONTACT_KEY, includePublicEndpoints = true)
+        }.thenReturn(
+            resolution(
+                resolvedEndpoint(
+                    methodId = MethodId.P2wpkh,
+                    value = "bcrt1qpublic",
+                    source = PaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT,
+                ),
+                privateState = ContactPaymentResolutionPrivateState.RECOVERY_PENDING,
+            ),
+        )
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.NoEndpoint, result)
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
     fun `beginSavedContactPayment falls back to public when private endpoints are not locally payable`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
@@ -589,7 +640,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         clock = clock,
     )
 
-    private fun resolution(vararg endpoints: PaykitResolvedPaymentEndpoint) = PaykitContactPaymentResolution(
+    private fun resolution(
+        vararg endpoints: PaykitResolvedPaymentEndpoint,
+        privateState: ContactPaymentResolutionPrivateState = ContactPaymentResolutionPrivateState.AVAILABLE,
+    ) = PaykitContactPaymentResolution(
+        privateState = privateState,
         payableEndpoints = endpoints.toList(),
     )
 
@@ -627,6 +682,19 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         },
         failedToQueue = failedToQueue,
         failedToDeliver = emptyList(),
+    )
+
+    private fun linkedPeer(publicKey: String, state: LinkedPeerState) = LinkedPeerRecord(
+        counterparty = publicKey,
+        state = state,
+        lastSyncAt = null,
+        lastPrivateReceiveAt = null,
+        failureCount = 0u,
+        localRecoveryAttemptId = null,
+        localRecoveryMarkerCreatedAt = null,
+        localRecoveryMarkerLastError = null,
+        remoteRecoveryAttemptId = null,
+        remoteRecoveryMarkerObservedAt = null,
     )
 
     private fun lightningInvoice(bolt11: String, paymentHash: ByteArray) = LightningInvoice(

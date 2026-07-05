@@ -1,6 +1,8 @@
 package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Scanner
+import com.synonym.paykit.ContactPaymentResolutionPrivateState
+import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.PaymentEndpointReservationInput
 import com.synonym.paykit.PaymentEndpointSource
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
@@ -445,6 +447,11 @@ class PrivatePaykitRepo @Inject constructor(
                     )
                 }
 
+                if (resolution.privateState == ContactPaymentResolutionPrivateState.RECOVERY_PENDING) {
+                    schedulePendingPrivateMessageDrainRetries("payment recovery", publicKeys = listOf(publicKey))
+                    return@runSuspendCatching PublicPaykitPaymentResult.NoEndpoint
+                }
+
                 val publicEndpoints = resolution.payableEndpoints
                     .filter { it.source == PaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT }
                     .mapNotNull { PublicPaykitRepo.parseEndpoint(it.identifier, it.payload) }
@@ -639,28 +646,79 @@ class PrivatePaykitRepo @Inject constructor(
             pendingMessageDrainRetryJob?.cancel()
 
             pendingMessageDrainRetryJob = retryScope.launch {
-                for (retryDelay in privateMessageDrainRetryDelays) {
+                var retryIndex = 0
+                while (true) {
+                    val retryDelay = privateMessageDrainRetryDelays[
+                        retryIndex.coerceAtMost(privateMessageDrainRetryDelays.lastIndex),
+                    ]
                     delay(retryDelay)
                     drainPendingPrivateMessageRetryKeys("$reason retry")
+                    if (!hasPendingMessageDrainRetryKeys(retryGeneration)) break
+                    retryIndex += 1
                 }
                 finishPendingMessageDrainRetries(retryGeneration)
             }
         }
     }
 
-    private suspend fun drainPendingPrivateMessageRetryKeys(reason: String) {
+    private suspend fun drainPendingPrivateMessageRetryKeys(reason: String) = withContext(serializedDispatcher) {
         val retryKeys = synchronized(pendingMessageDrainRetryLock) {
             pendingMessageDrainRetryKeys.toList()
         }
-        if (retryKeys.isEmpty()) return
+        if (retryKeys.isEmpty()) return@withContext
         drainPendingPrivateMessages(reason, advancingLinksFor = retryKeys)
+        updatePendingMessageDrainRetryKeys(retryKeys)
     }
+
+    private fun hasPendingMessageDrainRetryKeys(generation: Int): Boolean =
+        synchronized(pendingMessageDrainRetryLock) {
+            generation == pendingMessageDrainRetryGeneration && pendingMessageDrainRetryKeys.isNotEmpty()
+        }
 
     private fun finishPendingMessageDrainRetries(generation: Int) {
         synchronized(pendingMessageDrainRetryLock) {
             if (generation != pendingMessageDrainRetryGeneration) return
             pendingMessageDrainRetryJob = null
             pendingMessageDrainRetryKeys.clear()
+        }
+    }
+
+    private suspend fun updatePendingMessageDrainRetryKeys(publicKeys: Collection<String>) {
+        val remainingKeys = pendingPrivateMessageDrainKeys(publicKeys)
+        synchronized(pendingMessageDrainRetryLock) {
+            pendingMessageDrainRetryKeys.removeAll(publicKeys.toSet())
+            pendingMessageDrainRetryKeys.addAll(remainingKeys)
+        }
+    }
+
+    private suspend fun pendingPrivateMessageDrainKeys(publicKeys: Collection<String>): Set<String> {
+        val retryKeys = publicKeys.mapNotNull(::normalizedPublicKey).toSet()
+        if (retryKeys.isEmpty()) return emptySet()
+
+        val linkedPeers = runSuspendCatching { paykitSdkService.linkedPeers() }
+            .getOrElse {
+                Logger.warn("Failed to inspect private Paykit link state", it, context = TAG)
+                return retryKeys
+            }
+            .mapNotNull { peer ->
+                normalizedPublicKey(peer.counterparty)?.let { publicKey -> publicKey to peer.state }
+            }
+            .toMap()
+        val pendingOutbound = runSuspendCatching { paykitSdkService.pendingOutboundPrivateCounterparties() }
+            .getOrElse {
+                Logger.warn("Failed to inspect pending private Paykit messages", it, context = TAG)
+                return retryKeys
+            }
+            .mapNotNull(::normalizedPublicKey)
+            .toSet()
+
+        return retryKeys.filterTo(mutableSetOf()) { publicKey ->
+            when (linkedPeers[publicKey]) {
+                LinkedPeerState.LINKED -> publicKey in pendingOutbound
+                LinkedPeerState.BLOCKED, LinkedPeerState.UNKNOWN -> false
+                null -> publicKey in pendingOutbound
+                else -> true
+            }
         }
     }
 

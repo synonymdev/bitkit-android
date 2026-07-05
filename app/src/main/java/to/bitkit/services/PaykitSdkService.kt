@@ -2,11 +2,13 @@ package to.bitkit.services
 
 import android.content.Context
 import com.synonym.paykit.ContactPaymentResolution
+import com.synonym.paykit.ContactPaymentResolutionPrivateState
 import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.EndpointSyncReport
 import com.synonym.paykit.IdentityStatus
+import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.PaykitAndroid
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitProfile
@@ -38,10 +40,10 @@ import com.synonym.paykit.SdkStateBlobSnapshot
 import com.synonym.paykit.SdkStateBlobStore
 import com.synonym.paykit.decodeSdkStateBlobSnapshot
 import com.synonym.paykit.defaultConfig
-import com.synonym.paykit.derivePubkySecretKey
 import com.synonym.paykit.encodeSdkStateBlobSnapshot
 import com.synonym.paykit.parsePubkyAuthUrl
 import com.synonym.paykit.pubkyPublicKeyFromSecret
+import com.synonym.paykit.pubkySecretKeyFromBip39Mnemonic
 import com.synonym.paykit.requiredSessionCapabilities
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
@@ -66,6 +68,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 data class PaykitContactPaymentResolution(
+    val privateState: ContactPaymentResolutionPrivateState,
     val payableEndpoints: List<PaykitResolvedPaymentEndpoint>,
 )
 
@@ -389,6 +392,20 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    suspend fun linkedPeers(): List<LinkedPeerRecord> {
+        isSetup.await()
+        return operationMutex.withLock {
+            handle().linkedPeers()
+        }
+    }
+
+    suspend fun pendingOutboundPrivateCounterparties(): List<String> {
+        isSetup.await()
+        return operationMutex.withLock {
+            handle().pendingOutboundPrivateCounterparties()
+        }
+    }
+
     suspend fun prepareAndResolveContactPayment(
         counterparty: String,
         includePublicEndpoints: Boolean,
@@ -417,6 +434,7 @@ class PaykitSdkService @Inject constructor(
 
     private fun ContactPaymentResolution.toPaykitContactPaymentResolution(): PaykitContactPaymentResolution {
         return PaykitContactPaymentResolution(
+            privateState = privateState,
             payableEndpoints = payableEndpoints.map {
                 PaykitResolvedPaymentEndpoint(
                     counterparty = it.counterparty,
@@ -572,10 +590,8 @@ class PaykitSdkService @Inject constructor(
         fun secretKeyHex(secretKey: PubkyLocalSecretKey): String =
             secretKey.exportBytes().toHex()
 
-        private const val PUBKY_DERIVATION_RUNTIME_LABEL = "bitkit"
-
-        fun deriveSecretKey(seed: ByteArray): String =
-            secretKeyHex(derivePubkySecretKey(seed = seed, runtimeLabel = PUBKY_DERIVATION_RUNTIME_LABEL))
+        fun deriveSecretKey(mnemonic: String): String =
+            secretKeyHex(pubkySecretKeyFromBip39Mnemonic(mnemonicPhrase = mnemonic))
 
         fun publicKeyFromSecret(secretKeyHex: String): String =
             pubkyPublicKeyFromSecret(localSecretKey(secretKeyHex))

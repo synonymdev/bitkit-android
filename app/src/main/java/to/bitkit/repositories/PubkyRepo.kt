@@ -1126,9 +1126,7 @@ class PubkyRepo @Inject constructor(
         val mnemonic = requireNotNull(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)) {
             "BIP39 mnemonic not found in keychain"
         }
-        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
-        val seed = pubkyService.mnemonicToSeed(mnemonic, passphrase)
-        pubkyService.deriveSecretKey(seed)
+        pubkyService.deriveSecretKey(mnemonic)
     }
 
     private fun notifyBackupStateChanged() {
