@@ -17,7 +17,7 @@
       Verify the hardware wallet detail screen opens (testTag "HardwareWalletScreen"), showing the device name with a blue bitcoin icon in the top bar and a balance header
     </action>
     <action>
-      If a "Transfer To Spending" button is shown (testTag "HardwareTransferToSpending"), tap it, verify the transfer amount screen opens (testTag "HardwareTransferAmount") titled "TRANSFER TO SPENDING", then navigate back to the hardware wallet detail screen; otherwise skip this step
+      If a "Transfer To Spending" button is shown (testTag "HardwareTransferToSpending"), tap it; if the first-run Transfer To Spending intro appears, tap "Get Started"; verify the transfer amount screen opens (testTag "HardwareTransferAmount") titled "TRANSFER TO SPENDING", then navigate back to the hardware wallet detail screen; otherwise skip this step
     </action>
     <action>
       If the activity list shows transactions, verify their circular icons are blue, then tap the first one, verify an activity detail screen opens, and navigate back

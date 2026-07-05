@@ -19,6 +19,9 @@
       Tap the "Transfer To Spending" button (testTag "HardwareTransferToSpending")
     </action>
     <action>
+      If the first-run Transfer To Spending intro appears, tap "Get Started"
+    </action>
+    <action>
       Verify the transfer amount screen opens (testTag "HardwareTransferAmount"), titled "TRANSFER TO SPENDING", showing an AVAILABLE row, the 25% and MAX quick buttons, and a number pad
     </action>
     <action>

@@ -20,6 +20,9 @@
       Tap the "Transfer To Spending" button (testTag "HardwareTransferToSpending")
     </action>
     <action>
+      If the first-run Transfer To Spending intro appears, tap "Get Started"
+    </action>
+    <action>
       Verify the transfer amount screen opens (testTag "HardwareTransferAmount"), titled "TRANSFER TO SPENDING", and the AVAILABLE amount is lower than the hardware wallet balance because it is capped by LSP headroom
     </action>
     <action>

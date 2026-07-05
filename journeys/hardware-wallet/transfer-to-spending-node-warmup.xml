@@ -22,6 +22,9 @@
       Verify the transfer amount screen or loading/progress UI appears, and no reconnect, node-not-ready, or generic failure toast is shown while the node warms up
     </action>
     <action>
+      If the first-run Transfer To Spending intro appears, tap "Get Started"
+    </action>
+    <action>
       Tap the "25%" quick button (testTag "HardwareTransferAmountQuarter") if the amount screen is shown
     </action>
     <action>
