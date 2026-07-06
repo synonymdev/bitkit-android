@@ -25,6 +25,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -101,6 +102,7 @@ class PubkyRepo @Inject constructor(
 
     private val _authState = MutableStateFlow(PubkyAuthState.Idle)
     private val _activeAuthAttemptId = MutableStateFlow<String?>(null)
+    private val _approvedAuthAttemptId = MutableStateFlow<String?>(null)
     private val _authCancelEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val authCancelEvents = _authCancelEvents.asSharedFlow()
 
@@ -264,6 +266,7 @@ class PubkyRepo @Inject constructor(
     suspend fun startAuthentication(): Result<PubkyRingAuthRequest> {
         val attemptId = UUID.randomUUID().toString()
         _activeAuthAttemptId.update { attemptId }
+        _approvedAuthAttemptId.update { null }
         _authState.update { PubkyAuthState.Authenticating }
         return try {
             runSuspendCatching {
@@ -284,6 +287,8 @@ class PubkyRepo @Inject constructor(
         val attemptId = _activeAuthAttemptId.value ?: return Result.failure(PubkyAuthAttemptInactive())
         var didCompleteAuth = false
         return try {
+            waitForAuthApproval(attemptId)
+
             val result = runSuspendCatching {
                 withContext(ioDispatcher) {
                     pubkyService.completeAuth()
@@ -306,12 +311,18 @@ class PubkyRepo @Inject constructor(
                 if (_activeAuthAttemptId.value == attemptId) {
                     _activeAuthAttemptId.update { null }
                 }
+                if (_approvedAuthAttemptId.value == attemptId) {
+                    _approvedAuthAttemptId.update { null }
+                }
                 restoreAuthStateAfterAuthFlow()
             }
 
             result.onSuccess { pk ->
                 if (_activeAuthAttemptId.value == attemptId) {
                     _activeAuthAttemptId.update { null }
+                }
+                if (_approvedAuthAttemptId.value == attemptId) {
+                    _approvedAuthAttemptId.update { null }
                 }
                 _publicKey.update { pk }
                 _authState.update { PubkyAuthState.Authenticated }
@@ -323,6 +334,9 @@ class PubkyRepo @Inject constructor(
             clearCompletedAuthSessionIfNeeded(didCompleteAuth)
             if (_activeAuthAttemptId.value == attemptId) {
                 _activeAuthAttemptId.update { null }
+            }
+            if (_approvedAuthAttemptId.value == attemptId) {
+                _approvedAuthAttemptId.update { null }
             }
             restoreAuthStateAfterAuthFlow()
             throw e
@@ -362,6 +376,9 @@ class PubkyRepo @Inject constructor(
         return when (callback) {
             is PubkyRingAuthCallback.Success -> {
                 Logger.info("Received Pubky Ring auth success callback", context = TAG)
+                _activeAuthAttemptId.value?.let { attemptId ->
+                    _approvedAuthAttemptId.update { attemptId }
+                }
                 PubkyRingAuthCallbackHandlingResult.Handled
             }
             is PubkyRingAuthCallback.Cancel -> {
@@ -403,7 +420,14 @@ class PubkyRepo @Inject constructor(
 
     private fun isCurrentAuthCallback(callback: PubkyRingAuthCallback): Boolean {
         val activeAuthAttemptId = _activeAuthAttemptId.value ?: return false
-        return callback.nonce == activeAuthAttemptId
+        return callback.nonce == activeAuthAttemptId ||
+            (callback is PubkyRingAuthCallback.Success && callback.nonce == null)
+    }
+
+    private suspend fun waitForAuthApproval(attemptId: String) {
+        if (_approvedAuthAttemptId.value == attemptId) return
+        _approvedAuthAttemptId.filter { it == attemptId }.first()
+        ensureAuthAttemptActive(attemptId)
     }
 
     private fun ensureAuthAttemptActive(attemptId: String?) {
@@ -415,6 +439,7 @@ class PubkyRepo @Inject constructor(
 
     private fun endAuthAttempt() {
         _activeAuthAttemptId.update { null }
+        _approvedAuthAttemptId.update { null }
         _authCancelEvents.tryEmit(Unit)
         restoreAuthStateAfterAuthFlow()
     }
