@@ -268,6 +268,42 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `merges duplicate sent tx activities without subtracting fee twice`() = test {
+        val sut = createRepo()
+        val fee = 1_000uL
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 0uL),
+                activities = listOf(
+                    watcherActivity(amount = 40_000uL, txid = "sent-shared", txType = PaymentType.SENT, fee = fee),
+                ),
+                transactionDetails = emptyList(),
+                txCount = 1u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+        watcherEvents.emit(
+            "dev1|taproot" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 0uL),
+                activities = listOf(
+                    watcherActivity(amount = 20_000uL, txid = "sent-shared", txType = PaymentType.SENT, fee = fee),
+                ),
+                transactionDetails = emptyList(),
+                txCount = 1u,
+                blockHeight = 1u,
+                accountType = AccountType.TAPROOT,
+            )
+        )
+
+        val activity = sut.wallets.value.single().activities.single() as Activity.Onchain
+        assertEquals(PaymentType.SENT, activity.v1.txType)
+        assertEquals(60_000uL, activity.v1.value)
+        assertEquals(fee, activity.v1.fee)
+    }
+
+    @Test
     fun `preserves activity timestamp across watcher refreshes`() = test {
         val sut = createRepo()
         val pendingActivity = watcherActivity(
@@ -988,6 +1024,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         blockHeight: UInt? = 850_000u,
         timestamp: ULong? = 1_700_000_000uL,
         confirmations: UInt = 3u,
+        fee: ULong = 0uL,
     ) = Activity.Onchain(
         OnchainActivity.create(
             walletId = "wallet0",
@@ -995,7 +1032,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             txType = txType,
             txId = txid,
             value = amount,
-            fee = 0uL,
+            fee = fee,
             address = "",
             timestamp = timestamp ?: 0uL,
             confirmed = blockHeight != null && confirmations > 0u,

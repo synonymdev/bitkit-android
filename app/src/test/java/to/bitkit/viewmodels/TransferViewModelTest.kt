@@ -12,6 +12,7 @@ import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.withTimeout
 import org.junit.Before
@@ -25,6 +26,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -35,6 +37,7 @@ import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
+import to.bitkit.models.Toast
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
 import to.bitkit.models.safe
@@ -47,9 +50,11 @@ import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.transfer.previewBtOrder
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -355,6 +360,27 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(cacheStore, never()).addPaidOrder(any(), any())
+    }
+
+    @Test
+    fun `onTransferToSpendingHwConfirm does not toast when user cancels during reconnect`() = test {
+        val order = previewBtOrder()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = false))))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+            .thenReturn(Result.failure(TrezorException.UserCancelled()))
+        whenever(hwWalletRepo.isKnownBluetoothDevice(DEVICE_ID)).thenReturn(false)
+        whenever(context.getString(R.string.lightning__transfer_hw__reconnect_error_title)).thenReturn("reconnect title")
+        whenever(context.getString(R.string.lightning__transfer_hw__reconnect_error_description)).thenReturn("reconnect body")
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertTrue(toasts.isEmpty())
+        verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
     }
 
     private fun hwWallet(deviceId: String, connected: Boolean) = HwWallet(

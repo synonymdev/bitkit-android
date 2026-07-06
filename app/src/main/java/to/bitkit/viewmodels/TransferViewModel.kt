@@ -559,6 +559,7 @@ class TransferViewModel @Inject constructor(
             }
         }.getOrElse {
             if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            if (it.isTrezorUserCancellation()) throw it
             throw HardwareReconnectError(it)
         }
     }
@@ -609,6 +610,10 @@ class TransferViewModel @Inject constructor(
     private suspend fun handleHardwareTransferFailure(e: Throwable, deviceId: String) {
         when (e) {
             is HardwareReconnectError -> {
+                if (e.isTrezorUserCancellation()) {
+                    Logger.info("Hardware transfer cancelled on device for '$deviceId'", context = TAG)
+                    return
+                }
                 Logger.error("Failed to reconnect hardware device", e, context = TAG)
                 showHardwareReconnectError(deviceId)
             }

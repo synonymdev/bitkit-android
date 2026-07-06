@@ -523,7 +523,7 @@ class HwWalletRepo @Inject constructor(
         }
         val value = when (txType) {
             PaymentType.RECEIVED -> received.safe() - sent.safe()
-            PaymentType.SENT -> (sent.safe() - received.safe()).safe() - fee.safe()
+            PaymentType.SENT -> sent.safe() - received.safe()
         }
 
         return Activity.Onchain(
