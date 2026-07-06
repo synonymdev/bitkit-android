@@ -1,39 +1,39 @@
 <journey name="Hardware Wallet Activity Blue Icons">
   <description>
     Verifies hardware wallet on-chain activity in the home list and the All Activity screen
-    with blue icon variants and tab filter behavior. Hardware activities are now first-class
-    Bitkit Core activities (persisted by the watcher), so they appear in the unified list and
-    survive tab and tag filters like normal transactions. Requires a paired Bridge emulator
-    whose wallet has at least one on-chain transaction (run connect-home-tile.xml first; fund
-    per README.md if the deterministic wallet has no history).
+    with blue icon variants, mixed transaction history, and tab filter behavior. Hardware
+    activities are first-class Bitkit Core activities persisted by the watcher, so they appear
+    in the unified list and survive filters like normal transactions. Requires a paired Bridge
+    emulator with the mixed hardware activity fixture from README.md: at least two confirmed
+    hardware receives with distinct amounts and one hardware Transfer To Spending transaction.
   </description>
   <actions>
     <action>
       Launch the Bitkit app and go to the wallet home screen
     </action>
     <action>
-      Verify the recent activity list contains at least one item whose circular icon is blue instead of orange
+      Verify the recent activity list contains at least one blue hardware activity row, then tap "Show All" beneath the activity list
     </action>
     <action>
-      Tap the first activity item with a blue icon
+      Verify the All Activity list contains at least three blue hardware rows from the fixture: two received rows with distinct amounts and one Transfer row with subtitle "From Savings"
     </action>
     <action>
-      Verify an activity detail screen opens showing a blue icon and an on-chain amount
+      Verify the hardware Transfer row appears only once in All Activity; fail if the same new transfer amount is also shown as a separate normal TransferIcon/default-wallet row
     </action>
     <action>
-      Navigate back, then tap "Show All" beneath the activity list
+      Tap the blue hardware Transfer row with subtitle "From Savings"
     </action>
     <action>
-      Verify the All Activity list also contains items with blue icons
+      Verify an activity detail screen opens showing a blue hardware icon, title "From Savings", status content, and "TO SPENDING", then navigate back to All Activity
     </action>
     <action>
-      Tap the "Sent" tab and verify no blue-icon item with a received (downward) arrow is listed
+      Tap the "Sent" tab and verify the blue hardware Transfer row is listed, while the two blue received rows are not listed
     </action>
     <action>
-      Tap the "Received" tab and verify blue-icon items with received arrows are listed, assuming the hardware wallet has incoming transactions
+      Tap the "Received" tab and verify the two distinct blue received rows are listed, while the hardware Transfer row is not listed
     </action>
     <action>
-      Tap back to the "All" tab and verify the blue-icon hardware items are listed again
+      Tap back to the "All" tab and verify the blue hardware received rows and blue hardware Transfer row are listed again
     </action>
   </actions>
 </journey>

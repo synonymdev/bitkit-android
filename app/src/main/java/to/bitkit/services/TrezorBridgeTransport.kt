@@ -44,11 +44,8 @@ class TrezorBridgeTransport(
         private const val READ_TIMEOUT_MS = 30_000
         private const val CALL_READ_TIMEOUT_MS = 120_000
 
-        /**
-         * Trezor protobuf MessageType_SignTx. This is the only call that waits
-         * for on-device signing.
-         */
         private const val SIGN_TX_MESSAGE_TYPE = 15
+        private const val BUTTON_ACK_MESSAGE_TYPE = 27
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -151,7 +148,13 @@ class TrezorBridgeTransport(
 
         return runCatching {
             val request = encodeFrame(messageType, data)
-            val timeoutMs = if (messageType == SIGN_TX_MESSAGE_TYPE.toUShort()) callReadTimeoutMs else readTimeoutMs
+            val timeoutMs = when (messageType) {
+                SIGN_TX_MESSAGE_TYPE.toUShort(),
+                BUTTON_ACK_MESSAGE_TYPE.toUShort(),
+                -> callReadTimeoutMs
+
+                else -> readTimeoutMs
+            }
             val response = post("/call/${encode(session)}", request, readTimeoutMs = timeoutMs)
             decodeFrame(response)
         }.getOrElse {

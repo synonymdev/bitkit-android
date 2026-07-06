@@ -5,14 +5,12 @@ import com.synonym.bitkitcore.ChannelLiquidityOptions
 import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtInfoOptions
-import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.withTimeout
 import org.junit.Before
@@ -26,7 +24,6 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
-import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -37,7 +34,6 @@ import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
-import to.bitkit.models.Toast
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
 import to.bitkit.models.safe
@@ -50,11 +46,9 @@ import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.transfer.previewBtOrder
-import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -223,6 +217,8 @@ class TransferViewModelTest : BaseUnitTest() {
         )
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
+        whenever(hwWalletRepo.getWalletId(DEVICE_ID))
+            .thenReturn(Result.success(HW_WALLET_ID))
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.success(mock<TrezorFeatures>()))
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
@@ -255,7 +251,9 @@ class TransferViewModelTest : BaseUnitTest() {
             eq(TXID),
             eq(MINING_FEE),
             eq(FEE_RATE),
+            eq(HW_WALLET_ID),
         )
+        verify(hwWalletRepo).getWalletId(DEVICE_ID)
         verify(hwWalletRepo).ensureConnected(DEVICE_ID)
     }
 
@@ -277,6 +275,8 @@ class TransferViewModelTest : BaseUnitTest() {
         )
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
+        whenever(hwWalletRepo.getWalletId(DEVICE_ID))
+            .thenReturn(Result.success(HW_WALLET_ID))
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.success(mock<TrezorFeatures>()))
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull()))
@@ -300,9 +300,10 @@ class TransferViewModelTest : BaseUnitTest() {
         val order = previewBtOrder()
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = false))))
+        whenever(hwWalletRepo.getWalletId(DEVICE_ID))
+            .thenReturn(Result.success(HW_WALLET_ID))
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.failure(RuntimeException("no device")))
-        whenever(hwWalletRepo.isKnownBluetoothDevice(DEVICE_ID)).thenReturn(false)
 
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
@@ -325,6 +326,8 @@ class TransferViewModelTest : BaseUnitTest() {
         )
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
+        whenever(hwWalletRepo.getWalletId(DEVICE_ID))
+            .thenReturn(Result.success(HW_WALLET_ID))
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.success(mock<TrezorFeatures>()))
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
@@ -479,6 +482,7 @@ class TransferViewModelTest : BaseUnitTest() {
         const val DEVICE_ID = "dev1"
         const val DEVICE_BUSY_MESSAGE = "Your Trezor is busy. Unlock it on the device, then try again."
         const val ERROR_TITLE = "Error"
+        const val HW_WALLET_ID = "trezor:dev1"
         const val XPUB = "zpub-test"
         const val TXID = "tx-abc"
         const val FEE_RATE = 2uL

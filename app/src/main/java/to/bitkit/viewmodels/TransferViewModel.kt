@@ -32,6 +32,7 @@ import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Defaults
+import to.bitkit.ext.DEFAULT_WALLET_ID
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.ext.isTrezorUserCancellation
@@ -278,6 +279,7 @@ class TransferViewModel @Inject constructor(
         createTransferActivity: Boolean = false,
         fee: ULong = 0uL,
         feeRate: ULong = 0uL,
+        walletId: String = DEFAULT_WALLET_ID,
         txTotalSats: ULong? = null,
         preTransferOnchainSats: ULong? = null,
     ) {
@@ -296,6 +298,7 @@ class TransferViewModel @Inject constructor(
                 txId = txId,
                 fee = fee,
                 feeRate = feeRate,
+                walletId = walletId,
             )
         }
         viewModelScope.launch { walletRepo.syncBalances() }
@@ -526,10 +529,6 @@ class TransferViewModel @Inject constructor(
     }
 
     /** Pays for the order by composing and signing the funding send on the Trezor, then watches it. */
-    fun warmUpHardwareConnection(deviceId: String) {
-        hwWalletRepo.warmUpKnownDevice(deviceId)
-    }
-
     fun onTransferToSpendingHwConfirm(order: IBtOrder, deviceId: String) {
         if (hwTransferSignJob?.isActive == true) return
 
@@ -541,6 +540,10 @@ class TransferViewModel @Inject constructor(
                     ToastEventBus.send(type = Toast.ToastType.ERROR, title = context.getString(R.string.common__error))
                     return@launch
                 }
+                val walletId = hwWalletRepo.getWalletId(deviceId).getOrElse {
+                    handleHardwareTransferFailure(it, deviceId)
+                    return@launch
+                }
 
                 signTransferToSpendingWithHardware(order, deviceId, address)
                     .onSuccess { result ->
@@ -550,6 +553,7 @@ class TransferViewModel @Inject constructor(
                             createTransferActivity = true,
                             fee = result.miningFeeSats,
                             feeRate = result.feeRate,
+                            walletId = walletId,
                         )
                         setTransferEffect(TransferEffect.OnHwTxSigned)
                     }
@@ -590,7 +594,6 @@ class TransferViewModel @Inject constructor(
             }
         }.getOrElse {
             if (it is CancellationException && it !is TimeoutCancellationException) throw it
-            if (it.isTrezorUserCancellation()) throw it
             throw HardwareReconnectError(it)
         }
     }
@@ -655,7 +658,7 @@ class TransferViewModel @Inject constructor(
         when (e) {
             is HardwareReconnectError -> {
                 Logger.error("Failed to reconnect hardware device", e, context = TAG)
-                showHardwareReconnectError(deviceId)
+                showHardwareReconnectError()
             }
             is HardwareSigningTimeoutError -> {
                 Logger.warn("Timed out hardware transfer signing for '$deviceId'", e, context = TAG)
@@ -672,14 +675,7 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private suspend fun showHardwareReconnectError(deviceId: String) {
-        if (hwWalletRepo.isKnownBluetoothDevice(deviceId)) {
-            ToastEventBus.send(
-                type = Toast.ToastType.INFO,
-                title = context.getString(R.string.hardware__connect_error),
-            )
-            return
-        }
+    private suspend fun showHardwareReconnectError() {
         ToastEventBus.send(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.lightning__transfer_hw__reconnect_error_title),

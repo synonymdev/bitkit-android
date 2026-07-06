@@ -166,6 +166,37 @@ class TrezorBridgeTransportTest {
     }
 
     @Test
+    fun `button ack call uses longer read timeout than bridge management requests`() {
+        server.route = { request ->
+            when {
+                request.path == "/enumerate" -> {
+                    TestHttpResponse("""[{"path":"emulator:21324","session":null}]""")
+                }
+                request.path == "/acquire/emulator%3A21324/null" -> {
+                    TestHttpResponse("""{"session":"session-1"}""")
+                }
+                request.path == "/call/session-1" -> {
+                    TestHttpResponse(
+                        body = frame(18u.toUShort(), byteArrayOf(0x01)),
+                        delayMs = 200,
+                    )
+                }
+                else -> TestHttpResponse("{}", statusCode = 404)
+            }
+        }
+
+        val sut = createSut(readTimeoutMs = 50, callReadTimeoutMs = 1_000)
+        val device = sut.enumerateDevices().single()
+        assertTrue(sut.openDevice(device.path).success)
+
+        val result = sut.callMessage(device.path, 27u, byteArrayOf())
+
+        assertTrue(result.success)
+        assertEquals(18u.toUShort(), result.messageType)
+        assertEquals(listOf<Byte>(0x01), result.data.toList())
+    }
+
+    @Test
     fun `non signing call uses bridge management read timeout`() {
         server.route = { request ->
             when {

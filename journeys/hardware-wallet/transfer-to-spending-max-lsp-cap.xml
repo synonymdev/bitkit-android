@@ -3,12 +3,20 @@
     Verifies that a funded hardware wallet whose balance is larger than the current
     Blocktank/LSP headroom is capped by the transferable spending limit, not by the
     device balance. Requires a paired Bridge emulator or physical Trezor with a hardware
-    balance larger than the available transfer limit, and at least one existing channel or
-    pending order consuming most of the regtest LSP cap.
+    balance larger than the available transfer limit, at least one existing channel or
+    pending order consuming most of the regtest LSP cap, and the mixed hardware activity
+    fixture from README.md. The app Electrum backend, hardware funding backend, and
+    Blocktank regtest backend must match.
   </description>
   <actions>
     <action>
       Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Verify the app Electrum backend matches the Blocktank regtest backend before starting the transfer; for current dev/staging runs the app must use ssl://electrs.bitkit.stag0.blocktank.to:9999 and the funding/mining steps must use ./lsp /regtest/chain commands, not local ./bitcoin-cli
+    </action>
+    <action>
+      Before starting, verify the home or hardware wallet detail Activity list already contains at least one blue hardware received row with a distinct amount; this prior-history control must remain visible after the capped transfer completes
     </action>
     <action>
       Verify the hardware wallet tile shows a balance larger than the AVAILABLE amount expected in the transfer flow
@@ -41,7 +49,22 @@
       Tap "Open Trezor Connect" (testTag "HardwareTransferOpenTrezorConnect") and approve every hardware-wallet prompt
     </action>
     <action>
-      Verify the transaction signed screen appears (testTag "HardwareTransferSigned") and then advances to Processing Payment / setting-up progress
+      Verify the transaction signed screen appears (testTag "HardwareTransferSigned") and then advances to Processing Payment / setting-up progress as an intermediate state
+    </action>
+    <action>
+      Before mining, tap "Continue Using Bitkit" (testTag "TransferSuccess-button") and verify the app returns to the wallet home screen
+    </action>
+    <action>
+      Before mining, verify the recent Activity list contains exactly one hardware wallet transfer row for the new tx, with the blue hardware icon, title "Transfer", subtitle "From Savings", and a non-confirmed/non-stuck transfer status, above the prior blue received row from the fixture
+    </action>
+    <action>
+      Mine one block on the same Blocktank regtest backend with ./lsp POST /regtest/chain/mine '{"count":1}', then wait for the app/Core sync to observe the confirmation
+    </action>
+    <action>
+      Verify the SPENDING balance has increased by the capped AVAILABLE amount and the same hardware wallet transfer row for the new tx is now confirmed
+    </action>
+    <action>
+      Verify the capped transfer amount is not duplicated as a second default-wallet row with a normal TransferIcon or the same Transfer / From Savings text
     </action>
   </actions>
 </journey>

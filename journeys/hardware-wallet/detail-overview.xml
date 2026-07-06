@@ -4,7 +4,9 @@
     the top bar, balance header, the Transfer To Spending entry when funds are present,
     the grouped activity list, and the Remove device confirm dialog. The final
     Remove step forgets the device, so run this last (re-run connect-home-tile.xml to pair
-    again). Requires a paired Bridge emulator (run connect-home-tile.xml first).
+    again). Requires a paired Bridge emulator (run connect-home-tile.xml first) and the mixed
+    hardware activity fixture from README.md, so this journey verifies multiple rows instead
+    of a single hardware transaction.
   </description>
   <actions>
     <action>
@@ -20,7 +22,10 @@
       If a "Transfer To Spending" button is shown (testTag "HardwareTransferToSpending"), tap it; if the first-run Transfer To Spending intro appears, tap "Get Started"; verify the transfer amount screen opens (testTag "HardwareTransferAmount") titled "TRANSFER TO SPENDING", then navigate back to the hardware wallet detail screen; otherwise skip this step
     </action>
     <action>
-      If the activity list shows transactions, verify their circular icons are blue, then tap the first one, verify an activity detail screen opens, and navigate back
+      Verify the detail activity list shows multiple blue hardware rows for the paired wallet, including at least one received row and one Transfer / From Savings row, and does not show a duplicate normal TransferIcon row for the same hardware transfer amount
+    </action>
+    <action>
+      Tap one blue hardware row, verify an activity detail screen opens with a blue icon, then navigate back
     </action>
     <action>
       Tap the "Remove" button labelled with the device name near the bottom of the screen (testTag "RemoveHardwareWallet")

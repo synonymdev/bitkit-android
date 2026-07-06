@@ -3,20 +3,22 @@
     Verifies that a hardware-wallet transaction behaves as a first-class Bitkit Core activity:
     its detail screen supports tags (which persist and keep the item visible under a tag
     filter) and its Explore screen shows the transaction inputs and outputs fetched from the
-    configured Electrum backend. Requires a paired Bridge emulator whose wallet has at least
-    one on-chain transaction (run connect-home-tile.xml first; fund per README.md if the
-    deterministic wallet has no history). Use a hardware seed distinct from the Bitkit wallet
-    seed so the transaction resolves as a hardware (blue-icon) activity, not a local one.
+    configured Electrum backend. Requires a paired Bridge emulator with the mixed hardware
+    activity fixture from README.md. Use a hardware seed distinct from the Bitkit wallet seed
+    so the transaction resolves as a hardware (blue-icon) activity, not a local one.
   </description>
   <actions>
     <action>
       Launch the Bitkit app and go to the wallet home screen
     </action>
     <action>
-      Tap the first activity item with a blue (hardware) circular icon
+      Tap "Show All" beneath the activity list
     </action>
     <action>
-      Verify an activity detail screen opens showing a blue icon and an on-chain amount
+      In All Activity, tap a blue hardware received activity row with a distinct amount, not the Transfer / From Savings row
+    </action>
+    <action>
+      Verify an activity detail screen opens showing a blue icon, a received on-chain amount, and status content for that selected hardware transaction
     </action>
     <action>
       Tap "Add Tag", enter the tag "hwtest" and confirm it
@@ -25,16 +27,16 @@
       Verify a tag chip labelled "hwtest" is shown on the activity detail screen
     </action>
     <action>
-      Navigate back to the home screen, then tap the same blue-icon activity again and verify the "hwtest" tag is still shown (it persisted to Bitkit Core)
+      Navigate back to All Activity, then tap the same blue hardware received activity again and verify the "hwtest" tag is still shown (it persisted to Bitkit Core)
     </action>
     <action>
       Tap "Explore", verify the Activity Explorer screen opens and shows an "Inputs" section and an "Outputs" section each listing at least one entry
     </action>
     <action>
-      Navigate back to the home screen, then tap "Show All" beneath the activity list
+      Navigate back to All Activity
     </action>
     <action>
-      Open the tag filter, select the "hwtest" tag, and verify the blue-icon hardware activity remains listed in the filtered results
+      Open the tag filter, select the "hwtest" tag, and verify only the tagged blue hardware activity remains listed from the hardware fixture; the other untagged blue received or transfer rows should not match the tag filter
     </action>
   </actions>
 </journey>

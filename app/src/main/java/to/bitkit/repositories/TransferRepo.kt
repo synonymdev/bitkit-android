@@ -16,6 +16,7 @@ import org.lightningdevkit.ldknode.PendingSweepBalance
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.DEFAULT_WALLET_ID
 import to.bitkit.ext.channelId
 import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.ext.runSuspendCatching
@@ -107,6 +108,7 @@ class TransferRepo @Inject constructor(
         txId: String,
         fee: ULong,
         feeRate: ULong,
+        walletId: String = DEFAULT_WALLET_ID,
     ): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
             val address = requireNotNull(order.payment?.onchain?.address?.takeIf { it.isNotEmpty() }) {
@@ -120,6 +122,7 @@ class TransferRepo @Inject constructor(
                 feeRate = feeRate,
                 isTransfer = true,
                 channelId = order.channel?.shortChannelId,
+                walletId = walletId,
             )
         }.onFailure {
             Logger.error("Failed to create pending transfer activity for '$txId'", it, context = TAG)
@@ -260,7 +263,22 @@ class TransferRepo @Inject constructor(
     }
 
     private suspend fun markActivityAsTransfer(txid: String, channelId: String) {
-        val activity = coreService.activity.getOnchainActivityByTxId(txid) ?: return
+        val hardwareActivity = runSuspendCatching {
+            coreService.activity.get(
+                filter = ActivityFilter.ONCHAIN,
+                limit = 50u,
+                sortDirection = SortDirection.DESC,
+            )
+        }.getOrNull().orEmpty()
+            .filterIsInstance<Activity.Onchain>()
+            .map { it.v1 }
+            .filter { it.txId == txid }
+            .firstOrNull { it.walletId != DEFAULT_WALLET_ID }
+
+        val activity = hardwareActivity
+            ?: coreService.activity.getOnchainActivityByTxId(txid)
+            ?: return
+
         if (activity.isTransfer && activity.channelId == channelId) return
         val updated = activity.copy(isTransfer = true, channelId = channelId)
         coreService.activity.update(activity.id, Activity.Onchain(updated))
