@@ -1215,6 +1215,51 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `disconnectStaleSession should not disconnect unrelated connected device`() = test {
+        val otherDeviceId = "device-other"
+        val knownOther = mockKnownDevice(id = otherDeviceId, path = "/other")
+        val otherDevice = mockDeviceInfo(id = otherDeviceId, path = "/other")
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownOther))
+        whenever(trezorService.scan()).thenReturn(listOf(otherDevice))
+        whenever(trezorService.connect(eq(otherDeviceId), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        assertTrue(sut.connectKnownDevice(otherDeviceId).isSuccess)
+        assertEquals(otherDeviceId, sut.state.value.connectedDeviceId())
+
+        val result = sut.disconnectStaleSession(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        assertEquals(otherDeviceId, sut.state.value.connectedDeviceId())
+        verify(trezorService, never()).disconnect()
+    }
+
+    @Test
+    fun `connectKnownDevice failure should not disconnect unrelated connected device`() = test {
+        val otherDeviceId = "device-other"
+        val knownOther = mockKnownDevice(id = otherDeviceId, path = "/other")
+        val knownTarget = mockKnownDevice()
+        val otherDevice = mockDeviceInfo(id = otherDeviceId, path = "/other")
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownTarget, knownOther))
+        whenever(trezorService.scan()).thenReturn(listOf(otherDevice))
+        whenever(trezorService.connect(eq(otherDeviceId), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        assertTrue(sut.connectKnownDevice(otherDeviceId).isSuccess)
+
+        whenever(trezorService.scan()).thenReturn(emptyList())
+        val result = sut.connectKnownDevice(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertEquals(otherDeviceId, sut.state.value.connectedDeviceId())
+        verify(trezorService, never()).disconnect()
+    }
+
+    @Test
     fun `ensureConnected returns current selected device without reconnecting`() = test {
         val features = mockFeatures()
         val device = mockDeviceInfo()

@@ -85,6 +85,9 @@ class HwWalletRepo @Inject constructor(
         private const val WATCHER_ID_SEPARATOR = "|"
         private val WATCHER_START_RETRY_DELAY = 30.seconds
         const val DEVICE_LABEL_MAX_LENGTH = 50
+
+        /** Trezor v1 (2.4.0) tracks native segwit only; multi-type HW support is follow-up work. */
+        private val SUPPORTED_WATCHER_ADDRESS_TYPES = setOf(HwFundingAddressType.NATIVE_SEGWIT.settingsKey)
     }
 
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -418,14 +421,13 @@ class HwWalletRepo @Inject constructor(
             ) { desired, _ ->
                 desired
             }.collect { (knownDevices, watcherSettings) ->
-                // Only watch the address types the user monitors (Settings > Advanced > Address Type),
-                // mirroring the on-chain wallet. Xpubs for all types are still captured on connect, so
-                // toggling a type on later starts its watcher without reconnecting the device.
+                // Trezor v1 watches native segwit only (not global Advanced address-type monitoring).
+                // Xpubs for all types are still captured on connect for a future multi-type release.
                 // Device entries sharing an xpub (same device on bluetooth and usb) watch it only once.
                 val filtered = knownDevices.flatMap { device ->
                     val walletId = device.resolvedWalletId()
                     device.xpubs
-                        .filterKeys { it in watcherSettings.monitoredTypes }
+                        .filterKeys { it in SUPPORTED_WATCHER_ADDRESS_TYPES }
                         .map { (addressType, xpub) ->
                             WatcherSpec(
                                 deviceId = device.id,

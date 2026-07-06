@@ -1110,6 +1110,10 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun disconnectStaleSession(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
+        val connectedId = _state.value.connected?.id
+        if (connectedId != null && connectedId != deviceId) {
+            return@withContext Result.success(Unit)
+        }
         val result = runSuspendCatching {
             trezorService.disconnect()
             disconnectTransportDevice(deviceId)

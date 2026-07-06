@@ -343,7 +343,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `starts watchers only for the address types the user monitors`() = test {
+    fun `starts native segwit watcher regardless of monitored address types`() = test {
         storeData.value = HwWalletData(
             knownDevices = listOf(
                 device.copy(
@@ -361,7 +361,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         createRepo()
 
         verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
-        verify(trezorRepo).startWatcher(eq("dev1|taproot"), any(), any(), any(), anyOrNull(), any(), any())
+        verify(trezorRepo, never()).startWatcher(eq("dev1|taproot"), any(), any(), any(), anyOrNull(), any(), any())
         verify(trezorRepo, never()).startWatcher(eq("dev1|legacy"), any(), any(), any(), anyOrNull(), any(), any())
     }
 
@@ -685,13 +685,13 @@ class HwWalletRepoTest : BaseUnitTest() {
             )
         )
 
-        // Stop fails: the watcher data must survive so the balance is not silently wrong.
-        settingsData.value = SettingsData(addressTypesToMonitor = emptyList())
+        // Stop fails when the device is removed: watcher data must survive so the balance is not silently wrong.
+        storeData.value = HwWalletData(knownDevices = emptyList())
         assertEquals(100uL, sut.totalSats.value)
 
         // Stop succeeds on a later sync: the watcher data is finally dropped.
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
-        settingsData.value = SettingsData(addressTypesToMonitor = listOf("taproot"))
+        storeData.value = HwWalletData(knownDevices = emptyList())
         assertEquals(0uL, sut.totalSats.value)
     }
 
