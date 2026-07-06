@@ -669,11 +669,14 @@ class HwWalletRepoTest : BaseUnitTest() {
     @Test
     fun `keeps a stale watcher until stopping it succeeds`() = test {
         storeData.value = HwWalletData(
-            knownDevices = listOf(device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS")))
+            knownDevices = listOf(
+                device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS", "taproot" to "zpubTR")),
+            )
         )
         wheneverStartWatcher().thenReturn(Result.success(Unit))
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.failure(AppError("stop failed")))
         val sut = createRepo()
+        runCurrent()
 
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
@@ -684,14 +687,23 @@ class HwWalletRepoTest : BaseUnitTest() {
                 accountType = AccountType.NATIVE_SEGWIT,
             )
         )
+        runCurrent()
 
-        // Stop fails when the device is removed: watcher data must survive so the balance is not silently wrong.
-        storeData.value = HwWalletData(knownDevices = emptyList())
+        // Dropping the native-segwit xpub stops the watcher; a failed stop keeps ghost balance visible.
+        storeData.value = HwWalletData(
+            knownDevices = listOf(device.copy(xpubs = mapOf("taproot" to "zpubTR"))),
+        )
+        runCurrent()
         assertEquals(100uL, sut.totalSats.value)
 
         // Stop succeeds on a later sync: the watcher data is finally dropped.
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
-        storeData.value = HwWalletData(knownDevices = emptyList())
+        storeData.value = HwWalletData(
+            knownDevices = listOf(
+                device.copy(xpubs = mapOf("taproot" to "zpubTR"), lastConnectedAt = 2L),
+            ),
+        )
+        runCurrent()
         assertEquals(0uL, sut.totalSats.value)
     }
 
