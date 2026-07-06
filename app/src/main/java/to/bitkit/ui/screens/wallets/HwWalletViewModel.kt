@@ -16,6 +16,7 @@ import to.bitkit.R
 import to.bitkit.models.HwWallet
 import to.bitkit.models.Toast
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
 import to.bitkit.ui.shared.toast.ToastEventBus
 import javax.inject.Inject
 
@@ -31,9 +32,84 @@ class HwWalletViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(HwWalletDetailUiState())
     val uiState: StateFlow<HwWalletDetailUiState> = _uiState.asStateFlow()
 
+    private var renameSessionId = 0L
+
     fun onRemoveClick(wallet: HwWallet) = _uiState.update { it.copy(isPendingRemoval = wallet) }
 
     fun onDismissRemoveDialog() = _uiState.update { it.copy(isPendingRemoval = null) }
+
+    fun onRenameClick(wallet: HwWallet) {
+        renameSessionId += 1
+        _uiState.update {
+            it.copy(
+                isPendingRename = wallet,
+                labelInput = wallet.name.take(DEVICE_LABEL_MAX_LENGTH),
+                isSavingLabel = false,
+                isRenameSaved = false,
+            )
+        }
+    }
+
+    fun onDismissRenameSheet() {
+        renameSessionId += 1
+        _uiState.update {
+            it.copy(
+                isPendingRename = null,
+                labelInput = "",
+                isSavingLabel = false,
+                isRenameSaved = false,
+            )
+        }
+    }
+
+    fun onLabelChange(value: String) = _uiState.update { it.copy(labelInput = value.take(DEVICE_LABEL_MAX_LENGTH)) }
+
+    fun saveDeviceLabel() {
+        val state = _uiState.value
+        val wallet = state.isPendingRename ?: return
+        if (state.labelInput.trim().isEmpty() || state.isSavingLabel) return
+        val sessionId = renameSessionId
+
+        viewModelScope.launch {
+            _uiState.update {
+                if (it.matchesRenameSession(wallet.id, sessionId)) it.copy(isSavingLabel = true) else it
+            }
+            hwWalletRepo.setDeviceLabel(wallet.id, state.labelInput)
+                .onSuccess {
+                    _uiState.update {
+                        if (it.matchesRenameSession(wallet.id, sessionId)) {
+                            it.copy(
+                                isSavingLabel = false,
+                                isRenameSaved = true,
+                            )
+                        } else {
+                            it
+                        }
+                    }
+                }
+                .onFailure {
+                    var shouldSendToast = false
+                    _uiState.update {
+                        if (it.matchesRenameSession(wallet.id, sessionId)) {
+                            shouldSendToast = true
+                            it.copy(isSavingLabel = false)
+                        } else {
+                            it
+                        }
+                    }
+                    if (shouldSendToast) {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = context.getString(R.string.hardware__rename_error),
+                        )
+                    }
+                }
+        }
+    }
+
+    private fun HwWalletDetailUiState.matchesRenameSession(deviceId: String, sessionId: Long) =
+        renameSessionId == sessionId && isPendingRename?.id == deviceId
 
     fun removeDevice(deviceId: String) {
         viewModelScope.launch {
@@ -52,4 +128,8 @@ class HwWalletViewModel @Inject constructor(
 @Immutable
 data class HwWalletDetailUiState(
     val isPendingRemoval: HwWallet? = null,
+    val isPendingRename: HwWallet? = null,
+    val labelInput: String = "",
+    val isSavingLabel: Boolean = false,
+    val isRenameSaved: Boolean = false,
 )
