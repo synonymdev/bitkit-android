@@ -495,7 +495,7 @@ class HwWalletRepo @Inject constructor(
     }
 
     private fun KnownDevice.resolvedWalletId(): String =
-        walletId.takeIf { it.isNotBlank() } ?: trezorRepo.deriveWalletId(xpubs)
+        walletId.takeIf { it.isNotBlank() } ?: trezorRepo.deriveWalletId(xpubs, id)
 
     private fun List<HwWatcherData>.toMergedActivities(): List<Activity> =
         flatMap { it.activities }
@@ -515,6 +515,7 @@ class HwWalletRepo @Inject constructor(
         val sent = onchainActivities.filter { it.v1.txType == PaymentType.SENT }
             .fold(0uL) { acc, activity -> acc.safe() + activity.v1.value.safe() }
         val fee = onchainActivities.maxOf { it.v1.fee }
+        val feeRate = onchainActivities.maxOf { it.v1.feeRate }
         val txType = when {
             received > sent -> PaymentType.RECEIVED
             sent > received -> PaymentType.SENT
@@ -530,6 +531,7 @@ class HwWalletRepo @Inject constructor(
                 txType = txType,
                 value = value,
                 fee = fee,
+                feeRate = feeRate,
                 address = onchainActivities.firstOrNull { it.v1.address.isNotBlank() }?.v1?.address.orEmpty(),
                 confirmed = onchainActivities.any { it.v1.confirmed },
                 isBoosted = onchainActivities.any { it.v1.isBoosted },

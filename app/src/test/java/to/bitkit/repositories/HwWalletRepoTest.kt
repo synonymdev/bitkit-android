@@ -85,7 +85,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(trezorRepo.state).thenReturn(trezorState)
         whenever(trezorRepo.watcherEvents).thenReturn(watcherEvents)
-        whenever(trezorRepo.deriveWalletId(any())).thenAnswer { invocation ->
+        whenever(trezorRepo.deriveWalletId(any(), any())).thenAnswer { invocation ->
             val xpubs = invocation.getArgument<Map<String, String>>(0)
             "derived-${xpubs.values.sorted().joinToString()}"
         }

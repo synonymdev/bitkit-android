@@ -740,11 +740,8 @@ class TrezorRepo @Inject constructor(
             .any { it.matches(deviceId) && it.transportType == TransportType.BLUETOOTH }
     }
 
-    fun deriveWalletId(xpubs: Map<String, String>): String = runCatching {
-        HwWalletId.derive(xpubs)
-    }.getOrElse {
-        walletKey(xpubs, "")
-    }
+    fun deriveWalletId(xpubs: Map<String, String>, deviceId: String = ""): String =
+        deriveHardwareWalletId(xpubs, deviceId)
 
     private suspend fun connectedFeatures(deviceId: String): TrezorFeatures? {
         val current = _state.value.connected
@@ -1192,11 +1189,16 @@ private val KnownDevice.walletKey: String
 private fun walletKey(xpubs: Map<String, String>, fallback: String): String =
     xpubs.values.sorted().joinToString().ifEmpty { fallback }
 
+private fun deriveHardwareWalletId(xpubs: Map<String, String>, deviceId: String = ""): String =
+    runCatching { HwWalletId.derive(xpubs) }.getOrElse {
+        if (xpubs.isNotEmpty()) walletKey(xpubs, deviceId) else newHardwareWalletId()
+    }
+
 private fun List<KnownDevice>.findHardwareWalletId(deviceId: String, xpubs: Map<String, String>): String {
     val walletKey = walletKey(xpubs, deviceId)
     return firstOrNull { it.id == deviceId }?.walletId?.takeIf { it.isNotBlank() }
         ?: firstOrNull { it.walletKey == walletKey }?.walletId?.takeIf { it.isNotBlank() }
-        ?: runCatching { HwWalletId.derive(xpubs) }.getOrElse { newHardwareWalletId() }
+        ?: deriveHardwareWalletId(xpubs, deviceId)
 }
 
 private fun newHardwareWalletId(): String = runCatching {
@@ -1211,11 +1213,7 @@ private fun List<KnownDevice>.withHardwareWalletIds(): List<KnownDevice> {
     return map {
         val walletId = existingByWallet[it.walletKey]
             ?: generatedByWallet.getOrPut(it.walletKey) {
-                if (it.xpubs.isNotEmpty()) {
-                    runCatching { HwWalletId.derive(it.xpubs) }.getOrElse { newHardwareWalletId() }
-                } else {
-                    newHardwareWalletId()
-                }
+                deriveHardwareWalletId(it.xpubs, it.id)
             }
         if (it.walletId == walletId) it else it.copy(walletId = walletId)
     }
