@@ -91,6 +91,7 @@ class HwWalletRepo @Inject constructor(
 
     private val activeWatchers = mutableSetOf<String>()
     private val activeWatcherElectrumUrls = mutableMapOf<String, String>()
+    private val activeWatcherWalletIds = mutableMapOf<String, String>()
     private val retryingWatcherStarts = mutableSetOf<String>()
     private val watcherSyncRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val _watcherData = MutableStateFlow<Map<String, HwWatcherData>>(emptyMap())
@@ -115,6 +116,7 @@ class HwWalletRepo @Inject constructor(
         }
         activeWatchers.clear()
         activeWatcherElectrumUrls.clear()
+        activeWatcherWalletIds.clear()
         retryingWatcherStarts.clear()
         emittedReceivedTxIds.clear()
         _watcherData.update { emptyMap() }
@@ -421,6 +423,7 @@ class HwWalletRepo @Inject constructor(
                 // toggling a type on later starts its watcher without reconnecting the device.
                 // Device entries sharing an xpub (same device on bluetooth and usb) watch it only once.
                 val filtered = knownDevices.flatMap { device ->
+                    val walletId = device.resolvedWalletId()
                     device.xpubs
                         .filterKeys { it in watcherSettings.monitoredTypes }
                         .map { (addressType, xpub) ->
@@ -429,7 +432,7 @@ class HwWalletRepo @Inject constructor(
                                 addressType = addressType,
                                 xpub = xpub,
                                 electrumUrl = watcherSettings.electrumUrl,
-                                walletId = device.walletId,
+                                walletId = walletId,
                             )
                         }
                 }.distinctBy { it.addressType to it.xpub }
@@ -437,7 +440,13 @@ class HwWalletRepo @Inject constructor(
 
                 filtered.forEach { spec ->
                     val isActive = spec.watcherId in activeWatchers
-                    if (isActive && activeWatcherElectrumUrls[spec.watcherId] == spec.electrumUrl) return@forEach
+                    if (
+                        isActive &&
+                        activeWatcherElectrumUrls[spec.watcherId] == spec.electrumUrl &&
+                        activeWatcherWalletIds[spec.watcherId] == spec.walletId
+                    ) {
+                        return@forEach
+                    }
                     if (isActive && !stopActiveWatcher(spec.watcherId)) return@forEach
 
                     trezorRepo.startWatcher(
@@ -450,6 +459,7 @@ class HwWalletRepo @Inject constructor(
                     ).onSuccess {
                         activeWatchers += spec.watcherId
                         activeWatcherElectrumUrls[spec.watcherId] = spec.electrumUrl
+                        activeWatcherWalletIds[spec.watcherId] = spec.walletId
                         retryingWatcherStarts -= spec.watcherId
                     }.onFailure {
                         Logger.warn("Retrying watcher '${spec.watcherId}' after start failure", it, context = TAG)
@@ -470,6 +480,7 @@ class HwWalletRepo @Inject constructor(
         trezorRepo.stopWatcher(watcherId).onSuccess {
             activeWatchers -= watcherId
             activeWatcherElectrumUrls -= watcherId
+            activeWatcherWalletIds -= watcherId
             _watcherData.update { it - watcherId }
         }.isSuccess
 
@@ -483,14 +494,57 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    private fun List<HwWatcherData>.toMergedActivities(): List<Activity> {
-        val byId = linkedMapOf<String, Activity>()
-        sortedBy { "${it.deviceId}|${it.addressType}" }
-            .flatMap { it.activities }
-            .forEach { activity ->
-                byId[activity.rawId()] = activity
-            }
-        return byId.values.toList()
+    private fun KnownDevice.resolvedWalletId(): String =
+        walletId.takeIf { it.isNotBlank() } ?: trezorRepo.deriveWalletId(xpubs)
+
+    private fun List<HwWatcherData>.toMergedActivities(): List<Activity> =
+        flatMap { it.activities }
+            .groupBy { it.rawId() }
+            .values
+            .map { it.mergedActivity() }
+
+    private fun List<Activity>.mergedActivity(): Activity {
+        if (size == 1) return first()
+
+        val onchainActivities = filterIsInstance<Activity.Onchain>()
+        if (onchainActivities.size != size) return first()
+
+        val base = onchainActivities.minBy { it.v1.timestamp }
+        val received = onchainActivities.filter { it.v1.txType == PaymentType.RECEIVED }
+            .fold(0uL) { acc, activity -> acc.safe() + activity.v1.value.safe() }
+        val sent = onchainActivities.filter { it.v1.txType == PaymentType.SENT }
+            .fold(0uL) { acc, activity -> acc.safe() + activity.v1.value.safe() }
+        val fee = onchainActivities.maxOf { it.v1.fee }
+        val txType = when {
+            received > sent -> PaymentType.RECEIVED
+            sent > received -> PaymentType.SENT
+            else -> base.v1.txType
+        }
+        val value = when (txType) {
+            PaymentType.RECEIVED -> received.safe() - sent.safe()
+            PaymentType.SENT -> (sent.safe() - received.safe()).safe() - fee.safe()
+        }
+
+        return Activity.Onchain(
+            base.v1.copy(
+                txType = txType,
+                value = value,
+                fee = fee,
+                address = onchainActivities.firstOrNull { it.v1.address.isNotBlank() }?.v1?.address.orEmpty(),
+                confirmed = onchainActivities.any { it.v1.confirmed },
+                isBoosted = onchainActivities.any { it.v1.isBoosted },
+                boostTxIds = onchainActivities.flatMap { it.v1.boostTxIds }.distinct(),
+                isTransfer = onchainActivities.any { it.v1.isTransfer },
+                doesExist = onchainActivities.any { it.v1.doesExist },
+                confirmTimestamp = onchainActivities.mapNotNull { it.v1.confirmTimestamp }.maxOrNull(),
+                channelId = onchainActivities.firstNotNullOfOrNull { it.v1.channelId },
+                transferTxId = onchainActivities.firstNotNullOfOrNull { it.v1.transferTxId },
+                contact = onchainActivities.firstNotNullOfOrNull { it.v1.contact },
+                createdAt = onchainActivities.mapNotNull { it.v1.createdAt }.minOrNull(),
+                updatedAt = onchainActivities.mapNotNull { it.v1.updatedAt }.maxOrNull(),
+                seenAt = onchainActivities.mapNotNull { it.v1.seenAt }.minOrNull(),
+            )
+        )
     }
 
     private fun List<Activity>.findOnchain(txid: String) = filterIsInstance<Activity.Onchain>()

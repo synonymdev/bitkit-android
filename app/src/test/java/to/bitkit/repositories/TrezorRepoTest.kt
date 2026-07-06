@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeParams
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorDeviceInfo
+import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
@@ -25,6 +26,7 @@ import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -1261,6 +1263,28 @@ class TrezorRepoTest : BaseUnitTest() {
         verify(trezorService, times(3)).scan()
         verify(trezorService).connect(eq(bleDeviceId), any())
         verify(trezorService, never()).connect(eq(bleDeviceId), any(), eq(false))
+    }
+
+    @Test
+    fun `ensureConnected stops bluetooth retry after user cancellation`() = test {
+        val bleDeviceId = "ble:57:21:A7:F9:DD:AD"
+        val knownDevice = mockKnownDevice(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TransportType.BLUETOOTH,
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(emptyList())
+        whenever(trezorService.connect(eq(bleDeviceId), any())).doAnswer { throw TrezorException.UserCancelled() }
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.ensureConnected(bleDeviceId)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is TrezorException.UserCancelled)
+        verify(trezorService, times(1)).connect(eq(bleDeviceId), any())
     }
 
     // endregion

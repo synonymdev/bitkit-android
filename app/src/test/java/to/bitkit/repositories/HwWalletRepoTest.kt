@@ -22,6 +22,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -84,6 +85,10 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(trezorRepo.state).thenReturn(trezorState)
         whenever(trezorRepo.watcherEvents).thenReturn(watcherEvents)
+        whenever(trezorRepo.deriveWalletId(any())).thenAnswer { invocation ->
+            val xpubs = invocation.getArgument<Map<String, String>>(0)
+            "derived-${xpubs.values.sorted().joinToString()}"
+        }
         runBlocking {
             whenever(activityRepo.syncHardwareOnchainActivity(any())).thenReturn(Result.success(Unit))
         }
@@ -219,7 +224,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         val activity = sut.wallets.value.single().activities.single() as Activity.Onchain
         assertEquals(PaymentType.RECEIVED, activity.v1.txType)
-        assertEquals(50uL, activity.v1.value)
+        assertEquals(150uL, activity.v1.value)
         assertEquals(150uL, sut.wallets.value.single().balanceSats)
     }
 
@@ -259,7 +264,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         val activity = sut.activities.value.single() as Activity.Onchain
         assertEquals(2, sut.wallets.value.size)
         assertEquals(PaymentType.RECEIVED, activity.v1.txType)
-        assertEquals(50uL, activity.v1.value)
+        assertEquals(150uL, activity.v1.value)
     }
 
     @Test
@@ -366,6 +371,61 @@ class HwWalletRepoTest : BaseUnitTest() {
             accountType = anyOrNull(),
             electrumUrl = eq(secondServer),
             walletId = any(),
+        )
+    }
+
+    @Test
+    fun `restarts active watchers when wallet id changes`() = test {
+        val derivedWalletId = "derived-zpubNS"
+        storeData.value = HwWalletData(knownDevices = listOf(device.copy(walletId = "legacy-wallet-id")))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever(trezorRepo.stopWatcher(any())).thenReturn(Result.success(Unit))
+
+        createRepo()
+        runCurrent()
+
+        val order = inOrder(trezorRepo)
+        order.verify(trezorRepo).startWatcher(
+            watcherId = eq("dev1|nativeSegwit"),
+            extendedKey = eq("zpubNS"),
+            network = eq(Env.network.toCoreNetwork()),
+            gapLimit = any(),
+            accountType = anyOrNull(),
+            electrumUrl = any(),
+            walletId = eq("legacy-wallet-id"),
+        )
+
+        storeData.value = HwWalletData(knownDevices = listOf(device.copy(walletId = derivedWalletId)))
+        runCurrent()
+
+        order.verify(trezorRepo).stopWatcher("dev1|nativeSegwit")
+        order.verify(trezorRepo).startWatcher(
+            watcherId = eq("dev1|nativeSegwit"),
+            extendedKey = eq("zpubNS"),
+            network = eq(Env.network.toCoreNetwork()),
+            gapLimit = any(),
+            accountType = anyOrNull(),
+            electrumUrl = any(),
+            walletId = eq(derivedWalletId),
+        )
+    }
+
+    @Test
+    fun `starts watchers with derived wallet id when store value is blank`() = test {
+        storeData.value = HwWalletData(knownDevices = listOf(device.copy(walletId = "")))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+
+        createRepo()
+        runCurrent()
+
+        verify(trezorRepo).startWatcher(
+            watcherId = eq("dev1|nativeSegwit"),
+            extendedKey = eq("zpubNS"),
+            network = eq(Env.network.toCoreNetwork()),
+            gapLimit = any(),
+            accountType = anyOrNull(),
+            electrumUrl = any(),
+            walletId = eq("derived-zpubNS"),
         )
     }
 

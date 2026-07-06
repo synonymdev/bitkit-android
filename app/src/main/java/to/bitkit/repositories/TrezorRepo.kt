@@ -28,7 +28,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -54,6 +53,7 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toTransportType
@@ -680,7 +680,9 @@ class TrezorRepo @Inject constructor(
             }.onFailure { e ->
                 Logger.error("Connect known device failed", e, context = TAG)
                 _state.update { it.copy(error = e.message) }
-                disconnectStaleSession(deviceId)
+                if (!forceSession) {
+                    disconnectStaleSession(deviceId)
+                }
             }
         } finally {
             if (startedConnecting) {
@@ -724,7 +726,11 @@ class TrezorRepo @Inject constructor(
                 allowBleFallback = allowBleFallback,
             )
             if (result.isSuccess) return result
-            lastFailure = result.exceptionOrNull()
+            val failure = result.exceptionOrNull()
+            if (failure?.isTrezorUserCancellation() == true) {
+                return Result.failure(failure)
+            }
+            lastFailure = failure
         }
         return Result.failure(lastFailure ?: AppError("Failed to connect"))
     }
@@ -732,6 +738,12 @@ class TrezorRepo @Inject constructor(
     suspend fun isKnownBluetoothDevice(deviceId: String): Boolean = withContext(ioDispatcher) {
         (_state.value.knownDevices + loadKnownDevices()).distinctBy { it.id }
             .any { it.matches(deviceId) && it.transportType == TransportType.BLUETOOTH }
+    }
+
+    fun deriveWalletId(xpubs: Map<String, String>): String = runCatching {
+        HwWalletId.derive(xpubs)
+    }.getOrElse {
+        walletKey(xpubs, "")
     }
 
     private suspend fun connectedFeatures(deviceId: String): TrezorFeatures? {
@@ -745,7 +757,7 @@ class TrezorRepo @Inject constructor(
     }
 
     private suspend fun waitForConnectAttempt(deviceId: String) {
-        runCatching {
+        try {
             withTimeout(CONNECT_ATTEMPT_MAX_WAIT) {
                 while (true) {
                     if (connectedFeatures(deviceId) != null) return@withTimeout
@@ -753,8 +765,8 @@ class TrezorRepo @Inject constructor(
                     delay(CONNECT_ATTEMPT_POLL_INTERVAL)
                 }
             }
-        }.onFailure {
-            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+        } catch (e: TimeoutCancellationException) {
+            // Expected: in-flight connect ran longer than our wait window; caller will retry.
         }
     }
 
