@@ -449,7 +449,6 @@ class PrivatePaykitRepo @Inject constructor(
 
                 if (resolution.privateState == ContactPaymentResolutionPrivateState.RECOVERY_PENDING) {
                     schedulePendingPrivateMessageDrainRetries("payment recovery", publicKeys = listOf(publicKey))
-                    return@runSuspendCatching PublicPaykitPaymentResult.NoEndpoint
                 }
 
                 val publicEndpoints = resolution.payableEndpoints

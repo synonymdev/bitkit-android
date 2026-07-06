@@ -24,11 +24,11 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
-import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.App
@@ -503,7 +503,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `beginSavedContactPayment does not use public endpoint while private recovery is pending`() = test {
+    fun `beginSavedContactPayment uses public endpoint while private recovery is pending`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
         whenever {
@@ -517,6 +517,22 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 ),
                 privateState = ContactPaymentResolutionPrivateState.RECOVERY_PENDING,
             ),
+        )
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.Opened("bcrt1qpublic"), result)
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment returns no endpoint when recovery pending has no public endpoint`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever {
+            paykitSdkService.prepareAndResolveContactPayment(CONTACT_KEY, includePublicEndpoints = true)
+        }.thenReturn(
+            resolution(privateState = ContactPaymentResolutionPrivateState.RECOVERY_PENDING),
         )
 
         val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
