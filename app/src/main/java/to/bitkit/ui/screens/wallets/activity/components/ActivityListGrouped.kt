@@ -13,7 +13,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -30,7 +29,6 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import to.bitkit.R
 import to.bitkit.ext.activityKey
-import to.bitkit.ext.rawTimestamp
 import to.bitkit.ext.scopedId
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.components.BodyM
@@ -81,17 +79,18 @@ fun ActivityListGrouped(
             ) {
                 itemsIndexed(
                     items = groupedItems,
-                    key = { _, item ->
+                    key = { index, item ->
                         when (item) {
-                            is ActivityGroupHeader -> "header_${item.title}"
-                            is ActivityGroupEntry -> item.item.activityKey()
+                            is String -> "header_$item"
+                            is Activity -> item.activityKey()
+                            else -> "item_$index"
                         }
                     }
                 ) { index, item ->
                     when (item) {
-                        is ActivityGroupHeader -> {
+                        is String -> {
                             Caption13Up(
-                                text = item.title,
+                                text = item,
                                 color = Colors.White64,
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -104,8 +103,7 @@ fun ActivityListGrouped(
                             )
                         }
 
-                        is ActivityGroupEntry -> {
-                            val activity = item.item
+                        is Activity -> {
                             Column(
                                 modifier = Modifier
                                     .animateItem(
@@ -115,12 +113,12 @@ fun ActivityListGrouped(
                                     )
                             ) {
                                 ActivityRow(
-                                    item = activity,
+                                    item = item,
                                     onClick = onActivityItemClick,
                                     testTag = "$activityTestTagPrefix-$index",
-                                    title = titleProvider(activity) ?: contactActivityTitle(activity, contacts),
-                                    isHardware = activity.scopedId() in hardwareIds,
-                                    contact = if (showContactAvatar) contactForActivity(activity, contacts) else null,
+                                    title = titleProvider(item) ?: contactActivityTitle(item, contacts),
+                                    isHardware = item.scopedId() in hardwareIds,
+                                    contact = if (showContactAvatar) contactForActivity(item, contacts) else null,
                                 )
                                 VerticalSpacer(16.dp)
                             }
@@ -175,17 +173,18 @@ fun LazyListScope.activityListGroupedItems(
         val groupedItems = groupActivityItems(items)
         itemsIndexed(
             items = groupedItems,
-            key = { _, item ->
+            key = { index, item ->
                 when (item) {
-                    is ActivityGroupHeader -> "header_${item.title}"
-                    is ActivityGroupEntry -> item.item.activityKey()
+                    is String -> "header_$item"
+                    is Activity -> item.activityKey()
+                    else -> "item_$index"
                 }
             },
         ) { index, item ->
             when (item) {
-                is ActivityGroupHeader -> {
+                is String -> {
                     Caption13Up(
-                        text = item.title,
+                        text = item,
                         color = Colors.White64,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -198,8 +197,7 @@ fun LazyListScope.activityListGroupedItems(
                     )
                 }
 
-                is ActivityGroupEntry -> {
-                    val activity = item.item
+                is Activity -> {
                     Column(
                         modifier = Modifier
                             .animateItem(
@@ -209,10 +207,10 @@ fun LazyListScope.activityListGroupedItems(
                             )
                     ) {
                         ActivityRow(
-                            item = activity,
+                            item = item,
                             onClick = onActivityItemClick,
                             testTag = "Activity-$index",
-                            isHardware = activity.scopedId() in hardwareIds,
+                            isHardware = item.scopedId() in hardwareIds,
                         )
                         VerticalSpacer(16.dp)
                     }
@@ -259,7 +257,7 @@ fun LazyListScope.activityListGroupedItems(
 
 // region utils
 @Suppress("CyclomaticComplexMethod")
-private fun groupActivityItems(activityItems: List<Activity>): List<GroupedActivityItem> {
+private fun groupActivityItems(activityItems: List<Activity>): List<Any> {
     val now = Instant.now()
     val zoneId = ZoneId.systemDefault()
     val today = now.atZone(zoneId).truncatedTo(ChronoUnit.DAYS)
@@ -279,7 +277,10 @@ private fun groupActivityItems(activityItems: List<Activity>): List<GroupedActiv
     val earlierItems = mutableListOf<Activity>()
 
     for (item in activityItems) {
-        val timestamp = item.rawTimestamp().toLong()
+        val timestamp = when (item) {
+            is Activity.Lightning -> item.v1.timestamp.toLong()
+            is Activity.Onchain -> item.v1.timestamp.toLong()
+        }
         when {
             timestamp >= startOfDay -> todayItems.add(item)
             timestamp >= startOfYesterday -> yesterdayItems.add(item)
@@ -292,41 +293,32 @@ private fun groupActivityItems(activityItems: List<Activity>): List<GroupedActiv
 
     return buildList {
         if (todayItems.isNotEmpty()) {
-            add(ActivityGroupHeader("TODAY"))
-            addAll(todayItems.map { ActivityGroupEntry(it) })
+            add("TODAY")
+            addAll(todayItems)
         }
         if (yesterdayItems.isNotEmpty()) {
-            add(ActivityGroupHeader("YESTERDAY"))
-            addAll(yesterdayItems.map { ActivityGroupEntry(it) })
+            add("YESTERDAY")
+            addAll(yesterdayItems)
         }
         if (weekItems.isNotEmpty()) {
-            add(ActivityGroupHeader("THIS WEEK"))
-            addAll(weekItems.map { ActivityGroupEntry(it) })
+            add("THIS WEEK")
+            addAll(weekItems)
         }
         if (monthItems.isNotEmpty()) {
-            add(ActivityGroupHeader("THIS MONTH"))
-            addAll(monthItems.map { ActivityGroupEntry(it) })
+            add("THIS MONTH")
+            addAll(monthItems)
         }
         if (yearItems.isNotEmpty()) {
-            add(ActivityGroupHeader("THIS YEAR"))
-            addAll(yearItems.map { ActivityGroupEntry(it) })
+            add("THIS YEAR")
+            addAll(yearItems)
         }
         if (earlierItems.isNotEmpty()) {
-            add(ActivityGroupHeader("EARLIER"))
-            addAll(earlierItems.map { ActivityGroupEntry(it) })
+            add("EARLIER")
+            addAll(earlierItems)
         }
     }
 }
 // endregion
-
-@Immutable
-private sealed interface GroupedActivityItem
-
-@Immutable
-private data class ActivityGroupHeader(val title: String) : GroupedActivityItem
-
-@Immutable
-private data class ActivityGroupEntry(val item: Activity) : GroupedActivityItem
 
 @Preview
 @Composable

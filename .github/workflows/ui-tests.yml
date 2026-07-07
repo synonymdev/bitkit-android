@@ -28,7 +28,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           java-version: '17'
-          distribution: 'temurin'
+          distribution: 'adopt'
 
       - name: Cache gradle
         uses: actions/cache@v5
@@ -107,7 +107,7 @@ jobs:
 
       - name: Upload UI test report
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: compose_test_report
           path: |

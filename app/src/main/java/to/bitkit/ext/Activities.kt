@@ -109,11 +109,6 @@ fun Activity.paymentState(): PaymentState? = when (this) {
     is Activity.Onchain -> null
 }
 
-fun Activity.txId(): String? = when (this) {
-    is Activity.Lightning -> null
-    is Activity.Onchain -> v1.txId
-}
-
 fun Activity.confirmed(): Boolean? = when (this) {
     is Activity.Lightning -> null
     is Activity.Onchain -> v1.confirmed
@@ -135,11 +130,6 @@ fun Activity.timestamp() = when (this) {
         true -> v1.confirmTimestamp ?: v1.timestamp
         else -> v1.timestamp
     }
-}
-
-fun Activity.rawTimestamp() = when (this) {
-    is Activity.Lightning -> v1.timestamp
-    is Activity.Onchain -> v1.timestamp
 }
 
 enum class BoostType { RBF, CPFP }

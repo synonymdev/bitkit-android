@@ -31,7 +31,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           java-version: '17'
-          distribution: 'temurin'
+          distribution: 'adopt'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
@@ -177,7 +177,7 @@ jobs:
           echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ steps.artifacts.outputs.artifact_name }}
           path: ${{ steps.artifacts.outputs.artifact_dir }}

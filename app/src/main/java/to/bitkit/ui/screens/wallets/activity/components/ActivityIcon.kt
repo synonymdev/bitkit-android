@@ -19,9 +19,12 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.LightningActivity
+import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
+import to.bitkit.ext.create
 import to.bitkit.ext.doesExist
 import to.bitkit.ext.isBoosting
 import to.bitkit.ext.isTransfer
@@ -29,7 +32,6 @@ import to.bitkit.ext.paymentState
 import to.bitkit.ext.txType
 import to.bitkit.models.PubkyProfile
 import to.bitkit.ui.components.PubkyContactAvatar
-import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -42,17 +44,14 @@ fun ActivityIcon(
     isHardware: Boolean = false,
     contact: PubkyProfile? = null,
 ) {
+    val isLightning = activity is Activity.Lightning
+    val isBoosting = activity.isBoosting()
+    val status = activity.paymentState()
     val txType = activity.txType()
-    val arrowIcon = painterResource(
-        id = if (txType == PaymentType.SENT) {
-            R.drawable.ic_sent
-        } else {
-            R.drawable.ic_received
-        },
-    )
+    val arrowIcon = painterResource(if (txType == PaymentType.SENT) R.drawable.ic_sent else R.drawable.ic_received)
 
     when {
-        isCpfpChild || activity.isBoosting() -> {
+        isCpfpChild || isBoosting -> {
             CircularIcon(
                 icon = painterResource(R.drawable.ic_timer_alt),
                 iconColor = Colors.Yellow,
@@ -68,30 +67,21 @@ fun ActivityIcon(
             testTag = "ActivityContactAvatar",
             modifier = modifier
         )
-        activity is Activity.Lightning -> ActivityIconLightning(activity.paymentState(), size, arrowIcon, modifier)
-        else -> ActivityIconOnchain(
-            txType = txType,
-            isTransfer = activity.isTransfer(),
-            doesExist = activity.doesExist(),
-            arrowIcon = arrowIcon,
-            size = size,
-            isHardware = isHardware,
-            modifier = modifier,
-        )
+        isLightning -> ActivityIconLightning(status, size, arrowIcon, modifier)
+        else -> ActivityIconOnchain(activity, arrowIcon, size, isHardware, modifier)
     }
 }
 
 @Composable
 private fun ActivityIconOnchain(
-    txType: PaymentType,
-    isTransfer: Boolean,
-    doesExist: Boolean,
+    activity: Activity,
     arrowIcon: Painter,
     size: Dp,
     isHardware: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val isTransferFromSpending = isTransfer && txType == PaymentType.RECEIVED
+    val isTransfer = activity.isTransfer()
+    val isTransferFromSpending = isTransfer && activity.txType() == PaymentType.RECEIVED
     val (iconColor, backgroundColor) = when {
         isHardware -> Colors.Blue to Colors.Blue16
         isTransferFromSpending -> Colors.Purple to Colors.Purple16
@@ -105,7 +95,7 @@ private fun ActivityIconOnchain(
 
     CircularIcon(
         icon = when {
-            !doesExist -> painterResource(R.drawable.ic_x)
+            !activity.doesExist() -> painterResource(R.drawable.ic_x)
             isTransfer -> painterResource(R.drawable.ic_transfer)
             else -> arrowIcon
         },
@@ -187,7 +177,145 @@ private fun Preview() {
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.padding(16.dp),
         ) {
-            previewActivityItems.forEach { ActivityIcon(activity = it) }
+            // Lightning Sent Succeeded
+            ActivityIcon(
+                activity = Activity.Lightning(
+                    v1 = LightningActivity.create(
+                        id = "test-lightning-1",
+                        txType = PaymentType.SENT,
+                        status = PaymentState.SUCCEEDED,
+                        value = 50000uL,
+                        invoice = "lnbc...",
+                        timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        fee = 1uL,
+                    )
+                )
+            )
+
+            // Lightning Received Failed
+            ActivityIcon(
+                activity = Activity.Lightning(
+                    v1 = LightningActivity.create(
+                        id = "test-lightning-2",
+                        txType = PaymentType.RECEIVED,
+                        status = PaymentState.FAILED,
+                        value = 50000uL,
+                        invoice = "lnbc...",
+                        timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        fee = 1uL,
+                    )
+                )
+            )
+
+            // Lightning Pending
+            ActivityIcon(
+                activity = Activity.Lightning(
+                    v1 = LightningActivity.create(
+                        id = "test-lightning-3",
+                        txType = PaymentType.SENT,
+                        status = PaymentState.PENDING,
+                        value = 50000uL,
+                        invoice = "lnbc...",
+                        timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        fee = 1uL,
+                    )
+                )
+            )
+
+            // Onchain Received
+            ActivityIcon(
+                activity = Activity.Onchain(
+                    v1 = OnchainActivity.create(
+                        id = "test-onchain-1",
+                        txType = PaymentType.RECEIVED,
+                        txId = "abc123",
+                        value = 100000uL,
+                        fee = 500uL,
+                        address = "bc1...",
+                        timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        confirmed = true,
+                        feeRate = 8uL,
+                        confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
+                    )
+                )
+            )
+
+            // Onchain BOOST CPFP
+            ActivityIcon(
+                activity = Activity.Onchain(
+                    v1 = OnchainActivity.create(
+                        id = "test-onchain-1",
+                        txType = PaymentType.RECEIVED,
+                        txId = "abc123",
+                        value = 100000uL,
+                        fee = 500uL,
+                        address = "bc1...",
+                        timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        feeRate = 8uL,
+                        isBoosted = true,
+                        confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
+                    )
+                )
+            )
+
+            // Onchain BOOST RBF
+            ActivityIcon(
+                activity = Activity.Onchain(
+                    v1 = OnchainActivity.create(
+                        id = "test-onchain-1",
+                        txType = PaymentType.SENT,
+                        txId = "abc123",
+                        value = 100000uL,
+                        fee = 500uL,
+                        address = "bc1...",
+                        timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        feeRate = 8uL,
+                        isBoosted = true,
+                        confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
+                    )
+                )
+            )
+
+            // Onchain Transfer
+            ActivityIcon(
+                activity = Activity.Onchain(
+                    v1 = OnchainActivity.create(
+                        id = "test-onchain-2",
+                        txType = PaymentType.SENT,
+                        txId = "abc123",
+                        value = 100000uL,
+                        fee = 500uL,
+                        address = "bc1...",
+                        timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        confirmed = true,
+                        feeRate = 8uL,
+                        isTransfer = true,
+                        confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        transferTxId = "transferTxId",
+                    )
+                )
+            )
+
+            // Onchain Removed
+            ActivityIcon(
+                activity = Activity.Onchain(
+                    v1 = OnchainActivity.create(
+                        id = "test-onchain-2",
+                        txType = PaymentType.SENT,
+                        txId = "abc123",
+                        value = 100000uL,
+                        fee = 500uL,
+                        address = "bc1...",
+                        timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        confirmed = true,
+                        feeRate = 8uL,
+                        isBoosted = true,
+                        doesExist = false,
+                        confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        transferTxId = "transferTxId",
+                    )
+                )
+            )
         }
     }
 }

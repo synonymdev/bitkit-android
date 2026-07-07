@@ -29,7 +29,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           java-version: '17'
-          distribution: 'temurin'
+          distribution: 'adopt'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
@@ -57,7 +57,7 @@ jobs:
         run: ./gradlew testDevDebugUnitTest
 
       - name: Upload test report
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v6
         with:
           name: unit_test_report_${{ github.run_number }}
           path: app/build/reports/tests/testDevDebugUnitTest/

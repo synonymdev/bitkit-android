@@ -8,7 +8,6 @@ import com.synonym.bitkitcore.PaymentType
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.ext.create
-import to.bitkit.models.ActivityWalletType
 import java.util.Calendar
 
 val previewActivityItems: ImmutableList<Activity> = buildList {
@@ -20,119 +19,97 @@ val previewActivityItems: ImmutableList<Activity> = buildList {
 
     fun Calendar.epochSecond() = (timeInMillis / 1000).toULong()
 
+    // Today
     add(
-        onchainPreviewItem(
-            id = "1",
-            txType = PaymentType.RECEIVED,
-            value = 42_000uL,
-            fee = 200uL,
-            timestamp = today.epochSecond(),
-            txId = "01",
-            confirmed = true,
-            isBoosted = true,
-            doesExist = false,
+        Activity.Onchain(
+            OnchainActivity.create(
+                id = "1",
+                txType = PaymentType.RECEIVED,
+                txId = "01",
+                value = 42_000_u,
+                fee = 200_u,
+                address = "bc1",
+                confirmed = true,
+                timestamp = today.epochSecond(),
+                isBoosted = true,
+                boostTxIds = listOf("02", "03"),
+                doesExist = false,
+                confirmTimestamp = today.epochSecond(),
+                channelId = "channelId",
+                transferTxId = "transferTxId",
+                createdAt = today.epochSecond() - 30_000u,
+                updatedAt = today.epochSecond(),
+            )
         )
     )
 
+    // Yesterday
     add(
-        lightningPreviewItem(
-            id = "2",
-            txType = PaymentType.SENT,
-            status = PaymentState.PENDING,
-            value = 30_000uL,
-            fee = 15uL,
-            timestamp = yesterday.epochSecond(),
-            message = "Custom very long lightning activity message to test truncation",
+        Activity.Lightning(
+            LightningActivity.create(
+                id = "2",
+                txType = PaymentType.SENT,
+                status = PaymentState.PENDING,
+                value = 30_000_u,
+                invoice = "lnbc2",
+                timestamp = yesterday.epochSecond(),
+                fee = 15_u,
+                message = "Custom very long lightning activity message to test truncation",
+                preimage = "preimage1",
+            )
         )
     )
 
+    // This Week
     add(
-        lightningPreviewItem(
-            id = "3",
-            txType = PaymentType.RECEIVED,
-            status = PaymentState.FAILED,
-            value = 217_000uL,
-            fee = 17uL,
-            timestamp = thisWeek.epochSecond(),
+        Activity.Lightning(
+            LightningActivity.create(
+                id = "3",
+                txType = PaymentType.RECEIVED,
+                status = PaymentState.FAILED,
+                value = 217_000_u,
+                invoice = "lnbc3",
+                timestamp = thisWeek.epochSecond(),
+                fee = 17_u,
+                preimage = "preimage2",
+            )
         )
     )
 
+    // This Month
     add(
-        onchainPreviewItem(
-            id = "4",
-            txType = PaymentType.SENT,
-            value = 950_000uL,
-            fee = 110uL,
-            timestamp = thisMonth.epochSecond(),
-            txId = "04",
-            isTransfer = true,
+        Activity.Onchain(
+            OnchainActivity.create(
+                id = "4",
+                txType = PaymentType.SENT,
+                txId = "04",
+                value = 950_000_u,
+                fee = 110_u,
+                address = "bc1",
+                timestamp = thisMonth.epochSecond(),
+                isTransfer = true,
+                confirmTimestamp = today.epochSecond() + 3600u,
+                channelId = "channelId",
+                transferTxId = "transferTxId",
+            )
         )
     )
 
+    // Last Year
     add(
-        lightningPreviewItem(
-            id = "5",
-            txType = PaymentType.SENT,
-            status = PaymentState.SUCCEEDED,
-            value = 200_000uL,
-            fee = 1uL,
-            timestamp = lastYear.epochSecond(),
+        Activity.Lightning(
+            LightningActivity.create(
+                id = "5",
+                txType = PaymentType.SENT,
+                status = PaymentState.SUCCEEDED,
+                value = 200_000_u,
+                invoice = "lnbc…",
+                timestamp = lastYear.epochSecond(),
+                fee = 1_u,
+            )
         )
     )
 }.toImmutableList()
 
 fun previewOnchainActivityItems() = previewActivityItems.filterIsInstance<Activity.Onchain>().toImmutableList()
-
 fun previewLightningActivityItems() = previewActivityItems.filterIsInstance<Activity.Lightning>().toImmutableList()
-
-@Suppress("LongParameterList")
-private fun lightningPreviewItem(
-    id: String,
-    txType: PaymentType,
-    status: PaymentState,
-    value: ULong,
-    fee: ULong,
-    timestamp: ULong,
-    message: String = "",
-) = Activity.Lightning(
-    LightningActivity.create(
-        id = id,
-        walletId = ActivityWalletType.BITKIT.id(),
-        txType = txType,
-        status = status,
-        value = value,
-        fee = fee,
-        invoice = "lnbc$id",
-        message = message,
-        timestamp = timestamp,
-    )
-)
-
-@Suppress("LongParameterList")
-private fun onchainPreviewItem(
-    id: String,
-    txType: PaymentType,
-    value: ULong,
-    fee: ULong,
-    timestamp: ULong,
-    txId: String,
-    confirmed: Boolean = false,
-    isBoosted: Boolean = false,
-    isTransfer: Boolean = false,
-    doesExist: Boolean = true,
-) = Activity.Onchain(
-    OnchainActivity.create(
-        id = id,
-        walletId = ActivityWalletType.BITKIT.id(),
-        txType = txType,
-        value = value,
-        fee = fee,
-        txId = txId,
-        address = "bc1qpreview$id",
-        timestamp = timestamp,
-        confirmed = confirmed,
-        isBoosted = isBoosted,
-        isTransfer = isTransfer,
-        doesExist = doesExist,
-    )
-)
