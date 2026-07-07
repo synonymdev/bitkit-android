@@ -206,8 +206,8 @@ class TransferViewModel @Inject constructor(
             val address = order.payment?.onchain?.address.orEmpty()
 
             // Use live spendableOnchainBalanceSats (not cached) to respect anchor reserves
-            val spendableBalance =
-                lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats ?: 0uL
+            val balanceDetails = lightningRepo.getBalancesAsync().getOrNull()
+            val spendableBalance = balanceDetails?.spendableOnchainBalanceSats ?: 0uL
             val sendAllFee = lightningRepo.estimateSendAllFee(
                 address = address,
                 speed = speed,
@@ -221,6 +221,24 @@ class TransferViewModel @Inject constructor(
                 spendableBalance.toLong() - order.feeSat.toLong() - sendAllFee.toLong()
             val shouldUseSendAll =
                 expectedChange >= 0 && expectedChange < TRANSFER_SEND_ALL_THRESHOLD_SATS
+
+            val miningFee = if (shouldUseSendAll) {
+                sendAllFee
+            } else {
+                lightningRepo.calculateTotalFee(
+                    amountSats = order.feeSat,
+                    address = address,
+                    speed = speed,
+                ).getOrElse {
+                    Logger.warn("Failed to estimate transfer funding fee", it, context = TAG)
+                    0uL
+                }
+            }
+            val txTotalSats = if (shouldUseSendAll) {
+                spendableBalance
+            } else {
+                order.feeSat.safe() + miningFee.safe()
+            }
 
             Logger.debug(
                 "BT confirm: spendable=$spendableBalance, feeSat=${order.feeSat}, " +
@@ -237,7 +255,14 @@ class TransferViewModel @Inject constructor(
                     channelId = order.channel?.shortChannelId,
                     isMaxAmount = shouldUseSendAll,
                 )
-                .onSuccess { txId -> fundPaidOrder(order, txId) }
+                .onSuccess { txId ->
+                    fundPaidOrder(
+                        order = order,
+                        txId = txId,
+                        txTotalSats = txTotalSats,
+                        preTransferOnchainSats = balanceDetails?.totalOnchainBalanceSats ?: spendableBalance,
+                    )
+                }
                 .onFailure { error ->
                     ToastEventBus.send(error)
                 }
@@ -251,6 +276,8 @@ class TransferViewModel @Inject constructor(
         createTransferActivity: Boolean = false,
         fee: ULong = 0uL,
         feeRate: ULong = 0uL,
+        txTotalSats: ULong? = null,
+        preTransferOnchainSats: ULong? = null,
     ) {
         cacheStore.addPaidOrder(orderId = order.id, txId = txId)
         transferRepo.createTransfer(
@@ -258,6 +285,8 @@ class TransferViewModel @Inject constructor(
             amountSats = order.clientBalanceSat.toLong(),
             fundingTxId = txId,
             lspOrderId = order.id,
+            txTotalSats = txTotalSats?.toLong(),
+            preTransferOnchainSats = preTransferOnchainSats?.toLong(),
         )
         if (createTransferActivity) {
             transferRepo.createPendingToSpendingActivity(

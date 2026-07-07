@@ -247,6 +247,8 @@ class TransferViewModelTest : BaseUnitTest() {
             eq(TXID),
             eq(order.id),
             isNull<UInt>(),
+            isNull<Long>(),
+            isNull<Long>(),
         )
         verify(transferRepo).createPendingToSpendingActivity(
             eq(order),

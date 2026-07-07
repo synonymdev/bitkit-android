@@ -47,8 +47,12 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val coopCloseSavingsSats = getCoopCloseTransferSats(activeTransfers, channels, balanceDetails)
             val lingeringCoopCloseSats = getLingeringCoopCloseSats(activeTransfers, channels, balanceDetails)
             val toSpendingAmount = paidOrdersSats.safe() + pendingChannelsSats.safe()
+            val orderPaymentsOnchainToSubtract = getOrderPaymentOnchainToSubtract(
+                activeTransfers = activeTransfers,
+                currentOnchainSats = balanceDetails.totalOnchainBalanceSats,
+            )
 
-            val totalOnchainSats = balanceDetails.totalOnchainBalanceSats
+            val totalOnchainSats = balanceDetails.totalOnchainBalanceSats.safe() - orderPaymentsOnchainToSubtract.safe()
             val channelFundableBalance = getMaxChannelFundableAmount(lightningRepo.getChannelFundableBalance())
             val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
             val afterClosingChannels = afterPendingChannels.safe() - toSavingsAmount.safe()
@@ -89,6 +93,27 @@ class DeriveBalanceStateUseCase @Inject constructor(
             }
             if (channelBalance == null) {
                 amount = amount.safe() + transfer.amountSats.toULong().safe()
+            }
+        }
+
+        return amount
+    }
+
+    private fun getOrderPaymentOnchainToSubtract(
+        activeTransfers: List<TransferEntity>,
+        currentOnchainSats: ULong,
+    ): ULong {
+        var amount = 0uL
+        val orderPayments = activeTransfers.filter {
+            it.type.isToSpending() && it.fundingTxId != null && it.lspOrderId != null
+        }
+
+        for (transfer in orderPayments) {
+            val txTotalSats = transfer.txTotalSats?.takeIf { it > 0 }?.toULong()
+            val preTransferOnchainSats = transfer.preTransferOnchainSats?.takeIf { it > 0 }?.toULong()
+
+            if (txTotalSats != null && preTransferOnchainSats != null && currentOnchainSats >= preTransferOnchainSats) {
+                amount = amount.safe() + txTotalSats.safe()
             }
         }
 

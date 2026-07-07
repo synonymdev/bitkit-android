@@ -1,0 +1,108 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 7,
+    "identityHash": "2b1cda225c170b5f1bbfbf76e5fa4cf5",
+    "entities": [
+      {
+        "tableName": "config",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`walletIndex` INTEGER NOT NULL, PRIMARY KEY(`walletIndex`))",
+        "fields": [
+          {
+            "fieldPath": "walletIndex",
+            "columnName": "walletIndex",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "walletIndex"
+          ]
+        }
+      },
+      {
+        "tableName": "transfers",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `type` TEXT NOT NULL, `amountSats` INTEGER NOT NULL, `channelId` TEXT, `fundingTxId` TEXT, `lspOrderId` TEXT, `isSettled` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `settledAt` INTEGER, `claimableAtHeight` INTEGER, `txTotalSats` INTEGER, `preTransferOnchainSats` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amountSats",
+            "columnName": "amountSats",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "channelId",
+            "columnName": "channelId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fundingTxId",
+            "columnName": "fundingTxId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lspOrderId",
+            "columnName": "lspOrderId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isSettled",
+            "columnName": "isSettled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "settledAt",
+            "columnName": "settledAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "claimableAtHeight",
+            "columnName": "claimableAtHeight",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "txTotalSats",
+            "columnName": "txTotalSats",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "preTransferOnchainSats",
+            "columnName": "preTransferOnchainSats",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2b1cda225c170b5f1bbfbf76e5fa4cf5')"
+    ]
+  }
+}
