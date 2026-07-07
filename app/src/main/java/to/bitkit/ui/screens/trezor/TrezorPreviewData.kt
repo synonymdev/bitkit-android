@@ -18,7 +18,6 @@ import com.synonym.bitkitcore.TrezorTransportType
 import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WalletBalance
 import kotlinx.collections.immutable.persistentListOf
-import to.bitkit.ext.create
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.repositories.ConnectedTrezorDevice

@@ -204,6 +204,7 @@ class TransferViewModel @Inject constructor(
     }
 
     /** Pays for the order and start watching it for state updates */
+    @Suppress("LongMethod")
     fun onTransferToSpendingConfirm(order: IBtOrder, speed: TransactionSpeed? = null) {
         viewModelScope.launch {
             val address = order.payment?.onchain?.address.orEmpty()

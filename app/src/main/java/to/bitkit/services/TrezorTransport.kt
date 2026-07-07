@@ -674,13 +674,17 @@ class TrezorTransport @Inject constructor(
         return UsbEndpoints(read = readEndpoint, write = writeEndpoint)
     }
 
-    @Suppress("TooGenericExceptionCaught", "ReturnCount")
+    @Suppress("TooGenericExceptionCaught", "ReturnCount", "LongMethod")
     private fun openUsbDevice(path: String): TrezorTransportWriteResult {
         return try {
             closeUsbDevice(path)
 
             val device = usbManager.deviceList[path]
-                ?: return TrezorTransportWriteResult(success = false, error = "Device not found: $path", errorCode = null)
+                ?: return TrezorTransportWriteResult(
+                    success = false,
+                    error = "Device not found: $path",
+                    errorCode = null,
+                )
 
             if (!usbManager.hasPermission(device)) {
                 if (!requestUsbPermissionEnabled) {
@@ -701,12 +705,20 @@ class TrezorTransport @Inject constructor(
             }
 
             val connection = usbManager.openDevice(device)
-                ?: return TrezorTransportWriteResult(success = false, error = "Failed to open device: $path", errorCode = null)
+                ?: return TrezorTransportWriteResult(
+                    success = false,
+                    error = "Failed to open device: $path",
+                    errorCode = null,
+                )
 
             val usbInterface = device.getInterface(0)
             if (!connection.claimInterface(usbInterface, true)) {
                 connection.close()
-                return TrezorTransportWriteResult(success = false, error = "Failed to claim interface", errorCode = null)
+                return TrezorTransportWriteResult(
+                    success = false,
+                    error = "Failed to claim interface",
+                    errorCode = null,
+                )
             }
 
             val endpoints = findUsbEndpoints(usbInterface)
@@ -730,7 +742,11 @@ class TrezorTransport @Inject constructor(
             TrezorTransportWriteResult(success = true, error = "", errorCode = null)
         } catch (e: Exception) {
             Logger.error("USB open failed", e, context = TAG)
-            TrezorTransportWriteResult(success = false, error = e.message ?: "Unknown error", errorCode = null)
+            TrezorTransportWriteResult(
+                success = false,
+                error = e.message ?: "Unknown error",
+                errorCode = null,
+            )
         }
     }
 
@@ -746,7 +762,11 @@ class TrezorTransport @Inject constructor(
             TrezorTransportWriteResult(success = true, error = "", errorCode = null)
         } catch (e: Exception) {
             Logger.error("USB close failed", e, context = TAG)
-            TrezorTransportWriteResult(success = false, error = e.message ?: "Unknown error", errorCode = null)
+            TrezorTransportWriteResult(
+                success = false,
+                error = e.message ?: "Unknown error",
+                errorCode = null,
+            )
         }
     }
 
@@ -782,10 +802,20 @@ class TrezorTransport @Inject constructor(
             }
 
             Logger.debug("USB read '$bytesRead' bytes from '$path'", context = TAG)
-            TrezorTransportReadResult(success = true, data = buffer.copyOf(bytesRead), error = "", errorCode = null)
+            TrezorTransportReadResult(
+                success = true,
+                data = buffer.copyOf(bytesRead),
+                error = "",
+                errorCode = null,
+            )
         } catch (e: Exception) {
             Logger.error("USB read failed", e, context = TAG)
-            TrezorTransportReadResult(success = false, data = byteArrayOf(), error = e.message ?: "Unknown error", errorCode = null)
+            TrezorTransportReadResult(
+                success = false,
+                data = byteArrayOf(),
+                error = e.message ?: "Unknown error",
+                errorCode = null,
+            )
         }
     }
 
@@ -793,7 +823,11 @@ class TrezorTransport @Inject constructor(
     private fun writeUsbChunk(path: String, data: ByteArray): TrezorTransportWriteResult {
         return try {
             val openDevice = usbConnections[path]
-                ?: return TrezorTransportWriteResult(success = false, error = "Device not open: $path", errorCode = null)
+                ?: return TrezorTransportWriteResult(
+                    success = false,
+                    error = "Device not open: $path",
+                    errorCode = null,
+                )
 
             val bytesWritten = openDevice.connection.bulkTransfer(
                 openDevice.writeEndpoint,
@@ -802,14 +836,22 @@ class TrezorTransport @Inject constructor(
                 WRITE_TIMEOUT_MS,
             )
             if (bytesWritten != data.size) {
-                return TrezorTransportWriteResult(success = false, error = "USB write timed out", errorCode = null)
+                return TrezorTransportWriteResult(
+                    success = false,
+                    error = "USB write timed out",
+                    errorCode = null,
+                )
             }
 
             Logger.debug("USB wrote '${data.size}' bytes to '$path'", context = TAG)
             TrezorTransportWriteResult(success = true, error = "", errorCode = null)
         } catch (e: Exception) {
             Logger.error("USB write failed", e, context = TAG)
-            TrezorTransportWriteResult(success = false, error = e.message ?: "Unknown error", errorCode = null)
+            TrezorTransportWriteResult(
+                success = false,
+                error = e.message ?: "Unknown error",
+                errorCode = null,
+            )
         }
     }
 
@@ -875,18 +917,30 @@ class TrezorTransport @Inject constructor(
         if (device.bondState == BluetoothDevice.BOND_NONE) {
             Logger.info("Device not bonded, initiating bonding: '$address'", context = TAG)
             if (!device.createBond()) {
-                return TrezorTransportWriteResult(success = false, error = "Failed to initiate bonding", errorCode = null)
+                return TrezorTransportWriteResult(
+                    success = false,
+                    error = "Failed to initiate bonding",
+                    errorCode = null,
+                )
             }
             var bondAttempts = 0
             while (device.bondState != BluetoothDevice.BOND_BONDED && bondAttempts < MAX_BOND_POLL_ATTEMPTS) {
                 Thread.sleep(BOND_POLL_INTERVAL_MS)
                 bondAttempts++
                 if (device.bondState == BluetoothDevice.BOND_NONE) {
-                    return TrezorTransportWriteResult(success = false, error = "Bonding failed or rejected", errorCode = null)
+                    return TrezorTransportWriteResult(
+                        success = false,
+                        error = "Bonding failed or rejected",
+                        errorCode = null,
+                    )
                 }
             }
             if (device.bondState != BluetoothDevice.BOND_BONDED) {
-                return TrezorTransportWriteResult(success = false, error = "Bonding timeout", errorCode = null)
+                return TrezorTransportWriteResult(
+                    success = false,
+                    error = "Bonding timeout",
+                    errorCode = null,
+                )
             }
             Logger.info("Device bonded successfully: '$address'", context = TAG)
         } else if (device.bondState == BluetoothDevice.BOND_BONDING) {
@@ -1005,10 +1059,18 @@ class TrezorTransport @Inject constructor(
             connection.gatt.close()
             Thread.sleep(100)
             Logger.info("BLE device closed: '$path'", context = TAG)
-            TrezorTransportWriteResult(success = timeoutError == null, error = timeoutError.orEmpty(), errorCode = null)
+            TrezorTransportWriteResult(
+                success = timeoutError == null,
+                error = timeoutError.orEmpty(),
+                errorCode = null,
+            )
         } catch (e: Exception) {
             Logger.error("BLE close failed", e, context = TAG)
-            TrezorTransportWriteResult(success = false, error = e.message ?: "BLE close failed", errorCode = null)
+            TrezorTransportWriteResult(
+                success = false,
+                error = e.message ?: "BLE close failed",
+                errorCode = null,
+            )
         } finally {
             userInitiatedCloseSet.remove(path)
         }
@@ -1037,7 +1099,12 @@ class TrezorTransport @Inject constructor(
             TrezorTransportReadResult(success = true, data = data, error = "", errorCode = null)
         } catch (e: Exception) {
             Logger.error("BLE read failed", e, context = TAG)
-            TrezorTransportReadResult(success = false, data = byteArrayOf(), error = e.message ?: "Read failed", errorCode = null)
+            TrezorTransportReadResult(
+                success = false,
+                data = byteArrayOf(),
+                error = e.message ?: "Read failed",
+                errorCode = null,
+            )
         }
     }
 
@@ -1052,14 +1119,26 @@ class TrezorTransport @Inject constructor(
     @SuppressLint("MissingPermission")
     private fun writeBleChunk(path: String, data: ByteArray): TrezorTransportWriteResult {
         val connection = bleConnections[path]
-            ?: return TrezorTransportWriteResult(success = false, error = "Device not open: $path", errorCode = null)
+            ?: return TrezorTransportWriteResult(
+                success = false,
+                error = "Device not open: $path",
+                errorCode = null,
+            )
 
         val writeChar = connection.writeCharacteristic
-            ?: return TrezorTransportWriteResult(success = false, error = "Write characteristic not available", errorCode = null)
+            ?: return TrezorTransportWriteResult(
+                success = false,
+                error = "Write characteristic not available",
+                errorCode = null,
+            )
 
         if (!connection.isConnected) {
             Logger.warn("BLE write attempted on disconnected device: '$path'", context = TAG)
-            return TrezorTransportWriteResult(success = false, error = "Device disconnected", errorCode = null)
+            return TrezorTransportWriteResult(
+                success = false,
+                error = "Device disconnected",
+                errorCode = null,
+            )
         }
 
         return try {
@@ -1127,7 +1206,11 @@ class TrezorTransport @Inject constructor(
             TrezorTransportWriteResult(success = false, error = lastError, errorCode = null)
         } catch (e: Exception) {
             Logger.error("BLE write failed", e, context = TAG)
-            TrezorTransportWriteResult(success = false, error = e.message ?: "Write failed", errorCode = null)
+            TrezorTransportWriteResult(
+                success = false,
+                error = e.message ?: "Write failed",
+                errorCode = null,
+            )
         }
     }
 

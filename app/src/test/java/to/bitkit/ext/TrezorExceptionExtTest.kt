@@ -1,10 +1,10 @@
 package to.bitkit.ext
 
 import com.synonym.bitkitcore.TrezorException
+import org.junit.Test
 import to.bitkit.utils.AppError
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import org.junit.Test
 
 class TrezorExceptionExtTest {
     @Test
