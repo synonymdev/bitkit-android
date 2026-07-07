@@ -18,4 +18,6 @@ data class TransferEntity(
     val createdAt: Long,
     val settledAt: Long? = null,
     val claimableAtHeight: Int? = null,
+    val txTotalSats: Long? = null,
+    val preTransferOnchainSats: Long? = null,
 )

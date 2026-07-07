@@ -15,7 +15,14 @@ data class BalanceState(
     val balanceInTransferToSpending: ULong = 0uL,
     val hardwareWallets: List<HwWalletBalance> = emptyList(),
 ) {
-    val totalSats get() = totalOnchainSats + totalLightningSats
+    val totalSats
+        get() = totalOnchainSats
+            .safe()
+            .plus(totalLightningSats.safe())
+            .safe()
+            .plus(balanceInTransferToSavings.safe())
+            .safe()
+            .plus(balanceInTransferToSpending.safe())
 
     val totalHardwareSats get() = hardwareWallets.fold(0uL) { acc, wallet -> acc.safe() + wallet.sats.safe() }
 

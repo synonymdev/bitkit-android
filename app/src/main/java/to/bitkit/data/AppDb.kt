@@ -31,7 +31,7 @@ import to.bitkit.env.Env
         ConfigEntity::class,
         TransferEntity::class,
     ],
-    version = 6,
+    version = 7,
 )
 @TypeConverters(StringListConverter::class)
 abstract class AppDb : RoomDatabase() {
@@ -42,6 +42,13 @@ abstract class AppDb : RoomDatabase() {
         private val MIGRATION_5_6 = object : Migration(5, 6) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE transfers ADD COLUMN claimableAtHeight INTEGER DEFAULT NULL")
+            }
+        }
+
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE transfers ADD COLUMN txTotalSats INTEGER DEFAULT NULL")
+                db.execSQL("ALTER TABLE transfers ADD COLUMN preTransferOnchainSats INTEGER DEFAULT NULL")
             }
         }
 
@@ -72,7 +79,7 @@ abstract class AppDb : RoomDatabase() {
                         }
                     }
                 })
-                .addMigrations(MIGRATION_5_6)
+                .addMigrations(MIGRATION_5_6, MIGRATION_6_7)
                 .apply {
                     if (Env.isDebug) fallbackToDestructiveMigration(dropAllTables = true)
                 }

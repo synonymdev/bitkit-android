@@ -95,6 +95,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             balanceState.totalLightningSats,
             "Lightning balance unchanged - channel not open yet"
         )
+        assertEquals(200_000uL, balanceState.totalSats)
     }
 
     @Test
@@ -211,6 +212,40 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             balanceState.totalLightningSats,
             "Lightning balance reduced - pending channel not ready"
         )
+        assertEquals(150_000uL, balanceState.totalSats)
+    }
+
+    @Test
+    fun `should subtract LSP funding transaction while onchain balance has not synced`() = test {
+        val initialOnchainSats = 86_901uL
+        val transferSats = 20_212uL
+        val txTotalSats = 25_809uL
+        val balance = newBalanceDetails().copy(
+            totalOnchainBalanceSats = initialOnchainSats,
+            totalLightningBalanceSats = 0uL,
+        )
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balance))
+        val transfers = listOf(
+            newTransferEntity(
+                type = TransferType.TO_SPENDING,
+                amountSats = transferSats.toLong(),
+                fundingTxId = "funding-tx-id",
+                lspOrderId = "lsp-order-id",
+                txTotalSats = txTotalSats.toLong(),
+                preTransferOnchainSats = initialOnchainSats.toLong(),
+            )
+        )
+
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(transferRepo.activeTransfers).thenReturn(flowOf(transfers))
+
+        val result = sut()
+
+        assertTrue(result.isSuccess)
+        val balanceState = result.getOrThrow()
+        assertEquals(61_092uL, balanceState.totalOnchainSats)
+        assertEquals(transferSats, balanceState.balanceInTransferToSpending)
+        assertEquals(81_304uL, balanceState.totalSats)
     }
 
     @Test
@@ -251,6 +286,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             balanceState.totalLightningSats,
             "Lightning balance reduced while the discovered LSP channel is still pending"
         )
+        assertEquals(150_000uL, balanceState.totalSats)
     }
 
     @Test
@@ -294,6 +330,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         val balanceState = result.getOrThrow()
         assertEquals(amountSats, balanceState.balanceInTransferToSpending)
         assertEquals(0uL, balanceState.totalLightningSats)
+        assertEquals(150_000uL, balanceState.totalSats)
     }
 
     @Test
@@ -590,6 +627,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             balanceState.totalLightningSats,
             "Lightning reduced by manual channel (30k) + transfer to savings (20k)"
         )
+        assertEquals(150_000uL, balanceState.totalSats)
     }
 
     private suspend fun newBalanceDetails() = BalanceDetails(
@@ -632,6 +670,8 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         channelId: String? = null,
         fundingTxId: String? = null,
         lspOrderId: String? = null,
+        txTotalSats: Long? = null,
+        preTransferOnchainSats: Long? = null,
     ) = TransferEntity(
         id = "test-transfer-${System.currentTimeMillis()}",
         type = type,
@@ -641,5 +681,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
         lspOrderId = lspOrderId,
         isSettled = false,
         createdAt = System.currentTimeMillis(),
+        txTotalSats = txTotalSats,
+        preTransferOnchainSats = preTransferOnchainSats,
     )
 }
