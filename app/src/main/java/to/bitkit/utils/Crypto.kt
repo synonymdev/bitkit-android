@@ -30,6 +30,10 @@ import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
+fun sha256d(input: ByteArray): ByteArray {
+    return MessageDigest.getInstance("SHA-256").run { digest(digest(input)) }
+}
+
 @Suppress("SwallowedException", "MagicNumber", "TooGenericExceptionCaught")
 @Singleton
 class Crypto @Inject constructor() {
@@ -224,10 +228,6 @@ class Crypto @Inject constructor() {
         val sBytes = BigIntegers.asUnsignedByteArray(32, s)
         val signature = byteArrayOf(recIdByte) + rBytes + sBytes
         return signature.toHex()
-    }
-
-    private fun sha256d(input: ByteArray): ByteArray {
-        return MessageDigest.getInstance("SHA-256").run { digest(digest(input)) }
     }
 }
 

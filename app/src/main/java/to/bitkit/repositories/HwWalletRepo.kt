@@ -48,6 +48,7 @@ import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
+import to.bitkit.models.identityKey
 import to.bitkit.models.safe
 import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType
@@ -169,7 +170,7 @@ class HwWalletRepo @Inject constructor(
         runSuspendCatching {
             val devices = hwWalletStore.loadKnownDevices()
             val target = requireNotNull(devices.find { it.id == deviceId }) { "Unknown hardware wallet '$deviceId'" }
-            val groupIds = devices.filter { it.walletKey == target.walletKey }.map { it.id }.toSet()
+            val groupIds = devices.filter { it.identityKey == target.identityKey }.map { it.id }.toSet()
             val xpub = requireNotNull(target.xpubs[addressType.settingsKey]) {
                 "Hardware wallet '$deviceId' has no '${addressType.settingsKey}' account"
             }
@@ -261,7 +262,7 @@ class HwWalletRepo @Inject constructor(
             val target = requireNotNull(devices.find { it.id == deviceId }) { "Unknown hardware wallet '$deviceId'" }
             val customLabel = label.trim().take(DEVICE_LABEL_MAX_LENGTH).ifEmpty { null }
             val updated = devices.map {
-                if (it.walletKey == target.walletKey) it.copy(customLabel = customLabel) else it
+                if (it.identityKey == target.identityKey) it.copy(customLabel = customLabel) else it
             }
             hwWalletStore.saveKnownDevices(updated)
         }
@@ -279,7 +280,11 @@ class HwWalletRepo @Inject constructor(
             val target = knownDevices.find { it.id == deviceId }
             val ids = when (target) {
                 null -> setOf(deviceId)
-                else -> knownDevices.filter { it.walletKey == target.walletKey }.map { it.id }.toSet()
+                else ->
+                    knownDevices
+                        .filter { it.identityKey == target.identityKey }
+                        .map { it.id }
+                        .toSet()
             }
             activeWatchers.toList()
                 .filter { it.toDeviceId() in ids }
@@ -294,7 +299,7 @@ class HwWalletRepo @Inject constructor(
             target?.walletId?.takeIf { it.isNotBlank() }
         }.fold(
             onSuccess = {
-                if (it == null) Result.success(Unit) else activityRepo.deleteActivitiesForWallet(it)
+                if (it == null) Result.success(Unit) else activityRepo.deleteForWallet(it)
             },
             onFailure = { Result.failure(it) },
         ).onFailure {
@@ -312,7 +317,7 @@ class HwWalletRepo @Inject constructor(
         // identity, so group by them to show one wallet and count its balance once.
         data.knownDevices
             .filter { it.xpubs.isNotEmpty() }
-            .groupBy { it.walletKey }
+            .groupBy { it.identityKey }
             .map { (_, devices) ->
                 val connectedDevice = devices.find { it.id == trezorState.connectedDeviceId() }
                 val device = connectedDevice ?: devices.maxBy { it.lastConnectedAt }
@@ -384,7 +389,7 @@ class HwWalletRepo @Inject constructor(
                 val updatedWatcherData = _watcherData.value + (watcherId to watcher)
                 _watcherData.update { updatedWatcherData }
 
-                activityRepo.persistHardwareActivities(activities, transactionDetails)
+                activityRepo.persistHardware(activities, transactionDetails)
                     .getOrElse { return@collect }
 
                 emitReceivedTxs(previous, activities, updatedWatcherData)
@@ -587,14 +592,6 @@ private data class WatcherSettings(
     val monitoredTypes: Set<String>,
     val electrumUrl: String,
 )
-
-/**
- * Cross-transport identity of the wallet a device entry tracks: entries created by
- * pairing the same physical device over different transports share the same xpubs.
- * Entries without captured xpubs fall back to their own transport-level id.
- */
-private val KnownDevice.walletKey: String
-    get() = xpubs.values.sorted().joinToString().ifEmpty { id }
 
 /**
  * Resolves the name shown for a hardware wallet: the Bitkit-side custom label if the user set one,

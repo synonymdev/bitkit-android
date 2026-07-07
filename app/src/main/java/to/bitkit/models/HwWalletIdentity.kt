@@ -1,45 +1,44 @@
 package to.bitkit.models
 
+import to.bitkit.utils.sha256d
 import java.math.BigInteger
-import java.security.MessageDigest
 
 private const val EXTENDED_KEY_VERSION_SIZE = 4
 private const val BASE58_CHECKSUM_SIZE = 4
 private const val BASE58_ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
 private const val BASE58_ZERO = '1'
-private const val SHA_256 = "SHA-256"
 private val BASE58_RADIX = BigInteger.valueOf(58L)
 private val XPUB_VERSION = byteArrayOf(0x04.toByte(), 0x88.toByte(), 0xB2.toByte(), 0x1E.toByte())
 private val TPUB_VERSION = byteArrayOf(0x04.toByte(), 0x35.toByte(), 0x87.toByte(), 0xCF.toByte())
 
-val KnownDevice.hwWalletIdentityKey: String
-    get() = hwWalletIdentityKey(xpubs, id)
+val KnownDevice.identityKey: String
+    get() = identityKey(xpubs, id)
 
-fun hwWalletIdentityKey(xpubs: Map<String, String>, fallback: String): String =
+fun identityKey(xpubs: Map<String, String>, fallback: String): String =
     xpubs.values.sorted().joinToString().ifEmpty { fallback }
 
-fun List<KnownDevice>.findHardwareWalletId(
+fun List<KnownDevice>.findWalletId(
     deviceId: String,
     xpubs: Map<String, String>,
     deriveWalletId: (Collection<String>) -> String,
 ): String {
-    val identityKey = hwWalletIdentityKey(xpubs, deviceId)
-    firstOrNull { it.hwWalletIdentityKey == identityKey }?.walletId?.takeIf { it.isNotBlank() }?.let { return it }
+    val targetIdentityKey = identityKey(xpubs, deviceId)
+    firstOrNull { it.identityKey == targetIdentityKey }?.walletId?.takeIf { it.isNotBlank() }?.let { return it }
     if (xpubs.values.any { it.isNotBlank() }) return deriveWalletId(xpubs.values)
 
     return firstOrNull { it.id == deviceId }?.walletId?.takeIf { it.isNotBlank() }.orEmpty()
 }
 
-fun List<KnownDevice>.withHardwareWalletIds(
+fun List<KnownDevice>.withWalletIds(
     deriveWalletId: (Collection<String>) -> String,
 ): List<KnownDevice> {
-    val existingByWallet = filter { it.walletId.isNotBlank() }
-        .associate { it.hwWalletIdentityKey to it.walletId }
-    val generatedByWallet = mutableMapOf<String, String>()
+    val existingByIdentity = filter { it.walletId.isNotBlank() }
+        .associate { it.identityKey to it.walletId }
+    val generatedByIdentity = mutableMapOf<String, String>()
 
     return map {
-        val walletId = existingByWallet[it.hwWalletIdentityKey]
-            ?: generatedByWallet.getOrPut(it.hwWalletIdentityKey) { deriveWalletId(it.xpubs.values) }
+        val walletId = existingByIdentity[it.identityKey]
+            ?: generatedByIdentity.getOrPut(it.identityKey) { deriveWalletId(it.xpubs.values) }
         if (it.walletId == walletId) it else it.copy(walletId = walletId)
     }
 }
@@ -69,7 +68,7 @@ private fun String.decodeBase58Check(): Result<ByteArray> = runCatching {
     check(decoded.size >= BASE58_CHECKSUM_SIZE)
     val payload = decoded.copyOfRange(0, decoded.size - BASE58_CHECKSUM_SIZE)
     val checksum = decoded.copyOfRange(decoded.size - BASE58_CHECKSUM_SIZE, decoded.size)
-    check(payload.sha256d().copyOfRange(0, BASE58_CHECKSUM_SIZE).contentEquals(checksum))
+    check(sha256d(payload).copyOfRange(0, BASE58_CHECKSUM_SIZE).contentEquals(checksum))
     payload
 }
 
@@ -88,7 +87,7 @@ private fun String.decodeBase58(): ByteArray {
 }
 
 private fun ByteArray.encodeBase58Check(): String {
-    val checksum = sha256d().copyOfRange(0, BASE58_CHECKSUM_SIZE)
+    val checksum = sha256d(this).copyOfRange(0, BASE58_CHECKSUM_SIZE)
     return (this + checksum).encodeBase58()
 }
 
@@ -102,9 +101,4 @@ private fun ByteArray.encodeBase58(): String {
     }
     repeat(takeWhile { it == 0.toByte() }.size) { encoded.append(BASE58_ZERO) }
     return encoded.reverse().toString()
-}
-
-private fun ByteArray.sha256d(): ByteArray {
-    val digest = MessageDigest.getInstance(SHA_256)
-    return digest.digest(digest.digest(this))
 }

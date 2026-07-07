@@ -292,7 +292,7 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `persistHardwareActivities upserts multiple activities and transaction details`() = test {
+    fun `persistHardware upserts multiple activities and transaction details`() = test {
         val activities = listOf(
             createOnchainActivity(
                 id = "hw-received-id",
@@ -333,7 +333,7 @@ class ActivityRepoTest : BaseUnitTest() {
         wheneverBlocking { coreService.activity.upsertList(activities) }.thenReturn(Unit)
         wheneverBlocking { coreService.activity.upsertTransactionDetailsList(details) }.thenReturn(Unit)
 
-        val result = sut.persistHardwareActivities(activities, details)
+        val result = sut.persistHardware(activities, details)
 
         assertTrue(result.isSuccess)
         verify(coreService.activity).upsertList(activities)
@@ -341,7 +341,7 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `persistHardwareActivities preserves transfer metadata for existing hardware activity`() = test {
+    fun `persistHardware preserves transfer metadata for existing hardware activity`() = test {
         val incoming = createOnchainActivity(
             id = "hw-transfer-txid",
             txId = "hw-transfer-txid",
@@ -376,15 +376,15 @@ class ActivityRepoTest : BaseUnitTest() {
         }.thenReturn(existing.v1)
         whenever { coreService.activity.upsertList(listOf(expected)) }.thenReturn(Unit)
 
-        val result = sut.persistHardwareActivities(listOf(incoming), emptyList())
+        val result = sut.persistHardware(listOf(incoming), emptyList())
 
         assertTrue(result.isSuccess)
         verify(coreService.activity).upsertList(listOf(expected))
     }
 
     @Test
-    fun `persistHardwareActivities does nothing when both lists are empty`() = test {
-        val result = sut.persistHardwareActivities(emptyList(), emptyList())
+    fun `persistHardware does nothing when both lists are empty`() = test {
+        val result = sut.persistHardware(emptyList(), emptyList())
 
         assertTrue(result.isSuccess)
         verify(coreService.activity, never()).upsertList(any())
@@ -392,10 +392,10 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `deleteActivitiesForWallet delegates to core delete by wallet id`() = test {
+    fun `deleteForWallet delegates to core delete by wallet id`() = test {
         wheneverBlocking { coreService.activity.deleteByWalletId(hardwareWalletId) }.thenReturn(3u)
 
-        val result = sut.deleteActivitiesForWallet(hardwareWalletId)
+        val result = sut.deleteForWallet(hardwareWalletId)
 
         assertTrue(result.isSuccess)
         verify(coreService.activity).deleteByWalletId(hardwareWalletId)

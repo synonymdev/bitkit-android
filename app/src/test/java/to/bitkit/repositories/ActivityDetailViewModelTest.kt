@@ -220,7 +220,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `reloadActivity keeps last state on failure`() = test {
+    fun `reload keeps last state on failure`() = test {
         val activity = createTestActivity(ACTIVITY_ID)
         val activitiesChangedFlow = MutableStateFlow(System.currentTimeMillis())
 

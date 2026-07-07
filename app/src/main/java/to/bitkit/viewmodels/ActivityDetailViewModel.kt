@@ -70,7 +70,7 @@ class ActivityDetailViewModel @Inject constructor(
                             it.copy(activityLoadState = ActivityLoadState.Success(activity))
                         }
                         loadTags()
-                        observeActivityChanges(activityId, walletId)
+                        observeChanges(activityId, walletId)
                     } else {
                         _uiState.update {
                             it.copy(
@@ -101,16 +101,16 @@ class ActivityDetailViewModel @Inject constructor(
         _tags.update { persistentListOf() }
     }
 
-    private fun observeActivityChanges(activityId: String, walletId: String?) {
+    private fun observeChanges(activityId: String, walletId: String?) {
         observeJob?.cancel()
         observeJob = viewModelScope.launch(bgDispatcher) {
             activityRepo.activitiesChanged.collect {
-                reloadActivity(activityId, walletId)
+                reload(activityId, walletId)
             }
         }
     }
 
-    private suspend fun reloadActivity(activityId: String, walletId: String?) {
+    private suspend fun reload(activityId: String, walletId: String?) {
         activityRepo.getActivity(activityId, walletId)
             .onSuccess { updatedActivity ->
                 if (updatedActivity != null) {
@@ -168,7 +168,7 @@ class ActivityDetailViewModel @Inject constructor(
                 forPaymentId = id,
                 syncLdkPayments = false,
             ).onSuccess {
-                reloadActivity(id, walletId)
+                reload(id, walletId)
             }
         }
     }

@@ -214,7 +214,7 @@ class ActivityRepo @Inject constructor(
         notifyActivitiesChanged()
     }
 
-    suspend fun persistHardwareActivities(
+    suspend fun persistHardware(
         activities: List<Activity>,
         transactionDetails: List<BitkitCoreTransactionDetails>,
     ): Result<Unit> = withContext(bgDispatcher) {
@@ -241,7 +241,7 @@ class ActivityRepo @Inject constructor(
         )
     }
 
-    suspend fun deleteActivitiesForWallet(walletId: String): Result<Unit> = withContext(bgDispatcher) {
+    suspend fun deleteForWallet(walletId: String): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
             val deleted = coreService.activity.deleteByWalletId(walletId)
             notifyActivitiesChanged()

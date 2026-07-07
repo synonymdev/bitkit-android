@@ -943,7 +943,7 @@ class ActivityService(
             }
         }
         if (existingActivity == null) {
-            existingActivity = findAnyOnchainActivityByTxId(kind.txid)
+            existingActivity = findAnyOnchainByTxId(kind.txid)
         }
 
         val existingOnchainActivity = existingActivity as? Activity.Onchain
@@ -1015,7 +1015,7 @@ class ActivityService(
         }
     }
 
-    private fun findAnyOnchainActivityByTxId(txId: String): Activity.Onchain? {
+    private fun findAnyOnchainByTxId(txId: String): Activity.Onchain? {
         return getActivities(
             walletId = null,
             filter = ActivityFilter.ONCHAIN,

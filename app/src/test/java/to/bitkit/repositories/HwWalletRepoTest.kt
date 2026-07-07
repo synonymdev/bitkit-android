@@ -92,8 +92,8 @@ class HwWalletRepoTest : BaseUnitTest() {
             val xpubs = invocation.getArgument<Collection<String>>(0)
             "derived-${xpubs.sorted().joinToString()}"
         }
-        whenever { activityRepo.persistHardwareActivities(any(), any()) }.thenReturn(Result.success(Unit))
-        whenever { activityRepo.deleteActivitiesForWallet(any()) }.thenReturn(Result.success(Unit))
+        whenever { activityRepo.persistHardware(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { activityRepo.deleteForWallet(any()) }.thenReturn(Result.success(Unit))
         whenever(clock.now()).thenReturn(Instant.fromEpochSeconds(1_700_000_000))
     }
 
@@ -178,7 +178,49 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(10_562_411uL, wallet.balanceSats)
         assertEquals(10_562_411uL, sut.totalSats.value)
         assertEquals(listOf("t1", "t2"), wallet.activities.map { (it as Activity.Onchain).v1.txId })
-        verify(activityRepo).persistHardwareActivities(listOf(received, sent), details)
+        verify(activityRepo).persistHardware(listOf(received, sent), details)
+    }
+
+    @Test
+    fun `transactions changed event from inactive watcher is ignored`() = test {
+        val sut = createRepo()
+        val activity = watcherActivity(txid = "t1", amount = 10_562_411uL)
+
+        watcherEvents.emit(
+            "random|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 10_562_411uL),
+                activities = listOf(activity),
+                transactionDetails = emptyList(),
+                txCount = 1u,
+                blockHeight = 850_000u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+
+        assertEquals(0uL, sut.totalSats.value)
+        verify(activityRepo, never()).persistHardware(listOf(activity), emptyList())
+    }
+
+    @Test
+    fun `transactions changed event updates balance and activities when persistence fails`() = test {
+        val activity = watcherActivity(txid = "t1", amount = 10_562_411uL)
+        whenever { activityRepo.persistHardware(listOf(activity), emptyList()) }
+            .thenReturn(Result.failure(AppError("persist failed")))
+        val sut = createRepo()
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 10_562_411uL),
+                activities = listOf(activity),
+                transactionDetails = emptyList(),
+                txCount = 1u,
+                blockHeight = 850_000u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+
+        assertEquals(10_562_411uL, sut.totalSats.value)
+        assertEquals(listOf(activity), sut.wallets.value.single().activities)
     }
 
     @Test
@@ -782,6 +824,23 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(true, result.isSuccess)
         verify(trezorRepo).stopWatcher("dev1|nativeSegwit")
         verify(trezorRepo).forgetDevice("dev1")
+        verify(activityRepo).deleteForWallet(trezorWalletId)
+    }
+
+    @Test
+    fun `removeDevice fails when activity purge fails`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any()) }.thenReturn(Result.success(Unit))
+        whenever { activityRepo.deleteForWallet(trezorWalletId) }
+            .thenReturn(Result.failure(AppError("purge failed")))
+        val sut = createRepo()
+        runCurrent()
+
+        val result = sut.removeDevice("dev1")
+
+        assertEquals(true, result.isFailure)
+        verify(activityRepo).deleteForWallet(trezorWalletId)
     }
 
     @Test
