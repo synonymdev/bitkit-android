@@ -726,14 +726,12 @@ class HwWalletRepoTest : BaseUnitTest() {
         )
         runCurrent()
 
-        // Dropping the native-segwit xpub stops the watcher; a failed stop keeps ghost balance visible.
         storeData.value = HwWalletData(
             knownDevices = listOf(device.copy(xpubs = mapOf("taproot" to "zpubTR"))),
         )
         runCurrent()
         assertEquals(100uL, sut.totalSats.value)
 
-        // Stop succeeds on a later sync: the watcher data is finally dropped.
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
         storeData.value = HwWalletData(
             knownDevices = listOf(

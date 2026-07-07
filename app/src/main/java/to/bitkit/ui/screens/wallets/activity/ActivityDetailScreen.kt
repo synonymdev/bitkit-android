@@ -55,25 +55,16 @@ import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import to.bitkit.R
-import to.bitkit.ext.confirmed
 import to.bitkit.ext.contact
 import to.bitkit.ext.create
-import to.bitkit.ext.doesExist
 import to.bitkit.ext.ellipsisMiddle
-import to.bitkit.ext.fee
-import to.bitkit.ext.feeRate
-import to.bitkit.ext.isBoosted
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
-import to.bitkit.ext.message
-import to.bitkit.ext.paymentState
 import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
 import to.bitkit.ext.totalValue
-import to.bitkit.ext.txType
-import to.bitkit.ext.value
 import to.bitkit.ext.walletId
 import to.bitkit.models.ActivityWalletType
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
@@ -364,8 +355,14 @@ private fun ActivityDetailContent(
 
     val amountPrefix = if (isSent) "-" else "+"
     val timestamp = item.timestamp()
-    val paymentValue = item.value()
-    val baseFee = item.fee()
+    val paymentValue = when (item) {
+        is Activity.Lightning -> item.v1.value
+        is Activity.Onchain -> item.v1.value
+    }
+    val baseFee = when (item) {
+        is Activity.Lightning -> item.v1.fee
+        is Activity.Onchain -> item.v1.fee
+    }
     val isSelfSend = isSent && paymentValue == 0uL
     val channelId = (item as? Activity.Onchain)?.v1?.channelId
     val txId = (item as? Activity.Onchain)?.v1?.txId
@@ -562,8 +559,8 @@ private fun ActivityDetailContent(
         )
 
         // Note section for Lightning payments with message
-        if (item is Activity.Lightning && item.message().isNotEmpty()) {
-            val message = item.message()
+        if (item is Activity.Lightning && item.v1.message.isNotEmpty()) {
+            val message = item.v1.message
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -668,11 +665,12 @@ private fun ActivityDetailContent(
                 val hasCompletedBoost = when (item) {
                     is Activity.Lightning -> false
                     is Activity.Onchain -> {
-                        if (item.isBoosted() && item.v1.boostTxIds.isNotEmpty()) {
-                            if (item.txType() == PaymentType.SENT) {
+                        val activity = item.v1
+                        if (activity.isBoosted && activity.boostTxIds.isNotEmpty()) {
+                            if (activity.txType == PaymentType.SENT) {
                                 true
                             } else {
-                                item.v1.boostTxIds.any { boostTxDoesExist[it] == true }
+                                activity.boostTxIds.any { boostTxDoesExist[it] == true }
                             }
                         } else {
                             false
@@ -858,7 +856,7 @@ private fun StatusSection(
         Row(verticalAlignment = Alignment.CenterVertically) {
             when (item) {
                 is Activity.Lightning -> {
-                    when (item.paymentState()) {
+                    when (item.v1.status) {
                         PaymentState.PENDING -> {
                             StatusRow(
                                 painterResource(R.drawable.ic_hourglass_simple),
@@ -882,8 +880,6 @@ private fun StatusSection(
                                 Colors.Purple,
                             )
                         }
-
-                        null -> Unit
                     }
                 }
 
@@ -894,29 +890,29 @@ private fun StatusSection(
                     var statusText = stringResource(R.string.wallet__activity_confirming)
                     var statusTestTag: String? = null
 
-                    if (item.isTransfer()) {
+                    if (item.v1.isTransfer) {
                         val context = LocalContext.current
-                        val duration = context.getFeeShortDescription(item.feeRate(), feeRates)
+                        val duration = context.getFeeShortDescription(item.v1.feeRate, feeRates)
                         statusText = stringResource(R.string.wallet__activity_transfer_pending)
                             .replace("{duration}", duration)
                         statusTestTag = "StatusTransfer"
                     }
 
-                    if (item.isBoosted()) {
+                    if (item.v1.isBoosted) {
                         statusIcon = painterResource(R.drawable.ic_timer_alt)
                         statusColor = Colors.Yellow
                         statusText = stringResource(R.string.wallet__activity_boosting)
                         statusTestTag = "StatusBoosting"
                     }
 
-                    if (item.confirmed() == true) {
+                    if (item.v1.confirmed) {
                         statusIcon = painterResource(R.drawable.ic_check_circle)
                         statusColor = Colors.Green
                         statusText = stringResource(R.string.wallet__activity_confirmed)
                         statusTestTag = "StatusConfirmed"
                     }
 
-                    if (!item.doesExist()) {
+                    if (!item.v1.doesExist) {
                         statusIcon = painterResource(R.drawable.ic_x)
                         statusColor = Colors.Red
                         statusText = stringResource(R.string.wallet__activity_removed)
@@ -989,7 +985,18 @@ private fun ZigzagDivider() {
 private fun PreviewLightningSent() {
     AppThemeSurface {
         ActivityDetailContent(
-            item = previewLightningDetailItem(),
+            item = Activity.Lightning(
+                v1 = LightningActivity.create(
+                    id = "test-lightning-1",
+                    txType = PaymentType.SENT,
+                    status = PaymentState.SUCCEEDED,
+                    value = 50000UL,
+                    invoice = "lnbc...",
+                    timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                    fee = 1UL,
+                    message = "Thanks for paying at the bar. Here's my share.",
+                )
+            ),
             assignedContact = null,
             tags = persistentListOf("Lunch", "Drinks"),
             onRemoveTag = {},
@@ -1009,7 +1016,20 @@ private fun PreviewLightningSent() {
 private fun PreviewOnchain() {
     AppThemeSurface {
         ActivityDetailContent(
-            item = previewOnchainDetailItem(),
+            item = Activity.Onchain(
+                v1 = OnchainActivity.create(
+                    id = "test-onchain-1",
+                    txType = PaymentType.RECEIVED,
+                    txId = "abc123",
+                    value = 100000UL,
+                    fee = 500UL,
+                    address = "bc1...",
+                    timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
+                    confirmed = true,
+                    feeRate = 8UL,
+                    confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
+                )
+            ),
             assignedContact = null,
             tags = persistentListOf(),
             onRemoveTag = {},
@@ -1032,7 +1052,18 @@ private fun PreviewSheetSmallScreen() {
             modifier = Modifier.sheetHeight(),
         ) {
             ActivityDetailContent(
-                item = previewLightningDetailItem(),
+                item = Activity.Lightning(
+                    v1 = LightningActivity.create(
+                        id = "test-lightning-1",
+                        txType = PaymentType.SENT,
+                        status = PaymentState.SUCCEEDED,
+                        value = 50000UL,
+                        invoice = "lnbc...",
+                        timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                        fee = 1UL,
+                        message = "Thanks for paying at the bar. Here's my share.",
+                    )
+                ),
                 assignedContact = null,
                 tags = persistentListOf("Lunch", "Drinks"),
                 onRemoveTag = {},
@@ -1059,61 +1090,27 @@ private fun shouldEnableBoostButton(
     if (isHardware) return false
     if (item !is Activity.Onchain) return false
 
-    // Check all disable conditions
-    val shouldDisable = isCpfpChild || !item.doesExist() || item.confirmed() == true ||
-        (item.isBoosted() && isBoostCompleted(item, boostTxDoesExist))
+    val activity = item.v1
+
+    val shouldDisable = isCpfpChild || !activity.doesExist || activity.confirmed ||
+        (activity.isBoosted && isBoostCompleted(activity, boostTxDoesExist))
 
     if (shouldDisable) return false
 
-    // Enable if not a transfer and has value
-    return !item.isTransfer() && item.value() > 0uL
+    return !activity.isTransfer && activity.value > 0uL
 }
 
 @ReadOnlyComposable
 @Composable
 private fun isBoostCompleted(
-    activity: Activity.Onchain,
+    activity: OnchainActivity,
     boostTxDoesExist: ImmutableMap<String, Boolean>,
 ): Boolean {
-    if (activity.v1.boostTxIds.isEmpty()) return true
+    if (activity.boostTxIds.isEmpty()) return true
 
-    if (activity.txType() == PaymentType.SENT) {
+    if (activity.txType == PaymentType.SENT) {
         return true
     } else {
-        return activity.v1.boostTxIds.any { boostTxDoesExist[it] == true }
+        return activity.boostTxIds.any { boostTxDoesExist[it] == true }
     }
-}
-
-private fun previewLightningDetailItem(): Activity.Lightning {
-    val timestamp = 1_700_000_000uL
-    return Activity.Lightning(
-        v1 = LightningActivity.create(
-            id = "test-lightning-1",
-            txType = PaymentType.SENT,
-            status = PaymentState.SUCCEEDED,
-            value = 50_000UL,
-            invoice = "lnbc...",
-            timestamp = timestamp,
-            fee = 1UL,
-            message = "Thanks for paying at the bar. Here's my share.",
-        ),
-    )
-}
-
-private fun previewOnchainDetailItem(): Activity.Onchain {
-    val timestamp = 1_699_996_400uL
-    return Activity.Onchain(
-        v1 = OnchainActivity.create(
-            id = "test-onchain-1",
-            txType = PaymentType.RECEIVED,
-            value = 100_000UL,
-            fee = 500UL,
-            timestamp = timestamp,
-            txId = "abc123",
-            address = "bc1...",
-            feeRate = 8UL,
-            confirmed = true,
-            confirmTimestamp = 1_700_000_000uL,
-        ),
-    )
 }

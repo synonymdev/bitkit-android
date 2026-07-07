@@ -46,7 +46,6 @@ import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.isSent
 import to.bitkit.ext.totalValue
-import to.bitkit.ext.txType
 import to.bitkit.models.Toast
 import to.bitkit.ui.Routes
 import to.bitkit.ui.appViewModel
@@ -304,11 +303,8 @@ private fun ColumnScope.OnchainDetails(
             valueContent = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     txDetails.inputs.forEach { input ->
-                        BodySSB(
-                            text = "${input.txid}:${input.vout}",
-                            maxLines = 1,
-                            overflow = TextOverflow.MiddleEllipsis,
-                        )
+                        val text = "${input.txid}:${input.vout}"
+                        BodySSB(text = text, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                     }
                 }
             },
@@ -321,11 +317,8 @@ private fun ColumnScope.OnchainDetails(
             valueContent = {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     txDetails.outputs.forEach { output ->
-                        BodySSB(
-                            text = output.scriptpubkeyAddress ?: "",
-                            maxLines = 1,
-                            overflow = TextOverflow.MiddleEllipsis,
-                        )
+                        val address = output.scriptpubkeyAddress ?: ""
+                        BodySSB(text = address, maxLines = 1, overflow = TextOverflow.MiddleEllipsis)
                     }
                 }
             },
@@ -346,7 +339,7 @@ private fun ColumnScope.OnchainDetails(
     val boostTxIds = onchain.v1.boostTxIds
     if (boostTxIds.isNotEmpty()) {
         boostTxIds.forEachIndexed { index, boostedTxId ->
-            val isRbf = onchain.txType() == PaymentType.SENT || !(boostTxDoesExist[boostedTxId] ?: true)
+            val isRbf = onchain.v1.txType == PaymentType.SENT || !(boostTxDoesExist[boostedTxId] ?: true)
             Section(
                 title = stringResource(
                     if (isRbf) R.string.wallet__activity_boosted_rbf else R.string.wallet__activity_boosted_cpfp
@@ -396,7 +389,19 @@ private fun Section(
 private fun PreviewLightning() {
     AppThemeSurface {
         ActivityExploreContent(
-            item = previewLightningDetailItem(),
+            item = Activity.Lightning(
+                v1 = LightningActivity.create(
+                    id = "test-lightning-1",
+                    txType = PaymentType.SENT,
+                    status = PaymentState.SUCCEEDED,
+                    value = 50000UL,
+                    invoice = "lnbc...",
+                    timestamp = (System.currentTimeMillis() / 1000).toULong(),
+                    fee = 1UL,
+                    message = "Thanks for paying at the bar. Here's my share.",
+                    preimage = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+                ),
+            ),
         )
     }
 }
@@ -406,42 +411,20 @@ private fun PreviewLightning() {
 private fun PreviewOnchain() {
     AppThemeSurface {
         ActivityExploreContent(
-            item = previewOnchainDetailItem(),
+            item = Activity.Onchain(
+                v1 = OnchainActivity.create(
+                    id = "test-onchain-1",
+                    txType = PaymentType.RECEIVED,
+                    txId = "abc123",
+                    value = 100000UL,
+                    fee = 500UL,
+                    address = "bc1...",
+                    timestamp = (System.currentTimeMillis() / 1000 - 3600).toULong(),
+                    confirmed = true,
+                    feeRate = 8UL,
+                    confirmTimestamp = (System.currentTimeMillis() / 1000).toULong(),
+                ),
+            ),
         )
     }
-}
-
-private fun previewLightningDetailItem(): Activity.Lightning {
-    val timestamp = 1_700_000_000uL
-    return Activity.Lightning(
-        v1 = LightningActivity.create(
-            id = "test-lightning-1",
-            txType = PaymentType.SENT,
-            status = PaymentState.SUCCEEDED,
-            value = 50_000UL,
-            invoice = "lnbc...",
-            timestamp = timestamp,
-            fee = 1UL,
-            message = "Thanks for paying at the bar. Here's my share.",
-            preimage = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-        ),
-    )
-}
-
-private fun previewOnchainDetailItem(): Activity.Onchain {
-    val timestamp = 1_699_996_400uL
-    return Activity.Onchain(
-        v1 = OnchainActivity.create(
-            id = "test-onchain-1",
-            txType = PaymentType.RECEIVED,
-            value = 100_000UL,
-            fee = 500UL,
-            timestamp = timestamp,
-            txId = "abc123",
-            address = "bc1...",
-            feeRate = 8UL,
-            confirmed = true,
-            confirmTimestamp = 1_700_000_000uL,
-        ),
-    )
 }

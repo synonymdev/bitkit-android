@@ -536,7 +536,6 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    /** Pays for the order by composing and signing the funding send on the Trezor, then watches it. */
     fun onTransferToSpendingHwConfirm(order: IBtOrder, deviceId: String) {
         if (hwTransferSignJob?.isActive == true) return
 

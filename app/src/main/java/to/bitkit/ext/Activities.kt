@@ -21,11 +21,6 @@ fun Activity.walletId(): String = when (this) {
 
 fun Activity.scopedId(): String = "${walletId()}:${rawId()}"
 
-fun Activity.activityKey(): String = when (this) {
-    is Activity.Lightning -> "lightning_${scopedId()}"
-    is Activity.Onchain -> "onchain_${scopedId()}"
-}
-
 fun Activity.isHardwareWalletActivity(): Boolean = ActivityWalletType.TREZOR.owns(walletId())
 
 fun Activity.txType(): PaymentType = when (this) {
@@ -50,21 +45,6 @@ fun Activity.totalValue() = when (this) {
         PaymentType.SENT -> v1.value + v1.fee
         else -> v1.value
     }
-}
-
-fun Activity.value() = when (this) {
-    is Activity.Lightning -> v1.value
-    is Activity.Onchain -> v1.value
-}
-
-fun Activity.fee() = when (this) {
-    is Activity.Lightning -> v1.fee
-    is Activity.Onchain -> v1.fee
-}
-
-fun Activity.message() = when (this) {
-    is Activity.Lightning -> v1.message
-    is Activity.Onchain -> ""
 }
 
 fun Activity.isBoosted() = when (this) {
@@ -107,16 +87,6 @@ fun Activity.isReplacedSentTransaction(txIdsInBoostTxIds: Set<String>): Boolean 
 fun Activity.paymentState(): PaymentState? = when (this) {
     is Activity.Lightning -> this.v1.status
     is Activity.Onchain -> null
-}
-
-fun Activity.confirmed(): Boolean? = when (this) {
-    is Activity.Lightning -> null
-    is Activity.Onchain -> v1.confirmed
-}
-
-fun Activity.feeRate(): ULong = when (this) {
-    is Activity.Lightning -> 0u
-    is Activity.Onchain -> v1.feeRate
 }
 
 fun Activity.Onchain.boostType() = when (this.v1.txType) {

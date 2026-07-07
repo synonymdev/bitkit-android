@@ -28,7 +28,6 @@ import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import to.bitkit.R
-import to.bitkit.ext.activityKey
 import to.bitkit.ext.scopedId
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.components.BodyM
@@ -82,7 +81,8 @@ fun ActivityListGrouped(
                     key = { index, item ->
                         when (item) {
                             is String -> "header_$item"
-                            is Activity -> item.activityKey()
+                            is Activity.Lightning -> "lightning_${item.scopedId()}"
+                            is Activity.Onchain -> "onchain_${item.scopedId()}"
                             else -> "item_$index"
                         }
                     }
@@ -176,7 +176,8 @@ fun LazyListScope.activityListGroupedItems(
             key = { index, item ->
                 when (item) {
                     is String -> "header_$item"
-                    is Activity -> item.activityKey()
+                    is Activity.Lightning -> "lightning_${item.scopedId()}"
+                    is Activity.Onchain -> "onchain_${item.scopedId()}"
                     else -> "item_$index"
                 }
             },
