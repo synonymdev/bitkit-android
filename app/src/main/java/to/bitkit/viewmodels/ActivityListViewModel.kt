@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
-import to.bitkit.ext.isHardwareWalletActivity
+import to.bitkit.ext.isFromHardwareWallet
 import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.scopedId
@@ -130,7 +130,7 @@ class ActivityListViewModel @Inject constructor(
         val all = activityRepo.getActivities(filter = ActivityFilter.ALL).getOrNull() ?: emptyList()
         val filtered = filterOutReplacedSentTransactions(all)
         _hardwareIds.update {
-            filtered.filter { it.isHardwareWalletActivity() }.map { it.scopedId() }.toImmutableSet()
+            filtered.filter { it.isFromHardwareWallet() }.map { it.scopedId() }.toImmutableSet()
         }
         _latestActivities.update { filtered.take(SIZE_LATEST).toImmutableList() }
         _lightningActivities.update { filtered.filterIsInstance<Activity.Lightning>().toImmutableList() }

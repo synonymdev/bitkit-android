@@ -21,7 +21,7 @@ fun Activity.walletId(): String = when (this) {
 
 fun Activity.scopedId(): String = "${walletId()}:${rawId()}"
 
-fun Activity.isHardwareWalletActivity(): Boolean = ActivityWalletType.TREZOR.owns(walletId())
+fun Activity.isFromHardwareWallet(): Boolean = ActivityWalletType.TREZOR.owns(walletId())
 
 fun Activity.txType(): PaymentType = when (this) {
     is Activity.Lightning -> v1.txType
