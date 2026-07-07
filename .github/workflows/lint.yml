@@ -48,7 +48,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload lint report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: lint_report_${{ github.run_number }}
           path: app/build/reports/detekt/

@@ -57,7 +57,7 @@ jobs:
         run: ./gradlew testDevDebugUnitTest
 
       - name: Upload test report
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: unit_test_report_${{ github.run_number }}
           path: app/build/reports/tests/testDevDebugUnitTest/

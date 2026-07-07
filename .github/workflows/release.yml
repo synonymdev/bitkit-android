@@ -177,7 +177,7 @@ jobs:
           echo "artifact_dir=$artifact_dir" >> "$GITHUB_OUTPUT"
 
       - name: Upload release artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.artifacts.outputs.artifact_name }}
           path: ${{ steps.artifacts.outputs.artifact_dir }}

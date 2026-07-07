@@ -64,7 +64,7 @@ jobs:
           mv "$apk" app/build/outputs/apk/dev/debug/bitkit_e2e.apk
 
       - name: Upload APK
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: bitkit-e2e-apk_${{ github.run_number }}
           path: app/build/outputs/apk/dev/debug/bitkit_e2e.apk
@@ -138,7 +138,7 @@ jobs:
           script: echo "Generated AVD snapshot for caching."
 
       - name: Download APK
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: bitkit-e2e-apk_${{ github.run_number }}
           path: bitkit-e2e-tests/aut
@@ -222,7 +222,7 @@ jobs:
 
       - name: Upload E2E Artifacts (${{ matrix.scenario.name }})
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-artifacts_${{ matrix.scenario.name }}_${{ matrix.rn_version }}_${{ github.run_number }}
           path: bitkit-e2e-tests/artifacts/
