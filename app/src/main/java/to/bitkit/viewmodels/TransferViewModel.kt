@@ -528,6 +528,13 @@ class TransferViewModel @Inject constructor(
         }
     }
 
+    fun warmUpHardwareConnection(deviceId: String) {
+        viewModelScope.launch {
+            hwWalletRepo.ensureConnected(deviceId)
+                .onFailure { Logger.warn("Failed to warm up hardware connection for '$deviceId'", it, context = TAG) }
+        }
+    }
+
     /** Pays for the order by composing and signing the funding send on the Trezor, then watches it. */
     fun onTransferToSpendingHwConfirm(order: IBtOrder, deviceId: String) {
         if (hwTransferSignJob?.isActive == true) return
