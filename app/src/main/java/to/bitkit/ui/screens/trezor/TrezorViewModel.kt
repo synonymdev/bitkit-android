@@ -10,7 +10,6 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
-import com.synonym.bitkitcore.HistoryTransaction
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorScriptType

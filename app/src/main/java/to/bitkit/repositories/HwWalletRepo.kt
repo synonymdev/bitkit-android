@@ -4,7 +4,6 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
-import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
@@ -35,7 +34,6 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
-import to.bitkit.ext.create
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
