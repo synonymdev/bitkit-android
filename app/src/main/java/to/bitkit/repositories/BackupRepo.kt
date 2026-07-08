@@ -35,8 +35,6 @@ import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.resetPin
 import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
-import to.bitkit.ext.decodeActivityBackupV1Compat
-import to.bitkit.ext.decodeMetadataBackupV1Compat
 import to.bitkit.ext.formatPlural
 import to.bitkit.ext.nowMillis
 import to.bitkit.models.ActivityBackupV1
@@ -583,7 +581,7 @@ class BackupRepo @Inject constructor(
 
         val result = runCatching {
             performRestore(BackupCategory.METADATA) { dataBytes ->
-                val parsed = String(dataBytes).decodeMetadataBackupV1Compat()
+                val parsed = json.decodeFromString<MetadataBackupV1>(String(dataBytes))
                 val cleanCache = parsed.cache.resetBip21() // Force address rotation
                 cacheStore.update { cleanCache }
                 Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
@@ -615,7 +613,7 @@ class BackupRepo @Inject constructor(
                 parsed.createdAt
             }
             performRestore(BackupCategory.ACTIVITY) { dataBytes ->
-                val parsed = String(dataBytes).decodeActivityBackupV1Compat()
+                val parsed = json.decodeFromString<ActivityBackupV1>(String(dataBytes))
                 activityRepo.restoreFromBackup(parsed)
                 parsed.createdAt
             }
