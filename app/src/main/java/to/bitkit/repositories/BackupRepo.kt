@@ -1,6 +1,9 @@
 package to.bitkit.repositories
 
 import android.content.Context
+import com.synonym.bitkitcore.migrateBackupActivitiesJson
+import com.synonym.bitkitcore.migrateBackupActivityTagsJson
+import com.synonym.bitkitcore.migrateBackupPreActivityMetadataJson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +28,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import to.bitkit.R
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
@@ -581,7 +587,11 @@ class BackupRepo @Inject constructor(
 
         val result = runCatching {
             performRestore(BackupCategory.METADATA) { dataBytes ->
-                val parsed = json.decodeFromString<MetadataBackupV1>(String(dataBytes))
+                val migrated = migrateCoreOwnedBackupFields(
+                    String(dataBytes),
+                    mapOf("tagMetadata" to ::migrateBackupPreActivityMetadataJson),
+                )
+                val parsed = json.decodeFromString<MetadataBackupV1>(migrated)
                 val cleanCache = parsed.cache.resetBip21() // Force address rotation
                 cacheStore.update { cleanCache }
                 Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
@@ -613,7 +623,14 @@ class BackupRepo @Inject constructor(
                 parsed.createdAt
             }
             performRestore(BackupCategory.ACTIVITY) { dataBytes ->
-                val parsed = json.decodeFromString<ActivityBackupV1>(String(dataBytes))
+                val migrated = migrateCoreOwnedBackupFields(
+                    String(dataBytes),
+                    mapOf(
+                        "activities" to ::migrateBackupActivitiesJson,
+                        "activityTags" to ::migrateBackupActivityTagsJson,
+                    ),
+                )
+                val parsed = json.decodeFromString<ActivityBackupV1>(migrated)
                 activityRepo.restoreFromBackup(parsed)
                 parsed.createdAt
             }
@@ -683,6 +700,28 @@ class BackupRepo @Inject constructor(
             .forEach {
                 scheduleBackup(it)
             }
+    }
+
+    /**
+     * Fill in wallet ids that predate wallet-scoped activity data before a backup
+     * envelope is decoded. Each Core-owned array field is handed to the matching
+     * Core migration helper as raw JSON, so the app never edits Core model JSON
+     * itself. Records that already carry a wallet id are left unchanged, so this
+     * is safe to run on current backups too.
+     */
+    private fun migrateCoreOwnedBackupFields(
+        raw: String,
+        fieldMigrations: Map<String, (String) -> String>,
+    ): String {
+        val root = json.parseToJsonElement(raw).jsonObject
+        val patched = root.toMutableMap()
+        for ((field, migrate) in fieldMigrations) {
+            val element = root[field]
+            if (element is JsonArray) {
+                patched[field] = json.parseToJsonElement(migrate(element.toString()))
+            }
+        }
+        return JsonObject(patched).toString()
     }
 
     private suspend fun performRestore(
