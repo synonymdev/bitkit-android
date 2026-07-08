@@ -37,6 +37,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.timestamp
 import to.bitkit.models.HwFundingAccount
 import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwFundingBroadcastResult
@@ -502,6 +503,7 @@ class HwWalletRepo @Inject constructor(
             .groupBy { it.rawId() }
             .values
             .map { it.mergedActivity() }
+            .sortedByDescending { it.timestamp() }
 
     private fun List<Activity>.mergedActivity(): Activity {
         if (size == 1) return first()

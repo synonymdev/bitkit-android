@@ -198,6 +198,30 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `merges activities in descending timestamp order`() = test {
+        val sut = createRepo()
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 200uL),
+                activities = listOf(
+                    watcherActivity(amount = 100uL, txid = "older", timestamp = 1_600_000_000uL),
+                    watcherActivity(amount = 100uL, txid = "newer", timestamp = 1_800_000_000uL),
+                ),
+                transactionDetails = emptyList(),
+                txCount = 2u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+
+        val activities = sut.wallets.value.single().activities
+        assertEquals(2, activities.size)
+        assertEquals("newer", (activities[0] as Activity.Onchain).v1.txId)
+        assertEquals("older", (activities[1] as Activity.Onchain).v1.txId)
+    }
+
+    @Test
     fun `merges duplicate tx activities from multiple address-type watchers`() = test {
         val sut = createRepo()
 
