@@ -9,6 +9,7 @@ import com.synonym.paykit.ContactProfileSource
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PublicationStatus
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -177,6 +178,18 @@ class PubkyRepoTest : BaseUnitTest() {
         val result = sut.completeAuthentication()
 
         assertTrue(result.isFailure)
+        verifyBlocking(pubkyService, never()) { completeAuth() }
+    }
+
+    @Test
+    fun `completeAuthentication should fail when auth is canceled before approval`() = test {
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        sut.startAuthentication()
+
+        val result = async { sut.completeAuthentication() }
+        sut.cancelAuthentication()
+
+        assertTrue(result.await().isFailure)
         verifyBlocking(pubkyService, never()) { completeAuth() }
     }
 

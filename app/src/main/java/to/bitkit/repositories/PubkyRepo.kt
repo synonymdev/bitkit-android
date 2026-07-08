@@ -25,7 +25,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -73,6 +72,8 @@ sealed class PubkyContactError(message: String) : AppError(message) {
 }
 
 private class PubkyAuthAttemptInactive : AppError("Auth attempt is no longer active")
+
+private enum class AuthAttemptWaitResult { Approved, Inactive }
 
 @Suppress("TooManyFunctions", "LargeClass", "LongParameterList")
 @Singleton
@@ -287,9 +288,8 @@ class PubkyRepo @Inject constructor(
         val attemptId = _activeAuthAttemptId.value ?: return Result.failure(PubkyAuthAttemptInactive())
         var didCompleteAuth = false
         return try {
-            waitForAuthApproval(attemptId)
-
             val result = runSuspendCatching {
+                waitForAuthApproval(attemptId)
                 withContext(ioDispatcher) {
                     pubkyService.completeAuth()
                     didCompleteAuth = true
@@ -426,8 +426,16 @@ class PubkyRepo @Inject constructor(
 
     private suspend fun waitForAuthApproval(attemptId: String) {
         if (_approvedAuthAttemptId.value == attemptId) return
-        _approvedAuthAttemptId.filter { it == attemptId }.first()
-        ensureAuthAttemptActive(attemptId)
+
+        val result = combine(_approvedAuthAttemptId, _activeAuthAttemptId) { approvedAttemptId, activeAttemptId ->
+            when {
+                approvedAttemptId == attemptId -> AuthAttemptWaitResult.Approved
+                activeAttemptId != attemptId -> AuthAttemptWaitResult.Inactive
+                else -> null
+            }
+        }.first { it != null }
+
+        if (result != AuthAttemptWaitResult.Approved) throw PubkyAuthAttemptInactive()
     }
 
     private fun ensureAuthAttemptActive(attemptId: String?) {

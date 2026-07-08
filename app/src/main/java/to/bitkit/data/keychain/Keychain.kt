@@ -88,7 +88,7 @@ class Keychain @Inject constructor(
         fun upsert(key: String, value: ByteArray) {
             try {
                 val encryptedValue = keyStore.encrypt(value)
-                kotlinx.coroutines.runBlocking {
+                runBlocking {
                     keychain.edit { it[key.indexedBlocking] = encryptedValue.toBase64() }
                 }
             } catch (c: CancellationException) {
@@ -102,7 +102,7 @@ class Keychain @Inject constructor(
         @Suppress("TooGenericExceptionCaught")
         fun delete(key: String) {
             try {
-                kotlinx.coroutines.runBlocking {
+                runBlocking {
                     keychain.edit { it.remove(key.indexedBlocking) }
                 }
             } catch (c: CancellationException) {
@@ -176,11 +176,11 @@ class Keychain @Inject constructor(
         }
 
     private val blockingSnapshot: Preferences
-        get() = kotlinx.coroutines.runBlocking { keychain.data.first() }
+        get() = runBlocking { keychain.data.first() }
 
     private val String.indexedBlocking: Preferences.Key<String>
         get() {
-            val walletIndex = kotlinx.coroutines.runBlocking {
+            val walletIndex = runBlocking {
                 db.configDao().getAll().first()
             }.firstOrNull()?.walletIndex ?: 0
             return "${this}_$walletIndex".let(::stringPreferencesKey)
