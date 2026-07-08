@@ -733,8 +733,8 @@ class TrezorRepo @Inject constructor(
             .any { it.matches(deviceId) && it.transportType == TransportType.BLUETOOTH }
     }
 
-    fun deriveWalletId(xpubs: Map<String, String>): String =
-        deriveHardwareWalletId(xpubs).orEmpty()
+    fun deriveWalletId(xpubs: Map<String, String>): String? =
+        deriveHardwareWalletId(xpubs)?.takeIf { it.isNotBlank() }
 
     private suspend fun connectedFeatures(deviceId: String): TrezorFeatures? {
         val current = _state.value.connected
