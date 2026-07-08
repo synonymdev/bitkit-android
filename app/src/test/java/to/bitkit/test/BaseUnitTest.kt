@@ -19,14 +19,17 @@ abstract class BaseUnitTest(
 
     protected val testDispatcher get() = coroutinesTestRule.testDispatcher
 
+    private var walletScopeRestore: AutoCloseable? = null
+
     @Before
     fun setUpWalletScope() {
-        WalletScope.testOverride = "wallet0"
+        walletScopeRestore = WalletScope.pushTestOverride("wallet0")
     }
 
     @After
     fun tearDownWalletScope() {
-        WalletScope.testOverride = null
+        walletScopeRestore?.close()
+        walletScopeRestore = null
     }
 
     protected fun test(block: suspend TestScope.() -> Unit) = runTest(testDispatcher) { block() }

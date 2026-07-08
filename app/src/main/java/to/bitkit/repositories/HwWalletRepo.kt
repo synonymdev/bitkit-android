@@ -495,7 +495,7 @@ class HwWalletRepo @Inject constructor(
     }
 
     private fun KnownDevice.resolvedWalletId(): String =
-        walletId.takeIf { it.isNotBlank() } ?: trezorRepo.deriveWalletId(xpubs, id)
+        walletId.takeIf { it.isNotBlank() } ?: trezorRepo.deriveWalletId(xpubs)
 
     private fun List<HwWatcherData>.toMergedActivities(): List<Activity> =
         flatMap { it.activities }

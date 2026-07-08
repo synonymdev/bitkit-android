@@ -28,6 +28,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
@@ -692,11 +693,7 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun ensureConnected(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
-        connectedFeatures(deviceId)?.let { return@withContext Result.success(it) }
-        if (isConnectInProgress()) {
-            awaitInFlightConnect(deviceId)
-            connectedFeatures(deviceId)?.let { return@withContext Result.success(it) }
-        }
+        awaitConnectedOrNull(deviceId)?.let { return@withContext Result.success(it) }
         if (isKnownBluetoothDevice(deviceId)) {
             return@withContext reconnectKnownBluetoothDevice(deviceId)
         }
@@ -714,11 +711,7 @@ class TrezorRepo @Inject constructor(
             if (attempt > 0) {
                 delay(TRANSPORT_RESTORED_RECONNECT_DELAY * attempt)
             }
-            connectedFeatures(deviceId)?.let { return Result.success(it) }
-            if (isConnectInProgress()) {
-                awaitInFlightConnect(deviceId)
-                connectedFeatures(deviceId)?.let { return Result.success(it) }
-            }
+            awaitConnectedOrNull(deviceId)?.let { return Result.success(it) }
             val allowBleFallback = attempt == TRANSPORT_RESTORED_MAX_ATTEMPTS - 1
             val result = connectKnownDevice(
                 deviceId = deviceId,
@@ -740,12 +733,21 @@ class TrezorRepo @Inject constructor(
             .any { it.matches(deviceId) && it.transportType == TransportType.BLUETOOTH }
     }
 
-    fun deriveWalletId(xpubs: Map<String, String>, deviceId: String = ""): String =
-        deriveHardwareWalletId(xpubs, deviceId)
+    fun deriveWalletId(xpubs: Map<String, String>): String =
+        deriveHardwareWalletId(xpubs).orEmpty()
 
     private suspend fun connectedFeatures(deviceId: String): TrezorFeatures? {
         val current = _state.value.connected
         return if (current?.id == deviceId && trezorService.isConnected()) current.features else null
+    }
+
+    private suspend fun awaitConnectedOrNull(deviceId: String): TrezorFeatures? {
+        connectedFeatures(deviceId)?.let { return it }
+        if (isConnectInProgress()) {
+            awaitInFlightConnect(deviceId)
+            connectedFeatures(deviceId)?.let { return it }
+        }
+        return null
     }
 
     private suspend fun awaitInFlightConnect(deviceId: String) {
@@ -754,7 +756,7 @@ class TrezorRepo @Inject constructor(
     }
 
     private suspend fun waitForConnectAttempt(deviceId: String) {
-        try {
+        runCatching {
             withTimeout(CONNECT_ATTEMPT_MAX_WAIT) {
                 while (true) {
                     if (connectedFeatures(deviceId) != null) return@withTimeout
@@ -762,8 +764,8 @@ class TrezorRepo @Inject constructor(
                     delay(CONNECT_ATTEMPT_POLL_INTERVAL)
                 }
             }
-        } catch (e: TimeoutCancellationException) {
-            // Expected: in-flight connect ran longer than our wait window; caller will retry.
+        }.onFailure {
+            if (it is CancellationException && it !is TimeoutCancellationException) throw it
         }
     }
 
@@ -771,6 +773,12 @@ class TrezorRepo @Inject constructor(
         deviceId: String,
         knownDevice: KnownDevice?,
         allowBleFallback: Boolean = true,
+    ): TrezorDeviceInfo = findKnownDeviceInScan(deviceId, knownDevice, allowBleFallback)
+
+    private suspend fun findKnownDeviceInScan(
+        deviceId: String,
+        knownDevice: KnownDevice?,
+        allowBleFallback: Boolean,
     ): TrezorDeviceInfo {
         val scannedDevices = trezorService.scan()
         Logger.debug(
@@ -1046,10 +1054,11 @@ class TrezorRepo @Inject constructor(
         awaitSetup()
         val knownDevices = (_state.value.knownDevices + loadKnownDevices()).distinctBy { it.id }
         val knownDevice = knownDevices.find { it.matches(deviceId) }
-        val devices = trezorService.scan()
-        val device = devices.find { it.id == deviceId }
-            ?: knownDevice?.takeIf { it.transportType == TransportType.BLUETOOTH }?.toDeviceInfo()
-            ?: throw AppError("Device not found during reconnect")
+        val device = findKnownDeviceInScan(
+            deviceId = deviceId,
+            knownDevice = knownDevice,
+            allowBleFallback = true,
+        )
         val features = connectWithThpRetry(device.id, trezorUiHandler.currentSelection())
         _state.update { it.copy(connected = ConnectedTrezorDevice(id = deviceId, features = features)) }
     }
@@ -1193,21 +1202,19 @@ private val KnownDevice.walletKey: String
 private fun walletKey(xpubs: Map<String, String>, fallback: String): String =
     xpubs.values.sorted().joinToString().ifEmpty { fallback }
 
-private fun deriveHardwareWalletId(xpubs: Map<String, String>, deviceId: String = ""): String =
-    runCatching { HwWalletId.derive(xpubs) }.getOrElse {
-        if (xpubs.isNotEmpty()) walletKey(xpubs, deviceId) else newHardwareWalletId()
+private fun deriveHardwareWalletId(xpubs: Map<String, String>): String? =
+    if (xpubs.isEmpty()) {
+        null
+    } else {
+        runCatching { HwWalletId.derive(xpubs) }.getOrNull()
     }
 
 private fun List<KnownDevice>.findHardwareWalletId(deviceId: String, xpubs: Map<String, String>): String {
     val walletKey = walletKey(xpubs, deviceId)
     return firstOrNull { it.id == deviceId }?.walletId?.takeIf { it.isNotBlank() }
         ?: firstOrNull { it.walletKey == walletKey }?.walletId?.takeIf { it.isNotBlank() }
-        ?: deriveHardwareWalletId(xpubs, deviceId)
+        ?: deriveHardwareWalletId(xpubs).orEmpty()
 }
-
-private fun newHardwareWalletId(): String = runCatching {
-    HwWalletId.derive(mapOf("fallback" to java.util.UUID.randomUUID().toString()))
-}.getOrElse { java.util.UUID.randomUUID().toString() }
 
 private fun List<KnownDevice>.withHardwareWalletIds(): List<KnownDevice> {
     val existingByWallet = filter { it.walletId.isNotBlank() }
@@ -1217,7 +1224,7 @@ private fun List<KnownDevice>.withHardwareWalletIds(): List<KnownDevice> {
     return map {
         val walletId = existingByWallet[it.walletKey]
             ?: generatedByWallet.getOrPut(it.walletKey) {
-                deriveHardwareWalletId(it.xpubs, it.id)
+                deriveHardwareWalletId(it.xpubs).orEmpty()
             }
         if (it.walletId == walletId) it else it.copy(walletId = walletId)
     }

@@ -45,7 +45,6 @@ import to.bitkit.services.TrezorTransport
 import to.bitkit.services.TrezorUiHandler
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
-import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -197,7 +196,7 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `initialize assigns wallet ids to restored devices missing them`() = test {
+    fun `initialize leaves wallet id blank until xpubs are available`() = test {
         val knownDevice = mockKnownDevice(walletId = "")
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         sut = createSut()
@@ -205,12 +204,8 @@ class TrezorRepoTest : BaseUnitTest() {
         val result = sut.initialize()
 
         assertTrue(result.isSuccess)
-        val savedCaptor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(savedCaptor.capture())
-        val saved = savedCaptor.firstValue.single()
-        assertEquals(knownDevice.id, saved.id)
-        assertNotNull(UUID.fromString(saved.walletId))
-        assertEquals(listOf(saved), sut.state.value.knownDevices)
+        verify(hwWalletStore, never()).saveKnownDevices(any())
+        assertEquals("", sut.state.value.knownDevices.single().walletId)
     }
 
     @Test
@@ -649,7 +644,7 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(TransportType.USB, saved.transportType)
         assertEquals("Savings", saved.label)
         assertEquals("Safe 5", saved.model)
-        assertNotNull(UUID.fromString(saved.walletId))
+        assertEquals("", saved.walletId)
     }
 
     @Test

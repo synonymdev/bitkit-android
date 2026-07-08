@@ -8,6 +8,7 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ComposeAccount
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.HistoryTransaction
+import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TransactionHistoryResult
@@ -315,7 +316,7 @@ internal object TrezorPreviewData {
 
     val sampleWatcherActivities = listOf(
         Activity.Onchain(
-            com.synonym.bitkitcore.OnchainActivity.create(walletId = "wallet0",
+            OnchainActivity.create(walletId = "wallet0",
                 id = SAMPLE_TXID,
                 txType = PaymentType.RECEIVED,
                 txId = SAMPLE_TXID,
@@ -327,7 +328,7 @@ internal object TrezorPreviewData {
             ),
         ),
         Activity.Onchain(
-            com.synonym.bitkitcore.OnchainActivity.create(walletId = "wallet0",
+            OnchainActivity.create(walletId = "wallet0",
                 id = "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3",
                 txType = PaymentType.SENT,
                 txId = "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3",

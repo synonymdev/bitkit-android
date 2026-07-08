@@ -4,8 +4,14 @@ import androidx.annotation.VisibleForTesting
 import com.synonym.bitkitcore.getDefaultWalletId
 
 object WalletScope {
+    private var testOverride: String? = null
+
     @VisibleForTesting
-    internal var testOverride: String? = null
+    internal fun pushTestOverride(walletId: String): AutoCloseable {
+        val previous = testOverride
+        testOverride = walletId
+        return AutoCloseable { testOverride = previous }
+    }
 
     val default: String
         get() = testOverride ?: lazyDefault
