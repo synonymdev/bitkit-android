@@ -4,6 +4,7 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.IBtOrder
+import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -263,19 +264,20 @@ class TransferRepo @Inject constructor(
     }
 
     private suspend fun markActivityAsTransfer(txid: String, channelId: String) {
-        val hardwareActivity = runSuspendCatching {
+        val hardwareActivities = runSuspendCatching {
             coreService.activity.get(
+                walletId = null,
                 filter = ActivityFilter.ONCHAIN,
-                limit = 50u,
-                sortDirection = SortDirection.DESC,
             )
         }.getOrNull().orEmpty()
             .filterIsInstance<Activity.Onchain>()
             .map { it.v1 }
-            .filter { it.txId == txid }
-            .firstOrNull { it.walletId != DEFAULT_WALLET_ID }
+            .filter { it.walletId != DEFAULT_WALLET_ID && it.txId == txid }
 
-        val activity = hardwareActivity
+        val hardwareTransferActivity = hardwareActivities.firstOrNull { it.isTransfer }
+            ?: hardwareActivities.singleOrNull { it.txType == PaymentType.SENT }
+
+        val activity = hardwareTransferActivity
             ?: coreService.activity.getOnchainActivityByTxId(txid)
             ?: return
 

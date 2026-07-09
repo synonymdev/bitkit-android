@@ -44,6 +44,7 @@ import kotlinx.collections.immutable.persistentMapOf
 import to.bitkit.R
 import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
+import to.bitkit.ext.isFromHardwareWallet
 import to.bitkit.ext.isSent
 import to.bitkit.ext.totalValue
 import to.bitkit.models.Toast
@@ -210,7 +211,11 @@ private fun ActivityExploreContent(
                 showBitcoinSymbol = false,
                 modifier = Modifier.weight(1f),
             )
-            ActivityIcon(activity = item, size = 48.dp)
+            ActivityIcon(
+                activity = item,
+                size = 48.dp,
+                isHardware = item.isFromHardwareWallet(),
+            )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -323,7 +328,7 @@ private fun ColumnScope.OnchainDetails(
                 }
             },
         )
-    } else {
+    } else if (!onchain.v1.isTransfer) {
         CircularProgressIndicator(
             strokeWidth = 2.dp,
             modifier = Modifier

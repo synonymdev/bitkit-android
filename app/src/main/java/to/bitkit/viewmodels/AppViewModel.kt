@@ -85,6 +85,7 @@ import to.bitkit.ext.claimableAtHeight
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.isFixedAmount
+import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
@@ -2879,10 +2880,12 @@ class AppViewModel @Inject constructor(
     }
 
     fun toast(error: Throwable) {
+        if (error.isTrezorUserCancellation()) return
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.common__error),
-            description = error.message ?: context.getString(R.string.common__error_body)
+            description = error.message?.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.common__error_body),
         )
     }
 

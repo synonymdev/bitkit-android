@@ -262,7 +262,7 @@ class ActivityService(
                 minDate = null,
                 maxDate = null,
                 limit = null,
-                sortDirection = null
+                sortDirection = null,
             )
             for (activity in activities) {
                 when (activity) {
@@ -329,11 +329,11 @@ class ActivityService(
         txid: String,
         walletId: String? = null,
     ): BitkitCoreTransactionDetails? = ServiceQueue.CORE.background {
-        getBitkitCoreTransactionDetails(walletId ?: defaultWalletId, txid)
+        getBitkitCoreTransactionDetails(walletId = walletId ?: defaultWalletId, txId = txid)
     }
 
     suspend fun getActivity(id: String, walletId: String? = null): Activity? = ServiceQueue.CORE.background {
-        getActivityById(walletId ?: defaultWalletId, id)
+        getActivityById(walletId = walletId ?: defaultWalletId, activityId = id)
     }
 
     suspend fun getOnchainActivityByTxId(
@@ -353,7 +353,7 @@ class ActivityService(
 
     @Suppress("LongParameterList")
     suspend fun get(
-        walletId: String? = null,
+        walletId: String? = defaultWalletId,
         filter: ActivityFilter? = null,
         txType: PaymentType? = null,
         tags: List<String>? = null,
@@ -363,15 +363,25 @@ class ActivityService(
         limit: UInt? = null,
         sortDirection: SortDirection? = null,
     ): List<Activity> = ServiceQueue.CORE.background {
-        getActivities(walletId, filter, txType, tags, search, minDate, maxDate, limit, sortDirection)
+        getActivities(
+            walletId = walletId,
+            filter = filter,
+            txType = txType,
+            tags = tags,
+            search = search,
+            minDate = minDate,
+            maxDate = maxDate,
+            limit = limit,
+            sortDirection = sortDirection,
+        )
     }
 
     suspend fun update(id: String, activity: Activity) = ServiceQueue.CORE.background {
-        updateActivity(id, activity)
+        updateActivity(activityId = id, activity = activity)
     }
 
     suspend fun delete(id: String, walletId: String? = null): Boolean = ServiceQueue.CORE.background {
-        deleteActivityById(walletId ?: defaultWalletId, id)
+        deleteActivityById(walletId = walletId ?: defaultWalletId, activityId = id)
     }
 
     suspend fun appendTags(
@@ -380,7 +390,7 @@ class ActivityService(
         walletId: String? = null,
     ): Result<Unit> = runSuspendCatching {
         ServiceQueue.CORE.background {
-            addTags(walletId ?: defaultWalletId, toActivityId, tags)
+            addTags(walletId = walletId ?: defaultWalletId, activityId = toActivityId, tags = tags)
         }
     }
 
@@ -389,12 +399,12 @@ class ActivityService(
         tags: List<String>,
         walletId: String? = null,
     ) = ServiceQueue.CORE.background {
-        removeTags(walletId ?: defaultWalletId, fromActivityId, tags)
+        removeTags(walletId = walletId ?: defaultWalletId, activityId = fromActivityId, tags = tags)
     }
 
     suspend fun tags(forActivityId: String, walletId: String? = null): List<String> =
         ServiceQueue.CORE.background {
-            getTags(walletId ?: defaultWalletId, forActivityId)
+            getTags(walletId = walletId ?: defaultWalletId, activityId = forActivityId)
         }
 
     suspend fun allPossibleTags(): List<String> = ServiceQueue.CORE.background {
@@ -425,7 +435,7 @@ class ActivityService(
         com.synonym.bitkitcore.addPreActivityMetadataTags(
             walletId = defaultWalletId,
             paymentId = paymentId,
-            tags = tags
+            tags = tags,
         )
     }
 
@@ -556,7 +566,7 @@ class ActivityService(
             return
         }
 
-        val existingActivity = getActivityById(defaultWalletId, payment.id)
+        val existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
         if (existingActivity is Activity.Lightning) {
             val statusChanging = existingActivity.v1.status != state
             val needsPrivateContactAttribution = existingActivity.v1.contact == null &&
@@ -596,8 +606,8 @@ class ActivityService(
             )
         }
 
-        if (getActivityById(defaultWalletId, payment.id) != null) {
-            updateActivity(payment.id, Activity.Lightning(ln))
+        if (getActivityById(walletId = defaultWalletId, activityId = payment.id) != null) {
+            updateActivity(activityId = payment.id, activity = Activity.Lightning(ln))
         } else {
             upsertActivity(Activity.Lightning(ln))
         }
@@ -936,14 +946,14 @@ class ActivityService(
         val timestamp = payment.latestUpdateTimestamp
         val confirmationData = getConfirmationStatus(kind, timestamp)
 
-        var existingActivity = getActivityById(defaultWalletId, payment.id)
+        var existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
         if (existingActivity == null) {
             getOnchainActivityByTxId(kind.txid)?.let {
                 existingActivity = Activity.Onchain(it)
             }
         }
         if (existingActivity == null) {
-            existingActivity = findAnyOnchainByTxId(kind.txid)
+            existingActivity = findHardwareTransferByTxId(kind.txid)
         }
 
         val existingOnchainActivity = existingActivity as? Activity.Onchain
@@ -1009,13 +1019,13 @@ class ActivityService(
 
         if (existingActivity != null && existingActivity is Activity.Onchain) {
             val existingOnchain = existingActivity.v1
-            updateActivity(existingOnchain.id, Activity.Onchain(onChain))
+            updateActivity(activityId = existingOnchain.id, activity = Activity.Onchain(onChain))
         } else {
             upsertActivity(Activity.Onchain(onChain))
         }
     }
 
-    private fun findAnyOnchainByTxId(txId: String): Activity.Onchain? {
+    private fun findHardwareTransferByTxId(txId: String): Activity.Onchain? {
         return getActivities(
             walletId = null,
             filter = ActivityFilter.ONCHAIN,
@@ -1024,9 +1034,11 @@ class ActivityService(
             search = null,
             minDate = null,
             maxDate = null,
-            limit = 50u,
-            sortDirection = SortDirection.DESC,
-        ).filterIsInstance<Activity.Onchain>().firstOrNull { it.v1.txId == txId }
+            limit = null,
+            sortDirection = null,
+        ).filterIsInstance<Activity.Onchain>().firstOrNull {
+            it.v1.walletId != defaultWalletId && it.v1.txId == txId && it.v1.isTransfer
+        }
     }
 
     private fun PaymentDirection.toPaymentType(): PaymentType =
@@ -1145,7 +1157,15 @@ class ActivityService(
     ) {
         ServiceQueue.CORE.background {
             runCatching {
-                if (getOnchainActivityByTxId(txId = txid, walletId = walletId) != null) {
+                val existing = getOnchainActivityByTxId(txId = txid, walletId = walletId)
+                if (existing != null) {
+                    if (isTransfer) {
+                        val updated = existing.copy(
+                            isTransfer = true,
+                            channelId = existing.channelId ?: channelId,
+                        )
+                        if (updated != existing) upsertActivity(Activity.Onchain(updated))
+                    }
                     Logger.debug("Activity already exists for txid $txid, skipping immediate creation", context = TAG)
                     return@background
                 }
@@ -1272,7 +1292,7 @@ class ActivityService(
                 isBoosted = false,
                 updatedAt = System.currentTimeMillis().toULong() / 1000u
             )
-            updateActivity(replacedActivity.id, Activity.Onchain(updatedActivity))
+            updateActivity(activityId = replacedActivity.id, activity = Activity.Onchain(updatedActivity))
             Logger.info("Marked transaction $txid as replaced", context = TAG)
         } else {
             Logger.info(
@@ -1332,7 +1352,7 @@ class ActivityService(
             contact = replacementActivity.contact ?: replacedActivity?.contact,
             updatedAt = System.currentTimeMillis().toULong() / 1000u,
         )
-        updateActivity(replacementActivity.id, Activity.Onchain(updatedActivity))
+        updateActivity(activityId = replacementActivity.id, activity = Activity.Onchain(updatedActivity))
 
         if (replacedActivity != null) {
             copyTagsFromReplacedActivity(txid, conflictTxid, replacedActivity.id, replacementActivity.id)
@@ -1376,7 +1396,7 @@ class ActivityService(
                     updatedAt = System.currentTimeMillis().toULong() / 1000u
                 )
 
-                updateActivity(onchain.id, Activity.Onchain(updatedActivity))
+                updateActivity(activityId = onchain.id, activity = Activity.Onchain(updatedActivity))
             }.onFailure { e ->
                 Logger.error("Error handling onchain transaction reorged for $txid", e, context = TAG)
             }
@@ -1396,7 +1416,7 @@ class ActivityService(
                     updatedAt = System.currentTimeMillis().toULong() / 1000u
                 )
 
-                updateActivity(onchain.id, Activity.Onchain(updatedActivity))
+                updateActivity(activityId = onchain.id, activity = Activity.Onchain(updatedActivity))
             }.onFailure { e ->
                 Logger.error("Error handling onchain transaction evicted for $txid", e, context = TAG)
             }
@@ -1459,7 +1479,8 @@ class ActivityService(
     }
 
     suspend fun isActivitySeen(activityId: String, walletId: String? = null): Boolean = ServiceQueue.CORE.background {
-        val activity = getActivityById(walletId ?: defaultWalletId, activityId) ?: return@background false
+        val activity = getActivityById(walletId = walletId ?: defaultWalletId, activityId = activityId)
+            ?: return@background false
         return@background when (activity) {
             is Activity.Lightning -> activity.v1.seenAt != null
             is Activity.Onchain -> activity.v1.seenAt != null
@@ -1471,7 +1492,7 @@ class ActivityService(
         walletId: String? = null,
         seenAt: ULong? = null,
     ) = ServiceQueue.CORE.background {
-        val activity = getActivityById(walletId ?: defaultWalletId, activityId) ?: run {
+        val activity = getActivityById(walletId = walletId ?: defaultWalletId, activityId = activityId) ?: run {
             Logger.warn("Skipped marking activity '$activityId' as seen because it was not found", context = TAG)
             return@background
         }
@@ -1482,7 +1503,7 @@ class ActivityService(
             is Activity.Onchain -> Activity.Onchain(activity.v1.copy(seenAt = timestamp))
         }
 
-        updateActivity(activityId, updatedActivity)
+        updateActivity(activityId = activityId, activity = updatedActivity)
         Logger.info("Marked activity '$activityId' as seen at '$timestamp'", context = TAG)
     }
 

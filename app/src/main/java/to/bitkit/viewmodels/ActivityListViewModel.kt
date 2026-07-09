@@ -127,14 +127,15 @@ class ActivityListViewModel @Inject constructor(
     }
 
     private suspend fun refreshActivityState() {
-        val all = activityRepo.getActivities(filter = ActivityFilter.ALL).getOrNull() ?: emptyList()
+        val all = activityRepo.getActivities(walletId = null, filter = ActivityFilter.ALL).getOrNull() ?: emptyList()
         val filtered = filterOutReplacedSentTransactions(all)
+        val bitkitActivities = filtered.filterNot { it.isFromHardwareWallet() }
         _hardwareIds.update {
             filtered.filter { it.isFromHardwareWallet() }.map { it.scopedId() }.toImmutableSet()
         }
         _latestActivities.update { filtered.take(SIZE_LATEST).toImmutableList() }
-        _lightningActivities.update { filtered.filterIsInstance<Activity.Lightning>().toImmutableList() }
-        _onchainActivities.update { filtered.filterIsInstance<Activity.Onchain>().toImmutableList() }
+        _lightningActivities.update { bitkitActivities.filterIsInstance<Activity.Lightning>().toImmutableList() }
+        _onchainActivities.update { bitkitActivities.filterIsInstance<Activity.Onchain>().toImmutableList() }
     }
 
     private suspend fun fetchFilteredActivities(filters: ActivityFilters): List<Activity>? {
@@ -145,6 +146,7 @@ class ActivityListViewModel @Inject constructor(
         }
 
         val activities = activityRepo.getActivities(
+            walletId = null,
             filter = ActivityFilter.ALL,
             txType = txType,
             tags = filters.tags.takeIf { it.isNotEmpty() }?.toList(),

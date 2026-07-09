@@ -14,6 +14,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -35,7 +36,6 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isTrezorUserCancellation
-import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.scopedId
 import to.bitkit.ext.timestamp
@@ -59,9 +59,7 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.ceil
-import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.ExperimentalTime
 
 /**
  * Production hardware-wallet business layer. Tracks paired Trezor devices as
@@ -72,14 +70,12 @@ import kotlin.time.ExperimentalTime
  * and the underlying watcher transport.
  */
 @Suppress("TooManyFunctions")
-@OptIn(ExperimentalTime::class)
 @Singleton
 class HwWalletRepo @Inject constructor(
     private val trezorRepo: TrezorRepo,
     private val activityRepo: ActivityRepo,
     private val hwWalletStore: HwWalletStore,
     private val settingsStore: SettingsStore,
-    private val clock: Clock,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
@@ -162,6 +158,15 @@ class HwWalletRepo @Inject constructor(
     suspend fun ensureConnected(deviceId: String): Result<TrezorFeatures> = trezorRepo.ensureConnected(deviceId)
 
     suspend fun isKnownBluetoothDevice(deviceId: String): Boolean = trezorRepo.isKnownBluetoothDevice(deviceId)
+
+    suspend fun getWalletId(deviceId: String): Result<String> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val target = requireNotNull(hwWalletStore.loadKnownDevices().find { it.id == deviceId }) {
+                "Unknown hardware wallet '$deviceId'"
+            }
+            requireNotNull(target.resolvedWalletId()) { "Hardware wallet '$deviceId' has no wallet id" }
+        }
+    }
 
     suspend fun getFundingAccount(
         deviceId: String,
@@ -275,9 +280,10 @@ class HwWalletRepo @Inject constructor(
      * single id would leave the tile reappearing through the other transport.
      */
     suspend fun removeDevice(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val knownDevices = hwWalletStore.loadKnownDevices()
             val target = knownDevices.find { it.id == deviceId }
+            val walletId = target?.resolvedWalletId()
             val ids = when (target) {
                 null -> setOf(deviceId)
                 else ->
@@ -291,18 +297,12 @@ class HwWalletRepo @Inject constructor(
                 .forEach {
                     if (!stopActiveWatcher(it)) throw AppError("Failed to stop hardware wallet watcher '$it'")
                 }
+            walletId?.let { activityRepo.deleteForWallet(it).getOrThrow() }
             val failures = ids.mapNotNull { trezorRepo.forgetDevice(it).exceptionOrNull() }
             val remaining = hwWalletStore.loadKnownDevices().map { it.id }.toSet()
             failures.firstOrNull()?.let { throw it }
             check(ids.none { it in remaining }) { "Hardware wallet '$deviceId' still present after removal" }
-
-            target?.walletId?.takeIf { it.isNotBlank() }
-        }.fold(
-            onSuccess = {
-                if (it == null) Result.success(Unit) else activityRepo.deleteForWallet(it)
-            },
-            onFailure = { Result.failure(it) },
-        ).onFailure {
+        }.onFailure {
             watcherSyncRequests.tryEmit(Unit)
         }
     }
@@ -372,7 +372,7 @@ class HwWalletRepo @Inject constructor(
     }
 
     private fun observeWatcherEvents() {
-        scope.launch {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
             trezorRepo.watcherEvents.collect { (watcherId, event) ->
                 if (event !is WatcherEvent.TransactionsChanged) return@collect
                 val walletId = activeWatcherWalletIds[watcherId] ?: return@collect
@@ -386,12 +386,15 @@ class HwWalletRepo @Inject constructor(
                     balanceSats = event.balance.total,
                     activities = activities.toImmutableList(),
                 )
-                val updatedWatcherData = _watcherData.value + (watcherId to watcher)
-                _watcherData.update { updatedWatcherData }
+                _watcherData.update {
+                    it + (watcherId to watcher.copy(activities = previous?.activities ?: persistentListOf()))
+                }
 
                 activityRepo.persistHardware(activities, transactionDetails)
                     .getOrElse { return@collect }
 
+                val updatedWatcherData = _watcherData.value + (watcherId to watcher)
+                _watcherData.update { updatedWatcherData }
                 emitReceivedTxs(previous, activities, updatedWatcherData)
             }
         }
@@ -422,6 +425,7 @@ class HwWalletRepo @Inject constructor(
             }
     }
 
+    @Suppress("LongMethod")
     private fun syncWatchers() {
         scope.launch {
             val desiredWatchers = combine(
@@ -469,6 +473,7 @@ class HwWalletRepo @Inject constructor(
                     }
                     if (isActive && !stopActiveWatcher(spec.watcherId)) return@forEach
 
+                    activeWatcherWalletIds[spec.watcherId] = spec.walletId
                     trezorRepo.startWatcher(
                         watcherId = spec.watcherId,
                         extendedKey = spec.xpub,
@@ -479,9 +484,10 @@ class HwWalletRepo @Inject constructor(
                     ).onSuccess {
                         activeWatchers += spec.watcherId
                         activeWatcherElectrumUrls[spec.watcherId] = spec.electrumUrl
-                        activeWatcherWalletIds[spec.watcherId] = spec.walletId
                         retryingWatcherStarts -= spec.watcherId
                     }.onFailure {
+                        activeWatcherWalletIds -= spec.watcherId
+                        _watcherData.update { it - spec.watcherId }
                         Logger.warn("Retrying watcher '${spec.watcherId}' after start failure", it, context = TAG)
                         scheduleWatcherStartRetry(spec.watcherId)
                     }
@@ -519,7 +525,7 @@ class HwWalletRepo @Inject constructor(
 
     private fun List<HwWatcherData>.toMergedActivities(): List<Activity> =
         flatMap { it.activities }
-            .groupBy { it.rawId() }
+            .groupBy { it.scopedId() }
             .values
             .map { it.mergedActivity() }
             .sortedByDescending { it.timestamp() }

@@ -26,7 +26,6 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.rawId
 import to.bitkit.ext.walletId
-import to.bitkit.models.USat
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.TransferRepo
@@ -66,11 +65,9 @@ class ActivityDetailViewModel @Inject constructor(
                 .onSuccess { activity ->
                     if (activity != null) {
                         this@ActivityDetailViewModel.activity = activity
-                        _uiState.update {
-                            it.copy(activityLoadState = ActivityLoadState.Success(activity))
-                        }
+                        _uiState.update { it.copy(activityLoadState = ActivityLoadState.Success(activity)) }
                         loadTags()
-                        observeChanges(activityId, walletId)
+                        observeActivityChanges(activityId, walletId)
                     } else {
                         _uiState.update {
                             it.copy(
@@ -101,16 +98,16 @@ class ActivityDetailViewModel @Inject constructor(
         _tags.update { persistentListOf() }
     }
 
-    private fun observeChanges(activityId: String, walletId: String?) {
+    private fun observeActivityChanges(activityId: String, walletId: String?) {
         observeJob?.cancel()
         observeJob = viewModelScope.launch(bgDispatcher) {
             activityRepo.activitiesChanged.collect {
-                reload(activityId, walletId)
+                reloadActivity(activityId, walletId)
             }
         }
     }
 
-    private suspend fun reload(activityId: String, walletId: String?) {
+    private suspend fun reloadActivity(activityId: String, walletId: String?) {
         activityRepo.getActivity(activityId, walletId)
             .onSuccess { updatedActivity ->
                 if (updatedActivity != null) {
@@ -168,7 +165,7 @@ class ActivityDetailViewModel @Inject constructor(
                 forPaymentId = id,
                 syncLdkPayments = false,
             ).onSuccess {
-                reload(id, walletId)
+                reloadActivity(id, walletId)
             }
         }
     }
@@ -237,17 +234,6 @@ class ActivityDetailViewModel @Inject constructor(
         }.getOrNull()
     }
 
-    suspend fun findTransferOrderAmounts(
-        channelId: String?,
-        txId: String?,
-    ): TransferOrderAmounts? {
-        val order = findOrderForTransfer(channelId, txId) ?: return null
-        return TransferOrderAmounts(
-            serviceFee = USat(order.feeSat) - USat(order.clientBalanceSat),
-            transferAmount = order.clientBalanceSat,
-        )
-    }
-
     private companion object {
         const val TAG = "ActivityDetailViewModel"
     }
@@ -263,8 +249,3 @@ class ActivityDetailViewModel @Inject constructor(
         val activityLoadState: ActivityLoadState = ActivityLoadState.Initial,
     )
 }
-
-data class TransferOrderAmounts(
-    val serviceFee: ULong,
-    val transferAmount: ULong,
-)

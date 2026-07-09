@@ -39,6 +39,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.isTrezorDeviceBusy
+import to.bitkit.models.ActivityWalletType
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.toCoreNetwork
@@ -70,6 +71,9 @@ class TrezorRepoTest : BaseUnitTest() {
         private const val TEST_SIGNATURE = "signature123"
         private const val TEST_ADDRESS = "bc1qtest"
         private const val DEVICE_BUSY_MESSAGE = "Your Trezor is busy. Unlock it on the device, then try again."
+        private const val TEST_UPUB =
+            "upub5DWPhYKrgLiETEmgLykymFzBK6gXUNvkE67HLSEh5zcWNRdx2Hxd8HypxaDa" +
+                "K1p62a1kXwe9eBcV3pGm7yEpHh4ebrspSoer4x8Ko29egtv"
     }
 
     @get:Rule(order = 1)
@@ -108,6 +112,9 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(context.getString(R.string.hardware__connect_error)).thenReturn("Could not connect to your Trezor.")
         whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
         whenever { hwWalletStore.loadKnownDevices() }.thenReturn(emptyList())
+        whenever(trezorService.deriveWalletId(any(), any())).thenAnswer {
+            walletIdFor(*it.getArgument<Collection<String>>(1).toTypedArray())
+        }
         stubAccountXpubFetch()
     }
 
@@ -121,6 +128,9 @@ class TrezorRepoTest : BaseUnitTest() {
         clock = Clock.System,
         ioDispatcher = testDispatcher,
     )
+
+    private fun walletIdFor(vararg xpubs: String): String =
+        ActivityWalletType.TREZOR.idPrefixed(xpubs.sorted().joinToString("|"))
 
     @Suppress("LongParameterList")
     private fun mockDeviceInfo(
@@ -227,6 +237,39 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         verify(hwWalletStore, never()).saveKnownDevices(any())
         assertEquals("", sut.state.value.knownDevices.single().walletId)
+    }
+
+    @Test
+    fun `initialize derives wallet id for restored device`() = test {
+        val knownDevice = mockKnownDevice(walletId = "", xpubs = mapOf("nativeSegwit" to "xpubNS"))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        sut = createSut()
+
+        val result = sut.initialize()
+
+        assertTrue(result.isSuccess)
+        val savedCaptor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(savedCaptor.capture())
+        val saved = savedCaptor.firstValue.single()
+        assertEquals(walletIdFor("xpubNS"), saved.walletId)
+        verify(trezorService).deriveWalletId(ActivityWalletType.TREZOR.id(), setOf("xpubNS"))
+    }
+
+    @Test
+    fun `initialize keeps restored slip132 xpub for core derivation`() = test {
+        val knownDevice = mockKnownDevice(walletId = "", xpubs = mapOf("nativeSegwit" to TEST_UPUB))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        sut = createSut()
+
+        val result = sut.initialize()
+
+        assertTrue(result.isSuccess)
+        val savedCaptor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(savedCaptor.capture())
+        val saved = savedCaptor.firstValue.single()
+        assertEquals(TEST_UPUB, saved.xpubs["nativeSegwit"])
+        assertEquals(walletIdFor(TEST_UPUB), saved.walletId)
+        verify(trezorService).deriveWalletId(ActivityWalletType.TREZOR.id(), setOf(TEST_UPUB))
     }
 
     @Test
@@ -684,7 +727,8 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(TransportType.USB, saved.transportType)
         assertEquals("Savings", saved.label)
         assertEquals("Safe 5", saved.model)
-        assertEquals("", saved.walletId)
+        assertEquals(walletIdFor(*saved.xpubs.values.toTypedArray()), saved.walletId)
+        verify(trezorService).deriveWalletId(eq(ActivityWalletType.TREZOR.id()), any())
     }
 
     @Test
@@ -726,6 +770,44 @@ class TrezorRepoTest : BaseUnitTest() {
         val captor = argumentCaptor<List<KnownDevice>>()
         verify(hwWalletStore).saveKnownDevices(captor.capture())
         assertEquals(setOf(walletId), captor.firstValue.map { it.walletId }.toSet())
+    }
+
+    @Test
+    fun `connect derives new wallet id when xpub identity changes`() = test {
+        val oldWalletId = walletIdFor("old-native-xpub")
+        val nativeSegwitPath = "m/84'/1'/0'"
+        val previousDevice = mockKnownDevice(
+            xpubs = mapOf("nativeSegwit" to "old-native-xpub"),
+            walletId = oldWalletId,
+        )
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(previousDevice))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        ).thenAnswer {
+            val path = it.getArgument<String>(0)
+            if (path == nativeSegwitPath) {
+                mockPublicKeyResponse(xpub = "new-native-xpub", path = nativeSegwitPath)
+            } else {
+                throw AppError("xpub failed")
+            }
+        }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertEquals(walletIdFor("new-native-xpub"), captor.firstValue.single().walletId)
     }
 
     @Test

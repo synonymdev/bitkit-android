@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.ActivityTags
 import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
@@ -175,7 +176,7 @@ class ActivityRepoTest : BaseUnitTest() {
     fun `syncActivities success flow`() = test {
         val payments = listOf(testPaymentDetails)
         wheneverBlocking { lightningRepo.getPayments() }.thenReturn(Result.success(payments))
-        wheneverBlocking { coreService.activity.getActivity(any<String>(), anyOrNull()) }.thenReturn(null)
+        whenever(coreService.activity.getActivity(any<String>(), anyOrNull())).thenReturn(null)
         wheneverBlocking {
             coreService.activity.syncLdkNodePaymentsToActivities(
                 any<List<PaymentDetails>>(),
@@ -242,6 +243,7 @@ class ActivityRepoTest : BaseUnitTest() {
         val activities = listOf(testActivity)
         wheneverBlocking {
             coreService.activity.get(
+                walletId = ActivityWalletType.BITKIT.id(),
                 filter = ActivityFilter.ALL,
                 txType = PaymentType.RECEIVED,
                 tags = listOf("tag1"),
@@ -269,9 +271,29 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `getAllActivitiesTags defaults to Bitkit wallet`() = test {
+        val bitkitTags = ActivityTags(
+            walletId = ActivityWalletType.BITKIT.id(),
+            activityId = "bitkit-activity",
+            tags = listOf("bitkit"),
+        )
+        val hardwareTags = ActivityTags(
+            walletId = hardwareWalletId,
+            activityId = "hardware-activity",
+            tags = listOf("hardware"),
+        )
+        whenever(coreService.activity.getAllActivitiesTags())
+            .thenReturn(listOf(bitkitTags, hardwareTags))
+
+        val result = sut.getAllActivitiesTags()
+
+        assertEquals(listOf(bitkitTags), result.getOrThrow())
+    }
+
+    @Test
     fun `getActivity returns activity when found`() = test {
         val activityId = "activity123"
-        wheneverBlocking { coreService.activity.getActivity(activityId, null) }.thenReturn(testActivity)
+        whenever(coreService.activity.getActivity(activityId, null)).thenReturn(testActivity)
 
         val result = sut.getActivity(activityId)
 
@@ -282,7 +304,7 @@ class ActivityRepoTest : BaseUnitTest() {
     @Test
     fun `getActivity passes wallet id to core lookup`() = test {
         val activityId = "activity123"
-        wheneverBlocking { coreService.activity.getActivity(activityId, hardwareWalletId) }.thenReturn(testActivity)
+        whenever(coreService.activity.getActivity(activityId, hardwareWalletId)).thenReturn(testActivity)
 
         val result = sut.getActivity(activityId, hardwareWalletId)
 
@@ -330,8 +352,8 @@ class ActivityRepoTest : BaseUnitTest() {
             transactionDetails("hw-sent-txid", -4_521L),
             transactionDetails("hw-transfer-txid", -7_222L),
         )
-        wheneverBlocking { coreService.activity.upsertList(activities) }.thenReturn(Unit)
-        wheneverBlocking { coreService.activity.upsertTransactionDetailsList(details) }.thenReturn(Unit)
+        whenever(coreService.activity.upsertList(activities)).thenReturn(Unit)
+        whenever(coreService.activity.upsertTransactionDetailsList(details)).thenReturn(Unit)
 
         val result = sut.persistHardware(activities, details)
 
@@ -393,7 +415,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
     @Test
     fun `deleteForWallet delegates to core delete by wallet id`() = test {
-        wheneverBlocking { coreService.activity.deleteByWalletId(hardwareWalletId) }.thenReturn(3u)
+        whenever(coreService.activity.deleteByWalletId(hardwareWalletId)).thenReturn(3u)
 
         val result = sut.deleteForWallet(hardwareWalletId)
 
@@ -404,7 +426,7 @@ class ActivityRepoTest : BaseUnitTest() {
     @Test
     fun `getActivity returns null when not found`() = test {
         val activityId = "activity123"
-        wheneverBlocking { coreService.activity.getActivity(activityId, null) }.thenReturn(null)
+        whenever(coreService.activity.getActivity(activityId, null)).thenReturn(null)
 
         val result = sut.getActivity(activityId)
 
@@ -432,6 +454,7 @@ class ActivityRepoTest : BaseUnitTest() {
         whenever(coreService.activity.getTxIdsInBoostTxIds()).thenReturn(setOf(replacedTxId))
         whenever(
             coreService.activity.get(
+                walletId = ActivityWalletType.BITKIT.id(),
                 filter = ActivityFilter.ALL,
                 txType = null,
                 tags = null,
@@ -466,6 +489,7 @@ class ActivityRepoTest : BaseUnitTest() {
         whenever(coreService.activity.getOnchainActivityByTxId(replacedTxId)).thenReturn(replacedActivity.v1)
         whenever(
             coreService.activity.get(
+                walletId = ActivityWalletType.BITKIT.id(),
                 filter = ActivityFilter.ONCHAIN,
                 txType = null,
                 tags = null,
@@ -676,7 +700,7 @@ class ActivityRepoTest : BaseUnitTest() {
     @Test
     fun `addTagsToActivity fails when tags lookup fails`() = test {
         val activityId = "activity123"
-        wheneverBlocking { coreService.activity.tags(activityId) } doThrow AppError("tags failed")
+        whenever(coreService.activity.tags(activityId)) doThrow AppError("tags failed")
 
         val result = sut.addTagsToActivity(activityId, listOf("tag1"))
 
@@ -739,7 +763,7 @@ class ActivityRepoTest : BaseUnitTest() {
     fun `removeTagsFromActivity fails when dropTags fails`() = test {
         val activityId = "activity123"
         val tags = listOf("tag1")
-        wheneverBlocking { coreService.activity.dropTags(activityId, tags) } doThrow AppError("drop failed")
+        whenever(coreService.activity.dropTags(activityId, tags)) doThrow AppError("drop failed")
 
         val result = sut.removeTagsFromActivity(activityId, tags)
 

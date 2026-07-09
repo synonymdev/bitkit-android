@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.FundingTx
 import com.synonym.bitkitcore.IBtChannel
 import com.synonym.bitkitcore.IBtOrder
@@ -28,6 +29,7 @@ import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.ext.create
 import to.bitkit.ext.createChannelDetails
+import to.bitkit.models.ActivityWalletType
 import to.bitkit.models.TransferType
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
@@ -59,7 +61,7 @@ class TransferRepoTest : BaseUnitTest() {
         private const val ID_ORDER = "test-order-id"
         private const val ID_CHANNEL = "test-channel-id"
         private const val ID_TRANSFER = "test-transfer-id"
-        private const val ID_HW_WALLET = "trezor:dev1"
+        private val ID_HW_WALLET = ActivityWalletType.TREZOR.idPrefixed("dev1")
         private val fundingTxo = OutPoint(txid = "test-funding-tx-id", vout = 0u)
     }
 
@@ -304,7 +306,8 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `syncTransferStates persists resolved channel and marks activity for TO_SPENDING transfer`() = test {
+    @Suppress("LongMethod")
+    fun `syncTransferStates marks watcher-first hardware sent as transfer`() = test {
         val transfer = TransferEntity(
             id = ID_TRANSFER,
             type = TransferType.TO_SPENDING,
@@ -328,15 +331,39 @@ class TransferRepoTest : BaseUnitTest() {
             fee = 0uL,
             address = "bc1qtest",
             timestamp = 1000uL,
-            isTransfer = true,
+            isTransfer = false,
             channelId = null,
+            walletId = ID_HW_WALLET,
+        )
+        val unrelated = OnchainActivity.create(
+            id = "unrelated-hardware-activity",
+            txType = PaymentType.RECEIVED,
+            txId = fundingTxo.txid,
+            value = 50_000uL,
+            fee = 0uL,
+            address = "bc1qunrelated",
+            timestamp = 1000uL,
+            isTransfer = false,
+            walletId = ActivityWalletType.TREZOR.idPrefixed("dev2"),
         )
 
         whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
         whenever(lightningRepo.getChannels()).thenReturn(listOf(channelDetails))
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(mock()))
         whenever(blocktankRepo.getOrder(ID_ORDER, refresh = false)).thenReturn(Result.success(null))
-        whenever(activityService.getOnchainActivityByTxId(fundingTxo.txid)).thenReturn(activity)
+        whenever(
+            activityService.get(
+                walletId = anyOrNull(),
+                filter = eq(ActivityFilter.ONCHAIN),
+                txType = anyOrNull(),
+                tags = anyOrNull(),
+                search = anyOrNull(),
+                minDate = anyOrNull(),
+                maxDate = anyOrNull(),
+                limit = anyOrNull(),
+                sortDirection = anyOrNull(),
+            )
+        ).thenReturn(listOf(Activity.Onchain(unrelated), Activity.Onchain(activity)))
 
         val result = sut.syncTransferStates()
 
@@ -346,6 +373,7 @@ class TransferRepoTest : BaseUnitTest() {
             eq(activity.id),
             eq(Activity.Onchain(activity.copy(isTransfer = true, channelId = ID_CHANNEL))),
         )
+        verify(activityService, never()).getOnchainActivityByTxId(fundingTxo.txid)
     }
 
     @Test

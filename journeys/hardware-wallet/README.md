@@ -97,10 +97,30 @@ Current journeys pair the standard wallet. Hidden/passphrase wallet behavior is 
 not asserted here yet; it needs explicit UX and identity-scoping coverage as described in
 synonymdev/bitkit-android#1030.
 
+## Bridge transaction approval
+
+After tapping `Open Trezor Connect`, approve these four prompts on the Bridge emulator in
+order:
+
+1. `Recipient #1`
+2. `Amount #1`
+3. `Confirm Locktime`
+4. `Summary`
+
+Use the User Env dashboard or run this helper once for each prompt:
+
+```sh
+../bitkit-docker/scripts/trezor-emulator send-json '{"type":"emulator-press-yes"}'
+```
+
+Complete all four approvals within the Bridge call's 120-second timeout. After approving
+`Summary`, observe the Android screen immediately: `HardwareTransferSigned` is a one-second
+handoff before the app advances to Processing Payment.
+
 To exercise the received-money sheet (not covered by a journey because it needs an
-out-of-band transfer), fund the emulator wallet on regtest from `bitkit-docker`, e.g.
-send to an address generated via Dev Settings → Trezor → Get Address, then mine a block
-with `./bitcoin-cli`.
+out-of-band transfer), fund the emulator wallet through the same backend used by the app.
+Generate the address from Dev Settings → Trezor → Get Address, then use Dev Settings →
+Blocktank Regtest to deposit and mine the confirmation.
 
 ## Hardware Activity Fixture
 
@@ -112,6 +132,18 @@ Do not validate hardware activity journeys against a single transaction. Before 
 - At least one hardware-wallet Transfer To Spending transaction.
 - Prefer at least one normal app activity in the unified Activity list when the run already
   has one, so filters prove hardware and app-owned entries coexist.
+
+Create the two hardware receives through the app so setup and confirmation use the same
+backend as Transfer To Spending:
+
+1. Open Settings → Dev Settings → Trezor and connect the known Bridge device.
+2. Under Address Generation, tap `Get Address` and copy the generated address.
+3. Return to Dev Settings → Blocktank Regtest, paste the address into `Address`, enter a
+   distinct amount, and tap `Make Deposit`.
+4. Set the block count to `1`, tap `Mine Blocks`, and wait for the success message and the
+   hardware balance/activity to update.
+5. Return to Trezor, tap `Next Index`, generate the next address, and repeat with a different
+   amount.
 
 When this fixture is used with Transfer To Spending, create the receive and transfer history
 on the same backend described below. Use distinct amounts and note the latest transfer amount
@@ -134,7 +166,8 @@ For current dev runs, set the app Electrum server to:
 ssl://electrs.bitkit.stag0.blocktank.to:9999
 ```
 
-Fund the Trezor account and mine confirmations through the same backend, for example:
+The journeys fund and mine through Dev Settings → Blocktank Regtest. The equivalent host-side
+setup commands are:
 
 ```sh
 ./lsp POST /regtest/chain/deposit '{"address":"<trezor-address>","amountSat":25000000}'

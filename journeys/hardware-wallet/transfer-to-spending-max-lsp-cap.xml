@@ -5,15 +5,12 @@
     device balance. Requires a paired Bridge emulator or physical Trezor with a hardware
     balance larger than the available transfer limit, at least one existing channel or
     pending order consuming most of the regtest LSP cap, and the mixed hardware activity
-    fixture from README.md. The app Electrum backend, hardware funding backend, and
-    Blocktank regtest backend must match.
+    fixture from README.md. The app must use the staging Blocktank Electrum backend, and
+    funding and confirmation must use the app's Blocktank Regtest screen.
   </description>
   <actions>
     <action>
       Launch the Bitkit app and go to the wallet home screen
-    </action>
-    <action>
-      Verify the app Electrum backend matches the Blocktank regtest backend before starting the transfer; for current dev/staging runs the app must use ssl://electrs.bitkit.stag0.blocktank.to:9999 and the funding/mining steps must use ./lsp /regtest/chain commands, not local ./bitcoin-cli
     </action>
     <action>
       Before starting, verify the home or hardware wallet detail Activity list already contains at least one blue hardware received row with a distinct amount; this prior-history control must remain visible after the capped transfer completes
@@ -46,10 +43,13 @@
       Verify the sign screen opens (testTag "HardwareTransferSign"), showing NETWORK FEES, SERVICE FEES, TO SPENDING and TOTAL, without an insufficient-funds toast
     </action>
     <action>
-      Tap "Open Trezor Connect" (testTag "HardwareTransferOpenTrezorConnect") and approve every hardware-wallet prompt
+      Tap "Open Trezor Connect" (testTag "HardwareTransferOpenTrezorConnect")
     </action>
     <action>
-      Verify the transaction signed screen appears (testTag "HardwareTransferSigned") and then advances to Processing Payment / setting-up progress as an intermediate state
+      On the Bridge emulator, promptly approve the Recipient #1, Amount #1, Confirm Locktime and Summary prompts in that order, completing all four within 120 seconds
+    </action>
+    <action>
+      Immediately verify the one-second transaction signed handoff appears (testTag "HardwareTransferSigned") and then advances to Processing Payment / setting-up progress as an intermediate state
     </action>
     <action>
       Before mining, tap "Continue Using Bitkit" (testTag "TransferSuccess-button") and verify the app returns to the wallet home screen
@@ -58,7 +58,37 @@
       Before mining, verify the recent Activity list contains exactly one hardware wallet transfer row for the new tx, with the blue hardware icon, title "Transfer", subtitle "From Savings", and a non-confirmed/non-stuck transfer status, above the prior blue received row from the fixture
     </action>
     <action>
-      Mine one block on the same Blocktank regtest backend with ./lsp POST /regtest/chain/mine '{"count":1}', then wait for the app/Core sync to observe the confirmation
+      Open the main menu from the wallet home screen
+    </action>
+    <action>
+      Tap "Settings"
+    </action>
+    <action>
+      Tap "Dev Settings" (testTag "DevSettings")
+    </action>
+    <action>
+      Scroll to the REGTEST section and tap "Blocktank Regtest"
+    </action>
+    <action>
+      Verify the "Blocktank Regtest" screen is shown and the block count is set to 1
+    </action>
+    <action>
+      Tap "Mine Blocks"
+    </action>
+    <action>
+      Verify the success message says "Successfully mined 1 blocks"
+    </action>
+    <action>
+      Tap the top-bar back button to return to Dev Settings
+    </action>
+    <action>
+      Tap the top-bar back button to return to Settings
+    </action>
+    <action>
+      Tap the top-bar back button to return to the wallet home screen
+    </action>
+    <action>
+      Verify the app/Core sync observes the newly mined confirmation
     </action>
     <action>
       Verify the SPENDING balance has increased by the capped AVAILABLE amount and the same hardware wallet transfer row for the new tx is now confirmed

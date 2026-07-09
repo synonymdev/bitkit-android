@@ -37,6 +37,7 @@ import to.bitkit.R
 import to.bitkit.ext.uniqueUtxoKey
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
@@ -66,7 +67,11 @@ fun SendCoinSelectionScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val tagsByTxId by viewModel.tagsByTxId.collectAsStateWithLifecycle()
 
-    LaunchedEffect(requiredAmount, address) {
+    val activity = activityListViewModel ?: return
+    val onchainActivities by activity.onchainActivities.collectAsStateWithLifecycle()
+
+    LaunchedEffect(requiredAmount, onchainActivities) {
+        viewModel.setOnchainActivities(onchainActivities.orEmpty())
         viewModel.loadUtxos(requiredAmount, address)
     }
 

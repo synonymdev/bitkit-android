@@ -4,18 +4,16 @@
     Your Device -> Transaction Signed -> Processing Payment -> same-backend confirmation ->
     activity verification. The funding send is signed on the Bridge emulator device, so no
     physical Trezor is required. Requires a paired Bridge emulator (run connect-home-tile.xml
-    first) whose native-segwit account holds spendable regtest funds on the same regtest backend
-    used by Blocktank. Run with the mixed hardware activity fixture from README.md so the final
+    first) whose native-segwit account holds spendable regtest funds on the staging Blocktank
+    regtest backend. Run with the mixed hardware activity fixture from README.md so the final
     Activity assertions prove the new transfer coexists with older hardware receive rows and is
-    not duplicated as a default-wallet activity. Mirrors the on-chain Transfer To Spending flow,
-    swapping local signing for the device.
+    not duplicated as a default-wallet activity. The journey mines the funding transaction from
+    the app's Blocktank Regtest screen before checking the confirmed state. Mirrors the on-chain
+    Transfer To Spending flow, swapping local signing for the device.
   </description>
   <actions>
     <action>
       Launch the Bitkit app and go to the wallet home screen
-    </action>
-    <action>
-      Verify the app Electrum backend matches the Blocktank regtest backend before starting the transfer; for current dev/staging runs the app must use ssl://electrs.bitkit.stag0.blocktank.to:9999 and the funding/mining steps must use ./lsp /regtest/chain commands, not local ./bitcoin-cli
     </action>
     <action>
       Before starting, verify the home or hardware wallet detail Activity list already contains at least one blue hardware received row with a distinct amount; this is the prior-history control used to detect ordering and filtering regressions after the new transfer
@@ -24,7 +22,7 @@
       Tap the hardware wallet tile beneath the SAVINGS and SPENDING tiles, and verify the hardware wallet detail screen opens (testTag "HardwareWalletScreen")
     </action>
     <action>
-      If the hardware wallet balance is zero, fund a Trezor receive address on the same Blocktank regtest backend with ./lsp POST /regtest/chain/deposit '{"address":"&lt;trezor-address&gt;","amountSat":25000000}', mine it with ./lsp POST /regtest/chain/mine '{"count":1}', then wait until the hardware wallet tile/detail balance reflects the funded amount
+      Verify the hardware wallet has a non-zero spendable balance
     </action>
     <action>
       Tap the "Transfer To Spending" button (testTag "HardwareTransferToSpending")
@@ -45,10 +43,13 @@
       Verify the sign screen opens (testTag "HardwareTransferSign"), titled "SIGN WITH YOUR DEVICE", showing the NETWORK FEES, SERVICE FEES, TO SPENDING and TOTAL cells, the Learn More and Advanced buttons, and the Trezor illustration
     </action>
     <action>
-      Tap "Open Trezor Connect" (testTag "HardwareTransferOpenTrezorConnect") and wait while the Bridge emulator composes, signs and broadcasts the funding transaction
+      Tap "Open Trezor Connect" (testTag "HardwareTransferOpenTrezorConnect")
     </action>
     <action>
-      Verify the transaction signed screen appears (testTag "HardwareTransferSigned"), titled "TRANSACTION SIGNED", showing the same fee cells and the checkmark illustration
+      On the Bridge emulator, promptly approve the Recipient #1, Amount #1, Confirm Locktime and Summary prompts in that order, completing all four within 120 seconds
+    </action>
+    <action>
+      Immediately verify the one-second transaction signed handoff appears (testTag "HardwareTransferSigned"), titled "TRANSACTION SIGNED", showing the same fee cells and the checkmark illustration
     </action>
     <action>
       Wait for the screen to auto-forward and verify the Processing Payment / setting-up progress screen appears as an intermediate state, not as the final success condition
@@ -63,7 +64,37 @@
       Before mining, open the new hardware transfer row and verify the Activity detail shows "TO SPENDING" and a pending or otherwise non-confirmed transfer status, then navigate back to the wallet home screen
     </action>
     <action>
-      Mine one block on the same Blocktank regtest backend with ./lsp POST /regtest/chain/mine '{"count":1}', then wait for the app/Core sync to observe the confirmation
+      Open the main menu from the wallet home screen
+    </action>
+    <action>
+      Tap "Settings"
+    </action>
+    <action>
+      Tap "Dev Settings" (testTag "DevSettings")
+    </action>
+    <action>
+      Scroll to the REGTEST section and tap "Blocktank Regtest"
+    </action>
+    <action>
+      Verify the "Blocktank Regtest" screen is shown and the block count is set to 1
+    </action>
+    <action>
+      Tap "Mine Blocks"
+    </action>
+    <action>
+      Verify the success message says "Successfully mined 1 blocks"
+    </action>
+    <action>
+      Tap the top-bar back button to return to Dev Settings
+    </action>
+    <action>
+      Tap the top-bar back button to return to Settings
+    </action>
+    <action>
+      Tap the top-bar back button to return to the wallet home screen
+    </action>
+    <action>
+      Verify the app/Core sync observes the newly mined confirmation
     </action>
     <action>
       Verify the SPENDING balance has increased by the transfer amount and the same hardware wallet transfer row for the new tx is now confirmed

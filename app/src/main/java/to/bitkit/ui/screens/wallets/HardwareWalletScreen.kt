@@ -109,8 +109,7 @@ private fun HardwareWalletContent(
 
     // Every activity here belongs to the watch-only device, so render them all with the blue
     // hardware icon, matching the home list.
-    val activityItems = remember(wallet.activities) { wallet.activities }
-    val hardwareIds = remember(activityItems) { activityItems.map { it.scopedId() }.toImmutableSet() }
+    val hardwareIds = remember(wallet.activities) { wallet.activities.map { it.scopedId() }.toImmutableSet() }
 
     val hazeState = rememberHazeState()
 
@@ -190,7 +189,7 @@ private fun HardwareWalletContent(
                 }
 
                 activityListGroupedItems(
-                    items = activityItems,
+                    items = wallet.activities,
                     onActivityItemClick = onActivityItemClick,
                     onEmptyActivityRowClick = {},
                     showFooter = false,

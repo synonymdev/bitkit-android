@@ -3,6 +3,8 @@ package to.bitkit.ui.screens.wallets.send
 import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.Activity.Onchain
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableMap
@@ -18,6 +20,7 @@ import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.SpendableUtxo
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
+import to.bitkit.ext.rawId
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -39,6 +42,12 @@ class SendCoinSelectionViewModel @Inject constructor(
 
     private val _tagsByTxId = MutableStateFlow<ImmutableMap<String, ImmutableList<String>>>(persistentMapOf())
     val tagsByTxId = _tagsByTxId.asStateFlow()
+
+    private var onchainActivities: List<Activity> = emptyList()
+
+    fun setOnchainActivities(onchainActivities: List<Activity>) {
+        this.onchainActivities = onchainActivities
+    }
 
     fun loadUtxos(requiredAmount: ULong, address: String) = viewModelScope.launch {
         runCatching {
@@ -73,14 +82,20 @@ class SendCoinSelectionViewModel @Inject constructor(
         if (_tagsByTxId.value.containsKey(txId)) return
 
         viewModelScope.launch(bgDispatcher) {
-            activityRepo.getOnchainActivityByTxId(txId)?.let { activity ->
-                activityRepo.getActivityTags(activity.id)
+            // find activity by txId
+            onchainActivities.firstOrNull { (it as? Onchain)?.v1?.txId == txId }?.let { activity ->
+                // get tags by activity id
+                activityRepo.getActivityTags(activity.rawId())
                     .onSuccess { tags ->
                         if (tags.isNotEmpty()) {
+                            // add map entry linking tags to utxo.outpoint.txid
                             _tagsByTxId.update {
                                 (it + (txId to tags.toImmutableList())).toImmutableMap()
                             }
                         }
+                    }
+                    .onFailure {
+                        Logger.error("Failed to load tags for utxo $txId", it, context = TAG)
                     }
             }
         }

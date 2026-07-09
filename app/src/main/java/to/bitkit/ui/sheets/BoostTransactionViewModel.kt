@@ -57,27 +57,7 @@ class BoostTransactionViewModel @Inject constructor(
     private var minFeeRate: ULong = 2U
     private var activity: Activity.Onchain? = null
 
-    fun setupActivity(activityId: String, walletId: String?) {
-        _uiState.update { it.copy(loading = true) }
-
-        viewModelScope.launch {
-            activityRepo.getActivity(activityId, walletId)
-                .onSuccess {
-                    val activity = it as? Activity.Onchain
-                    if (activity == null) {
-                        handleError("Activity '$activityId' is not boostable")
-                        return@onSuccess
-                    }
-
-                    setupActivity(activity)
-                }
-                .onFailure {
-                    handleError("Failed to load activity '$activityId'", log = false)
-                }
-        }
-    }
-
-    private fun setupActivity(activity: Activity.Onchain) {
+    fun setupActivity(activity: Activity.Onchain) {
         Logger.debug("Setup activity $activity", context = TAG)
         this.activity = activity
 
@@ -366,8 +346,8 @@ class BoostTransactionViewModel @Inject constructor(
         return Result.success(Unit)
     }
 
-    private fun handleError(message: String, error: Throwable? = null, log: Boolean = true) {
-        if (log) Logger.error(message, error, context = TAG)
+    private fun handleError(message: String, error: Throwable? = null) {
+        Logger.error(message, error, context = TAG)
         _uiState.update {
             it.copy(
                 boosting = false,

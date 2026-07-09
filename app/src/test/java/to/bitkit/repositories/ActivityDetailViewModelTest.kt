@@ -179,9 +179,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         // Verify initial state loaded
         val initialState = sut.uiState.value.activityLoadState
         assertTrue(initialState is ActivityDetailViewModel.ActivityLoadState.Success)
-        assertTrue(initialState.activity is Activity.Onchain)
-        assertEquals(initialActivity.v1.id, initialState.activity.v1.id)
-        assertEquals(initialActivity.v1.confirmed, initialState.activity.v1.confirmed)
+        assertEquals(initialActivity, initialState.activity)
 
         // Simulate activity update
         whenever(activityRepo.getActivity(eq(ACTIVITY_ID), anyOrNull())).thenReturn(Result.success(updatedActivity))
@@ -190,9 +188,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         // Verify ViewModel reflects updated activity
         val updatedState = sut.uiState.value.activityLoadState
         assertTrue(updatedState is ActivityDetailViewModel.ActivityLoadState.Success)
-        assertTrue(updatedState.activity is Activity.Onchain)
-        assertEquals(updatedActivity.v1.id, updatedState.activity.v1.id)
-        assertEquals(updatedActivity.v1.confirmed, updatedState.activity.v1.confirmed)
+        assertEquals(updatedActivity, updatedState.activity)
     }
 
     @Test
@@ -220,7 +216,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `reload keeps last state on failure`() = test {
+    fun `reloadActivity keeps last state on failure`() = test {
         val activity = createTestActivity(ACTIVITY_ID)
         val activitiesChangedFlow = MutableStateFlow(System.currentTimeMillis())
 
@@ -239,9 +235,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         // Verify last known state is preserved
         val state = sut.uiState.value.activityLoadState
         assertTrue(state is ActivityDetailViewModel.ActivityLoadState.Success)
-        assertTrue(state.activity is Activity.Onchain)
-        assertEquals(activity.v1.id, state.activity.v1.id)
-        assertEquals(activity.v1.confirmed, state.activity.v1.confirmed)
+        assertEquals(activity, state.activity)
     }
 
     @Test

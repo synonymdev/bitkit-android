@@ -58,6 +58,7 @@ import to.bitkit.R
 import to.bitkit.ext.contact
 import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
+import to.bitkit.ext.isFromHardwareWallet
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
@@ -66,7 +67,6 @@ import to.bitkit.ext.toActivityItemDate
 import to.bitkit.ext.toActivityItemTime
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.walletId
-import to.bitkit.models.ActivityWalletType
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -101,7 +101,6 @@ import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getScreenTitleRes
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
-import to.bitkit.viewmodels.TransferOrderAmounts
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -181,7 +180,7 @@ fun ActivityDetailScreen(
 
             is ActivityDetailViewModel.ActivityLoadState.Success -> {
                 val item = loadState.activity
-                val isHardware = remember(item.walletId()) { ActivityWalletType.TREZOR.owns(item.walletId()) }
+                val isHardware = remember(item.walletId()) { item.isFromHardwareWallet() }
                 val app = appViewModel ?: return@Box
                 val settings = settingsViewModel ?: return@Box
                 val hideBalance by settings.hideBalance.collectAsStateWithLifecycle()
@@ -210,7 +209,7 @@ fun ActivityDetailScreen(
                 }
 
                 // Update boostTxDoesExist when boostTxIds change
-                LaunchedEffect(if (item is Activity.Onchain) item.v1.boostTxIds else persistentListOf()) {
+                LaunchedEffect(if (item is Activity.Onchain) item.v1.boostTxIds else emptyList()) {
                     if (item is Activity.Onchain && item.v1.boostTxIds.isNotEmpty()) {
                         boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
                     }
@@ -276,8 +275,7 @@ fun ActivityDetailScreen(
                     (item as? Activity.Onchain)?.let {
                         BoostTransactionSheet(
                             onDismiss = detailViewModel::onDismissBoostSheet,
-                            activityId = it.rawId(),
-                            walletId = it.walletId(),
+                            item = it,
                             onSuccess = {
                                 app.toast(
                                     type = Toast.ToastType.SUCCESS,
@@ -367,18 +365,18 @@ private fun ActivityDetailContent(
     val channelId = (item as? Activity.Onchain)?.v1?.channelId
     val txId = (item as? Activity.Onchain)?.v1?.txId
 
-    var orderAmounts by remember { mutableStateOf<TransferOrderAmounts?>(null) }
+    var order by remember { mutableStateOf<com.synonym.bitkitcore.IBtOrder?>(null) }
 
     LaunchedEffect(item, isTransferToSpending, detailViewModel) {
-        orderAmounts = if (isTransferToSpending && detailViewModel != null) {
-            detailViewModel.findTransferOrderAmounts(channelId, txId)
+        order = if (isTransferToSpending && detailViewModel != null) {
+            detailViewModel.findOrderForTransfer(channelId, txId)
         } else {
             null
         }
     }
 
-    val orderServiceFee: ULong? = orderAmounts?.serviceFee
-    val transferAmount: ULong? = orderAmounts?.transferAmount
+    val orderServiceFee: ULong? = order?.let { it.feeSat - it.clientBalanceSat }
+    val transferAmount: ULong? = order?.clientBalanceSat
 
     val fee: ULong? = when {
         isTransferToSpending && orderServiceFee != null && baseFee != null -> baseFee + orderServiceFee
@@ -1092,11 +1090,13 @@ private fun shouldEnableBoostButton(
 
     val activity = item.v1
 
+    // Check all disable conditions
     val shouldDisable = isCpfpChild || !activity.doesExist || activity.confirmed ||
         (activity.isBoosted && isBoostCompleted(activity, boostTxDoesExist))
 
     if (shouldDisable) return false
 
+    // Enable if not a transfer and has value
     return !activity.isTransfer && activity.value > 0uL
 }
 

@@ -160,6 +160,17 @@ class ActivityListViewModelTest : BaseUnitTest() {
         job.cancel()
     }
 
+    @Test
+    fun `onchain activities remain scoped to Bitkit wallet`() = test {
+        val sut = createViewModel()
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf("bitkit-sent", "bitkit-received"),
+            sut.onchainActivities.value?.map { it.rawId() },
+        )
+    }
+
     private fun onchainActivity(
         id: String,
         txType: PaymentType,

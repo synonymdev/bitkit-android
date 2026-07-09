@@ -24,12 +24,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.AccountType
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.PaymentType
 import to.bitkit.models.safe
 import to.bitkit.repositories.TrezorState
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -166,6 +169,51 @@ private fun WatcherStatusContent(uiState: TrezorUiState) {
             InfoRow("Block Height", "${uiState.watcherBlockHeight}")
             InfoRow("Account Type", uiState.watcherAccountType?.name ?: "-")
             InfoRow("Transactions", "${uiState.watcherTransactionCount}")
+        }
+    }
+
+    if (uiState.watcherActivities.isNotEmpty()) {
+        VerticalSpacer(12.dp)
+        Caption13Up(
+            text = "Activities (${uiState.watcherActivities.size})",
+            color = Colors.White64,
+        )
+        VerticalSpacer(4.dp)
+        LazyColumn(
+            modifier = Modifier.heightIn(max = 200.dp),
+        ) {
+            items(uiState.watcherActivities.filterIsInstance<Activity.Onchain>()) { activity ->
+                val onchain = activity.v1
+                val directionLabel = when (onchain.txType) {
+                    PaymentType.SENT -> "Sent"
+                    PaymentType.RECEIVED -> "Recv"
+                }
+                val directionColor = when (onchain.txType) {
+                    PaymentType.SENT -> Colors.Red
+                    PaymentType.RECEIVED -> Colors.Green
+                }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 2.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Caption(
+                        text = "$directionLabel ${onchain.value} sats",
+                        color = directionColor,
+                    )
+                    HorizontalSpacer(8.dp)
+                    Caption(
+                        text = "${onchain.txId.take(8)}...${onchain.txId.takeLast(8)}",
+                        color = Colors.White50,
+                    )
+                    HorizontalSpacer(8.dp)
+                    Caption(
+                        text = if (onchain.confirmed) "confirmed" else "pending",
+                        color = Colors.White50,
+                    )
+                }
+            }
         }
     }
 

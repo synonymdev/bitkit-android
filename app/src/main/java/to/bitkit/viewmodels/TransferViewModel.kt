@@ -529,11 +529,9 @@ class TransferViewModel @Inject constructor(
         }
     }
 
+    /** Pays for the order by composing and signing the funding send on the Trezor, then watches it. */
     fun warmUpHardwareConnection(deviceId: String) {
-        viewModelScope.launch {
-            hwWalletRepo.ensureConnected(deviceId)
-                .onFailure { Logger.warn("Failed to warm up hardware connection for '$deviceId'", it, context = TAG) }
-        }
+        hwWalletRepo.warmUpKnownDevice(deviceId)
     }
 
     fun onTransferToSpendingHwConfirm(order: IBtOrder, deviceId: String) {
@@ -594,6 +592,7 @@ class TransferViewModel @Inject constructor(
         return result
     }
 
+    @Suppress("ThrowsCount")
     private suspend fun ensureHardwareConnected(deviceId: String) {
         runCatching {
             withTimeout(HW_RECONNECT_TIMEOUT) {
@@ -601,6 +600,7 @@ class TransferViewModel @Inject constructor(
             }
         }.getOrElse {
             if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            if (it.isTrezorUserCancellation()) throw it
             throw HardwareReconnectError(it)
         }
     }
@@ -665,7 +665,7 @@ class TransferViewModel @Inject constructor(
         when (e) {
             is HardwareReconnectError -> {
                 Logger.error("Failed to reconnect hardware device", e, context = TAG)
-                showHardwareReconnectError()
+                showHardwareReconnectError(deviceId)
             }
             is HardwareSigningTimeoutError -> {
                 Logger.warn("Timed out hardware transfer signing for '$deviceId'", e, context = TAG)
@@ -682,7 +682,14 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private suspend fun showHardwareReconnectError() {
+    private suspend fun showHardwareReconnectError(deviceId: String) {
+        if (hwWalletRepo.isKnownBluetoothDevice(deviceId)) {
+            ToastEventBus.send(
+                type = Toast.ToastType.INFO,
+                title = context.getString(R.string.hardware__connect_error),
+            )
+            return
+        }
         ToastEventBus.send(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.lightning__transfer_hw__reconnect_error_title),

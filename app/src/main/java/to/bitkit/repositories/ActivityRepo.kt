@@ -42,6 +42,7 @@ import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.rawId
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.CoreService
@@ -218,7 +219,7 @@ class ActivityRepo @Inject constructor(
         activities: List<Activity>,
         transactionDetails: List<BitkitCoreTransactionDetails>,
     ): Result<Unit> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val mergedActivities = activities.map { mergeExistingTransferMetadata(it) }
             if (mergedActivities.isNotEmpty()) coreService.activity.upsertList(mergedActivities)
             if (transactionDetails.isNotEmpty()) coreService.activity.upsertTransactionDetailsList(transactionDetails)
@@ -242,7 +243,7 @@ class ActivityRepo @Inject constructor(
     }
 
     suspend fun deleteForWallet(walletId: String): Result<Unit> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val deleted = coreService.activity.deleteByWalletId(walletId)
             notifyActivitiesChanged()
             Logger.info("Deleted '$deleted' activities for hardware wallet '$walletId'", context = TAG)
@@ -348,7 +349,7 @@ class ActivityRepo @Inject constructor(
     }
 
     suspend fun getActivities(
-        walletId: String? = null,
+        walletId: String? = DEFAULT_WALLET_ID,
         filter: ActivityFilter? = null,
         txType: PaymentType? = null,
         tags: List<String>? = null,
@@ -784,9 +785,12 @@ class ActivityRepo @Inject constructor(
     /**
      * Get all [ActivityTags] for backup
      */
-    suspend fun getAllActivitiesTags(): Result<List<ActivityTags>> = withContext(bgDispatcher) {
+    suspend fun getAllActivitiesTags(
+        walletId: String? = DEFAULT_WALLET_ID,
+    ): Result<List<ActivityTags>> = withContext(bgDispatcher) {
         runCatching {
-            coreService.activity.getAllActivitiesTags()
+            val tags = coreService.activity.getAllActivitiesTags()
+            if (walletId == null) tags else tags.filter { it.walletId == walletId }
         }.onFailure {
             Logger.error("getAllActivityTags error", it, context = TAG)
         }

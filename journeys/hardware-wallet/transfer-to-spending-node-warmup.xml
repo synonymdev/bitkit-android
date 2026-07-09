@@ -3,13 +3,10 @@
     Verifies that starting a hardware-wallet transfer while the Lightning node is still
     warming up does not fail or strand the CTA in loading. The flow should show the normal
     loading/progress UI, continue once the node reaches the needed state, and land on the
-    sign screen. Requires a paired and funded hardware wallet on the same regtest backend
-    used by Blocktank.
+    sign screen. Requires a paired and funded hardware wallet using the staging Blocktank
+    Electrum backend and the app's Blocktank Regtest funding controls.
   </description>
   <actions>
-    <action>
-      Verify the app Electrum backend matches the Blocktank regtest backend before starting the transfer; for current dev/staging runs the app must use ssl://electrs.bitkit.stag0.blocktank.to:9999 and setup funding must use ./lsp /regtest/chain commands, not local ./bitcoin-cli
-    </action>
     <action>
       adb: adb shell am force-stop to.bitkit.dev
     </action>

@@ -38,7 +38,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -52,6 +51,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
@@ -62,12 +62,15 @@ import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toTransportType
 import to.bitkit.models.ALL_ADDRESS_TYPES
+import to.bitkit.models.ActivityWalletType
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
+import to.bitkit.models.findWalletId
 import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toSettingsString
 import to.bitkit.models.toTrezorCoinType
+import to.bitkit.models.withWalletIds
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
@@ -77,7 +80,6 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.TrezorErrorPresenter
 import java.io.File
-import to.bitkit.models.HwWalletId
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -759,8 +761,10 @@ class TrezorRepo @Inject constructor(
             .any { it.matches(deviceId) && it.transportType == TransportType.BLUETOOTH }
     }
 
-    fun deriveWalletId(xpubs: Map<String, String>): String? =
-        deriveHardwareWalletId(xpubs)?.takeIf { it.isNotBlank() }
+    fun deriveWalletId(xpubs: Collection<String>): String {
+        if (xpubs.isEmpty() || xpubs.any { it.isBlank() }) return ""
+        return trezorService.deriveWalletId(ActivityWalletType.TREZOR.id(), xpubs)
+    }
 
     private suspend fun connectedFeatures(deviceId: String): TrezorFeatures? {
         val current = _state.value.connected
@@ -1040,7 +1044,7 @@ class TrezorRepo @Inject constructor(
             lastConnectedAt = clock.nowMs(),
             xpubs = xpubs,
             customLabel = previous?.customLabel,
-            walletId = knownDevices.findHardwareWalletId(deviceInfo.id, xpubs),
+            walletId = knownDevices.findWalletId(deviceInfo.id, xpubs, ::deriveWalletId),
         )
         val updated = knownDevices.filter { it.id != known.id } + known
         saveKnownDevices(updated)
@@ -1099,9 +1103,9 @@ class TrezorRepo @Inject constructor(
     }
 
     private suspend fun loadKnownDevices(): List<KnownDevice> = runCatching {
-        val devices = hwWalletStore.loadKnownDevices()
-        val migrated = devices.withHardwareWalletIds()
-        if (migrated != devices) {
+        val stored = hwWalletStore.loadKnownDevices()
+        val migrated = stored.withWalletIds(::deriveWalletId)
+        if (migrated != stored) {
             hwWalletStore.saveKnownDevices(migrated)
         }
         migrated
@@ -1319,40 +1323,6 @@ data class ConnectedTrezorDevice(
 )
 
 private fun KnownDevice.matches(deviceId: String) = id == deviceId || path == deviceId
-
-private val KnownDevice.walletKey: String
-    get() = walletKey(xpubs, id)
-
-private fun walletKey(xpubs: Map<String, String>, fallback: String): String =
-    xpubs.values.sorted().joinToString().ifEmpty { fallback }
-
-private fun deriveHardwareWalletId(xpubs: Map<String, String>): String? =
-    if (xpubs.isEmpty()) {
-        null
-    } else {
-        runCatching { HwWalletId.derive(xpubs) }.getOrNull()
-    }
-
-private fun List<KnownDevice>.findHardwareWalletId(deviceId: String, xpubs: Map<String, String>): String {
-    val walletKey = walletKey(xpubs, deviceId)
-    return firstOrNull { it.id == deviceId }?.walletId?.takeIf { it.isNotBlank() }
-        ?: firstOrNull { it.walletKey == walletKey }?.walletId?.takeIf { it.isNotBlank() }
-        ?: deriveHardwareWalletId(xpubs).orEmpty()
-}
-
-private fun List<KnownDevice>.withHardwareWalletIds(): List<KnownDevice> {
-    val existingByWallet = filter { it.walletId.isNotBlank() }
-        .associate { it.walletKey to it.walletId }
-    val generatedByWallet = mutableMapOf<String, String>()
-
-    return map {
-        val walletId = existingByWallet[it.walletKey]
-            ?: generatedByWallet.getOrPut(it.walletKey) {
-                deriveHardwareWalletId(it.xpubs).orEmpty()
-            }
-        if (it.walletId == walletId) it else it.copy(walletId = walletId)
-    }
-}
 
 private fun KnownDevice.toDeviceInfo() = TrezorDeviceInfo(
     id = id,
