@@ -14,6 +14,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,6 +54,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WidgetsBackupV1
 import to.bitkit.services.LightningService
+import to.bitkit.services.PaykitSdkService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.jsonLogOf
@@ -92,6 +94,7 @@ class BackupRepo @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
     private val pubkyRepo: PubkyRepo,
+    private val paykitSdkService: PaykitSdkService,
     private val privatePaykitRepo: Provider<PrivatePaykitRepo>,
     private val privatePaykitAddressReservationRepo: Provider<PrivatePaykitAddressReservationRepo>,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
@@ -284,57 +287,21 @@ class BackupRepo @Inject constructor(
         }
         dataListenerJobs.add(preActivityMetadataJob)
 
-        val pubkyStateJob = scope.launch {
-            pubkyRepo.backupStateVersion
-                .drop(1)
-                .collect {
-                    if (shouldSkipBackup()) return@collect
-                    markBackupRequired(BackupCategory.METADATA)
-                }
-        }
-        dataListenerJobs.add(pubkyStateJob)
-
-        val privatePaykitStateJob = scope.launch {
-            privatePaykitRepo.get().backupStateVersion
-                .drop(1)
-                .collect {
-                    if (shouldSkipBackup()) return@collect
-                    markBackupRequired(BackupCategory.WALLET)
-                }
-        }
-        dataListenerJobs.add(privatePaykitStateJob)
-
-        val privatePaykitReservationJob = scope.launch {
-            privatePaykitAddressReservationRepo.get().backupStateVersion
-                .drop(1)
-                .collect {
-                    if (shouldSkipBackup()) return@collect
-                    markBackupRequired(BackupCategory.WALLET)
-                }
-        }
-        dataListenerJobs.add(privatePaykitReservationJob)
+        dataListenerJobs.add(observeBackupChanges(pubkyRepo.backupStateVersion, BackupCategory.METADATA))
+        dataListenerJobs.add(observeBackupChanges(privatePaykitRepo.get().backupStateVersion, BackupCategory.WALLET))
+        dataListenerJobs.add(observeBackupChanges(paykitSdkService.backupStateVersion, BackupCategory.WALLET))
+        dataListenerJobs.add(
+            observeBackupChanges(
+                privatePaykitAddressReservationRepo.get().backupStateVersion,
+                BackupCategory.WALLET,
+            )
+        )
 
         // BLOCKTANK - Observe blocktank state changes (orders, cjitEntries, info)
-        val blocktankJob = scope.launch {
-            blocktankRepo.blocktankState
-                .drop(1)
-                .collect {
-                    if (shouldSkipBackup()) return@collect
-                    markBackupRequired(BackupCategory.BLOCKTANK)
-                }
-        }
-        dataListenerJobs.add(blocktankJob)
+        dataListenerJobs.add(observeBackupChanges(blocktankRepo.blocktankState, BackupCategory.BLOCKTANK))
 
         // ACTIVITY - Observe activity changes
-        val activityChangesJob = scope.launch {
-            activityRepo.activitiesChanged
-                .drop(1)
-                .collect {
-                    if (shouldSkipBackup()) return@collect
-                    markBackupRequired(BackupCategory.ACTIVITY)
-                }
-        }
-        dataListenerJobs.add(activityChangesJob)
+        dataListenerJobs.add(observeBackupChanges(activityRepo.activitiesChanged, BackupCategory.ACTIVITY))
 
         // LIGHTNING_CONNECTIONS - Only display sync timestamp, ldk-node manages its own backups
         @OptIn(FlowPreview::class)
@@ -355,6 +322,14 @@ class BackupRepo @Inject constructor(
 
         Logger.debug("Started ${dataListenerJobs.size} data store listeners", context = TAG)
     }
+
+    private fun observeBackupChanges(flow: Flow<*>, category: BackupCategory): Job =
+        scope.launch {
+            flow.drop(1).collect {
+                if (shouldSkipBackup()) return@collect
+                markBackupRequired(category)
+            }
+        }
 
     private fun startPeriodicBackupFailureCheck() {
         periodicCheckJob = scope.launch {
@@ -544,12 +519,14 @@ class BackupRepo @Inject constructor(
         val preActivityMetadata = preActivityMetadataRepo.getAllPreActivityMetadata().getOrDefault(emptyList())
         val cacheData = cacheStore.data.first()
         val pubkySession = pubkyRepo.snapshotSessionBackupState().getOrDefault(null)
+        val pubkyContactProfileOverrides = pubkyRepo.snapshotContactProfileOverrides().getOrDefault(null)
 
         val payload = MetadataBackupV1(
             createdAt = currentTimeMillis(),
             tagMetadata = preActivityMetadata,
             cache = cacheData,
             pubkySession = pubkySession,
+            pubkyContactProfileOverrides = pubkyContactProfileOverrides,
         )
 
         json.encodeToString(payload).toByteArray()
@@ -562,9 +539,9 @@ class BackupRepo @Inject constructor(
                 Logger.warn("Failed to snapshot private Paykit reservations", it, context = TAG)
             }
             .getOrThrow()
-        val privateLinks = privatePaykitRepo.get().backupSnapshot()
+        val paykitSdkBackupState = privatePaykitRepo.get().backupSnapshot()
             .onFailure {
-                Logger.warn("Failed to snapshot private Paykit contact links", it, context = TAG)
+                Logger.warn("Failed to snapshot Paykit SDK state", it, context = TAG)
             }
             .getOrThrow()
 
@@ -572,7 +549,7 @@ class BackupRepo @Inject constructor(
             createdAt = currentTimeMillis(),
             transfers = transfers,
             privatePaykitHighestReservedReceiveIndexByAddressType = privateReservations,
-            privatePaykitContactLinks = privateLinks,
+            paykitSdkBackupState = paykitSdkBackupState,
         )
 
         return json.encodeToString(payload).toByteArray()
@@ -600,6 +577,10 @@ class BackupRepo @Inject constructor(
                 pubkyRepo.restoreSessionBackupState(parsed.pubkySession)
                     .onFailure {
                         Logger.warn("Failed to restore pubky session backup state", it, context = TAG)
+                    }
+                pubkyRepo.restoreContactProfileOverrides(parsed.pubkyContactProfileOverrides)
+                    .onFailure {
+                        Logger.warn("Failed to restore pubky contact profile overrides", it, context = TAG)
                     }
                 Logger.debug("Restored ${parsed.tagMetadata.size} pre-activity metadata", TAG)
                 parsed.createdAt
@@ -656,7 +637,9 @@ class BackupRepo @Inject constructor(
         val addressReservationRepo = privatePaykitAddressReservationRepo.get()
         addressReservationRepo.restoreBackup(parsed.privatePaykitHighestReservedReceiveIndexByAddressType).getOrThrow()
         val privateRepo = privatePaykitRepo.get()
-        privateRepo.restoreBackup(parsed.privatePaykitContactLinks).getOrThrow()
+        privateRepo.restoreBackup(parsed.paykitSdkBackupState).onFailure {
+            Logger.warn("Failed to restore Paykit SDK backup state", it, context = TAG)
+        }
         addressReservationRepo.reconcileReservedIndexesWithLdk().getOrThrow()
         Logger.debug("Restored ${parsed.transfers.size} transfers", context = TAG)
         return parsed.createdAt

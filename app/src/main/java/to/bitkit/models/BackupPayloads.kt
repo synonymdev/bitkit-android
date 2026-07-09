@@ -20,21 +20,7 @@ data class WalletBackupV1(
     val createdAt: Long,
     val transfers: List<TransferEntity>,
     val privatePaykitHighestReservedReceiveIndexByAddressType: Map<String, Int>? = null,
-    val privatePaykitContactLinks: Map<String, PrivatePaykitContactLinkBackupV1>? = null,
-)
-
-@Serializable
-data class PrivatePaykitContactLinkBackupV1(
-    val publicKey: String,
-    val linkSnapshotHex: String? = null,
-    val handshakeSnapshotHex: String? = null,
-    val remoteEndpoints: Map<String, String> = emptyMap(),
-    val linkCompletedAt: Long? = null,
-    val handshakeUpdatedAt: Long? = null,
-    val recoveryStartedAt: Long? = null,
-    val mainRecoveryAttemptId: String? = null,
-    val responderRecoveryAttemptId: String? = null,
-    val awaitingRecoveredRemoteEndpoints: Boolean = false,
+    val paykitSdkBackupState: String? = null,
 )
 
 @Serializable
@@ -44,6 +30,7 @@ data class MetadataBackupV1(
     val tagMetadata: List<PreActivityMetadata>,
     val cache: AppCacheData,
     val pubkySession: PubkySessionBackupV1? = null,
+    val pubkyContactProfileOverrides: Map<String, PubkyProfileData>? = null,
 )
 
 @Serializable

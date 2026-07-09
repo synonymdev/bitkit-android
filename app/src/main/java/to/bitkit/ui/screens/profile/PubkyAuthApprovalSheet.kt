@@ -186,6 +186,7 @@ private fun Content(
         SheetTopBar(titleText = headerTitle)
 
         when (uiState.state) {
+            ApprovalState.Loading -> LoadingContent()
             ApprovalState.Authorize -> AuthorizeContent(
                 uiState = uiState,
                 onAuthorize = onAuthorize,
@@ -200,6 +201,18 @@ private fun Content(
             )
         }
     }
+}
+
+@Composable
+private fun ColumnScope.LoadingContent() {
+    FillHeight()
+    PrimaryButton(
+        text = stringResource(R.string.profile__auth_approval_authorizing),
+        onClick = {},
+        isLoading = true,
+        enabled = false,
+    )
+    VerticalSpacer(16.dp)
 }
 
 @Composable

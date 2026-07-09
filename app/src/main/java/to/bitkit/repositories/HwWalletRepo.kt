@@ -369,8 +369,8 @@ class HwWalletRepo @Inject constructor(
                     balanceSats = event.balance.total,
                     activities = activities,
                 )
-                val updatedWatcherData = _watcherData.value + (watcherId to watcher)
-                _watcherData.update { updatedWatcherData }
+                _watcherData.update { it + (watcherId to watcher) }
+                val updatedWatcherData = _watcherData.value
                 activities.filterIsInstance<Activity.Onchain>().forEach {
                     activityRepo.syncHardwareOnchainActivity(it.v1)
                 }
@@ -424,7 +424,7 @@ class HwWalletRepo @Inject constructor(
                 // Xpubs for all types are still captured on connect for a future multi-type release.
                 // Device entries sharing an xpub (same device on bluetooth and usb) watch it only once.
                 val filtered = knownDevices.flatMap { device ->
-                    val walletId = device.resolvedWalletId()
+                    val walletId = device.resolvedWalletId() ?: return@flatMap emptyList<WatcherSpec>()
                     device.xpubs
                         .filterKeys { it in SUPPORTED_WATCHER_ADDRESS_TYPES }
                         .map { (addressType, xpub) ->
@@ -495,7 +495,7 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    private fun KnownDevice.resolvedWalletId(): String =
+    private fun KnownDevice.resolvedWalletId(): String? =
         walletId.takeIf { it.isNotBlank() } ?: trezorRepo.deriveWalletId(xpubs)
 
     private fun List<HwWatcherData>.toMergedActivities(): List<Activity> =

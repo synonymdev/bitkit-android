@@ -77,20 +77,20 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch {
             _isSigningOut.update { true }
             _showSignOutDialog.update { false }
-            privatePaykitRepo.removePublishedEndpointsBestEffort(TAG)
-            privatePaykitRepo.closeAndClear(markProfileRecoveryPending = true)
-            pubkyRepo.signOut()
-                .onSuccess {
-                    _effects.emit(ProfileEffect.SignedOut)
-                }
-                .onFailure {
-                    Logger.error("Sign out failed", it, context = TAG)
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.profile__sign_out_title),
-                        description = it.message,
-                    )
-                }
+            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
+            val result = pubkyRepo.signOut()
+            privatePaykitRepo.closeAndClear()
+            if (result.isSuccess) {
+                _effects.emit(ProfileEffect.SignedOut)
+            } else {
+                val error = requireNotNull(result.exceptionOrNull()) { "Sign out failed without an error" }
+                Logger.error("Sign out failed", error, context = TAG)
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.profile__sign_out_title),
+                    description = error.message,
+                )
+            }
             _isSigningOut.update { false }
         }
     }

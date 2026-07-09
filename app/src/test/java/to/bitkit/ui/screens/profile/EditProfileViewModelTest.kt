@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -56,8 +57,11 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        verify(pubkyRepo).deleteProfileWithSessionRetry()
-        verify(privatePaykitRepo).closeAndClear(markProfileRecoveryPending = true)
+        inOrder(privatePaykitRepo, pubkyRepo).apply {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(pubkyRepo).deleteProfileWithSessionRetry()
+            verify(privatePaykitRepo).closeAndClear()
+        }
     }
 
     @Test
@@ -74,8 +78,11 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        verify(pubkyRepo).deleteProfileWithSessionRetry()
-        verify(privatePaykitRepo).closeAndClear(markProfileRecoveryPending = true)
+        inOrder(privatePaykitRepo, pubkyRepo).apply {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(pubkyRepo).deleteProfileWithSessionRetry()
+            verify(privatePaykitRepo).closeAndClear()
+        }
     }
 
     @Test
@@ -114,8 +121,63 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertEquals(EditProfileEffect.DisconnectSuccess, awaitItem())
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        inOrder(privatePaykitRepo, pubkyRepo).apply {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(pubkyRepo).signOut()
+            verify(privatePaykitRepo).closeAndClear()
+        }
+    }
+
+    @Test
+    fun `disconnectProfile continues when private cleanup fails`() = test {
+        val sut = createSut()
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
+            .thenReturn(Result.failure(TestAppError("cleanup failed")))
+        whenever(pubkyRepo.signOut()).thenReturn(Result.success(Unit))
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.disconnectProfile()
+            advanceUntilIdle()
+
+            assertEquals(EditProfileEffect.DisconnectSuccess, awaitItem())
+        }
+        assertFalse(sut.uiState.value.isSaving)
         verify(pubkyRepo).signOut()
-        verify(privatePaykitRepo).closeAndClear(markProfileRecoveryPending = true)
+        verify(privatePaykitRepo).closeAndClear()
+    }
+
+    @Test
+    fun `disconnectProfile clears local Paykit state when Pubky sign out fails`() = test {
+        val sut = createSut()
+        whenever(pubkyRepo.signOut()).thenReturn(Result.failure(TestAppError("sign out failed")))
+        advanceUntilIdle()
+
+        sut.disconnectProfile()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isSaving)
+        verify(privatePaykitRepo).closeAndClear()
+    }
+
+    @Test
+    fun `deleteProfile should continue when private cleanup fails`() = test {
+        val sut = createSut()
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
+            .thenReturn(Result.failure(TestAppError("cleanup failed")))
+        whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.deleteProfile()
+            advanceUntilIdle()
+
+            assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
+        }
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        assertFalse(sut.uiState.value.isSaving)
+        verify(pubkyRepo).deleteProfileWithSessionRetry()
+        verify(privatePaykitRepo).closeAndClear()
     }
 
     @Test
@@ -138,9 +200,9 @@ class EditProfileViewModelTest : BaseUnitTest() {
         whenever(context.getString(any<Int>())).thenReturn("")
         whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
-        whenever { privatePaykitRepo.removePublishedEndpointsBestEffort(any()) }
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
             .thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.closeAndClear(any()) }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
 
         return EditProfileViewModel(
             context = context,

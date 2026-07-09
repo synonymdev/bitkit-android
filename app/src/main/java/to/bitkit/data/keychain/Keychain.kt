@@ -66,6 +66,54 @@ class Keychain @Inject constructor(
         }
     }
 
+    internal fun <T> accessBlocking(block: BlockingAccess.() -> T): T =
+        BlockingAccess().block()
+
+    internal inner class BlockingAccess {
+        @Suppress("TooGenericExceptionCaught")
+        fun load(key: String): ByteArray? {
+            try {
+                return blockingSnapshot[key.indexedBlocking]?.fromBase64()?.let {
+                    keyStore.decrypt(it)
+                }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                emitLoadDiagnosticsOnce(key, t)
+                throw KeychainError.FailedToLoad(key, cause = t)
+            }
+        }
+
+        @Suppress("TooGenericExceptionCaught")
+        fun upsert(key: String, value: ByteArray) {
+            try {
+                val encryptedValue = keyStore.encrypt(value)
+                runBlocking {
+                    keychain.edit { it[key.indexedBlocking] = encryptedValue.toBase64() }
+                }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                throw KeychainError.FailedToSave(key, cause = t)
+            }
+            Logger.info("Upserted value for key '$key'", context = TAG)
+        }
+
+        @Suppress("TooGenericExceptionCaught")
+        fun delete(key: String) {
+            try {
+                runBlocking {
+                    keychain.edit { it.remove(key.indexedBlocking) }
+                }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (t: Throwable) {
+                throw KeychainError.FailedToDelete(key, cause = t)
+            }
+            Logger.debug("Deleted value for key '$key'", context = TAG)
+        }
+    }
+
     suspend fun saveString(key: String, value: String) = save(key, value.toByteArray())
 
     @Suppress("TooGenericExceptionCaught", "ThrowsCount")
@@ -80,10 +128,9 @@ class Keychain @Inject constructor(
         } catch (t: Throwable) {
             throw KeychainError.FailedToSave(key, cause = t)
         }
-        Logger.info("Saved to keychain: $key")
+        Logger.info("Saved value for key '$key'", context = TAG)
     }
 
-    /** Inserts or replaces a string value associated with a given key in the keychain. */
     @Suppress("TooGenericExceptionCaught")
     suspend fun upsertString(key: String, value: String) {
         try {
@@ -94,7 +141,7 @@ class Keychain @Inject constructor(
         } catch (t: Throwable) {
             throw KeychainError.FailedToSave(key, cause = t)
         }
-        Logger.info("Upsert in keychain: $key")
+        Logger.info("Upserted value for key '$key'", context = TAG)
     }
 
     @Suppress("TooGenericExceptionCaught")
@@ -106,7 +153,7 @@ class Keychain @Inject constructor(
         } catch (t: Throwable) {
             throw KeychainError.FailedToDelete(key, cause = t)
         }
-        Logger.debug("Deleted from keychain: $key")
+        Logger.debug("Deleted value for key '$key'", context = TAG)
     }
 
     fun exists(key: String): Boolean {
@@ -119,12 +166,23 @@ class Keychain @Inject constructor(
         keyStore.resetEncryptionKey()
         val count = keys.size
 
-        Logger.info("Reset keychain encryption key and deleted all '$count' entries")
+        Logger.info("Reset keychain encryption key and deleted all '$count' entries", context = TAG)
     }
 
     private val String.indexed: Preferences.Key<String>
         get() {
             val walletIndex = runBlocking { db.configDao().getAll().first() }.firstOrNull()?.walletIndex ?: 0
+            return "${this}_$walletIndex".let(::stringPreferencesKey)
+        }
+
+    private val blockingSnapshot: Preferences
+        get() = runBlocking { keychain.data.first() }
+
+    private val String.indexedBlocking: Preferences.Key<String>
+        get() {
+            val walletIndex = runBlocking {
+                db.configDao().getAll().first()
+            }.firstOrNull()?.walletIndex ?: 0
             return "${this}_$walletIndex".let(::stringPreferencesKey)
         }
 
@@ -174,7 +232,7 @@ class Keychain @Inject constructor(
         PIN,
         PIN_ATTEMPTS_REMAINING,
         PAYKIT_SESSION,
-        PRIVATE_PAYKIT_SECRET_STATE,
+        PAYKIT_SDK_STATE,
         PUBKY_SECRET_KEY,
     }
 }
