@@ -3,6 +3,7 @@ package to.bitkit.ui.sheets.hardware
 import android.content.Context
 import app.cash.turbine.test
 import com.synonym.bitkitcore.TrezorDeviceInfo
+import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorTransportType
 import kotlinx.collections.immutable.ImmutableList
@@ -46,6 +47,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.deviceState).thenReturn(deviceState)
         whenever(context.getString(R.string.hardware__connect_error)).thenReturn(CONNECT_ERROR)
         whenever(context.getString(R.string.hardware__search_error)).thenReturn(SEARCH_ERROR)
+        whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
         sut = HwConnectViewModel(
             hwWalletRepo = hwWalletRepo,
             context = context,
@@ -209,6 +211,18 @@ class HwConnectViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onConnectClick surfaces device busy unlock prompt`() = test {
+        givenDeviceFound()
+        runCurrent()
+        whenever(hwWalletRepo.connect("dev1")).thenReturn(Result.failure(AppError(TrezorException.DeviceBusy())))
+
+        sut.onConnectClick()
+        runCurrent()
+
+        assertEquals(DEVICE_BUSY_MESSAGE, sut.uiState.value.errorMessage)
+    }
+
+    @Test
     fun `pairing code request surfaces the inline pair code step`() = test {
         sut.effects.test {
             needsPairingCode.value = true
@@ -297,5 +311,6 @@ class HwConnectViewModelTest : BaseUnitTest() {
     private companion object {
         const val CONNECT_ERROR = "Could not connect"
         const val SEARCH_ERROR = "Could not search"
+        const val DEVICE_BUSY_MESSAGE = "Your Trezor is busy. Unlock it on the device, then try again."
     }
 }

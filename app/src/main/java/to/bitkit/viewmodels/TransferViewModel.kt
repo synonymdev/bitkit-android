@@ -33,6 +33,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
+import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingTransaction
@@ -48,6 +49,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.TrezorErrorPresenter
 import javax.inject.Inject
 import kotlin.math.min
 import kotlin.math.roundToLong
@@ -657,6 +659,14 @@ class TransferViewModel @Inject constructor(
             else -> {
                 if (e.isTrezorUserCancellation()) {
                     Logger.info("Hardware transfer cancelled on device for '$deviceId'", context = TAG)
+                    return
+                }
+                if (e.isTrezorDeviceBusy()) {
+                    Logger.warn("Hardware transfer blocked by busy Trezor for '$deviceId'", e, context = TAG)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = TrezorErrorPresenter.userMessage(context, e),
+                    )
                     return
                 }
                 Logger.error("Hardware transfer failed", e, context = TAG)

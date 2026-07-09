@@ -54,10 +54,12 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toTransportType
+import com.synonym.bitkitcore.AddressType
 import to.bitkit.models.ALL_ADDRESS_TYPES
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
@@ -72,6 +74,7 @@ import to.bitkit.services.TrezorUiHandler
 import to.bitkit.services.TrezorWalletMode
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.TrezorErrorPresenter
 import java.io.File
 import to.bitkit.models.HwWalletId
 import javax.inject.Inject
@@ -105,6 +108,16 @@ class TrezorRepo @Inject constructor(
         private val TRANSPORT_RESTORED_RECONNECT_DELAY = 2.seconds
         private val CONNECT_ATTEMPT_POLL_INTERVAL = 250.milliseconds
         private val CONNECT_ATTEMPT_MAX_WAIT = 28.seconds
+        private const val MAX_XPUB_FETCH_ATTEMPTS = 3
+        private val XPUB_FETCH_RETRY_DELAY = 300.milliseconds
+        private val TRANSIENT_FAILURE_MARKERS = listOf(
+            "TransportError",
+            "ConnectionError",
+            "DeviceDisconnected",
+            "Timeout",
+            "IoError",
+            "SessionError",
+        )
     }
 
     private val _state = MutableStateFlow(TrezorState())
@@ -271,7 +284,7 @@ class TrezorRepo @Inject constructor(
                     isSetup = CompletableDeferred()
                 }
                 Logger.error("Trezor init failed", e, context = TAG)
-                _state.update { it.copy(error = e.message) }
+                _state.update { it.copy(error = trezorErrorMessage(e)) }
             }
         }
     }
@@ -287,7 +300,7 @@ class TrezorRepo @Inject constructor(
             devices
         }.onFailure { e ->
             Logger.error("Trezor scan failed", e, context = TAG)
-            _state.update { it.copy(isScanning = false, error = e.message) }
+            _state.update { it.copy(isScanning = false, error = trezorErrorMessage(e)) }
         }
     }
 
@@ -301,7 +314,7 @@ class TrezorRepo @Inject constructor(
             devices
         }.onFailure { e ->
             Logger.error("Trezor listDevices failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -344,7 +357,7 @@ class TrezorRepo @Inject constructor(
             features
         }.onFailure { e ->
             Logger.error("Trezor connect failed", e, context = TAG)
-            _state.update { it.copy(isConnecting = false, error = e.message) }
+            _state.update { it.copy(isConnecting = false, error = trezorErrorMessage(e)) }
         }
     }
 
@@ -366,7 +379,7 @@ class TrezorRepo @Inject constructor(
             response
         }.onFailure { e ->
             Logger.error("Trezor getAddress failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -386,7 +399,7 @@ class TrezorRepo @Inject constructor(
             response
         }.onFailure { e ->
             Logger.error("Trezor getPublicKey failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -405,7 +418,7 @@ class TrezorRepo @Inject constructor(
             )
         }.onFailure {
             Logger.error("Failed to get Trezor transaction history", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
@@ -424,7 +437,7 @@ class TrezorRepo @Inject constructor(
             )
         }.onFailure { e ->
             Logger.error("Trezor getAccountInfo failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -441,7 +454,7 @@ class TrezorRepo @Inject constructor(
             )
         }.onFailure { e ->
             Logger.error("Trezor getAddressInfo failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -473,7 +486,7 @@ class TrezorRepo @Inject constructor(
             trezorService.composeTransaction(params)
         }.onFailure {
             Logger.error("Trezor composeTransaction failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
@@ -488,7 +501,7 @@ class TrezorRepo @Inject constructor(
             response
         }.onFailure {
             Logger.error("Trezor signTxFromPsbt failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
@@ -503,7 +516,7 @@ class TrezorRepo @Inject constructor(
             )
         }.onFailure {
             Logger.error("Trezor broadcastRawTx failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
@@ -531,7 +544,7 @@ class TrezorRepo @Inject constructor(
         }.onFailure { e ->
             TrezorDebugLog.log("DISCONNECT", "FAILED: ${e.message}")
             Logger.error("Trezor disconnect failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -551,7 +564,7 @@ class TrezorRepo @Inject constructor(
             response
         }.onFailure { e ->
             Logger.error("Trezor signMessage failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -573,7 +586,7 @@ class TrezorRepo @Inject constructor(
             result
         }.onFailure { e ->
             Logger.error("Trezor verifyMessage failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -634,7 +647,7 @@ class TrezorRepo @Inject constructor(
             _state.update { it.copy(isAutoReconnecting = false) }
         }.onFailure { e ->
             Logger.error("Auto-reconnect failed", e, context = TAG)
-            _state.update { it.copy(isAutoReconnecting = false, error = e.message) }
+            _state.update { it.copy(isAutoReconnecting = false, error = trezorErrorMessage(e)) }
         }
     }
 
@@ -680,7 +693,7 @@ class TrezorRepo @Inject constructor(
                 features
             }.onFailure { e ->
                 Logger.error("Connect known device failed", e, context = TAG)
-                _state.update { it.copy(error = e.message) }
+                _state.update { it.copy(error = trezorErrorMessage(e)) }
                 if (!forceSession) {
                     disconnectStaleSession(deviceId)
                 }
@@ -825,7 +838,7 @@ class TrezorRepo @Inject constructor(
         }.onFailure { e ->
             TrezorDebugLog.log("FORGET", "FAILED: ${e.message}")
             Logger.error("Forget device failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -854,7 +867,7 @@ class TrezorRepo @Inject constructor(
             Logger.info("Started watcher '$watcherId'", context = TAG)
         }.onFailure {
             Logger.error("Start watcher failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
@@ -866,7 +879,7 @@ class TrezorRepo @Inject constructor(
             Logger.info("Stopped watcher '$watcherId'", context = TAG)
         }.onFailure {
             Logger.error("Stop watcher failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
@@ -881,7 +894,7 @@ class TrezorRepo @Inject constructor(
             TrezorDebugLog.log(WATCHER_TAG, "Stopped all watchers")
         }.onFailure {
             Logger.error("Stop all watchers failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
@@ -1012,17 +1025,39 @@ class TrezorRepo @Inject constructor(
     private suspend fun fetchAccountXpubs(): Map<String, String> {
         val coin = Env.network.toTrezorCoinType()
         return ALL_ADDRESS_TYPES.mapNotNull { addressType ->
-            runCatching {
-                val xpub = trezorService.getPublicKey(
-                    path = addressType.toAccountDerivationPath(network = Env.network),
+            fetchXpubForAddressType(addressType, coin)?.let { addressType.toSettingsString() to it }
+        }.toMap()
+    }
+
+    private suspend fun fetchXpubForAddressType(
+        addressType: AddressType,
+        coin: TrezorCoinType,
+    ): String? {
+        val path = addressType.toAccountDerivationPath(network = Env.network)
+        val settingsKey = addressType.toSettingsString()
+        for (attempt in 1..MAX_XPUB_FETCH_ATTEMPTS) {
+            val result = runSuspendCatching {
+                trezorService.getPublicKey(
+                    path = path,
                     coin = coin,
                     showOnTrezor = false,
                 ).xpub
-                addressType.toSettingsString() to xpub
-            }.onFailure {
-                Logger.warn("Could not read xpub for '${addressType.toSettingsString()}'", it, context = TAG)
-            }.getOrNull()
-        }.toMap()
+            }
+            if (result.isSuccess) {
+                return result.getOrThrow()
+            }
+            val error = result.exceptionOrNull() ?: return null
+            Logger.warn(
+                "Could not read xpub for '$settingsKey' (attempt $attempt/$MAX_XPUB_FETCH_ATTEMPTS)",
+                error,
+                context = TAG,
+            )
+            if (!isTransientTransportFailure(error) || attempt == MAX_XPUB_FETCH_ATTEMPTS) {
+                return null
+            }
+            delay(XPUB_FETCH_RETRY_DELAY)
+        }
+        return null
     }
 
     private suspend fun loadKnownDevices(): List<KnownDevice> = runCatching {
@@ -1081,7 +1116,7 @@ class TrezorRepo @Inject constructor(
             _state.update { it.copy(error = null) }
         }.onFailure { e ->
             Logger.error("Trezor clearCredentials failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -1160,7 +1195,24 @@ class TrezorRepo @Inject constructor(
         TrezorDebugLog.log("CRED", "$label: file=$sanitizedId.json exists=$exists size=$size")
     }
 
+    private fun trezorErrorMessage(error: Throwable): String? =
+        if (error.isTrezorDeviceBusy()) {
+            TrezorErrorPresenter.userMessage(context, error)
+        } else {
+            error.message
+        }
+
+    private fun isTransientTransportFailure(error: Throwable): Boolean {
+        if (error.isTrezorDeviceBusy()) return true
+        val text = buildString {
+            append(error.message.orEmpty())
+            error.cause?.message?.let { append(it) }
+        }
+        return TRANSIENT_FAILURE_MARKERS.any { marker -> text.contains(marker, ignoreCase = true) }
+    }
+
     private fun isRetryableError(e: Throwable): Boolean {
+        if (e.isTrezorDeviceBusy()) return true
         val msg = e.message?.lowercase() ?: return false
         // A rejected session (wrong passphrase, or the user cancelling on-device
         // passphrase entry) is a definitive failure, not a transient THP/transport

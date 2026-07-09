@@ -33,6 +33,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.R
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -67,6 +68,7 @@ class TrezorRepoTest : BaseUnitTest() {
         private const val TEST_MESSAGE = "Hello Trezor"
         private const val TEST_SIGNATURE = "signature123"
         private const val TEST_ADDRESS = "bc1qtest"
+        private const val DEVICE_BUSY_MESSAGE = "Your Trezor is busy. Unlock it on the device, then try again."
     }
 
     @get:Rule(order = 1)
@@ -102,6 +104,8 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Standard)
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(context.filesDir).thenReturn(tempFolder.root)
+        whenever(context.getString(R.string.hardware__connect_error)).thenReturn("Could not connect to your Trezor.")
+        whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
         whenever { hwWalletStore.loadKnownDevices() }.thenReturn(emptyList())
     }
 
@@ -155,6 +159,21 @@ class TrezorRepoTest : BaseUnitTest() {
         depth = 3u,
         rootFingerprint = 0u,
     )
+
+    private fun stubAccountXpubFetch() {
+        whenever {
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        }.thenAnswer {
+            mockPublicKeyResponse(
+                xpub = "xpub-${it.getArgument<String>(0)}",
+                path = it.getArgument(0),
+            )
+        }
+    }
 
     @Suppress("LongParameterList")
     private fun mockKnownDevice(
@@ -793,6 +812,71 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
+    }
+
+    @Test
+    fun `connect should retry once for device busy errors`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any()))
+            .doAnswer { throw TrezorException.DeviceBusy() }
+            .thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        stubAccountXpubFetch()
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        verify(trezorService, times(2)).connect(eq(DEVICE_ID), any())
+    }
+
+    @Test
+    fun `connect maps device busy failures to unlock prompt`() = test {
+        whenever(trezorService.connect(eq(DEVICE_ID), any()))
+            .doAnswer { throw TrezorException.DeviceBusy() }
+        sut = createSut()
+
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertEquals(DEVICE_BUSY_MESSAGE, sut.state.value.error)
+    }
+
+    @Test
+    fun `connect retries account xpub fetch on device busy`() = test {
+        val nativeSegwitPath = "m/84'/1'/0'"
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        var nativeSegwitAttempts = 0
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        ).thenAnswer {
+            val path = it.getArgument<String>(0)
+            if (path == nativeSegwitPath) {
+                nativeSegwitAttempts++
+                if (nativeSegwitAttempts == 1) {
+                    throw TrezorException.DeviceBusy()
+                }
+                mockPublicKeyResponse(xpub = "native-xpub", path = nativeSegwitPath)
+            } else {
+                throw AppError("unsupported")
+            }
+        }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        assertEquals(2, nativeSegwitAttempts)
     }
 
     @Test
