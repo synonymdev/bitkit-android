@@ -19,7 +19,9 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
+import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.repositories.resolveHwWalletName
+import to.bitkit.utils.TrezorErrorPresenter
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
@@ -110,25 +112,29 @@ class HwConnectViewModel @Inject constructor(
                             }
                         }
                     }
-                    .onFailure {
-                        onConnectFailed(resolvedDeviceId, resolvedDeviceModel)
+                    .onFailure { error ->
+                        onConnectFailed(resolvedDeviceId, resolvedDeviceModel, error)
                         return@launch
                     }
             }
             hwWalletRepo.connect(resolvedDeviceId)
                 .onSuccess { onConnected(resolvedDeviceId, it) }
-                .onFailure { onConnectFailed(resolvedDeviceId, resolvedDeviceModel) }
+                .onFailure { error -> onConnectFailed(resolvedDeviceId, resolvedDeviceModel, error) }
             connectJob = null
         }
     }
 
-    private fun onConnectFailed(deviceId: String, deviceModel: String) {
+    private fun onConnectFailed(deviceId: String, deviceModel: String, error: Throwable) {
         _uiState.update {
             it.copy(
                 isConnecting = false,
                 foundDeviceId = deviceId,
                 deviceModel = deviceModel,
-                errorMessage = context.getString(R.string.hardware__connect_error),
+                errorMessage = if (error.isTrezorDeviceBusy()) {
+                    TrezorErrorPresenter.userMessage(context, error)
+                } else {
+                    context.getString(R.string.hardware__connect_error)
+                },
             )
         }
         setEffect(

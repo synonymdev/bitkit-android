@@ -33,6 +33,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
+import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingTransaction
@@ -48,6 +49,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.TrezorErrorPresenter
 import javax.inject.Inject
 import kotlin.math.min
 import kotlin.math.roundToLong
@@ -637,12 +639,21 @@ class TransferViewModel @Inject constructor(
     }
 
     private suspend fun handleHardwareTransferFailure(e: Throwable, deviceId: String) {
+        if (e.isTrezorUserCancellation()) {
+            Logger.info("Hardware transfer cancelled on device for '$deviceId'", context = TAG)
+            return
+        }
+        if (e.isTrezorDeviceBusy()) {
+            Logger.warn("Hardware transfer blocked by busy Trezor for '$deviceId'", e, context = TAG)
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.common__error),
+                description = TrezorErrorPresenter.userMessage(context, e),
+            )
+            return
+        }
         when (e) {
             is HardwareReconnectError -> {
-                if (e.isTrezorUserCancellation()) {
-                    Logger.info("Hardware transfer cancelled on device for '$deviceId'", context = TAG)
-                    return
-                }
                 Logger.error("Failed to reconnect hardware device", e, context = TAG)
                 showHardwareReconnectError(deviceId)
             }
@@ -655,10 +666,6 @@ class TransferViewModel @Inject constructor(
                 showHardwareFundingError(e)
             }
             else -> {
-                if (e.isTrezorUserCancellation()) {
-                    Logger.info("Hardware transfer cancelled on device for '$deviceId'", context = TAG)
-                    return
-                }
                 Logger.error("Hardware transfer failed", e, context = TAG)
                 ToastEventBus.send(e)
             }

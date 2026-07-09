@@ -365,6 +365,65 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onTransferToSpendingHwConfirm shows unlock prompt when device is busy`() = test {
+        val order = previewBtOrder()
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FEE_RATE,
+        )
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+        whenever(hwWalletRepo.signAndBroadcastFunding(any(), any()))
+            .thenReturn(Result.failure(AppError(TrezorException.DeviceBusy())))
+        whenever(context.getString(R.string.common__error)).thenReturn(ERROR_TITLE)
+        whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
+        whenever(context.getString(R.string.hardware__connect_error)).thenReturn("connect error")
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(1, toasts.size)
+        assertEquals(Toast.ToastType.ERROR, toasts.single().type)
+        assertEquals(ERROR_TITLE, toasts.single().title)
+        assertEquals(DEVICE_BUSY_MESSAGE, toasts.single().description)
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+    }
+
+    @Test
+    fun `onTransferToSpendingHwConfirm shows unlock prompt when device is busy during reconnect`() = test {
+        val order = previewBtOrder()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = false))))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+            .thenReturn(Result.failure(AppError(TrezorException.DeviceBusy())))
+        whenever(context.getString(R.string.common__error)).thenReturn(ERROR_TITLE)
+        whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
+        whenever(context.getString(R.string.hardware__connect_error)).thenReturn("connect error")
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(1, toasts.size)
+        assertEquals(Toast.ToastType.ERROR, toasts.single().type)
+        assertEquals(ERROR_TITLE, toasts.single().title)
+        assertEquals(DEVICE_BUSY_MESSAGE, toasts.single().description)
+        verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
+    }
+
+    @Test
     fun `onTransferToSpendingHwConfirm does not toast when user cancels during reconnect`() = test {
         val order = previewBtOrder()
         val toasts = mutableListOf<Toast>()
@@ -418,6 +477,8 @@ class TransferViewModelTest : BaseUnitTest() {
         const val SERVICE_FEE = 286uL
         const val LSP_FEE = 2_398uL // NETWORK_FEE + SERVICE_FEE
         const val DEVICE_ID = "dev1"
+        const val DEVICE_BUSY_MESSAGE = "Your Trezor is busy. Unlock it on the device, then try again."
+        const val ERROR_TITLE = "Error"
         const val XPUB = "zpub-test"
         const val TXID = "tx-abc"
         const val FEE_RATE = 2uL

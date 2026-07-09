@@ -26,4 +26,23 @@ class TrezorExceptionExtTest {
         assertFalse(AppError("sign failed").isTrezorUserCancellation())
         assertFalse(TrezorException.Timeout().isTrezorUserCancellation())
     }
+
+    @Test
+    fun `isTrezorDeviceBusy returns true for device busy exceptions`() {
+        assertTrue(TrezorException.DeviceBusy().isTrezorDeviceBusy())
+    }
+
+    @Test
+    fun `isTrezorDeviceBusy walks the cause chain`() {
+        val error = AppError(TrezorException.DeviceBusy())
+
+        assertTrue(error.isTrezorDeviceBusy())
+    }
+
+    @Test
+    fun `isTrezorDeviceBusy returns false for other errors`() {
+        assertFalse(TrezorException.Timeout().isTrezorDeviceBusy())
+        assertFalse(TrezorException.UserCancelled().isTrezorDeviceBusy())
+        assertFalse(AppError("sign failed").isTrezorDeviceBusy())
+    }
 }

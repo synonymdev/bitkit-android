@@ -175,6 +175,7 @@
     <string name="hardware__connection_badge_connected_usb">Connected via USB</string>
     <string name="hardware__connection_badge_disconnected_bluetooth">Disconnected via Bluetooth</string>
     <string name="hardware__connection_badge_disconnected_usb">Disconnected via USB</string>
+    <string name="hardware__device_busy">Your Trezor is busy. Unlock it on the device, then try again.</string>
     <string name="hardware__device_model_trezor">Trezor</string>
     <string name="hardware__found_header">Found &lt;accent&gt;Trezor&lt;/accent&gt;</string>
     <string name="hardware__found_text">Would you like to securely pair this %1$s with Bitkit?</string>

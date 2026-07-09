@@ -8,3 +8,6 @@ fun Throwable.isTrezorUserCancellation(): Boolean =
             it is TrezorException.PinCancelled ||
             it is TrezorException.PassphraseCancelled
     }
+
+fun Throwable.isTrezorDeviceBusy(): Boolean =
+    generateSequence(this) { it.cause }.any { it is TrezorException.DeviceBusy }
