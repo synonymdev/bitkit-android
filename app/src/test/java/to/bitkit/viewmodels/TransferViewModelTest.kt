@@ -386,6 +386,7 @@ class TransferViewModelTest : BaseUnitTest() {
             .thenReturn(Result.failure(AppError(TrezorException.DeviceBusy())))
         whenever(context.getString(R.string.common__error)).thenReturn(ERROR_TITLE)
         whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
+        whenever(context.getString(R.string.hardware__connect_error)).thenReturn("connect error")
 
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
@@ -409,6 +410,7 @@ class TransferViewModelTest : BaseUnitTest() {
             .thenReturn(Result.failure(AppError(TrezorException.DeviceBusy())))
         whenever(context.getString(R.string.common__error)).thenReturn(ERROR_TITLE)
         whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
+        whenever(context.getString(R.string.hardware__connect_error)).thenReturn("connect error")
 
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()

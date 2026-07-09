@@ -38,6 +38,7 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.toCoreNetwork
@@ -107,6 +108,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(context.getString(R.string.hardware__connect_error)).thenReturn("Could not connect to your Trezor.")
         whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
         whenever { hwWalletStore.loadKnownDevices() }.thenReturn(emptyList())
+        stubAccountXpubFetch()
     }
 
     private fun createSut(): TrezorRepo = TrezorRepo(
@@ -815,21 +817,16 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `connect should retry once for device busy errors`() = test {
-        val features = mockFeatures()
-        val device = mockDeviceInfo()
+    fun `connect should fail fast for device busy errors`() = test {
         whenever(trezorService.connect(eq(DEVICE_ID), any()))
             .doAnswer { throw TrezorException.DeviceBusy() }
-            .thenReturn(features)
-        whenever(trezorService.scan()).thenReturn(listOf(device))
-        stubAccountXpubFetch()
         sut = createSut()
 
-        sut.scan()
         val result = sut.connect(DEVICE_ID)
 
-        assertTrue(result.isSuccess)
-        verify(trezorService, times(2)).connect(eq(DEVICE_ID), any())
+        assertTrue(result.isFailure)
+        assertEquals(DEVICE_BUSY_MESSAGE, sut.state.value.error)
+        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
     }
 
     @Test
@@ -877,6 +874,30 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(2, nativeSegwitAttempts)
+    }
+
+    @Test
+    fun `connect fails when account xpub reads exhaust device busy retries`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        ).thenAnswer { throw TrezorException.DeviceBusy() }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertEquals(DEVICE_BUSY_MESSAGE, sut.state.value.error)
+        assertNull(sut.state.value.connectedDevice())
+        verify(hwWalletStore, never()).saveKnownDevices(any())
     }
 
     @Test
@@ -1408,6 +1429,33 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull() is TrezorException.UserCancelled)
+        verify(trezorService, times(1)).connect(eq(bleDeviceId), any())
+    }
+
+    @Test
+    fun `ensureConnected stops bluetooth retry on device busy`() = test {
+        val bleDeviceId = "ble:57:21:A7:F9:DD:AD"
+        val knownDevice = mockKnownDevice(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TransportType.BLUETOOTH,
+        )
+        val device = mockDeviceInfo(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TrezorTransportType.BLUETOOTH,
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(bleDeviceId), any())).doAnswer { throw TrezorException.DeviceBusy() }
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.ensureConnected(bleDeviceId)
+
+        assertTrue(result.isFailure)
+        assertEquals(true, result.exceptionOrNull()?.isTrezorDeviceBusy())
         verify(trezorService, times(1)).connect(eq(bleDeviceId), any())
     }
 

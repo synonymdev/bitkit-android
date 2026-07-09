@@ -15,6 +15,7 @@ import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
+import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorScriptType
@@ -736,6 +737,9 @@ class TrezorRepo @Inject constructor(
             if (failure?.isTrezorUserCancellation() == true) {
                 return Result.failure(failure)
             }
+            if (failure?.isTrezorDeviceBusy() == true) {
+                return Result.failure(failure)
+            }
             lastFailure = failure
         }
         return Result.failure(lastFailure ?: AppError("Failed to connect"))
@@ -999,7 +1003,17 @@ class TrezorRepo @Inject constructor(
         val storedIds = stored.map { it.id }.toSet()
         val knownDevices = stored + _state.value.knownDevices.filter { it.id !in storedIds }
         val previous = knownDevices.find { it.id == deviceInfo.id }
-        val xpubs = previous?.xpubs.orEmpty() + fetchAccountXpubs()
+        val fetchResult = fetchAccountXpubs()
+        val xpubs = previous?.xpubs.orEmpty() + fetchResult.xpubs
+        if (xpubs.isEmpty()) {
+            throw AppError(TrezorException.DeviceBusy())
+        }
+        val retryableGaps = fetchResult.transientFailures.filter { addressType ->
+            xpubs[addressType.toSettingsString()] == null
+        }
+        if (retryableGaps.isNotEmpty()) {
+            throw AppError(TrezorException.DeviceBusy())
+        }
         val known = KnownDevice(
             id = deviceInfo.id,
             name = deviceInfo.name,
@@ -1019,22 +1033,31 @@ class TrezorRepo @Inject constructor(
 
     /**
      * Reads account-level extended public keys for every supported address type so a
-     * watch-only balance can be tracked later without the device present. Failures are
-     * swallowed per type: a missing xpub just means that address type is not watched.
+     * watch-only balance can be tracked later without the device present. Permanent
+     * rejections (e.g. unsupported address type) are skipped; transient transport
+     * failures are tracked so [addOrUpdateKnownDevice] can block a partial save.
      */
-    private suspend fun fetchAccountXpubs(): Map<String, String> {
+    private suspend fun fetchAccountXpubs(): AccountXpubFetchResult {
         val coin = Env.network.toTrezorCoinType()
-        return ALL_ADDRESS_TYPES.mapNotNull { addressType ->
-            fetchXpubForAddressType(addressType, coin)?.let { addressType.toSettingsString() to it }
-        }.toMap()
+        val xpubs = mutableMapOf<String, String>()
+        val transientFailures = mutableSetOf<AddressType>()
+        for (addressType in ALL_ADDRESS_TYPES) {
+            val result = fetchXpubForAddressType(addressType, coin)
+            result.xpub?.let { xpubs[addressType.toSettingsString()] = it }
+            if (result.transientExhausted && result.xpub == null) {
+                transientFailures.add(addressType)
+            }
+        }
+        return AccountXpubFetchResult(xpubs = xpubs, transientFailures = transientFailures)
     }
 
     private suspend fun fetchXpubForAddressType(
         addressType: AddressType,
         coin: TrezorCoinType,
-    ): String? {
+    ): XpubFetchResult {
         val path = addressType.toAccountDerivationPath(network = Env.network)
         val settingsKey = addressType.toSettingsString()
+        var lastError: Throwable? = null
         for (attempt in 1..MAX_XPUB_FETCH_ATTEMPTS) {
             val result = runSuspendCatching {
                 trezorService.getPublicKey(
@@ -1044,20 +1067,21 @@ class TrezorRepo @Inject constructor(
                 ).xpub
             }
             if (result.isSuccess) {
-                return result.getOrThrow()
+                return XpubFetchResult(xpub = result.getOrThrow())
             }
-            val error = result.exceptionOrNull() ?: return null
+            lastError = result.exceptionOrNull() ?: return XpubFetchResult()
             Logger.warn(
                 "Could not read xpub for '$settingsKey' (attempt $attempt/$MAX_XPUB_FETCH_ATTEMPTS)",
-                error,
+                lastError,
                 context = TAG,
             )
-            if (!isTransientTransportFailure(error) || attempt == MAX_XPUB_FETCH_ATTEMPTS) {
-                return null
+            if (!isTransientTransportFailure(lastError) || attempt == MAX_XPUB_FETCH_ATTEMPTS) {
+                break
             }
             delay(XPUB_FETCH_RETRY_DELAY)
         }
-        return null
+        val transientExhausted = lastError?.let { isTransientTransportFailure(it) } == true
+        return XpubFetchResult(transientExhausted = transientExhausted)
     }
 
     private suspend fun loadKnownDevices(): List<KnownDevice> = runCatching {
@@ -1212,7 +1236,7 @@ class TrezorRepo @Inject constructor(
     }
 
     private fun isRetryableError(e: Throwable): Boolean {
-        if (e.isTrezorDeviceBusy()) return true
+        if (e.isTrezorDeviceBusy()) return false
         val msg = e.message?.lowercase() ?: return false
         // A rejected session (wrong passphrase, or the user cancelling on-device
         // passphrase entry) is a definitive failure, not a transient THP/transport
@@ -1221,6 +1245,16 @@ class TrezorRepo @Inject constructor(
         if ("rejected" in msg) return false
         return "thp" in msg || "session" in msg || "timeout" in msg || "disconnect" in msg
     }
+
+    private data class AccountXpubFetchResult(
+        val xpubs: Map<String, String>,
+        val transientFailures: Set<AddressType>,
+    )
+
+    private data class XpubFetchResult(
+        val xpub: String? = null,
+        val transientExhausted: Boolean = false,
+    )
 }
 
 @Stable
