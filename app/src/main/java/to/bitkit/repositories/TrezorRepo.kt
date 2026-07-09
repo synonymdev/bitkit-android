@@ -15,6 +15,7 @@ import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
+import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorScriptType
@@ -1241,6 +1242,9 @@ class TrezorRepo @Inject constructor(
 
     private fun isTransientTransportFailure(error: Throwable): Boolean {
         if (error.isTrezorDeviceBusy()) return true
+        // Typed variants first: several TrezorException variants carry a blank
+        // message, so the string markers below would never match them.
+        if (generateSequence(error) { it.cause }.any { it.isTransientTrezorException() }) return true
         val text = buildString {
             append(error.message.orEmpty())
             error.cause?.message?.let { append(it) }
@@ -1248,14 +1252,35 @@ class TrezorRepo @Inject constructor(
         return TRANSIENT_FAILURE_MARKERS.any { marker -> text.contains(marker, ignoreCase = true) }
     }
 
+    private fun Throwable.isTransientTrezorException(): Boolean = when (this) {
+        is TrezorException.TransportException,
+        is TrezorException.ConnectionException,
+        is TrezorException.DeviceDisconnected,
+        is TrezorException.Timeout,
+        is TrezorException.IoException,
+        is TrezorException.SessionException,
+        -> true
+
+        else -> false
+    }
+
     private fun isRetryableError(e: Throwable): Boolean {
         if (e.isTrezorDeviceBusy()) return false
-        val msg = e.message?.lowercase() ?: return false
+        val msg = e.message?.lowercase().orEmpty()
         // A rejected session (wrong passphrase, or the user cancelling on-device
         // passphrase entry) is a definitive failure, not a transient THP/transport
         // hiccup. Retrying it just re-prompts the device and risks wedging the
         // connection, so don't treat ThpCreateNewSession rejections as retryable.
         if ("rejected" in msg) return false
+        // Typed variants: Timeout and DeviceDisconnected carry blank messages and
+        // SessionException a details-only one, so the string markers below can
+        // miss them. Session rejections are already excluded by the guard above.
+        val hasRetryableTyped = generateSequence(e) { it.cause }.any {
+            it is TrezorException.Timeout ||
+                it is TrezorException.DeviceDisconnected ||
+                it is TrezorException.SessionException
+        }
+        if (hasRetryableTyped) return true
         return "thp" in msg || "session" in msg || "timeout" in msg || "disconnect" in msg
     }
 

@@ -920,6 +920,53 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `connect should retry once for typed timeout errors`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any()))
+            .doAnswer { throw TrezorException.Timeout() }
+            .thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        verify(trezorService, times(2)).connect(eq(DEVICE_ID), any())
+    }
+
+    @Test
+    fun `connect blocks partial save when typed timeout exhausts xpub retries`() = test {
+        val nativeSegwitPath = "m/84'/1'/0'"
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        ).thenAnswer {
+            if (it.getArgument<String>(0) == nativeSegwitPath) {
+                mockPublicKeyResponse(xpub = "native-xpub", path = nativeSegwitPath)
+            } else {
+                throw TrezorException.Timeout()
+            }
+        }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertNull(sut.state.value.connectedDevice())
+        verify(hwWalletStore, never()).saveKnownDevices(any())
+    }
+
+    @Test
     fun `connect preserves cause when xpub reads exhaust non-busy transient retries`() = test {
         val features = mockFeatures()
         val device = mockDeviceInfo()
