@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
+import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeParams
@@ -59,7 +60,6 @@ import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toTransportType
-import com.synonym.bitkitcore.AddressType
 import to.bitkit.models.ALL_ADDRESS_TYPES
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
