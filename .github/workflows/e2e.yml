@@ -26,7 +26,7 @@ jobs:
       code: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.code == 'true' }}
     steps:
       - uses: actions/checkout@v6
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         if: github.event_name == 'pull_request'
         id: filter
         with:
@@ -51,7 +51,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           java-version: "17"
-          distribution: "adopt"
+          distribution: "temurin"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
@@ -83,7 +83,7 @@ jobs:
           mv "$apk" app/build/outputs/apk/dev/debug/bitkit_e2e.apk
 
       - name: Upload APK (local)
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: bitkit-e2e-apk_${{ github.run_number }}
           path: app/build/outputs/apk/dev/debug/bitkit_e2e.apk
@@ -101,7 +101,7 @@ jobs:
         uses: actions/setup-java@v5
         with:
           java-version: "17"
-          distribution: "adopt"
+          distribution: "temurin"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v5
@@ -136,7 +136,7 @@ jobs:
           mv "$apk" app/build/outputs/apk/dev/debug/bitkit_e2e.apk
 
       - name: Upload APK (regtest)
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: bitkit-e2e-apk-regtest_${{ github.run_number }}
           path: app/build/outputs/apk/dev/debug/bitkit_e2e.apk
@@ -210,7 +210,7 @@ jobs:
           script: echo "Generated AVD snapshot for caching."
 
       - name: Download APK
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: bitkit-e2e-apk_${{ github.run_number }}
           path: bitkit-e2e-tests/aut
@@ -302,7 +302,7 @@ jobs:
 
       - name: Upload E2E Artifacts (${{ matrix.shard.name }})
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-artifacts_${{ matrix.shard.name }}_${{ github.run_number }}
           path: bitkit-e2e-tests/artifacts/
@@ -368,7 +368,7 @@ jobs:
           script: echo "Generated AVD snapshot for caching."
 
       - name: Download APK (regtest)
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v7
         with:
           name: bitkit-e2e-apk-regtest_${{ github.run_number }}
           path: bitkit-e2e-tests/aut
@@ -454,7 +454,7 @@ jobs:
 
       - name: Upload E2E Artifacts (${{ matrix.shard.name }})
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: e2e-artifacts-regtest_${{ matrix.shard.name }}_${{ github.run_number }}
           path: bitkit-e2e-tests/artifacts/
