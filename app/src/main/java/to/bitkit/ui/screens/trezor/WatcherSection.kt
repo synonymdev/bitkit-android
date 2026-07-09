@@ -24,7 +24,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.synonym.bitkitcore.AccountType
-import com.synonym.bitkitcore.TxDirection
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.PaymentType
 import to.bitkit.models.safe
 import to.bitkit.repositories.TrezorState
 import to.bitkit.ui.components.ButtonSize
@@ -171,26 +172,25 @@ private fun WatcherStatusContent(uiState: TrezorUiState) {
         }
     }
 
-    if (uiState.watcherTransactions.isNotEmpty()) {
+    if (uiState.watcherActivities.isNotEmpty()) {
         VerticalSpacer(12.dp)
         Caption13Up(
-            text = "Transactions (${uiState.watcherTransactions.size})",
+            text = "Activities (${uiState.watcherActivities.size})",
             color = Colors.White64,
         )
         VerticalSpacer(4.dp)
         LazyColumn(
             modifier = Modifier.heightIn(max = 200.dp),
         ) {
-            items(uiState.watcherTransactions) { tx ->
-                val directionLabel = when (tx.direction) {
-                    TxDirection.SENT -> "Sent"
-                    TxDirection.RECEIVED -> "Recv"
-                    TxDirection.SELF_TRANSFER -> "Self"
+            items(uiState.watcherActivities.filterIsInstance<Activity.Onchain>()) { activity ->
+                val onchain = activity.v1
+                val directionLabel = when (onchain.txType) {
+                    PaymentType.SENT -> "Sent"
+                    PaymentType.RECEIVED -> "Recv"
                 }
-                val directionColor = when (tx.direction) {
-                    TxDirection.SENT -> Colors.Red
-                    TxDirection.RECEIVED -> Colors.Green
-                    TxDirection.SELF_TRANSFER -> Colors.White64
+                val directionColor = when (onchain.txType) {
+                    PaymentType.SENT -> Colors.Red
+                    PaymentType.RECEIVED -> Colors.Green
                 }
                 Row(
                     modifier = Modifier
@@ -199,17 +199,17 @@ private fun WatcherStatusContent(uiState: TrezorUiState) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                 ) {
                     Caption(
-                        text = "$directionLabel ${tx.amount} sats",
+                        text = "$directionLabel ${onchain.value} sats",
                         color = directionColor,
                     )
                     HorizontalSpacer(8.dp)
                     Caption(
-                        text = "${tx.txid.take(8)}...${tx.txid.takeLast(8)}",
+                        text = "${onchain.txId.take(8)}...${onchain.txId.takeLast(8)}",
                         color = Colors.White50,
                     )
                     HorizontalSpacer(8.dp)
                     Caption(
-                        text = "${tx.confirmations} conf",
+                        text = if (onchain.confirmed) "confirmed" else "pending",
                         color = Colors.White50,
                     )
                 }

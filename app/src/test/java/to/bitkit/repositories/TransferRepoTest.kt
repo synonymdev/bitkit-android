@@ -291,7 +291,7 @@ class TransferRepoTest : BaseUnitTest() {
             fundingTxo = fundingTxo,
             isChannelReady = false,
         )
-        val activity = OnchainActivity.create(
+        val activity = OnchainActivity.create(walletId = "wallet0",
             id = fundingTxo.txid,
             txType = PaymentType.SENT,
             txId = fundingTxo.txid,
@@ -609,7 +609,7 @@ class TransferRepoTest : BaseUnitTest() {
             createdAt = 1000L,
         )
 
-        val sweepActivity = OnchainActivity.create(
+        val sweepActivity = OnchainActivity.create(walletId = "wallet0",
             id = "sweep-activity-id",
             txType = PaymentType.RECEIVED,
             txId = "sweep-txid",
@@ -741,7 +741,7 @@ class TransferRepoTest : BaseUnitTest() {
             createdAt = 1000L,
         )
 
-        val sweepActivity = OnchainActivity.create(
+        val sweepActivity = OnchainActivity.create(walletId = "wallet0",
             id = "sweep-activity-id",
             txType = PaymentType.RECEIVED,
             txId = sweepTxid,

@@ -33,6 +33,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
+import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.Toast
@@ -523,6 +524,10 @@ class TransferViewModel @Inject constructor(
     }
 
     /** Pays for the order by composing and signing the funding send on the Trezor, then watches it. */
+    fun warmUpHardwareConnection(deviceId: String) {
+        hwWalletRepo.warmUpKnownDevice(deviceId)
+    }
+
     fun onTransferToSpendingHwConfirm(order: IBtOrder, deviceId: String) {
         if (hwTransferSignJob?.isActive == true) return
 
@@ -583,6 +588,7 @@ class TransferViewModel @Inject constructor(
             }
         }.getOrElse {
             if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            if (it.isTrezorUserCancellation()) throw it
             throw HardwareReconnectError(it)
         }
     }
@@ -633,8 +639,12 @@ class TransferViewModel @Inject constructor(
     private suspend fun handleHardwareTransferFailure(e: Throwable, deviceId: String) {
         when (e) {
             is HardwareReconnectError -> {
+                if (e.isTrezorUserCancellation()) {
+                    Logger.info("Hardware transfer cancelled on device for '$deviceId'", context = TAG)
+                    return
+                }
                 Logger.error("Failed to reconnect hardware device", e, context = TAG)
-                showHardwareReconnectError()
+                showHardwareReconnectError(deviceId)
             }
             is HardwareSigningTimeoutError -> {
                 Logger.warn("Timed out hardware transfer signing for '$deviceId'", e, context = TAG)
@@ -645,13 +655,24 @@ class TransferViewModel @Inject constructor(
                 showHardwareFundingError(e)
             }
             else -> {
+                if (e.isTrezorUserCancellation()) {
+                    Logger.info("Hardware transfer cancelled on device for '$deviceId'", context = TAG)
+                    return
+                }
                 Logger.error("Hardware transfer failed", e, context = TAG)
                 ToastEventBus.send(e)
             }
         }
     }
 
-    private suspend fun showHardwareReconnectError() {
+    private suspend fun showHardwareReconnectError(deviceId: String) {
+        if (hwWalletRepo.isKnownBluetoothDevice(deviceId)) {
+            ToastEventBus.send(
+                type = Toast.ToastType.INFO,
+                title = context.getString(R.string.hardware__connect_error),
+            )
+            return
+        }
         ToastEventBus.send(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.lightning__transfer_hw__reconnect_error_title),

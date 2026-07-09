@@ -67,7 +67,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     @Test
     fun `loadActivity falls back to hardware wallet activity when missing from the database`() = test {
         val hwActivity = Activity.Onchain(
-            OnchainActivity.create(
+            OnchainActivity.create(walletId = "wallet0",
                 id = ACTIVITY_ID,
                 txType = PaymentType.RECEIVED,
                 txId = ACTIVITY_ID,
@@ -263,7 +263,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         confirmed: Boolean = false,
     ): Activity.Onchain {
         return Activity.Onchain(
-            v1 = OnchainActivity.create(
+            v1 = OnchainActivity.create(walletId = "wallet0",
                 id = id,
                 txType = PaymentType.RECEIVED,
                 txId = "tx-$id",

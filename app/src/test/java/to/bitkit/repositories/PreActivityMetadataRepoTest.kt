@@ -45,7 +45,8 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
         isReceive = false,
         feeRate = 10u,
         isTransfer = false,
-        channelId = "channel-123"
+        channelId = "channel-123",
+        walletId = "wallet0",
     )
 
     @Before
@@ -375,7 +376,8 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             id = id,
             address = address,
             isReceive = true,
-            tags = tags
+            tags = tags,
+            walletId = "wallet0",
         )
 
         assertTrue(result.isSuccess)
@@ -393,7 +395,8 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             address = address,
             isReceive = false,
             tags = emptyList(),
-            isTransfer = true
+            isTransfer = true,
+            walletId = "wallet0",
         )
 
         assertTrue(result.isSuccess)
@@ -413,7 +416,8 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             tags = listOf("important"),
             feeRate = 10u,
             isTransfer = true,
-            channelId = "channel-123"
+            channelId = "channel-123",
+            walletId = "wallet0",
         )
 
         assertTrue(result.isSuccess)
@@ -430,7 +434,8 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             address = address,
             isReceive = true,
             tags = emptyList(),
-            isTransfer = false
+            isTransfer = false,
+            walletId = "wallet0",
         )
 
         assertTrue(result.isFailure)
@@ -455,7 +460,8 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             address = address,
             isReceive = true,
             tags = tags,
-            feeRate = null
+            feeRate = null,
+            walletId = "wallet0",
         )
 
         assertTrue(result.isSuccess)
@@ -478,7 +484,8 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             address = address,
             isReceive = true,
             tags = tags,
-            channelId = null
+            channelId = null,
+            walletId = "wallet0",
         )
 
         assertTrue(result.isSuccess)
@@ -496,7 +503,8 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             id = id,
             address = address,
             isReceive = true,
-            tags = tags
+            tags = tags,
+            walletId = "wallet0",
         )
 
         assertTrue(result.isFailure)
@@ -592,7 +600,8 @@ class PreActivityMetadataRepoTest : BaseUnitTest() {
             id = id,
             address = address,
             isReceive = true,
-            tags = tags
+            tags = tags,
+            walletId = "wallet0",
         )
 
         assertTrue(result.isSuccess)

@@ -45,6 +45,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.Bip21Utils
+import to.bitkit.models.WalletScope
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.measured
@@ -237,6 +238,7 @@ class WalletRepo @Inject constructor(
         }.getOrNull()
 
         val preActivityMetadata = PreActivityMetadata(
+            walletId = WalletScope.default,
             paymentId = paymentId,
             createdAt = nowTimestamp().toEpochMilli().toULong(),
             tags = tags,

@@ -11,6 +11,7 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.services.CoreService
+import to.bitkit.models.WalletScope
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -127,11 +128,13 @@ class PreActivityMetadataRepo @Inject constructor(
         feeRate: ULong? = null,
         isTransfer: Boolean = false,
         channelId: String? = null,
+        walletId: String = WalletScope.default,
     ): Result<Unit> = withContext(ioDispatcher) {
         return@withContext runCatching {
             require(tags.isNotEmpty() || isTransfer)
 
             val preActivityMetadata = PreActivityMetadata(
+                walletId = walletId,
                 paymentId = id,
                 createdAt = nowTimestamp().toEpochMilli().toULong(),
                 tags = tags,
