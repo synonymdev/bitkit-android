@@ -8,8 +8,8 @@ import kotlin.test.assertNull
 
 class PubkyRouteResolverTest {
     companion object {
-        private const val VALID_PUBLIC_KEY = "pubkyybndrfg8ejkmcpqxot1uwisza345h769ybndrfg8ejkmcpqxot1u"
-        private const val OTHER_VALID_PUBLIC_KEY = "pubkya345h769ybndrfg8ejkmcpqxot1uwiszybndrfg8ejkmcpqxot1u"
+        private const val VALID_PUBLIC_KEY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        private const val OTHER_VALID_PUBLIC_KEY = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
     }
 
     @Test

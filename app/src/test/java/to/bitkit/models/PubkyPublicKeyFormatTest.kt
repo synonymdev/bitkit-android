@@ -11,17 +11,17 @@ class PubkyPublicKeyFormatTest {
     @Test
     fun `bounded trims lowercases and caps input`() {
         val overlongInput =
-            "  PUBKYYBNDRFG8EJKMCPQXOT1UWISZA345H769YBNDRFG8EJKMCPQXOT1Uextra  "
+            "  PUBKY3RSDUHCXPW74SNWYCT86M38C63J3PQ8X4YCQIKXG64ROIK8YW5XGextra  "
 
         val bounded = PubkyPublicKeyFormat.bounded(overlongInput)
 
         assertEquals(PubkyPublicKeyFormat.maximumInputLength, bounded.length)
-        assertEquals("pubkyybndrfg8ejkmcpqxot1uwisza345h769ybndrfg8ejkmcpqxot1u", bounded)
+        assertEquals("pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg", bounded)
     }
 
     @Test
     fun `normalized accepts prefixed and unprefixed keys`() {
-        val rawKey = "ybndrfg8ejkmcpqxot1uwisza345h769ybndrfg8ejkmcpqxot1u"
+        val rawKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         val prefixedKey = "pubky$rawKey"
 
         assertEquals(prefixedKey, PubkyPublicKeyFormat.normalized(rawKey))
@@ -33,21 +33,21 @@ class PubkyPublicKeyFormatTest {
         assertNull(PubkyPublicKeyFormat.normalized("pubkyshort"))
         assertNull(
             PubkyPublicKeyFormat.normalized(
-                "pubkyybndrfg8ejkmcpqxot1uwisza345h769ybndrfg8ejkmcpqxot10",
+                "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5x0",
             ),
         )
     }
 
     @Test
     fun `redacted shortens normalized pubky keys`() {
-        val rawKey = "ybndrfg8ejkmcpqxot1uwisza345h769ybndrfg8ejkmcpqxot1u"
+        val rawKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
 
-        assertEquals("pubkyyb…pqxot1u", PubkyPublicKeyFormat.redacted(rawKey))
+        assertEquals("pubky3r…k8yw5xg", PubkyPublicKeyFormat.redacted(rawKey))
     }
 
     @Test
     fun `matches compares equivalent pubky representations`() {
-        val rawKey = "ybndrfg8ejkmcpqxot1uwisza345h769ybndrfg8ejkmcpqxot1u"
+        val rawKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         val prefixedKey = "pubky$rawKey"
 
         assertTrue(PubkyPublicKeyFormat.matches(rawKey, prefixedKey))

@@ -339,6 +339,20 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `refreshReusableReceiveAddress creates address when cached address is blank`() = test {
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = "")))
+        sut = createSut()
+        sut.loadFromCache()
+
+        val result = sut.refreshReusableReceiveAddress()
+
+        assertTrue(result.isSuccess)
+        assertEquals(ADDRESS_NEW, sut.walletState.value.onchainAddress)
+        verify(privatePaykitAddressReservationRepo).nextReusableReceiveAddress()
+        verify(cacheStore).setOnchainAddress(ADDRESS_NEW)
+    }
+
+    @Test
     fun `refreshReusableReceiveAddressIfReserved replaces unavailable cached address`() = test {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = ADDRESS, bolt11 = INVOICE)))
         whenever { privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(ADDRESS) }

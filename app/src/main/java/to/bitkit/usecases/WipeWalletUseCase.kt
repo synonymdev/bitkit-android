@@ -50,11 +50,11 @@ class WipeWalletUseCase @Inject constructor(
             backupRepo.setWiping(true)
             backupRepo.reset()
 
-            privatePaykitRepo.get().removePublishedEndpointsBestEffort(TAG)
-            privatePaykitRepo.get().closeAndClear()
-            privatePaykitAddressReservationRepo.clear()
+            privatePaykitRepo.get().removePublishedEndpointsForCleanup(TAG)
             pubkyRepo.removeBitkitPaymentEndpoints()
                 .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
+            privatePaykitRepo.get().closeAndClear()
+            privatePaykitAddressReservationRepo.clear()
             pubkyRepo.wipeLocalState()
             keychain.wipe()
             firebaseMessaging.deleteToken()

@@ -57,7 +57,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     fun setUp() {
         whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.removePublishedEndpointsBestEffort(any()) }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitAddressReservationRepo.clear() }.thenReturn(Unit)
         onWipeCalled = false
@@ -109,10 +109,10 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         )
         inOrder.verify(backupRepo).setWiping(true)
         inOrder.verify(backupRepo).reset()
-        inOrder.verify(privatePaykitRepo).removePublishedEndpointsBestEffort(any())
+        inOrder.verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+        inOrder.verify(pubkyRepo).removeBitkitPaymentEndpoints()
         inOrder.verify(privatePaykitRepo).closeAndClear()
         inOrder.verify(privatePaykitAddressReservationRepo).clear()
-        inOrder.verify(pubkyRepo).removeBitkitPaymentEndpoints()
         inOrder.verify(pubkyRepo).wipeLocalState()
         inOrder.verify(keychain).wipe()
         inOrder.verify(coreService).wipeData()

@@ -63,7 +63,6 @@ data class PrivatePaykitCacheData(
     val contacts: Map<String, PrivatePaykitContactCacheData> = emptyMap(),
     val cleanupPending: Boolean = false,
     val deletedContactCleanupPendingPublicKeys: Set<String> = emptySet(),
-    val profileRecoveryPending: Boolean = false,
 )
 
 @Serializable
@@ -71,15 +70,7 @@ data class PrivatePaykitContactCacheData(
     val remoteEndpoints: List<PrivatePaykitStoredPaymentEntryData> = emptyList(),
     val localInvoice: PrivatePaykitStoredInvoiceData? = null,
     val receivedInvoicePaymentHashes: List<String> = emptyList(),
-    val lastLocalPayloadHash: String? = null,
-    val linkCompletedAt: Long? = null,
-    val handshakeUpdatedAt: Long? = null,
-    val recoveryStartedAt: Long? = null,
-    val mainRecoveryAttemptId: String? = null,
-    val responderRecoveryAttemptId: String? = null,
-    val lastCompletedRecoveryAttemptId: String? = null,
-    val awaitingRecoveredRemoteEndpoints: Boolean = false,
-    val linkFailureCount: Int = 0,
+    val hasPublishedPrivatePaymentList: Boolean = false,
 )
 
 @Serializable

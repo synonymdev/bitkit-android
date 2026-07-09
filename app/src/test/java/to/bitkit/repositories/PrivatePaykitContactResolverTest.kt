@@ -16,7 +16,7 @@ import kotlin.test.assertNull
 
 class PrivatePaykitContactResolverTest : BaseUnitTest() {
     companion object {
-        private const val CONTACT_KEY = "pubkycytinw71a3ge1esmzj5e53hsr3jtj6t4pogpgr6k75w9mzmyokzo"
+        private const val CONTACT_KEY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         private const val PAYMENT_HASH = "010203"
         private const val PRIVATE_ADDRESS = "bcrt1qterdweva9vextackckt6pjy0mmuc54g87g6lsq"
     }

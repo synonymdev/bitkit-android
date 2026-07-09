@@ -5,7 +5,10 @@ import androidx.compose.runtime.Stable
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import to.bitkit.ext.ellipsisMiddle
-import com.synonym.bitkitcore.PubkyProfile as CorePubkyProfile
+import com.synonym.paykit.PaykitProfile as SdkPaykitProfile
+import com.synonym.paykit.PubkyProfile as SdkPubkyProfile
+
+private val pubkyProfileJson = Json { ignoreUnknownKeys = true }
 
 @Immutable
 data class PubkyProfileLink(val label: String, val url: String)
@@ -23,17 +26,20 @@ data class PubkyProfile(
     companion object {
         private const val TRUNCATED_PK_LENGTH = 11
 
-        fun fromFfi(publicKey: String, ffiProfile: CorePubkyProfile): PubkyProfile {
+        fun fromPubkyProfile(publicKey: String, sdkProfile: SdkPubkyProfile): PubkyProfile {
             return PubkyProfile(
                 publicKey = publicKey,
-                name = ffiProfile.name,
-                bio = ffiProfile.bio ?: "",
-                imageUrl = ffiProfile.image,
-                links = ffiProfile.links.orEmpty().map { PubkyProfileLink(label = it.title, url = it.url) },
+                name = sdkProfile.name,
+                bio = sdkProfile.bio ?: "",
+                imageUrl = sdkProfile.image,
+                links = sdkProfile.links.map { PubkyProfileLink(label = it.title, url = it.url) },
                 tags = emptyList(),
-                status = ffiProfile.status,
+                status = sdkProfile.status,
             )
         }
+
+        fun fromPaykitProfile(publicKey: String, profile: SdkPaykitProfile): PubkyProfile =
+            PubkyProfileData.fromPaykitProfile(profile).toPubkyProfile(publicKey)
 
         fun placeholder(publicKey: String) = PubkyProfile(
             publicKey = publicKey,
@@ -63,6 +69,10 @@ data class PubkyProfile(
     val truncatedPublicKey: String
         get() = publicKey.ellipsisMiddle(TRUNCATED_PK_LENGTH)
 
+    fun withNameFallback(fallbackName: String?): PubkyProfile {
+        return if (name.isBlank() && !fallbackName.isNullOrBlank()) copy(name = fallbackName) else this
+    }
+
     fun toProfileData() = PubkyProfileData(
         name = name,
         bio = bio,
@@ -85,11 +95,28 @@ data class PubkyProfileData(
 ) {
     companion object {
         fun decode(json: String): PubkyProfileData =
-            Json { ignoreUnknownKeys = true }.decodeFromString(json)
+            pubkyProfileJson.decodeFromString(json)
+
+        fun fromPaykitProfile(profile: SdkPaykitProfile): PubkyProfileData {
+            val extra = profile.extraJson?.let { runCatching { decode(it) }.getOrNull() }
+            return PubkyProfileData(
+                name = profile.displayName ?: extra?.name.orEmpty(),
+                bio = extra?.bio.orEmpty(),
+                image = profile.imageUri ?: extra?.image,
+                links = extra?.links.orEmpty(),
+                tags = extra?.tags.orEmpty(),
+            )
+        }
     }
 
     fun encode(): ByteArray =
-        Json.encodeToString(this).toByteArray(Charsets.UTF_8)
+        pubkyProfileJson.encodeToString(this).toByteArray(Charsets.UTF_8)
+
+    fun toPaykitProfile() = SdkPaykitProfile(
+        displayName = name,
+        imageUri = image,
+        extraJson = encode().toString(Charsets.UTF_8),
+    )
 
     fun toPubkyProfile(publicKey: String) = PubkyProfile(
         publicKey = publicKey,

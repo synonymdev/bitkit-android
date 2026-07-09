@@ -30,6 +30,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.filterOpen
 import to.bitkit.ext.nowTimestamp
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.AddressModel
@@ -344,17 +345,30 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    private suspend fun refreshAddressIfNeeded() = withContext(bgDispatcher) {
+    private suspend fun refreshAddressIfNeeded() {
+        refreshReusableReceiveAddress()
+    }
+
+    suspend fun refreshReusableReceiveAddress(): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            refreshReusableReceiveAddressOrThrow()
+            updateBip21Url()
+            Unit
+        }.onFailure {
+            Logger.error("Failed to refresh reusable receive address", it, context = TAG)
+        }
+    }
+
+    private suspend fun refreshReusableReceiveAddressOrThrow() {
         val address = getOnchainAddress()
         if (address.isEmpty()) {
-            newAddress()
+            newAddress().getOrThrow()
         } else if (privatePaykitAddressReservationRepo.isUnavailableForReusableReceive(address)) {
-            replaceReusableOnchainAddress()
+            replaceReusableOnchainAddress().getOrThrow()
         } else {
-            checkAddressUsage(address).onSuccess { wasUsed ->
-                if (wasUsed) {
-                    newAddress()
-                }
+            val wasUsed = checkAddressUsage(address).getOrThrow()
+            if (wasUsed) {
+                replaceReusableOnchainAddress().getOrThrow()
             }
         }
     }
@@ -446,8 +460,7 @@ class WalletRepo @Inject constructor(
                 return@runCatching
             }
 
-            clearReusableOnchainAddress()
-            newAddress().getOrThrow()
+            replaceReusableOnchainAddress().getOrThrow()
             updateBip21Url()
         }.onFailure {
             Logger.error("Failed to refresh reserved receive address", it, context = TAG)

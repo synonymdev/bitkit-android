@@ -6,7 +6,7 @@ import kotlin.test.assertEquals
 
 class ContactImportFlowTest {
     private companion object {
-        const val VALID_PUBLIC_KEY = "pubkyybndrfg8ejkmcpqxot1uwisza345h769ybndrfg8ejkmcpqxot1u"
+        const val VALID_PUBLIC_KEY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
     }
 
     @Test
