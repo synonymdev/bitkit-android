@@ -80,9 +80,6 @@ class AddContactViewModel @Inject constructor(
                     }
                 }
                 .onFailure { error ->
-                    if (error == PubkyContactError.AlreadyExists) {
-                        refreshContactPaykitReceivers(publicKey)
-                    }
                     _uiState.update { state ->
                         state.copy(
                             isLoading = false,
@@ -97,6 +94,9 @@ class AddContactViewModel @Inject constructor(
                                     context.getString(R.string.contacts__add_error_fetch)
                             },
                         )
+                    }
+                    if (error == PubkyContactError.AlreadyExists) {
+                        refreshContactPaykitReceivers(publicKey)
                     }
                 }
         }

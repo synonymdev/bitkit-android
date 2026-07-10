@@ -657,6 +657,29 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `prepareSavedContacts continues when another contact record cannot be read`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+        )
+        whenever { paykitSdkService.contactRecord(CONTACT_KEY) }
+            .thenThrow(IllegalStateException("contact unavailable"))
+        whenever { addressReservationRepo.currentOrRotatedAddress(OTHER_CONTACT_KEY, WALLET_RECEIVER_PATH) }
+            .thenReturn(Result.success(OTHER_PRIVATE_ADDRESS))
+        whenever { paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any()) }.thenAnswer {
+            privateListDeliveryReportForUpdates(it.getArgument(0))
+        }
+
+        val result = sut.prepareSavedContacts(listOf(CONTACT_KEY, OTHER_CONTACT_KEY))
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
+        verifyBlocking(paykitSdkService) { syncPrivatePaymentListsWithReservations(captor.capture(), eq(false)) }
+        assertEquals(listOf(OTHER_CONTACT_KEY), captor.firstValue.map { it.counterparty })
+    }
+
+    @Test
     fun `prepareSavedContacts preserves cleanup markers while saving publication state`() = test {
         settingsData.value = SettingsData(
             sharesPrivatePaykitEndpoints = true,

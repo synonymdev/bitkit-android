@@ -153,10 +153,10 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    suspend fun refreshSavedContactEndpoints(publicKeys: Collection<String>): Result<Unit> =
+    suspend fun refreshSavedContactEndpoints(publicKey: String): Result<Unit> =
         withContext(serializedDispatcher) {
             runSuspendCatching {
-                val keys = rememberSavedContacts(publicKeys, replacing = true)
+                val keys = rememberSavedContacts(listOf(publicKey), replacing = false)
                 if (!canPublishPrivateEndpoints()) {
                     prepareRelevantPrivateLinksIfAvailable(keys, "refresh")
                     return@runSuspendCatching
@@ -550,7 +550,15 @@ class PrivatePaykitRepo @Inject constructor(
         val linkRetryKeys = mutableListOf<PrivateMessageDrainRetryKey>()
 
         for (publicKey in publicKeys) {
-            val receiverPaths = receiverPathsForSavedContact(publicKey)
+            val receiverPaths = runSuspendCatching { receiverPathsForSavedContact(publicKey) }
+                .onFailure {
+                    firstError = firstError ?: it
+                    Logger.warn(
+                        "Failed to read saved Paykit receivers for '${redacted(publicKey)}' during '$reason'",
+                        it,
+                        context = TAG,
+                    )
+                }.getOrNull() ?: continue
             val receiverPathSelection = paykitSdkService.privateReceiverPathSelection(publicKey, receiverPaths)
             val linkableReceiverPaths = receiverPathSelection.linkableReceiverPaths
             val publicationReceiverPaths = receiverPathSelection.publishableReceiverPaths
@@ -604,8 +612,16 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun prepareRelevantPrivateLinksIfAvailable(publicKeys: Collection<String>, reason: String) {
         if (!hasLocalSecretKeyForCurrentProfile()) return
 
-        val retryKeys = publicKeys.flatMap { publicKey ->
-            val receiverPaths = receiverPathsForSavedContact(publicKey)
+        val retryKeys = mutableListOf<PrivateMessageDrainRetryKey>()
+        for (publicKey in publicKeys) {
+            val receiverPaths = runSuspendCatching { receiverPathsForSavedContact(publicKey) }
+                .onFailure {
+                    Logger.warn(
+                        "Failed to read saved Paykit receivers for '${redacted(publicKey)}' during '$reason'",
+                        it,
+                        context = TAG,
+                    )
+                }.getOrNull() ?: continue
             val selection = paykitSdkService.privateReceiverPathSelection(publicKey, receiverPaths)
             selection.error?.let {
                 Logger.warn(
@@ -614,10 +630,10 @@ class PrivatePaykitRepo @Inject constructor(
                     context = TAG,
                 )
             }
-            selection.linkableReceiverPaths.map { PrivateMessageDrainRetryKey(publicKey, it) }
-        }.distinct()
+            retryKeys += selection.linkableReceiverPaths.map { PrivateMessageDrainRetryKey(publicKey, it) }
+        }
 
-        drainAndSchedulePrivateLinkRetries(reason, retryKeys)
+        drainAndSchedulePrivateLinkRetries(reason, retryKeys.distinct())
     }
 
     private suspend fun drainAndSchedulePrivateLinkRetries(
@@ -825,7 +841,7 @@ class PrivatePaykitRepo @Inject constructor(
                     PrivateMessageDrainRetryKey(publicKey, peer.counterpartyReceiverPath) to peer.state
                 }
             }
-            .groupBy(keySelector = { it.first }, valueTransform = { it.second })
+            .toMap()
         val pendingOutbound = runSuspendCatching { paykitSdkService.pendingOutboundPrivateCounterparties() }
             .getOrElse {
                 Logger.warn("Failed to inspect pending private Paykit messages", it, context = TAG)
@@ -839,11 +855,9 @@ class PrivatePaykitRepo @Inject constructor(
             .toSet()
 
         return retryKeys.filterTo(mutableSetOf()) { retryKey ->
-            val states = linkedPeers[retryKey].orEmpty()
-            when {
-                LinkedPeerState.LINKED in states -> retryKey in pendingOutbound
-                states.isEmpty() -> retryKey in pendingOutbound
-                states.all { it == LinkedPeerState.BLOCKED || it == LinkedPeerState.UNKNOWN } -> false
+            when (linkedPeers[retryKey]) {
+                LinkedPeerState.LINKED, null -> retryKey in pendingOutbound
+                LinkedPeerState.BLOCKED, LinkedPeerState.UNKNOWN -> false
                 else -> true
             }
         }

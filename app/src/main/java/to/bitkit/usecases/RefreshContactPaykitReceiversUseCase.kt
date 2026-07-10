@@ -22,7 +22,7 @@ class RefreshContactPaykitReceiversUseCase @Inject constructor(
     suspend operator fun invoke(publicKey: String): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             pubkyRepo.refreshContactReceiverPaths(publicKey).getOrThrow()
-            privatePaykitRepo.refreshSavedContactEndpoints(pubkyRepo.contacts.value.map { it.publicKey }).getOrThrow()
+            privatePaykitRepo.refreshSavedContactEndpoints(publicKey).getOrThrow()
         }.onFailure {
             Logger.warn(
                 "Failed to refresh Paykit receivers for '${PubkyPublicKeyFormat.redacted(publicKey)}'",

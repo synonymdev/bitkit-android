@@ -193,15 +193,6 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         return lightningRepo.getAddressBalance(address).getOrDefault(0u) > 0u
     }
 
-    suspend fun hasContactAssignment(publicKey: String): Boolean = withContext(ioDispatcher) {
-        val normalizedKey = normalizedPublicKey(publicKey)
-        locked {
-            it.contactAssignments.keys.any { assignmentKey ->
-                assignmentKey.publicKeyFromAssignmentKey() == normalizedKey
-            }
-        }
-    }
-
     suspend fun clearContactAssignment(publicKey: String) = withContext(ioDispatcher) {
         val normalizedKey = normalizedPublicKey(publicKey)
         locked { current ->
