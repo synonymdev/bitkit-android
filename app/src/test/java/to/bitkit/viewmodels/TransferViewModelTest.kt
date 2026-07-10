@@ -767,6 +767,31 @@ class TransferViewModelTest : BaseUnitTest() {
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
 
+    @Test
+    fun `onTransferToSpendingHwConfirm clears signed transaction after permanent broadcast failure`() = test {
+        val order = previewBtOrder()
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FEE_RATE,
+        )
+        val signed = signedFunding(funding)
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+        whenever(hwWalletRepo.signFunding(DEVICE_ID, funding)).thenReturn(Result.success(signed))
+        whenever(hwWalletRepo.broadcastFunding(signed)).thenReturn(Result.failure(AppError("invalid transaction")))
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+
+        assertEquals(false, sut.spendingUiState.value.hasPendingHwBroadcast)
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+    }
+
     private fun signedFunding(
         funding: HwFundingTransaction,
         feeRate: ULong = FEE_RATE,

@@ -35,6 +35,7 @@ import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.isTrezorLockedOrBusy
 import to.bitkit.ext.isTrezorUserCancellation
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
@@ -561,7 +562,7 @@ class TransferViewModel @Inject constructor(
 
                 signAndBroadcastHardwareFunding(order, deviceId, address)
                     .onSuccess { result ->
-                        runCatching {
+                        runSuspendCatching {
                             fundPaidOrder(
                                 order = order,
                                 txId = result.txId,
@@ -741,6 +742,8 @@ class TransferViewModel @Inject constructor(
 
     private suspend fun showHardwareBroadcastError(error: HardwareBroadcastError) {
         if (!error.isHardwareBroadcastConnectivityFailure()) {
+            pendingHwFundingBroadcast = null
+            _spendingUiState.update { it.copy(hasPendingHwBroadcast = false) }
             ToastEventBus.send(error.cause ?: error)
             return
         }

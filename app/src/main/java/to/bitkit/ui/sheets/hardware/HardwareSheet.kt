@@ -124,6 +124,12 @@ fun HardwareSheet(
         onFinish = onFinish,
     )
 
+    LaunchedEffect(sheet.route) {
+        if (sheet.route is HardwareRoute.PairCode) {
+            navController.navigateTo(sheet.route)
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()

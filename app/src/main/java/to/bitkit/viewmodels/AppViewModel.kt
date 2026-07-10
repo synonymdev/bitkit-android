@@ -3115,7 +3115,7 @@ class AppViewModel @Inject constructor(
         val currentSheet = _currentSheet.value
         if (currentSheet is Sheet.Hardware) {
             if (currentSheet.route is HardwareRoute.PairCode && currentSheet.route.requestId != requestId) {
-                showSheet(Sheet.Hardware(route = HardwareRoute.PairCode(requestId)))
+                _currentSheet.update { Sheet.Hardware(route = HardwareRoute.PairCode(requestId)) }
             }
             return
         }
