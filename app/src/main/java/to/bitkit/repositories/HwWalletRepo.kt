@@ -41,6 +41,7 @@ import to.bitkit.ext.timestamp
 import to.bitkit.models.HwFundingAccount
 import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwFundingBroadcastResult
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
@@ -222,11 +223,11 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    /** Signs a composed funding payment on the Trezor and broadcasts it. */
-    suspend fun signAndBroadcastFunding(
+    /** Signs a composed funding payment on the Trezor. */
+    suspend fun signFunding(
         deviceId: String,
         funding: HwFundingTransaction,
-    ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
+    ): Result<HwFundingSignedTx> = withContext(ioDispatcher) {
         runSuspendCatching {
             val signed = runSuspendCatching {
                 trezorRepo.signTxFromPsbt(
@@ -240,12 +241,27 @@ class HwWalletRepo @Inject constructor(
                     trezorRepo.disconnectStaleSession(deviceId)
                 }
             }
-            val txId = trezorRepo.broadcastRawTx(serializedTx = signed.getOrThrow().serializedTx).getOrThrow()
-            HwFundingBroadcastResult(
-                txId = txId,
+            val signedTx = signed.getOrThrow()
+            HwFundingSignedTx(
+                serializedTx = signedTx.serializedTx,
                 miningFeeSats = funding.miningFeeSats,
                 feeRate = ceil(funding.feeRate.toDouble()).toULong(),
                 totalSpent = funding.totalSpent,
+            )
+        }
+    }
+
+    /** Broadcasts a signed funding payment without requiring the hardware device. */
+    suspend fun broadcastFunding(
+        signedTx: HwFundingSignedTx,
+    ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val txId = trezorRepo.broadcastRawTx(serializedTx = signedTx.serializedTx).getOrThrow()
+            HwFundingBroadcastResult(
+                txId = txId,
+                miningFeeSats = signedTx.miningFeeSats,
+                feeRate = signedTx.feeRate,
+                totalSpent = signedTx.totalSpent,
             )
         }
     }

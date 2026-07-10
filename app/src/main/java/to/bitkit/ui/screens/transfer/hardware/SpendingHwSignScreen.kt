@@ -72,6 +72,7 @@ fun SpendingHwSignScreen(
         order = order,
         isAdvanced = state.isAdvanced,
         isSigning = state.isSigning,
+        hasPendingBroadcast = state.hasPendingHwBroadcast,
         onBackClick = onBackClick,
         onLearnMoreClick = onLearnMoreClick,
         onAdvancedClick = onAdvancedClick,
@@ -85,6 +86,7 @@ private fun Content(
     order: IBtOrder,
     isAdvanced: Boolean = false,
     isSigning: Boolean = false,
+    hasPendingBroadcast: Boolean = false,
     onBackClick: () -> Unit = {},
     onLearnMoreClick: () -> Unit = {},
     onAdvancedClick: () -> Unit = {},
@@ -111,7 +113,13 @@ private fun Content(
             ) {
                 VerticalSpacer(32.dp)
                 Display(
-                    text = stringResource(R.string.lightning__transfer_hw__sign_title)
+                    text = stringResource(
+                        if (hasPendingBroadcast) {
+                            R.string.lightning__transfer_hw__signed_title
+                        } else {
+                            R.string.lightning__transfer_hw__sign_title
+                        }
+                    )
                         .withAccent(accentColor = Colors.Purple),
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -126,6 +134,7 @@ private fun Content(
                         text = stringResource(R.string.common__learn_more),
                         size = ButtonSize.Small,
                         fullWidth = false,
+                        enabled = !isSigning && !hasPendingBroadcast,
                         onClick = onLearnMoreClick,
                         modifier = Modifier.testTag("HardwareTransferSignLearnMore")
                     )
@@ -135,6 +144,7 @@ private fun Content(
                         ),
                         size = ButtonSize.Small,
                         fullWidth = false,
+                        enabled = !isSigning && !hasPendingBroadcast,
                         onClick = { if (isAdvanced) onUseDefaultLspBalanceClick() else onAdvancedClick() },
                         modifier = Modifier.testTag(
                             if (isAdvanced) "HardwareTransferSignDefault" else "HardwareTransferSignAdvanced"
@@ -145,7 +155,13 @@ private fun Content(
                 FillHeight()
 
                 PrimaryButton(
-                    text = stringResource(R.string.lightning__transfer_hw__open_connect),
+                    text = stringResource(
+                        if (hasPendingBroadcast) {
+                            R.string.common__retry
+                        } else {
+                            R.string.lightning__transfer_hw__open_connect
+                        }
+                    ),
                     onClick = onOpenConnect,
                     enabled = !isSigning,
                     isLoading = isSigning,
@@ -220,6 +236,17 @@ private fun PreviewSigning() {
         Content(
             order = previewBtOrder(),
             isSigning = true,
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewPendingBroadcast() {
+    AppThemeSurface {
+        Content(
+            order = previewBtOrder(),
+            hasPendingBroadcast = true,
         )
     }
 }

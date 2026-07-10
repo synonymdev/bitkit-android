@@ -36,6 +36,7 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.isTrezorLockedOrBusy
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.models.HwFundingBroadcastResult
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
@@ -96,6 +97,7 @@ class TransferViewModel @Inject constructor(
     fun setTransferEffect(effect: TransferEffect) = viewModelScope.launch { transferEffects.emit(effect) }
     var maxLspFee = 0uL
     private var hwTransferSignJob: Job? = null
+    private var pendingHwFundingBroadcast: PendingHwFundingBroadcast? = null
 
     // region Spending
 
@@ -386,7 +388,15 @@ class TransferViewModel @Inject constructor(
 
     private suspend fun onOrderCreated(order: IBtOrder) {
         settingsStore.update { it.copy(lightningSetupStep = 0) }
-        _spendingUiState.update { it.copy(order = order, isAdvanced = false, defaultOrder = null) }
+        pendingHwFundingBroadcast = null
+        _spendingUiState.update {
+            it.copy(
+                order = order,
+                isAdvanced = false,
+                defaultOrder = null,
+                hasPendingHwBroadcast = false,
+            )
+        }
         setTransferEffect(TransferEffect.OnOrderCreated)
     }
 
@@ -489,6 +499,7 @@ class TransferViewModel @Inject constructor(
     fun resetSpendingState() {
         hwTransferSignJob?.cancel()
         hwTransferSignJob = null
+        pendingHwFundingBroadcast = null
         _spendingUiState.update { TransferToSpendingUiState() }
         _transferValues.update { TransferValues() }
     }
@@ -541,8 +552,10 @@ class TransferViewModel @Inject constructor(
                     return@launch
                 }
 
-                signTransferToSpendingWithHardware(order, deviceId, address)
+                signAndBroadcastHardwareFunding(order, deviceId, address)
                     .onSuccess { result ->
+                        pendingHwFundingBroadcast = null
+                        _spendingUiState.update { it.copy(hasPendingHwBroadcast = false) }
                         fundPaidOrder(
                             order = order,
                             txId = result.txId,
@@ -560,21 +573,20 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private suspend fun signTransferToSpendingWithHardware(
+    private suspend fun signAndBroadcastHardwareFunding(
         order: IBtOrder,
         deviceId: String,
         address: String,
     ): Result<HwFundingBroadcastResult> {
         val result = runCatching {
-            ensureHardwareConnected(deviceId)
-            val satsPerVByte = hwFundingSatsPerVByte()
-            val funding = composeHardwareFundingTransaction(
-                deviceId = deviceId,
-                address = address,
-                sats = order.feeSat,
-                satsPerVByte = satsPerVByte,
-            )
-            signAndBroadcastHardwareFunding(deviceId, funding)
+            val signedTx = pendingHwFundingBroadcast
+                ?.takeIf { it.orderId == order.id }
+                ?.signedTx
+                ?: prepareSignedHardwareFunding(order, deviceId, address).also {
+                    pendingHwFundingBroadcast = PendingHwFundingBroadcast(orderId = order.id, signedTx = it)
+                    _spendingUiState.update { state -> state.copy(hasPendingHwBroadcast = true) }
+                }
+            broadcastHardwareFunding(signedTx)
         }
         result.exceptionOrNull()?.let {
             if (it is CancellationException && it !is TimeoutCancellationException) throw it
@@ -582,6 +594,23 @@ class TransferViewModel @Inject constructor(
         return result
     }
 
+    private suspend fun prepareSignedHardwareFunding(
+        order: IBtOrder,
+        deviceId: String,
+        address: String,
+    ): HwFundingSignedTx {
+        ensureHardwareConnected(deviceId)
+        val satsPerVByte = hwFundingSatsPerVByte()
+        val funding = composeHardwareFundingTransaction(
+            deviceId = deviceId,
+            address = address,
+            sats = order.feeSat,
+            satsPerVByte = satsPerVByte,
+        )
+        return signHardwareFunding(deviceId, funding)
+    }
+
+    @Suppress("ThrowsCount")
     private suspend fun ensureHardwareConnected(deviceId: String) {
         runCatching {
             withTimeout(HW_RECONNECT_TIMEOUT) {
@@ -616,13 +645,13 @@ class TransferViewModel @Inject constructor(
     }
 
     @Suppress("ThrowsCount")
-    private suspend fun signAndBroadcastHardwareFunding(
+    private suspend fun signHardwareFunding(
         deviceId: String,
         funding: HwFundingTransaction,
-    ): HwFundingBroadcastResult {
+    ): HwFundingSignedTx {
         return runCatching {
             withTimeout(HW_SIGN_TIMEOUT) {
-                hwWalletRepo.signAndBroadcastFunding(
+                hwWalletRepo.signFunding(
                     deviceId = deviceId,
                     funding = funding,
                 ).getOrThrow()
@@ -634,6 +663,19 @@ class TransferViewModel @Inject constructor(
                 throw HardwareSigningTimeoutError(it)
             }
             throw it
+        }
+    }
+
+    private suspend fun broadcastHardwareFunding(
+        signedTx: HwFundingSignedTx,
+    ): HwFundingBroadcastResult {
+        return runCatching {
+            withTimeout(HW_BROADCAST_TIMEOUT) {
+                hwWalletRepo.broadcastFunding(signedTx).getOrThrow()
+            }
+        }.getOrElse {
+            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            throw HardwareBroadcastError(it)
         }
     }
 
@@ -651,6 +693,10 @@ class TransferViewModel @Inject constructor(
             return
         }
         when (e) {
+            is HardwareBroadcastError -> {
+                Logger.warn("Hardware funding transaction is signed but not confirmed broadcast", e, context = TAG)
+                showHardwareBroadcastError(e)
+            }
             is HardwareReconnectError -> {
                 Logger.error("Failed to reconnect hardware device", e, context = TAG)
                 showHardwareReconnectError(deviceId)
@@ -669,6 +715,23 @@ class TransferViewModel @Inject constructor(
             }
         }
     }
+
+    private suspend fun showHardwareBroadcastError(error: HardwareBroadcastError) {
+        if (!error.isHardwareBroadcastConnectivityFailure()) {
+            ToastEventBus.send(error.cause ?: error)
+            return
+        }
+        ToastEventBus.send(
+            type = Toast.ToastType.WARNING,
+            title = context.getString(R.string.other__connection_issue),
+            description = context.getString(R.string.other__connection_issues_explain),
+        )
+    }
+
+    private fun Throwable.isHardwareBroadcastConnectivityFailure(): Boolean =
+        generateSequence(this) { it.cause }.any {
+            it is TimeoutCancellationException || "Failed to connect to Electrum" in it.message.orEmpty()
+        }
 
     private fun Throwable.isHardwareInteractionTimeout(): Boolean =
         this is HardwareFundingError &&
@@ -946,6 +1009,9 @@ class TransferViewModel @Inject constructor(
 
         /** Upper bound for one hardware signing attempt before the UI releases the button. */
         private val HW_SIGN_TIMEOUT = 120.seconds
+
+        /** Upper bound for broadcasting a signed hardware funding transaction. */
+        private val HW_BROADCAST_TIMEOUT = 120.seconds
         const val LN_SETUP_STEP_0 = 0
         const val LN_SETUP_STEP_1 = 1
         const val LN_SETUP_STEP_2 = 2
@@ -956,6 +1022,12 @@ class TransferViewModel @Inject constructor(
 private class HardwareReconnectError(cause: Throwable) : AppError(cause)
 private class HardwareFundingError(cause: Throwable) : AppError(cause)
 private class HardwareSigningTimeoutError(cause: Throwable) : AppError(cause)
+private class HardwareBroadcastError(cause: Throwable) : AppError(cause)
+
+private data class PendingHwFundingBroadcast(
+    val orderId: String,
+    val signedTx: HwFundingSignedTx,
+)
 
 // region state
 data class TransferToSpendingUiState(
@@ -967,6 +1039,7 @@ data class TransferToSpendingUiState(
     val quarterAmount: Long = 0,
     val isLoading: Boolean = false,
     val isSigning: Boolean = false,
+    val hasPendingHwBroadcast: Boolean = false,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
 )

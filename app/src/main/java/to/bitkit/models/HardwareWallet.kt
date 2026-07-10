@@ -65,6 +65,13 @@ data class HwFundingTransaction(
     val satsPerVByte: ULong,
 )
 
+data class HwFundingSignedTx(
+    val serializedTx: String,
+    val miningFeeSats: ULong,
+    val feeRate: ULong,
+    val totalSpent: ULong,
+)
+
 data class HwFundingBroadcastResult(
     val txId: String,
     val miningFeeSats: ULong,
