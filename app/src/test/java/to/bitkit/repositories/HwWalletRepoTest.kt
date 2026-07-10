@@ -5,8 +5,8 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
-import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorException
+import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.WalletBalance
 import com.synonym.bitkitcore.WatcherEvent
@@ -33,6 +33,7 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.ext.create
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWalletReceivedTx
@@ -40,7 +41,6 @@ import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toTrezorCoinType
-import to.bitkit.ext.create
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
@@ -501,7 +501,10 @@ class HwWalletRepoTest : BaseUnitTest() {
         advanceTimeBy(30.seconds)
         runCurrent()
 
-        verify(trezorRepo, times(2)).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
+        verify(
+            trezorRepo,
+            times(2)
+        ).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -650,7 +653,10 @@ class HwWalletRepoTest : BaseUnitTest() {
         val sut = createRepo()
 
         verify(trezorRepo).startWatcher(eq("ble1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
-        verify(trezorRepo, never()).startWatcher(eq("usb1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
+        verify(
+            trezorRepo,
+            never()
+        ).startWatcher(eq("usb1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
 
         watcherEvents.emit(
             "ble1|nativeSegwit" to WatcherEvent.TransactionsChanged(
@@ -950,7 +956,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         val signedTx = TrezorSignedTx(
             signatures = emptyList(),
             serializedTx = "rawtx",
-            txid = "signed-txid",
+            txid = null,
         )
         val funding = HwFundingTransaction(
             psbt = "psbt",
@@ -967,7 +973,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.isSuccess)
         assertEquals("rawtx", result.getOrThrow().serializedTx)
-        assertEquals("signed-txid", result.getOrThrow().txId)
+        assertEquals(null, result.getOrThrow().txId)
         assertEquals(1_250uL, result.getOrThrow().miningFeeSats)
         assertEquals(3uL, result.getOrThrow().feeRate)
         assertEquals(26_250uL, result.getOrThrow().totalSpent)
@@ -1116,7 +1122,6 @@ class HwWalletRepoTest : BaseUnitTest() {
             confirmed = blockHeight != null && confirmations > 0u,
         )
     )
-
 
     @Test
     fun `scan delegates to trezorRepo`() = test {

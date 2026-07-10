@@ -240,6 +240,7 @@ class TransferViewModelTest : BaseUnitTest() {
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
 
+        assertEquals(MINING_FEE, sut.spendingUiState.value.hwMiningFeeSats)
         verify(hwWalletRepo).composeFundingTransaction(
             eq(DEVICE_ID),
             eq(order.payment?.onchain?.address.orEmpty()),
@@ -537,8 +538,12 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.failure(TrezorException.UserCancelled()))
         whenever(hwWalletRepo.isKnownBluetoothDevice(DEVICE_ID)).thenReturn(false)
-        whenever(context.getString(R.string.lightning__transfer_hw__reconnect_error_title)).thenReturn("reconnect title")
-        whenever(context.getString(R.string.lightning__transfer_hw__reconnect_error_description)).thenReturn("reconnect body")
+        whenever(
+            context.getString(R.string.lightning__transfer_hw__reconnect_error_title)
+        ).thenReturn("reconnect title")
+        whenever(
+            context.getString(R.string.lightning__transfer_hw__reconnect_error_description)
+        ).thenReturn("reconnect body")
 
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()

@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.IBtOrder
 import to.bitkit.R
+import to.bitkit.models.safe
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FeeInfo
@@ -78,6 +79,7 @@ fun SpendingHwSignScreen(
         isAdvanced = state.isAdvanced,
         isSigning = state.isSigning,
         hasPendingBroadcast = state.hasPendingHwBroadcast,
+        miningFeeSats = state.hwMiningFeeSats,
         onBackClick = onBackClick,
         onLearnMoreClick = onLearnMoreClick,
         onAdvancedClick = onAdvancedClick,
@@ -92,6 +94,7 @@ private fun Content(
     isAdvanced: Boolean = false,
     isSigning: Boolean = false,
     hasPendingBroadcast: Boolean = false,
+    miningFeeSats: ULong = 0u,
     onBackClick: () -> Unit = {},
     onLearnMoreClick: () -> Unit = {},
     onAdvancedClick: () -> Unit = {},
@@ -130,7 +133,10 @@ private fun Content(
                 )
                 VerticalSpacer(16.dp)
 
-                SpendingHwFeeGrid(order = order)
+                SpendingHwFeeGrid(
+                    order = order,
+                    miningFeeSats = miningFeeSats,
+                )
 
                 VerticalSpacer(24.dp)
 
@@ -182,6 +188,7 @@ private fun Content(
 internal fun SpendingHwFeeGrid(
     order: IBtOrder,
     modifier: Modifier = Modifier,
+    miningFeeSats: ULong = 0u,
 ) {
     Column(modifier = modifier) {
         Row(
@@ -190,7 +197,7 @@ internal fun SpendingHwFeeGrid(
         ) {
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__network_fee),
-                amount = order.networkFeeSat.toLong(),
+                amount = (order.networkFeeSat.safe() + miningFeeSats.safe()).toLong(),
             )
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__lsp_fee),
@@ -207,7 +214,7 @@ internal fun SpendingHwFeeGrid(
             )
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__total),
-                amount = order.feeSat.toLong(),
+                amount = (order.feeSat.safe() + miningFeeSats.safe()).toLong(),
             )
         }
     }

@@ -252,13 +252,12 @@ class HwWalletRepo @Inject constructor(
                 }
             }
             val signedTx = signed.getOrThrow()
-            val txId = signedTx.txid ?: throw AppError("Signed hardware funding transaction has no txid")
             HwFundingSignedTx(
                 serializedTx = signedTx.serializedTx,
                 miningFeeSats = funding.miningFeeSats,
                 feeRate = ceil(funding.feeRate.toDouble()).toULong(),
                 totalSpent = funding.totalSpent,
-                txId = txId,
+                txId = signedTx.txid,
             )
         }
     }
@@ -268,8 +267,8 @@ class HwWalletRepo @Inject constructor(
         signedTx: HwFundingSignedTx,
     ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val txId = trezorRepo.broadcastRawTx(serializedTx = signedTx.serializedTx).getOrElse {
-                if (it.isAlreadyBroadcastError()) signedTx.txId else throw it
+            val txId = trezorRepo.broadcastRawTx(serializedTx = signedTx.serializedTx).getOrElse { error ->
+                signedTx.txId?.takeIf { error.isAlreadyBroadcastError() } ?: throw error
             }
             HwFundingBroadcastResult(
                 txId = txId,

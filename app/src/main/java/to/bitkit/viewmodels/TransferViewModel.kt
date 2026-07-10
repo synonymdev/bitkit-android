@@ -396,6 +396,7 @@ class TransferViewModel @Inject constructor(
                 isAdvanced = false,
                 defaultOrder = null,
                 hasPendingHwBroadcast = false,
+                hwMiningFeeSats = 0u,
             )
         }
         setTransferEffect(TransferEffect.OnOrderCreated)
@@ -494,7 +495,14 @@ class TransferViewModel @Inject constructor(
 
     fun onUseDefaultLspBalanceClick() {
         val defaultOrder = _spendingUiState.value.defaultOrder
-        _spendingUiState.update { it.copy(order = defaultOrder, defaultOrder = null, isAdvanced = false) }
+        _spendingUiState.update {
+            it.copy(
+                order = defaultOrder,
+                defaultOrder = null,
+                isAdvanced = false,
+                hwMiningFeeSats = 0u,
+            )
+        }
     }
 
     fun resetSpendingState() {
@@ -649,7 +657,7 @@ class TransferViewModel @Inject constructor(
         sats: ULong,
         satsPerVByte: ULong,
     ): HwFundingTransaction {
-        return runCatching {
+        val funding = runCatching {
             withTimeout(HW_COMPOSE_TIMEOUT) {
                 hwWalletRepo.composeFundingTransaction(
                     deviceId = deviceId,
@@ -662,6 +670,8 @@ class TransferViewModel @Inject constructor(
             if (it is CancellationException && it !is TimeoutCancellationException) throw it
             throw HardwareFundingError(it)
         }
+        _spendingUiState.update { it.copy(hwMiningFeeSats = funding.miningFeeSats) }
+        return funding
     }
 
     @Suppress("ThrowsCount")
@@ -1080,6 +1090,7 @@ data class TransferToSpendingUiState(
     val isLoading: Boolean = false,
     val isSigning: Boolean = false,
     val hasPendingHwBroadcast: Boolean = false,
+    val hwMiningFeeSats: ULong = 0u,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
 )
