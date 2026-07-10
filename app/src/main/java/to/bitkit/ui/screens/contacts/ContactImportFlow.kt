@@ -11,7 +11,7 @@ internal fun hasPendingImport(profile: PubkyProfile?, contacts: List<PubkyProfil
 
 internal sealed interface AddContactValidationResult {
     data object Empty : AddContactValidationResult
-    data object ExistingContact : AddContactValidationResult
+    data class ExistingContact(val normalizedKey: String) : AddContactValidationResult
     data object InvalidKey : AddContactValidationResult
     data object OwnKey : AddContactValidationResult
     data class Valid(val normalizedKey: String) : AddContactValidationResult
@@ -36,7 +36,7 @@ internal fun resolveAddContactValidation(
         ?: return AddContactValidationResult.InvalidKey
 
     if (contacts.any { PubkyPublicKeyFormat.matches(it.publicKey, normalizedKey) }) {
-        return AddContactValidationResult.ExistingContact
+        return AddContactValidationResult.ExistingContact(normalizedKey)
     }
 
     return AddContactValidationResult.Valid(normalizedKey = normalizedKey)

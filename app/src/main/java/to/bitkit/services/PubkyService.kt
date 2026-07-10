@@ -4,6 +4,7 @@ import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PaykitProfile
 import to.bitkit.async.ServiceQueue
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.AppError
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,8 +45,16 @@ class PubkyService @Inject constructor(
     }
 
     suspend fun removeBitkitPaymentEndpoints() = ServiceQueue.CORE.background {
-        val report = paykitSdkService.syncPublicEndpoints(emptyList())
-        if (report.failed.isNotEmpty()) throw AppError("Failed to remove Paykit payment endpoints")
+        val endpointError = runSuspendCatching {
+            val report = paykitSdkService.syncPublicEndpoints(emptyList())
+            if (report.failed.isNotEmpty()) throw AppError("Failed to remove Paykit payment endpoints")
+        }.exceptionOrNull()
+        val markerError = runSuspendCatching {
+            paykitSdkService.syncLocalReceiverMarker(isDiscoverable = false)
+        }.exceptionOrNull()
+        val cleanupError = endpointError ?: markerError
+        if (endpointError != null && markerError != null) endpointError.addSuppressed(markerError)
+        cleanupError?.let { throw it }
     }
 
     // endregion
@@ -140,8 +149,12 @@ class PubkyService @Inject constructor(
         paykitSdkService.contactRecords()
     }
 
-    suspend fun saveContact(publicKey: String, label: String?): ContactRecord = ServiceQueue.CORE.background {
-        paykitSdkService.saveContact(publicKey, label)
+    suspend fun saveContact(
+        publicKey: String,
+        label: String?,
+        receiverPaths: List<String>? = null,
+    ): ContactRecord = ServiceQueue.CORE.background {
+        paykitSdkService.saveContact(publicKey, label, receiverPaths)
     }
 
     suspend fun removeContact(publicKey: String): ContactRecord? = ServiceQueue.CORE.background {
@@ -153,6 +166,10 @@ class PubkyService @Inject constructor(
         allowPubkyProfileFallback: Boolean,
     ): ContactProfileResolution? = ServiceQueue.CORE.background {
         paykitSdkService.resolveContactProfile(publicKey, allowPubkyProfileFallback)
+    }
+
+    suspend fun discoverRelevantReceiverPaths(publicKey: String): List<String> = ServiceQueue.CORE.background {
+        paykitSdkService.discoverRelevantReceiverPaths(publicKey)
     }
 
     // endregion

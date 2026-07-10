@@ -16,11 +16,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import javax.inject.Inject
 
 @HiltViewModel
 class ContactsViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
+    private val refreshContactPaykitReceivers: RefreshContactPaykitReceiversUseCase,
 ) : ViewModel() {
 
     private val _searchText = MutableStateFlow("")
@@ -40,6 +42,7 @@ class ContactsViewModel @Inject constructor(
         myProfile,
         _searchText,
     ) { contacts, isLoading, myProfileValue, search ->
+        val sortedContacts = contacts.sortedBy { it.name.lowercase() }.toImmutableList()
         val filtered = if (search.isBlank()) {
             contacts
         } else {
@@ -51,6 +54,7 @@ class ContactsViewModel @Inject constructor(
         val sorted = filtered.sortedBy { it.name.lowercase() }.toImmutableList()
         ContactsUiState(
             contacts = sorted,
+            allContacts = sortedContacts,
             myProfile = myProfileValue,
             isLoading = isLoading,
             searchText = search,
@@ -64,11 +68,16 @@ class ContactsViewModel @Inject constructor(
     fun refresh() {
         viewModelScope.launch { pubkyRepo.loadContacts() }
     }
+
+    fun refreshExistingContact(publicKey: String) {
+        viewModelScope.launch { refreshContactPaykitReceivers(publicKey) }
+    }
 }
 
 @Stable
 data class ContactsUiState(
     val contacts: ImmutableList<PubkyProfile> = persistentListOf(),
+    val allContacts: ImmutableList<PubkyProfile> = persistentListOf(),
     val myProfile: PubkyProfile? = null,
     val isLoading: Boolean = false,
     val searchText: String = "",

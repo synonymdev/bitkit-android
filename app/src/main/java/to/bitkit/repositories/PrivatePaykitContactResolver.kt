@@ -20,7 +20,9 @@ class PrivatePaykitContactResolver @Inject constructor(
             if (paymentHash.isBlank()) return@withContext null
             cacheStore.data.first().contacts.firstNotNullOfOrNull { (publicKey, contactState) ->
                 publicKey.takeIf {
-                    contactState.localInvoice?.paymentHash == paymentHash ||
+                    contactState.localInvoicesByReceiverPath.values.any { invoice ->
+                        invoice.paymentHash == paymentHash
+                    } ||
                         paymentHash in contactState.receivedInvoicePaymentHashes
                 }
             }

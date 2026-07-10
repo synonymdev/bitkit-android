@@ -32,28 +32,32 @@ internal data class PrivatePaykitState(
 
 internal data class ContactState(
     var remoteEndpoints: List<StoredPaymentEntry> = emptyList(),
-    var localInvoice: StoredInvoice? = null,
+    var localInvoicesByReceiverPath: Map<String, StoredInvoice> = emptyMap(),
     var receivedInvoicePaymentHashes: List<String> = emptyList(),
-    var hasPublishedPrivatePaymentList: Boolean = false,
+    var publishedPrivatePaymentReceiverPaths: Set<String> = emptySet(),
 ) {
     constructor(cache: PrivatePaykitContactCacheData) : this(
         remoteEndpoints = cache.remoteEndpoints.map { StoredPaymentEntry(it.methodId, it.endpointData) },
-        localInvoice = cache.localInvoice?.let { StoredInvoice(it.bolt11, it.paymentHash, it.expiresAt) },
+        localInvoicesByReceiverPath = cache.localInvoicesByReceiverPath.mapValues { (_, invoice) ->
+            StoredInvoice(invoice.bolt11, invoice.paymentHash, invoice.expiresAt)
+        },
         receivedInvoicePaymentHashes = cache.receivedInvoicePaymentHashes,
-        hasPublishedPrivatePaymentList = cache.hasPublishedPrivatePaymentList,
+        publishedPrivatePaymentReceiverPaths = cache.publishedPrivatePaymentReceiverPaths,
     )
 
     val hasCacheState: Boolean
-        get() = hasPublishedPrivatePaymentList ||
+        get() = publishedPrivatePaymentReceiverPaths.isNotEmpty() ||
             remoteEndpoints.isNotEmpty() ||
-            localInvoice != null ||
+            localInvoicesByReceiverPath.isNotEmpty() ||
             receivedInvoicePaymentHashes.isNotEmpty()
 
     fun cacheState() = PrivatePaykitContactCacheData(
         remoteEndpoints = remoteEndpoints.map { PrivatePaykitStoredPaymentEntryData(it.methodId, it.endpointData) },
-        localInvoice = localInvoice?.let { PrivatePaykitStoredInvoiceData(it.bolt11, it.paymentHash, it.expiresAt) },
+        localInvoicesByReceiverPath = localInvoicesByReceiverPath.mapValues { (_, invoice) ->
+            PrivatePaykitStoredInvoiceData(invoice.bolt11, invoice.paymentHash, invoice.expiresAt)
+        },
         receivedInvoicePaymentHashes = receivedInvoicePaymentHashes,
-        hasPublishedPrivatePaymentList = hasPublishedPrivatePaymentList,
+        publishedPrivatePaymentReceiverPaths = publishedPrivatePaymentReceiverPaths,
     )
 }
 

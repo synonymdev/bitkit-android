@@ -15,12 +15,14 @@ import to.bitkit.data.PrivatePaykitReservationStore
 import to.bitkit.data.PrivatePaykitStoredAssignmentData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.addressTypeFromAddress
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toSettingsString
 import to.bitkit.services.CoreService
+import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -80,33 +82,24 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
             }
         }
 
-    suspend fun currentOrRotatedAddress(publicKey: String): Result<String> = withContext(ioDispatcher) {
-        runCatching {
-            val normalizedKey = normalizedPublicKey(publicKey)
-            val current = locked { it.contactAssignments[normalizedKey] }
+    suspend fun currentOrRotatedAddress(
+        publicKey: String,
+        receiverPath: String,
+    ): Result<String> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val assignmentKey = contactAssignmentKey(publicKey, receiverPath)
+            val current = locked { it.contactAssignments[assignmentKey] }
             if (current != null && isAddressTypeMonitored(current.addressType)) {
                 val address = resolvedAddress(current).getOrThrow()
-                if (!isReservedAddressUsed(address)) return@runCatching address
+                if (!isReservedAddressUsed(address)) return@runSuspendCatching address
             } else if (current != null) {
-                clearCurrentAssignment(normalizedKey)
+                clearCurrentAssignment(assignmentKey)
             }
 
-            allocateAddress(normalizedKey).getOrThrow()
+            allocateAddress(assignmentKey).getOrThrow()
         }.onFailure {
             Logger.warn(
                 "Failed to get private Paykit address for '${redacted(publicKey)}'",
-                it,
-                context = TAG,
-            )
-        }
-    }
-
-    suspend fun rotateAddress(publicKey: String): Result<String> = withContext(ioDispatcher) {
-        runCatching {
-            allocateAddress(normalizedPublicKey(publicKey)).getOrThrow()
-        }.onFailure {
-            Logger.warn(
-                "Failed to rotate private Paykit address for '${redacted(publicKey)}'",
                 it,
                 context = TAG,
             )
@@ -163,7 +156,7 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         assignments.firstOrNull { (_, assignment) ->
             assignment.addressType == addressType &&
                 (assignment.address == address || resolvedAddress(assignment).getOrNull() == address)
-        }?.first
+        }?.first?.publicKeyFromAssignmentKey()
     }
 
     suspend fun currentContactPublicKeyForReservedAddress(address: String): String? = withContext(ioDispatcher) {
@@ -173,24 +166,25 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         assignments.firstOrNull { (_, assignment) ->
             assignment.addressType == addressType &&
                 (assignment.address == address || resolvedAddress(assignment).getOrNull() == address)
-        }?.first
+        }?.first?.publicKeyFromAssignmentKey()
     }
 
     suspend fun contactsWithUsedReservedAddresses(): List<String> = withContext(ioDispatcher) {
         val assignments = locked { it.contactAssignments.map { entry -> entry.key to entry.value } }
         assignments.mapNotNull { (publicKey, assignment) ->
             val address = resolvedAddress(assignment).getOrNull() ?: return@mapNotNull null
-            val isUsed = runCatching { isReservedAddressUsed(address) }
+            val isUsed = runSuspendCatching { isReservedAddressUsed(address) }
                 .onFailure {
                     Logger.warn(
-                        "Failed to check private Paykit address usage for '${redacted(publicKey)}'",
+                        "Failed to check private Paykit address usage for " +
+                            "'${redacted(publicKey.publicKeyFromAssignmentKey())}'",
                         it,
                         context = TAG,
                     )
                 }
                 .getOrDefault(false)
-            publicKey.takeIf { isUsed }
-        }
+            publicKey.publicKeyFromAssignmentKey().takeIf { isUsed }
+        }.distinct()
     }
 
     private suspend fun isReservedAddressUsed(address: String): Boolean {
@@ -201,18 +195,30 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
 
     suspend fun hasContactAssignment(publicKey: String): Boolean = withContext(ioDispatcher) {
         val normalizedKey = normalizedPublicKey(publicKey)
-        locked { it.contactAssignments.containsKey(normalizedKey) }
+        locked {
+            it.contactAssignments.keys.any { assignmentKey ->
+                assignmentKey.publicKeyFromAssignmentKey() == normalizedKey
+            }
+        }
     }
 
     suspend fun clearContactAssignment(publicKey: String) = withContext(ioDispatcher) {
         val normalizedKey = normalizedPublicKey(publicKey)
         locked { current ->
-            val hadAssignment = normalizedKey in current.contactAssignments
-            val hadHistory = normalizedKey in current.contactAssignmentHistory
+            val hadAssignment = current.contactAssignments.keys.any {
+                it.publicKeyFromAssignmentKey() == normalizedKey
+            }
+            val hadHistory = current.contactAssignmentHistory.keys.any {
+                it.publicKeyFromAssignmentKey() == normalizedKey
+            }
             if (!hadAssignment && !hadHistory) return@locked
             val next = current.copy(
-                contactAssignments = current.contactAssignments - normalizedKey,
-                contactAssignmentHistory = current.contactAssignmentHistory - normalizedKey,
+                contactAssignments = current.contactAssignments.filterKeys {
+                    it.publicKeyFromAssignmentKey() != normalizedKey
+                },
+                contactAssignmentHistory = current.contactAssignmentHistory.filterKeys {
+                    it.publicKeyFromAssignmentKey() != normalizedKey
+                },
             )
             ledger = next
             persist(next)
@@ -224,8 +230,12 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         val savedKeys = excludingPublicKeys.mapNotNull { normalizedPublicKeyOrNull(it) }.toSet()
         locked { current ->
             val next = current.copy(
-                contactAssignments = current.contactAssignments.filterKeys { it in savedKeys },
-                contactAssignmentHistory = current.contactAssignmentHistory.filterKeys { it in savedKeys },
+                contactAssignments = current.contactAssignments.filterKeys {
+                    it.publicKeyFromAssignmentKey() in savedKeys
+                },
+                contactAssignmentHistory = current.contactAssignmentHistory.filterKeys {
+                    it.publicKeyFromAssignmentKey() in savedKeys
+                },
             )
             if (next == current) return@locked
             ledger = next
@@ -242,8 +252,8 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         }
     }
 
-    private suspend fun allocateAddress(publicKey: String): Result<String> = withContext(ioDispatcher) {
-        runCatching {
+    private suspend fun allocateAddress(assignmentKey: String): Result<String> = withContext(ioDispatcher) {
+        runSuspendCatching {
             val addressType = selectedAddressType()
             val addressTypeKey = addressType.toSettingsString()
 
@@ -259,13 +269,13 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
             )
             locked { current ->
                 val reserved = current.reservedReceiveIndexesByAddressType[addressTypeKey].orEmpty() + addressInfo.index
-                val history = current.contactAssignmentHistory[publicKey].orEmpty()
+                val history = current.contactAssignmentHistory[assignmentKey].orEmpty()
                     .let { if (assignment in it) it else it + assignment }
                 val next = current.copy(
                     reservedReceiveIndexesByAddressType = current.reservedReceiveIndexesByAddressType +
                         (addressTypeKey to reserved),
-                    contactAssignments = current.contactAssignments + (publicKey to assignment),
-                    contactAssignmentHistory = current.contactAssignmentHistory + (publicKey to history),
+                    contactAssignments = current.contactAssignments + (assignmentKey to assignment),
+                    contactAssignmentHistory = current.contactAssignmentHistory + (assignmentKey to history),
                 )
                 ledger = next
                 persist(next)
@@ -317,9 +327,9 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
         }
     }
 
-    private suspend fun clearCurrentAssignment(publicKey: String) {
+    private suspend fun clearCurrentAssignment(assignmentKey: String) {
         locked { current ->
-            val next = current.copy(contactAssignments = current.contactAssignments - publicKey)
+            val next = current.copy(contactAssignments = current.contactAssignments - assignmentKey)
             ledger = next
             persist(next)
             notifyBackupStateChanged()
@@ -376,6 +386,13 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
 
     private fun normalizedPublicKeyOrNull(publicKey: String): String? =
         PubkyPublicKeyFormat.normalized(publicKey)
+
+    private fun contactAssignmentKey(publicKey: String, receiverPath: String): String {
+        val normalizedKey = normalizedPublicKey(publicKey)
+        return if (receiverPath == PaykitReceiverPaths.WALLET) normalizedKey else "$normalizedKey#$receiverPath"
+    }
+
+    private fun String.publicKeyFromAssignmentKey(): String = substringBefore("#")
 
     private fun redacted(publicKey: String): String =
         PubkyPublicKeyFormat.redacted(publicKey)

@@ -22,6 +22,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.services.CoreService
 import to.bitkit.services.PaykitContactPaymentResolution
+import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
@@ -121,6 +122,23 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `syncPublishedEndpoints does not publish endpoints when receiver marker publish fails`() = test {
+        settingsFlow.value = SettingsData(
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+        )
+        walletState.value = WalletState(onchainAddress = "bc1ptest")
+        val markerError = RuntimeException("marker failed")
+        whenever { paykitSdkService.syncLocalReceiverMarker(isDiscoverable = true) }
+            .thenThrow(markerError)
+
+        val error = sut.syncPublishedEndpoints(publish = true).exceptionOrNull()
+
+        assertEquals(markerError, error)
+        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any()) }
+    }
+
+    @Test
     fun `syncPublishedEndpoints remove clears SDK public endpoints and metadata`() = test {
         settingsFlow.value = SettingsData(
             publicPaykitBolt11 = "lnbc1old",
@@ -135,6 +153,33 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         assertEquals("", settingsFlow.value.publicPaykitBolt11)
         assertEquals(false, settingsFlow.value.publicPaykitCleanupPending)
         verifyBlocking(paykitSdkService) { syncPublicEndpoints(emptyList()) }
+    }
+
+    @Test
+    fun `syncPublishedEndpoints remove keeps cleanup pending when receiver marker removal fails`() = test {
+        settingsFlow.value = SettingsData(publicPaykitCleanupPending = true)
+        val markerError = RuntimeException("marker failed")
+        whenever { paykitSdkService.syncLocalReceiverMarker(isDiscoverable = false) }
+            .thenThrow(markerError)
+
+        val error = sut.syncPublishedEndpoints(publish = false).exceptionOrNull()
+
+        assertEquals(markerError, error)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(emptyList()) }
+    }
+
+    @Test
+    fun `syncPublishedEndpoints remove preserves both cleanup failures`() = test {
+        val endpointError = RuntimeException("endpoint failed")
+        val markerError = RuntimeException("marker failed")
+        whenever { paykitSdkService.syncPublicEndpoints(emptyList()) }.thenThrow(endpointError)
+        whenever { paykitSdkService.syncLocalReceiverMarker(isDiscoverable = false) }.thenThrow(markerError)
+
+        val error = sut.syncPublishedEndpoints(publish = false).exceptionOrNull()
+
+        assertEquals(endpointError, error)
+        assertEquals(listOf(markerError), error?.suppressedExceptions)
     }
 
     @Test
@@ -171,7 +216,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @Test
     fun `beginPayment opens SDK resolved public endpoint`() = test {
         whenever {
-            paykitSdkService.resolvePublicContactPayment("pubkycontact")
+            paykitSdkService.resolvePublicContactPayment("pubkycontact", PaykitReceiverPaths.WALLET)
         }.thenReturn(
             resolution(
                 resolvedEndpoint(

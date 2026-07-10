@@ -36,7 +36,7 @@ class ContactImportFlowTest {
     @Test
     fun `resolveAddContactValidation returns existing contact for saved contact`() {
         assertEquals(
-            AddContactValidationResult.ExistingContact,
+            AddContactValidationResult.ExistingContact(normalizedKey = VALID_PUBLIC_KEY),
             resolveAddContactValidation(
                 input = VALID_PUBLIC_KEY,
                 ownPublicKey = null,

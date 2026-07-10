@@ -23,6 +23,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -31,6 +32,7 @@ class AddContactViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
+    private val refreshContactPaykitReceivers: RefreshContactPaykitReceiversUseCase,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
@@ -78,6 +80,9 @@ class AddContactViewModel @Inject constructor(
                     }
                 }
                 .onFailure { error ->
+                    if (error == PubkyContactError.AlreadyExists) {
+                        refreshContactPaykitReceivers(publicKey)
+                    }
                     _uiState.update { state ->
                         state.copy(
                             isLoading = false,
