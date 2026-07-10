@@ -55,7 +55,7 @@
       Wait for the screen to auto-forward and verify the Processing Payment / setting-up progress screen appears as an intermediate state, not as the final success condition
     </action>
     <action>
-      Before mining, tap "Continue Using Bitkit" (testTag "TransferSuccess-button") and verify the app returns to the wallet home screen
+      On the Processing Payment screen, immediately tap "Continue Using Bitkit" (testTag "TransferSuccess-button") within five seconds, before the regtest auto-mine runs, and verify the app returns to the wallet home screen
     </action>
     <action>
       Before mining, verify the recent Activity list contains exactly one new hardware wallet transfer row for the new tx, with the blue hardware icon, title "Transfer", subtitle "From Savings", and a non-confirmed/non-stuck transfer status, above the prior blue received row from the fixture
@@ -94,7 +94,7 @@
       Tap the top-bar back button to return to the wallet home screen
     </action>
     <action>
-      Verify the app/Core sync observes the newly mined confirmation
+      Verify the app observes the newly mined confirmation through bitkit-core
     </action>
     <action>
       Verify the SPENDING balance has increased by the transfer amount and the same hardware wallet transfer row for the new tx is now confirmed

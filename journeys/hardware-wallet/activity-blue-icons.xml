@@ -2,7 +2,7 @@
   <description>
     Verifies hardware wallet on-chain activity in the home list and the All Activity screen
     with blue icon variants, mixed transaction history, and tab filter behavior. Hardware
-    activities are first-class Bitkit Core activities persisted by the watcher, so they appear
+    activities are first-class bitkit-core activities persisted by the watcher, so they appear
     in the unified list and survive filters like normal transactions. Requires a paired Bridge
     emulator with the mixed hardware activity fixture from README.md: at least two confirmed
     hardware receives with distinct amounts and one hardware Transfer To Spending transaction.
@@ -27,10 +27,13 @@
       Verify an activity detail screen opens showing a blue hardware icon, title "From Savings", status content, and "TO SPENDING", then navigate back to All Activity
     </action>
     <action>
-      Tap the "Sent" tab and verify the blue hardware Transfer row is listed, while the two blue received rows are not listed
+      Tap the "Sent" tab and verify neither the blue hardware Transfer row nor the two blue received rows are listed
     </action>
     <action>
       Tap the "Received" tab and verify the two distinct blue received rows are listed, while the hardware Transfer row is not listed
+    </action>
+    <action>
+      Tap the "Other" tab and verify the blue hardware Transfer row is listed, while the two blue received rows are not listed
     </action>
     <action>
       Tap back to the "All" tab and verify the blue hardware received rows and blue hardware Transfer row are listed again

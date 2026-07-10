@@ -34,7 +34,6 @@ import to.bitkit.models.TransferType
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
-import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -149,33 +148,6 @@ class TransferRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(transferDao).insert(any())
-    }
-
-    @Test
-    fun `createPendingToSpendingActivity passes hardware wallet id`() = test {
-        val order = previewBtOrder()
-        val fee = 123uL
-        val feeRate = 2uL
-
-        val result = sut.createPendingToSpendingActivity(
-            order = order,
-            txId = fundingTxo.txid,
-            fee = fee,
-            feeRate = feeRate,
-            walletId = ID_HW_WALLET,
-        )
-
-        assertTrue(result.isSuccess)
-        verify(activityService).createSentOnchainActivityFromSendResult(
-            eq(fundingTxo.txid),
-            eq(order.payment?.onchain?.address.orEmpty()),
-            eq(order.feeSat),
-            eq(fee),
-            eq(feeRate),
-            eq(true),
-            eq(order.channel?.shortChannelId),
-            eq(ID_HW_WALLET),
-        )
     }
 
     @Test

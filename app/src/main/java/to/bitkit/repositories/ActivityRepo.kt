@@ -6,6 +6,7 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.ActivityTags
 import com.synonym.bitkitcore.ClosedChannelDetails
+import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
@@ -216,30 +217,49 @@ class ActivityRepo @Inject constructor(
     }
 
     suspend fun persistHardware(
+        walletId: String,
         activities: List<Activity>,
         transactionDetails: List<BitkitCoreTransactionDetails>,
-    ): Result<Unit> = withContext(bgDispatcher) {
+    ): Result<List<Activity>> = withContext(bgDispatcher) {
         runSuspendCatching {
-            val mergedActivities = activities.map { mergeExistingTransferMetadata(it) }
-            if (mergedActivities.isNotEmpty()) coreService.activity.upsertList(mergedActivities)
-            if (transactionDetails.isNotEmpty()) coreService.activity.upsertTransactionDetailsList(transactionDetails)
-            if (mergedActivities.isNotEmpty() || transactionDetails.isNotEmpty()) notifyActivitiesChanged()
+            val persistedActivities = coreService.activity.replaceHardwareSnapshot(
+                walletId = walletId,
+                activities = activities,
+                transactionDetails = transactionDetails,
+            )
+            notifyActivitiesChanged()
+            persistedActivities
         }.onFailure {
             Logger.error("Failed to persist hardware activities", it, context = TAG)
         }
     }
 
-    private suspend fun mergeExistingTransferMetadata(activity: Activity): Activity {
-        val onchain = activity as? Activity.Onchain ?: return activity
-        val existing = getOnchainActivityByTxId(onchain.v1.txId, onchain.v1.walletId) ?: return activity
-        if (!existing.isTransfer && existing.channelId == null) return activity
-
-        return Activity.Onchain(
-            onchain.v1.copy(
-                isTransfer = onchain.v1.isTransfer || existing.isTransfer,
-                channelId = onchain.v1.channelId ?: existing.channelId,
+    @Suppress("LongParameterList")
+    suspend fun createPendingToSpendingActivity(
+        order: IBtOrder,
+        txId: String,
+        fee: ULong,
+        feeRate: ULong,
+        walletId: String = DEFAULT_WALLET_ID,
+    ): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val address = requireNotNull(order.payment?.onchain?.address?.takeIf { it.isNotEmpty() }) {
+                "Order '${order.id}' has no on-chain payment address"
+            }
+            coreService.activity.createSentOnchainActivityFromSendResult(
+                txid = txId,
+                address = address,
+                amount = order.feeSat,
+                fee = fee,
+                feeRate = feeRate,
+                isTransfer = true,
+                channelId = order.channel?.shortChannelId,
+                walletId = walletId,
             )
-        )
+            notifyActivitiesChanged()
+        }.onFailure {
+            Logger.error("Failed to create pending transfer activity for '$txId'", it, context = TAG)
+        }
     }
 
     suspend fun deleteForWallet(walletId: String): Result<Unit> = withContext(bgDispatcher) {
@@ -297,13 +317,15 @@ class ActivityRepo @Inject constructor(
         coreService.activity.getTransactionDetails(txid, walletId)
     }
 
-    suspend fun getBoostTxDoesExist(boostTxIds: List<String>): Map<String, Boolean> {
-        return coreService.activity.getBoostTxDoesExist(boostTxIds)
+    suspend fun getBoostTxDoesExist(boostTxIds: List<String>, walletId: String): Map<String, Boolean> {
+        return coreService.activity.getBoostTxDoesExist(boostTxIds, walletId)
     }
 
-    suspend fun isCpfpChildTransaction(txId: String): Boolean = coreService.activity.isCpfpChildTransaction(txId)
+    suspend fun isCpfpChildTransaction(txId: String, walletId: String): Boolean =
+        coreService.activity.isCpfpChildTransaction(txId, walletId)
 
-    suspend fun getTxIdsInBoostTxIds(): Set<String> = coreService.activity.getTxIdsInBoostTxIds()
+    suspend fun getTxIdsInBoostTxIds(walletId: String): Set<String> =
+        coreService.activity.getTxIdsInBoostTxIds(walletId)
 
     /**
      * Gets a specific activity by payment hash or txID with retry logic
@@ -359,7 +381,7 @@ class ActivityRepo @Inject constructor(
         limit: UInt? = null,
         sortDirection: SortDirection? = null,
     ): Result<List<Activity>> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             coreService.activity.get(walletId, filter, txType, tags, search, minDate, maxDate, limit, sortDirection)
         }.onFailure {
             Logger.error(
@@ -389,7 +411,7 @@ class ActivityRepo @Inject constructor(
     suspend fun contactActivities(publicKey: String): Result<List<Activity>> = withContext(ioDispatcher) {
         runCatching {
             val normalizedKey = PubkyPublicKeyFormat.normalized(publicKey) ?: publicKey
-            val txIdsInBoostTxIds = getTxIdsInBoostTxIds()
+            val txIdsInBoostTxIds = getTxIdsInBoostTxIds(DEFAULT_WALLET_ID)
             getActivities(
                 filter = ActivityFilter.ALL,
                 sortDirection = SortDirection.DESC,

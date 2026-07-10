@@ -9,6 +9,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -53,6 +54,14 @@ class ActivityListViewModelTest : BaseUnitTest() {
         walletId = ActivityWalletType.TREZOR.idPrefixed("dev1"),
     )
 
+    private val hwTransfer = onchainActivity(
+        id = "hw-transfer",
+        txType = PaymentType.SENT,
+        timestamp = 175uL,
+        walletId = ActivityWalletType.TREZOR.idPrefixed("dev1"),
+        isTransfer = true,
+    )
+
     private val hwSecondWallet = onchainActivity(
         id = "hw-second-wallet",
         txType = PaymentType.RECEIVED,
@@ -60,14 +69,14 @@ class ActivityListViewModelTest : BaseUnitTest() {
         walletId = ActivityWalletType.TREZOR.idPrefixed("dev2"),
     )
 
-    private val activities = listOf(hwSecondWallet, bitkitSent, hwSent, bitkitReceived, hwReceived)
+    private val activities = listOf(hwSecondWallet, bitkitSent, hwSent, bitkitReceived, hwReceived, hwTransfer)
 
     @Before
     fun setUp() {
         whenever(activityRepo.state).thenReturn(MutableStateFlow(ActivityState()))
         whenever(activityRepo.activitiesChanged).thenReturn(MutableStateFlow(0L))
         whenever { activityRepo.syncActivities() }.thenReturn(Result.success(Unit))
-        whenever { activityRepo.getTxIdsInBoostTxIds() }.thenReturn(emptySet())
+        whenever { activityRepo.getTxIdsInBoostTxIds(any()) }.thenReturn(emptySet())
         whenever {
             activityRepo.getActivities(
                 walletId = anyOrNull(),
@@ -98,7 +107,7 @@ class ActivityListViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(
-            listOf("bitkit-sent", "bitkit-received", "hw-received", "hw-sent", "hw-second-wallet"),
+            listOf("bitkit-sent", "bitkit-received", "hw-received", "hw-transfer", "hw-sent", "hw-second-wallet"),
             sut.filteredActivities.value?.map { it.rawId() },
         )
     }
@@ -117,12 +126,21 @@ class ActivityListViewModelTest : BaseUnitTest() {
                 limit = anyOrNull(),
                 sortDirection = anyOrNull(),
             )
-        }.thenReturn(Result.success(listOf(bitkitSent, hwSent)))
+        }.thenReturn(Result.success(listOf(bitkitSent, hwSent, hwTransfer)))
         val sut = createViewModel()
         sut.setTab(ActivityTab.SENT)
         advanceUntilIdle()
 
         assertEquals(listOf("bitkit-sent", "hw-sent"), sut.filteredActivities.value?.map { it.rawId() })
+    }
+
+    @Test
+    fun `hardware transfer is included only under the other tab`() = test {
+        val sut = createViewModel()
+        sut.setTab(ActivityTab.OTHER)
+        advanceUntilIdle()
+
+        assertEquals(listOf("hw-transfer"), sut.filteredActivities.value?.map { it.rawId() })
     }
 
     @Test
@@ -156,7 +174,10 @@ class ActivityListViewModelTest : BaseUnitTest() {
         val job = launch { sut.hardwareIds.collect {} }
         advanceUntilIdle()
 
-        assertEquals(setOf(hwReceived.scopedId(), hwSent.scopedId(), hwSecondWallet.scopedId()), sut.hardwareIds.value)
+        assertEquals(
+            setOf(hwReceived.scopedId(), hwTransfer.scopedId(), hwSent.scopedId(), hwSecondWallet.scopedId()),
+            sut.hardwareIds.value,
+        )
         job.cancel()
     }
 
@@ -171,11 +192,59 @@ class ActivityListViewModelTest : BaseUnitTest() {
         )
     }
 
+    @Test
+    fun `replaced transactions remain scoped by wallet`() = test {
+        val txId = "shared-tx"
+        val hardwareWalletId = ActivityWalletType.TREZOR.idPrefixed("dev1")
+        val bitkit = Activity.Onchain(
+            onchainActivity(
+                id = "bitkit-replaced",
+                txType = PaymentType.SENT,
+                timestamp = 200uL,
+            ).v1.copy(
+                txId = txId,
+                doesExist = false,
+            ),
+        )
+        val hardware = Activity.Onchain(
+            onchainActivity(
+                id = "hardware-replaced",
+                txType = PaymentType.SENT,
+                timestamp = 100uL,
+                walletId = hardwareWalletId,
+            ).v1.copy(
+                txId = txId,
+                doesExist = false,
+            ),
+        )
+        whenever {
+            activityRepo.getActivities(
+                walletId = anyOrNull(),
+                filter = anyOrNull(),
+                txType = anyOrNull(),
+                tags = anyOrNull(),
+                search = anyOrNull(),
+                minDate = anyOrNull(),
+                maxDate = anyOrNull(),
+                limit = anyOrNull(),
+                sortDirection = anyOrNull(),
+            )
+        }.thenReturn(Result.success(listOf(bitkit, hardware)))
+        whenever { activityRepo.getTxIdsInBoostTxIds(ActivityWalletType.BITKIT.id()) }.thenReturn(setOf(txId))
+        whenever { activityRepo.getTxIdsInBoostTxIds(hardwareWalletId) }.thenReturn(emptySet())
+
+        val sut = createViewModel()
+        advanceUntilIdle()
+
+        assertEquals(listOf("hardware-replaced"), sut.filteredActivities.value?.map { it.rawId() })
+    }
+
     private fun onchainActivity(
         id: String,
         txType: PaymentType,
         timestamp: ULong,
         walletId: String = ActivityWalletType.BITKIT.id(),
+        isTransfer: Boolean = false,
     ) = Activity.Onchain(
         OnchainActivity.create(
             id = id,
@@ -187,6 +256,7 @@ class ActivityListViewModelTest : BaseUnitTest() {
             timestamp = timestamp,
             confirmed = true,
             walletId = walletId,
+            isTransfer = isTransfer,
         )
     )
 }

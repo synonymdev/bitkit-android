@@ -3,7 +3,6 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.BtOrderState2
-import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CoroutineDispatcher
@@ -100,33 +99,6 @@ class TransferRepo @Inject constructor(
             Logger.info("Settled transfer: $id", context = TAG)
         }.onFailure { e ->
             Logger.error("Failed to settle transfer", e, context = TAG)
-        }
-    }
-
-    @Suppress("LongParameterList")
-    suspend fun createPendingToSpendingActivity(
-        order: IBtOrder,
-        txId: String,
-        fee: ULong,
-        feeRate: ULong,
-        walletId: String = DEFAULT_WALLET_ID,
-    ): Result<Unit> = withContext(bgDispatcher) {
-        runSuspendCatching {
-            val address = requireNotNull(order.payment?.onchain?.address?.takeIf { it.isNotEmpty() }) {
-                "Order '${order.id}' has no on-chain payment address"
-            }
-            coreService.activity.createSentOnchainActivityFromSendResult(
-                txid = txId,
-                address = address,
-                amount = order.feeSat,
-                fee = fee,
-                feeRate = feeRate,
-                isTransfer = true,
-                channelId = order.channel?.shortChannelId,
-                walletId = walletId,
-            )
-        }.onFailure {
-            Logger.error("Failed to create pending transfer activity for '$txId'", it, context = TAG)
         }
     }
 

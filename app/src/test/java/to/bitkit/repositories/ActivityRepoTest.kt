@@ -27,12 +27,14 @@ import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.dto.PendingBoostActivity
+import to.bitkit.ext.DEFAULT_WALLET_ID
 import to.bitkit.ext.create
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.mock
 import to.bitkit.models.ActivityWalletType
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -352,18 +354,18 @@ class ActivityRepoTest : BaseUnitTest() {
             transactionDetails("hw-sent-txid", -4_521L),
             transactionDetails("hw-transfer-txid", -7_222L),
         )
-        whenever(coreService.activity.upsertList(activities)).thenReturn(Unit)
-        whenever(coreService.activity.upsertTransactionDetailsList(details)).thenReturn(Unit)
+        whenever(coreService.activity.replaceHardwareSnapshot(hardwareWalletId, activities, details))
+            .thenReturn(activities)
 
-        val result = sut.persistHardware(activities, details)
+        val result = sut.persistHardware(hardwareWalletId, activities, details)
 
         assertTrue(result.isSuccess)
-        verify(coreService.activity).upsertList(activities)
-        verify(coreService.activity).upsertTransactionDetailsList(details)
+        assertEquals(activities, result.getOrThrow())
+        verify(coreService.activity).replaceHardwareSnapshot(hardwareWalletId, activities, details)
     }
 
     @Test
-    fun `persistHardware preserves transfer metadata for existing hardware activity`() = test {
+    fun `persistHardware returns canonical transfer metadata from core`() = test {
         val incoming = createOnchainActivity(
             id = "hw-transfer-txid",
             txId = "hw-transfer-txid",
@@ -375,18 +377,6 @@ class ActivityRepoTest : BaseUnitTest() {
             walletId = hardwareWalletId,
             txType = PaymentType.SENT,
         )
-        val existing = createOnchainActivity(
-            id = "hw-transfer-txid",
-            txId = "hw-transfer-txid",
-            value = 7_000uL,
-            fee = 222uL,
-            timestamp = 3_900uL,
-            confirmed = false,
-            isTransfer = true,
-            channelId = "channel-id",
-            walletId = hardwareWalletId,
-            txType = PaymentType.SENT,
-        )
         val expected = Activity.Onchain(
             incoming.v1.copy(
                 isTransfer = true,
@@ -394,23 +384,53 @@ class ActivityRepoTest : BaseUnitTest() {
             )
         )
         whenever {
-            coreService.activity.getOnchainActivityByTxId("hw-transfer-txid", hardwareWalletId)
-        }.thenReturn(existing.v1)
-        whenever { coreService.activity.upsertList(listOf(expected)) }.thenReturn(Unit)
+            coreService.activity.replaceHardwareSnapshot(hardwareWalletId, listOf(incoming), emptyList())
+        }.thenReturn(listOf(expected))
 
-        val result = sut.persistHardware(listOf(incoming), emptyList())
+        val result = sut.persistHardware(hardwareWalletId, listOf(incoming), emptyList())
 
         assertTrue(result.isSuccess)
-        verify(coreService.activity).upsertList(listOf(expected))
+        assertEquals(listOf(expected), result.getOrThrow())
     }
 
     @Test
-    fun `persistHardware does nothing when both lists are empty`() = test {
-        val result = sut.persistHardware(emptyList(), emptyList())
+    fun `persistHardware reconciles an empty snapshot`() = test {
+        whenever { coreService.activity.replaceHardwareSnapshot(hardwareWalletId, emptyList(), emptyList()) }
+            .thenReturn(emptyList())
+
+        val result = sut.persistHardware(hardwareWalletId, emptyList(), emptyList())
 
         assertTrue(result.isSuccess)
-        verify(coreService.activity, never()).upsertList(any())
-        verify(coreService.activity, never()).upsertTransactionDetailsList(any())
+        verify(coreService.activity).replaceHardwareSnapshot(hardwareWalletId, emptyList(), emptyList())
+    }
+
+    @Test
+    fun `createPendingToSpendingActivity persists wallet scope and invalidates activities`() = test {
+        val order = previewBtOrder()
+        val txId = "hardware-funding-tx"
+        val fee = 123uL
+        val feeRate = 2uL
+
+        val result = sut.createPendingToSpendingActivity(
+            order = order,
+            txId = txId,
+            fee = fee,
+            feeRate = feeRate,
+            walletId = hardwareWalletId,
+        )
+
+        assertTrue(result.isSuccess)
+        assertTrue(sut.activitiesChanged.value > 0L)
+        verify(coreService.activity).createSentOnchainActivityFromSendResult(
+            eq(txId),
+            eq(order.payment?.onchain?.address.orEmpty()),
+            eq(order.feeSat),
+            eq(fee),
+            eq(feeRate),
+            eq(true),
+            eq(order.channel?.shortChannelId),
+            eq(hardwareWalletId),
+        )
     }
 
     @Test
@@ -451,7 +471,7 @@ class ActivityRepoTest : BaseUnitTest() {
             boostTxIds = listOf(replacedTxId),
             contact = contactPublicKey,
         )
-        whenever(coreService.activity.getTxIdsInBoostTxIds()).thenReturn(setOf(replacedTxId))
+        whenever(coreService.activity.getTxIdsInBoostTxIds(DEFAULT_WALLET_ID)).thenReturn(setOf(replacedTxId))
         whenever(
             coreService.activity.get(
                 walletId = ActivityWalletType.BITKIT.id(),

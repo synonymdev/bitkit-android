@@ -180,14 +180,19 @@ the local chain only, leaves the staging Blocktank order unpaid, and strands the
 Processing Payment.
 
 After hardware signing and broadcast, Processing Payment is an intermediate checkpoint only.
-Before mining, tap `Continue Using Bitkit`, verify the app returns home, and verify the new
-hardware Transfer / From Savings row exists once with a pending or otherwise non-confirmed
-status. Then mine the same backend, wait for the app/Core sync to observe the confirmation,
-verify Spending balance updates, and verify the same hardware transfer row/detail becomes
-confirmed.
+On regtest, tap `Continue Using Bitkit` within five seconds so the screen's automatic mine is
+cancelled before it runs. Verify the app returns home and the new hardware Transfer / From
+Savings row exists once with a pending or otherwise non-confirmed status. Then mine the same
+backend, wait for the app to observe the confirmation through bitkit-core, verify Spending balance
+updates, and verify the same hardware transfer row/detail becomes confirmed.
 
 For transfer-to-spending QA, explicitly cover the LSP cap boundary: the hardware wallet
 balance can be much larger than the displayed AVAILABLE amount because MAX is capped by
 Blocktank channel headroom. After signing, decode the funding transaction and compare the
 activity DB row: the on-chain activity fee should be the composed mining fee, while the
 funding output should equal the final Blocktank `order.feeSat`.
+
+Repeated transfer runs consume the app wallet's Blocktank channel headroom. If that app
+identity reaches the total-liquidity cap, clear the app data, onboard a fresh app wallet, and
+re-pair the same Bridge Trezor before rerunning the journey. Keep the deterministic Trezor seed
+unchanged so its funded hardware balance and transaction history remain available.

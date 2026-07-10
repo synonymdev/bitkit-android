@@ -33,6 +33,7 @@ import com.synonym.bitkitcore.createCjitEntry
 import com.synonym.bitkitcore.createOrder
 import com.synonym.bitkitcore.deleteActivitiesByWalletId
 import com.synonym.bitkitcore.deleteActivityById
+import com.synonym.bitkitcore.deleteTransactionDetails
 import com.synonym.bitkitcore.deriveOnchainDescriptor
 import com.synonym.bitkitcore.estimateOrderFeeFull
 import com.synonym.bitkitcore.getActivities
@@ -291,6 +292,58 @@ class ActivityService(
 
     suspend fun upsertTransactionDetailsList(list: List<BitkitCoreTransactionDetails>) = ServiceQueue.CORE.background {
         upsertTransactionDetails(list)
+    }
+
+    suspend fun replaceHardwareSnapshot(
+        walletId: String,
+        activities: List<Activity>,
+        transactionDetails: List<BitkitCoreTransactionDetails>,
+    ): List<Activity> = ServiceQueue.CORE.background {
+        val existingActivities = getActivities(
+            walletId = walletId,
+            filter = ActivityFilter.ONCHAIN,
+            txType = null,
+            tags = null,
+            search = null,
+            minDate = null,
+            maxDate = null,
+            limit = null,
+            sortDirection = null,
+        ).filterIsInstance<Activity.Onchain>()
+        val incomingIds = activities.map { it.rawId() }.toSet()
+        existingActivities
+            .filter { !it.v1.isTransfer && it.v1.id !in incomingIds }
+            .forEach {
+                deleteActivityById(walletId = walletId, activityId = it.v1.id)
+                deleteTransactionDetails(walletId = walletId, txId = it.v1.txId)
+            }
+
+        val existingByTxId = existingActivities.associateBy { it.v1.txId }
+        val mergedActivities = activities.map { activity ->
+            val onchain = activity as? Activity.Onchain ?: return@map activity
+            val existing = existingByTxId[onchain.v1.txId]?.v1 ?: return@map activity
+            if (!existing.isTransfer && existing.channelId == null) return@map activity
+
+            Activity.Onchain(
+                onchain.v1.copy(
+                    isTransfer = onchain.v1.isTransfer || existing.isTransfer,
+                    channelId = onchain.v1.channelId ?: existing.channelId,
+                )
+            )
+        }
+        if (mergedActivities.isNotEmpty()) upsertActivities(mergedActivities)
+        if (transactionDetails.isNotEmpty()) upsertTransactionDetails(transactionDetails)
+        getActivities(
+            walletId = walletId,
+            filter = ActivityFilter.ONCHAIN,
+            txType = null,
+            tags = null,
+            search = null,
+            minDate = null,
+            maxDate = null,
+            limit = null,
+            sortDirection = null,
+        )
     }
 
     private fun mapToCoreTransactionDetails(
@@ -1547,11 +1600,11 @@ class ActivityService(
         }
     }
 
-    suspend fun getBoostTxDoesExist(boostTxIds: List<String>): Map<String, Boolean> {
+    suspend fun getBoostTxDoesExist(boostTxIds: List<String>, walletId: String): Map<String, Boolean> {
         return ServiceQueue.CORE.background {
             val doesExistMap = mutableMapOf<String, Boolean>()
             for (boostTxId in boostTxIds) {
-                val boostActivity = getOnchainActivityByTxId(boostTxId)
+                val boostActivity = getOnchainActivityByTxId(boostTxId, walletId)
                 if (boostActivity != null) {
                     doesExistMap[boostTxId] = boostActivity.doesExist && !boostActivity.isBoosted
                 }
@@ -1560,21 +1613,22 @@ class ActivityService(
         }
     }
 
-    suspend fun isCpfpChildTransaction(txId: String): Boolean {
+    suspend fun isCpfpChildTransaction(txId: String, walletId: String): Boolean {
         return ServiceQueue.CORE.background {
-            val txIdsInBoostTxIds = getTxIdsInBoostTxIds()
+            val txIdsInBoostTxIds = getTxIdsInBoostTxIds(walletId)
             if (!txIdsInBoostTxIds.contains(txId)) {
                 return@background false
             }
 
-            val activity = getOnchainActivityByTxId(txId) ?: return@background false
+            val activity = getOnchainActivityByTxId(txId, walletId) ?: return@background false
             return@background activity.doesExist
         }
     }
 
-    suspend fun getTxIdsInBoostTxIds(): Set<String> {
+    suspend fun getTxIdsInBoostTxIds(walletId: String): Set<String> {
         return ServiceQueue.CORE.background {
             val allOnchainActivities = get(
+                walletId = walletId,
                 filter = ActivityFilter.ONCHAIN,
                 txType = null,
                 tags = null,

@@ -33,6 +33,7 @@ import to.bitkit.ext.isTransfer
 import to.bitkit.ext.scopedId
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.txType
+import to.bitkit.ext.walletId
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.ActivityRepo
@@ -168,8 +169,13 @@ class ActivityListViewModel @Inject constructor(
     }
 
     private suspend fun filterOutReplacedSentTransactions(activities: List<Activity>): List<Activity> {
-        val txIdsInBoostTxIds = activityRepo.getTxIdsInBoostTxIds()
-        return activities.filterNot { it.isReplacedSentTransaction(txIdsInBoostTxIds) }
+        val txIdsByWallet = activities
+            .map { it.walletId() }
+            .distinct()
+            .associateWith { activityRepo.getTxIdsInBoostTxIds(it) }
+        return activities.filterNot {
+            it.isReplacedSentTransaction(txIdsByWallet[it.walletId()].orEmpty())
+        }
     }
 
     fun updateAvailableTags() {
@@ -196,8 +202,8 @@ class ActivityListViewModel @Inject constructor(
         activityRepo.removeAllActivities()
     }
 
-    suspend fun isCpfpChildTransaction(txId: String): Boolean {
-        return activityRepo.isCpfpChildTransaction(txId)
+    suspend fun isCpfpChildTransaction(txId: String, walletId: String): Boolean {
+        return activityRepo.isCpfpChildTransaction(txId, walletId)
     }
 
     private fun <T> Flow<T>.stateInScope(

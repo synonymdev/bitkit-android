@@ -196,11 +196,11 @@ class ActivityDetailViewModel @Inject constructor(
         _boostSheetVisible.update { false }
     }
 
-    suspend fun getBoostTxDoesExist(boostTxIds: List<String>): ImmutableMap<String, Boolean> =
-        activityRepo.getBoostTxDoesExist(boostTxIds).toImmutableMap()
+    suspend fun getBoostTxDoesExist(boostTxIds: List<String>, walletId: String): ImmutableMap<String, Boolean> =
+        activityRepo.getBoostTxDoesExist(boostTxIds, walletId).toImmutableMap()
 
-    suspend fun isCpfpChildTransaction(txId: String): Boolean {
-        return activityRepo.isCpfpChildTransaction(txId)
+    suspend fun isCpfpChildTransaction(txId: String, walletId: String): Boolean {
+        return activityRepo.isCpfpChildTransaction(txId, walletId)
     }
 
     suspend fun findOrderForTransfer(

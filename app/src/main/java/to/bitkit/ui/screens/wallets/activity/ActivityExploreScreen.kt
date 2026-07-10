@@ -143,7 +143,7 @@ fun ActivityExploreScreen(
                     if (item is Activity.Onchain) {
                         detailViewModel.fetchTransactionDetails(item.v1.txId)
                         if (item.v1.boostTxIds.isNotEmpty()) {
-                            boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
+                            boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds, item.v1.walletId)
                         }
                     } else {
                         detailViewModel.clearTransactionDetails()

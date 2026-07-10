@@ -196,9 +196,9 @@ fun ActivityDetailScreen(
 
                 LaunchedEffect(item) {
                     if (item is Activity.Onchain) {
-                        isCpfpChild = detailViewModel.isCpfpChildTransaction(item.v1.txId)
+                        isCpfpChild = detailViewModel.isCpfpChildTransaction(item.v1.txId, item.v1.walletId)
                         boostTxDoesExist = if (item.v1.boostTxIds.isNotEmpty()) {
-                            detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
+                            detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds, item.v1.walletId)
                         } else {
                             persistentMapOf()
                         }
@@ -211,7 +211,7 @@ fun ActivityDetailScreen(
                 // Update boostTxDoesExist when boostTxIds change
                 LaunchedEffect(if (item is Activity.Onchain) item.v1.boostTxIds else emptyList()) {
                     if (item is Activity.Onchain && item.v1.boostTxIds.isNotEmpty()) {
-                        boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds)
+                        boostTxDoesExist = detailViewModel.getBoostTxDoesExist(item.v1.boostTxIds, item.v1.walletId)
                     }
                 }
 

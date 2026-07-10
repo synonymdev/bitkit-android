@@ -88,7 +88,7 @@
       Tap the top-bar back button to return to the wallet home screen
     </action>
     <action>
-      Verify the app/Core sync observes the newly mined confirmation
+      Verify the app observes the newly mined confirmation through bitkit-core
     </action>
     <action>
       Verify the SPENDING balance has increased by the capped AVAILABLE amount and the same hardware wallet transfer row for the new tx is now confirmed

@@ -102,7 +102,7 @@ fun ActivityRow(
 
     LaunchedEffect(item) {
         isCpfpChild = if (item is Activity.Onchain && activityListViewModel != null) {
-            activityListViewModel.isCpfpChildTransaction(item.v1.txId)
+            activityListViewModel.isCpfpChildTransaction(item.v1.txId, item.v1.walletId)
         } else {
             false
         }

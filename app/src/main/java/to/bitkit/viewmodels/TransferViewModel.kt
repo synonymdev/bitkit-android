@@ -42,6 +42,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.safe
+import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
@@ -73,6 +74,7 @@ class TransferViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
+    private val activityRepo: ActivityRepo,
     private val transferRepo: TransferRepo,
     private val clock: Clock,
 ) : ViewModel() {
@@ -294,7 +296,7 @@ class TransferViewModel @Inject constructor(
             preTransferOnchainSats = preTransferOnchainSats?.toLong(),
         )
         if (createTransferActivity) {
-            transferRepo.createPendingToSpendingActivity(
+            activityRepo.createPendingToSpendingActivity(
                 order = order,
                 txId = txId,
                 fee = fee,
@@ -545,13 +547,9 @@ class TransferViewModel @Inject constructor(
                     ToastEventBus.send(type = Toast.ToastType.ERROR, title = context.getString(R.string.common__error))
                     return@launch
                 }
-                val walletId = hwWalletRepo.getWalletId(deviceId).getOrElse {
-                    handleHardwareTransferFailure(it, deviceId)
-                    return@launch
-                }
 
                 signTransferToSpendingWithHardware(order, deviceId, address)
-                    .onSuccess { result ->
+                    .onSuccess { (walletId, result) ->
                         fundPaidOrder(
                             order = order,
                             txId = result.txId,
@@ -574,9 +572,10 @@ class TransferViewModel @Inject constructor(
         order: IBtOrder,
         deviceId: String,
         address: String,
-    ): Result<HwFundingBroadcastResult> {
+    ): Result<Pair<String, HwFundingBroadcastResult>> {
         val result = runCatching {
             ensureHardwareConnected(deviceId)
+            val walletId = hwWalletRepo.getWalletId(deviceId).getOrThrow()
             val satsPerVByte = hwFundingSatsPerVByte()
             val funding = composeHardwareFundingTransaction(
                 deviceId = deviceId,
@@ -584,7 +583,7 @@ class TransferViewModel @Inject constructor(
                 sats = order.feeSat,
                 satsPerVByte = satsPerVByte,
             )
-            signAndBroadcastHardwareFunding(deviceId, funding)
+            walletId to signAndBroadcastHardwareFunding(deviceId, funding)
         }
         result.exceptionOrNull()?.let {
             if (it is CancellationException && it !is TimeoutCancellationException) throw it

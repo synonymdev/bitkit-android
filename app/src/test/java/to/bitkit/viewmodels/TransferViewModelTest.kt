@@ -21,6 +21,7 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -42,6 +43,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
 import to.bitkit.models.safe
+import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
 import to.bitkit.repositories.HwWalletRepo
@@ -70,6 +72,7 @@ class TransferViewModelTest : BaseUnitTest() {
     private val walletRepo = mock<WalletRepo>()
     private val settingsStore = mock<SettingsStore>()
     private val cacheStore = mock<CacheStore>()
+    private val activityRepo = mock<ActivityRepo>()
     private val transferRepo = mock<TransferRepo>()
     private val clock = mock<Clock>()
 
@@ -89,6 +92,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus)))
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(blocktankRepo.blocktankState).thenReturn(blocktankState)
+        whenever { hwWalletRepo.getWalletId(DEVICE_ID) }.thenReturn(Result.success(HW_WALLET_ID))
 
         sut = TransferViewModel(
             context = context,
@@ -98,6 +102,7 @@ class TransferViewModelTest : BaseUnitTest() {
             walletRepo = walletRepo,
             settingsStore = settingsStore,
             cacheStore = cacheStore,
+            activityRepo = activityRepo,
             transferRepo = transferRepo,
             clock = clock,
         )
@@ -224,8 +229,6 @@ class TransferViewModelTest : BaseUnitTest() {
         )
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
-        whenever(hwWalletRepo.getWalletId(DEVICE_ID))
-            .thenReturn(Result.success(HW_WALLET_ID))
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.success(mock<TrezorFeatures>()))
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
@@ -253,15 +256,19 @@ class TransferViewModelTest : BaseUnitTest() {
             isNull<Long>(),
             isNull<Long>(),
         )
-        verify(transferRepo).createPendingToSpendingActivity(
+        verify(activityRepo).createPendingToSpendingActivity(
             eq(order),
             eq(TXID),
             eq(MINING_FEE),
             eq(FEE_RATE),
             eq(HW_WALLET_ID),
         )
-        verify(hwWalletRepo).getWalletId(DEVICE_ID)
-        verify(hwWalletRepo).ensureConnected(DEVICE_ID)
+        inOrder(hwWalletRepo).apply {
+            verify(hwWalletRepo).ensureConnected(DEVICE_ID)
+            verify(hwWalletRepo).getWalletId(DEVICE_ID)
+            verify(hwWalletRepo).composeFundingTransaction(any(), any(), any(), any())
+            verify(hwWalletRepo).signAndBroadcastFunding(any(), any())
+        }
     }
 
     @Test
@@ -282,8 +289,6 @@ class TransferViewModelTest : BaseUnitTest() {
         )
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
-        whenever(hwWalletRepo.getWalletId(DEVICE_ID))
-            .thenReturn(Result.success(HW_WALLET_ID))
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.success(mock<TrezorFeatures>()))
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull()))
@@ -307,8 +312,6 @@ class TransferViewModelTest : BaseUnitTest() {
         val order = previewBtOrder()
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = false))))
-        whenever(hwWalletRepo.getWalletId(DEVICE_ID))
-            .thenReturn(Result.success(HW_WALLET_ID))
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.failure(RuntimeException("no device")))
         whenever(hwWalletRepo.isKnownBluetoothDevice(DEVICE_ID)).thenReturn(false)
@@ -317,6 +320,7 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(hwWalletRepo).ensureConnected(DEVICE_ID)
+        verify(hwWalletRepo, never()).getWalletId(DEVICE_ID)
         verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
         verify(hwWalletRepo, never()).signAndBroadcastFunding(any(), any())
     }
@@ -334,8 +338,6 @@ class TransferViewModelTest : BaseUnitTest() {
         )
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
-        whenever(hwWalletRepo.getWalletId(DEVICE_ID))
-            .thenReturn(Result.success(HW_WALLET_ID))
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.success(mock<TrezorFeatures>()))
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
