@@ -269,9 +269,6 @@ class EditProfileViewModel @Inject constructor(
         }
         val cleanupResult = privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
         if (cleanupResult.isFailure) {
-            val error = requireNotNull(cleanupResult.exceptionOrNull()) {
-                "Private Paykit cleanup failed without an error"
-            }
             _uiState.update {
                 it.copy(
                     isSaving = false,

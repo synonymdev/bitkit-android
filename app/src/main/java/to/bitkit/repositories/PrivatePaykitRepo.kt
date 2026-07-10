@@ -153,10 +153,15 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    suspend fun refreshSavedContactEndpoints(publicKey: String): Result<Unit> =
+    suspend fun refreshSavedContactEndpoints(
+        publicKey: String,
+        savedPublicKeys: Collection<String>,
+    ): Result<Unit> =
         withContext(serializedDispatcher) {
             runSuspendCatching {
-                val keys = rememberSavedContacts(listOf(publicKey), replacing = false)
+                val normalizedKey = normalizedPublicKey(publicKey) ?: return@runSuspendCatching
+                rememberSavedContacts(savedPublicKeys + normalizedKey, replacing = false)
+                val keys = listOf(normalizedKey)
                 if (!canPublishPrivateEndpoints()) {
                     prepareRelevantPrivateLinksIfAvailable(keys, "refresh")
                     return@runSuspendCatching
