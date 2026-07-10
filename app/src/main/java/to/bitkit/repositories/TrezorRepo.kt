@@ -57,6 +57,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isTrezorDeviceBusy
+import to.bitkit.ext.isTrezorLockedOrBusy
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
@@ -719,12 +720,26 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun ensureConnected(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
-        awaitConnectedOrNull(deviceId)?.let { return@withContext Result.success(it) }
-        if (isKnownBluetoothDevice(deviceId)) {
-            return@withContext reconnectKnownBluetoothDevice(deviceId)
+        val result = awaitConnectedOrNull(deviceId)?.let { Result.success(it) } ?: run {
+            if (isKnownBluetoothDevice(deviceId)) {
+                reconnectKnownBluetoothDevice(deviceId)
+            } else {
+                connectKnownDevice(deviceId, forceSession = true)
+            }
         }
-        connectKnownDevice(deviceId, forceSession = true)
+        result.requireUnlocked()
     }
+
+    private fun Result<TrezorFeatures>.requireUnlocked(): Result<TrezorFeatures> = fold(
+        onSuccess = {
+            if (it.pinProtection == true && it.unlocked == false) {
+                Result.failure(TrezorException.DeviceBusy())
+            } else {
+                Result.success(it)
+            }
+        },
+        onFailure = { Result.failure(it) },
+    )
 
     /**
      * BLE Trezors often need a few seconds to advertise again after unlock, so retry
@@ -1235,7 +1250,7 @@ class TrezorRepo @Inject constructor(
     }
 
     private fun trezorErrorMessage(error: Throwable): String? =
-        if (error.isTrezorDeviceBusy()) {
+        if (error.isTrezorLockedOrBusy()) {
             TrezorErrorPresenter.userMessage(context, error)
         } else {
             error.message

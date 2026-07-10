@@ -11,3 +11,10 @@ fun Throwable.isTrezorUserCancellation(): Boolean =
 
 fun Throwable.isTrezorDeviceBusy(): Boolean =
     generateSequence(this) { it.cause }.any { it is TrezorException.DeviceBusy }
+
+fun Throwable.isTrezorLockedOrBusy(): Boolean =
+    isTrezorDeviceBusy() ||
+        generateSequence(this) { it.cause }.any {
+            val message = it.message.orEmpty()
+            "Device error (code 99)" in message && "Firmware error" in message
+        }

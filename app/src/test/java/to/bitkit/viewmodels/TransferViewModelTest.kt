@@ -384,7 +384,6 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
         whenever(hwWalletRepo.signAndBroadcastFunding(any(), any()))
             .thenReturn(Result.failure(AppError(TrezorException.DeviceBusy())))
-        whenever(context.getString(R.string.common__error)).thenReturn(ERROR_TITLE)
         whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
         whenever(context.getString(R.string.hardware__connect_error)).thenReturn("connect error")
 
@@ -393,9 +392,58 @@ class TransferViewModelTest : BaseUnitTest() {
         toastJob.cancel()
 
         assertEquals(1, toasts.size)
-        assertEquals(Toast.ToastType.ERROR, toasts.single().type)
-        assertEquals(ERROR_TITLE, toasts.single().title)
-        assertEquals(DEVICE_BUSY_MESSAGE, toasts.single().description)
+        assertEquals(Toast.ToastType.INFO, toasts.single().type)
+        assertEquals(DEVICE_BUSY_MESSAGE, toasts.single().title)
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+    }
+
+    @Test
+    fun `onTransferToSpendingHwConfirm shows unlock prompt for locked device firmware response`() = test {
+        val order = previewBtOrder()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any()))
+            .thenReturn(Result.failure(AppError("Device error (code 99): Firmware error")))
+        whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(1, toasts.size)
+        assertEquals(Toast.ToastType.INFO, toasts.single().type)
+        assertEquals(DEVICE_BUSY_MESSAGE, toasts.single().title)
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+    }
+
+    @Test
+    fun `onTransferToSpendingHwConfirm shows unlock prompt when composition times out`() = test {
+        val order = previewBtOrder()
+        val timeout = runCatching { withTimeout(0) { Unit } }.exceptionOrNull() as TimeoutCancellationException
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = true))))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any()))
+            .thenReturn(Result.failure(timeout))
+        whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(1, toasts.size)
+        assertEquals(Toast.ToastType.INFO, toasts.single().type)
+        assertEquals(DEVICE_BUSY_MESSAGE, toasts.single().title)
+        verify(hwWalletRepo, never()).signAndBroadcastFunding(any(), any())
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
 
@@ -408,7 +456,6 @@ class TransferViewModelTest : BaseUnitTest() {
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = false))))
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.failure(AppError(TrezorException.DeviceBusy())))
-        whenever(context.getString(R.string.common__error)).thenReturn(ERROR_TITLE)
         whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
         whenever(context.getString(R.string.hardware__connect_error)).thenReturn("connect error")
 
@@ -417,9 +464,8 @@ class TransferViewModelTest : BaseUnitTest() {
         toastJob.cancel()
 
         assertEquals(1, toasts.size)
-        assertEquals(Toast.ToastType.ERROR, toasts.single().type)
-        assertEquals(ERROR_TITLE, toasts.single().title)
-        assertEquals(DEVICE_BUSY_MESSAGE, toasts.single().description)
+        assertEquals(Toast.ToastType.INFO, toasts.single().type)
+        assertEquals(DEVICE_BUSY_MESSAGE, toasts.single().title)
         verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
     }
 
@@ -478,7 +524,6 @@ class TransferViewModelTest : BaseUnitTest() {
         const val LSP_FEE = 2_398uL // NETWORK_FEE + SERVICE_FEE
         const val DEVICE_ID = "dev1"
         const val DEVICE_BUSY_MESSAGE = "Your Trezor is busy. Unlock it on the device, then try again."
-        const val ERROR_TITLE = "Error"
         const val XPUB = "zpub-test"
         const val TXID = "tx-abc"
         const val FEE_RATE = 2uL

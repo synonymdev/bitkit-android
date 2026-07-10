@@ -144,9 +144,13 @@ class TrezorRepoTest : BaseUnitTest() {
     private fun mockFeatures(
         label: String? = DEVICE_LABEL,
         model: String? = DEVICE_MODEL,
+        pinProtection: Boolean? = null,
+        unlocked: Boolean? = null,
     ): TrezorFeatures = mock {
         on { this.label }.thenReturn(label)
         on { this.model }.thenReturn(model)
+        on { this.pinProtection }.thenReturn(pinProtection)
+        on { this.unlocked }.thenReturn(unlocked)
     }
 
     private fun mockPublicKeyResponse(
@@ -1516,6 +1520,25 @@ class TrezorRepoTest : BaseUnitTest() {
         verify(trezorService, times(1)).scan()
         verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
         verify(trezorService, never()).disconnect()
+    }
+
+    @Test
+    fun `ensureConnected returns device busy when current device is locked`() = test {
+        val features = mockFeatures(pinProtection = true, unlocked = false)
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        whenever(trezorService.isConnected()).thenReturn(true)
+
+        val result = sut.ensureConnected(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.isTrezorDeviceBusy() == true)
+        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
     }
 
     @Test

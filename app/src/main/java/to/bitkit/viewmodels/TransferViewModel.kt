@@ -33,7 +33,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
-import to.bitkit.ext.isTrezorDeviceBusy
+import to.bitkit.ext.isTrezorLockedOrBusy
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingTransaction
@@ -49,7 +49,6 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
-import to.bitkit.utils.TrezorErrorPresenter
 import javax.inject.Inject
 import kotlin.math.min
 import kotlin.math.roundToLong
@@ -643,12 +642,11 @@ class TransferViewModel @Inject constructor(
             Logger.info("Hardware transfer cancelled on device for '$deviceId'", context = TAG)
             return
         }
-        if (e.isTrezorDeviceBusy()) {
-            Logger.warn("Hardware transfer blocked by busy Trezor for '$deviceId'", e, context = TAG)
+        if (e.isTrezorLockedOrBusy() || e.isHardwareInteractionTimeout()) {
+            Logger.warn("Blocked hardware transfer for locked or busy Trezor '$deviceId'", e, context = TAG)
             ToastEventBus.send(
-                type = Toast.ToastType.ERROR,
-                title = context.getString(R.string.common__error),
-                description = TrezorErrorPresenter.userMessage(context, e),
+                type = Toast.ToastType.INFO,
+                title = context.getString(R.string.hardware__device_busy),
             )
             return
         }
@@ -671,6 +669,10 @@ class TransferViewModel @Inject constructor(
             }
         }
     }
+
+    private fun Throwable.isHardwareInteractionTimeout(): Boolean =
+        this is HardwareFundingError &&
+            generateSequence<Throwable>(this) { it.cause }.any { it is TimeoutCancellationException }
 
     private suspend fun showHardwareReconnectError(deviceId: String) {
         if (hwWalletRepo.isKnownBluetoothDevice(deviceId)) {

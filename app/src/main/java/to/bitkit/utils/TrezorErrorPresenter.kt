@@ -2,11 +2,11 @@ package to.bitkit.utils
 
 import android.content.Context
 import to.bitkit.R
-import to.bitkit.ext.isTrezorDeviceBusy
+import to.bitkit.ext.isTrezorLockedOrBusy
 
 object TrezorErrorPresenter {
     fun userMessage(context: Context, error: Throwable): String {
-        if (error.isTrezorDeviceBusy()) {
+        if (error.isTrezorLockedOrBusy()) {
             return context.getString(R.string.hardware__device_busy)
         }
         return userMessage(
@@ -17,7 +17,7 @@ object TrezorErrorPresenter {
     }
 
     fun userMessage(context: Context, error: Throwable, fallback: String): String {
-        if (error.isTrezorDeviceBusy()) {
+        if (error.isTrezorLockedOrBusy()) {
             return context.getString(R.string.hardware__device_busy)
         }
         return error.message?.takeIf { it.isNotBlank() } ?: fallback

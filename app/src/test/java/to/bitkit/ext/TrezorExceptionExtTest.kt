@@ -45,4 +45,17 @@ class TrezorExceptionExtTest {
         assertFalse(TrezorException.UserCancelled().isTrezorDeviceBusy())
         assertFalse(AppError("sign failed").isTrezorDeviceBusy())
     }
+
+    @Test
+    fun `isTrezorLockedOrBusy recognizes locked device firmware response`() {
+        val error = AppError("Device error (code 99): Firmware error")
+
+        assertTrue(error.isTrezorLockedOrBusy())
+    }
+
+    @Test
+    fun `isTrezorLockedOrBusy rejects unrelated firmware errors`() {
+        assertFalse(AppError("Firmware error").isTrezorLockedOrBusy())
+        assertFalse(AppError("Device error (code 98): Firmware error").isTrezorLockedOrBusy())
+    }
 }
