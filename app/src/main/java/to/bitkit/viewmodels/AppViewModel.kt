@@ -3109,9 +3109,16 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        // The Connect Hardware flow is itself a Hardware sheet and drives the pair-code step
-        // inline within its own NavHost; replacing it here would tear down that back stack.
-        if (_currentSheet.value is Sheet.Hardware) return
+        // The Connect Hardware flow drives pair-code requests through its own NavHost. An app-wide
+        // PairCode sheet has no connect back stack to preserve, so replace its start route when the
+        // device requests a new code and force the input state to reset.
+        val currentSheet = _currentSheet.value
+        if (currentSheet is Sheet.Hardware) {
+            if (currentSheet.route is HardwareRoute.PairCode && currentSheet.route.requestId != requestId) {
+                showSheet(Sheet.Hardware(route = HardwareRoute.PairCode(requestId)))
+            }
+            return
+        }
 
         queuedPairingCodeRequestId = null
         showSheet(Sheet.Hardware(route = HardwareRoute.PairCode(requestId)))

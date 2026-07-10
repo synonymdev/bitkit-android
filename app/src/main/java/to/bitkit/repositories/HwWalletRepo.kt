@@ -88,6 +88,16 @@ class HwWalletRepo @Inject constructor(
 
         /** Trezor v1 (2.4.0) tracks native segwit only; multi-type HW support is follow-up work. */
         private val SUPPORTED_WATCHER_ADDRESS_TYPES = setOf(HwFundingAddressType.NATIVE_SEGWIT.settingsKey)
+        private val ALREADY_BROADCAST_MARKERS = listOf(
+            "already in block chain",
+            "already in blockchain",
+            "already in mempool",
+            "already-in-block-chain",
+            "already-in-mempool",
+            "txn-already-known",
+            "transaction already exists",
+            "already known",
+        )
     }
 
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
@@ -247,6 +257,7 @@ class HwWalletRepo @Inject constructor(
                 miningFeeSats = funding.miningFeeSats,
                 feeRate = ceil(funding.feeRate.toDouble()).toULong(),
                 totalSpent = funding.totalSpent,
+                txId = signedTx.txid,
             )
         }
     }
@@ -256,13 +267,21 @@ class HwWalletRepo @Inject constructor(
         signedTx: HwFundingSignedTx,
     ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val txId = trezorRepo.broadcastRawTx(serializedTx = signedTx.serializedTx).getOrThrow()
+            val txId = trezorRepo.broadcastRawTx(serializedTx = signedTx.serializedTx).getOrElse {
+                signedTx.txId?.takeIf { _ -> it.isAlreadyBroadcastError() } ?: throw it
+            }
             HwFundingBroadcastResult(
                 txId = txId,
                 miningFeeSats = signedTx.miningFeeSats,
                 feeRate = signedTx.feeRate,
                 totalSpent = signedTx.totalSpent,
             )
+        }
+    }
+
+    private fun Throwable.isAlreadyBroadcastError(): Boolean {
+        return generateSequence(this) { it.cause }.any { error ->
+            ALREADY_BROADCAST_MARKERS.any { it in error.message.orEmpty().lowercase() }
         }
     }
 

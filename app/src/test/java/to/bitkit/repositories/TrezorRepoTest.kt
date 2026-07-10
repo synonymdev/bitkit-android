@@ -1533,11 +1533,34 @@ class TrezorRepoTest : BaseUnitTest() {
         sut.scan()
         sut.connect(DEVICE_ID)
         whenever(trezorService.isConnected()).thenReturn(true)
+        whenever(trezorService.refreshFeatures()).thenReturn(features)
 
         val result = sut.ensureConnected(DEVICE_ID)
 
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull()?.isTrezorDeviceBusy() == true)
+        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
+    }
+
+    @Test
+    fun `ensureConnected refreshes cached locked features after device unlock`() = test {
+        val lockedFeatures = mockFeatures(pinProtection = true, unlocked = false)
+        val unlockedFeatures = mockFeatures(pinProtection = true, unlocked = true)
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(lockedFeatures)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        whenever(trezorService.isConnected()).thenReturn(true)
+        whenever(trezorService.refreshFeatures()).thenReturn(unlockedFeatures)
+
+        val result = sut.ensureConnected(DEVICE_ID)
+
+        assertEquals(unlockedFeatures, result.getOrNull())
+        assertEquals(unlockedFeatures, sut.state.value.connected?.features)
+        verify(trezorService).refreshFeatures()
         verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
     }
 

@@ -967,6 +967,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.isSuccess)
         assertEquals("rawtx", result.getOrThrow().serializedTx)
+        assertEquals("signed-txid", result.getOrThrow().txId)
         assertEquals(1_250uL, result.getOrThrow().miningFeeSats)
         assertEquals(3uL, result.getOrThrow().feeRate)
         assertEquals(26_250uL, result.getOrThrow().totalSpent)
@@ -992,6 +993,24 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(3uL, result.getOrThrow().feeRate)
         assertEquals(26_250uL, result.getOrThrow().totalSpent)
         verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
+    }
+
+    @Test
+    fun `broadcastFunding recovers signed txid when transaction is already known`() = test {
+        val signedTx = HwFundingSignedTx(
+            serializedTx = "rawtx",
+            miningFeeSats = 1_250uL,
+            feeRate = 3uL,
+            totalSpent = 26_250uL,
+            txId = "signed-txid",
+        )
+        whenever(trezorRepo.broadcastRawTx("rawtx"))
+            .thenReturn(Result.failure(AppError("Broadcast failed: txn-already-in-mempool")))
+        val sut = createRepo()
+
+        val result = sut.broadcastFunding(signedTx)
+
+        assertEquals("signed-txid", result.getOrThrow().txId)
     }
 
     @Test

@@ -22,4 +22,20 @@ class TrezorDebugLogTest {
         assertFalse("1234" in line)
         assertFalse("hidden wallet" in line)
     }
+
+    @Test
+    fun `structured sensitive diagnostic values are redacted`() {
+        TrezorDebugLog.log(
+            "STRUCTURED_REDACTION_TEST",
+            """{"xpub":"xpub-secret","psbt":"psbt-secret","raw_tx":"raw-secret","pin":"1234","passphrase":"hidden"}""",
+        )
+
+        val line = TrezorDebugLog.lines.value.last { "[STRUCTURED_REDACTION_TEST]" in it }
+
+        assertFalse("xpub-secret" in line)
+        assertFalse("psbt-secret" in line)
+        assertFalse("raw-secret" in line)
+        assertFalse("1234" in line)
+        assertFalse("hidden" in line)
+    }
 }

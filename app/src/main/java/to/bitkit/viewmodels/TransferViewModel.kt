@@ -497,16 +497,18 @@ class TransferViewModel @Inject constructor(
     }
 
     fun resetSpendingState() {
-        cancelHardwareTransfer()
+        hwTransferSignJob?.cancel()
+        hwTransferSignJob = null
+        pendingHwFundingBroadcast = null
         _spendingUiState.update { TransferToSpendingUiState() }
         _transferValues.update { TransferValues() }
     }
 
     fun cancelHardwareTransfer() {
+        if (pendingHwFundingBroadcast != null) return
         hwTransferSignJob?.cancel()
         hwTransferSignJob = null
-        pendingHwFundingBroadcast = null
-        _spendingUiState.update { it.copy(isSigning = false, hasPendingHwBroadcast = false) }
+        _spendingUiState.update { it.copy(isSigning = false) }
     }
 
     // endregion
@@ -559,16 +561,22 @@ class TransferViewModel @Inject constructor(
 
                 signAndBroadcastHardwareFunding(order, deviceId, address)
                     .onSuccess { result ->
-                        pendingHwFundingBroadcast = null
-                        _spendingUiState.update { it.copy(hasPendingHwBroadcast = false) }
-                        fundPaidOrder(
-                            order = order,
-                            txId = result.txId,
-                            createTransferActivity = true,
-                            fee = result.miningFeeSats,
-                            feeRate = result.feeRate,
-                        )
-                        setTransferEffect(TransferEffect.OnHwTxSigned)
+                        runCatching {
+                            fundPaidOrder(
+                                order = order,
+                                txId = result.txId,
+                                createTransferActivity = true,
+                                fee = result.miningFeeSats,
+                                feeRate = result.feeRate,
+                            )
+                        }.onSuccess {
+                            pendingHwFundingBroadcast = null
+                            _spendingUiState.update { it.copy(hasPendingHwBroadcast = false) }
+                            setTransferEffect(TransferEffect.OnHwTxSigned)
+                        }.onFailure {
+                            Logger.error("Failed to record broadcast hardware transfer", it, context = TAG)
+                            handleHardwareTransferFailure(it, deviceId)
+                        }
                     }
                     .onFailure { handleHardwareTransferFailure(it, deviceId) }
             } finally {
@@ -585,10 +593,16 @@ class TransferViewModel @Inject constructor(
     ): Result<HwFundingBroadcastResult> {
         val result = runCatching {
             val signedTx = pendingHwFundingBroadcast
-                ?.takeIf { it.orderId == order.id }
+                ?.takeIf { it.matches(order, deviceId, address) }
                 ?.signedTx
                 ?: prepareSignedHardwareFunding(order, deviceId, address).also {
-                    pendingHwFundingBroadcast = PendingHwFundingBroadcast(orderId = order.id, signedTx = it)
+                    pendingHwFundingBroadcast = PendingHwFundingBroadcast(
+                        orderId = order.id,
+                        deviceId = deviceId,
+                        address = address,
+                        amountSats = order.feeSat,
+                        signedTx = it,
+                    )
                     _spendingUiState.update { state -> state.copy(hasPendingHwBroadcast = true) }
                 }
             broadcastHardwareFunding(signedTx)
@@ -689,7 +703,7 @@ class TransferViewModel @Inject constructor(
             Logger.info("Hardware transfer cancelled on device for '$deviceId'", context = TAG)
             return
         }
-        if (e.isTrezorLockedOrBusy() || e.isHardwareInteractionTimeout()) {
+        if (e.isTrezorLockedOrBusy()) {
             Logger.warn("Blocked hardware transfer for locked or busy Trezor '$deviceId'", e, context = TAG)
             ToastEventBus.send(
                 type = Toast.ToastType.INFO,
@@ -712,7 +726,11 @@ class TransferViewModel @Inject constructor(
             }
             is HardwareFundingError -> {
                 Logger.warn("Failed to compose hardware transfer funding for '$deviceId'", e, context = TAG)
-                showHardwareFundingError(e)
+                if (e.isHardwareInteractionTimeout()) {
+                    showHardwareConnectivityError()
+                } else {
+                    showHardwareFundingError(e)
+                }
             }
             else -> {
                 Logger.error("Hardware transfer failed", e, context = TAG)
@@ -726,6 +744,10 @@ class TransferViewModel @Inject constructor(
             ToastEventBus.send(error.cause ?: error)
             return
         }
+        showHardwareConnectivityError()
+    }
+
+    private suspend fun showHardwareConnectivityError() {
         ToastEventBus.send(
             type = Toast.ToastType.WARNING,
             title = context.getString(R.string.other__connection_issue),
@@ -1032,8 +1054,17 @@ private class HardwareBroadcastError(cause: Throwable) : AppError(cause)
 
 private data class PendingHwFundingBroadcast(
     val orderId: String,
+    val deviceId: String,
+    val address: String,
+    val amountSats: ULong,
     val signedTx: HwFundingSignedTx,
-)
+) {
+    fun matches(order: IBtOrder, deviceId: String, address: String): Boolean =
+        orderId == order.id &&
+            this.deviceId == deviceId &&
+            this.address == address &&
+            amountSats == order.feeSat
+}
 
 // region state
 data class TransferToSpendingUiState(

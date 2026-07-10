@@ -720,7 +720,7 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun ensureConnected(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
-        val result = awaitConnectedOrNull(deviceId)?.let { Result.success(it) } ?: run {
+        val result = awaitConnectedOrNull(deviceId)?.let { refreshLockedFeatures(deviceId, it) } ?: run {
             if (isKnownBluetoothDevice(deviceId)) {
                 reconnectKnownBluetoothDevice(deviceId)
             } else {
@@ -728,6 +728,16 @@ class TrezorRepo @Inject constructor(
             }
         }
         result.requireUnlocked()
+    }
+
+    private suspend fun refreshLockedFeatures(
+        deviceId: String,
+        features: TrezorFeatures,
+    ): Result<TrezorFeatures> {
+        if (features.pinProtection != true || features.unlocked != false) return Result.success(features)
+        return runSuspendCatching { trezorService.refreshFeatures() }.onSuccess {
+            _state.update { state -> state.copy(connected = ConnectedTrezorDevice(id = deviceId, features = it)) }
+        }
     }
 
     private fun Result<TrezorFeatures>.requireUnlocked(): Result<TrezorFeatures> = fold(

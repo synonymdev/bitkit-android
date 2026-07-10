@@ -16,8 +16,9 @@ object TrezorDebugLog {
     private const val TAG = "TrezorDebugLog"
     private const val MAX_LINES = 300
     private val secretValuePattern = Regex(
-        """(?i)\b(mnemonic|seed|passphrase|pin|pairing[ _-]?code|credential|xpub|extended[ _-]?key|psbt|""" +
-            """raw[ _-]?tx|serialized[ _-]?tx)\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)""",
+        """(?i)["']?\b(mnemonic|seed|passphrase|pin|pairing[ _-]?code|credential|xpub|""" +
+            """extended[ _-]?key|psbt|raw[ _-]?tx|serialized[ _-]?tx)\b["']?\s*[:=]\s*""" +
+            """("[^"]*"|'[^']*'|[^\s,;}]+)""",
     )
     private val _lines = MutableStateFlow<ImmutableList<String>>(persistentListOf())
     val lines: StateFlow<ImmutableList<String>> = _lines.asStateFlow()

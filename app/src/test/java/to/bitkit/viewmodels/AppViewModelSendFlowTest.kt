@@ -311,6 +311,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `new app-wide pairing request replaces the stale pair code route`() = test {
+        needsPairingCode.value = true
+        pairingCodeRequestId.value = 1L
+        advanceUntilIdle()
+
+        pairingCodeRequestId.value = 2L
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Hardware(route = HardwareRoute.PairCode(2L)), sut.currentSheet.value)
+    }
+
+    @Test
     fun `pairing code request does not interrupt a high priority sheet`() = test {
         sut.showSheet(Sheet.Pin())
         advanceUntilIdle()
