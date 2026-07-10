@@ -321,6 +321,29 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onTransferToSpendingHwConfirm shows connection guidance for bluetooth reconnect failure`() = test {
+        val order = previewBtOrder()
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = false))))
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+            .thenReturn(Result.failure(RuntimeException("no device")))
+        whenever(hwWalletRepo.isKnownBluetoothDevice(DEVICE_ID)).thenReturn(true)
+        whenever(context.getString(R.string.hardware__connect_title)).thenReturn(CONNECT_TITLE)
+        whenever(context.getString(R.string.hardware__connect_error)).thenReturn(CONNECT_DESCRIPTION)
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(Toast.ToastType.INFO, toasts.single().type)
+        assertEquals(CONNECT_TITLE, toasts.single().title)
+        assertEquals(CONNECT_DESCRIPTION, toasts.single().description)
+        verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
+    }
+
+    @Test
     fun `onTransferToSpendingHwConfirm disconnects stale session when signing times out`() = test {
         val order = previewBtOrder()
         val timeout = runCatching { withTimeout(0) { Unit } }.exceptionOrNull() as TimeoutCancellationException
@@ -634,6 +657,8 @@ class TransferViewModelTest : BaseUnitTest() {
         const val DEVICE_BUSY_MESSAGE = "Your Trezor is busy. Unlock it on the device, then try again."
         const val CONNECTION_ISSUE_TITLE = "Internet Connectivity Issues"
         const val CONNECTION_ISSUE_DESCRIPTION = "Please check your connection."
+        const val CONNECT_TITLE = "Connect Device"
+        const val CONNECT_DESCRIPTION = "Check the hardware device and try again."
         const val XPUB = "zpub-test"
         const val TXID = "tx-abc"
         const val FEE_RATE = 2uL

@@ -741,7 +741,8 @@ class TransferViewModel @Inject constructor(
         if (hwWalletRepo.isKnownBluetoothDevice(deviceId)) {
             ToastEventBus.send(
                 type = Toast.ToastType.INFO,
-                title = context.getString(R.string.hardware__connect_error),
+                title = context.getString(R.string.hardware__connect_title),
+                description = context.getString(R.string.hardware__connect_error),
             )
             return
         }
