@@ -38,7 +38,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -52,6 +51,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
@@ -62,6 +62,7 @@ import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toTransportType
 import to.bitkit.models.ALL_ADDRESS_TYPES
+import to.bitkit.models.HwWalletId
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.toAccountDerivationPath
@@ -77,7 +78,6 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.TrezorErrorPresenter
 import java.io.File
-import to.bitkit.models.HwWalletId
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -151,6 +151,9 @@ class TrezorRepo @Inject constructor(
      * UI should show a dialog when this emits true.
      */
     val needsPairingCode = trezorTransport.needsPairingCode
+
+    /** Identity of the active pairing-code request; changes for every transport callback. */
+    val pairingCodeRequestId = trezorTransport.pairingCodeRequestId
 
     /**
      * Submit the pairing code entered by the user.
@@ -876,8 +879,7 @@ class TrezorRepo @Inject constructor(
                 gapLimit = gapLimit,
             )
             trezorService.startWatcher(params, eventBridge)
-            TrezorDebugLog.log(WATCHER_TAG, "Started watcher '$watcherId' for '${extendedKey.take(12)}...'")
-            Logger.info("Started watcher '$watcherId'", context = TAG)
+            TrezorDebugLog.log(WATCHER_TAG, "Started watcher '$watcherId'")
         }.onFailure {
             Logger.error("Start watcher failed", it, context = TAG)
             _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
@@ -889,7 +891,6 @@ class TrezorRepo @Inject constructor(
             awaitSetup()
             trezorService.stopWatcher(watcherId)
             TrezorDebugLog.log(WATCHER_TAG, "Stopped watcher '$watcherId'")
-            Logger.info("Stopped watcher '$watcherId'", context = TAG)
         }.onFailure {
             Logger.error("Stop watcher failed", it, context = TAG)
             _state.update { s -> s.copy(error = trezorErrorMessage(it)) }

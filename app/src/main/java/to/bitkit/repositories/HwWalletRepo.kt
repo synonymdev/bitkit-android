@@ -128,6 +128,9 @@ class HwWalletRepo @Inject constructor(
     /** Pairing-code request raised by the device during connect; the UI shows the Pair Device sheet. */
     val needsPairingCode = trezorRepo.needsPairingCode
 
+    /** Identity of the active request, incremented for each pairing-code callback. */
+    val pairingCodeRequestId = trezorRepo.pairingCodeRequestId
+
     fun submitPairingCode(code: String) = trezorRepo.submitPairingCode(code)
 
     fun cancelPairingCode() = trezorRepo.cancelPairingCode()

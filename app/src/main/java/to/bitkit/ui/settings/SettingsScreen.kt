@@ -373,7 +373,11 @@ private fun GeneralTabContent(
         SettingsButtonRow(
             title = stringResource(R.string.settings__hardware_wallets__nav_title),
             icon = { SettingsIcon(R.drawable.ic_device_mobile_speaker) },
-            value = SettingsButtonValue.StringValue(state.hardwareWalletCount.toString()),
+            value = if (state.hardwareWalletCount > 0) {
+                SettingsButtonValue.StringValue(state.hardwareWalletCount.toString())
+            } else {
+                SettingsButtonValue.None
+            },
             onClick = { onEvent(SettingsEvent.HardwareWalletsClick) },
             modifier = Modifier.testTag("HardwareWalletsSettings")
         )

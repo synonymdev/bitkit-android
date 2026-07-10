@@ -175,8 +175,10 @@ fun HardwareSheet(
                     onFinish = viewModel::onFinishClick,
                 )
             }
-            composableWithDefaultTransitions<HardwareRoute.PairCode> {
+            composableWithDefaultTransitions<HardwareRoute.PairCode> { backStackEntry ->
+                val route = backStackEntry.toRoute<HardwareRoute.PairCode>()
                 HwPairCodeSheet(
+                    requestId = route.requestId,
                     onSubmit = appViewModel::submitPairingCode,
                     onCancel = appViewModel::cancelPairingCode,
                 )
@@ -220,7 +222,9 @@ private fun ConnectEffectHandler(
                         deviceModel = effect.deviceModel,
                     ),
                 )
-                HwConnectEffect.NavigateToPairCode -> navController.navigateTo(HardwareRoute.PairCode)
+                is HwConnectEffect.NavigateToPairCode -> navController.navigateTo(
+                    HardwareRoute.PairCode(requestId = effect.requestId),
+                )
                 HwConnectEffect.NavigateToPaired -> navController.navigateTo(HardwareRoute.Paired)
                 HwConnectEffect.Dismiss -> appViewModel.hideSheet()
                 HwConnectEffect.Finish -> {
@@ -249,5 +253,5 @@ sealed interface HardwareRoute {
     data object Paired : HardwareRoute
 
     @Serializable
-    data object PairCode : HardwareRoute
+    data class PairCode(val requestId: Long) : HardwareRoute
 }

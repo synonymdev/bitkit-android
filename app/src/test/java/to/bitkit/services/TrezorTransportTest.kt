@@ -12,9 +12,14 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import kotlin.concurrent.thread
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
+import kotlin.test.fail
 
 class TrezorTransportTest {
 
@@ -62,6 +67,55 @@ class TrezorTransportTest {
 
         assertTrue(result.isEmpty())
         verify(context, never()).getSystemService(Context.BLUETOOTH_SERVICE)
+    }
+
+    @Test
+    fun `each pairing callback emits a distinct request id`() {
+        whenever(context.applicationContext).thenReturn(context)
+        whenever(context.packageName).thenReturn("to.bitkit.dev")
+        val sut = createSut()
+        val results = Collections.synchronizedList(mutableListOf<String>())
+
+        val firstCallback = thread { results += sut.getPairingCode() }
+        val firstRequestId = awaitPairingRequestId(sut)
+        sut.submitPairingCode("123456")
+        firstCallback.join()
+
+        val secondCallback = thread { results += sut.getPairingCode() }
+        val secondRequestId = awaitPairingRequestId(sut, excluding = firstRequestId)
+        sut.submitPairingCode("654321")
+        secondCallback.join()
+
+        assertNotEquals(firstRequestId, secondRequestId)
+        assertEquals(listOf("123456", "654321"), results)
+    }
+
+    @Test
+    fun `bluetooth off releases every pending operation`() {
+        val connectionLatch = CountDownLatch(1)
+        val writeLatch = CountDownLatch(1)
+        val disconnectLatch = CountDownLatch(1)
+
+        releasePendingBleOperations(
+            connectionLatch = connectionLatch,
+            writeLatch = writeLatch,
+            disconnectLatch = disconnectLatch,
+        )
+
+        assertEquals(0L, connectionLatch.count)
+        assertEquals(0L, writeLatch.count)
+        assertEquals(0L, disconnectLatch.count)
+    }
+
+    private fun awaitPairingRequestId(
+        sut: TrezorTransport,
+        excluding: Long? = null,
+    ): Long {
+        repeat(100) {
+            sut.pairingCodeRequestId.value?.takeIf { it != excluding }?.let { return it }
+            Thread.sleep(10)
+        }
+        fail("Pairing code request was not emitted")
     }
 
     private fun createSut() = TrezorTransport(

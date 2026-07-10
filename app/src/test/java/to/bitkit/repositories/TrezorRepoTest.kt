@@ -456,6 +456,33 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `bluetooth restore reconnects only after pairing request clears`() = test {
+        val transportRestored = MutableSharedFlow<TransportType>()
+        val needsPairingCode = MutableStateFlow(true)
+        val knownDevice = mockKnownDevice()
+        val device = mockDeviceInfo()
+        val features = mockFeatures()
+        whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
+        whenever(trezorTransport.needsPairingCode).thenReturn(needsPairingCode)
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
+        sut = createSut()
+
+        transportRestored.emit(TransportType.BLUETOOTH)
+        advanceUntilIdle()
+        verify(trezorService, never()).scan()
+
+        needsPairingCode.value = false
+        transportRestored.emit(TransportType.BLUETOOTH)
+        advanceUntilIdle()
+
+        verify(trezorService).scan()
+        verify(trezorService).connect(eq(DEVICE_ID), any(), eq(false))
+    }
+
+    @Test
     fun `onTransportRestored auto-reconnects to a known device`() = test {
         val features = mockFeatures()
         val device = mockDeviceInfo()

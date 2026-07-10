@@ -17,9 +17,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
-import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.repositories.resolveHwWalletName
 import to.bitkit.utils.TrezorErrorPresenter
 import javax.inject.Inject
@@ -230,8 +230,8 @@ class HwConnectViewModel @Inject constructor(
 
     private fun observePairingCode() {
         viewModelScope.launch {
-            hwWalletRepo.needsPairingCode.collect { needsCode ->
-                if (needsCode) setEffect(HwConnectEffect.NavigateToPairCode)
+            hwWalletRepo.pairingCodeRequestId.collect { requestId ->
+                if (requestId != null) setEffect(HwConnectEffect.NavigateToPairCode(requestId))
             }
         }
     }
@@ -272,7 +272,7 @@ data class HwConnectUiState(
 sealed interface HwConnectEffect {
     data object NavigateToSearching : HwConnectEffect
     data class NavigateToFound(val deviceId: String, val deviceModel: String) : HwConnectEffect
-    data object NavigateToPairCode : HwConnectEffect
+    data class NavigateToPairCode(val requestId: Long) : HwConnectEffect
     data object NavigateToPaired : HwConnectEffect
     data object Dismiss : HwConnectEffect
     data object Finish : HwConnectEffect

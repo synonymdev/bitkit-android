@@ -498,7 +498,6 @@ class TrezorViewModel @Inject constructor(
             val feeRate = state.sendFeeRate.toFloatOrNull() ?: return@launch
             _uiState.update { it.copy(send = it.send.copy(isComposing = true)) }
             TrezorDebugLog.log("COMPOSE", "=== composeTx START ===")
-            TrezorDebugLog.log("COMPOSE", "address=${state.sendAddress}")
             TrezorDebugLog.log("COMPOSE", "amount=${state.sendAmountSats}, sendMax=${state.isSendMax}")
             TrezorDebugLog.log("COMPOSE", "feeRate=$feeRate sat/vB, network=${state.selectedNetwork}")
             TrezorDebugLog.log("COMPOSE", "coinSelection=${state.coinSelection}")

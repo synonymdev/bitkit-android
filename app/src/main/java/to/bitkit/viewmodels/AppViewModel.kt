@@ -259,7 +259,7 @@ class AppViewModel @Inject constructor(
 
     private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
     val currentSheet = _currentSheet.asStateFlow()
-    private var isPairingCodeSheetQueued = false
+    private var queuedPairingCodeRequestId: Long? = null
 
     private val processedPaymentsLock = Any()
     private val processedPayments = mutableSetOf<String>()
@@ -341,13 +341,13 @@ class AppViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            hwWalletRepo.needsPairingCode.collect { needsCode ->
-                if (needsCode) {
-                    showPairingCodeSheet()
+            hwWalletRepo.pairingCodeRequestId.collect { requestId ->
+                if (requestId != null) {
+                    showPairingCodeSheet(requestId)
                 } else {
-                    isPairingCodeSheetQueued = false
+                    queuedPairingCodeRequestId = null
                     _currentSheet.update { sheet ->
-                        if (sheet is Sheet.Hardware && sheet.route == HardwareRoute.PairCode) null else sheet
+                        if (sheet is Sheet.Hardware && sheet.route is HardwareRoute.PairCode) null else sheet
                     }
                 }
             }
@@ -3103,9 +3103,9 @@ class AppViewModel @Inject constructor(
      * any screen via silent reconnects, so the sheet is shown app-wide. High-priority
      * sheets are not interrupted: the pairing sheet waits until the active sheet closes.
      */
-    private fun showPairingCodeSheet() {
+    private fun showPairingCodeSheet(requestId: Long) {
         if (isHighPrioritySheet(_currentSheet.value)) {
-            isPairingCodeSheetQueued = true
+            queuedPairingCodeRequestId = requestId
             return
         }
 
@@ -3113,18 +3113,18 @@ class AppViewModel @Inject constructor(
         // inline within its own NavHost; replacing it here would tear down that back stack.
         if (_currentSheet.value is Sheet.Hardware) return
 
-        isPairingCodeSheetQueued = false
-        showSheet(Sheet.Hardware(route = HardwareRoute.PairCode))
+        queuedPairingCodeRequestId = null
+        showSheet(Sheet.Hardware(route = HardwareRoute.PairCode(requestId)))
     }
 
     private fun showQueuedPairingCodeSheet() {
-        if (!isPairingCodeSheetQueued) return
+        val requestId = queuedPairingCodeRequestId ?: return
         if (!hwWalletRepo.needsPairingCode.value) {
-            isPairingCodeSheetQueued = false
+            queuedPairingCodeRequestId = null
             return
         }
 
-        showPairingCodeSheet()
+        showPairingCodeSheet(requestId)
     }
 
     private fun isHighPrioritySheet(sheet: Sheet?) = sheet is Sheet.Gift ||
