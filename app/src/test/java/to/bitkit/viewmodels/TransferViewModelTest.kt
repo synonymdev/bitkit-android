@@ -9,17 +9,20 @@ import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.NodeStatus
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
@@ -315,6 +318,26 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(hwWalletRepo).ensureConnected(DEVICE_ID)
+        verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        verify(hwWalletRepo, never()).broadcastFunding(any())
+    }
+
+    @Test
+    fun `cancelHardwareTransfer stops an in-flight hardware transfer`() = test {
+        val order = previewBtOrder()
+        val connectResult = CompletableDeferred<Result<TrezorFeatures>>()
+        whenever(hwWalletRepo.ensureConnected(DEVICE_ID)).doSuspendableAnswer { connectResult.await() }
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        runCurrent()
+        assertEquals(true, sut.spendingUiState.value.isSigning)
+
+        sut.cancelHardwareTransfer()
+        runCurrent()
+
+        assertEquals(false, sut.spendingUiState.value.isSigning)
+        assertEquals(false, sut.spendingUiState.value.hasPendingHwBroadcast)
         verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
         verify(hwWalletRepo, never()).signFunding(any(), any())
         verify(hwWalletRepo, never()).broadcastFunding(any())

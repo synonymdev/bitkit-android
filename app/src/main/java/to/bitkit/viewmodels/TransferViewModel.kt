@@ -497,11 +497,16 @@ class TransferViewModel @Inject constructor(
     }
 
     fun resetSpendingState() {
+        cancelHardwareTransfer()
+        _spendingUiState.update { TransferToSpendingUiState() }
+        _transferValues.update { TransferValues() }
+    }
+
+    fun cancelHardwareTransfer() {
         hwTransferSignJob?.cancel()
         hwTransferSignJob = null
         pendingHwFundingBroadcast = null
-        _spendingUiState.update { TransferToSpendingUiState() }
-        _transferValues.update { TransferValues() }
+        _spendingUiState.update { it.copy(isSigning = false, hasPendingHwBroadcast = false) }
     }
 
     // endregion

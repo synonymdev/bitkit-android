@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -57,6 +58,10 @@ fun SpendingHwSignScreen(
 
     LaunchedEffect(deviceId) {
         viewModel.warmUpHardwareConnection(deviceId)
+    }
+
+    DisposableEffect(viewModel) {
+        onDispose(viewModel::cancelHardwareTransfer)
     }
 
     LaunchedEffect(Unit) {
