@@ -70,7 +70,7 @@ data class HwFundingSignedTx(
     val miningFeeSats: ULong,
     val feeRate: ULong,
     val totalSpent: ULong,
-    val txId: String? = null,
+    val txId: String,
 )
 
 data class HwFundingBroadcastResult(

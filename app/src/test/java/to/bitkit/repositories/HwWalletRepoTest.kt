@@ -981,6 +981,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             miningFeeSats = 1_250uL,
             feeRate = 3uL,
             totalSpent = 26_250uL,
+            txId = "signed-txid",
         )
         whenever(trezorRepo.broadcastRawTx("rawtx")).thenReturn(Result.success("broadcast-txid"))
         val sut = createRepo()

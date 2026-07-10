@@ -38,4 +38,20 @@ class TrezorDebugLogTest {
         assertFalse("1234" in line)
         assertFalse("hidden" in line)
     }
+
+    @Test
+    fun `unquoted multi word sensitive diagnostic values are fully redacted`() {
+        TrezorDebugLog.log(
+            "MULTI_WORD_REDACTION_TEST",
+            "mnemonic=abandon ability able passphrase=my hidden wallet",
+        )
+
+        val line = TrezorDebugLog.lines.value.last { "[MULTI_WORD_REDACTION_TEST]" in it }
+
+        assertContains(line, "mnemonic=<redacted>")
+        assertFalse("abandon" in line)
+        assertFalse("ability" in line)
+        assertFalse("able" in line)
+        assertFalse("my hidden wallet" in line)
+    }
 }
