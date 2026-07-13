@@ -57,7 +57,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isTrezorDeviceBusy
-import to.bitkit.ext.isTrezorLockedOrBusy
+import to.bitkit.ext.isTrezorFirmwareError
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
@@ -1260,7 +1260,7 @@ class TrezorRepo @Inject constructor(
     }
 
     private fun trezorErrorMessage(error: Throwable): String? =
-        if (error.isTrezorLockedOrBusy()) {
+        if (error.isTrezorDeviceBusy() || error.isTrezorFirmwareError()) {
             TrezorErrorPresenter.userMessage(context, error)
         } else {
             error.message

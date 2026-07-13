@@ -453,7 +453,7 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onTransferToSpendingHwConfirm shows unlock prompt for locked device firmware response`() = test {
+    fun `onTransferToSpendingHwConfirm shows reconnect prompt for firmware error response`() = test {
         val order = previewBtOrder()
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
@@ -464,15 +464,19 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
         whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any()))
             .thenReturn(Result.failure(AppError("Device error (code 99): Firmware error")))
-        whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
+        whenever(context.getString(R.string.lightning__transfer_hw__reconnect_error_title))
+            .thenReturn(RECONNECT_TITLE)
+        whenever(context.getString(R.string.lightning__transfer_hw__reconnect_error_description))
+            .thenReturn(RECONNECT_DESCRIPTION)
 
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
         toastJob.cancel()
 
         assertEquals(1, toasts.size)
-        assertEquals(Toast.ToastType.INFO, toasts.single().type)
-        assertEquals(DEVICE_BUSY_MESSAGE, toasts.single().title)
+        assertEquals(Toast.ToastType.ERROR, toasts.single().type)
+        assertEquals(RECONNECT_TITLE, toasts.single().title)
+        assertEquals(RECONNECT_DESCRIPTION, toasts.single().description)
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
 
@@ -857,6 +861,8 @@ class TransferViewModelTest : BaseUnitTest() {
         const val CONNECTION_ISSUE_DESCRIPTION = "Please check your connection."
         const val CONNECT_TITLE = "Connect Device"
         const val CONNECT_DESCRIPTION = "Check the hardware device and try again."
+        const val RECONNECT_TITLE = "Reconnect Hardware Device"
+        const val RECONNECT_DESCRIPTION = "Please reconnect your hardware device."
         const val XPUB = "zpub-test"
         const val TXID = "tx-abc"
         const val FEE_RATE = 2uL

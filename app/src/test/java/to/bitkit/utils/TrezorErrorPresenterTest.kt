@@ -28,10 +28,10 @@ class TrezorErrorPresenterTest {
     }
 
     @Test
-    fun `userMessage maps locked device firmware response to unlock prompt`() {
+    fun `userMessage maps firmware error response to connect guidance`() {
         val message = TrezorErrorPresenter.userMessage(context, AppError("Device error (code 99): Firmware error"))
 
-        assertEquals(deviceBusyMessage, message)
+        assertEquals(connectErrorMessage, message)
     }
 
     @Test

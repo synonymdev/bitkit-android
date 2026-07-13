@@ -33,7 +33,8 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
-import to.bitkit.ext.isTrezorLockedOrBusy
+import to.bitkit.ext.isTrezorDeviceBusy
+import to.bitkit.ext.isTrezorFirmwareError
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HwFundingBroadcastResult
@@ -711,12 +712,17 @@ class TransferViewModel @Inject constructor(
             Logger.info("Hardware transfer cancelled on device for '$deviceId'", context = TAG)
             return
         }
-        if (e.isTrezorLockedOrBusy()) {
+        if (e.isTrezorDeviceBusy()) {
             Logger.warn("Blocked hardware transfer for locked or busy Trezor '$deviceId'", e, context = TAG)
             ToastEventBus.send(
                 type = Toast.ToastType.INFO,
                 title = context.getString(R.string.hardware__device_busy),
             )
+            return
+        }
+        if (e.isTrezorFirmwareError()) {
+            Logger.warn("Received Trezor firmware error for '$deviceId'", e, context = TAG)
+            showHardwareReconnectRequiredError()
             return
         }
         when (e) {
@@ -783,6 +789,10 @@ class TransferViewModel @Inject constructor(
             )
             return
         }
+        showHardwareReconnectRequiredError()
+    }
+
+    private suspend fun showHardwareReconnectRequiredError() {
         ToastEventBus.send(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.lightning__transfer_hw__reconnect_error_title),
