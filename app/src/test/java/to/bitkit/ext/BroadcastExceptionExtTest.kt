@@ -2,8 +2,8 @@ package to.bitkit.ext
 
 import com.synonym.bitkitcore.BroadcastException
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Test
 import to.bitkit.utils.AppError
 import kotlin.test.assertFalse
