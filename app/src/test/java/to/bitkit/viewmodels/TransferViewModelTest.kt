@@ -313,7 +313,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = false))))
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
-            .thenReturn(Result.failure(RuntimeException("no device")))
+            .thenReturn(Result.failure(AppError("no device")))
         whenever(hwWalletRepo.isKnownBluetoothDevice(DEVICE_ID)).thenReturn(false)
 
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
@@ -355,7 +355,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.wallets)
             .thenReturn(MutableStateFlow(persistentListOf(hwWallet(DEVICE_ID, connected = false))))
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
-            .thenReturn(Result.failure(RuntimeException("no device")))
+            .thenReturn(Result.failure(AppError("no device")))
         whenever(hwWalletRepo.isKnownBluetoothDevice(DEVICE_ID)).thenReturn(true)
         whenever(context.getString(R.string.hardware__connect_title)).thenReturn(CONNECT_TITLE)
         whenever(context.getString(R.string.hardware__connect_error)).thenReturn(CONNECT_DESCRIPTION)
