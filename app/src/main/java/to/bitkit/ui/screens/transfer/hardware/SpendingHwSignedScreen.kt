@@ -51,17 +51,12 @@ fun SpendingHwSignedScreen(
         onContinue()
     }
 
-    Content(
-        order = order,
-        miningFeeSats = state.hwMiningFeeSats,
-        onBackClick = onCloseClick,
-    )
+    Content(order = order, onBackClick = onCloseClick)
 }
 
 @Composable
 private fun Content(
     order: IBtOrder,
-    miningFeeSats: ULong = 0u,
     onBackClick: () -> Unit = {},
 ) {
     ScreenColumn {
@@ -90,10 +85,7 @@ private fun Content(
                 )
                 VerticalSpacer(16.dp)
 
-                SpendingHwFeeGrid(
-                    order = order,
-                    miningFeeSats = miningFeeSats,
-                )
+                SpendingHwFeeGrid(order = order)
             }
         }
     }
