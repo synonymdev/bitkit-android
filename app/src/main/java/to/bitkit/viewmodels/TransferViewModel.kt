@@ -33,6 +33,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
+import to.bitkit.ext.isBroadcastConnectivityFailure
 import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.ext.isTrezorFirmwareError
 import to.bitkit.ext.isTrezorUserCancellation
@@ -100,6 +101,7 @@ class TransferViewModel @Inject constructor(
     var maxLspFee = 0uL
     private var hwTransferSignJob: Job? = null
     private var pendingHwFundingBroadcast: PendingHwFundingBroadcast? = null
+    private var activeHwTransferDeviceId: String? = null
 
     // region Spending
 
@@ -508,15 +510,26 @@ class TransferViewModel @Inject constructor(
         hwTransferSignJob?.cancel()
         hwTransferSignJob = null
         pendingHwFundingBroadcast = null
+        activeHwTransferDeviceId = null
         _spendingUiState.update { TransferToSpendingUiState() }
         _transferValues.update { TransferValues() }
     }
 
     fun cancelHardwareTransfer() {
         if (pendingHwFundingBroadcast != null) return
+        val deviceId = activeHwTransferDeviceId
         hwTransferSignJob?.cancel()
         hwTransferSignJob = null
         _spendingUiState.update { it.copy(isSigning = false) }
+        if (deviceId != null) {
+            viewModelScope.launch {
+                hwWalletRepo.disconnectStaleSession(deviceId)
+            }
+        }
+    }
+
+    fun consumeHwFundingComplete() {
+        _spendingUiState.update { it.copy(hwFundingComplete = false) }
     }
 
     // endregion
@@ -558,6 +571,7 @@ class TransferViewModel @Inject constructor(
     fun onTransferToSpendingHwConfirm(order: IBtOrder, deviceId: String) {
         if (hwTransferSignJob?.isActive == true) return
 
+        activeHwTransferDeviceId = deviceId
         hwTransferSignJob = viewModelScope.launch {
             _spendingUiState.update { it.copy(isSigning = true) }
             try {
@@ -579,7 +593,13 @@ class TransferViewModel @Inject constructor(
                             )
                         }.onSuccess {
                             pendingHwFundingBroadcast = null
-                            _spendingUiState.update { it.copy(hasPendingHwBroadcast = false) }
+                            activeHwTransferDeviceId = null
+                            _spendingUiState.update {
+                                it.copy(
+                                    hasPendingHwBroadcast = false,
+                                    hwFundingComplete = true,
+                                )
+                            }
                             setTransferEffect(TransferEffect.OnHwTxSigned)
                         }.onFailure {
                             Logger.error("Failed to record broadcast hardware transfer", it, context = TAG)
@@ -655,21 +675,18 @@ class TransferViewModel @Inject constructor(
         address: String,
         sats: ULong,
         satsPerVByte: ULong,
-    ): HwFundingTransaction {
-        val funding = runCatching {
-            withTimeout(HW_COMPOSE_TIMEOUT) {
-                hwWalletRepo.composeFundingTransaction(
-                    deviceId = deviceId,
-                    address = address,
-                    sats = sats,
-                    satsPerVByte = satsPerVByte,
-                ).getOrThrow()
-            }
-        }.getOrElse {
-            if (it is CancellationException && it !is TimeoutCancellationException) throw it
-            throw HardwareFundingError(it)
+    ): HwFundingTransaction = runCatching {
+        withTimeout(HW_COMPOSE_TIMEOUT) {
+            hwWalletRepo.composeFundingTransaction(
+                deviceId = deviceId,
+                address = address,
+                sats = sats,
+                satsPerVByte = satsPerVByte,
+            ).getOrThrow()
         }
-        return funding
+    }.getOrElse {
+        if (it is CancellationException && it !is TimeoutCancellationException) throw it
+        throw HardwareFundingError(it)
     }
 
     @Suppress("ThrowsCount")
@@ -772,9 +789,7 @@ class TransferViewModel @Inject constructor(
     }
 
     private fun Throwable.isHardwareBroadcastConnectivityFailure(): Boolean =
-        generateSequence(this) { it.cause }.any {
-            it is TimeoutCancellationException || "Failed to connect to Electrum" in it.message.orEmpty()
-        }
+        isBroadcastConnectivityFailure()
 
     private fun Throwable.isHardwareInteractionTimeout(): Boolean =
         this is HardwareFundingError &&
@@ -1097,6 +1112,7 @@ data class TransferToSpendingUiState(
     val isLoading: Boolean = false,
     val isSigning: Boolean = false,
     val hasPendingHwBroadcast: Boolean = false,
+    val hwFundingComplete: Boolean = false,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
 )

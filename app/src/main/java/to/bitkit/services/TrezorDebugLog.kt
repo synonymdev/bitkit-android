@@ -7,13 +7,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import to.bitkit.utils.Logger
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
 object TrezorDebugLog {
-    private const val TAG = "TrezorDebugLog"
     private const val MAX_LINES = 300
     private const val SECRET_KEYS = "mnemonic|seed|passphrase|pin|pairing[ _-]?code|credential|xpub|" +
         "extended[ _-]?key|psbt|raw[ _-]?tx|serialized[ _-]?tx"
@@ -37,7 +35,6 @@ object TrezorDebugLog {
                 updated.toImmutableList()
             }
         }
-        Logger.debug("Recorded Trezor diagnostic '$tag': '$sanitizedMessage'", context = TAG)
     }
 
     fun clear() {

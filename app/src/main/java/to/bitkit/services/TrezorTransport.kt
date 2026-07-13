@@ -94,6 +94,7 @@ class TrezorTransport @Inject constructor(
         private const val SCAN_DURATION_MS = 3000L
         private const val CONNECTION_TIMEOUT_MS = 10000L
         private const val BLE_READ_TIMEOUT_MS = 5000L
+        private const val BLE_READ_POLL_INTERVAL_MS = 100L
         private const val DISCONNECT_TIMEOUT_MS = 3000L
         private const val PAIRING_CODE_TIMEOUT_MS = 120000L // 2 minutes to enter code
 
@@ -1070,16 +1071,31 @@ class TrezorTransport @Inject constructor(
             )
 
         return try {
-            val data = connection.readQueue.poll(BLE_READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                ?: return TrezorTransportReadResult(
-                    success = false,
-                    data = byteArrayOf(),
-                    error = "Read timeout",
-                    errorCode = null,
-                )
-
-            Logger.debug("BLE read ${data.size} bytes from '$path'", context = TAG)
-            TrezorTransportReadResult(success = true, data = data, error = "", errorCode = null)
+            val deadlineMs = System.currentTimeMillis() + BLE_READ_TIMEOUT_MS
+            while (System.currentTimeMillis() < deadlineMs) {
+                if (!connection.isConnected) {
+                    return TrezorTransportReadResult(
+                        success = false,
+                        data = byteArrayOf(),
+                        error = "BLE disconnected",
+                        errorCode = null,
+                    )
+                }
+                val remainingMs = deadlineMs - System.currentTimeMillis()
+                if (remainingMs <= 0) break
+                val pollMs = minOf(BLE_READ_POLL_INTERVAL_MS, remainingMs)
+                val data = connection.readQueue.poll(pollMs, TimeUnit.MILLISECONDS)
+                if (data != null) {
+                    Logger.debug("BLE read ${data.size} bytes from '$path'", context = TAG)
+                    return TrezorTransportReadResult(success = true, data = data, error = "", errorCode = null)
+                }
+            }
+            TrezorTransportReadResult(
+                success = false,
+                data = byteArrayOf(),
+                error = "Read timeout",
+                errorCode = null,
+            )
         } catch (e: Exception) {
             Logger.error("BLE read failed", e, context = TAG)
             TrezorTransportReadResult(

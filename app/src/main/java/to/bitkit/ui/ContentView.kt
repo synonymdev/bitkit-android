@@ -646,6 +646,13 @@ private fun RootNavHost(
     onHomeCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val spendingState by transferViewModel.spendingUiState.collectAsStateWithLifecycle()
+    LaunchedEffect(spendingState.hwFundingComplete) {
+        if (spendingState.hwFundingComplete) {
+            transferViewModel.consumeHwFundingComplete()
+            navController.navigateTo(Routes.SpendingHwSigned)
+        }
+    }
 
     NavHost(navController, startDestination = Routes.Home) {
         home(
@@ -804,7 +811,6 @@ private fun RootNavHost(
                     onCloseClick = { navController.navigateToHome() },
                     onLearnMoreClick = { navController.navigateTo(Routes.TransferLiquidity) },
                     onAdvancedClick = { navController.navigateTo(Routes.SpendingAdvanced) },
-                    onSigned = { navController.navigateTo(Routes.SpendingHwSigned) },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingHwSigned> {

@@ -36,7 +36,6 @@ import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.viewmodels.TransferEffect
 import to.bitkit.viewmodels.TransferViewModel
 
 @Composable
@@ -47,7 +46,6 @@ fun SpendingHwSignScreen(
     onCloseClick: () -> Unit,
     onLearnMoreClick: () -> Unit,
     onAdvancedClick: () -> Unit,
-    onSigned: () -> Unit,
 ) {
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
 
@@ -62,15 +60,6 @@ fun SpendingHwSignScreen(
 
     DisposableEffect(viewModel) {
         onDispose(viewModel::cancelHardwareTransfer)
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.transferEffects.collect { effect ->
-            when (effect) {
-                TransferEffect.OnHwTxSigned -> onSigned()
-                else -> Unit
-            }
-        }
     }
 
     Content(

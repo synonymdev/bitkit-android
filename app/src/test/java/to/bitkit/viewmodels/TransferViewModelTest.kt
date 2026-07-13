@@ -1,6 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import com.synonym.bitkitcore.BroadcastException
 import com.synonym.bitkitcore.ChannelLiquidityOptions
 import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
@@ -329,16 +330,18 @@ class TransferViewModelTest : BaseUnitTest() {
         val order = previewBtOrder()
         val connectResult = CompletableDeferred<Result<TrezorFeatures>>()
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID)).doSuspendableAnswer { connectResult.await() }
+        whenever(hwWalletRepo.disconnectStaleSession(DEVICE_ID)).thenReturn(Result.success(Unit))
 
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         runCurrent()
         assertEquals(true, sut.spendingUiState.value.isSigning)
 
         sut.cancelHardwareTransfer()
-        runCurrent()
+        advanceUntilIdle()
 
         assertEquals(false, sut.spendingUiState.value.isSigning)
         assertEquals(false, sut.spendingUiState.value.hasPendingHwBroadcast)
+        verify(hwWalletRepo).disconnectStaleSession(DEVICE_ID)
         verify(hwWalletRepo, never()).composeFundingTransaction(any(), any(), any(), any())
         verify(hwWalletRepo, never()).signFunding(any(), any())
         verify(hwWalletRepo, never()).broadcastFunding(any())
@@ -584,7 +587,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.signFunding(DEVICE_ID, funding)).thenReturn(Result.success(signed))
         whenever(hwWalletRepo.broadcastFunding(signed))
             .thenReturn(
-                Result.failure(AppError("Failed to connect to Electrum: DNS lookup failed")),
+                Result.failure(AppError(BroadcastException.ElectrumException("DNS lookup failed"))),
                 Result.success(broadcast),
             )
         whenever(context.getString(R.string.other__connection_issue)).thenReturn(CONNECTION_ISSUE_TITLE)
@@ -627,7 +630,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
         whenever(hwWalletRepo.signFunding(DEVICE_ID, funding)).thenReturn(Result.success(signed))
         whenever(hwWalletRepo.broadcastFunding(signed))
-            .thenReturn(Result.failure(AppError("Failed to connect to Electrum: DNS lookup failed")))
+            .thenReturn(Result.failure(AppError(BroadcastException.ElectrumException("DNS lookup failed"))))
         whenever(context.getString(R.string.other__connection_issue)).thenReturn(CONNECTION_ISSUE_TITLE)
         whenever(context.getString(R.string.other__connection_issues_explain)).thenReturn(CONNECTION_ISSUE_DESCRIPTION)
 
@@ -685,6 +688,7 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(false, sut.spendingUiState.value.hasPendingHwBroadcast)
+        assertEquals(true, sut.spendingUiState.value.hwFundingComplete)
         verify(cacheStore).addPaidOrder(order.id, TXID)
         verify(transferRepo).createTransfer(
             eq(TransferType.TO_SPENDING),

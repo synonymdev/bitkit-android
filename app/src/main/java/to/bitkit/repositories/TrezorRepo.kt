@@ -35,6 +35,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
@@ -506,7 +507,7 @@ class TrezorRepo @Inject constructor(
         psbtBase64: String,
         network: TrezorCoinType?,
     ): Result<TrezorSignedTx> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             ensureConnected()
             val response = trezorService.signTxFromPsbt(psbtBase64, network)
             _state.update { it.copy(error = null) }
@@ -520,7 +521,7 @@ class TrezorRepo @Inject constructor(
     suspend fun broadcastRawTx(
         serializedTx: String,
     ): Result<String> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             awaitSetup()
             trezorService.broadcastRawTx(
                 serializedTx = serializedTx,
@@ -1217,20 +1218,22 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun disconnectStaleSession(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
-        val connectedId = _state.value.connected?.id
-        if (connectedId != null && connectedId != deviceId) {
-            return@withContext Result.success(Unit)
-        }
-        val result = runSuspendCatching {
-            trezorService.disconnect()
-            disconnectTransportDevice(deviceId)
-        }
-            .onFailure {
-                Logger.warn("Failed to disconnect stale Trezor session for '$deviceId'", it, context = TAG)
+    suspend fun disconnectStaleSession(deviceId: String): Result<Unit> = withContext(NonCancellable) {
+        withContext(ioDispatcher) {
+            val connectedId = _state.value.connected?.id
+            if (connectedId != null && connectedId != deviceId) {
+                return@withContext Result.success(Unit)
             }
-        _state.update { it.copy(connected = null) }
-        result
+            val result = runSuspendCatching {
+                trezorService.disconnect()
+                disconnectTransportDevice(deviceId)
+            }
+                .onFailure {
+                    Logger.warn("Failed to disconnect stale Trezor session for '$deviceId'", it, context = TAG)
+                }
+            _state.update { it.copy(connected = null) }
+            result
+        }
     }
 
     private suspend fun disconnectTransportDevice(deviceId: String) {
