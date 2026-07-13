@@ -696,7 +696,7 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onTransferToSpendingHwConfirm retains signed transaction when bookkeeping fails`() = test {
+    fun `onTransferToSpendingHwConfirm retries core-derived txid after bookkeeping fails`() = test {
         val order = previewBtOrder()
         val funding = HwFundingTransaction(
             psbt = "psbt",
@@ -718,7 +718,11 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
         whenever(hwWalletRepo.signFunding(DEVICE_ID, funding)).thenReturn(Result.success(signed))
         whenever(hwWalletRepo.broadcastFunding(signed)).thenReturn(Result.success(broadcast))
-        whenever(cacheStore.addPaidOrder(order.id, TXID)).thenThrow(RuntimeException("cache failed"))
+        var bookkeepingAttempts = 0
+        whenever(cacheStore.addPaidOrder(order.id, TXID)).thenAnswer {
+            if (bookkeepingAttempts++ == 0) throw RuntimeException("cache failed")
+            Unit
+        }
 
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
@@ -735,6 +739,15 @@ class TransferViewModelTest : BaseUnitTest() {
             anyOrNull(),
             anyOrNull(),
         )
+
+        sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+        advanceUntilIdle()
+
+        assertEquals(false, sut.spendingUiState.value.hasPendingHwBroadcast)
+        verify(hwWalletRepo, times(1)).signFunding(DEVICE_ID, funding)
+        verify(hwWalletRepo, times(2)).broadcastFunding(signed)
+        verify(cacheStore, times(2)).addPaidOrder(order.id, TXID)
+        verify(transferRepo).createPendingToSpendingActivity(order, TXID, MINING_FEE, FEE_RATE)
     }
 
     @Test
