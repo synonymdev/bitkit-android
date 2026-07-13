@@ -805,7 +805,6 @@ class TransferViewModelTest : BaseUnitTest() {
         miningFeeSats = funding.miningFeeSats,
         feeRate = feeRate,
         totalSpent = funding.totalSpent,
-        txId = TXID,
     )
 
     private fun hwWallet(deviceId: String, connected: Boolean) = HwWallet(
