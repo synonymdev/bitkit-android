@@ -240,7 +240,6 @@ class TransferViewModelTest : BaseUnitTest() {
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
 
-        assertEquals(MINING_FEE, sut.spendingUiState.value.hwMiningFeeSats)
         verify(hwWalletRepo).composeFundingTransaction(
             eq(DEVICE_ID),
             eq(order.payment?.onchain?.address.orEmpty()),
@@ -720,7 +719,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.broadcastFunding(signed)).thenReturn(Result.success(broadcast))
         var bookkeepingAttempts = 0
         whenever(cacheStore.addPaidOrder(order.id, TXID)).thenAnswer {
-            if (bookkeepingAttempts++ == 0) throw RuntimeException("cache failed")
+            if (bookkeepingAttempts++ == 0) throw AppError("cache failed")
             Unit
         }
 

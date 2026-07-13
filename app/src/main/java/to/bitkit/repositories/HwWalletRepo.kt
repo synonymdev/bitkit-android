@@ -229,19 +229,15 @@ class HwWalletRepo @Inject constructor(
         funding: HwFundingTransaction,
     ): Result<HwFundingSignedTx> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val signed = runSuspendCatching {
-                trezorRepo.signTxFromPsbt(
-                    psbtBase64 = funding.psbt,
-                    network = Env.network.toTrezorCoinType(),
-                ).getOrThrow()
-            }
-            if (signed.isFailure) {
-                val failure = signed.exceptionOrNull()
-                if (failure?.isTrezorUserCancellation() != true) {
+            val signedTx = trezorRepo.signTxFromPsbt(
+                psbtBase64 = funding.psbt,
+                network = Env.network.toTrezorCoinType(),
+            ).getOrElse {
+                if (!it.isTrezorUserCancellation()) {
                     trezorRepo.disconnectStaleSession(deviceId)
                 }
+                throw it
             }
-            val signedTx = signed.getOrThrow()
             HwFundingSignedTx(
                 serializedTx = signedTx.serializedTx,
                 miningFeeSats = funding.miningFeeSats,

@@ -396,7 +396,6 @@ class TransferViewModel @Inject constructor(
                 isAdvanced = false,
                 defaultOrder = null,
                 hasPendingHwBroadcast = false,
-                hwMiningFeeSats = 0u,
             )
         }
         setTransferEffect(TransferEffect.OnOrderCreated)
@@ -500,7 +499,6 @@ class TransferViewModel @Inject constructor(
                 order = defaultOrder,
                 defaultOrder = null,
                 isAdvanced = false,
-                hwMiningFeeSats = 0u,
             )
         }
     }
@@ -670,7 +668,6 @@ class TransferViewModel @Inject constructor(
             if (it is CancellationException && it !is TimeoutCancellationException) throw it
             throw HardwareFundingError(it)
         }
-        _spendingUiState.update { it.copy(hwMiningFeeSats = funding.miningFeeSats) }
         return funding
     }
 
@@ -1090,7 +1087,6 @@ data class TransferToSpendingUiState(
     val isLoading: Boolean = false,
     val isSigning: Boolean = false,
     val hasPendingHwBroadcast: Boolean = false,
-    val hwMiningFeeSats: ULong = 0u,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
 )
