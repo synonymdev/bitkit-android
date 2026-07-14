@@ -11,12 +11,19 @@ import com.synonym.bitkitcore.TrezorFeatures
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
@@ -62,6 +69,7 @@ import kotlin.math.roundToLong
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
@@ -371,7 +379,7 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onTransferToSpendingHwConfirm disconnects stale session when signing times out`() = test {
+    fun `onTransferToSpendingHwConfirm disconnects stale session when signing fails with timeout`() = test {
         val order = previewBtOrder()
         val timeout = runCatching { withTimeout(0) { Unit } }.exceptionOrNull() as TimeoutCancellationException
         val funding = HwFundingTransaction(
@@ -395,6 +403,55 @@ class TransferViewModelTest : BaseUnitTest() {
 
         verify(hwWalletRepo).disconnectStaleSession(DEVICE_ID)
         verify(cacheStore, never()).addPaidOrder(any(), any())
+    }
+
+    @Test
+    fun `onTransferToSpendingHwConfirm disconnects when HW_SIGN_TIMEOUT elapses`() = runTest {
+        val dispatcher = StandardTestDispatcher(testScheduler)
+        Dispatchers.setMain(dispatcher)
+        try {
+            val order = previewBtOrder()
+            val funding = HwFundingTransaction(
+                psbt = "psbt",
+                miningFeeSats = MINING_FEE,
+                feeRate = FEE_RATE.toFloat(),
+                totalSpent = order.feeSat + MINING_FEE,
+                satsPerVByte = FEE_RATE,
+            )
+            whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
+                .thenReturn(Result.success(mock<TrezorFeatures>()))
+            whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+            whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any()))
+                .thenReturn(Result.success(funding))
+            whenever(hwWalletRepo.signFunding(any(), any())).doSuspendableAnswer {
+                delay(Long.MAX_VALUE)
+                Result.success(signedFunding(funding))
+            }
+            whenever(hwWalletRepo.disconnectStaleSession(DEVICE_ID)).thenReturn(Result.success(Unit))
+
+            val viewModel = TransferViewModel(
+                context = context,
+                lightningRepo = lightningRepo,
+                blocktankRepo = blocktankRepo,
+                hwWalletRepo = hwWalletRepo,
+                walletRepo = walletRepo,
+                settingsStore = settingsStore,
+                cacheStore = cacheStore,
+                transferRepo = transferRepo,
+                clock = clock,
+            )
+
+            viewModel.onTransferToSpendingHwConfirm(order, DEVICE_ID)
+            runCurrent()
+            advanceTimeBy(120.seconds.inWholeMilliseconds + 1)
+            runCurrent()
+            advanceUntilIdle()
+
+            verify(hwWalletRepo).disconnectStaleSession(DEVICE_ID)
+            verify(cacheStore, never()).addPaidOrder(any(), any())
+        } finally {
+            Dispatchers.resetMain()
+        }
     }
 
     @Test
