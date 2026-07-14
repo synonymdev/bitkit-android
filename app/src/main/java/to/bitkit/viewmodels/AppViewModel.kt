@@ -3293,7 +3293,7 @@ class AppViewModel @Inject constructor(
         private val LNURL_WITHDRAW_EXPIRY_SEC = 1.hours.inWholeSeconds.toUInt()
 
         /** Intent actions carrying a deeplink URI: browsers and apps send VIEW, NFC tag taps send NDEF_DISCOVERED. */
-        private val DEEPLINK_ACTIONS = setOf(Intent.ACTION_VIEW, NfcAdapter.ACTION_NDEF_DISCOVERED)
+        internal val DEEPLINK_ACTIONS = setOf(Intent.ACTION_VIEW, NfcAdapter.ACTION_NDEF_DISCOVERED)
     }
 }
 

@@ -297,7 +297,7 @@ class MainActivity : FragmentActivity() {
 internal fun Intent?.launchKey(): String? {
     this ?: return null
     return when (action) {
-        Intent.ACTION_VIEW -> data?.toString()?.let {
+        in AppViewModel.DEEPLINK_ACTIONS -> data?.toString()?.let {
             SamRockSetupRequest.sanitizedLaunchKey(it) ?: it
         }
         UsbManager.ACTION_USB_DEVICE_ATTACHED -> listOfNotNull(action, usbDevice()?.deviceName).joinToString(":")
