@@ -38,6 +38,7 @@ import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.PublicKey
+import org.lightningdevkit.ldknode.ScoringFeeParameters
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.Txid
 import org.lightningdevkit.ldknode.defaultConfig
@@ -89,6 +90,12 @@ class LightningService @Inject constructor(
     companion object {
         private const val TAG = "LightningService"
         private const val NODE_ID_PREVIEW_LEN = 20
+        private const val SCORING_BASE_PENALTY_MSAT = 50_000uL
+        private const val SCORING_LIQUIDITY_PENALTY_MULTIPLIER_MSAT = 10_000uL
+        private const val SCORING_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT = 10_000uL
+        private const val SCORING_HISTORICAL_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT = 20_000uL
+        private const val SCORING_CONSIDERED_IMPOSSIBLE_PENALTY_MSAT = 1_000_000_000_000uL
+        private const val SCORING_PROBING_DIVERSITY_PENALTY_MSAT = 60_000uL
     }
 
     @Volatile
@@ -168,6 +175,7 @@ class LightningService @Inject constructor(
             configureChainSource(customServerUrl)
             configureGossipSource(customRgsServerUrl)
             configureScorerSource()
+            setScoringFeeParams(scorerFeeParameters(config))
             setAddressType(selectedType)
             setAddressTypesToMonitor(monitoredTypes)
 
@@ -859,6 +867,15 @@ class LightningService @Inject constructor(
         }
     }
     // endregion
+
+    private fun scorerFeeParameters(config: Config): ScoringFeeParameters = config.scoringFeeParams.copy(
+        basePenaltyMsat = SCORING_BASE_PENALTY_MSAT,
+        liquidityPenaltyMultiplierMsat = SCORING_LIQUIDITY_PENALTY_MULTIPLIER_MSAT,
+        liquidityPenaltyAmountMultiplierMsat = SCORING_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT,
+        historicalLiquidityPenaltyAmountMultiplierMsat = SCORING_HISTORICAL_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT,
+        consideredImpossiblePenaltyMsat = SCORING_CONSIDERED_IMPOSSIBLE_PENALTY_MSAT,
+        probingDiversityPenaltyMsat = SCORING_PROBING_DIVERSITY_PENALTY_MSAT,
+    )
 
     // region utxo selection
     suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> {
