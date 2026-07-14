@@ -528,10 +528,6 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    fun consumeHwFundingComplete() {
-        _spendingUiState.update { it.copy(hwFundingComplete = false) }
-    }
-
     // endregion
 
     // region Hardware Wallet
@@ -594,12 +590,7 @@ class TransferViewModel @Inject constructor(
                         }.onSuccess {
                             pendingHwFundingBroadcast = null
                             activeHwTransferDeviceId = null
-                            _spendingUiState.update {
-                                it.copy(
-                                    hasPendingHwBroadcast = false,
-                                    hwFundingComplete = true,
-                                )
-                            }
+                            _spendingUiState.update { it.copy(hasPendingHwBroadcast = false) }
                             setTransferEffect(TransferEffect.OnHwTxSigned)
                         }.onFailure {
                             Logger.error("Failed to record broadcast hardware transfer", it, context = TAG)
@@ -771,7 +762,7 @@ class TransferViewModel @Inject constructor(
     }
 
     private suspend fun showHardwareBroadcastError(error: HardwareBroadcastError) {
-        if (!error.isHardwareBroadcastConnectivityFailure()) {
+        if (!error.isBroadcastConnectivityFailure()) {
             pendingHwFundingBroadcast = null
             _spendingUiState.update { it.copy(hasPendingHwBroadcast = false) }
             ToastEventBus.send(error.cause ?: error)
@@ -787,9 +778,6 @@ class TransferViewModel @Inject constructor(
             description = context.getString(R.string.other__connection_issues_explain),
         )
     }
-
-    private fun Throwable.isHardwareBroadcastConnectivityFailure(): Boolean =
-        isBroadcastConnectivityFailure()
 
     private fun Throwable.isHardwareInteractionTimeout(): Boolean =
         this is HardwareFundingError &&
@@ -1112,7 +1100,6 @@ data class TransferToSpendingUiState(
     val isLoading: Boolean = false,
     val isSigning: Boolean = false,
     val hasPendingHwBroadcast: Boolean = false,
-    val hwFundingComplete: Boolean = false,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
 )

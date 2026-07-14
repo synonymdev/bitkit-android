@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import to.bitkit.ext.bluetoothManager
+import to.bitkit.ext.nowMs
 import to.bitkit.ext.usbManager
 import to.bitkit.models.TransportType
 import to.bitkit.utils.Logger
@@ -54,6 +55,8 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 /**
  * Transport callback implementation for Trezor communication.
@@ -64,10 +67,12 @@ import javax.inject.Singleton
  * USB communication uses 64-byte chunks, Bluetooth uses 244-byte chunks.
  */
 @Suppress("LargeClass")
+@OptIn(ExperimentalTime::class)
 @Singleton
 class TrezorTransport @Inject constructor(
     @ApplicationContext private val context: Context,
     private val bridgeTransport: TrezorBridgeTransport,
+    private val clock: Clock,
 ) : TrezorTransportCallback {
 
     companion object {
@@ -1071,8 +1076,8 @@ class TrezorTransport @Inject constructor(
             )
 
         return try {
-            val deadlineMs = System.currentTimeMillis() + BLE_READ_TIMEOUT_MS
-            while (System.currentTimeMillis() < deadlineMs) {
+            val deadlineMs = clock.nowMs() + BLE_READ_TIMEOUT_MS
+            while (clock.nowMs() < deadlineMs) {
                 if (!connection.isConnected) {
                     return TrezorTransportReadResult(
                         success = false,
@@ -1081,7 +1086,7 @@ class TrezorTransport @Inject constructor(
                         errorCode = null,
                     )
                 }
-                val remainingMs = deadlineMs - System.currentTimeMillis()
+                val remainingMs = deadlineMs - clock.nowMs()
                 if (remainingMs <= 0) break
                 val pollMs = minOf(BLE_READ_POLL_INTERVAL_MS, remainingMs)
                 val data = connection.readQueue.poll(pollMs, TimeUnit.MILLISECONDS)

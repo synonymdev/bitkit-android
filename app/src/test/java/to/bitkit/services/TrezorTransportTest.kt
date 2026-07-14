@@ -20,7 +20,10 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 import kotlin.test.fail
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class TrezorTransportTest {
 
     private val context = mock<Context>()
@@ -121,5 +124,6 @@ class TrezorTransportTest {
     private fun createSut() = TrezorTransport(
         context = context,
         bridgeTransport = bridgeTransport,
+        clock = Clock.System,
     )
 }

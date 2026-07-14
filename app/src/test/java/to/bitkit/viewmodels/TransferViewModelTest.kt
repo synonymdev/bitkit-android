@@ -672,6 +672,14 @@ class TransferViewModelTest : BaseUnitTest() {
             totalSpent = order.feeSat + MINING_FEE,
         )
         val broadcastResult = CompletableDeferred<Result<HwFundingBroadcastResult>>()
+        var hwTxSignedEmitted = false
+        backgroundScope.launch {
+            sut.transferEffects.collect { effect ->
+                if (effect is TransferEffect.OnHwTxSigned) {
+                    hwTxSignedEmitted = true
+                }
+            }
+        }
         whenever(hwWalletRepo.ensureConnected(DEVICE_ID))
             .thenReturn(Result.success(mock<TrezorFeatures>()))
         whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
@@ -688,7 +696,7 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(false, sut.spendingUiState.value.hasPendingHwBroadcast)
-        assertEquals(true, sut.spendingUiState.value.hwFundingComplete)
+        assertTrue(hwTxSignedEmitted)
         verify(cacheStore).addPaidOrder(order.id, TXID)
         verify(transferRepo).createTransfer(
             eq(TransferType.TO_SPENDING),
