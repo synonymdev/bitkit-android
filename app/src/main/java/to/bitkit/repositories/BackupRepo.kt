@@ -35,6 +35,7 @@ import to.bitkit.async.appScope
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
@@ -91,6 +92,7 @@ class BackupRepo @Inject constructor(
     private val vssBackupClientLdk: VssBackupClientLdk,
     private val settingsStore: SettingsStore,
     private val widgetsStore: WidgetsStore,
+    private val watchOnlyAccountStore: WatchOnlyAccountStore,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
     private val pubkyRepo: PubkyRepo,
@@ -262,6 +264,18 @@ class BackupRepo @Inject constructor(
                 }
         }
         dataListenerJobs.add(transfersJob)
+
+        val watchOnlyAccountsJob = scope.launch {
+            watchOnlyAccountStore.data
+                .map { it.accounts }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    if (shouldSkipBackup()) return@collect
+                    markBackupRequired(BackupCategory.WALLET)
+                }
+        }
+        dataListenerJobs.add(watchOnlyAccountsJob)
 
         // METADATA - Observe entire CacheStore excluding backup statuses
         val cacheMetadataJob = scope.launch {
@@ -551,6 +565,7 @@ class BackupRepo @Inject constructor(
             transfers = transfers,
             privatePaykitHighestReservedReceiveIndexByAddressType = privateReservations,
             paykitSdkBackupState = paykitSdkBackupState,
+            watchOnlyAccounts = watchOnlyAccountStore.load(),
         )
 
         return json.encodeToString(payload).toByteArray()
@@ -632,6 +647,7 @@ class BackupRepo @Inject constructor(
     private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
         val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
         db.transferDao().upsert(parsed.transfers)
+        watchOnlyAccountStore.save(parsed.watchOnlyAccounts.orEmpty())
         if (!parsed.privatePaykitHighestReservedReceiveIndexByAddressType.isNullOrEmpty()) {
             cacheStore.update { it.copy(onchainAddress = "", bip21 = "") }
         }

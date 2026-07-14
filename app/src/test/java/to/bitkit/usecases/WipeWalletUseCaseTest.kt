@@ -13,6 +13,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.repositories.ActivityRepo
@@ -38,6 +39,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val db = mock<AppDb>()
     private val settingsStore = mock<SettingsStore>()
     private val cacheStore = mock<CacheStore>()
+    private val watchOnlyAccountStore = mock<WatchOnlyAccountStore>()
     private val widgetsStore = mock<WidgetsStore>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
@@ -72,6 +74,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             db = db,
             settingsStore = settingsStore,
             cacheStore = cacheStore,
+            watchOnlyAccountStore = watchOnlyAccountStore,
             widgetsStore = widgetsStore,
             blocktankRepo = blocktankRepo,
             activityRepo = activityRepo,
@@ -100,6 +103,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             db,
             settingsStore,
             cacheStore,
+            watchOnlyAccountStore,
             widgetsStore,
             blocktankRepo,
             activityRepo,
@@ -121,6 +125,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(db).clearAllTables()
         inOrder.verify(settingsStore).reset()
         inOrder.verify(cacheStore).reset()
+        inOrder.verify(watchOnlyAccountStore).save(emptyList())
         inOrder.verify(widgetsStore).reset()
         inOrder.verify(blocktankRepo).resetState()
         inOrder.verify(activityRepo).resetState()

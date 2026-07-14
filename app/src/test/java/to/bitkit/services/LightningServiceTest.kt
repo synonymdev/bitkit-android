@@ -27,6 +27,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.async.newSingleThreadDispatcher
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
@@ -50,6 +51,7 @@ class LightningServiceTest : BaseUnitTest() {
     private val keychain = mock<Keychain>()
     private val vssStoreIdProvider = mock<VssStoreIdProvider>()
     private val settingsStore = mock<SettingsStore>()
+    private val watchOnlyAccountStore = mock<WatchOnlyAccountStore>()
     private val loggerLdk = mock<LoggerLdk>()
     private val node = mock<Node>()
 
@@ -66,6 +68,7 @@ class LightningServiceTest : BaseUnitTest() {
             keychain = keychain,
             vssStoreIdProvider = vssStoreIdProvider,
             settingsStore = settingsStore,
+            watchOnlyAccountStore = watchOnlyAccountStore,
             loggerLdk = loggerLdk,
         )
         sut.node = node

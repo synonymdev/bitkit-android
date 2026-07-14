@@ -4,6 +4,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.runSuspendCatching
@@ -31,6 +32,7 @@ class WipeWalletUseCase @Inject constructor(
     private val db: AppDb,
     private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
+    private val watchOnlyAccountStore: WatchOnlyAccountStore,
     private val widgetsStore: WidgetsStore,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
@@ -66,6 +68,7 @@ class WipeWalletUseCase @Inject constructor(
 
                 settingsStore.reset()
                 cacheStore.reset()
+                watchOnlyAccountStore.save(emptyList())
                 widgetsStore.reset()
 
                 blocktankRepo.resetState()

@@ -22,6 +22,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -30,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
+import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthPermission
 import to.bitkit.models.PubkyProfile
 import to.bitkit.ui.appViewModel
@@ -45,6 +47,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.Text13Up
+import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.settingsViewModel
@@ -111,6 +114,7 @@ fun PubkyAuthApprovalSheet(
         Content(
             uiState = uiState,
             onAuthorize = { viewModel.requestAuthorize(authUrl) },
+            onAccountNameChange = viewModel::updateWatchOnlyAccountName,
             onCancel = { viewModel.dismiss() },
             onDismiss = { viewModel.dismiss() },
         )
@@ -167,6 +171,7 @@ internal fun resolvePubkyApprovalLocalAuthMode(
 private fun Content(
     uiState: PubkyAuthApprovalUiState,
     onAuthorize: () -> Unit,
+    onAccountNameChange: (String) -> Unit,
     onCancel: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -190,6 +195,7 @@ private fun Content(
             ApprovalState.Authorize -> AuthorizeContent(
                 uiState = uiState,
                 onAuthorize = onAuthorize,
+                onAccountNameChange = onAccountNameChange,
                 onCancel = onCancel,
             )
             ApprovalState.Authorizing -> AuthorizingContent(
@@ -219,6 +225,7 @@ private fun ColumnScope.LoadingContent() {
 private fun ColumnScope.AuthorizeContent(
     uiState: PubkyAuthApprovalUiState,
     onAuthorize: () -> Unit,
+    onAccountNameChange: (String) -> Unit,
     onCancel: () -> Unit,
 ) {
     DescriptionText(serviceName = uiState.serviceName)
@@ -226,6 +233,17 @@ private fun ColumnScope.AuthorizeContent(
 
     PermissionsSection(permissions = uiState.permissions)
     VerticalSpacer(16.dp)
+
+    uiState.bitkitClaim?.let {
+        BitkitClaimSection(it)
+        VerticalSpacer(16.dp)
+        WatchOnlyAccountName(
+            value = uiState.watchOnlyAccountName,
+            enabled = true,
+            onValueChange = onAccountNameChange,
+        )
+        VerticalSpacer(16.dp)
+    }
 
     FillHeight()
 
@@ -259,6 +277,17 @@ private fun ColumnScope.AuthorizingContent(
 
     PermissionsSection(permissions = uiState.permissions)
     VerticalSpacer(16.dp)
+
+    uiState.bitkitClaim?.let {
+        BitkitClaimSection(it)
+        VerticalSpacer(16.dp)
+        WatchOnlyAccountName(
+            value = uiState.watchOnlyAccountName,
+            enabled = false,
+            onValueChange = {},
+        )
+        VerticalSpacer(16.dp)
+    }
 
     FillHeight()
 
@@ -367,6 +396,51 @@ private fun PermissionRow(permission: PubkyAuthPermission) {
 }
 
 @Composable
+private fun BitkitClaimSection(bitkitClaim: PubkyAuthClaim) {
+    when (bitkitClaim) {
+        PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1 -> Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Colors.Gray6, RoundedCornerShape(16.dp))
+                .padding(16.dp),
+        ) {
+            Text13Up(
+                text = stringResource(R.string.profile__auth_approval_watch_only_account_title),
+                color = Colors.White64,
+            )
+            VerticalSpacer(8.dp)
+            BodyM(
+                text = stringResource(R.string.profile__auth_approval_watch_only_account_description),
+                color = Colors.White64,
+            )
+        }
+    }
+}
+
+@Composable
+private fun WatchOnlyAccountName(
+    value: String,
+    enabled: Boolean,
+    onValueChange: (String) -> Unit,
+) {
+    Text13Up(
+        text = stringResource(R.string.profile__auth_approval_watch_only_account_name),
+        color = Colors.White64,
+    )
+    VerticalSpacer(8.dp)
+    TextInput(
+        value = value,
+        onValueChange = onValueChange,
+        enabled = enabled,
+        placeholder = stringResource(R.string.profile__auth_approval_watch_only_account_name_placeholder),
+        singleLine = true,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("PubkyAuthWatchOnlyAccountName"),
+    )
+}
+
+@Composable
 private fun TrustWarning() {
     BodyM(
         text = stringResource(R.string.profile__auth_approval_trust_warning),
@@ -405,6 +479,7 @@ private fun AuthorizePreview() {
                         PubkyAuthPermission(path = "/pub/pubky.app/", accessLevel = "rw"),
                         PubkyAuthPermission(path = "/pub/paykit/v0/", accessLevel = "rw"),
                     ),
+                    bitkitClaim = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1,
                     profile = PubkyProfile(
                         publicKey = "pk8e3qm5f4kgczagxhertyuiop1gxag",
                         name = "Satoshi Nakamoto",
@@ -415,6 +490,7 @@ private fun AuthorizePreview() {
                     ),
                 ),
                 onAuthorize = {},
+                onAccountNameChange = {},
                 onCancel = {},
                 onDismiss = {},
             )
@@ -433,6 +509,7 @@ private fun SuccessPreview() {
                     serviceName = "pubky.app",
                 ),
                 onAuthorize = {},
+                onAccountNameChange = {},
                 onCancel = {},
                 onDismiss = {},
             )
