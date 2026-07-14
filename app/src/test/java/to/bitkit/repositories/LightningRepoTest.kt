@@ -1348,24 +1348,26 @@ class LightningRepoTest : BaseUnitTest() {
         val onEvent = startNodeAndCaptureEvents()
 
         val result = async { sut.waitForProbeOutcome(setOf(probePaymentA)) }
-        onEvent(Event.ProbeSuccessful(paymentId = probePaymentA, paymentHash = probeHashA))
+        onEvent(Event.ProbeSuccessful(paymentId = probePaymentA, paymentHash = probeHashA, routeFeeMsat = 123uL))
 
         val outcome = result.await().getOrThrow()
         assertIs<ProbeOutcome.Success>(outcome)
         assertEquals(probePaymentA, outcome.paymentId)
         assertEquals(probeHashA, outcome.paymentHash)
+        assertEquals(123uL, outcome.routeFeeMsat)
     }
 
     @Test
     fun `waitForProbeOutcome returns cached success when event arrives before wait`() = test {
         val onEvent = startNodeAndCaptureEvents()
-        onEvent(Event.ProbeSuccessful(paymentId = probePaymentA, paymentHash = probeHashA))
+        onEvent(Event.ProbeSuccessful(paymentId = probePaymentA, paymentHash = probeHashA, routeFeeMsat = 123uL))
 
         val outcome = sut.waitForProbeOutcome(setOf(probePaymentA)).getOrThrow()
 
         assertIs<ProbeOutcome.Success>(outcome)
         assertEquals(probePaymentA, outcome.paymentId)
         assertEquals(probeHashA, outcome.paymentHash)
+        assertEquals(123uL, outcome.routeFeeMsat)
     }
 
     @Test
@@ -1373,14 +1375,29 @@ class LightningRepoTest : BaseUnitTest() {
         val onEvent = startNodeAndCaptureEvents()
         val result = async { sut.waitForProbeOutcome(setOf(probePaymentA, probePaymentB)) }
 
-        onEvent(Event.ProbeFailed(paymentId = probePaymentA, paymentHash = probeHashA, shortChannelId = 1uL))
-        onEvent(Event.ProbeFailed(paymentId = probePaymentB, paymentHash = probeHashB, shortChannelId = 2uL))
+        onEvent(
+            Event.ProbeFailed(
+                paymentId = probePaymentA,
+                paymentHash = probeHashA,
+                shortChannelId = 1uL,
+                routeFeeMsat = 123uL,
+            )
+        )
+        onEvent(
+            Event.ProbeFailed(
+                paymentId = probePaymentB,
+                paymentHash = probeHashB,
+                shortChannelId = 990_718_250_873_192_449uL,
+                routeFeeMsat = 456uL,
+            )
+        )
 
         val outcome = result.await().getOrThrow()
         assertIs<ProbeOutcome.Failure>(outcome)
         assertEquals(probePaymentB, outcome.paymentId)
         assertEquals(probeHashB, outcome.paymentHash)
-        assertEquals(2uL, outcome.shortChannelId)
+        assertEquals("990718250873192449", outcome.shortChannelId)
+        assertEquals(456uL, outcome.routeFeeMsat)
     }
 
     @Test
@@ -1388,27 +1405,56 @@ class LightningRepoTest : BaseUnitTest() {
         val onEvent = startNodeAndCaptureEvents()
         val result = async { sut.waitForProbeOutcome(setOf(probePaymentA, probePaymentB)) }
 
-        onEvent(Event.ProbeFailed(paymentId = probePaymentA, paymentHash = probeHashA, shortChannelId = 1uL))
-        onEvent(Event.ProbeSuccessful(paymentId = probePaymentB, paymentHash = probeHashB))
+        onEvent(
+            Event.ProbeFailed(
+                paymentId = probePaymentA,
+                paymentHash = probeHashA,
+                shortChannelId = 1uL,
+                routeFeeMsat = 123uL,
+            )
+        )
+        onEvent(
+            Event.ProbeSuccessful(
+                paymentId = probePaymentB,
+                paymentHash = probeHashB,
+                routeFeeMsat = 456uL,
+            )
+        )
 
         val outcome = result.await().getOrThrow()
         assertIs<ProbeOutcome.Success>(outcome)
         assertEquals(probePaymentB, outcome.paymentId)
         assertEquals(probeHashB, outcome.paymentHash)
+        assertEquals(456uL, outcome.routeFeeMsat)
     }
 
     @Test
     fun `waitForProbeOutcome does not hang on partial cached failures`() = test {
         val onEvent = startNodeAndCaptureEvents()
-        onEvent(Event.ProbeFailed(paymentId = probePaymentA, paymentHash = probeHashA, shortChannelId = 1uL))
+        onEvent(
+            Event.ProbeFailed(
+                paymentId = probePaymentA,
+                paymentHash = probeHashA,
+                shortChannelId = 1uL,
+                routeFeeMsat = 123uL,
+            )
+        )
 
         val result = async { sut.waitForProbeOutcome(setOf(probePaymentA, probePaymentB)) }
-        onEvent(Event.ProbeFailed(paymentId = probePaymentB, paymentHash = probeHashB, shortChannelId = 2uL))
+        onEvent(
+            Event.ProbeFailed(
+                paymentId = probePaymentB,
+                paymentHash = probeHashB,
+                shortChannelId = 2uL,
+                routeFeeMsat = 456uL,
+            )
+        )
 
         val outcome = result.await().getOrThrow()
         assertIs<ProbeOutcome.Failure>(outcome)
         assertEquals(probePaymentB, outcome.paymentId)
-        assertEquals(2uL, outcome.shortChannelId)
+        assertEquals("2", outcome.shortChannelId)
+        assertEquals(456uL, outcome.routeFeeMsat)
     }
 
     @Test
@@ -1425,7 +1471,7 @@ class LightningRepoTest : BaseUnitTest() {
     fun `stop clears probe cache`() = test {
         val onEvent = startNodeAndCaptureEvents()
         whenever(lightningService.stop()).thenReturn(Unit)
-        onEvent(Event.ProbeSuccessful(paymentId = probePaymentA, paymentHash = probeHashA))
+        onEvent(Event.ProbeSuccessful(paymentId = probePaymentA, paymentHash = probeHashA, routeFeeMsat = null))
 
         sut.stop()
         val result = sut.waitForProbeOutcome(setOf(probePaymentA), timeout = 1.seconds)
