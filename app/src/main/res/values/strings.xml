@@ -319,6 +319,12 @@
     <string name="lightning__savings_advanced__total">Total selected</string>
     <string name="lightning__savings_confirm__label">Transfer to savings</string>
     <string name="lightning__savings_confirm__transfer_all">Transfer all</string>
+    <string name="lightning__savings_confirm__amount">To savings</string>
+    <string name="lightning__savings_confirm__network_fee">Network fee</string>
+    <string name="lightning__savings_confirm__service_fee">Service fee</string>
+    <string name="lightning__savings_confirm__receive">You\'ll receive</string>
+    <string name="lightning__savings_confirm__close_instead">Close channel instead</string>
+    <string name="lightning__savings_confirm__amount_too_low">Amount is too low to transfer to savings.</string>
     <string name="lightning__savings_interrupted__nav_title">Transfer\n&lt;accent&gt;interrupted&lt;/accent&gt;</string>
     <string name="lightning__savings_interrupted__text">Funds were not transferred yet. Bitkit will try to initiate the transfer during the next &lt;accent&gt;30 minutes&lt;/accent&gt;. Please keep your app open.</string>
     <string name="lightning__savings_interrupted__title">Keep Bitkit\n&lt;accent&gt;open&lt;/accent&gt;</string>

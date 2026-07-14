@@ -2,6 +2,7 @@ package to.bitkit.ui
 
 import android.content.Context
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -28,6 +29,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
+import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.viewmodels.RestoreState
@@ -47,6 +49,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private val pubkyRepo = mock<PubkyRepo>()
     private val migrationService = mock<MigrationService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
+    private val boltzService = mock<BoltzService>()
 
     private val lightningState = MutableStateFlow(LightningState())
     private val walletState = MutableStateFlow(WalletState())
@@ -64,6 +67,7 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(migrationService.tryFetchMigrationPeersFromBackup()).thenReturn(emptyList())
         whenever { migrationService.getRNRemoteBackupTimestamp() }.thenReturn(null)
         whenever(connectivityRepo.isOnline).thenReturn(isOnline)
+        whenever(boltzService.events).thenReturn(MutableSharedFlow())
 
         sut = WalletViewModel(
             context = context,
@@ -76,6 +80,7 @@ class WalletViewModelTest : BaseUnitTest() {
             pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
+            boltzService = boltzService,
         )
     }
 
@@ -287,6 +292,7 @@ class WalletViewModelTest : BaseUnitTest() {
             pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
+            boltzService = boltzService,
         )
 
         assertEquals(RestoreState.Initial, testSut.restoreState.value)
@@ -348,6 +354,7 @@ class WalletViewModelTest : BaseUnitTest() {
             pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
+            boltzService = boltzService,
         )
 
         // Trigger restore to put state in non-idle

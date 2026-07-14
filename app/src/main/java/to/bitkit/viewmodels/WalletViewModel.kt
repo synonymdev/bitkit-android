@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.BoltzSwapEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
@@ -37,6 +38,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.onboarding.LOADING_MS
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -60,6 +62,7 @@ class WalletViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     private val migrationService: MigrationService,
     private val connectivityRepo: ConnectivityRepo,
+    private val boltzService: BoltzService,
 ) : ViewModel() {
     companion object {
         private const val TAG = "WalletViewModel"
@@ -309,6 +312,8 @@ class WalletViewModel @Inject constructor(
                 if (_restoreState.value.isIdle()) {
                     walletRepo.refreshBip21()
                 }
+                collectSwapEventsOnce()
+                viewModelScope.launch { startSwapUpdates() }
                 // checkForOrphanedChannelMonitorRecovery()
             }
             .onFailure {
@@ -317,6 +322,36 @@ class WalletViewModel @Inject constructor(
                     ToastEventBus.send(it)
                 }
             }
+    }
+
+    private var swapEventsCollected = false
+
+    /**
+     * Open the swap updates stream so any pending LN -> onchain swaps resume and auto-claim
+     * once their lockup confirms. Uses the wallet's current fee rate for the claim tx.
+     */
+    private suspend fun startSwapUpdates() {
+        runCatching {
+            val speed = settingsStore.data.first().defaultTransactionSpeed
+            val feeRate = lightningRepo.getFeeRateForSpeed(speed).getOrNull()?.toDouble()
+            boltzService.startUpdates(feeRateSatPerVb = feeRate)
+        }.onFailure {
+            Logger.error("Failed to start swap updates", it, context = TAG)
+        }
+    }
+
+    /** Refresh balances when a swap lands on-chain so savings reflect it without a manual sync. */
+    private fun collectSwapEventsOnce() {
+        if (swapEventsCollected) return
+        swapEventsCollected = true
+        viewModelScope.launch {
+            boltzService.events.collect { event ->
+                if (event is BoltzSwapEvent.Claimed) {
+                    Logger.info("Savings swap claimed: ${event.swapId}", context = TAG)
+                    walletRepo.syncBalances()
+                }
+            }
+        }
     }
 
     private suspend fun connectMigrationPeers() {

@@ -1,0 +1,358 @@
+package to.bitkit.ui.settings
+
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardColors
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.synonym.bitkitcore.BoltzSwap
+import com.synonym.bitkitcore.BoltzSwapType
+import kotlinx.collections.immutable.ImmutableList
+import to.bitkit.models.Toast
+import to.bitkit.models.formatToModernDisplay
+import to.bitkit.ui.Routes
+import to.bitkit.ui.appViewModel
+import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.BodySSB
+import to.bitkit.ui.components.Caption
+import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.CaptionB
+import to.bitkit.ui.components.Footnote
+import to.bitkit.ui.components.HorizontalSpacer
+import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.settings.SectionHeader
+import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.shared.modifiers.clickableAlpha
+import to.bitkit.ui.theme.AppShapes
+import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.copyToClipboard
+import to.bitkit.viewmodels.SwapsViewModel
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+
+@Composable
+fun SwapsScreen(
+    onBackClick: () -> Unit,
+    onSwapItemClick: (String) -> Unit,
+    viewModel: SwapsViewModel = hiltViewModel(),
+) {
+    val swaps by viewModel.swaps.collectAsStateWithLifecycle()
+    val error by viewModel.error.collectAsStateWithLifecycle()
+
+    LaunchedEffect(Unit) { viewModel.refresh() }
+
+    SwapsContent(
+        swaps = swaps,
+        error = error,
+        onBack = onBackClick,
+        onClickSwap = onSwapItemClick,
+    )
+}
+
+@Composable
+private fun SwapsContent(
+    swaps: ImmutableList<BoltzSwap>,
+    error: String?,
+    modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
+    onClickSwap: (String) -> Unit = {},
+) {
+    Scaffold(
+        topBar = { AppTopBar(titleText = "Swaps", onBackClick = onBack) },
+        modifier = modifier,
+    ) { padding ->
+        LazyColumn(
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(padding),
+        ) {
+            error?.let {
+                item { BodyS(text = "Error: $it") }
+            }
+            if (swaps.isEmpty()) {
+                item { BodyS(text = "No swaps found…") }
+            } else {
+                items(swaps) { swap -> SwapCard(swap, onClickSwap) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SwapCard(model: BoltzSwap, onClick: (String) -> Unit) {
+    Card(
+        colors = cardColors,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickableAlpha { onClick(model.id) }
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CaptionB(
+                    text = model.id,
+                    maxLines = 1,
+                    overflow = TextOverflow.MiddleEllipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickableAlpha(onClick = copyToClipboard(model.id))
+                )
+                HorizontalSpacer(8.dp)
+                Surface(color = Colors.White16, shape = AppShapes.small) {
+                    Footnote(
+                        text = model.status.toString(),
+                        color = Colors.White64,
+                        maxLines = 1,
+                        modifier = Modifier.padding(4.dp)
+                    )
+                }
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                InfoCell(label = "Type", value = model.swapType.toString())
+                InfoCell(
+                    label = "Amount",
+                    value = "${model.amountSat.formatToModernDisplay()} sats",
+                    alignment = Alignment.End,
+                )
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                InfoCell(
+                    label = "Receives",
+                    value = model.onchainAmountSat?.let { "${it.formatToModernDisplay()} sats" } ?: "-",
+                )
+                InfoCell(
+                    label = "Created",
+                    value = formatEpochSeconds(model.createdAt),
+                    alignment = Alignment.End,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SwapDetailScreen(
+    swapItem: Routes.SwapDetail,
+    onBackClick: () -> Unit = {},
+    viewModel: SwapsViewModel = hiltViewModel(),
+) {
+    val app = appViewModel ?: return
+    val swaps by viewModel.swaps.collectAsStateWithLifecycle()
+    val swap = swaps.find { it.id == swapItem.id }
+    val canClaim = swap != null && swap.swapType == BoltzSwapType.REVERSE && swap.claimTxId == null
+
+    SwapDetailContent(
+        swap = swap,
+        onBack = onBackClick,
+        canClaim = canClaim,
+        onClaim = {
+            val id = swap?.id ?: return@SwapDetailContent
+            viewModel.claimReverseSwap(id) { result ->
+                result
+                    .onSuccess { txid ->
+                        app.toast(
+                            type = Toast.ToastType.SUCCESS,
+                            title = "Claim broadcast",
+                            description = txid,
+                        )
+                    }
+                    .onFailure { e ->
+                        app.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = "Claim failed",
+                            description = e.message ?: "Unknown error",
+                        )
+                    }
+            }
+        },
+    )
+}
+
+@Composable
+private fun SwapDetailContent(
+    swap: BoltzSwap?,
+    modifier: Modifier = Modifier,
+    onBack: () -> Unit = {},
+    canClaim: Boolean = false,
+    onClaim: () -> Unit = {},
+) {
+    Scaffold(
+        topBar = { AppTopBar(titleText = "Swap Details", onBackClick = onBack) },
+        modifier = modifier,
+    ) { padding ->
+        if (swap == null) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                BodyS(text = "Loading…")
+            }
+            return@Scaffold
+        }
+        LazyColumn(
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(padding),
+        ) {
+            item {
+                InfoCard(header = "Overview") {
+                    DetailRow("ID", swap.id)
+                    DetailRow("Type", swap.swapType.toString())
+                    DetailRow("Status", swap.status.toString())
+                    DetailRow("Network", swap.network.toString())
+                }
+            }
+            item {
+                InfoCard(header = "Amounts") {
+                    DetailRow("Amount", "${swap.amountSat.formatToModernDisplay()} sats")
+                    DetailRow(
+                        "Onchain amount",
+                        swap.onchainAmountSat?.let { "${it.formatToModernDisplay()} sats" } ?: "-",
+                    )
+                }
+            }
+            item {
+                InfoCard(header = "Addresses") {
+                    DetailRow("Lockup", swap.lockupAddress ?: "-")
+                    DetailRow("Claim / onchain", swap.onchainAddress ?: "-")
+                }
+            }
+            swap.invoice?.let { invoice ->
+                item {
+                    InfoCard(header = "Lightning") {
+                        DetailRow("Invoice", invoice)
+                    }
+                }
+            }
+            item {
+                InfoCard(header = "Transactions") {
+                    DetailRow("Claim txid", swap.claimTxId ?: "-")
+                    DetailRow("Refund txid", swap.refundTxId ?: "-")
+                }
+            }
+            item {
+                InfoCard(header = "Recovery") {
+                    DetailRow("Swap index", swap.swapIndex.toString())
+                    DetailRow("Timeout block", swap.timeoutBlockHeight.toString())
+                }
+            }
+            item {
+                InfoCard(header = "Timestamps") {
+                    DetailRow("Created", formatEpochSeconds(swap.createdAt))
+                }
+            }
+            if (canClaim) {
+                item {
+                    PrimaryButton(text = "Claim now", onClick = onClaim)
+                }
+            }
+        }
+    }
+}
+
+private val cardColors: CardColors @Composable get() = CardDefaults.cardColors(containerColor = Colors.White10)
+
+@Composable
+private fun InfoCard(
+    header: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    Column(modifier = modifier) {
+        SectionHeader(header, padding = PaddingValues.Zero)
+        Card(
+            colors = cardColors,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun InfoCell(label: String, value: String, alignment: Alignment.Horizontal = Alignment.Start) {
+    Column(horizontalAlignment = alignment) {
+        Caption13Up(text = label, color = Colors.White64)
+        VerticalSpacer(4.dp)
+        BodySSB(text = value)
+    }
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Row(
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 6.dp)
+    ) {
+        Caption(
+            text = label,
+            color = Colors.White64,
+            overflow = TextOverflow.MiddleEllipsis,
+            maxLines = 1,
+        )
+        HorizontalSpacer(16.dp)
+        Caption(
+            text = value,
+            color = MaterialTheme.colorScheme.onSurface,
+            textAlign = TextAlign.End,
+            overflow = TextOverflow.MiddleEllipsis,
+            maxLines = 1,
+            modifier = Modifier
+                .weight(1f, fill = false)
+                .clickableAlpha(onClick = copyToClipboard(value))
+        )
+    }
+}
+
+private val epochFormatter: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault())
+
+private fun formatEpochSeconds(seconds: ULong): String =
+    runCatching { epochFormatter.format(Instant.ofEpochSecond(seconds.toLong())) }
+        .getOrDefault(seconds.toString())

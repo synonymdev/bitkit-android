@@ -41,6 +41,8 @@ import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.ui.utils.withAccentBoldBright
 import to.bitkit.viewmodels.AppViewModel
+import to.bitkit.viewmodels.SavingsSwapResult
+import to.bitkit.viewmodels.SavingsTransferMode
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -55,43 +57,39 @@ fun SavingsProgressScreen(
     val context = LocalContext.current
     var progressState by remember { mutableStateOf(SavingsProgressState.PROGRESS) }
 
-    // Effect to close channels & update UI
+    // Effect to execute the transfer & update UI
     // TODO move this logic to viewmodel so it can outlive the screen lifecycle
     LaunchedEffect(Unit) {
-        val channelsFailedToCoopClose = transfer.closeSelectedChannels()
+        when (transfer.savingsTransferMode.value) {
+            SavingsTransferMode.SWAP -> runSavingsSwap(
+                transfer = transfer,
+                wallet = wallet,
+                onSuccess = { progressState = SavingsProgressState.SUCCESS },
+                onFailure = { reason ->
+                    app.toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.common__error),
+                        description = reason,
+                    )
+                    onTransferUnavailable()
+                },
+            )
 
-        if (channelsFailedToCoopClose.isEmpty()) {
-            wallet.refreshState()
-            delay(5000)
-            progressState = SavingsProgressState.SUCCESS
-        } else {
-            // Check if any channels can be retried (filter out trusted peers)
-            val (_, nonTrustedChannels) = transfer.separateTrustedChannels(channelsFailedToCoopClose)
-
-            if (nonTrustedChannels.isEmpty()) {
-                // All channels are trusted peers - show error and navigate back immediately
-                app.toast(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.lightning__close_error),
-                    description = context.getString(R.string.lightning__close_error_msg),
-                )
-                onTransferUnavailable()
-            } else {
-                transfer.startCoopCloseRetries(
-                    channels = nonTrustedChannels,
-                    onGiveUp = { app.showSheet(Sheet.ForceTransfer) },
-                    onTransferUnavailable = {
-                        app.toast(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.lightning__close_error),
-                            description = context.getString(R.string.lightning__close_error_msg),
-                        )
-                        onTransferUnavailable()
-                    },
-                )
-                delay(2500)
-                progressState = SavingsProgressState.INTERRUPTED
-            }
+            SavingsTransferMode.CLOSE -> runChannelClose(
+                transfer = transfer,
+                wallet = wallet,
+                onSuccess = { progressState = SavingsProgressState.SUCCESS },
+                onInterrupted = { progressState = SavingsProgressState.INTERRUPTED },
+                onGiveUp = { app.showSheet(Sheet.ForceTransfer) },
+                onUnavailable = {
+                    app.toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.lightning__close_error),
+                        description = context.getString(R.string.lightning__close_error_msg),
+                    )
+                    onTransferUnavailable()
+                },
+            )
         }
     }
 
@@ -100,6 +98,59 @@ fun SavingsProgressScreen(
         onContinueClick = { onContinueClick() },
         modifier = Modifier.keepScreenOn(),
     )
+}
+
+/** Swaps spending funds out to on-chain savings. A pending claim is treated as success. */
+private suspend fun runSavingsSwap(
+    transfer: TransferViewModel,
+    wallet: WalletViewModel,
+    onSuccess: () -> Unit,
+    onFailure: (String) -> Unit,
+) {
+    when (val result = transfer.executeSavingsSwap()) {
+        is SavingsSwapResult.Success, SavingsSwapResult.Pending -> {
+            wallet.refreshState()
+            onSuccess()
+        }
+
+        is SavingsSwapResult.Failure -> onFailure(result.reason)
+    }
+}
+
+/** Legacy path: cooperatively close the selected channel(s), retrying on failure. */
+@Suppress("MagicNumber", "LongParameterList")
+private suspend fun runChannelClose(
+    transfer: TransferViewModel,
+    wallet: WalletViewModel,
+    onSuccess: () -> Unit,
+    onInterrupted: () -> Unit,
+    onGiveUp: () -> Unit,
+    onUnavailable: () -> Unit,
+) {
+    val channelsFailedToCoopClose = transfer.closeSelectedChannels()
+
+    if (channelsFailedToCoopClose.isEmpty()) {
+        wallet.refreshState()
+        delay(5000)
+        onSuccess()
+        return
+    }
+
+    // Check if any channels can be retried (filter out trusted peers)
+    val (_, nonTrustedChannels) = transfer.separateTrustedChannels(channelsFailedToCoopClose)
+
+    if (nonTrustedChannels.isEmpty()) {
+        // All channels are trusted peers - show error and navigate back immediately
+        onUnavailable()
+    } else {
+        transfer.startCoopCloseRetries(
+            channels = nonTrustedChannels,
+            onGiveUp = onGiveUp,
+            onTransferUnavailable = onUnavailable,
+        )
+        delay(2500)
+        onInterrupted()
+    }
 }
 
 @Composable

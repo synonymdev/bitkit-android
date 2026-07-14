@@ -61,6 +61,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.services.BoltzService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -86,6 +87,7 @@ class TransferViewModelTest : BaseUnitTest() {
     private val cacheStore = mock<CacheStore>()
     private val transferRepo = mock<TransferRepo>()
     private val clock = mock<Clock>()
+    private val boltzService = mock<BoltzService>()
 
     private val balanceState = MutableStateFlow(BalanceState())
     private val blocktankState = MutableStateFlow(BlocktankState())
@@ -114,6 +116,7 @@ class TransferViewModelTest : BaseUnitTest() {
             cacheStore = cacheStore,
             transferRepo = transferRepo,
             clock = clock,
+            boltzService = boltzService,
         )
     }
 
@@ -520,6 +523,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 cacheStore = cacheStore,
                 transferRepo = transferRepo,
                 clock = clock,
+                boltzService = boltzService,
             )
 
             viewModel.onTransferToSpendingHwConfirm(order, DEVICE_ID)
