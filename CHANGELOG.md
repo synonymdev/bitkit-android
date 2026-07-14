@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-07-14
+
+### Fixed
+- Improved Lightning payment route selection reliability. #1052
+
 ## [2.3.1] - 2026-06-26
 
 ### Fixed
@@ -100,7 +105,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - About screen (content merged into Support) #857
 - Standalone General, Security, and Advanced settings screens (merged into tabs) #857
 
-[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.3.1...HEAD
+[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.3.2...HEAD
+[2.3.2]: https://github.com/synonymdev/bitkit-android/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/synonymdev/bitkit-android/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/synonymdev/bitkit-android/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/synonymdev/bitkit-android/compare/v2.1.2...v2.2.0
