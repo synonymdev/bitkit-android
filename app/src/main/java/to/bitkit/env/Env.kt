@@ -121,7 +121,7 @@ internal object Env {
 
     val btcRatesServer
         get() = when (network) {
-            Network.BITCOIN -> "https://blocktank.synonym.to/fx/rates/btc"
+            Network.BITCOIN -> "https://api1.blocktank.to/api/fx/rates/btc"
             else -> "https://bitkit.stag0.blocktank.to/fx/rates/btc"
         }
 
