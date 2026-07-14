@@ -169,8 +169,8 @@ android {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 36
-        versionCode = 184
-        versionName = "2.3.1"
+        versionCode = 185
+        versionName = "2.3.2"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         bitkitAndroidTestAnnotation?.let {
             testInstrumentationRunnerArguments["annotation"] = it
