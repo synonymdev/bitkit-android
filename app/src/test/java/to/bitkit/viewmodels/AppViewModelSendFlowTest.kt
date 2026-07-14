@@ -132,6 +132,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val balanceState = MutableStateFlow(BalanceState())
     private val hwReceivedTxs = MutableSharedFlow<HwWalletReceivedTx>()
     private val needsPairingCode = MutableStateFlow(false)
+    private val pairingCodeRequestId = MutableStateFlow<Long?>(null)
     private val settingsData = MutableStateFlow(SettingsData())
     private val isPaykitEnabled = MutableStateFlow(false)
     private val walletState = MutableStateFlow(WalletState())
@@ -159,6 +160,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(hwWalletRepo.receivedTxs).thenReturn(hwReceivedTxs)
         whenever(hwWalletRepo.needsPairingCode).thenReturn(needsPairingCode)
+        whenever(hwWalletRepo.pairingCodeRequestId).thenReturn(pairingCodeRequestId)
         whenever(coreService.activity).thenReturn(activityService)
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(walletRepo.walletState).thenReturn(walletState)
@@ -296,14 +298,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `pairing code request shows and hides the pair device sheet`() = test {
         needsPairingCode.value = true
+        pairingCodeRequestId.value = 1L
         advanceUntilIdle()
 
-        assertEquals(Sheet.Hardware(route = HardwareRoute.PairCode), sut.currentSheet.value)
+        assertEquals(Sheet.Hardware(route = HardwareRoute.PairCode(1L)), sut.currentSheet.value)
 
         needsPairingCode.value = false
+        pairingCodeRequestId.value = null
         advanceUntilIdle()
 
         assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `new app-wide pairing request replaces the stale pair code route`() = test {
+        needsPairingCode.value = true
+        pairingCodeRequestId.value = 1L
+        advanceUntilIdle()
+
+        pairingCodeRequestId.value = 2L
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Hardware(route = HardwareRoute.PairCode(2L)), sut.currentSheet.value)
     }
 
     @Test
@@ -312,6 +328,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         needsPairingCode.value = true
+        pairingCodeRequestId.value = 1L
         advanceUntilIdle()
 
         assertEquals(Sheet.Pin(), sut.currentSheet.value)
@@ -323,12 +340,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         needsPairingCode.value = true
+        pairingCodeRequestId.value = 1L
         advanceUntilIdle()
 
         sut.hideSheet()
         advanceUntilIdle()
 
-        assertEquals(Sheet.Hardware(route = HardwareRoute.PairCode), sut.currentSheet.value)
+        assertEquals(Sheet.Hardware(route = HardwareRoute.PairCode(1L)), sut.currentSheet.value)
     }
 
     @Test

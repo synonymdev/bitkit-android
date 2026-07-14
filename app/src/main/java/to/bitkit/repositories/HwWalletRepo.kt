@@ -41,6 +41,7 @@ import to.bitkit.ext.timestamp
 import to.bitkit.models.HwFundingAccount
 import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwFundingBroadcastResult
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
@@ -127,6 +128,9 @@ class HwWalletRepo @Inject constructor(
 
     /** Pairing-code request raised by the device during connect; the UI shows the Pair Device sheet. */
     val needsPairingCode = trezorRepo.needsPairingCode
+
+    /** Identity of the active request, incremented for each pairing-code callback. */
+    val pairingCodeRequestId = trezorRepo.pairingCodeRequestId
 
     fun submitPairingCode(code: String) = trezorRepo.submitPairingCode(code)
 
@@ -219,30 +223,41 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    /** Signs a composed funding payment on the Trezor and broadcasts it. */
-    suspend fun signAndBroadcastFunding(
+    /** Signs a composed funding payment on the Trezor. */
+    suspend fun signFunding(
         deviceId: String,
         funding: HwFundingTransaction,
-    ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
+    ): Result<HwFundingSignedTx> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val signed = runSuspendCatching {
-                trezorRepo.signTxFromPsbt(
-                    psbtBase64 = funding.psbt,
-                    network = Env.network.toTrezorCoinType(),
-                ).getOrThrow()
-            }
-            if (signed.isFailure) {
-                val failure = signed.exceptionOrNull()
-                if (failure?.isTrezorUserCancellation() != true) {
+            val signedTx = trezorRepo.signTxFromPsbt(
+                psbtBase64 = funding.psbt,
+                network = Env.network.toTrezorCoinType(),
+            ).getOrElse {
+                if (!it.isTrezorUserCancellation()) {
                     trezorRepo.disconnectStaleSession(deviceId)
                 }
+                throw it
             }
-            val txId = trezorRepo.broadcastRawTx(serializedTx = signed.getOrThrow().serializedTx).getOrThrow()
-            HwFundingBroadcastResult(
-                txId = txId,
+            HwFundingSignedTx(
+                serializedTx = signedTx.serializedTx,
                 miningFeeSats = funding.miningFeeSats,
                 feeRate = ceil(funding.feeRate.toDouble()).toULong(),
                 totalSpent = funding.totalSpent,
+            )
+        }
+    }
+
+    /** Broadcasts a signed funding payment without requiring the hardware device. */
+    suspend fun broadcastFunding(
+        signedTx: HwFundingSignedTx,
+    ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val txId = trezorRepo.broadcastRawTx(serializedTx = signedTx.serializedTx).getOrThrow()
+            HwFundingBroadcastResult(
+                txId = txId,
+                miningFeeSats = signedTx.miningFeeSats,
+                feeRate = signedTx.feeRate,
+                totalSpent = signedTx.totalSpent,
             )
         }
     }

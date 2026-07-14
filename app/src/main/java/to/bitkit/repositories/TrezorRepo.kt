@@ -35,10 +35,10 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -52,16 +52,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.isTrezorDeviceBusy
+import to.bitkit.ext.isTrezorFirmwareError
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toTransportType
 import to.bitkit.models.ALL_ADDRESS_TYPES
+import to.bitkit.models.HwWalletId
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.toAccountDerivationPath
@@ -77,7 +80,6 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.TrezorErrorPresenter
 import java.io.File
-import to.bitkit.models.HwWalletId
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -151,6 +153,9 @@ class TrezorRepo @Inject constructor(
      * UI should show a dialog when this emits true.
      */
     val needsPairingCode = trezorTransport.needsPairingCode
+
+    /** Identity of the active pairing-code request; changes for every transport callback. */
+    val pairingCodeRequestId = trezorTransport.pairingCodeRequestId
 
     /**
      * Submit the pairing code entered by the user.
@@ -502,7 +507,7 @@ class TrezorRepo @Inject constructor(
         psbtBase64: String,
         network: TrezorCoinType?,
     ): Result<TrezorSignedTx> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             ensureConnected()
             val response = trezorService.signTxFromPsbt(psbtBase64, network)
             _state.update { it.copy(error = null) }
@@ -516,7 +521,7 @@ class TrezorRepo @Inject constructor(
     suspend fun broadcastRawTx(
         serializedTx: String,
     ): Result<String> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             awaitSetup()
             trezorService.broadcastRawTx(
                 serializedTx = serializedTx,
@@ -716,12 +721,36 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun ensureConnected(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
-        awaitConnectedOrNull(deviceId)?.let { return@withContext Result.success(it) }
-        if (isKnownBluetoothDevice(deviceId)) {
-            return@withContext reconnectKnownBluetoothDevice(deviceId)
+        val result = awaitConnectedOrNull(deviceId)?.let { refreshLockedFeatures(deviceId, it) } ?: run {
+            if (isKnownBluetoothDevice(deviceId)) {
+                reconnectKnownBluetoothDevice(deviceId)
+            } else {
+                connectKnownDevice(deviceId, forceSession = true)
+            }
         }
-        connectKnownDevice(deviceId, forceSession = true)
+        result.requireUnlocked()
     }
+
+    private suspend fun refreshLockedFeatures(
+        deviceId: String,
+        features: TrezorFeatures,
+    ): Result<TrezorFeatures> {
+        if (features.pinProtection != true || features.unlocked != false) return Result.success(features)
+        return runSuspendCatching { trezorService.refreshFeatures() }.onSuccess {
+            _state.update { state -> state.copy(connected = ConnectedTrezorDevice(id = deviceId, features = it)) }
+        }
+    }
+
+    private fun Result<TrezorFeatures>.requireUnlocked(): Result<TrezorFeatures> = fold(
+        onSuccess = {
+            if (it.pinProtection == true && it.unlocked == false) {
+                Result.failure(TrezorException.DeviceBusy())
+            } else {
+                Result.success(it)
+            }
+        },
+        onFailure = { Result.failure(it) },
+    )
 
     /**
      * BLE Trezors often need a few seconds to advertise again after unlock, so retry
@@ -876,8 +905,7 @@ class TrezorRepo @Inject constructor(
                 gapLimit = gapLimit,
             )
             trezorService.startWatcher(params, eventBridge)
-            TrezorDebugLog.log(WATCHER_TAG, "Started watcher '$watcherId' for '${extendedKey.take(12)}...'")
-            Logger.info("Started watcher '$watcherId'", context = TAG)
+            TrezorDebugLog.log(WATCHER_TAG, "Started watcher '$watcherId'")
         }.onFailure {
             Logger.error("Start watcher failed", it, context = TAG)
             _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
@@ -889,7 +917,6 @@ class TrezorRepo @Inject constructor(
             awaitSetup()
             trezorService.stopWatcher(watcherId)
             TrezorDebugLog.log(WATCHER_TAG, "Stopped watcher '$watcherId'")
-            Logger.info("Stopped watcher '$watcherId'", context = TAG)
         }.onFailure {
             Logger.error("Stop watcher failed", it, context = TAG)
             _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
@@ -1191,20 +1218,22 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun disconnectStaleSession(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
-        val connectedId = _state.value.connected?.id
-        if (connectedId != null && connectedId != deviceId) {
-            return@withContext Result.success(Unit)
-        }
-        val result = runSuspendCatching {
-            trezorService.disconnect()
-            disconnectTransportDevice(deviceId)
-        }
-            .onFailure {
-                Logger.warn("Failed to disconnect stale Trezor session for '$deviceId'", it, context = TAG)
+    suspend fun disconnectStaleSession(deviceId: String): Result<Unit> = withContext(NonCancellable) {
+        withContext(ioDispatcher) {
+            val connectedId = _state.value.connected?.id
+            if (connectedId != null && connectedId != deviceId) {
+                return@withContext Result.success(Unit)
             }
-        _state.update { it.copy(connected = null) }
-        result
+            val result = runSuspendCatching {
+                trezorService.disconnect()
+                disconnectTransportDevice(deviceId)
+            }
+                .onFailure {
+                    Logger.warn("Failed to disconnect stale Trezor session for '$deviceId'", it, context = TAG)
+                }
+            _state.update { it.copy(connected = null) }
+            result
+        }
     }
 
     private suspend fun disconnectTransportDevice(deviceId: String) {
@@ -1234,7 +1263,7 @@ class TrezorRepo @Inject constructor(
     }
 
     private fun trezorErrorMessage(error: Throwable): String? =
-        if (error.isTrezorDeviceBusy()) {
+        if (error.isTrezorDeviceBusy() || error.isTrezorFirmwareError()) {
             TrezorErrorPresenter.userMessage(context, error)
         } else {
             error.message

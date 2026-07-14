@@ -43,6 +43,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import to.bitkit.ext.bluetoothManager
+import to.bitkit.ext.nowMs
 import to.bitkit.ext.usbManager
 import to.bitkit.models.TransportType
 import to.bitkit.utils.Logger
@@ -54,6 +55,8 @@ import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 /**
  * Transport callback implementation for Trezor communication.
@@ -64,10 +67,12 @@ import javax.inject.Singleton
  * USB communication uses 64-byte chunks, Bluetooth uses 244-byte chunks.
  */
 @Suppress("LargeClass")
+@OptIn(ExperimentalTime::class)
 @Singleton
 class TrezorTransport @Inject constructor(
     @ApplicationContext private val context: Context,
     private val bridgeTransport: TrezorBridgeTransport,
+    private val clock: Clock,
 ) : TrezorTransportCallback {
 
     companion object {
@@ -94,6 +99,7 @@ class TrezorTransport @Inject constructor(
         private const val SCAN_DURATION_MS = 3000L
         private const val CONNECTION_TIMEOUT_MS = 10000L
         private const val BLE_READ_TIMEOUT_MS = 5000L
+        private const val BLE_READ_POLL_INTERVAL_MS = 100L
         private const val DISCONNECT_TIMEOUT_MS = 3000L
         private const val PAIRING_CODE_TIMEOUT_MS = 120000L // 2 minutes to enter code
 
@@ -180,7 +186,15 @@ class TrezorTransport @Inject constructor(
     private val connectionStateReceiver = ConnectionStateReceiver(
         onBluetoothOff = {
             bleConnections.keys.toList().forEach { path ->
-                bleConnections[path]?.isConnected = false
+                bleConnections[path]?.let {
+                    it.isConnected = false
+                    it.writeStatus = BluetoothGatt.GATT_FAILURE
+                    releasePendingBleOperations(
+                        connectionLatch = it.connectionLatch,
+                        writeLatch = it.writeLatch,
+                        disconnectLatch = it.disconnectLatch,
+                    )
+                }
                 emitExternalDisconnect(path)
             }
         },
@@ -382,8 +396,6 @@ class TrezorTransport @Inject constructor(
 
     override fun getPairingCode(): String {
         TrezorDebugLog.log("PAIR", ">>> PAIRING CODE REQUESTED - Device requires re-pairing! <<<")
-        Logger.info("Requested pairing code from user", context = TAG)
-        Logger.info("Asked user to read the 6-digit code from Trezor screen", context = TAG)
 
         val latch = CountDownLatch(1)
 
@@ -391,6 +403,8 @@ class TrezorTransport @Inject constructor(
             pairingCodeResult = null
             pairingCodeRequest = PairingCodeRequest(isRequested = true, latch = latch)
             _needsPairingCode.update { true }
+            val requestId = nextPairingCodeRequestId++
+            _pairingCodeRequestId.update { requestId }
         }
 
         val result = try {
@@ -459,6 +473,7 @@ class TrezorTransport @Inject constructor(
         pairingCodeRequest = PairingCodeRequest()
         pairingCodeResult = null
         _needsPairingCode.update { false }
+        _pairingCodeRequestId.update { null }
     }
 
     /**
@@ -467,6 +482,10 @@ class TrezorTransport @Inject constructor(
      */
     private val _needsPairingCode = MutableStateFlow(false)
     val needsPairingCode: StateFlow<Boolean> = _needsPairingCode
+
+    private var nextPairingCodeRequestId = 1L
+    private val _pairingCodeRequestId = MutableStateFlow<Long?>(null)
+    val pairingCodeRequestId: StateFlow<Long?> = _pairingCodeRequestId
 
     /**
      * Submit a pairing code from the UI.
@@ -674,13 +693,17 @@ class TrezorTransport @Inject constructor(
         return UsbEndpoints(read = readEndpoint, write = writeEndpoint)
     }
 
-    @Suppress("TooGenericExceptionCaught", "ReturnCount")
+    @Suppress("TooGenericExceptionCaught", "LongMethod", "ReturnCount")
     private fun openUsbDevice(path: String): TrezorTransportWriteResult {
         return try {
             closeUsbDevice(path)
 
             val device = usbManager.deviceList[path]
-                ?: return TrezorTransportWriteResult(success = false, error = "Device not found: $path", errorCode = null)
+                ?: return TrezorTransportWriteResult(
+                    success = false,
+                    error = "Device not found: $path",
+                    errorCode = null,
+                )
 
             if (!usbManager.hasPermission(device)) {
                 if (!requestUsbPermissionEnabled) {
@@ -701,12 +724,20 @@ class TrezorTransport @Inject constructor(
             }
 
             val connection = usbManager.openDevice(device)
-                ?: return TrezorTransportWriteResult(success = false, error = "Failed to open device: $path", errorCode = null)
+                ?: return TrezorTransportWriteResult(
+                    success = false,
+                    error = "Failed to open device: $path",
+                    errorCode = null,
+                )
 
             val usbInterface = device.getInterface(0)
             if (!connection.claimInterface(usbInterface, true)) {
                 connection.close()
-                return TrezorTransportWriteResult(success = false, error = "Failed to claim interface", errorCode = null)
+                return TrezorTransportWriteResult(
+                    success = false,
+                    error = "Failed to claim interface",
+                    errorCode = null,
+                )
             }
 
             val endpoints = findUsbEndpoints(usbInterface)
@@ -785,7 +816,12 @@ class TrezorTransport @Inject constructor(
             TrezorTransportReadResult(success = true, data = buffer.copyOf(bytesRead), error = "", errorCode = null)
         } catch (e: Exception) {
             Logger.error("USB read failed", e, context = TAG)
-            TrezorTransportReadResult(success = false, data = byteArrayOf(), error = e.message ?: "Unknown error", errorCode = null)
+            TrezorTransportReadResult(
+                success = false,
+                data = byteArrayOf(),
+                error = e.message ?: "Unknown error",
+                errorCode = null,
+            )
         }
     }
 
@@ -793,7 +829,11 @@ class TrezorTransport @Inject constructor(
     private fun writeUsbChunk(path: String, data: ByteArray): TrezorTransportWriteResult {
         return try {
             val openDevice = usbConnections[path]
-                ?: return TrezorTransportWriteResult(success = false, error = "Device not open: $path", errorCode = null)
+                ?: return TrezorTransportWriteResult(
+                    success = false,
+                    error = "Device not open: $path",
+                    errorCode = null,
+                )
 
             val bytesWritten = openDevice.connection.bulkTransfer(
                 openDevice.writeEndpoint,
@@ -875,14 +915,22 @@ class TrezorTransport @Inject constructor(
         if (device.bondState == BluetoothDevice.BOND_NONE) {
             Logger.info("Device not bonded, initiating bonding: '$address'", context = TAG)
             if (!device.createBond()) {
-                return TrezorTransportWriteResult(success = false, error = "Failed to initiate bonding", errorCode = null)
+                return TrezorTransportWriteResult(
+                    success = false,
+                    error = "Failed to initiate bonding",
+                    errorCode = null,
+                )
             }
             var bondAttempts = 0
             while (device.bondState != BluetoothDevice.BOND_BONDED && bondAttempts < MAX_BOND_POLL_ATTEMPTS) {
                 Thread.sleep(BOND_POLL_INTERVAL_MS)
                 bondAttempts++
                 if (device.bondState == BluetoothDevice.BOND_NONE) {
-                    return TrezorTransportWriteResult(success = false, error = "Bonding failed or rejected", errorCode = null)
+                    return TrezorTransportWriteResult(
+                        success = false,
+                        error = "Bonding failed or rejected",
+                        errorCode = null,
+                    )
                 }
             }
             if (device.bondState != BluetoothDevice.BOND_BONDED) {
@@ -976,8 +1024,11 @@ class TrezorTransport @Inject constructor(
             ?: return TrezorTransportWriteResult(success = true, error = "", errorCode = null)
 
         connection.readQueue.clear()
-        connection.writeLatch?.countDown()
-        connection.connectionLatch?.countDown()
+        releasePendingBleOperations(
+            connectionLatch = connection.connectionLatch,
+            writeLatch = connection.writeLatch,
+            disconnectLatch = connection.disconnectLatch,
+        )
         Logger.info("Closed BLE device session '$path'", context = TAG)
         return TrezorTransportWriteResult(success = true, error = "", errorCode = null)
     }
@@ -991,7 +1042,7 @@ class TrezorTransport @Inject constructor(
         userInitiatedCloseSet.add(path)
         return try {
             val disconnectLatch = CountDownLatch(1)
-            bleConnections[path] = connection.copy(disconnectLatch = disconnectLatch)
+            connection.disconnectLatch = disconnectLatch
 
             connection.gatt.disconnect()
 
@@ -1025,19 +1076,39 @@ class TrezorTransport @Inject constructor(
             )
 
         return try {
-            val data = connection.readQueue.poll(BLE_READ_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-                ?: return TrezorTransportReadResult(
-                    success = false,
-                    data = byteArrayOf(),
-                    error = "Read timeout",
-                    errorCode = null,
-                )
-
-            Logger.debug("BLE read ${data.size} bytes from '$path'", context = TAG)
-            TrezorTransportReadResult(success = true, data = data, error = "", errorCode = null)
+            val deadlineMs = clock.nowMs() + BLE_READ_TIMEOUT_MS
+            while (clock.nowMs() < deadlineMs) {
+                if (!connection.isConnected) {
+                    return TrezorTransportReadResult(
+                        success = false,
+                        data = byteArrayOf(),
+                        error = "BLE disconnected",
+                        errorCode = null,
+                    )
+                }
+                val remainingMs = deadlineMs - clock.nowMs()
+                if (remainingMs <= 0) break
+                val pollMs = minOf(BLE_READ_POLL_INTERVAL_MS, remainingMs)
+                val data = connection.readQueue.poll(pollMs, TimeUnit.MILLISECONDS)
+                if (data != null) {
+                    Logger.debug("BLE read ${data.size} bytes from '$path'", context = TAG)
+                    return TrezorTransportReadResult(success = true, data = data, error = "", errorCode = null)
+                }
+            }
+            TrezorTransportReadResult(
+                success = false,
+                data = byteArrayOf(),
+                error = "Read timeout",
+                errorCode = null,
+            )
         } catch (e: Exception) {
             Logger.error("BLE read failed", e, context = TAG)
-            TrezorTransportReadResult(success = false, data = byteArrayOf(), error = e.message ?: "Read failed", errorCode = null)
+            TrezorTransportReadResult(
+                success = false,
+                data = byteArrayOf(),
+                error = e.message ?: "Read failed",
+                errorCode = null,
+            )
         }
     }
 
@@ -1055,7 +1126,11 @@ class TrezorTransport @Inject constructor(
             ?: return TrezorTransportWriteResult(success = false, error = "Device not open: $path", errorCode = null)
 
         val writeChar = connection.writeCharacteristic
-            ?: return TrezorTransportWriteResult(success = false, error = "Write characteristic not available", errorCode = null)
+            ?: return TrezorTransportWriteResult(
+                success = false,
+                error = "Write characteristic not available",
+                errorCode = null,
+            )
 
         if (!connection.isConnected) {
             Logger.warn("BLE write attempted on disconnected device: '$path'", context = TAG)
@@ -1360,4 +1435,14 @@ class TrezorTransport @Inject constructor(
         usbConnections.keys.toList().forEach { path -> closeUsbDevice(path) }
         bleConnections.keys.toList().forEach { path -> disconnectBleDevice(path) }
     }
+}
+
+internal fun releasePendingBleOperations(
+    connectionLatch: CountDownLatch?,
+    writeLatch: CountDownLatch?,
+    disconnectLatch: CountDownLatch?,
+) {
+    connectionLatch?.countDown()
+    writeLatch?.countDown()
+    disconnectLatch?.countDown()
 }

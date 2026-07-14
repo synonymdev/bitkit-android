@@ -28,6 +28,13 @@ class TrezorErrorPresenterTest {
     }
 
     @Test
+    fun `userMessage maps firmware error response to connect guidance`() {
+        val message = TrezorErrorPresenter.userMessage(context, AppError("Device error (code 99): Firmware error"))
+
+        assertEquals(connectErrorMessage, message)
+    }
+
+    @Test
     fun `userMessage returns error message when present`() {
         assertEquals("connect failed", TrezorErrorPresenter.userMessage(context, AppError("connect failed")))
     }

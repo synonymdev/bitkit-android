@@ -34,7 +34,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
 
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val context = mock<Context>()
-    private val needsPairingCode = MutableStateFlow(false)
+    private val pairingCodeRequestId = MutableStateFlow<Long?>(null)
     private val wallets = MutableStateFlow<ImmutableList<HwWallet>>(persistentListOf())
     private val deviceState = MutableStateFlow(TrezorState())
 
@@ -42,7 +42,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        whenever(hwWalletRepo.needsPairingCode).thenReturn(needsPairingCode)
+        whenever(hwWalletRepo.pairingCodeRequestId).thenReturn(pairingCodeRequestId)
         whenever(hwWalletRepo.wallets).thenReturn(wallets)
         whenever(hwWalletRepo.deviceState).thenReturn(deviceState)
         whenever(context.getString(R.string.hardware__connect_error)).thenReturn(CONNECT_ERROR)
@@ -225,8 +225,19 @@ class HwConnectViewModelTest : BaseUnitTest() {
     @Test
     fun `pairing code request surfaces the inline pair code step`() = test {
         sut.effects.test {
-            needsPairingCode.value = true
-            assertEquals(HwConnectEffect.NavigateToPairCode, awaitItem())
+            pairingCodeRequestId.value = 1L
+            assertEquals(HwConnectEffect.NavigateToPairCode(1L), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `repeated pairing code request emits a new inline pair code step`() = test {
+        sut.effects.test {
+            pairingCodeRequestId.value = 1L
+            assertEquals(HwConnectEffect.NavigateToPairCode(1L), awaitItem())
+            pairingCodeRequestId.value = 2L
+            assertEquals(HwConnectEffect.NavigateToPairCode(2L), awaitItem())
             cancelAndIgnoreRemainingEvents()
         }
     }

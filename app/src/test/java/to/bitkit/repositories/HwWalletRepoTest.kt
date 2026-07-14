@@ -5,8 +5,8 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
-import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorException
+import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.WalletBalance
 import com.synonym.bitkitcore.WatcherEvent
@@ -33,13 +33,14 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.ext.create
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toTrezorCoinType
-import to.bitkit.ext.create
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
@@ -500,7 +501,10 @@ class HwWalletRepoTest : BaseUnitTest() {
         advanceTimeBy(30.seconds)
         runCurrent()
 
-        verify(trezorRepo, times(2)).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
+        verify(
+            trezorRepo,
+            times(2)
+        ).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -649,7 +653,10 @@ class HwWalletRepoTest : BaseUnitTest() {
         val sut = createRepo()
 
         verify(trezorRepo).startWatcher(eq("ble1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
-        verify(trezorRepo, never()).startWatcher(eq("usb1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
+        verify(
+            trezorRepo,
+            never()
+        ).startWatcher(eq("usb1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
 
         watcherEvents.emit(
             "ble1|nativeSegwit" to WatcherEvent.TransactionsChanged(
@@ -945,11 +952,11 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `signAndBroadcastFunding returns txid and composed fee data`() = test {
+    fun `signFunding returns signed transaction and composed fee data`() = test {
         val signedTx = TrezorSignedTx(
             signatures = emptyList(),
             serializedTx = "rawtx",
-            txid = "signed-txid",
+            txid = null,
         )
         val funding = HwFundingTransaction(
             psbt = "psbt",
@@ -960,20 +967,58 @@ class HwWalletRepoTest : BaseUnitTest() {
         )
         whenever(trezorRepo.signTxFromPsbt("psbt", Env.network.toTrezorCoinType()))
             .thenReturn(Result.success(signedTx))
+        val sut = createRepo()
+
+        val result = sut.signFunding("dev1", funding)
+
+        assertEquals(true, result.isSuccess)
+        assertEquals("rawtx", result.getOrThrow().serializedTx)
+        assertEquals(1_250uL, result.getOrThrow().miningFeeSats)
+        assertEquals(3uL, result.getOrThrow().feeRate)
+        assertEquals(26_250uL, result.getOrThrow().totalSpent)
+        verify(trezorRepo, never()).broadcastRawTx(any())
+    }
+
+    @Test
+    fun `broadcastFunding returns txid and signed fee data`() = test {
+        val signedTx = HwFundingSignedTx(
+            serializedTx = "rawtx",
+            miningFeeSats = 1_250uL,
+            feeRate = 3uL,
+            totalSpent = 26_250uL,
+        )
         whenever(trezorRepo.broadcastRawTx("rawtx")).thenReturn(Result.success("broadcast-txid"))
         val sut = createRepo()
 
-        val result = sut.signAndBroadcastFunding("dev1", funding)
+        val result = sut.broadcastFunding(signedTx)
 
         assertEquals(true, result.isSuccess)
         assertEquals("broadcast-txid", result.getOrThrow().txId)
         assertEquals(1_250uL, result.getOrThrow().miningFeeSats)
         assertEquals(3uL, result.getOrThrow().feeRate)
         assertEquals(26_250uL, result.getOrThrow().totalSpent)
+        verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
     }
 
     @Test
-    fun `signAndBroadcastFunding disconnects stale session when sign fails`() = test {
+    fun `broadcastFunding returns core-derived txid when transaction is already known`() = test {
+        val signedTx = HwFundingSignedTx(
+            serializedTx = "rawtx",
+            miningFeeSats = 1_250uL,
+            feeRate = 3uL,
+            totalSpent = 26_250uL,
+        )
+        whenever(trezorRepo.broadcastRawTx("rawtx"))
+            .thenReturn(Result.success("core-derived-txid"))
+        val sut = createRepo()
+
+        val result = sut.broadcastFunding(signedTx)
+
+        assertEquals("core-derived-txid", result.getOrThrow().txId)
+    }
+
+    @Test
+    fun `signFunding disconnects stale session when sign fails`() = test {
         val funding = HwFundingTransaction(
             psbt = "psbt",
             miningFeeSats = 1_250uL,
@@ -986,7 +1031,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(trezorRepo.disconnectStaleSession("dev1")).thenReturn(Result.success(Unit))
         val sut = createRepo()
 
-        val result = sut.signAndBroadcastFunding("dev1", funding)
+        val result = sut.signFunding("dev1", funding)
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo).disconnectStaleSession("dev1")
@@ -994,7 +1039,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `signAndBroadcastFunding keeps session when user cancels on device`() = test {
+    fun `signFunding keeps session when user cancels on device`() = test {
         val funding = HwFundingTransaction(
             psbt = "psbt",
             miningFeeSats = 1_250uL,
@@ -1006,7 +1051,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             .thenReturn(Result.failure(TrezorException.UserCancelled()))
         val sut = createRepo()
 
-        val result = sut.signAndBroadcastFunding("dev1", funding)
+        val result = sut.signFunding("dev1", funding)
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo, never()).disconnectStaleSession(any())
@@ -1074,7 +1119,6 @@ class HwWalletRepoTest : BaseUnitTest() {
             confirmed = blockHeight != null && confirmations > 0u,
         )
     )
-
 
     @Test
     fun `scan delegates to trezorRepo`() = test {

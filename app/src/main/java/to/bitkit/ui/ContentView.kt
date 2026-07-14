@@ -216,6 +216,7 @@ import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SettingsViewModel
+import to.bitkit.viewmodels.TransferEffect
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -646,6 +647,13 @@ private fun RootNavHost(
     onHomeCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        transferViewModel.transferEffects.collect { effect ->
+            if (effect is TransferEffect.OnHwTxSigned) {
+                navController.navigateTo(Routes.SpendingHwSigned)
+            }
+        }
+    }
 
     NavHost(navController, startDestination = Routes.Home) {
         home(
@@ -804,7 +812,6 @@ private fun RootNavHost(
                     onCloseClick = { navController.navigateToHome() },
                     onLearnMoreClick = { navController.navigateTo(Routes.TransferLiquidity) },
                     onAdvancedClick = { navController.navigateTo(Routes.SpendingAdvanced) },
-                    onSigned = { navController.navigateTo(Routes.SpendingHwSigned) },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingHwSigned> {

@@ -19,7 +19,7 @@ alwaysApply: true
 - use official kotlin code guide
 - always use trailing commas in parameters list, except after modifiers parameter
 - when invoking any composable function, always pass the modifier argument last in the call, sse named parameters if needed to ensure this order, and omit trailing commas after it.
-- never modify `strings.xml`
+- English source copy may be updated in `app/src/main/res/values/strings.xml`; never edit localized `values-*/strings.xml` files directly
 - always keep compose preview at end of file
 - split screen composables into stateful wrapper parent and stateless child which can be rendered in the previews.
 - wrap previews in `AppThemeSurface` composable, and name them simple, like `Preview`, `Preview2`.

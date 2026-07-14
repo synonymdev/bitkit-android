@@ -40,6 +40,7 @@ import com.synonym.bitkitcore.trezorInitialize
 import com.synonym.bitkitcore.trezorIsConnected
 import com.synonym.bitkitcore.trezorIsInitialized
 import com.synonym.bitkitcore.trezorListDevices
+import com.synonym.bitkitcore.trezorRefreshFeatures
 import com.synonym.bitkitcore.trezorScan
 import com.synonym.bitkitcore.trezorSetTransportCallback
 import com.synonym.bitkitcore.trezorSetUiCallback
@@ -123,6 +124,12 @@ class TrezorService @Inject constructor(
     suspend fun isConnected(): Boolean {
         return ServiceQueue.CORE.background {
             trezorIsConnected()
+        }
+    }
+
+    suspend fun refreshFeatures(): TrezorFeatures {
+        return ServiceQueue.CORE.background {
+            trezorRefreshFeatures()
         }
     }
 

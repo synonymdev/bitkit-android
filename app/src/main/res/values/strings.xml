@@ -167,7 +167,7 @@
     <string name="hardware__bluetooth_permission_settings">Open Settings</string>
     <string name="hardware__bluetooth_permission_text">Bitkit needs the nearby-devices (Bluetooth) permission to find your hardware wallet. Enable it in Settings, then try again.</string>
     <string name="hardware__bluetooth_permission_title">Bluetooth access needed</string>
-    <string name="hardware__connect_error">Could not connect to your Trezor. Check that it is unlocked and try again.</string>
+    <string name="hardware__connect_error">Could not connect to your hardware device. Make sure it is unlocked, nearby, and not connected to another phone or computer, then try again.</string>
     <string name="hardware__connect_header">Searching for &lt;accent&gt;devices&lt;/accent&gt;</string>
     <string name="hardware__connect_text">Please connect your hardware wallet now via USB or Bluetooth.</string>
     <string name="hardware__connect_title">Connect Device</string>
