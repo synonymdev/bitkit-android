@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.nfc.NfcAdapter
 import androidx.core.net.toUri
 import app.cash.turbine.test
 import com.synonym.bitkitcore.LightningInvoice
@@ -495,6 +496,22 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(lightningRepo).setRecoveryMode(true)
+    }
+
+    @Test
+    fun `deeplink from NFC tag tap is processed`() = test {
+        sut.handleDeeplinkIntent(recoveryModeIntent(action = NfcAdapter.ACTION_NDEF_DISCOVERED))
+        advanceUntilIdle()
+
+        verify(lightningRepo).setRecoveryMode(true)
+    }
+
+    @Test
+    fun `intent without deeplink action is ignored`() = test {
+        sut.handleDeeplinkIntent(recoveryModeIntent(action = Intent.ACTION_MAIN))
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).setRecoveryMode(any())
     }
 
     @Test
@@ -1400,7 +1417,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         return URLEncoder.encode(this, StandardCharsets.UTF_8.name()).replace("+", "%20")
     }
 
-    private fun recoveryModeIntent(): Intent {
+    private fun recoveryModeIntent(action: String = Intent.ACTION_VIEW): Intent {
         val uri = mock<Uri> {
             on { toString() }.thenReturn("bitkit://recovery-mode")
             on { scheme }.thenReturn("bitkit")
@@ -1408,7 +1425,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             on { pathSegments }.thenReturn(emptyList())
         }
         return mock {
-            on { action }.thenReturn(Intent.ACTION_VIEW)
+            on { this.action }.thenReturn(action)
             on { data }.thenReturn(uri)
         }
     }
