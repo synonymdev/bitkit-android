@@ -47,7 +47,15 @@ class ProbingToolViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.sendProbeForNode(nodeId, 42uL))
             .thenReturn(Result.success(ProbeDispatch(paymentIds = setOf(paymentId))))
         whenever(lightningRepo.waitForProbeOutcome(setOf(paymentId)))
-            .thenReturn(Result.success(ProbeOutcome.Success(paymentId = paymentId, paymentHash = paymentHash)))
+            .thenReturn(
+                Result.success(
+                    ProbeOutcome.Success(
+                        paymentId = paymentId,
+                        paymentHash = paymentHash,
+                        routeFeeMsat = null,
+                    )
+                )
+            )
 
         sut.updateInvoice(nodeUri)
         sut.updateAmountSats("42")

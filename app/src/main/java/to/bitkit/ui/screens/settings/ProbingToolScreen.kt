@@ -186,11 +186,11 @@ private fun ProbingToolContent(
                             iconRes = R.drawable.ic_clock,
                             value = "${result.durationMs} ms",
                         )
-                        result.estimatedFeeSats?.let { fee ->
+                        result.routeFeeMsat?.let { fee ->
                             SettingsTextButtonRow(
-                                title = "Estimated Fee",
+                                title = "Route Fee",
                                 iconRes = R.drawable.ic_coins,
-                                value = "$fee sats",
+                                value = "$fee msat",
                             )
                         }
                         result.errorMessage?.let { error ->
@@ -216,7 +216,7 @@ private fun Preview() {
                 probeResult = ProbeResult(
                     success = true,
                     durationMs = 342,
-                    estimatedFeeSats = 5uL,
+                    routeFeeMsat = 5_000uL,
                 ),
             )
         )

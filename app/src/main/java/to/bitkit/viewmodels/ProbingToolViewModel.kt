@@ -161,7 +161,7 @@ class ProbingToolViewModel @Inject constructor(
                 dispatch
                     .onSuccess { probe ->
                         lightningRepo.waitForProbeOutcome(probe.paymentIds)
-                            .onSuccess { handleProbeOutcome(startTime, it, bolt11, amountSats) }
+                            .onSuccess { handleProbeOutcome(startTime, it) }
                             .onFailure { handleProbeFailure(startTime, it) }
                     }
                     .onFailure { handleProbeFailure(startTime, it) }
@@ -257,8 +257,6 @@ class ProbingToolViewModel @Inject constructor(
     private suspend fun handleProbeOutcome(
         startTime: Long,
         outcome: ProbeOutcome,
-        invoice: String?,
-        amountSats: ULong?,
     ) {
         val durationMs = Clock.System.nowMs() - startTime
         when (outcome) {
@@ -268,13 +266,12 @@ class ProbingToolViewModel @Inject constructor(
                     context = TAG,
                 )
 
-                val estimatedFee = invoice?.let { getEstimatedFee(it, amountSats) }
                 _uiState.update {
                     it.copy(
                         probeResult = ProbeResult(
                             success = true,
                             durationMs = durationMs,
-                            estimatedFeeSats = estimatedFee,
+                            routeFeeMsat = outcome.routeFeeMsat,
                         )
                     )
                 }
@@ -294,6 +291,7 @@ class ProbingToolViewModel @Inject constructor(
                         probeResult = ProbeResult(
                             success = false,
                             durationMs = durationMs,
+                            routeFeeMsat = outcome.routeFeeMsat,
                             errorMessage = message,
                         )
                     )
@@ -379,6 +377,6 @@ data class ProbingToolUiState(
 data class ProbeResult(
     val success: Boolean,
     val durationMs: Long,
-    val estimatedFeeSats: ULong? = null,
+    val routeFeeMsat: ULong? = null,
     val errorMessage: String? = null,
 )
