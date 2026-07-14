@@ -215,7 +215,7 @@ private sealed interface DevResult {
         val message: String? = null,
         val paymentId: String? = null,
         val paymentHash: String? = null,
-        val shortChannelId: ULong? = null,
+        val shortChannelId: String? = null,
         val paymentIds: List<String> = emptyList(),
     ) : DevResult {
         companion object {
