@@ -891,7 +891,6 @@
     <string name="settings__general__unit_title">Default Unit</string>
     <string name="settings__general_title">General</string>
     <string name="settings__hardware_wallets__add_button">Add Hardware Wallet</string>
-    <string name="settings__hardware_wallets__empty_text">Pair a hardware device to watch its balance and activity in Bitkit.</string>
     <string name="settings__hardware_wallets__name_label">Name</string>
     <string name="settings__hardware_wallets__nav_title">Hardware Wallets</string>
     <string name="settings__hardware_wallets__rename_title">Rename Hardware Wallet</string>
