@@ -36,6 +36,7 @@ import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.models.safe
 import to.bitkit.viewmodels.TransferViewModel
 
 @Composable
@@ -54,8 +55,9 @@ fun SpendingHwSignScreen(
         return
     }
 
-    LaunchedEffect(deviceId) {
+    LaunchedEffect(deviceId, order.id) {
         viewModel.warmUpHardwareConnection(deviceId)
+        viewModel.updateHwFundingFeeEstimate(order, deviceId)
     }
 
     DisposableEffect(viewModel) {
@@ -64,6 +66,7 @@ fun SpendingHwSignScreen(
 
     Content(
         order = order,
+        miningFeeSats = state.hwMiningFeeSats,
         isAdvanced = state.isAdvanced,
         isSigning = state.isSigning,
         hasPendingBroadcast = state.hasPendingHwBroadcast,
@@ -78,6 +81,7 @@ fun SpendingHwSignScreen(
 @Composable
 private fun Content(
     order: IBtOrder,
+    miningFeeSats: ULong = 0uL,
     isAdvanced: Boolean = false,
     isSigning: Boolean = false,
     hasPendingBroadcast: Boolean = false,
@@ -119,7 +123,10 @@ private fun Content(
                 )
                 VerticalSpacer(16.dp)
 
-                SpendingHwFeeGrid(order = order)
+                SpendingHwFeeGrid(
+                    order = order,
+                    miningFeeSats = miningFeeSats,
+                )
 
                 VerticalSpacer(24.dp)
 
@@ -170,8 +177,12 @@ private fun Content(
 @Composable
 internal fun SpendingHwFeeGrid(
     order: IBtOrder,
+    miningFeeSats: ULong = 0uL,
     modifier: Modifier = Modifier,
 ) {
+    val lspFee = order.feeSat.safe() - order.clientBalanceSat.safe()
+    val total = order.feeSat.safe() + miningFeeSats.safe()
+
     Column(modifier = modifier) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -179,11 +190,11 @@ internal fun SpendingHwFeeGrid(
         ) {
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__network_fee),
-                amount = order.networkFeeSat.toLong(),
+                amount = miningFeeSats.toLong(),
             )
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__lsp_fee),
-                amount = order.serviceFeeSat.toLong(),
+                amount = lspFee.toLong(),
             )
         }
         Row(
@@ -196,9 +207,25 @@ internal fun SpendingHwFeeGrid(
             )
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__total),
-                amount = order.feeSat.toLong(),
+                amount = total.toLong(),
             )
         }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewWithMiningFee() {
+    AppThemeSurface {
+        Content(
+            order = previewBtOrder(
+                networkFeeSat = 528uL,
+                serviceFeeSat = 132uL,
+                clientBalanceSat = 7_042uL,
+                feeSat = 7_402uL,
+            ),
+            miningFeeSats = 141uL,
+        )
     }
 }
 

@@ -198,6 +198,7 @@ class TransferViewModel @Inject constructor(
                         order = newOrder,
                         defaultOrder = oldOrder,
                         isAdvanced = true,
+                        hwMiningFeeSats = 0uL,
                     )
                 }
                 setTransferEffect(TransferEffect.OnOrderCreated)
@@ -399,6 +400,7 @@ class TransferViewModel @Inject constructor(
                 isAdvanced = false,
                 defaultOrder = null,
                 hasPendingHwBroadcast = false,
+                hwMiningFeeSats = 0uL,
             )
         }
         setTransferEffect(TransferEffect.OnOrderCreated)
@@ -502,6 +504,7 @@ class TransferViewModel @Inject constructor(
                 order = defaultOrder,
                 defaultOrder = null,
                 isAdvanced = false,
+                hwMiningFeeSats = 0uL,
             )
         }
     }
@@ -564,6 +567,32 @@ class TransferViewModel @Inject constructor(
         hwWalletRepo.warmUpKnownDevice(deviceId)
     }
 
+    /** Best-effort offline mining-fee estimate for the Sign screen (xpub compose, no device session). */
+    fun updateHwFundingFeeEstimate(order: IBtOrder, deviceId: String) {
+        viewModelScope.launch {
+            if (_spendingUiState.value.hasPendingHwBroadcast) return@launch
+            val address = order.payment?.onchain?.address.orEmpty()
+            if (address.isEmpty()) return@launch
+
+            runSuspendCatching {
+                val satsPerVByte = hwFundingSatsPerVByte()
+                hwWalletRepo.composeFundingTransaction(
+                    deviceId = deviceId,
+                    address = address,
+                    sats = order.feeSat,
+                    satsPerVByte = satsPerVByte,
+                ).getOrThrow().miningFeeSats
+            }.onSuccess { miningFeeSats ->
+                _spendingUiState.update { it.copy(hwMiningFeeSats = miningFeeSats) }
+            }.onFailure {
+                Logger.debug(
+                    "Skipped offline hardware funding fee estimate for '$deviceId'",
+                    context = TAG,
+                )
+            }
+        }
+    }
+
     fun onTransferToSpendingHwConfirm(order: IBtOrder, deviceId: String) {
         if (hwTransferSignJob?.isActive == true) return
 
@@ -614,6 +643,9 @@ class TransferViewModel @Inject constructor(
             val signedTx = pendingHwFundingBroadcast
                 ?.takeIf { it.matches(order, deviceId, address) }
                 ?.signedTx
+                ?.also { pending ->
+                    _spendingUiState.update { state -> state.copy(hwMiningFeeSats = pending.miningFeeSats) }
+                }
                 ?: prepareSignedHardwareFunding(order, deviceId, address).also {
                     pendingHwFundingBroadcast = PendingHwFundingBroadcast(
                         orderId = order.id,
@@ -622,7 +654,12 @@ class TransferViewModel @Inject constructor(
                         amountSats = order.feeSat,
                         signedTx = it,
                     )
-                    _spendingUiState.update { state -> state.copy(hasPendingHwBroadcast = true) }
+                    _spendingUiState.update { state ->
+                        state.copy(
+                            hasPendingHwBroadcast = true,
+                            hwMiningFeeSats = it.miningFeeSats,
+                        )
+                    }
                 }
             broadcastHardwareFunding(signedTx)
         }
@@ -645,6 +682,7 @@ class TransferViewModel @Inject constructor(
             sats = order.feeSat,
             satsPerVByte = satsPerVByte,
         )
+        _spendingUiState.update { it.copy(hwMiningFeeSats = funding.miningFeeSats) }
         return signHardwareFunding(deviceId, funding)
     }
 
@@ -1100,6 +1138,7 @@ data class TransferToSpendingUiState(
     val isLoading: Boolean = false,
     val isSigning: Boolean = false,
     val hasPendingHwBroadcast: Boolean = false,
+    val hwMiningFeeSats: ULong = 0uL,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
 )

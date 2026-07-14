@@ -221,6 +221,32 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `updateHwFundingFeeEstimate sets mining fee before signing`() = test {
+        val order = previewBtOrder()
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FEE_RATE,
+        )
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+
+        sut.updateHwFundingFeeEstimate(order, DEVICE_ID)
+        advanceUntilIdle()
+
+        assertEquals(MINING_FEE, sut.spendingUiState.value.hwMiningFeeSats)
+        verify(hwWalletRepo).composeFundingTransaction(
+            eq(DEVICE_ID),
+            eq(order.payment?.onchain?.address.orEmpty()),
+            eq(order.feeSat),
+            eq(FEE_RATE),
+        )
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+    }
+
+    @Test
     fun `onTransferToSpendingHwConfirm signs the funding send and records the paid order`() = test {
         val order = previewBtOrder()
         val funding = HwFundingTransaction(
@@ -249,6 +275,7 @@ class TransferViewModelTest : BaseUnitTest() {
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
 
+        assertEquals(MINING_FEE, sut.spendingUiState.value.hwMiningFeeSats)
         verify(hwWalletRepo).composeFundingTransaction(
             eq(DEVICE_ID),
             eq(order.payment?.onchain?.address.orEmpty()),
