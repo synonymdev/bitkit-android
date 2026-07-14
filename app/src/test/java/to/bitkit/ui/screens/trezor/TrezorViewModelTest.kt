@@ -361,7 +361,7 @@ class TrezorViewModelTest : BaseUnitTest() {
     @Test
     fun `startWatcher should not expose active watcher until start completes`() = test {
         val startResult = CompletableDeferred<Result<Unit>>()
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull(), any()))
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull(), any(), any()))
             .doSuspendableAnswer { startResult.await() }
         sut.setWatcherExtendedKey("xpub6test123")
 
@@ -391,13 +391,13 @@ class TrezorViewModelTest : BaseUnitTest() {
         sut.startWatcher()
         advanceUntilIdle()
 
-        verify(trezorRepo, never()).startWatcher(any(), any(), any(), any(), anyOrNull(), any())
+        verify(trezorRepo, never()).startWatcher(any(), any(), any(), any(), anyOrNull(), any(), any())
         assertNull(sut.uiState.value.activeWatcherId)
     }
 
     @Test
     fun `watcher transaction event should mark watcher connected`() = test {
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull(), any()))
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull(), any(), any()))
             .thenReturn(Result.success(Unit))
         sut.setWatcherExtendedKey("xpub6test123")
         sut.startWatcher()
@@ -406,7 +406,8 @@ class TrezorViewModelTest : BaseUnitTest() {
 
         watcherEventsFlow.emit(
             watcherId to WatcherEvent.TransactionsChanged(
-                transactions = TrezorPreviewData.sampleHistoryTransactions,
+                activities = TrezorPreviewData.sampleWatcherActivities,
+                transactionDetails = emptyList(),
                 balance = TrezorPreviewData.sampleWalletBalance,
                 txCount = 3u,
                 blockHeight = 850_000u,
@@ -424,7 +425,7 @@ class TrezorViewModelTest : BaseUnitTest() {
     @Test
     fun `watcher event should be handled while start is in flight`() = test {
         val startResult = CompletableDeferred<Result<Unit>>()
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull(), any()))
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull(), any(), any()))
             .doSuspendableAnswer { startResult.await() }
         sut.setWatcherExtendedKey("xpub6test123")
         sut.startWatcher()
@@ -433,7 +434,8 @@ class TrezorViewModelTest : BaseUnitTest() {
 
         watcherEventsFlow.emit(
             watcherId to WatcherEvent.TransactionsChanged(
-                transactions = TrezorPreviewData.sampleHistoryTransactions,
+                activities = TrezorPreviewData.sampleWatcherActivities,
+                transactionDetails = emptyList(),
                 balance = TrezorPreviewData.sampleWalletBalance,
                 txCount = 3u,
                 blockHeight = 850_000u,
@@ -458,7 +460,7 @@ class TrezorViewModelTest : BaseUnitTest() {
 
     @Test
     fun `stopWatcher should stop repo watcher and clear watcher state`() = test {
-        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull(), any()))
+        whenever(trezorRepo.startWatcher(any(), any(), any(), any(), anyOrNull(), any(), any()))
             .thenReturn(Result.success(Unit))
         whenever(trezorRepo.stopWatcher(any())).thenReturn(Result.success(Unit))
         sut.setWatcherExtendedKey("xpub6test123")
@@ -474,7 +476,7 @@ class TrezorViewModelTest : BaseUnitTest() {
         assertNull(state.activeWatcherId)
         assertEquals(WatcherConnectionStatus.IDLE, state.watcherConnectionStatus)
         assertNull(state.watcherBalance)
-        assertTrue(state.watcherTransactions.isEmpty())
+        assertTrue(state.watcherActivities.isEmpty())
     }
 
     @Test

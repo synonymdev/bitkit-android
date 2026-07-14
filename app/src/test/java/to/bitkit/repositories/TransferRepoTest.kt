@@ -32,6 +32,7 @@ import to.bitkit.models.TransferType
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
@@ -290,7 +291,7 @@ class TransferRepoTest : BaseUnitTest() {
             fundingTxo = fundingTxo,
             isChannelReady = false,
         )
-        val activity = OnchainActivity.create(
+        val activity = OnchainActivity.create(walletId = "wallet0",
             id = fundingTxo.txid,
             txType = PaymentType.SENT,
             txId = fundingTxo.txid,
@@ -413,8 +414,7 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `syncTransferStates settles TO_SAVINGS transfer when balances is null`() = test {
-        val settledAt = setupClockNowMock()
+    fun `syncTransferStates does not settle TO_SAVINGS transfer when balances are unavailable`() = test {
         val transfer = TransferEntity(
             id = ID_TRANSFER,
             type = TransferType.TO_SAVINGS,
@@ -426,13 +426,12 @@ class TransferRepoTest : BaseUnitTest() {
 
         whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
-        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.failure(Exception("Error")))
-        whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.failure(AppError("Balances unavailable")))
 
         val result = sut.syncTransferStates()
 
         assertTrue(result.isSuccess)
-        verify(transferDao).markSettled(eq(ID_TRANSFER), eq(settledAt))
+        verify(transferDao, never()).markSettled(any(), any())
     }
 
     @Test
@@ -544,6 +543,27 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `syncTransferStates does not settle COOP_CLOSE when balances are unavailable`() = test {
+        val transfer = TransferEntity(
+            id = ID_TRANSFER,
+            type = TransferType.COOP_CLOSE,
+            amountSats = 75000L,
+            channelId = ID_CHANNEL,
+            isSettled = false,
+            createdAt = 1000L,
+        )
+
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.failure(AppError("Balances unavailable")))
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(transferDao, never()).markSettled(any(), any())
+    }
+
+    @Test
     fun `syncTransferStates settles COOP_CLOSE when LDK balance is gone`() = test {
         val settledAt = setupClockNowMock()
         val transfer = TransferEntity(
@@ -589,7 +609,7 @@ class TransferRepoTest : BaseUnitTest() {
             createdAt = 1000L,
         )
 
-        val sweepActivity = OnchainActivity.create(
+        val sweepActivity = OnchainActivity.create(walletId = "wallet0",
             id = "sweep-activity-id",
             txType = PaymentType.RECEIVED,
             txId = "sweep-txid",
@@ -721,7 +741,7 @@ class TransferRepoTest : BaseUnitTest() {
             createdAt = 1000L,
         )
 
-        val sweepActivity = OnchainActivity.create(
+        val sweepActivity = OnchainActivity.create(walletId = "wallet0",
             id = "sweep-activity-id",
             txType = PaymentType.RECEIVED,
             txId = sweepTxid,

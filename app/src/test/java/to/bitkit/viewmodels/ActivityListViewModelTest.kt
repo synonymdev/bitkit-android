@@ -121,7 +121,7 @@ class ActivityListViewModelTest : BaseUnitTest() {
     }
 
     private fun onchainActivity(id: String, txType: PaymentType, timestamp: ULong) = Activity.Onchain(
-        OnchainActivity.create(
+        OnchainActivity.create(walletId = "wallet0",
             id = id,
             txType = txType,
             txId = id,

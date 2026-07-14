@@ -4,9 +4,12 @@ import com.synonym.bitkitcore.AccountAddresses
 import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.AccountUtxo
+import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ComposeAccount
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.HistoryTransaction
+import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SingleAddressInfoResult
 import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
@@ -19,6 +22,7 @@ import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WalletBalance
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import to.bitkit.ext.create
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.repositories.ConnectedTrezorDevice
@@ -36,6 +40,7 @@ internal object TrezorPreviewData {
         minorVersion = 8u,
         patchVersion = 1u,
         pinProtection = true,
+        unlocked = true,
         passphraseProtection = false,
         initialized = true,
         needsBackup = false,
@@ -51,6 +56,7 @@ internal object TrezorPreviewData {
         minorVersion = null,
         patchVersion = null,
         pinProtection = null,
+        unlocked = null,
         passphraseProtection = null,
         initialized = null,
         needsBackup = null,
@@ -257,6 +263,7 @@ internal object TrezorPreviewData {
             sent = 0uL,
             net = 100_000L,
             fee = null,
+            feeRate = null,
             amount = 100_000uL,
             direction = TxDirection.RECEIVED,
             blockHeight = 849_990u,
@@ -269,6 +276,7 @@ internal object TrezorPreviewData {
             sent = 50_000uL,
             net = -50_000L,
             fee = 1_200uL,
+            feeRate = 5.0,
             amount = 48_800uL,
             direction = TxDirection.SENT,
             blockHeight = 849_995u,
@@ -281,6 +289,7 @@ internal object TrezorPreviewData {
             sent = 5_000uL,
             net = 0L,
             fee = 500uL,
+            feeRate = 2.0,
             amount = 500uL,
             direction = TxDirection.SELF_TRANSFER,
             blockHeight = null,
@@ -305,6 +314,33 @@ internal object TrezorPreviewData {
         ),
     )
 
+    val sampleWatcherActivities = listOf(
+        Activity.Onchain(
+            OnchainActivity.create(walletId = "wallet0",
+                id = SAMPLE_TXID,
+                txType = PaymentType.RECEIVED,
+                txId = SAMPLE_TXID,
+                value = 100_000uL,
+                fee = 0uL,
+                address = SAMPLE_ADDRESS,
+                timestamp = 1_700_000_000uL,
+                confirmed = true,
+            ),
+        ),
+        Activity.Onchain(
+            OnchainActivity.create(walletId = "wallet0",
+                id = "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3",
+                txType = PaymentType.SENT,
+                txId = "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3",
+                value = 48_800uL,
+                fee = 1_200uL,
+                address = SAMPLE_ADDRESS,
+                timestamp = 1_700_100_000uL,
+                confirmed = true,
+            ),
+        ),
+    )
+
     val uiStateWithActiveWatcher = TrezorUiState(
         network = TrezorNetworkState(selectedNetwork = BitkitCoreNetwork.REGTEST),
         watcher = TrezorWatcherState(
@@ -312,7 +348,7 @@ internal object TrezorPreviewData {
             activeWatcherId = "watcher-abc-123",
             connectionStatus = WatcherConnectionStatus.CONNECTED,
             balance = sampleWalletBalance,
-            transactions = sampleHistoryTransactions.toImmutableList(),
+            activities = sampleWatcherActivities.toImmutableList(),
             transactionCount = 2u,
             blockHeight = 850_000u,
             accountType = AccountType.NATIVE_SEGWIT,

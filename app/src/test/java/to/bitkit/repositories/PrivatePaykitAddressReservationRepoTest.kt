@@ -24,7 +24,7 @@ import kotlin.test.assertNull
 
 class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
     companion object {
-        private const val CONTACT_KEY = "pubkycytinw71a3ge1esmzj5e53hsr3jtj6t4pogpgr6k75w9mzmyokzo"
+        private const val CONTACT_KEY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         private const val PRIVATE_ADDRESS = "bcrt1qterdweva9vextackckt6pjy0mmuc54g87g6lsq"
     }
 
@@ -211,7 +211,7 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
 
     @Test
     fun `clearContactAssignments removes stale private address attribution history`() = test {
-        val savedContactKey = "pubkyeytinw71a3ge1esmzj5e53hsr3jtj6t4pogpgr6k75w9mzmyokzo"
+        val savedContactKey = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         val savedPrivateAddress = "bcrt1qsavedweva9vextackckt6pjy0mmuc54gnn8peu"
         reservationData.value = PrivatePaykitReservationData(
             contactAssignments = mapOf(

@@ -27,7 +27,7 @@ object ToastEventBus {
             Toast(
                 type = Toast.ToastType.ERROR,
                 title = "Error",
-                description = error.message ?: "Unknown error",
+                description = error.message?.takeIf { it.isNotBlank() } ?: "Unknown error",
                 autoHide = true,
                 visibilityTime = Toast.VISIBILITY_TIME_DEFAULT,
             )

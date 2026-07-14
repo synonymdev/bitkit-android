@@ -36,6 +36,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.contact
+import to.bitkit.ext.create
 import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.nowMillis
@@ -653,7 +654,7 @@ class ActivityRepo @Inject constructor(
             val now = nowTimestamp().epochSecond.toULong()
             insertActivity(
                 Activity.Lightning(
-                    LightningActivity(
+                    LightningActivity.create(
                         id = id,
                         txType = PaymentType.RECEIVED,
                         status = PaymentState.SUCCEEDED,

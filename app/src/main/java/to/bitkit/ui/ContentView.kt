@@ -216,6 +216,7 @@ import to.bitkit.viewmodels.CurrencyViewModel
 import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.SettingsViewModel
+import to.bitkit.viewmodels.TransferEffect
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
@@ -246,6 +247,7 @@ fun ContentView(
 
     val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
     val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
+    val keepActiveInBackground by settingsViewModel.keepBitkitActiveInBackground.collectAsStateWithLifecycle()
     val walletExists = walletUiState.walletExists
 
     val requestNotificationPermission = rememberRequestNotificationPermission(
@@ -273,11 +275,12 @@ fun ContentView(
                 }
 
                 Lifecycle.Event.ON_STOP -> {
-                    if (walletExists && !isRecoveryMode && !notificationsGranted) {
-                        // App backgrounded without notification permission - stop node
+                    val keptAliveByService = notificationsGranted &&
+                        keepActiveInBackground &&
+                        appViewModel.isForegroundServiceRunning()
+                    if (walletExists && !isRecoveryMode && !keptAliveByService) {
                         walletViewModel.stop()
                     }
-                    // If notificationsGranted=true, service keeps node running
                 }
 
                 else -> Unit
@@ -644,6 +647,13 @@ private fun RootNavHost(
     onHomeCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    LaunchedEffect(Unit) {
+        transferViewModel.transferEffects.collect { effect ->
+            if (effect is TransferEffect.OnHwTxSigned) {
+                navController.navigateTo(Routes.SpendingHwSigned)
+            }
+        }
+    }
 
     NavHost(navController, startDestination = Routes.Home) {
         home(
@@ -802,7 +812,6 @@ private fun RootNavHost(
                     onCloseClick = { navController.navigateToHome() },
                     onLearnMoreClick = { navController.navigateTo(Routes.TransferLiquidity) },
                     onAdvancedClick = { navController.navigateTo(Routes.SpendingAdvanced) },
-                    onSigned = { navController.navigateTo(Routes.SpendingHwSigned) },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingHwSigned> {

@@ -49,7 +49,14 @@ fun TextInput(
     textStyle: TextStyle = AppTextStyles.BodySSB,
     colors: TextFieldColors = AppTextFieldDefaults.semiTransparent,
 ) {
-    var textFieldValue by remember { mutableStateOf(TextFieldValue(value)) }
+    var textFieldValue by remember {
+        mutableStateOf(
+            TextFieldValue(
+                text = value,
+                selection = TextRange(value.length),
+            )
+        )
+    }
 
     // Sync external changes
     LaunchedEffect(value) {

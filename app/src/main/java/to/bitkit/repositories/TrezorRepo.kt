@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.runtime.Stable
 import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
+import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeParams
@@ -14,6 +15,7 @@ import com.synonym.bitkitcore.TransactionHistoryResult
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorCoinType
 import com.synonym.bitkitcore.TrezorDeviceInfo
+import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorScriptType
@@ -28,11 +30,14 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -47,14 +52,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.isTrezorDeviceBusy
+import to.bitkit.ext.isTrezorFirmwareError
+import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toTransportType
 import to.bitkit.models.ALL_ADDRESS_TYPES
+import to.bitkit.models.HwWalletId
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.toAccountDerivationPath
@@ -68,11 +78,12 @@ import to.bitkit.services.TrezorUiHandler
 import to.bitkit.services.TrezorWalletMode
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.TrezorErrorPresenter
 import java.io.File
-import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import com.synonym.bitkitcore.Network as BitkitCoreNetwork
@@ -98,6 +109,18 @@ class TrezorRepo @Inject constructor(
         private const val WALLET_MODE_RECONNECT_DELAY_MS = 1_000L
         private const val TRANSPORT_RESTORED_MAX_ATTEMPTS = 4
         private val TRANSPORT_RESTORED_RECONNECT_DELAY = 2.seconds
+        private val CONNECT_ATTEMPT_POLL_INTERVAL = 250.milliseconds
+        private val CONNECT_ATTEMPT_MAX_WAIT = 28.seconds
+        private const val MAX_XPUB_FETCH_ATTEMPTS = 3
+        private val XPUB_FETCH_RETRY_DELAY = 300.milliseconds
+        private val TRANSIENT_FAILURE_MARKERS = listOf(
+            "TransportError",
+            "ConnectionError",
+            "DeviceDisconnected",
+            "Timeout",
+            "IoError",
+            "SessionError",
+        )
     }
 
     private val _state = MutableStateFlow(TrezorState())
@@ -130,6 +153,9 @@ class TrezorRepo @Inject constructor(
      * UI should show a dialog when this emits true.
      */
     val needsPairingCode = trezorTransport.needsPairingCode
+
+    /** Identity of the active pairing-code request; changes for every transport callback. */
+    val pairingCodeRequestId = trezorTransport.pairingCodeRequestId
 
     /**
      * Submit the pairing code entered by the user.
@@ -264,7 +290,7 @@ class TrezorRepo @Inject constructor(
                     isSetup = CompletableDeferred()
                 }
                 Logger.error("Trezor init failed", e, context = TAG)
-                _state.update { it.copy(error = e.message) }
+                _state.update { it.copy(error = trezorErrorMessage(e)) }
             }
         }
     }
@@ -280,7 +306,7 @@ class TrezorRepo @Inject constructor(
             devices
         }.onFailure { e ->
             Logger.error("Trezor scan failed", e, context = TAG)
-            _state.update { it.copy(isScanning = false, error = e.message) }
+            _state.update { it.copy(isScanning = false, error = trezorErrorMessage(e)) }
         }
     }
 
@@ -294,7 +320,7 @@ class TrezorRepo @Inject constructor(
             devices
         }.onFailure { e ->
             Logger.error("Trezor listDevices failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -302,42 +328,49 @@ class TrezorRepo @Inject constructor(
         deviceId: String,
         requestUsbPermission: Boolean = true,
     ): Result<TrezorFeatures> = withContext(ioDispatcher) {
-        runCatching {
-            awaitSetup()
-            _state.update { it.copy(isConnecting = true, error = null) }
-            TrezorDebugLog.log("CONNECT", "connect() called for deviceId=$deviceId")
-            val features = connectWithThpRetry(
-                deviceId = deviceId,
-                selection = trezorUiHandler.currentSelection(),
-                requestUsbPermission = requestUsbPermission,
-            )
-            TrezorDebugLog.log("CONNECT", "connect() succeeded: label=${features.label}, model=${features.model}")
-            val deviceInfo = _state.value.nearbyDevices.find { it.id == deviceId }
-                ?: _state.value.knownDevices.find { it.id == deviceId }?.let { known ->
-                    TrezorDeviceInfo(
-                        id = known.id,
-                        transportType = known.transportType.toCoreTransportType(),
-                        name = known.name,
-                        path = known.path,
-                        label = known.label,
-                        model = known.model,
-                        isBootloader = false,
+        var startedConnecting = false
+        try {
+            runSuspendCatching {
+                awaitSetup()
+                startedConnecting = true
+                _state.update { it.copy(isConnecting = true, error = null) }
+                TrezorDebugLog.log("CONNECT", "connect() called for deviceId=$deviceId")
+                val features = connectWithThpRetry(
+                    deviceId = deviceId,
+                    selection = trezorUiHandler.currentSelection(),
+                    requestUsbPermission = requestUsbPermission,
+                )
+                TrezorDebugLog.log("CONNECT", "connect() succeeded: label=${features.label}, model=${features.model}")
+                val deviceInfo = _state.value.nearbyDevices.find { it.id == deviceId }
+                    ?: _state.value.knownDevices.find { it.id == deviceId }?.let { known ->
+                        TrezorDeviceInfo(
+                            id = known.id,
+                            transportType = known.transportType.toCoreTransportType(),
+                            name = known.name,
+                            path = known.path,
+                            label = known.label,
+                            model = known.model,
+                            isBootloader = false,
+                        )
+                    }
+                if (deviceInfo != null) {
+                    addOrUpdateKnownDevice(deviceInfo, features)
+                }
+                _state.update {
+                    it.copy(
+                        connected = ConnectedTrezorDevice(id = deviceId, features = features),
+                        nearbyDevices = it.nearbyDevices.filter { d -> d.id != deviceId }.toImmutableList(),
                     )
                 }
-            if (deviceInfo != null) {
-                addOrUpdateKnownDevice(deviceInfo, features)
+                features
+            }.onFailure { e ->
+                Logger.error("Trezor connect failed", e, context = TAG)
+                _state.update { it.copy(error = trezorErrorMessage(e)) }
             }
-            _state.update {
-                it.copy(
-                    isConnecting = false,
-                    connected = ConnectedTrezorDevice(id = deviceId, features = features),
-                    nearbyDevices = it.nearbyDevices.filter { d -> d.id != deviceId }.toImmutableList(),
-                )
+        } finally {
+            if (startedConnecting) {
+                _state.update { it.copy(isConnecting = false) }
             }
-            features
-        }.onFailure { e ->
-            Logger.error("Trezor connect failed", e, context = TAG)
-            _state.update { it.copy(isConnecting = false, error = e.message) }
         }
     }
 
@@ -359,7 +392,7 @@ class TrezorRepo @Inject constructor(
             response
         }.onFailure { e ->
             Logger.error("Trezor getAddress failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -379,7 +412,7 @@ class TrezorRepo @Inject constructor(
             response
         }.onFailure { e ->
             Logger.error("Trezor getPublicKey failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -398,7 +431,7 @@ class TrezorRepo @Inject constructor(
             )
         }.onFailure {
             Logger.error("Failed to get Trezor transaction history", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
@@ -417,7 +450,7 @@ class TrezorRepo @Inject constructor(
             )
         }.onFailure { e ->
             Logger.error("Trezor getAccountInfo failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -434,7 +467,7 @@ class TrezorRepo @Inject constructor(
             )
         }.onFailure { e ->
             Logger.error("Trezor getAddressInfo failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -466,7 +499,7 @@ class TrezorRepo @Inject constructor(
             trezorService.composeTransaction(params)
         }.onFailure {
             Logger.error("Trezor composeTransaction failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
@@ -474,21 +507,21 @@ class TrezorRepo @Inject constructor(
         psbtBase64: String,
         network: TrezorCoinType?,
     ): Result<TrezorSignedTx> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             ensureConnected()
             val response = trezorService.signTxFromPsbt(psbtBase64, network)
             _state.update { it.copy(error = null) }
             response
         }.onFailure {
             Logger.error("Trezor signTxFromPsbt failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
     suspend fun broadcastRawTx(
         serializedTx: String,
     ): Result<String> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             awaitSetup()
             trezorService.broadcastRawTx(
                 serializedTx = serializedTx,
@@ -496,7 +529,7 @@ class TrezorRepo @Inject constructor(
             )
         }.onFailure {
             Logger.error("Trezor broadcastRawTx failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
@@ -524,7 +557,7 @@ class TrezorRepo @Inject constructor(
         }.onFailure { e ->
             TrezorDebugLog.log("DISCONNECT", "FAILED: ${e.message}")
             Logger.error("Trezor disconnect failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -544,7 +577,7 @@ class TrezorRepo @Inject constructor(
             response
         }.onFailure { e ->
             Logger.error("Trezor signMessage failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -566,7 +599,7 @@ class TrezorRepo @Inject constructor(
             result
         }.onFailure { e ->
             Logger.error("Trezor verifyMessage failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -593,41 +626,43 @@ class TrezorRepo @Inject constructor(
         }
 
         _state.update { it.copy(isAutoReconnecting = true, error = null) }
-        runCatching {
-            awaitSetup(walletIndex)
-            val cachedFeatures = if (trezorService.isConnected()) _state.value.connectedDevice() else null
-            if (cachedFeatures != null) {
-                cachedFeatures
-            } else {
-                if (trezorService.isConnected()) {
-                    // The transport dropped underneath the session (e.g. bluetooth was
-                    // toggled), so reset it before a fresh scan and connect.
-                    runCatching { trezorService.disconnect() }
-                }
-                val scannedDevices = scan().getOrThrow().filter { it.canAutoReconnect() }
-                val knownIds = knownDevices.map { it.id }.toSet()
-                val usbDevice = scannedDevices.find {
-                    it.transportType == TrezorTransportType.USB && it.id in knownIds
-                }
-                val idMatch = knownDevices.firstNotNullOfOrNull { known ->
-                    scannedDevices.find { it.id == known.id }
-                }
-                // Prefer the transport that just came back, so e.g. a USB replug does
-                // not reconnect over BLE when the same device is known on both.
-                val preferredMatch = preferredTransport?.let { preferred ->
-                    scannedDevices.find {
-                        it.id in knownIds && it.transportType.toTransportType() == preferred
+        try {
+            runSuspendCatching {
+                awaitSetup(walletIndex)
+                val cachedFeatures = if (trezorService.isConnected()) _state.value.connectedDevice() else null
+                if (cachedFeatures != null) {
+                    cachedFeatures
+                } else {
+                    if (trezorService.isConnected()) {
+                        // The transport dropped underneath the session (e.g. bluetooth was
+                        // toggled), so reset it before a fresh scan and connect.
+                        runCatching { trezorService.disconnect() }
                     }
+                    val scannedDevices = scan().getOrThrow().filter { it.canAutoReconnect() }
+                    val knownIds = knownDevices.map { it.id }.toSet()
+                    val usbDevice = scannedDevices.find {
+                        it.transportType == TrezorTransportType.USB && it.id in knownIds
+                    }
+                    val idMatch = knownDevices.firstNotNullOfOrNull { known ->
+                        scannedDevices.find { it.id == known.id }
+                    }
+                    // Prefer the transport that just came back, so e.g. a USB replug does
+                    // not reconnect over BLE when the same device is known on both.
+                    val preferredMatch = preferredTransport?.let { preferred ->
+                        scannedDevices.find {
+                            it.id in knownIds && it.transportType.toTransportType() == preferred
+                        }
+                    }
+                    val match = preferredMatch ?: idMatch ?: usbDevice
+                        ?: throw AppError("No known device found nearby")
+                    connect(match.id, requestUsbPermission = false).getOrThrow()
                 }
-                val match = preferredMatch ?: idMatch ?: usbDevice
-                    ?: throw AppError("No known device found nearby")
-                connect(match.id, requestUsbPermission = false).getOrThrow()
+            }.onFailure { e ->
+                Logger.error("Auto-reconnect failed", e, context = TAG)
+                _state.update { it.copy(error = trezorErrorMessage(e)) }
             }
-        }.onSuccess {
+        } finally {
             _state.update { it.copy(isAutoReconnecting = false) }
-        }.onFailure { e ->
-            Logger.error("Auto-reconnect failed", e, context = TAG)
-            _state.update { it.copy(isAutoReconnecting = false, error = e.message) }
         }
     }
 
@@ -641,8 +676,9 @@ class TrezorRepo @Inject constructor(
     suspend fun connectKnownDevice(
         deviceId: String,
         forceSession: Boolean = false,
+        allowBleFallback: Boolean = true,
     ): Result<TrezorFeatures> = withContext(ioDispatcher) {
-        if (_state.value.isConnecting) {
+        if (isConnectInProgress()) {
             return@withContext Result.failure(AppError("Connection already in progress"))
         }
         var startedConnecting = false
@@ -661,16 +697,7 @@ class TrezorRepo @Inject constructor(
                 Logger.debug("Scanning for reconnect devices", context = TAG)
                 val knownDevices = (_state.value.knownDevices + loadKnownDevices()).distinctBy { it.id }
                 val knownDevice = knownDevices.find { it.matches(deviceId) }
-                val scannedDevices = trezorService.scan()
-                Logger.debug(
-                    "Found '${scannedDevices.size}' reconnect devices '${scannedDevices.map { it.id }}'",
-                    context = TAG,
-                )
-                // Honor the transport the user selected — connect to exactly the
-                // entry they tapped instead of overriding Bluetooth with USB.
-                val device = scannedDevices.find { it.id == deviceId }
-                    ?: knownDevice?.takeIf { it.transportType == TransportType.BLUETOOTH }?.toDeviceInfo()
-                    ?: throw AppError("Device not found nearby — is it powered on?")
+                val device = resolveKnownReconnectDevice(deviceId, knownDevice, allowBleFallback)
                 Logger.debug("Found reconnect device '${device.id}'", context = TAG)
                 Logger.debug("Calling THP reconnect for '${device.id}'", context = TAG)
                 val features = connectWithThpRetry(device.id, trezorUiHandler.currentSelection())
@@ -681,7 +708,10 @@ class TrezorRepo @Inject constructor(
                 features
             }.onFailure { e ->
                 Logger.error("Connect known device failed", e, context = TAG)
-                _state.update { it.copy(error = e.message) }
+                _state.update { it.copy(error = trezorErrorMessage(e)) }
+                if (!forceSession) {
+                    disconnectStaleSession(deviceId)
+                }
             }
         } finally {
             if (startedConnecting) {
@@ -691,11 +721,130 @@ class TrezorRepo @Inject constructor(
     }
 
     suspend fun ensureConnected(deviceId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
-        val current = _state.value.connected
-        if (current?.id == deviceId && trezorService.isConnected()) {
-            return@withContext Result.success(current.features)
+        val result = awaitConnectedOrNull(deviceId)?.let { refreshLockedFeatures(deviceId, it) } ?: run {
+            if (isKnownBluetoothDevice(deviceId)) {
+                reconnectKnownBluetoothDevice(deviceId)
+            } else {
+                connectKnownDevice(deviceId, forceSession = true)
+            }
         }
-        connectKnownDevice(deviceId, forceSession = false)
+        result.requireUnlocked()
+    }
+
+    private suspend fun refreshLockedFeatures(
+        deviceId: String,
+        features: TrezorFeatures,
+    ): Result<TrezorFeatures> {
+        if (features.pinProtection != true || features.unlocked != false) return Result.success(features)
+        return runSuspendCatching { trezorService.refreshFeatures() }.onSuccess {
+            _state.update { state -> state.copy(connected = ConnectedTrezorDevice(id = deviceId, features = it)) }
+        }
+    }
+
+    private fun Result<TrezorFeatures>.requireUnlocked(): Result<TrezorFeatures> = fold(
+        onSuccess = {
+            if (it.pinProtection == true && it.unlocked == false) {
+                Result.failure(TrezorException.DeviceBusy())
+            } else {
+                Result.success(it)
+            }
+        },
+        onFailure = { Result.failure(it) },
+    )
+
+    /**
+     * BLE Trezors often need a few seconds to advertise again after unlock, so retry
+     * with growing delays (same cadence as [retryAutoReconnect]) instead of failing on
+     * the first empty scan or a premature direct-address connect.
+     */
+    private suspend fun reconnectKnownBluetoothDevice(deviceId: String): Result<TrezorFeatures> {
+        var lastFailure: Throwable? = null
+        repeat(TRANSPORT_RESTORED_MAX_ATTEMPTS) { attempt ->
+            if (attempt > 0) {
+                delay(TRANSPORT_RESTORED_RECONNECT_DELAY * attempt)
+            }
+            awaitConnectedOrNull(deviceId)?.let { return Result.success(it) }
+            val allowBleFallback = attempt == TRANSPORT_RESTORED_MAX_ATTEMPTS - 1
+            val result = connectKnownDevice(
+                deviceId = deviceId,
+                forceSession = attempt == 0,
+                allowBleFallback = allowBleFallback,
+            )
+            if (result.isSuccess) return result
+            val failure = result.exceptionOrNull()
+            if (failure?.isTrezorUserCancellation() == true) {
+                return Result.failure(failure)
+            }
+            if (failure?.isTrezorDeviceBusy() == true) {
+                return Result.failure(failure)
+            }
+            lastFailure = failure
+        }
+        return Result.failure(lastFailure ?: AppError("Failed to connect"))
+    }
+
+    suspend fun isKnownBluetoothDevice(deviceId: String): Boolean = withContext(ioDispatcher) {
+        (_state.value.knownDevices + loadKnownDevices()).distinctBy { it.id }
+            .any { it.matches(deviceId) && it.transportType == TransportType.BLUETOOTH }
+    }
+
+    fun deriveWalletId(xpubs: Map<String, String>): String? =
+        deriveHardwareWalletId(xpubs)?.takeIf { it.isNotBlank() }
+
+    private suspend fun connectedFeatures(deviceId: String): TrezorFeatures? {
+        val current = _state.value.connected
+        return if (current?.id == deviceId && trezorService.isConnected()) current.features else null
+    }
+
+    private suspend fun awaitConnectedOrNull(deviceId: String): TrezorFeatures? {
+        connectedFeatures(deviceId)?.let { return it }
+        if (isConnectInProgress()) {
+            awaitInFlightConnect(deviceId)
+            connectedFeatures(deviceId)?.let { return it }
+        }
+        return null
+    }
+
+    private suspend fun awaitInFlightConnect(deviceId: String) {
+        transportReconnectJob?.takeIf { it.isActive }?.join()
+        waitForConnectAttempt(deviceId)
+    }
+
+    private suspend fun waitForConnectAttempt(deviceId: String) {
+        runCatching {
+            withTimeout(CONNECT_ATTEMPT_MAX_WAIT) {
+                while (true) {
+                    if (connectedFeatures(deviceId) != null) return@withTimeout
+                    if (!isConnectInProgress()) return@withTimeout
+                    delay(CONNECT_ATTEMPT_POLL_INTERVAL)
+                }
+            }
+        }.onFailure {
+            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+        }
+    }
+
+    private suspend fun resolveKnownReconnectDevice(
+        deviceId: String,
+        knownDevice: KnownDevice?,
+        allowBleFallback: Boolean = true,
+    ): TrezorDeviceInfo = findKnownDeviceInScan(deviceId, knownDevice, allowBleFallback)
+
+    private suspend fun findKnownDeviceInScan(
+        deviceId: String,
+        knownDevice: KnownDevice?,
+        allowBleFallback: Boolean,
+    ): TrezorDeviceInfo {
+        val scannedDevices = trezorService.scan()
+        Logger.debug(
+            "Found '${scannedDevices.size}' reconnect devices '${scannedDevices.map { it.id }}'",
+            context = TAG,
+        )
+        scannedDevices.find { it.id == deviceId }?.let { return it }
+        if (allowBleFallback) {
+            knownDevice?.takeIf { it.transportType == TransportType.BLUETOOTH }?.toDeviceInfo()?.let { return it }
+        }
+        throw AppError("Device not found nearby — is it powered on?")
     }
 
     suspend fun forgetDevice(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
@@ -731,7 +880,7 @@ class TrezorRepo @Inject constructor(
         }.onFailure { e ->
             TrezorDebugLog.log("FORGET", "FAILED: ${e.message}")
             Logger.error("Forget device failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -742,11 +891,13 @@ class TrezorRepo @Inject constructor(
         gapLimit: UInt = 20u,
         accountType: AccountType? = null,
         electrumUrl: String = electrumUrlForNetwork(network),
+        walletId: String,
     ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             awaitSetup()
             val params = WatcherParams(
                 watcherId = watcherId,
+                walletId = walletId,
                 extendedKey = extendedKey,
                 electrumUrl = electrumUrl,
                 network = network,
@@ -754,11 +905,10 @@ class TrezorRepo @Inject constructor(
                 gapLimit = gapLimit,
             )
             trezorService.startWatcher(params, eventBridge)
-            TrezorDebugLog.log(WATCHER_TAG, "Started watcher '$watcherId' for '${extendedKey.take(12)}...'")
-            Logger.info("Started watcher '$watcherId'", context = TAG)
+            TrezorDebugLog.log(WATCHER_TAG, "Started watcher '$watcherId'")
         }.onFailure {
             Logger.error("Start watcher failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
@@ -767,10 +917,9 @@ class TrezorRepo @Inject constructor(
             awaitSetup()
             trezorService.stopWatcher(watcherId)
             TrezorDebugLog.log(WATCHER_TAG, "Stopped watcher '$watcherId'")
-            Logger.info("Stopped watcher '$watcherId'", context = TAG)
         }.onFailure {
             Logger.error("Stop watcher failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
@@ -785,7 +934,7 @@ class TrezorRepo @Inject constructor(
             TrezorDebugLog.log(WATCHER_TAG, "Stopped all watchers")
         }.onFailure {
             Logger.error("Stop all watchers failed", it, context = TAG)
-            _state.update { s -> s.copy(error = it.message) }
+            _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
 
@@ -835,6 +984,21 @@ class TrezorRepo @Inject constructor(
         }
     }
 
+    /** Pre-connects one known BLE Trezor before the transfer sign screen asks for it. */
+    fun warmUpKnownDevice(deviceId: String) {
+        scope.launch {
+            if (connectedFeatures(deviceId) != null) return@launch
+            if (isConnectInProgress()) return@launch
+            if (!hasKnownDevice(deviceId)) return@launch
+            if (!isKnownBluetoothDevice(deviceId)) return@launch
+
+            Logger.info("Warming up known bluetooth device '$deviceId'", context = TAG)
+            ensureConnected(deviceId).onFailure {
+                Logger.debug("Warm up connect failed for '$deviceId'", context = TAG)
+            }
+        }
+    }
+
     /**
      * Serializes reconnect triggers into one in-flight retry loop. A Trezor
      * re-enumerates USB during its unlock flow, so a single replug delivers several
@@ -858,7 +1022,11 @@ class TrezorRepo @Inject constructor(
             // A connect may have started while this attempt was waiting.
             if (_state.value.connected != null || isConnectInProgress()) return
             Logger.info("Attempting auto-reconnect after transport restored, attempt '${attempt + 1}'", context = TAG)
-            if (autoReconnect(preferredTransport = transportType).isSuccess) return
+            val result = autoReconnect(preferredTransport = transportType)
+            if (result.isSuccess) return
+            // A busy device needs the user to unlock it; retrying won't help and
+            // would keep the connect-in-progress state blocking user actions.
+            if (result.exceptionOrNull()?.isTrezorDeviceBusy() == true) return
         }
     }
 
@@ -875,7 +1043,20 @@ class TrezorRepo @Inject constructor(
         val storedIds = stored.map { it.id }.toSet()
         val knownDevices = stored + _state.value.knownDevices.filter { it.id !in storedIds }
         val previous = knownDevices.find { it.id == deviceInfo.id }
-        val xpubs = previous?.xpubs.orEmpty() + fetchAccountXpubs()
+        val fetchResult = fetchAccountXpubs()
+        val xpubs = previous?.xpubs.orEmpty() + fetchResult.xpubs
+        val retryableGaps = fetchResult.transientFailures.filterKeys { addressType ->
+            xpubs[addressType.toSettingsString()] == null
+        }
+        // Saving a device with retryable xpub gaps would start a watch-only wallet
+        // under an id that changes once the missing type is read on a later connect,
+        // so fail the connect instead, preserving the real cause (busy, disconnect, ...).
+        retryableGaps.values.firstOrNull()?.let { cause ->
+            throw AppError(cause)
+        }
+        if (xpubs.isEmpty()) {
+            throw AppError("Could not read any account keys from your Trezor. Reconnect and try again.")
+        }
         val known = KnownDevice(
             id = deviceInfo.id,
             name = deviceInfo.name,
@@ -895,23 +1076,53 @@ class TrezorRepo @Inject constructor(
 
     /**
      * Reads account-level extended public keys for every supported address type so a
-     * watch-only balance can be tracked later without the device present. Failures are
-     * swallowed per type: a missing xpub just means that address type is not watched.
+     * watch-only balance can be tracked later without the device present. Permanent
+     * rejections (e.g. unsupported address type) are skipped; transient transport
+     * failures are tracked so [addOrUpdateKnownDevice] can block a partial save.
      */
-    private suspend fun fetchAccountXpubs(): Map<String, String> {
+    private suspend fun fetchAccountXpubs(): AccountXpubFetchResult {
         val coin = Env.network.toTrezorCoinType()
-        return ALL_ADDRESS_TYPES.mapNotNull { addressType ->
-            runCatching {
-                val xpub = trezorService.getPublicKey(
-                    path = addressType.toAccountDerivationPath(network = Env.network),
+        val xpubs = mutableMapOf<String, String>()
+        val transientFailures = mutableMapOf<AddressType, Throwable>()
+        for (addressType in ALL_ADDRESS_TYPES) {
+            val result = fetchXpubForAddressType(addressType, coin)
+            result.xpub?.let { xpubs[addressType.toSettingsString()] = it }
+            result.transientError?.let { transientFailures[addressType] = it }
+        }
+        return AccountXpubFetchResult(xpubs = xpubs, transientFailures = transientFailures)
+    }
+
+    private suspend fun fetchXpubForAddressType(
+        addressType: AddressType,
+        coin: TrezorCoinType,
+    ): XpubFetchResult {
+        val path = addressType.toAccountDerivationPath(network = Env.network)
+        val settingsKey = addressType.toSettingsString()
+        var lastError: Throwable? = null
+        for (attempt in 1..MAX_XPUB_FETCH_ATTEMPTS) {
+            val result = runSuspendCatching {
+                trezorService.getPublicKey(
+                    path = path,
                     coin = coin,
                     showOnTrezor = false,
                 ).xpub
-                addressType.toSettingsString() to xpub
-            }.onFailure {
-                Logger.warn("Could not read xpub for '${addressType.toSettingsString()}'", it, context = TAG)
-            }.getOrNull()
-        }.toMap()
+            }
+            if (result.isSuccess) {
+                return XpubFetchResult(xpub = result.getOrThrow())
+            }
+            lastError = result.exceptionOrNull() ?: return XpubFetchResult()
+            Logger.warn(
+                "Could not read xpub for '$settingsKey' (attempt $attempt/$MAX_XPUB_FETCH_ATTEMPTS)",
+                lastError,
+                context = TAG,
+            )
+            if (!isTransientTransportFailure(lastError) || attempt == MAX_XPUB_FETCH_ATTEMPTS) {
+                break
+            }
+            delay(XPUB_FETCH_RETRY_DELAY)
+        }
+        val transientError = lastError?.takeIf { isTransientTransportFailure(it) }
+        return XpubFetchResult(transientError = transientError)
     }
 
     private suspend fun loadKnownDevices(): List<KnownDevice> = runCatching {
@@ -943,10 +1154,11 @@ class TrezorRepo @Inject constructor(
         awaitSetup()
         val knownDevices = (_state.value.knownDevices + loadKnownDevices()).distinctBy { it.id }
         val knownDevice = knownDevices.find { it.matches(deviceId) }
-        val devices = trezorService.scan()
-        val device = devices.find { it.id == deviceId }
-            ?: knownDevice?.takeIf { it.transportType == TransportType.BLUETOOTH }?.toDeviceInfo()
-            ?: throw AppError("Device not found during reconnect")
+        val device = findKnownDeviceInScan(
+            deviceId = deviceId,
+            knownDevice = knownDevice,
+            allowBleFallback = true,
+        )
         val features = connectWithThpRetry(device.id, trezorUiHandler.currentSelection())
         _state.update { it.copy(connected = ConnectedTrezorDevice(id = deviceId, features = features)) }
     }
@@ -969,7 +1181,7 @@ class TrezorRepo @Inject constructor(
             _state.update { it.copy(error = null) }
         }.onFailure { e ->
             Logger.error("Trezor clearCredentials failed", e, context = TAG)
-            _state.update { it.copy(error = e.message) }
+            _state.update { it.copy(error = trezorErrorMessage(e)) }
         }
     }
 
@@ -1006,16 +1218,22 @@ class TrezorRepo @Inject constructor(
         }
     }
 
-    suspend fun disconnectStaleSession(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
-        val result = runSuspendCatching {
-            trezorService.disconnect()
-            disconnectTransportDevice(deviceId)
-        }
-            .onFailure {
-                Logger.warn("Failed to disconnect stale Trezor session for '$deviceId'", it, context = TAG)
+    suspend fun disconnectStaleSession(deviceId: String): Result<Unit> = withContext(NonCancellable) {
+        withContext(ioDispatcher) {
+            val connectedId = _state.value.connected?.id
+            if (connectedId != null && connectedId != deviceId) {
+                return@withContext Result.success(Unit)
             }
-        _state.update { it.copy(connected = null) }
-        result
+            val result = runSuspendCatching {
+                trezorService.disconnect()
+                disconnectTransportDevice(deviceId)
+            }
+                .onFailure {
+                    Logger.warn("Failed to disconnect stale Trezor session for '$deviceId'", it, context = TAG)
+                }
+            _state.update { it.copy(connected = null) }
+            result
+        }
     }
 
     private suspend fun disconnectTransportDevice(deviceId: String) {
@@ -1044,15 +1262,66 @@ class TrezorRepo @Inject constructor(
         TrezorDebugLog.log("CRED", "$label: file=$sanitizedId.json exists=$exists size=$size")
     }
 
+    private fun trezorErrorMessage(error: Throwable): String? =
+        if (error.isTrezorDeviceBusy() || error.isTrezorFirmwareError()) {
+            TrezorErrorPresenter.userMessage(context, error)
+        } else {
+            error.message
+        }
+
+    private fun isTransientTransportFailure(error: Throwable): Boolean {
+        if (error.isTrezorDeviceBusy()) return true
+        // Typed variants first: several TrezorException variants carry a blank
+        // message, so the string markers below would never match them.
+        if (generateSequence(error) { it.cause }.any { it.isTransientTrezorException() }) return true
+        val text = buildString {
+            append(error.message.orEmpty())
+            error.cause?.message?.let { append(it) }
+        }
+        return TRANSIENT_FAILURE_MARKERS.any { marker -> text.contains(marker, ignoreCase = true) }
+    }
+
+    private fun Throwable.isTransientTrezorException(): Boolean = when (this) {
+        is TrezorException.TransportException,
+        is TrezorException.ConnectionException,
+        is TrezorException.DeviceDisconnected,
+        is TrezorException.Timeout,
+        is TrezorException.IoException,
+        is TrezorException.SessionException,
+        -> true
+
+        else -> false
+    }
+
     private fun isRetryableError(e: Throwable): Boolean {
-        val msg = e.message?.lowercase() ?: return false
+        if (e.isTrezorDeviceBusy()) return false
+        val msg = e.message?.lowercase().orEmpty()
         // A rejected session (wrong passphrase, or the user cancelling on-device
         // passphrase entry) is a definitive failure, not a transient THP/transport
         // hiccup. Retrying it just re-prompts the device and risks wedging the
         // connection, so don't treat ThpCreateNewSession rejections as retryable.
         if ("rejected" in msg) return false
+        // Typed variants: Timeout and DeviceDisconnected carry blank messages and
+        // SessionException a details-only one, so the string markers below can
+        // miss them. Session rejections are already excluded by the guard above.
+        val hasRetryableTyped = generateSequence(e) { it.cause }.any {
+            it is TrezorException.Timeout ||
+                it is TrezorException.DeviceDisconnected ||
+                it is TrezorException.SessionException
+        }
+        if (hasRetryableTyped) return true
         return "thp" in msg || "session" in msg || "timeout" in msg || "disconnect" in msg
     }
+
+    private data class AccountXpubFetchResult(
+        val xpubs: Map<String, String>,
+        val transientFailures: Map<AddressType, Throwable>,
+    )
+
+    private data class XpubFetchResult(
+        val xpub: String? = null,
+        val transientError: Throwable? = null,
+    )
 }
 
 @Stable
@@ -1086,11 +1355,18 @@ private val KnownDevice.walletKey: String
 private fun walletKey(xpubs: Map<String, String>, fallback: String): String =
     xpubs.values.sorted().joinToString().ifEmpty { fallback }
 
+private fun deriveHardwareWalletId(xpubs: Map<String, String>): String? =
+    if (xpubs.isEmpty()) {
+        null
+    } else {
+        runCatching { HwWalletId.derive(xpubs) }.getOrNull()
+    }
+
 private fun List<KnownDevice>.findHardwareWalletId(deviceId: String, xpubs: Map<String, String>): String {
     val walletKey = walletKey(xpubs, deviceId)
     return firstOrNull { it.id == deviceId }?.walletId?.takeIf { it.isNotBlank() }
         ?: firstOrNull { it.walletKey == walletKey }?.walletId?.takeIf { it.isNotBlank() }
-        ?: newHardwareWalletId()
+        ?: deriveHardwareWalletId(xpubs).orEmpty()
 }
 
 private fun List<KnownDevice>.withHardwareWalletIds(): List<KnownDevice> {
@@ -1100,12 +1376,12 @@ private fun List<KnownDevice>.withHardwareWalletIds(): List<KnownDevice> {
 
     return map {
         val walletId = existingByWallet[it.walletKey]
-            ?: generatedByWallet.getOrPut(it.walletKey) { newHardwareWalletId() }
+            ?: generatedByWallet.getOrPut(it.walletKey) {
+                deriveHardwareWalletId(it.xpubs).orEmpty()
+            }
         if (it.walletId == walletId) it else it.copy(walletId = walletId)
     }
 }
-
-private fun newHardwareWalletId(): String = UUID.randomUUID().toString()
 
 private fun KnownDevice.toDeviceInfo() = TrezorDeviceInfo(
     id = id,

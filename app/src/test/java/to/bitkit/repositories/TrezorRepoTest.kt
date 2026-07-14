@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeParams
 import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorDeviceInfo
+import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorPublicKeyResponse
 import com.synonym.bitkitcore.TrezorSignedMessageResponse
@@ -25,16 +26,19 @@ import org.junit.rules.TemporaryFolder
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.R
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.toCoreNetwork
@@ -43,7 +47,6 @@ import to.bitkit.services.TrezorTransport
 import to.bitkit.services.TrezorUiHandler
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
-import java.util.UUID
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -66,6 +69,7 @@ class TrezorRepoTest : BaseUnitTest() {
         private const val TEST_MESSAGE = "Hello Trezor"
         private const val TEST_SIGNATURE = "signature123"
         private const val TEST_ADDRESS = "bc1qtest"
+        private const val DEVICE_BUSY_MESSAGE = "Your Trezor is busy. Unlock it on the device, then try again."
     }
 
     @get:Rule(order = 1)
@@ -95,13 +99,16 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(trezorTransport.transportRestored).thenReturn(MutableSharedFlow())
         whenever(trezorTransport.hasUsbPermission(any())).thenReturn(true)
         whenever(trezorTransport.disconnectDevice(any())).thenReturn(
-            TrezorTransportWriteResult(success = true, error = "")
+            TrezorTransportWriteResult(success = true, error = "", errorCode = null)
         )
         whenever(trezorUiHandler.needsPinEntry).thenReturn(MutableStateFlow(false))
         whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Standard)
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(context.filesDir).thenReturn(tempFolder.root)
+        whenever(context.getString(R.string.hardware__connect_error)).thenReturn("Could not connect to your Trezor.")
+        whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
         whenever { hwWalletStore.loadKnownDevices() }.thenReturn(emptyList())
+        stubAccountXpubFetch()
     }
 
     private fun createSut(): TrezorRepo = TrezorRepo(
@@ -137,9 +144,13 @@ class TrezorRepoTest : BaseUnitTest() {
     private fun mockFeatures(
         label: String? = DEVICE_LABEL,
         model: String? = DEVICE_MODEL,
+        pinProtection: Boolean? = null,
+        unlocked: Boolean? = null,
     ): TrezorFeatures = mock {
         on { this.label }.thenReturn(label)
         on { this.model }.thenReturn(model)
+        on { this.pinProtection }.thenReturn(pinProtection)
+        on { this.unlocked }.thenReturn(unlocked)
     }
 
     private fun mockPublicKeyResponse(
@@ -154,6 +165,21 @@ class TrezorRepoTest : BaseUnitTest() {
         depth = 3u,
         rootFingerprint = 0u,
     )
+
+    private fun stubAccountXpubFetch() {
+        whenever {
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        }.thenAnswer {
+            mockPublicKeyResponse(
+                xpub = "xpub-${it.getArgument<String>(0)}",
+                path = it.getArgument(0),
+            )
+        }
+    }
 
     @Suppress("LongParameterList")
     private fun mockKnownDevice(
@@ -195,7 +221,7 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `initialize assigns wallet ids to restored devices missing them`() = test {
+    fun `initialize leaves wallet id blank until xpubs are available`() = test {
         val knownDevice = mockKnownDevice(walletId = "")
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
         sut = createSut()
@@ -203,12 +229,8 @@ class TrezorRepoTest : BaseUnitTest() {
         val result = sut.initialize()
 
         assertTrue(result.isSuccess)
-        val savedCaptor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(savedCaptor.capture())
-        val saved = savedCaptor.firstValue.single()
-        assertEquals(knownDevice.id, saved.id)
-        assertNotNull(UUID.fromString(saved.walletId))
-        assertEquals(listOf(saved), sut.state.value.knownDevices)
+        verify(hwWalletStore, never()).saveKnownDevices(any())
+        assertEquals("", sut.state.value.knownDevices.single().walletId)
     }
 
     @Test
@@ -350,6 +372,25 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `transport restored stops auto-reconnect retries on device busy`() = test {
+        val transportRestored = MutableSharedFlow<TransportType>()
+        val device = mockDeviceInfo()
+        whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false)))
+            .doAnswer { throw TrezorException.DeviceBusy() }
+        sut = createSut()
+
+        transportRestored.emit(TransportType.USB)
+        advanceUntilIdle()
+
+        assertNull(sut.state.value.connected)
+        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any(), eq(false))
+    }
+
+    @Test
     fun `reconnect prefers the transport that came back`() = test {
         val features = mockFeatures()
         val bleDevice = mockDeviceInfo(id = "ble-1", transportType = TrezorTransportType.BLUETOOTH, path = "ble-path")
@@ -419,6 +460,33 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `bluetooth restore reconnects only after pairing request clears`() = test {
+        val transportRestored = MutableSharedFlow<TransportType>()
+        val needsPairingCode = MutableStateFlow(true)
+        val knownDevice = mockKnownDevice()
+        val device = mockDeviceInfo()
+        val features = mockFeatures()
+        whenever(trezorTransport.transportRestored).thenReturn(transportRestored)
+        whenever(trezorTransport.needsPairingCode).thenReturn(needsPairingCode)
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(DEVICE_ID), any(), eq(false))).thenReturn(features)
+        sut = createSut()
+
+        transportRestored.emit(TransportType.BLUETOOTH)
+        advanceUntilIdle()
+        verify(trezorService, never()).scan()
+
+        needsPairingCode.value = false
+        transportRestored.emit(TransportType.BLUETOOTH)
+        advanceUntilIdle()
+
+        verify(trezorService).scan()
+        verify(trezorService).connect(eq(DEVICE_ID), any(), eq(false))
+    }
+
+    @Test
     fun `onTransportRestored auto-reconnects to a known device`() = test {
         val features = mockFeatures()
         val device = mockDeviceInfo()
@@ -465,6 +533,75 @@ class TrezorRepoTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(trezorService, never()).scan()
+    }
+
+    @Test
+    fun `warmUpKnownDevice connects to the requested bluetooth device`() = test {
+        val bleDeviceId = "ble:57:21:A7:F9:DD:AD"
+        val knownDevice = mockKnownDevice(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TransportType.BLUETOOTH,
+        )
+        val device = mockDeviceInfo(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TrezorTransportType.BLUETOOTH,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(bleDeviceId), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        sut.warmUpKnownDevice(bleDeviceId)
+        advanceUntilIdle()
+
+        assertEquals(bleDeviceId, sut.state.value.connectedDeviceId())
+        verify(trezorService).connect(eq(bleDeviceId), any())
+    }
+
+    @Test
+    fun `warmUpKnownDevice skips non-bluetooth devices`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(mockKnownDevice()))
+        sut = createSut()
+
+        sut.initialize()
+        sut.warmUpKnownDevice(DEVICE_ID)
+        advanceUntilIdle()
+
+        verify(trezorService, never()).scan()
+    }
+
+    @Test
+    fun `warmUpKnownDevice skips when device is already connected`() = test {
+        val bleDeviceId = "ble:57:21:A7:F9:DD:AD"
+        val knownDevice = mockKnownDevice(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TransportType.BLUETOOTH,
+        )
+        val device = mockDeviceInfo(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TrezorTransportType.BLUETOOTH,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.isConnected()).thenReturn(false, true)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(bleDeviceId), any())).thenReturn(features)
+        sut = createSut()
+        sut.initialize()
+        sut.warmUpKnownDevice(bleDeviceId)
+        advanceUntilIdle()
+
+        sut.warmUpKnownDevice(bleDeviceId)
+        advanceUntilIdle()
+
+        verify(trezorService, times(1)).scan()
     }
 
     @Test
@@ -578,7 +715,7 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(TransportType.USB, saved.transportType)
         assertEquals("Savings", saved.label)
         assertEquals("Safe 5", saved.model)
-        assertNotNull(UUID.fromString(saved.walletId))
+        assertEquals("", saved.walletId)
     }
 
     @Test
@@ -727,6 +864,182 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
+    }
+
+    @Test
+    fun `connect should fail fast for device busy errors`() = test {
+        whenever(trezorService.connect(eq(DEVICE_ID), any()))
+            .doAnswer { throw TrezorException.DeviceBusy() }
+        sut = createSut()
+
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertEquals(DEVICE_BUSY_MESSAGE, sut.state.value.error)
+        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
+    }
+
+    @Test
+    fun `connect maps device busy failures to unlock prompt`() = test {
+        whenever(trezorService.connect(eq(DEVICE_ID), any()))
+            .doAnswer { throw TrezorException.DeviceBusy() }
+        sut = createSut()
+
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertEquals(DEVICE_BUSY_MESSAGE, sut.state.value.error)
+    }
+
+    @Test
+    fun `connect retries account xpub fetch on device busy`() = test {
+        val nativeSegwitPath = "m/84'/1'/0'"
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        var nativeSegwitAttempts = 0
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        ).thenAnswer {
+            val path = it.getArgument<String>(0)
+            if (path == nativeSegwitPath) {
+                nativeSegwitAttempts++
+                if (nativeSegwitAttempts == 1) {
+                    throw TrezorException.DeviceBusy()
+                }
+                mockPublicKeyResponse(xpub = "native-xpub", path = nativeSegwitPath)
+            } else {
+                throw AppError("unsupported")
+            }
+        }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        assertEquals(2, nativeSegwitAttempts)
+    }
+
+    @Test
+    fun `connect fails when account xpub reads exhaust device busy retries`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        ).thenAnswer { throw TrezorException.DeviceBusy() }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertEquals(DEVICE_BUSY_MESSAGE, sut.state.value.error)
+        assertNull(sut.state.value.connectedDevice())
+        verify(hwWalletStore, never()).saveKnownDevices(any())
+    }
+
+    @Test
+    fun `connect should retry once for typed timeout errors`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any()))
+            .doAnswer { throw TrezorException.Timeout() }
+            .thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        verify(trezorService, times(2)).connect(eq(DEVICE_ID), any())
+    }
+
+    @Test
+    fun `connect blocks partial save when typed timeout exhausts xpub retries`() = test {
+        val nativeSegwitPath = "m/84'/1'/0'"
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        ).thenAnswer {
+            if (it.getArgument<String>(0) == nativeSegwitPath) {
+                mockPublicKeyResponse(xpub = "native-xpub", path = nativeSegwitPath)
+            } else {
+                throw TrezorException.Timeout()
+            }
+        }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertNull(sut.state.value.connectedDevice())
+        verify(hwWalletStore, never()).saveKnownDevices(any())
+    }
+
+    @Test
+    fun `connect preserves cause when xpub reads exhaust non-busy transient retries`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        ).thenAnswer { throw AppError("DeviceDisconnected") }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertEquals("DeviceDisconnected", sut.state.value.error)
+        assertNull(sut.state.value.connectedDevice())
+        verify(hwWalletStore, never()).saveKnownDevices(any())
+    }
+
+    @Test
+    fun `connect rethrows cancellation from xpub retry delay`() = test {
+        val features = mockFeatures()
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(
+            trezorService.getPublicKey(
+                path = any(),
+                coin = anyOrNull(),
+                showOnTrezor = eq(false),
+            )
+        ).thenAnswer { throw CancellationException("cancelled") }
+        sut = createSut()
+
+        sut.scan()
+        assertFailsWith<CancellationException> {
+            sut.connect(DEVICE_ID)
+        }
     }
 
     @Test
@@ -1124,6 +1437,7 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(features, result.getOrNull())
         assertEquals(bleDeviceId, sut.state.value.connectedDeviceId())
         verify(trezorService).connect(eq(bleDeviceId), any())
+        verify(trezorService).scan()
     }
 
     @Test
@@ -1140,6 +1454,51 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(cancellation.message, thrown.message)
         assertFalse(sut.state.value.isConnecting)
         assertNull(sut.state.value.error)
+    }
+
+    @Test
+    fun `disconnectStaleSession should not disconnect unrelated connected device`() = test {
+        val otherDeviceId = "device-other"
+        val knownOther = mockKnownDevice(id = otherDeviceId, path = "/other")
+        val otherDevice = mockDeviceInfo(id = otherDeviceId, path = "/other")
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownOther))
+        whenever(trezorService.scan()).thenReturn(listOf(otherDevice))
+        whenever(trezorService.connect(eq(otherDeviceId), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        assertTrue(sut.connectKnownDevice(otherDeviceId).isSuccess)
+        assertEquals(otherDeviceId, sut.state.value.connectedDeviceId())
+
+        val result = sut.disconnectStaleSession(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        assertEquals(otherDeviceId, sut.state.value.connectedDeviceId())
+        verify(trezorService, never()).disconnect()
+    }
+
+    @Test
+    fun `connectKnownDevice failure should not disconnect unrelated connected device`() = test {
+        val otherDeviceId = "device-other"
+        val knownOther = mockKnownDevice(id = otherDeviceId, path = "/other")
+        val knownTarget = mockKnownDevice()
+        val otherDevice = mockDeviceInfo(id = otherDeviceId, path = "/other")
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownTarget, knownOther))
+        whenever(trezorService.scan()).thenReturn(listOf(otherDevice))
+        whenever(trezorService.connect(eq(otherDeviceId), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        assertTrue(sut.connectKnownDevice(otherDeviceId).isSuccess)
+
+        whenever(trezorService.scan()).thenReturn(emptyList())
+        val result = sut.connectKnownDevice(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertEquals(otherDeviceId, sut.state.value.connectedDeviceId())
+        verify(trezorService, never()).disconnect()
     }
 
     @Test
@@ -1161,6 +1520,127 @@ class TrezorRepoTest : BaseUnitTest() {
         verify(trezorService, times(1)).scan()
         verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
         verify(trezorService, never()).disconnect()
+    }
+
+    @Test
+    fun `ensureConnected returns device busy when current device is locked`() = test {
+        val features = mockFeatures(pinProtection = true, unlocked = false)
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        whenever(trezorService.isConnected()).thenReturn(true)
+        whenever(trezorService.refreshFeatures()).thenReturn(features)
+
+        val result = sut.ensureConnected(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.isTrezorDeviceBusy() == true)
+        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
+    }
+
+    @Test
+    fun `ensureConnected refreshes cached locked features after device unlock`() = test {
+        val lockedFeatures = mockFeatures(pinProtection = true, unlocked = false)
+        val unlockedFeatures = mockFeatures(pinProtection = true, unlocked = true)
+        val device = mockDeviceInfo()
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(lockedFeatures)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        sut = createSut()
+
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        whenever(trezorService.isConnected()).thenReturn(true)
+        whenever(trezorService.refreshFeatures()).thenReturn(unlockedFeatures)
+
+        val result = sut.ensureConnected(DEVICE_ID)
+
+        assertEquals(unlockedFeatures, result.getOrNull())
+        assertEquals(unlockedFeatures, sut.state.value.connected?.features)
+        verify(trezorService).refreshFeatures()
+        verify(trezorService, times(1)).connect(eq(DEVICE_ID), any())
+    }
+
+    @Test
+    fun `ensureConnected retries bluetooth reconnect until scan finds the device`() = test {
+        val bleDeviceId = "ble:57:21:A7:F9:DD:AD"
+        val knownDevice = mockKnownDevice(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TransportType.BLUETOOTH,
+        )
+        val device = mockDeviceInfo(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TrezorTransportType.BLUETOOTH,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(emptyList(), emptyList(), listOf(device))
+        whenever(trezorService.connect(eq(bleDeviceId), any())).thenReturn(features)
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.ensureConnected(bleDeviceId)
+
+        assertTrue(result.isSuccess)
+        assertEquals(features, result.getOrNull())
+        verify(trezorService, times(3)).scan()
+        verify(trezorService).connect(eq(bleDeviceId), any())
+        verify(trezorService, never()).connect(eq(bleDeviceId), any(), eq(false))
+    }
+
+    @Test
+    fun `ensureConnected stops bluetooth retry after user cancellation`() = test {
+        val bleDeviceId = "ble:57:21:A7:F9:DD:AD"
+        val knownDevice = mockKnownDevice(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TransportType.BLUETOOTH,
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(emptyList())
+        whenever(trezorService.connect(eq(bleDeviceId), any())).doAnswer { throw TrezorException.UserCancelled() }
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.ensureConnected(bleDeviceId)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is TrezorException.UserCancelled)
+        verify(trezorService, times(1)).connect(eq(bleDeviceId), any())
+    }
+
+    @Test
+    fun `ensureConnected stops bluetooth retry on device busy`() = test {
+        val bleDeviceId = "ble:57:21:A7:F9:DD:AD"
+        val knownDevice = mockKnownDevice(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TransportType.BLUETOOTH,
+        )
+        val device = mockDeviceInfo(
+            id = bleDeviceId,
+            path = bleDeviceId,
+            transportType = TrezorTransportType.BLUETOOTH,
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.isConnected()).thenReturn(false)
+        whenever(trezorService.scan()).thenReturn(listOf(device))
+        whenever(trezorService.connect(eq(bleDeviceId), any())).doAnswer { throw TrezorException.DeviceBusy() }
+        sut = createSut()
+
+        sut.initialize()
+        val result = sut.ensureConnected(bleDeviceId)
+
+        assertTrue(result.isFailure)
+        assertEquals(true, result.exceptionOrNull()?.isTrezorDeviceBusy())
+        verify(trezorService, times(1)).connect(eq(bleDeviceId), any())
     }
 
     // endregion

@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -35,7 +36,7 @@ import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.viewmodels.TransferEffect
+import to.bitkit.models.safe
 import to.bitkit.viewmodels.TransferViewModel
 
 @Composable
@@ -46,7 +47,6 @@ fun SpendingHwSignScreen(
     onCloseClick: () -> Unit,
     onLearnMoreClick: () -> Unit,
     onAdvancedClick: () -> Unit,
-    onSigned: () -> Unit,
 ) {
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
 
@@ -55,19 +55,21 @@ fun SpendingHwSignScreen(
         return
     }
 
-    LaunchedEffect(Unit) {
-        viewModel.transferEffects.collect { effect ->
-            when (effect) {
-                TransferEffect.OnHwTxSigned -> onSigned()
-                else -> Unit
-            }
-        }
+    LaunchedEffect(deviceId, order.id) {
+        viewModel.warmUpHardwareConnection(deviceId)
+        viewModel.updateHwFundingFeeEstimate(order, deviceId)
+    }
+
+    DisposableEffect(viewModel) {
+        onDispose(viewModel::cancelHardwareTransfer)
     }
 
     Content(
         order = order,
+        miningFeeSats = state.hwMiningFeeSats,
         isAdvanced = state.isAdvanced,
         isSigning = state.isSigning,
+        hasPendingBroadcast = state.hasPendingHwBroadcast,
         onBackClick = onBackClick,
         onLearnMoreClick = onLearnMoreClick,
         onAdvancedClick = onAdvancedClick,
@@ -79,8 +81,10 @@ fun SpendingHwSignScreen(
 @Composable
 private fun Content(
     order: IBtOrder,
+    miningFeeSats: ULong = 0uL,
     isAdvanced: Boolean = false,
     isSigning: Boolean = false,
+    hasPendingBroadcast: Boolean = false,
     onBackClick: () -> Unit = {},
     onLearnMoreClick: () -> Unit = {},
     onAdvancedClick: () -> Unit = {},
@@ -107,13 +111,22 @@ private fun Content(
             ) {
                 VerticalSpacer(32.dp)
                 Display(
-                    text = stringResource(R.string.lightning__transfer_hw__sign_title)
+                    text = stringResource(
+                        if (hasPendingBroadcast) {
+                            R.string.lightning__transfer_hw__signed_title
+                        } else {
+                            R.string.lightning__transfer_hw__sign_title
+                        }
+                    )
                         .withAccent(accentColor = Colors.Purple),
                     modifier = Modifier.fillMaxWidth()
                 )
                 VerticalSpacer(16.dp)
 
-                SpendingHwFeeGrid(order = order)
+                SpendingHwFeeGrid(
+                    order = order,
+                    miningFeeSats = miningFeeSats,
+                )
 
                 VerticalSpacer(24.dp)
 
@@ -122,6 +135,7 @@ private fun Content(
                         text = stringResource(R.string.common__learn_more),
                         size = ButtonSize.Small,
                         fullWidth = false,
+                        enabled = !isSigning && !hasPendingBroadcast,
                         onClick = onLearnMoreClick,
                         modifier = Modifier.testTag("HardwareTransferSignLearnMore")
                     )
@@ -131,6 +145,7 @@ private fun Content(
                         ),
                         size = ButtonSize.Small,
                         fullWidth = false,
+                        enabled = !isSigning && !hasPendingBroadcast,
                         onClick = { if (isAdvanced) onUseDefaultLspBalanceClick() else onAdvancedClick() },
                         modifier = Modifier.testTag(
                             if (isAdvanced) "HardwareTransferSignDefault" else "HardwareTransferSignAdvanced"
@@ -141,7 +156,13 @@ private fun Content(
                 FillHeight()
 
                 PrimaryButton(
-                    text = stringResource(R.string.lightning__transfer_hw__open_connect),
+                    text = stringResource(
+                        if (hasPendingBroadcast) {
+                            R.string.common__retry
+                        } else {
+                            R.string.lightning__transfer_hw__open_connect
+                        }
+                    ),
                     onClick = onOpenConnect,
                     enabled = !isSigning,
                     isLoading = isSigning,
@@ -157,7 +178,11 @@ private fun Content(
 internal fun SpendingHwFeeGrid(
     order: IBtOrder,
     modifier: Modifier = Modifier,
+    miningFeeSats: ULong = 0uL,
 ) {
+    val lspFee = order.feeSat.safe() - order.clientBalanceSat.safe()
+    val total = order.feeSat.safe() + miningFeeSats.safe()
+
     Column(modifier = modifier) {
         Row(
             horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -165,11 +190,11 @@ internal fun SpendingHwFeeGrid(
         ) {
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__network_fee),
-                amount = order.networkFeeSat.toLong(),
+                amount = miningFeeSats.toLong(),
             )
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__lsp_fee),
-                amount = order.serviceFeeSat.toLong(),
+                amount = lspFee.toLong(),
             )
         }
         Row(
@@ -182,9 +207,25 @@ internal fun SpendingHwFeeGrid(
             )
             FeeInfo(
                 label = stringResource(R.string.lightning__spending_confirm__total),
-                amount = order.feeSat.toLong(),
+                amount = total.toLong(),
             )
         }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewWithMiningFee() {
+    AppThemeSurface {
+        Content(
+            order = previewBtOrder(
+                networkFeeSat = 528uL,
+                serviceFeeSat = 132uL,
+                clientBalanceSat = 7_042uL,
+                feeSat = 7_402uL,
+            ),
+            miningFeeSats = 141uL,
+        )
     }
 }
 
@@ -216,6 +257,17 @@ private fun PreviewSigning() {
         Content(
             order = previewBtOrder(),
             isSigning = true,
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewPendingBroadcast() {
+    AppThemeSurface {
+        Content(
+            order = previewBtOrder(),
+            hasPendingBroadcast = true,
         )
     }
 }

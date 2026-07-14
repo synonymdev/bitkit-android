@@ -149,7 +149,8 @@ private sealed interface DevCommand {
             val timeout = args.timeoutSeconds.coerceAtLeast(1).seconds
 
             Logger.info(
-                "Sending keysend probe for target '${args.targetName ?: "unknown"}' nodeId='${args.nodeId}' amountSats='$amountSats'",
+                "Sending keysend probe for target '${args.targetName ?: "unknown"}' " +
+                    "nodeId='${args.nodeId}' amountSats='$amountSats'",
                 context = TAG,
             )
 
@@ -215,7 +216,7 @@ private sealed interface DevResult {
         val message: String? = null,
         val paymentId: String? = null,
         val paymentHash: String? = null,
-        val shortChannelId: ULong? = null,
+        val shortChannelId: String? = null,
         val paymentIds: List<String> = emptyList(),
     ) : DevResult {
         companion object {

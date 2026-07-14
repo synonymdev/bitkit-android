@@ -164,6 +164,7 @@ fun ActivityExploreScreen(
                 val toastMessage = stringResource(R.string.common__copied)
                 ActivityExploreContent(
                     item = item,
+                    isHardware = uiState.isHardwareActivity,
                     txDetails = txDetails,
                     boostTxDoesExist = boostTxDoesExist,
                     onCopy = { text ->
@@ -187,6 +188,7 @@ fun ActivityExploreScreen(
 @Composable
 private fun ActivityExploreContent(
     item: Activity,
+    isHardware: Boolean = false,
     txDetails: TransactionDetails? = null,
     boostTxDoesExist: Map<String, Boolean> = emptyMap(),
     onCopy: (String) -> Unit = {},
@@ -210,7 +212,7 @@ private fun ActivityExploreContent(
                 showBitcoinSymbol = false,
                 modifier = Modifier.weight(1f),
             )
-            ActivityIcon(activity = item, size = 48.dp)
+            ActivityIcon(activity = item, size = 48.dp, isHardware = isHardware)
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -219,6 +221,7 @@ private fun ActivityExploreContent(
             is Activity.Onchain -> {
                 OnchainDetails(
                     onchain = item,
+                    isHardware = isHardware,
                     onCopy = onCopy,
                     txDetails = txDetails,
                     boostTxDoesExist = boostTxDoesExist,
@@ -281,6 +284,7 @@ private fun LightningDetails(
 @Composable
 private fun ColumnScope.OnchainDetails(
     onchain: Activity.Onchain,
+    isHardware: Boolean,
     onCopy: (String) -> Unit,
     txDetails: TransactionDetails?,
     boostTxDoesExist: Map<String, Boolean> = emptyMap(),
@@ -323,7 +327,7 @@ private fun ColumnScope.OnchainDetails(
                 }
             },
         )
-    } else {
+    } else if (!isHardware && !onchain.v1.isTransfer) {
         CircularProgressIndicator(
             strokeWidth = 2.dp,
             modifier = Modifier

@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.PendingSweepBalance
 import to.bitkit.data.dao.TransferDao
@@ -61,6 +62,8 @@ class TransferRepo @Inject constructor(
         fundingTxId: String? = null,
         lspOrderId: String? = null,
         claimableAtHeight: UInt? = null,
+        txTotalSats: Long? = null,
+        preTransferOnchainSats: Long? = null,
     ): Result<String> = withContext(bgDispatcher) {
         runCatching {
             val id = UUID.randomUUID().toString()
@@ -75,6 +78,8 @@ class TransferRepo @Inject constructor(
                     isSettled = false,
                     createdAt = clock.now().epochSeconds,
                     claimableAtHeight = claimableAtHeight?.toInt(),
+                    txTotalSats = txTotalSats,
+                    preTransferOnchainSats = preTransferOnchainSats,
                 )
             )
             Logger.info("Created transfer: id=$id type=$type channelId=$channelId", context = TAG)
@@ -161,30 +166,44 @@ class TransferRepo @Inject constructor(
                 }
             }
 
-            val toSavings = activeTransfers.filter { it.type.isToSavings() }
-
-            for (transfer in toSavings) {
-                val channelId = resolveChannelIdForTransfer(transfer, channels)
-                val hasBalance = balances?.lightningBalances?.any {
-                    it.channelId() == channelId
-                } ?: false
-
-                if (!hasBalance) {
-                    if (transfer.type == TransferType.FORCE_CLOSE) {
-                        settleForceClose(transfer, channelId, balances?.pendingBalancesFromChannelClosures)
-                    } else {
-                        markSettled(transfer.id)
-                        Logger.debug(
-                            "Channel $channelId balance swept, settled transfer: ${transfer.id}",
-                            context = TAG
-                        )
-                    }
-                }
-            }
+            settleToSavingsTransfers(activeTransfers, channels, balances)
         }.onSuccess {
             Logger.verbose("syncTransferStates completed", context = TAG)
         }.onFailure { e ->
             Logger.error("syncTransferStates error", e, context = TAG)
+        }
+    }
+
+    private suspend fun settleToSavingsTransfers(
+        activeTransfers: List<TransferEntity>,
+        channels: List<ChannelDetails>,
+        balances: BalanceDetails?,
+    ) {
+        val toSavings = activeTransfers.filter { it.type.isToSavings() }
+        if (toSavings.isEmpty()) return
+
+        val balanceDetails = balances ?: run {
+            Logger.debug("Skipped settling to-savings transfers because balances are unavailable", context = TAG)
+            return
+        }
+
+        for (transfer in toSavings) {
+            val channelId = resolveChannelIdForTransfer(transfer, channels)
+            val hasBalance = balanceDetails.lightningBalances.any {
+                it.channelId() == channelId
+            }
+
+            if (!hasBalance) {
+                if (transfer.type == TransferType.FORCE_CLOSE) {
+                    settleForceClose(transfer, channelId, balanceDetails.pendingBalancesFromChannelClosures)
+                } else {
+                    markSettled(transfer.id)
+                    Logger.debug(
+                        "Channel $channelId balance swept, settled transfer: ${transfer.id}",
+                        context = TAG
+                    )
+                }
+            }
         }
     }
 

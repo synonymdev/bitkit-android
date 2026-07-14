@@ -121,7 +121,7 @@ internal object Env {
 
     val btcRatesServer
         get() = when (network) {
-            Network.BITCOIN -> "https://blocktank.synonym.to/fx/rates/btc"
+            Network.BITCOIN -> "https://api1.blocktank.to/api/fx/rates/btc"
             else -> "https://bitkit.stag0.blocktank.to/fx/rates/btc"
         }
 
@@ -158,21 +158,6 @@ internal object Env {
     const val BITREFILL_APP = "Bitkit"
     const val BITREFILL_REF = "AL6dyZYt"
 
-    private val pubkyDomain: String
-        get() = when (network) {
-            Network.BITCOIN -> "bitkit.to"
-            else -> "staging.bitkit.to"
-        }
-
-    val pubkyCapabilities: String
-        get() {
-            val prefix = when (network) {
-                Network.BITCOIN -> ""
-                else -> "staging."
-            }
-            return "/pub/$pubkyDomain/:rw,/pub/${prefix}pubky.app/:r,/pub/paykit/v0/:rw"
-        }
-
     val homegateUrl: String
         get() {
             if (isLocalE2eBackend) {
@@ -184,15 +169,6 @@ internal object Env {
                 else -> "https://homegate.staging.pubky.app"
             }
         }
-
-    val profilePath: String
-        get() = "/pub/$pubkyDomain/profile.json"
-
-    val contactsBasePath: String
-        get() = "/pub/$pubkyDomain/contacts/"
-
-    val blobsBasePath: String
-        get() = "/pub/$pubkyDomain/blobs/"
 
     val rnBackupServerHost: String
         get() = when (network) {

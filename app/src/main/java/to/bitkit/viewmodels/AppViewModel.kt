@@ -85,6 +85,7 @@ import to.bitkit.ext.claimableAtHeight
 import to.bitkit.ext.getClipboardText
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.isFixedAmount
+import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
@@ -127,6 +128,7 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentNotification
 import to.bitkit.repositories.PendingPaymentRepo
@@ -142,6 +144,7 @@ import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
+import to.bitkit.services.NodeServiceFgState
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -199,6 +202,7 @@ class AppViewModel @Inject constructor(
     private val transferRepo: TransferRepo,
     private val migrationService: MigrationService,
     private val coreService: CoreService,
+    private val nodeServiceFgState: NodeServiceFgState,
     private val pubkyRepo: PubkyRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
@@ -255,7 +259,7 @@ class AppViewModel @Inject constructor(
 
     private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
     val currentSheet = _currentSheet.asStateFlow()
-    private var isPairingCodeSheetQueued = false
+    private var queuedPairingCodeRequestId: Long? = null
 
     private val processedPaymentsLock = Any()
     private val processedPayments = mutableSetOf<String>()
@@ -337,13 +341,13 @@ class AppViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
-            hwWalletRepo.needsPairingCode.collect { needsCode ->
-                if (needsCode) {
-                    showPairingCodeSheet()
+            hwWalletRepo.pairingCodeRequestId.collect { requestId ->
+                if (requestId != null) {
+                    showPairingCodeSheet(requestId)
                 } else {
-                    isPairingCodeSheetQueued = false
+                    queuedPairingCodeRequestId = null
                     _currentSheet.update { sheet ->
-                        if (sheet is Sheet.Hardware && sheet.route == HardwareRoute.PairCode) null else sheet
+                        if (sheet is Sheet.Hardware && sheet.route is HardwareRoute.PairCode) null else sheet
                     }
                 }
             }
@@ -2145,8 +2149,7 @@ class AppViewModel @Inject constructor(
                 lnurlPay != null -> {
                     QuickPayData.LnurlPay(
                         sats = amountSats,
-                        callback = lnurlPay.callback,
-                        amountMsats = lnurlPay.callbackAmountMsats(amountSats),
+                        data = lnurlPay,
                     )
                 }
 
@@ -2269,7 +2272,7 @@ class AppViewModel @Inject constructor(
         if (isLnurlPay) {
             val amountMsats = lnurl.data.callbackAmountMsats(amount)
             lightningRepo.fetchLnurlInvoice(
-                callbackUrl = lnurl.data.callback,
+                data = lnurl.data,
                 amountMsats = amountMsats,
                 comment = _sendUiState.value.comment.takeIf { it.isNotEmpty() },
             ).onSuccess { invoice ->
@@ -2277,7 +2280,8 @@ class AppViewModel @Inject constructor(
                     it.copy(decodedInvoice = invoice)
                 }
             }.onFailure {
-                toast(Exception(context.getString(R.string.wallet__error_lnurl_invoice_fetch)))
+                val message = getLnurlInvoiceFetchErrorMessage(it)
+                toast(Exception(message))
                 hideSheet()
                 return
             }
@@ -2376,6 +2380,11 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun getLnurlInvoiceFetchErrorMessage(error: Throwable): String = when (error) {
+        is LnurlPayInvoiceMismatchError -> context.getString(R.string.lightning__order_state__payment_canceled)
+        else -> context.getString(R.string.wallet__error_lnurl_invoice_fetch)
     }
 
     fun onConfirmWithdraw() {
@@ -2728,6 +2737,8 @@ class AppViewModel @Inject constructor(
         cacheStore.clearBackgroundReceive()
         showTransactionSheet(details)
     }
+
+    fun isForegroundServiceRunning(): Boolean = nodeServiceFgState.isForegroundServiceRunning
     // endregion
 
     // region Sheets
@@ -2866,10 +2877,12 @@ class AppViewModel @Inject constructor(
     }
 
     fun toast(error: Throwable) {
+        if (error.isTrezorUserCancellation()) return
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.common__error),
-            description = error.message ?: context.getString(R.string.common__error_body)
+            description = error.message?.takeIf { it.isNotBlank() }
+                ?: context.getString(R.string.common__error_body),
         )
     }
 
@@ -3090,28 +3103,35 @@ class AppViewModel @Inject constructor(
      * any screen via silent reconnects, so the sheet is shown app-wide. High-priority
      * sheets are not interrupted: the pairing sheet waits until the active sheet closes.
      */
-    private fun showPairingCodeSheet() {
+    private fun showPairingCodeSheet(requestId: Long) {
         if (isHighPrioritySheet(_currentSheet.value)) {
-            isPairingCodeSheetQueued = true
+            queuedPairingCodeRequestId = requestId
             return
         }
 
-        // The Connect Hardware flow is itself a Hardware sheet and drives the pair-code step
-        // inline within its own NavHost; replacing it here would tear down that back stack.
-        if (_currentSheet.value is Sheet.Hardware) return
+        // The Connect Hardware flow drives pair-code requests through its own NavHost. An app-wide
+        // PairCode sheet has no connect back stack to preserve, so replace its start route when the
+        // device requests a new code and force the input state to reset.
+        val currentSheet = _currentSheet.value
+        if (currentSheet is Sheet.Hardware) {
+            if (currentSheet.route is HardwareRoute.PairCode && currentSheet.route.requestId != requestId) {
+                _currentSheet.update { Sheet.Hardware(route = HardwareRoute.PairCode(requestId)) }
+            }
+            return
+        }
 
-        isPairingCodeSheetQueued = false
-        showSheet(Sheet.Hardware(route = HardwareRoute.PairCode))
+        queuedPairingCodeRequestId = null
+        showSheet(Sheet.Hardware(route = HardwareRoute.PairCode(requestId)))
     }
 
     private fun showQueuedPairingCodeSheet() {
-        if (!isPairingCodeSheetQueued) return
+        val requestId = queuedPairingCodeRequestId ?: return
         if (!hwWalletRepo.needsPairingCode.value) {
-            isPairingCodeSheetQueued = false
+            queuedPairingCodeRequestId = null
             return
         }
 
-        showPairingCodeSheet()
+        showPairingCodeSheet(requestId)
     }
 
     private fun isHighPrioritySheet(sheet: Sheet?) = sheet is Sheet.Gift ||
@@ -3398,7 +3418,7 @@ sealed interface QuickPayData {
     data class Bolt11(override val sats: ULong, val bolt11: String) : QuickPayData
 
     @Stable
-    data class LnurlPay(override val sats: ULong, val callback: String, val amountMsats: ULong) : QuickPayData
+    data class LnurlPay(override val sats: ULong, val data: LnurlPayData) : QuickPayData
 }
 // endregion
 

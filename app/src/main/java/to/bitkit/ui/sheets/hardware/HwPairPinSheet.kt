@@ -50,16 +50,17 @@ private val PAIRING_CELL_SPACING = 8.dp
 
 @Composable
 fun HwPairCodeSheet(
+    requestId: Long,
     onSubmit: (String) -> Unit,
     onCancel: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var code by remember { mutableStateOf("") }
-    var submitted by remember { mutableStateOf(false) }
+    var code by remember(requestId) { mutableStateOf("") }
+    var submitted by remember(requestId) { mutableStateOf(false) }
 
     // Dismissing the sheet without submitting (e.g. swipe down) cancels the pending
     // pairing request so the connect attempt does not hang until its timeout.
-    DisposableEffect(Unit) {
+    DisposableEffect(requestId) {
         onDispose { if (!submitted) onCancel() }
     }
 

@@ -4,12 +4,9 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
-import com.synonym.bitkitcore.HistoryTransaction
-import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
-import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -37,12 +34,14 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
-import to.bitkit.ext.create
+import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.timestamp
 import to.bitkit.models.HwFundingAccount
 import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwFundingBroadcastResult
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
@@ -86,12 +85,16 @@ class HwWalletRepo @Inject constructor(
         private const val WATCHER_ID_SEPARATOR = "|"
         private val WATCHER_START_RETRY_DELAY = 30.seconds
         const val DEVICE_LABEL_MAX_LENGTH = 50
+
+        /** Trezor v1 (2.4.0) tracks native segwit only; multi-type HW support is follow-up work. */
+        private val SUPPORTED_WATCHER_ADDRESS_TYPES = setOf(HwFundingAddressType.NATIVE_SEGWIT.settingsKey)
     }
 
     private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
 
     private val activeWatchers = mutableSetOf<String>()
     private val activeWatcherElectrumUrls = mutableMapOf<String, String>()
+    private val activeWatcherWalletIds = mutableMapOf<String, String>()
     private val retryingWatcherStarts = mutableSetOf<String>()
     private val watcherSyncRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val _watcherData = MutableStateFlow<Map<String, HwWatcherData>>(emptyMap())
@@ -107,6 +110,8 @@ class HwWalletRepo @Inject constructor(
 
     fun onAppForegrounded() = trezorRepo.onAppForegrounded()
 
+    fun warmUpKnownDevice(deviceId: String) = trezorRepo.warmUpKnownDevice(deviceId)
+
     suspend fun resetState() = withContext(ioDispatcher) {
         activeWatchers.toList().forEach { watcherId ->
             trezorRepo.stopWatcher(watcherId)
@@ -114,6 +119,7 @@ class HwWalletRepo @Inject constructor(
         }
         activeWatchers.clear()
         activeWatcherElectrumUrls.clear()
+        activeWatcherWalletIds.clear()
         retryingWatcherStarts.clear()
         emittedReceivedTxIds.clear()
         _watcherData.update { emptyMap() }
@@ -122,6 +128,9 @@ class HwWalletRepo @Inject constructor(
 
     /** Pairing-code request raised by the device during connect; the UI shows the Pair Device sheet. */
     val needsPairingCode = trezorRepo.needsPairingCode
+
+    /** Identity of the active request, incremented for each pairing-code callback. */
+    val pairingCodeRequestId = trezorRepo.pairingCodeRequestId
 
     fun submitPairingCode(code: String) = trezorRepo.submitPairingCode(code)
 
@@ -152,6 +161,8 @@ class HwWalletRepo @Inject constructor(
     ): Result<TrezorFeatures> = trezorRepo.connectKnownDevice(deviceId, forceSession = forceSession)
 
     suspend fun ensureConnected(deviceId: String): Result<TrezorFeatures> = trezorRepo.ensureConnected(deviceId)
+
+    suspend fun isKnownBluetoothDevice(deviceId: String): Boolean = trezorRepo.isKnownBluetoothDevice(deviceId)
 
     suspend fun getFundingAccount(
         deviceId: String,
@@ -212,27 +223,41 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    /** Signs a composed funding payment on the Trezor and broadcasts it. */
-    suspend fun signAndBroadcastFunding(
+    /** Signs a composed funding payment on the Trezor. */
+    suspend fun signFunding(
         deviceId: String,
         funding: HwFundingTransaction,
-    ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
+    ): Result<HwFundingSignedTx> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val signed = runSuspendCatching {
-                trezorRepo.signTxFromPsbt(
-                    psbtBase64 = funding.psbt,
-                    network = Env.network.toTrezorCoinType(),
-                ).getOrThrow()
+            val signedTx = trezorRepo.signTxFromPsbt(
+                psbtBase64 = funding.psbt,
+                network = Env.network.toTrezorCoinType(),
+            ).getOrElse {
+                if (!it.isTrezorUserCancellation()) {
+                    trezorRepo.disconnectStaleSession(deviceId)
+                }
+                throw it
             }
-            if (signed.isFailure) {
-                trezorRepo.disconnectStaleSession(deviceId)
-            }
-            val txId = trezorRepo.broadcastRawTx(serializedTx = signed.getOrThrow().serializedTx).getOrThrow()
-            HwFundingBroadcastResult(
-                txId = txId,
+            HwFundingSignedTx(
+                serializedTx = signedTx.serializedTx,
                 miningFeeSats = funding.miningFeeSats,
                 feeRate = ceil(funding.feeRate.toDouble()).toULong(),
                 totalSpent = funding.totalSpent,
+            )
+        }
+    }
+
+    /** Broadcasts a signed funding payment without requiring the hardware device. */
+    suspend fun broadcastFunding(
+        signedTx: HwFundingSignedTx,
+    ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val txId = trezorRepo.broadcastRawTx(serializedTx = signedTx.serializedTx).getOrThrow()
+            HwFundingBroadcastResult(
+                txId = txId,
+                miningFeeSats = signedTx.miningFeeSats,
+                feeRate = signedTx.feeRate,
+                totalSpent = signedTx.totalSpent,
             )
         }
     }
@@ -352,22 +377,19 @@ class HwWalletRepo @Inject constructor(
             trezorRepo.watcherEvents.collect { (watcherId, event) ->
                 if (event !is WatcherEvent.TransactionsChanged) return@collect
                 val previous = _watcherData.value[watcherId]
-                val activities = event.transactions
-                    .map { it.toOnchainActivity(clock, previous?.activities.orEmpty()) }
-                    .toImmutableList()
+                val activities = event.activities.toImmutableList()
                 val watcher = HwWatcherData(
                     deviceId = watcherId.toDeviceId(),
                     addressType = watcherId.toAddressTypeKey(),
                     balanceSats = event.balance.total,
-                    transactions = event.transactions.toImmutableList(),
                     activities = activities,
                 )
-                val updatedWatcherData = _watcherData.value + (watcherId to watcher)
-                _watcherData.update { updatedWatcherData }
+                _watcherData.update { it + (watcherId to watcher) }
+                val updatedWatcherData = _watcherData.value
                 activities.filterIsInstance<Activity.Onchain>().forEach {
                     activityRepo.syncHardwareOnchainActivity(it.v1)
                 }
-                emitReceivedTxs(previous, event, updatedWatcherData)
+                emitReceivedTxs(previous, activities, updatedWatcherData)
             }
         }
     }
@@ -378,21 +400,21 @@ class HwWalletRepo @Inject constructor(
      */
     private suspend fun emitReceivedTxs(
         previous: HwWatcherData?,
-        event: WatcherEvent.TransactionsChanged,
+        activities: List<Activity>,
         watcherData: Map<String, HwWatcherData>,
     ) {
         if (previous == null) return
-        val knownTxIds = previous.activities.map { it.rawId() }.toSet()
+        val knownTxIds = previous.activities.mapNotNull { activity ->
+            (activity as? Activity.Onchain)?.v1?.txId
+        }.toSet()
         val mergedActivities = watcherData.values.toList().toMergedActivities()
-        event.transactions
-            .filter {
-                it.direction == TxDirection.RECEIVED &&
-                    it.txid !in knownTxIds &&
-                    emittedReceivedTxIds.add(it.txid)
-            }
-            .forEach {
-                val sats = mergedActivities.findOnchain(it.txid)?.v1?.value ?: it.amount
-                _receivedTxs.emit(HwWalletReceivedTx(txid = it.txid, sats = sats))
+        activities.filterIsInstance<Activity.Onchain>()
+            .filter { it.v1.txType == PaymentType.RECEIVED }
+            .forEach { onchain ->
+                val txid = onchain.v1.txId
+                if (txid in knownTxIds || !emittedReceivedTxIds.add(txid)) return@forEach
+                val sats = mergedActivities.findOnchain(txid)?.v1?.value ?: onchain.v1.value
+                _receivedTxs.emit(HwWalletReceivedTx(txid = txid, sats = sats))
             }
     }
 
@@ -413,22 +435,34 @@ class HwWalletRepo @Inject constructor(
             ) { desired, _ ->
                 desired
             }.collect { (knownDevices, watcherSettings) ->
-                // Only watch the address types the user monitors (Settings > Advanced > Address Type),
-                // mirroring the on-chain wallet. Xpubs for all types are still captured on connect, so
-                // toggling a type on later starts its watcher without reconnecting the device.
+                // Trezor v1 watches native segwit only (not global Advanced address-type monitoring).
+                // Xpubs for all types are still captured on connect for a future multi-type release.
                 // Device entries sharing an xpub (same device on bluetooth and usb) watch it only once.
                 val filtered = knownDevices.flatMap { device ->
+                    val walletId = device.resolvedWalletId() ?: return@flatMap emptyList<WatcherSpec>()
                     device.xpubs
-                        .filterKeys { it in watcherSettings.monitoredTypes }
+                        .filterKeys { it in SUPPORTED_WATCHER_ADDRESS_TYPES }
                         .map { (addressType, xpub) ->
-                            WatcherSpec(device.id, addressType, xpub, watcherSettings.electrumUrl)
+                            WatcherSpec(
+                                deviceId = device.id,
+                                addressType = addressType,
+                                xpub = xpub,
+                                electrumUrl = watcherSettings.electrumUrl,
+                                walletId = walletId,
+                            )
                         }
                 }.distinctBy { it.addressType to it.xpub }
                 val filteredIds = filtered.map { it.watcherId }.toSet()
 
                 filtered.forEach { spec ->
                     val isActive = spec.watcherId in activeWatchers
-                    if (isActive && activeWatcherElectrumUrls[spec.watcherId] == spec.electrumUrl) return@forEach
+                    if (
+                        isActive &&
+                        activeWatcherElectrumUrls[spec.watcherId] == spec.electrumUrl &&
+                        activeWatcherWalletIds[spec.watcherId] == spec.walletId
+                    ) {
+                        return@forEach
+                    }
                     if (isActive && !stopActiveWatcher(spec.watcherId)) return@forEach
 
                     trezorRepo.startWatcher(
@@ -437,9 +471,11 @@ class HwWalletRepo @Inject constructor(
                         network = Env.network.toCoreNetwork(),
                         accountType = spec.addressType.toAddressType()?.toAccountType(),
                         electrumUrl = spec.electrumUrl,
+                        walletId = spec.walletId,
                     ).onSuccess {
                         activeWatchers += spec.watcherId
                         activeWatcherElectrumUrls[spec.watcherId] = spec.electrumUrl
+                        activeWatcherWalletIds[spec.watcherId] = spec.walletId
                         retryingWatcherStarts -= spec.watcherId
                     }.onFailure {
                         Logger.warn("Retrying watcher '${spec.watcherId}' after start failure", it, context = TAG)
@@ -460,6 +496,7 @@ class HwWalletRepo @Inject constructor(
         trezorRepo.stopWatcher(watcherId).onSuccess {
             activeWatchers -= watcherId
             activeWatcherElectrumUrls -= watcherId
+            activeWatcherWalletIds -= watcherId
             _watcherData.update { it - watcherId }
         }.isSuccess
 
@@ -473,57 +510,58 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    private fun HistoryTransaction.toOnchainActivity(clock: Clock, previousActivities: List<Activity>): Activity {
-        val activityTimestamp = timestamp ?: previousActivities.findOnchain(txid)?.v1?.timestamp
-            ?: clock.now().epochSeconds.toULong()
-        return listOf(this).toOnchainActivity(
-            timestamp = activityTimestamp,
-            sourceActivities = previousActivities,
-        )
-    }
+    private fun KnownDevice.resolvedWalletId(): String? =
+        walletId.takeIf { it.isNotBlank() } ?: trezorRepo.deriveWalletId(xpubs)
 
-    private fun List<HwWatcherData>.toMergedActivities(): List<Activity> {
-        val sourceActivities = flatMap { it.activities }
-        return flatMap { it.transactions }
-            .groupBy { it.txid }
+    private fun List<HwWatcherData>.toMergedActivities(): List<Activity> =
+        flatMap { it.activities }
+            .groupBy { it.rawId() }
             .values
-            .map { transactions ->
-                val timestamp = transactions.mapNotNull { it.timestamp }.minOrNull()
-                    ?: sourceActivities.findOnchain(transactions.first().txid)?.v1?.timestamp
-                    ?: 0uL
-                transactions.toOnchainActivity(timestamp, sourceActivities)
-            }
-    }
+            .map { it.mergedActivity() }
+            .sortedByDescending { it.timestamp() }
 
-    private fun List<HistoryTransaction>.toOnchainActivity(
-        timestamp: ULong,
-        sourceActivities: List<Activity>,
-    ): Activity {
-        val first = first()
-        val received = fold(0uL) { acc, tx -> acc.safe() + tx.received.safe() }
-        val sent = fold(0uL) { acc, tx -> acc.safe() + tx.sent.safe() }
-        val fee = mapNotNull { it.fee }.maxOrNull() ?: 0uL
-        val type = when {
+    private fun List<Activity>.mergedActivity(): Activity {
+        if (size == 1) return first()
+
+        val onchainActivities = filterIsInstance<Activity.Onchain>()
+        if (onchainActivities.size != size) return first()
+
+        val base = onchainActivities.minBy { it.v1.timestamp }
+        val received = onchainActivities.filter { it.v1.txType == PaymentType.RECEIVED }
+            .fold(0uL) { acc, activity -> acc.safe() + activity.v1.value.safe() }
+        val sent = onchainActivities.filter { it.v1.txType == PaymentType.SENT }
+            .fold(0uL) { acc, activity -> acc.safe() + activity.v1.value.safe() }
+        val fee = onchainActivities.maxOf { it.v1.fee }
+        val feeRate = onchainActivities.maxOf { it.v1.feeRate }
+        val txType = when {
             received > sent -> PaymentType.RECEIVED
-            else -> PaymentType.SENT
+            sent > received -> PaymentType.SENT
+            else -> base.v1.txType
         }
-        val value = when (type) {
+        val value = when (txType) {
             PaymentType.RECEIVED -> received.safe() - sent.safe()
-            PaymentType.SENT -> (sent.safe() - received.safe()).safe() - fee.safe()
+            PaymentType.SENT -> sent.safe() - received.safe()
         }
-        val confirmations = maxOf { it.confirmations }
-        val sourceActivity = sourceActivities.findOnchain(first.txid)
+
         return Activity.Onchain(
-            OnchainActivity.create(
-                id = first.txid,
-                txType = type,
-                txId = first.txid,
+            base.v1.copy(
+                txType = txType,
                 value = value,
                 fee = fee,
-                address = "",
-                timestamp = timestamp,
-                confirmed = confirmations > 0u,
-                confirmTimestamp = sourceActivity?.v1?.confirmTimestamp,
+                feeRate = feeRate,
+                address = onchainActivities.firstOrNull { it.v1.address.isNotBlank() }?.v1?.address.orEmpty(),
+                confirmed = onchainActivities.any { it.v1.confirmed },
+                isBoosted = onchainActivities.any { it.v1.isBoosted },
+                boostTxIds = onchainActivities.flatMap { it.v1.boostTxIds }.distinct(),
+                isTransfer = onchainActivities.any { it.v1.isTransfer },
+                doesExist = onchainActivities.any { it.v1.doesExist },
+                confirmTimestamp = onchainActivities.mapNotNull { it.v1.confirmTimestamp }.maxOrNull(),
+                channelId = onchainActivities.firstNotNullOfOrNull { it.v1.channelId },
+                transferTxId = onchainActivities.firstNotNullOfOrNull { it.v1.transferTxId },
+                contact = onchainActivities.firstNotNullOfOrNull { it.v1.contact },
+                createdAt = onchainActivities.mapNotNull { it.v1.createdAt }.minOrNull(),
+                updatedAt = onchainActivities.mapNotNull { it.v1.updatedAt }.maxOrNull(),
+                seenAt = onchainActivities.mapNotNull { it.v1.seenAt }.minOrNull(),
             )
         )
     }
@@ -536,6 +574,7 @@ class HwWalletRepo @Inject constructor(
         val addressType: String,
         val xpub: String,
         val electrumUrl: String,
+        val walletId: String,
     ) {
         val watcherId: String get() = "$deviceId$WATCHER_ID_SEPARATOR$addressType"
     }
@@ -577,6 +616,5 @@ private data class HwWatcherData(
     val deviceId: String,
     val addressType: String,
     val balanceSats: ULong,
-    val transactions: ImmutableList<HistoryTransaction>,
     val activities: ImmutableList<Activity>,
 )

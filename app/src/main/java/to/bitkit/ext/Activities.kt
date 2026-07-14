@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
+import to.bitkit.models.WalletScope
 
 fun Activity.rawId(): String = when (this) {
     is Activity.Lightning -> v1.id
@@ -94,6 +95,7 @@ enum class BoostType { RBF, CPFP }
 
 @Suppress("LongParameterList")
 fun LightningActivity.Companion.create(
+    walletId: String = WalletScope.default,
     id: String,
     txType: PaymentType,
     status: PaymentState,
@@ -108,6 +110,7 @@ fun LightningActivity.Companion.create(
     updatedAt: ULong? = createdAt,
     seenAt: ULong? = null,
 ) = LightningActivity(
+    walletId = walletId,
     id = id,
     txType = txType,
     status = status,
@@ -125,6 +128,7 @@ fun LightningActivity.Companion.create(
 
 @Suppress("LongParameterList")
 fun OnchainActivity.Companion.create(
+    walletId: String = WalletScope.default,
     id: String,
     txType: PaymentType,
     txId: String,
@@ -146,6 +150,7 @@ fun OnchainActivity.Companion.create(
     updatedAt: ULong? = createdAt,
     seenAt: ULong? = null,
 ) = OnchainActivity(
+    walletId = walletId,
     id = id,
     txType = txType,
     txId = txId,

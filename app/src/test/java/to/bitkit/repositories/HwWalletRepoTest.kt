@@ -3,11 +3,11 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ComposeResult
-import com.synonym.bitkitcore.HistoryTransaction
+import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorSignedTx
-import com.synonym.bitkitcore.TxDirection
 import com.synonym.bitkitcore.WalletBalance
 import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -22,6 +22,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -32,6 +33,8 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
+import to.bitkit.ext.create
+import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.KnownDevice
@@ -83,6 +86,10 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(trezorRepo.state).thenReturn(trezorState)
         whenever(trezorRepo.watcherEvents).thenReturn(watcherEvents)
+        whenever(trezorRepo.deriveWalletId(any())).thenAnswer { invocation ->
+            val xpubs = invocation.getArgument<Map<String, String>>(0)
+            "derived-${xpubs.values.sorted().joinToString()}"
+        }
         runBlocking {
             whenever(activityRepo.syncHardwareOnchainActivity(any())).thenReturn(Result.success(Unit))
         }
@@ -145,7 +152,8 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 10_562_411uL),
-                transactions = listOf(receivedTransaction(amount = 10_562_411uL)),
+                activities = listOf(watcherActivity(amount = 10_562_411uL)),
+                transactionDetails = emptyList(),
                 txCount = 1u,
                 blockHeight = 850_000u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -168,7 +176,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 100uL),
-                transactions = emptyList(),
+                activities = emptyList(), transactionDetails = emptyList(),
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -177,7 +185,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|taproot" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 50uL),
-                transactions = emptyList(),
+                activities = emptyList(), transactionDetails = emptyList(),
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
@@ -191,13 +199,38 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `merges activities in descending timestamp order`() = test {
+        val sut = createRepo()
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 200uL),
+                activities = listOf(
+                    watcherActivity(amount = 100uL, txid = "older", timestamp = 1_600_000_000uL),
+                    watcherActivity(amount = 100uL, txid = "newer", timestamp = 1_800_000_000uL),
+                ),
+                transactionDetails = emptyList(),
+                txCount = 2u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+
+        val activities = sut.wallets.value.single().activities
+        assertEquals(2, activities.size)
+        assertEquals("newer", (activities[0] as Activity.Onchain).v1.txId)
+        assertEquals("older", (activities[1] as Activity.Onchain).v1.txId)
+    }
+
+    @Test
     fun `merges duplicate tx activities from multiple address-type watchers`() = test {
         val sut = createRepo()
 
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 100uL),
-                transactions = listOf(receivedTransaction(amount = 100uL).copy(txid = "shared")),
+                activities = listOf(watcherActivity(amount = 100uL, txid = "shared")),
+                transactionDetails = emptyList(),
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -206,7 +239,8 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|taproot" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 50uL),
-                transactions = listOf(receivedTransaction(amount = 50uL).copy(txid = "shared")),
+                activities = listOf(watcherActivity(amount = 50uL, txid = "shared")),
+                transactionDetails = emptyList(),
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
@@ -234,7 +268,8 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 100uL),
-                transactions = listOf(receivedTransaction(amount = 100uL).copy(txid = "shared")),
+                activities = listOf(watcherActivity(amount = 100uL, txid = "shared")),
+                transactionDetails = emptyList(),
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -243,7 +278,8 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev2|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 50uL),
-                transactions = listOf(receivedTransaction(amount = 50uL).copy(txid = "shared")),
+                activities = listOf(watcherActivity(amount = 50uL, txid = "shared")),
+                transactionDetails = emptyList(),
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -257,22 +293,57 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `preserves generated timestamp for pending tx refreshes`() = test {
-        whenever(clock.now())
-            .thenReturn(Instant.fromEpochSeconds(1_800_000_000))
-            .thenReturn(Instant.fromEpochSeconds(1_800_000_060))
+    fun `merges duplicate sent tx activities without subtracting fee twice`() = test {
         val sut = createRepo()
-        val pendingTx = receivedTransaction(amount = 100uL).copy(
+        val fee = 1_000uL
+
+        watcherEvents.emit(
+            "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 0uL),
+                activities = listOf(
+                    watcherActivity(amount = 40_000uL, txid = "sent-shared", txType = PaymentType.SENT, fee = fee),
+                ),
+                transactionDetails = emptyList(),
+                txCount = 1u,
+                blockHeight = 1u,
+                accountType = AccountType.NATIVE_SEGWIT,
+            )
+        )
+        watcherEvents.emit(
+            "dev1|taproot" to WatcherEvent.TransactionsChanged(
+                balance = walletBalance(total = 0uL),
+                activities = listOf(
+                    watcherActivity(amount = 20_000uL, txid = "sent-shared", txType = PaymentType.SENT, fee = fee),
+                ),
+                transactionDetails = emptyList(),
+                txCount = 1u,
+                blockHeight = 1u,
+                accountType = AccountType.TAPROOT,
+            )
+        )
+
+        val activity = sut.wallets.value.single().activities.single() as Activity.Onchain
+        assertEquals(PaymentType.SENT, activity.v1.txType)
+        assertEquals(60_000uL, activity.v1.value)
+        assertEquals(fee, activity.v1.fee)
+    }
+
+    @Test
+    fun `preserves activity timestamp across watcher refreshes`() = test {
+        val sut = createRepo()
+        val pendingActivity = watcherActivity(
+            amount = 100uL,
             txid = "pending",
             blockHeight = null,
-            timestamp = null,
+            timestamp = 1_800_000_000uL,
             confirmations = 0u,
         )
 
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 100uL),
-                transactions = listOf(pendingTx),
+                activities = listOf(pendingActivity),
+                transactionDetails = emptyList(),
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -283,7 +354,8 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 100uL),
-                transactions = listOf(pendingTx),
+                activities = listOf(pendingActivity),
+                transactionDetails = emptyList(),
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -296,7 +368,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `starts watchers only for the address types the user monitors`() = test {
+    fun `starts native segwit watcher regardless of monitored address types`() = test {
         storeData.value = HwWalletData(
             knownDevices = listOf(
                 device.copy(
@@ -313,9 +385,9 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         createRepo()
 
-        verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any())
-        verify(trezorRepo).startWatcher(eq("dev1|taproot"), any(), any(), any(), anyOrNull(), any())
-        verify(trezorRepo, never()).startWatcher(eq("dev1|legacy"), any(), any(), any(), anyOrNull(), any())
+        verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
+        verify(trezorRepo, never()).startWatcher(eq("dev1|taproot"), any(), any(), any(), anyOrNull(), any(), any())
+        verify(trezorRepo, never()).startWatcher(eq("dev1|legacy"), any(), any(), any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -333,6 +405,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             gapLimit = any(),
             accountType = anyOrNull(),
             electrumUrl = eq(electrumServer),
+            walletId = any(),
         )
     }
 
@@ -358,6 +431,62 @@ class HwWalletRepoTest : BaseUnitTest() {
             gapLimit = any(),
             accountType = anyOrNull(),
             electrumUrl = eq(secondServer),
+            walletId = any(),
+        )
+    }
+
+    @Test
+    fun `restarts active watchers when wallet id changes`() = test {
+        val derivedWalletId = "derived-zpubNS"
+        storeData.value = HwWalletData(knownDevices = listOf(device.copy(walletId = "legacy-wallet-id")))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever(trezorRepo.stopWatcher(any())).thenReturn(Result.success(Unit))
+
+        createRepo()
+        runCurrent()
+
+        val order = inOrder(trezorRepo)
+        order.verify(trezorRepo).startWatcher(
+            watcherId = eq("dev1|nativeSegwit"),
+            extendedKey = eq("zpubNS"),
+            network = eq(Env.network.toCoreNetwork()),
+            gapLimit = any(),
+            accountType = anyOrNull(),
+            electrumUrl = any(),
+            walletId = eq("legacy-wallet-id"),
+        )
+
+        storeData.value = HwWalletData(knownDevices = listOf(device.copy(walletId = derivedWalletId)))
+        runCurrent()
+
+        order.verify(trezorRepo).stopWatcher("dev1|nativeSegwit")
+        order.verify(trezorRepo).startWatcher(
+            watcherId = eq("dev1|nativeSegwit"),
+            extendedKey = eq("zpubNS"),
+            network = eq(Env.network.toCoreNetwork()),
+            gapLimit = any(),
+            accountType = anyOrNull(),
+            electrumUrl = any(),
+            walletId = eq(derivedWalletId),
+        )
+    }
+
+    @Test
+    fun `starts watchers with derived wallet id when store value is blank`() = test {
+        storeData.value = HwWalletData(knownDevices = listOf(device.copy(walletId = "")))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+
+        createRepo()
+        runCurrent()
+
+        verify(trezorRepo).startWatcher(
+            watcherId = eq("dev1|nativeSegwit"),
+            extendedKey = eq("zpubNS"),
+            network = eq(Env.network.toCoreNetwork()),
+            gapLimit = any(),
+            accountType = anyOrNull(),
+            electrumUrl = any(),
+            walletId = eq("derived-zpubNS"),
         )
     }
 
@@ -367,12 +496,15 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         createRepo()
 
-        verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any())
+        verify(trezorRepo).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
 
         advanceTimeBy(30.seconds)
         runCurrent()
 
-        verify(trezorRepo, times(2)).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any())
+        verify(
+            trezorRepo,
+            times(2)
+        ).startWatcher(eq("dev1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
     }
 
     @Test
@@ -385,7 +517,8 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 100uL),
-                transactions = listOf(receivedTransaction(amount = 100uL)),
+                activities = listOf(watcherActivity(amount = 100uL)),
+                transactionDetails = emptyList(),
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -397,10 +530,11 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 150uL),
-                transactions = listOf(
-                    receivedTransaction(amount = 100uL),
-                    receivedTransaction(amount = 50uL).copy(txid = "t2"),
+                activities = listOf(
+                    watcherActivity(amount = 100uL),
+                    watcherActivity(amount = 50uL, txid = "t2"),
                 ),
+                transactionDetails = emptyList(),
                 txCount = 2u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -412,10 +546,11 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 150uL),
-                transactions = listOf(
-                    receivedTransaction(amount = 100uL),
-                    receivedTransaction(amount = 50uL).copy(txid = "t2"),
+                activities = listOf(
+                    watcherActivity(amount = 100uL),
+                    watcherActivity(amount = 50uL, txid = "t2"),
                 ),
+                transactionDetails = emptyList(),
                 txCount = 2u,
                 blockHeight = 3u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -435,7 +570,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 0uL),
-                transactions = emptyList(),
+                activities = emptyList(), transactionDetails = emptyList(),
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -444,7 +579,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|taproot" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 0uL),
-                transactions = emptyList(),
+                activities = emptyList(), transactionDetails = emptyList(),
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
@@ -454,7 +589,8 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 100uL),
-                transactions = listOf(receivedTransaction(amount = 100uL).copy(txid = "shared")),
+                activities = listOf(watcherActivity(amount = 100uL, txid = "shared")),
+                transactionDetails = emptyList(),
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -463,7 +599,8 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|taproot" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 50uL),
-                transactions = listOf(receivedTransaction(amount = 50uL).copy(txid = "shared")),
+                activities = listOf(watcherActivity(amount = 50uL, txid = "shared")),
+                transactionDetails = emptyList(),
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.TAPROOT,
@@ -483,7 +620,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 100uL),
-                transactions = emptyList(),
+                activities = emptyList(), transactionDetails = emptyList(),
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -492,9 +629,10 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 40uL),
-                transactions = listOf(
-                    receivedTransaction(amount = 60uL).copy(txid = "t3", direction = TxDirection.SENT),
+                activities = listOf(
+                    watcherActivity(amount = 60uL, txid = "t3", txType = PaymentType.SENT),
                 ),
+                transactionDetails = emptyList(),
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -514,13 +652,17 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         val sut = createRepo()
 
-        verify(trezorRepo).startWatcher(eq("ble1|nativeSegwit"), any(), any(), any(), anyOrNull(), any())
-        verify(trezorRepo, never()).startWatcher(eq("usb1|nativeSegwit"), any(), any(), any(), anyOrNull(), any())
+        verify(trezorRepo).startWatcher(eq("ble1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
+        verify(
+            trezorRepo,
+            never()
+        ).startWatcher(eq("usb1|nativeSegwit"), any(), any(), any(), anyOrNull(), any(), any())
 
         watcherEvents.emit(
             "ble1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 421_900uL),
-                transactions = listOf(receivedTransaction(amount = 421_900uL)),
+                activities = listOf(watcherActivity(amount = 421_900uL)),
+                transactionDetails = emptyList(),
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -558,29 +700,41 @@ class HwWalletRepoTest : BaseUnitTest() {
     @Test
     fun `keeps a stale watcher until stopping it succeeds`() = test {
         storeData.value = HwWalletData(
-            knownDevices = listOf(device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS")))
+            knownDevices = listOf(
+                device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS", "taproot" to "zpubTR")),
+            )
         )
         wheneverStartWatcher().thenReturn(Result.success(Unit))
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.failure(AppError("stop failed")))
         val sut = createRepo()
+        runCurrent()
 
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 100uL),
-                transactions = emptyList(),
+                activities = emptyList(), transactionDetails = emptyList(),
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
             )
         )
+        runCurrent()
 
-        // Stop fails: the watcher data must survive so the balance is not silently wrong.
-        settingsData.value = SettingsData(addressTypesToMonitor = emptyList())
+        // Dropping the native-segwit xpub stops the watcher; a failed stop keeps ghost balance visible.
+        storeData.value = HwWalletData(
+            knownDevices = listOf(device.copy(xpubs = mapOf("taproot" to "zpubTR"))),
+        )
+        runCurrent()
         assertEquals(100uL, sut.totalSats.value)
 
         // Stop succeeds on a later sync: the watcher data is finally dropped.
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
-        settingsData.value = SettingsData(addressTypesToMonitor = listOf("taproot"))
+        storeData.value = HwWalletData(
+            knownDevices = listOf(
+                device.copy(xpubs = mapOf("taproot" to "zpubTR"), lastConnectedAt = 2L),
+            ),
+        )
+        runCurrent()
         assertEquals(0uL, sut.totalSats.value)
     }
 
@@ -596,7 +750,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         watcherEvents.emit(
             "dev1|nativeSegwit" to WatcherEvent.TransactionsChanged(
                 balance = walletBalance(total = 100uL),
-                transactions = emptyList(),
+                activities = emptyList(), transactionDetails = emptyList(),
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
@@ -703,6 +857,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             gapLimit = any(),
             accountType = anyOrNull(),
             electrumUrl = any(),
+            walletId = any(),
         )
     }
 
@@ -722,6 +877,15 @@ class HwWalletRepoTest : BaseUnitTest() {
         sut.onAppForegrounded()
 
         verify(trezorRepo).onAppForegrounded()
+    }
+
+    @Test
+    fun `forwards warm up known device to the trezor repo`() = test {
+        val sut = createRepo()
+
+        sut.warmUpKnownDevice("dev1")
+
+        verify(trezorRepo).warmUpKnownDevice("dev1")
     }
 
     @Test
@@ -788,11 +952,11 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `signAndBroadcastFunding returns txid and composed fee data`() = test {
+    fun `signFunding returns signed transaction and composed fee data`() = test {
         val signedTx = TrezorSignedTx(
             signatures = emptyList(),
             serializedTx = "rawtx",
-            txid = "signed-txid",
+            txid = null,
         )
         val funding = HwFundingTransaction(
             psbt = "psbt",
@@ -803,20 +967,58 @@ class HwWalletRepoTest : BaseUnitTest() {
         )
         whenever(trezorRepo.signTxFromPsbt("psbt", Env.network.toTrezorCoinType()))
             .thenReturn(Result.success(signedTx))
+        val sut = createRepo()
+
+        val result = sut.signFunding("dev1", funding)
+
+        assertEquals(true, result.isSuccess)
+        assertEquals("rawtx", result.getOrThrow().serializedTx)
+        assertEquals(1_250uL, result.getOrThrow().miningFeeSats)
+        assertEquals(3uL, result.getOrThrow().feeRate)
+        assertEquals(26_250uL, result.getOrThrow().totalSpent)
+        verify(trezorRepo, never()).broadcastRawTx(any())
+    }
+
+    @Test
+    fun `broadcastFunding returns txid and signed fee data`() = test {
+        val signedTx = HwFundingSignedTx(
+            serializedTx = "rawtx",
+            miningFeeSats = 1_250uL,
+            feeRate = 3uL,
+            totalSpent = 26_250uL,
+        )
         whenever(trezorRepo.broadcastRawTx("rawtx")).thenReturn(Result.success("broadcast-txid"))
         val sut = createRepo()
 
-        val result = sut.signAndBroadcastFunding("dev1", funding)
+        val result = sut.broadcastFunding(signedTx)
 
         assertEquals(true, result.isSuccess)
         assertEquals("broadcast-txid", result.getOrThrow().txId)
         assertEquals(1_250uL, result.getOrThrow().miningFeeSats)
         assertEquals(3uL, result.getOrThrow().feeRate)
         assertEquals(26_250uL, result.getOrThrow().totalSpent)
+        verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
     }
 
     @Test
-    fun `signAndBroadcastFunding disconnects stale session when sign fails`() = test {
+    fun `broadcastFunding returns core-derived txid when transaction is already known`() = test {
+        val signedTx = HwFundingSignedTx(
+            serializedTx = "rawtx",
+            miningFeeSats = 1_250uL,
+            feeRate = 3uL,
+            totalSpent = 26_250uL,
+        )
+        whenever(trezorRepo.broadcastRawTx("rawtx"))
+            .thenReturn(Result.success("core-derived-txid"))
+        val sut = createRepo()
+
+        val result = sut.broadcastFunding(signedTx)
+
+        assertEquals("core-derived-txid", result.getOrThrow().txId)
+    }
+
+    @Test
+    fun `signFunding disconnects stale session when sign fails`() = test {
         val funding = HwFundingTransaction(
             psbt = "psbt",
             miningFeeSats = 1_250uL,
@@ -829,10 +1031,30 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(trezorRepo.disconnectStaleSession("dev1")).thenReturn(Result.success(Unit))
         val sut = createRepo()
 
-        val result = sut.signAndBroadcastFunding("dev1", funding)
+        val result = sut.signFunding("dev1", funding)
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo).disconnectStaleSession("dev1")
+        verify(trezorRepo, never()).broadcastRawTx(any())
+    }
+
+    @Test
+    fun `signFunding keeps session when user cancels on device`() = test {
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = 1_250uL,
+            feeRate = 2.0f,
+            totalSpent = 26_250uL,
+            satsPerVByte = 2uL,
+        )
+        whenever(trezorRepo.signTxFromPsbt("psbt", Env.network.toTrezorCoinType()))
+            .thenReturn(Result.failure(TrezorException.UserCancelled()))
+        val sut = createRepo()
+
+        val result = sut.signFunding("dev1", funding)
+
+        assertEquals(true, result.isFailure)
+        verify(trezorRepo, never()).disconnectStaleSession(any())
         verify(trezorRepo, never()).broadcastRawTx(any())
     }
 
@@ -863,6 +1085,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             gapLimit = any(),
             accountType = anyOrNull(),
             electrumUrl = any(),
+            walletId = any(),
         )
     }
 
@@ -875,17 +1098,26 @@ class HwWalletRepoTest : BaseUnitTest() {
         total = total,
     )
 
-    private fun receivedTransaction(amount: ULong) = HistoryTransaction(
-        txid = "t1",
-        received = amount,
-        sent = 0uL,
-        net = amount.toLong(),
-        fee = null,
-        amount = amount,
-        direction = TxDirection.RECEIVED,
-        blockHeight = 850_000u,
-        timestamp = 1_700_000_000uL,
-        confirmations = 3u,
+    private fun watcherActivity(
+        amount: ULong,
+        txid: String = "t1",
+        txType: PaymentType = PaymentType.RECEIVED,
+        blockHeight: UInt? = 850_000u,
+        timestamp: ULong? = 1_700_000_000uL,
+        confirmations: UInt = 3u,
+        fee: ULong = 0uL,
+    ) = Activity.Onchain(
+        OnchainActivity.create(
+            walletId = "wallet0",
+            id = txid,
+            txType = txType,
+            txId = txid,
+            value = amount,
+            fee = fee,
+            address = "",
+            timestamp = timestamp ?: 0uL,
+            confirmed = blockHeight != null && confirmations > 0u,
+        )
     )
 
     @Test
@@ -973,6 +1205,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             any(),
             any(),
             anyOrNull(),
+            any(),
             any(),
         )
     )

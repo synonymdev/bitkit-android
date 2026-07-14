@@ -4,7 +4,9 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.BalanceSource
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.LightningBalance
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
@@ -43,12 +45,18 @@ class DeriveBalanceStateUseCase @Inject constructor(
 
             val toSavingsAmount = getTransferToSavingsSats(activeTransfers, channels, balanceDetails)
             val coopCloseSavingsSats = getCoopCloseTransferSats(activeTransfers, channels, balanceDetails)
+            val lingeringCoopCloseSats = getLingeringCoopCloseSats(activeTransfers, channels, balanceDetails)
             val toSpendingAmount = paidOrdersSats.safe() + pendingChannelsSats.safe()
+            val orderPaymentsOnchainToSubtract = getOrderPaymentOnchainToSubtract(
+                activeTransfers = activeTransfers,
+                currentOnchainSats = balanceDetails.totalOnchainBalanceSats,
+            )
 
-            val totalOnchainSats = balanceDetails.totalOnchainBalanceSats
+            val totalOnchainSats = balanceDetails.totalOnchainBalanceSats.safe() - orderPaymentsOnchainToSubtract.safe()
             val channelFundableBalance = getMaxChannelFundableAmount(lightningRepo.getChannelFundableBalance())
             val afterPendingChannels = balanceDetails.totalLightningBalanceSats.safe() - pendingChannelsSats.safe()
-            val totalLightningSats = afterPendingChannels.safe() - toSavingsAmount.safe()
+            val afterClosingChannels = afterPendingChannels.safe() - toSavingsAmount.safe()
+            val totalLightningSats = afterClosingChannels.safe() - lingeringCoopCloseSats.safe()
 
             val balanceState = BalanceState(
                 totalOnchainSats = totalOnchainSats,
@@ -85,6 +93,27 @@ class DeriveBalanceStateUseCase @Inject constructor(
             }
             if (channelBalance == null) {
                 amount = amount.safe() + transfer.amountSats.toULong().safe()
+            }
+        }
+
+        return amount
+    }
+
+    private fun getOrderPaymentOnchainToSubtract(
+        activeTransfers: List<TransferEntity>,
+        currentOnchainSats: ULong,
+    ): ULong {
+        var amount = 0uL
+        val orderPayments = activeTransfers.filter {
+            it.type.isToSpending() && it.fundingTxId != null && it.lspOrderId != null
+        }
+
+        for (transfer in orderPayments) {
+            val txTotalSats = transfer.txTotalSats?.takeIf { it > 0 }?.toULong()
+            val preTransferOnchainSats = transfer.preTransferOnchainSats?.takeIf { it > 0 }?.toULong()
+
+            if (txTotalSats != null && preTransferOnchainSats != null && currentOnchainSats >= preTransferOnchainSats) {
+                amount = amount.safe() + txTotalSats.safe()
             }
         }
 
@@ -152,6 +181,32 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val channelId = transferRepo.resolveChannelIdForTransfer(transfer, channels)
             val channelBalance = balanceDetails.lightningBalances.find { it.channelId() == channelId }
             amount = amount.safe() + (channelBalance?.amountSats() ?: 0uL).safe()
+        }
+        return amount
+    }
+
+    private suspend fun getLingeringCoopCloseSats(
+        transfers: List<TransferEntity>,
+        channels: List<ChannelDetails>,
+        balanceDetails: BalanceDetails,
+    ): ULong {
+        val channelIds = channels.map { it.channelId }.toSet()
+        val transferChannelIds = mutableSetOf<String>()
+        for (transfer in transfers.filter { it.type.isToSavings() }) {
+            transferRepo.resolveChannelIdForTransfer(transfer, channels)?.let { transferChannelIds.add(it) }
+        }
+
+        var amount = 0uL
+        val claimableBalances = balanceDetails.lightningBalances
+            .filterIsInstance<LightningBalance.ClaimableAwaitingConfirmations>()
+        for (balance in claimableBalances) {
+            val isLingeringCoopClose = balance.source == BalanceSource.COOP_CLOSE &&
+                balance.channelId !in channelIds &&
+                balance.channelId !in transferChannelIds
+
+            if (isLingeringCoopClose) {
+                amount = amount.safe() + balance.amountSatoshis.safe()
+            }
         }
         return amount
     }

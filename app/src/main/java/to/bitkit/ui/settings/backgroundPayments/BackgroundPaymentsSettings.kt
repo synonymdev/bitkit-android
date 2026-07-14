@@ -22,8 +22,6 @@ import to.bitkit.ui.components.NotificationPreview
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.components.settings.SettingsButtonRow
-import to.bitkit.ui.components.settings.SettingsButtonValue
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.scaffold.AppTopBar
@@ -41,7 +39,7 @@ fun BackgroundPaymentsSettings(
 ) {
     val context = LocalContext.current
     val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
-    val showNotificationDetails by settingsViewModel.showNotificationDetails.collectAsStateWithLifecycle()
+    val keepActive by settingsViewModel.keepBitkitActiveInBackground.collectAsStateWithLifecycle()
 
     RequestNotificationPermissions(
         onPermissionChange = settingsViewModel::setNotificationPreference,
@@ -50,20 +48,20 @@ fun BackgroundPaymentsSettings(
 
     Content(
         hasPermission = notificationsGranted,
-        showDetails = showNotificationDetails,
+        keepActive = keepActive,
         onBack = onBack,
         onSystemSettingsClick = context::openNotificationSettings,
-        toggleNotificationDetails = settingsViewModel::toggleNotificationDetails,
+        onKeepActiveClick = { settingsViewModel.setKeepBitkitActiveInBackground(!keepActive) },
     )
 }
 
 @Composable
 private fun Content(
     hasPermission: Boolean,
-    showDetails: Boolean,
+    keepActive: Boolean,
     onBack: () -> Unit,
     onSystemSettingsClick: () -> Unit,
-    toggleNotificationDetails: () -> Unit,
+    onKeepActiveClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier.screen()
@@ -105,25 +103,17 @@ private fun Content(
                 )
             }
 
-            NotificationPreview(
+            SettingsSwitchRow(
+                title = stringResource(R.string.settings__bg__keep_active_title),
+                isChecked = keepActive,
+                onClick = onKeepActiveClick,
                 enabled = hasPermission,
-                title = stringResource(R.string.notification__received__title),
-                description = "₿ 21 000",
-                showDetails = showDetails,
-                modifier = Modifier.fillMaxWidth()
             )
 
-            VerticalSpacer(32.dp)
-
-            Text13Up(
-                text = stringResource(R.string.settings__bg__privacy_header),
-                color = Colors.White64
-            )
-
-            SettingsButtonRow(
-                stringResource(R.string.settings__bg__include_amount),
-                value = SettingsButtonValue.BooleanValue(showDetails),
-                onClick = toggleNotificationDetails,
+            BodyM(
+                text = stringResource(R.string.settings__bg__keep_active_desc),
+                color = Colors.White64,
+                modifier = Modifier.padding(vertical = 16.dp),
             )
 
             VerticalSpacer(32.dp)
@@ -140,6 +130,22 @@ private fun Content(
                 icon = { Image(painter = painterResource(R.drawable.ic_bell), contentDescription = null) },
                 onClick = onSystemSettingsClick,
             )
+
+            VerticalSpacer(32.dp)
+
+            Text13Up(
+                text = stringResource(R.string.common__preview),
+                color = Colors.White64
+            )
+
+            VerticalSpacer(16.dp)
+
+            NotificationPreview(
+                enabled = hasPermission,
+                title = stringResource(R.string.notification__received__title),
+                description = "₿ 21 000 ($21.00)",
+                modifier = Modifier.fillMaxWidth()
+            )
         }
     }
 }
@@ -150,10 +156,10 @@ private fun Preview1() {
     AppThemeSurface {
         Content(
             hasPermission = true,
-            showDetails = true,
+            keepActive = true,
             onBack = {},
             onSystemSettingsClick = {},
-            toggleNotificationDetails = {},
+            onKeepActiveClick = {},
         )
     }
 }
@@ -164,10 +170,10 @@ private fun Preview2() {
     AppThemeSurface {
         Content(
             hasPermission = false,
-            showDetails = false,
+            keepActive = false,
             onBack = {},
             onSystemSettingsClick = {},
-            toggleNotificationDetails = {},
+            onKeepActiveClick = {},
         )
     }
 }

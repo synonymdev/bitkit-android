@@ -6,6 +6,8 @@ import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.LnurlException
+import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.createChannelRequestUrl
@@ -86,6 +88,7 @@ import to.bitkit.services.LnurlWithdrawResponse
 import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
+import to.bitkit.models.WalletScope
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
@@ -429,6 +432,10 @@ class LightningRepo @Inject constructor(
         result
     }
 
+    fun removeEventHandler(handler: NodeEventHandler) {
+        _eventHandlers.remove(handler)
+    }
+
     private suspend fun onEvent(event: Event) {
         handleLdkEvent(event)
         recordProbeOutcome(event)
@@ -571,8 +578,13 @@ class LightningRepo @Inject constructor(
 
     private suspend fun recordProbeOutcome(event: Event) {
         val outcome = when (event) {
-            is Event.ProbeSuccessful -> ProbeOutcome.Success(event.paymentId, event.paymentHash)
-            is Event.ProbeFailed -> ProbeOutcome.Failure(event.paymentId, event.paymentHash, event.shortChannelId)
+            is Event.ProbeSuccessful -> ProbeOutcome.Success(event.paymentId, event.paymentHash, event.routeFeeMsat)
+            is Event.ProbeFailed -> ProbeOutcome.Failure(
+                event.paymentId,
+                event.paymentHash,
+                event.shortChannelId?.toString(),
+                event.routeFeeMsat,
+            )
             else -> return
         }
 
@@ -992,20 +1004,20 @@ class LightningRepo @Inject constructor(
         runCatching { lightningService.receiveMsats(amountMsats, description, expirySeconds) }
     }
 
-    @Suppress("ForbiddenComment")
     suspend fun fetchLnurlInvoice(
-        callbackUrl: String,
+        data: LnurlPayData,
         amountMsats: ULong,
         comment: String? = null,
     ): Result<LightningInvoice> {
         return runCatching {
-            // TODO use bitkit-core getLnurlInvoice if it works with callbackUrl
-            val bolt11 = lnurlService.fetchLnurlInvoice(callbackUrl, amountMsats, comment).getOrThrow().pr
+            val bolt11 = coreService.getLnurlInvoiceForPayData(data, amountMsats, comment)
             val decoded = (coreService.decode(bolt11) as Scanner.Lightning).invoice
             return@runCatching decoded
+        }.recoverCatching {
+            throw it.toLnurlPayInvoiceError()
         }.onFailure {
             Logger.error(
-                "Failed to fetch LNURL invoice, url: '$callbackUrl', amountMsats: '$amountMsats', comment: '$comment'",
+                "Failed to fetch LNURL invoice, uri: '${data.uri}', amountMsats: '$amountMsats', comment: '$comment'",
                 it,
                 context = TAG,
             )
@@ -1172,6 +1184,7 @@ class LightningRepo @Inject constructor(
         val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount)
 
         val preActivityMetadata = PreActivityMetadata(
+            walletId = WalletScope.default,
             paymentId = txId,
             createdAt = nowTimestamp().toEpochMilli().toULong(),
             tags = tags,
@@ -1715,9 +1728,24 @@ class NodeStopTimeoutError : AppError("Timeout waiting for node to stop")
 class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node to run and execute: '$opName'")
 class GetPaymentsError : AppError("It wasn't possible get the payments")
 class SyncUnhealthyError : AppError("Wallet sync failed before send")
+class LnurlPayInvoiceMismatchError : AppError("The invoice did not match the requested payment. Payment cancelled.")
 sealed class ProbeError(message: String) : AppError(message) {
     class NoProbeHandles : ProbeError("No probe handles returned")
     class TimedOut : ProbeError("Probe timed out")
+}
+
+private fun Throwable.toLnurlPayInvoiceError(): Throwable {
+    val lnurlPayValidationError = generateSequence(this) { it.cause }
+        .firstOrNull { it.isLnurlPayValidationError() }
+
+    return if (lnurlPayValidationError != null) LnurlPayInvoiceMismatchError() else this
+}
+
+private fun Throwable.isLnurlPayValidationError(): Boolean = when (this) {
+    is LnurlException.InvalidAmount,
+    is LnurlException.AmountMismatch -> true
+
+    else -> false
 }
 
 @Stable
@@ -1779,11 +1807,13 @@ sealed interface ProbeOutcome {
     data class Success(
         override val paymentId: PaymentId,
         override val paymentHash: PaymentHash,
+        val routeFeeMsat: ULong?,
     ) : ProbeOutcome
 
     data class Failure(
         override val paymentId: PaymentId,
         override val paymentHash: PaymentHash,
-        val shortChannelId: ULong?,
+        val shortChannelId: String?,
+        val routeFeeMsat: ULong?,
     ) : ProbeOutcome
 }
