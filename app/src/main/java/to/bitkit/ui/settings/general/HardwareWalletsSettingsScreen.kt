@@ -75,6 +75,7 @@ import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 
 private const val ILLUSTRATIONS_HEIGHT_FRACTION = 0.8f
 
@@ -203,15 +204,15 @@ private fun Content(
 @Composable
 private fun EmptyState(modifier: Modifier = Modifier) {
     Column(
-        verticalArrangement = Arrangement.Center,
-        modifier = modifier.fillMaxWidth()
+        verticalArrangement = Arrangement.Bottom,
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
     ) {
-        Display(text = stringResource(R.string.settings__hardware_wallets__nav_title))
+        Display(stringResource(R.string.hardware__intro_header).withAccent(accentColor = Colors.Blue))
         VerticalSpacer(8.dp)
-        BodyM(
-            text = stringResource(R.string.settings__hardware_wallets__empty_text),
-            color = Colors.White80,
-        )
+        BodyM(stringResource(R.string.hardware__intro_text), color = Colors.White64)
+        VerticalSpacer(32.dp)
     }
 }
 
