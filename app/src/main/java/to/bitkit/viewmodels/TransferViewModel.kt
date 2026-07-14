@@ -532,6 +532,8 @@ class TransferViewModel @Inject constructor(
         val deviceId = activeHwTransferDeviceId
         hwTransferSignJob?.cancel()
         hwTransferSignJob = null
+        hwFeeEstimateJob?.cancel()
+        hwFeeEstimateJob = null
         _spendingUiState.update { it.copy(isSigning = false) }
         if (deviceId != null) {
             viewModelScope.launch {
@@ -603,7 +605,6 @@ class TransferViewModel @Inject constructor(
                     }
                 }
             }.onFailure {
-                if (it is CancellationException) throw it
                 Logger.debug(
                     "Skipped offline hardware funding fee estimate for '$deviceId'",
                     context = TAG,

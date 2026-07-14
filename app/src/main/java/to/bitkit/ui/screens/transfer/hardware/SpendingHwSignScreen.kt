@@ -177,8 +177,8 @@ private fun Content(
 @Composable
 internal fun SpendingHwFeeGrid(
     order: IBtOrder,
-    miningFeeSats: ULong = 0uL,
     modifier: Modifier = Modifier,
+    miningFeeSats: ULong = 0uL,
 ) {
     val lspFee = order.feeSat.safe() - order.clientBalanceSat.safe()
     val total = order.feeSat.safe() + miningFeeSats.safe()
