@@ -1,6 +1,7 @@
 *.iml
 .gradle
 .idea
+.vscode
 !.idea/codeStyles/
 .kotlin
 .DS_Store

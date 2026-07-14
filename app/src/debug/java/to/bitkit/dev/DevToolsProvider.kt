@@ -126,6 +126,46 @@ private sealed interface DevCommand {
         }
     }
 
+    data class ProbeNode(val args: Args) : DevCommand {
+        companion object {
+            const val METHOD = "probeNode"
+            fun parse(arg: String?) = ProbeNode(arg.deserialize<Args>())
+        }
+
+        @Serializable
+        data class Args(
+            val targetName: String? = null,
+            val nodeId: String,
+            val amountMsat: ULong? = null,
+            val amountSats: ULong? = null,
+            val timeoutSeconds: Long = 90,
+        )
+
+        override suspend fun execute(deps: DevToolsProvider.Dependencies): DevResult {
+            val amountSats = args.amountSats ?: args.amountMsat?.let { msatCeilOf(it) }
+                ?: return DevResult.Error("Probe node requires amountSats or amountMsat")
+            val timeout = args.timeoutSeconds.coerceAtLeast(1).seconds
+
+            Logger.info(
+                "Sending keysend probe for target '${args.targetName ?: "unknown"}' " +
+                    "nodeId='${args.nodeId}' amountSats='$amountSats'",
+                context = TAG,
+            )
+
+            return deps.lightningRepo().sendProbeForNode(args.nodeId, amountSats)
+                .fold(
+                    onSuccess = {
+                        deps.lightningRepo().waitForProbeOutcome(it.paymentIds, timeout)
+                            .fold(
+                                onSuccess = { outcome -> outcome.toDevResult(it.paymentIds) },
+                                onFailure = { error -> DevResult.ProbeFailure.from(error, it.paymentIds) },
+                            )
+                    },
+                    onFailure = { DevResult.ProbeFailure.from(it) },
+                )
+        }
+    }
+
     data object ProbeReadiness : DevCommand {
         const val METHOD = "probeReadiness"
 
@@ -157,7 +197,7 @@ private sealed interface DevResult {
         val message: String? = null,
         val paymentId: String? = null,
         val paymentHash: String? = null,
-        val shortChannelId: ULong? = null,
+        val shortChannelId: String? = null,
         val paymentIds: List<String> = emptyList(),
     ) : DevResult {
         companion object {
