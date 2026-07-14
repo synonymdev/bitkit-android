@@ -100,6 +100,7 @@ class TransferViewModel @Inject constructor(
     fun setTransferEffect(effect: TransferEffect) = viewModelScope.launch { transferEffects.emit(effect) }
     var maxLspFee = 0uL
     private var hwTransferSignJob: Job? = null
+    private var hwFeeEstimateJob: Job? = null
     private var pendingHwFundingBroadcast: PendingHwFundingBroadcast? = null
     private var activeHwTransferDeviceId: String? = null
 
@@ -193,11 +194,14 @@ class TransferViewModel @Inject constructor(
                     spendingBalanceSats = oldOrder.clientBalanceSat,
                     receivingBalanceSats = receivingAmountSats.toULong(),
                 ).getOrThrow()
+                hwFeeEstimateJob?.cancel()
+                hwFeeEstimateJob = null
                 _spendingUiState.update {
                     it.copy(
                         order = newOrder,
                         defaultOrder = oldOrder,
                         isAdvanced = true,
+                        hwMiningFeeSats = 0uL,
                     )
                 }
                 setTransferEffect(TransferEffect.OnOrderCreated)
@@ -393,12 +397,15 @@ class TransferViewModel @Inject constructor(
     private suspend fun onOrderCreated(order: IBtOrder) {
         settingsStore.update { it.copy(lightningSetupStep = 0) }
         pendingHwFundingBroadcast = null
+        hwFeeEstimateJob?.cancel()
+        hwFeeEstimateJob = null
         _spendingUiState.update {
             it.copy(
                 order = order,
                 isAdvanced = false,
                 defaultOrder = null,
                 hasPendingHwBroadcast = false,
+                hwMiningFeeSats = 0uL,
             )
         }
         setTransferEffect(TransferEffect.OnOrderCreated)
@@ -497,11 +504,14 @@ class TransferViewModel @Inject constructor(
 
     fun onUseDefaultLspBalanceClick() {
         val defaultOrder = _spendingUiState.value.defaultOrder
+        hwFeeEstimateJob?.cancel()
+        hwFeeEstimateJob = null
         _spendingUiState.update {
             it.copy(
                 order = defaultOrder,
                 defaultOrder = null,
                 isAdvanced = false,
+                hwMiningFeeSats = 0uL,
             )
         }
     }
@@ -509,6 +519,8 @@ class TransferViewModel @Inject constructor(
     fun resetSpendingState() {
         hwTransferSignJob?.cancel()
         hwTransferSignJob = null
+        hwFeeEstimateJob?.cancel()
+        hwFeeEstimateJob = null
         pendingHwFundingBroadcast = null
         activeHwTransferDeviceId = null
         _spendingUiState.update { TransferToSpendingUiState() }
@@ -520,6 +532,8 @@ class TransferViewModel @Inject constructor(
         val deviceId = activeHwTransferDeviceId
         hwTransferSignJob?.cancel()
         hwTransferSignJob = null
+        hwFeeEstimateJob?.cancel()
+        hwFeeEstimateJob = null
         _spendingUiState.update { it.copy(isSigning = false) }
         if (deviceId != null) {
             viewModelScope.launch {
@@ -562,6 +576,41 @@ class TransferViewModel @Inject constructor(
     /** Pays for the order by composing and signing the funding send on the Trezor, then watches it. */
     fun warmUpHardwareConnection(deviceId: String) {
         hwWalletRepo.warmUpKnownDevice(deviceId)
+    }
+
+    /** Best-effort offline mining-fee estimate for the Sign screen (xpub compose, no device session). */
+    fun updateHwFundingFeeEstimate(order: IBtOrder, deviceId: String) {
+        hwFeeEstimateJob?.cancel()
+        hwFeeEstimateJob = viewModelScope.launch {
+            if (_spendingUiState.value.hasPendingHwBroadcast) return@launch
+            val address = order.payment?.onchain?.address.orEmpty()
+            if (address.isEmpty()) return@launch
+            val orderId = order.id
+
+            runSuspendCatching {
+                val satsPerVByte = hwFundingSatsPerVByte()
+                hwWalletRepo.composeFundingTransaction(
+                    deviceId = deviceId,
+                    address = address,
+                    sats = order.feeSat,
+                    satsPerVByte = satsPerVByte,
+                ).getOrThrow().miningFeeSats
+            }.onSuccess { miningFeeSats ->
+                _spendingUiState.update { state ->
+                    val activeOrderId = state.order?.id
+                    if ((activeOrderId != null && activeOrderId != orderId) || state.hasPendingHwBroadcast) {
+                        state
+                    } else {
+                        state.copy(hwMiningFeeSats = miningFeeSats)
+                    }
+                }
+            }.onFailure {
+                Logger.debug(
+                    "Skipped offline hardware funding fee estimate for '$deviceId'",
+                    context = TAG,
+                )
+            }
+        }
     }
 
     fun onTransferToSpendingHwConfirm(order: IBtOrder, deviceId: String) {
@@ -614,6 +663,9 @@ class TransferViewModel @Inject constructor(
             val signedTx = pendingHwFundingBroadcast
                 ?.takeIf { it.matches(order, deviceId, address) }
                 ?.signedTx
+                ?.also { pending ->
+                    _spendingUiState.update { state -> state.copy(hwMiningFeeSats = pending.miningFeeSats) }
+                }
                 ?: prepareSignedHardwareFunding(order, deviceId, address).also {
                     pendingHwFundingBroadcast = PendingHwFundingBroadcast(
                         orderId = order.id,
@@ -622,7 +674,12 @@ class TransferViewModel @Inject constructor(
                         amountSats = order.feeSat,
                         signedTx = it,
                     )
-                    _spendingUiState.update { state -> state.copy(hasPendingHwBroadcast = true) }
+                    _spendingUiState.update { state ->
+                        state.copy(
+                            hasPendingHwBroadcast = true,
+                            hwMiningFeeSats = it.miningFeeSats,
+                        )
+                    }
                 }
             broadcastHardwareFunding(signedTx)
         }
@@ -645,6 +702,7 @@ class TransferViewModel @Inject constructor(
             sats = order.feeSat,
             satsPerVByte = satsPerVByte,
         )
+        _spendingUiState.update { it.copy(hwMiningFeeSats = funding.miningFeeSats) }
         return signHardwareFunding(deviceId, funding)
     }
 
@@ -1100,6 +1158,7 @@ data class TransferToSpendingUiState(
     val isLoading: Boolean = false,
     val isSigning: Boolean = false,
     val hasPendingHwBroadcast: Boolean = false,
+    val hwMiningFeeSats: ULong = 0uL,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
 )

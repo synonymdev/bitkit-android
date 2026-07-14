@@ -221,6 +221,86 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `updateHwFundingFeeEstimate sets mining fee before signing`() = test {
+        val order = previewBtOrder()
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FEE_RATE,
+        )
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+
+        sut.updateHwFundingFeeEstimate(order, DEVICE_ID)
+        advanceUntilIdle()
+
+        assertEquals(MINING_FEE, sut.spendingUiState.value.hwMiningFeeSats)
+        verify(hwWalletRepo).composeFundingTransaction(
+            eq(DEVICE_ID),
+            eq(order.payment?.onchain?.address.orEmpty()),
+            eq(order.feeSat),
+            eq(FEE_RATE),
+        )
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+    }
+
+    @Test
+    fun `updateHwFundingFeeEstimate ignores superseded estimate`() = test {
+        val orderA = previewBtOrder()
+        val orderB = previewBtOrder().copy(id = "order-b-id")
+        val staleCompose = CompletableDeferred<Result<HwFundingTransaction>>()
+        val fundingB = HwFundingTransaction(
+            psbt = "psbt-b",
+            miningFeeSats = 999uL,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = orderB.feeSat + 999uL,
+            satsPerVByte = FEE_RATE,
+        )
+        val staleFunding = HwFundingTransaction(
+            psbt = "psbt-a",
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = orderA.feeSat + MINING_FEE,
+            satsPerVByte = FEE_RATE,
+        )
+
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.createOrder(any(), any(), any()))
+            .thenReturn(Result.success(orderA))
+            .thenReturn(Result.success(orderB))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).doSuspendableAnswer {
+            if (sut.spendingUiState.value.order?.id == orderA.id) {
+                staleCompose.await()
+            } else {
+                Result.success(fundingB)
+            }
+        }
+
+        sut.onConfirmAmount(OPTION_MAX_CLIENT_BALANCE.toLong())
+        advanceUntilIdle()
+
+        sut.updateHwFundingFeeEstimate(orderA, DEVICE_ID)
+        runCurrent()
+
+        sut.onSpendingAdvancedContinue(LSP_BALANCE.toLong())
+        advanceUntilIdle()
+
+        sut.updateHwFundingFeeEstimate(orderB, DEVICE_ID)
+        advanceUntilIdle()
+
+        assertEquals(999uL, sut.spendingUiState.value.hwMiningFeeSats)
+
+        staleCompose.complete(Result.success(staleFunding))
+        advanceUntilIdle()
+
+        assertEquals(999uL, sut.spendingUiState.value.hwMiningFeeSats)
+    }
+
+    @Test
     fun `onTransferToSpendingHwConfirm signs the funding send and records the paid order`() = test {
         val order = previewBtOrder()
         val funding = HwFundingTransaction(
@@ -249,6 +329,7 @@ class TransferViewModelTest : BaseUnitTest() {
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
 
+        assertEquals(MINING_FEE, sut.spendingUiState.value.hwMiningFeeSats)
         verify(hwWalletRepo).composeFundingTransaction(
             eq(DEVICE_ID),
             eq(order.payment?.onchain?.address.orEmpty()),
@@ -907,6 +988,13 @@ class TransferViewModelTest : BaseUnitTest() {
         defaultLspBalanceSat = LSP_BALANCE,
         minLspBalanceSat = LSP_BALANCE,
         maxLspBalanceSat = 0uL,
+        maxClientBalanceSat = maxClientBalanceSat,
+    )
+
+    private fun liquidityOptionsForCreate(maxClientBalanceSat: ULong) = ChannelLiquidityOptions(
+        defaultLspBalanceSat = LSP_BALANCE,
+        minLspBalanceSat = LSP_BALANCE,
+        maxLspBalanceSat = LSP_BALANCE,
         maxClientBalanceSat = maxClientBalanceSat,
     )
 
