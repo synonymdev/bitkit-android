@@ -149,7 +149,8 @@ private sealed interface DevCommand {
             val timeout = args.timeoutSeconds.coerceAtLeast(1).seconds
 
             Logger.info(
-                "Sending keysend probe for target '${args.targetName ?: "unknown"}' nodeId='${args.nodeId}' amountSats='$amountSats'",
+                "Sending keysend probe for target '${args.targetName ?: "unknown"}' " +
+                    "nodeId='${args.nodeId}' amountSats='$amountSats'",
                 context = TAG,
             )
 

@@ -96,6 +96,19 @@ class LightningService @Inject constructor(
         private const val SCORING_HISTORICAL_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT = 20_000uL
         private const val SCORING_CONSIDERED_IMPOSSIBLE_PENALTY_MSAT = 1_000_000_000_000uL
         private const val SCORING_PROBING_DIVERSITY_PENALTY_MSAT = 60_000uL
+
+        private val DEFAULT_SCORING_FEE_PARAMETERS = ScoringFeeParameters(
+            basePenaltyMsat = 1_024uL,
+            basePenaltyAmountMultiplierMsat = 131_072uL,
+            liquidityPenaltyMultiplierMsat = 0uL,
+            liquidityPenaltyAmountMultiplierMsat = 0uL,
+            historicalLiquidityPenaltyMultiplierMsat = 10_000uL,
+            historicalLiquidityPenaltyAmountMultiplierMsat = 1_250uL,
+            antiProbingPenaltyMsat = 250uL,
+            consideredImpossiblePenaltyMsat = 100_000_000_000uL,
+            linearSuccessProbability = false,
+            probingDiversityPenaltyMsat = 0uL,
+        )
     }
 
     @Volatile
@@ -175,7 +188,7 @@ class LightningService @Inject constructor(
             configureChainSource(customServerUrl)
             configureGossipSource(customRgsServerUrl)
             configureScorerSource()
-            setScoringFeeParams(scorerFeeParameters(config))
+            setScoringFeeParams(scorerFeeParameters())
             setAddressType(selectedType)
             setAddressTypesToMonitor(monitoredTypes)
 
@@ -868,17 +881,15 @@ class LightningService @Inject constructor(
     }
     // endregion
 
-    private fun scorerFeeParameters(config: Config): ScoringFeeParameters {
-        val defaultParams = requireNotNull(config.scoringFeeParams) { "scoringFeeParams" }
-        return defaultParams.copy(
-            basePenaltyMsat = SCORING_BASE_PENALTY_MSAT,
-            liquidityPenaltyMultiplierMsat = SCORING_LIQUIDITY_PENALTY_MULTIPLIER_MSAT,
-            liquidityPenaltyAmountMultiplierMsat = SCORING_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT,
-            historicalLiquidityPenaltyAmountMultiplierMsat = SCORING_HISTORICAL_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT,
-            consideredImpossiblePenaltyMsat = SCORING_CONSIDERED_IMPOSSIBLE_PENALTY_MSAT,
-            probingDiversityPenaltyMsat = SCORING_PROBING_DIVERSITY_PENALTY_MSAT,
-        )
-    }
+    private fun scorerFeeParameters(): ScoringFeeParameters = DEFAULT_SCORING_FEE_PARAMETERS.copy(
+        basePenaltyMsat = SCORING_BASE_PENALTY_MSAT,
+        liquidityPenaltyMultiplierMsat = SCORING_LIQUIDITY_PENALTY_MULTIPLIER_MSAT,
+        liquidityPenaltyAmountMultiplierMsat = SCORING_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT,
+        historicalLiquidityPenaltyAmountMultiplierMsat =
+            SCORING_HISTORICAL_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT,
+        consideredImpossiblePenaltyMsat = SCORING_CONSIDERED_IMPOSSIBLE_PENALTY_MSAT,
+        probingDiversityPenaltyMsat = SCORING_PROBING_DIVERSITY_PENALTY_MSAT,
+    )
 
     // region utxo selection
     suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> {
