@@ -578,8 +578,13 @@ class LightningRepo @Inject constructor(
 
     private suspend fun recordProbeOutcome(event: Event) {
         val outcome = when (event) {
-            is Event.ProbeSuccessful -> ProbeOutcome.Success(event.paymentId, event.paymentHash)
-            is Event.ProbeFailed -> ProbeOutcome.Failure(event.paymentId, event.paymentHash, event.shortChannelId)
+            is Event.ProbeSuccessful -> ProbeOutcome.Success(event.paymentId, event.paymentHash, event.routeFeeMsat)
+            is Event.ProbeFailed -> ProbeOutcome.Failure(
+                event.paymentId,
+                event.paymentHash,
+                event.shortChannelId?.toString(),
+                event.routeFeeMsat,
+            )
             else -> return
         }
 
@@ -1802,11 +1807,13 @@ sealed interface ProbeOutcome {
     data class Success(
         override val paymentId: PaymentId,
         override val paymentHash: PaymentHash,
+        val routeFeeMsat: ULong?,
     ) : ProbeOutcome
 
     data class Failure(
         override val paymentId: PaymentId,
         override val paymentHash: PaymentHash,
-        val shortChannelId: ULong?,
+        val shortChannelId: String?,
+        val routeFeeMsat: ULong?,
     ) : ProbeOutcome
 }
