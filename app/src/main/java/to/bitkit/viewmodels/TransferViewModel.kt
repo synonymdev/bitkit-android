@@ -100,6 +100,7 @@ class TransferViewModel @Inject constructor(
     fun setTransferEffect(effect: TransferEffect) = viewModelScope.launch { transferEffects.emit(effect) }
     var maxLspFee = 0uL
     private var hwTransferSignJob: Job? = null
+    private var hwFeeEstimateJob: Job? = null
     private var pendingHwFundingBroadcast: PendingHwFundingBroadcast? = null
     private var activeHwTransferDeviceId: String? = null
 
@@ -193,6 +194,8 @@ class TransferViewModel @Inject constructor(
                     spendingBalanceSats = oldOrder.clientBalanceSat,
                     receivingBalanceSats = receivingAmountSats.toULong(),
                 ).getOrThrow()
+                hwFeeEstimateJob?.cancel()
+                hwFeeEstimateJob = null
                 _spendingUiState.update {
                     it.copy(
                         order = newOrder,
@@ -394,6 +397,8 @@ class TransferViewModel @Inject constructor(
     private suspend fun onOrderCreated(order: IBtOrder) {
         settingsStore.update { it.copy(lightningSetupStep = 0) }
         pendingHwFundingBroadcast = null
+        hwFeeEstimateJob?.cancel()
+        hwFeeEstimateJob = null
         _spendingUiState.update {
             it.copy(
                 order = order,
@@ -499,6 +504,8 @@ class TransferViewModel @Inject constructor(
 
     fun onUseDefaultLspBalanceClick() {
         val defaultOrder = _spendingUiState.value.defaultOrder
+        hwFeeEstimateJob?.cancel()
+        hwFeeEstimateJob = null
         _spendingUiState.update {
             it.copy(
                 order = defaultOrder,
@@ -512,6 +519,8 @@ class TransferViewModel @Inject constructor(
     fun resetSpendingState() {
         hwTransferSignJob?.cancel()
         hwTransferSignJob = null
+        hwFeeEstimateJob?.cancel()
+        hwFeeEstimateJob = null
         pendingHwFundingBroadcast = null
         activeHwTransferDeviceId = null
         _spendingUiState.update { TransferToSpendingUiState() }
@@ -569,10 +578,12 @@ class TransferViewModel @Inject constructor(
 
     /** Best-effort offline mining-fee estimate for the Sign screen (xpub compose, no device session). */
     fun updateHwFundingFeeEstimate(order: IBtOrder, deviceId: String) {
-        viewModelScope.launch {
+        hwFeeEstimateJob?.cancel()
+        hwFeeEstimateJob = viewModelScope.launch {
             if (_spendingUiState.value.hasPendingHwBroadcast) return@launch
             val address = order.payment?.onchain?.address.orEmpty()
             if (address.isEmpty()) return@launch
+            val orderId = order.id
 
             runSuspendCatching {
                 val satsPerVByte = hwFundingSatsPerVByte()
@@ -583,8 +594,16 @@ class TransferViewModel @Inject constructor(
                     satsPerVByte = satsPerVByte,
                 ).getOrThrow().miningFeeSats
             }.onSuccess { miningFeeSats ->
-                _spendingUiState.update { it.copy(hwMiningFeeSats = miningFeeSats) }
+                _spendingUiState.update { state ->
+                    val activeOrderId = state.order?.id
+                    if ((activeOrderId != null && activeOrderId != orderId) || state.hasPendingHwBroadcast) {
+                        state
+                    } else {
+                        state.copy(hwMiningFeeSats = miningFeeSats)
+                    }
+                }
             }.onFailure {
+                if (it is CancellationException) throw it
                 Logger.debug(
                     "Skipped offline hardware funding fee estimate for '$deviceId'",
                     context = TAG,
