@@ -34,6 +34,7 @@ fun TextInput(
     placeholder: String? = null,
     value: String,
     onValueChange: (String) -> Unit,
+    enabled: Boolean = true,
     singleLine: Boolean = false,
     isError: Boolean = false,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
@@ -69,6 +70,7 @@ fun TextInput(
     }
 
     TextField(
+        enabled = enabled,
         placeholder = {
             placeholder?.let {
                 Text(placeholder, color = Colors.White64, style = textStyle)

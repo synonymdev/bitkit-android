@@ -160,6 +160,7 @@ import to.bitkit.ui.settings.advanced.AddressViewerScreen
 import to.bitkit.ui.settings.advanced.CoinSelectPreferenceScreen
 import to.bitkit.ui.settings.advanced.ElectrumConfigScreen
 import to.bitkit.ui.settings.advanced.RgsServerScreen
+import to.bitkit.ui.settings.advanced.WatchOnlyAccountsScreen
 import to.bitkit.ui.settings.appStatus.AppStatusScreen
 import to.bitkit.ui.settings.backgroundPayments.BackgroundPaymentsIntroScreen
 import to.bitkit.ui.settings.backgroundPayments.BackgroundPaymentsSettings
@@ -1476,6 +1477,9 @@ private fun NavGraphBuilder.advancedSettingsSubScreens(navController: NavHostCon
     composableWithDefaultTransitions<Routes.AddressViewer> {
         AddressViewerScreen(navController)
     }
+    composableWithDefaultTransitions<Routes.WatchOnlyAccounts> {
+        WatchOnlyAccountsScreen(navController)
+    }
     composableWithDefaultTransitions<Routes.NodeInfo> {
         NodeInfoScreen(navController)
     }
@@ -1930,6 +1934,9 @@ sealed interface Routes {
 
     @Serializable
     data object AddressViewer : Routes
+
+    @Serializable
+    data object WatchOnlyAccounts : Routes
 
     @Serializable
     data object CustomFeeSettings : Routes
