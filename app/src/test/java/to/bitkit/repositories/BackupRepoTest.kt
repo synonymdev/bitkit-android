@@ -27,6 +27,8 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsData
 import to.bitkit.data.WidgetsStore
+import to.bitkit.data.WatchOnlyAccountData
+import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.dao.TransferDao
@@ -53,6 +55,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val vssBackupClientLdk = mock<VssBackupClientLdk>()
     private val settingsStore = mock<SettingsStore>()
     private val widgetsStore = mock<WidgetsStore>()
+    private val watchOnlyAccountStore = mock<WatchOnlyAccountStore>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
@@ -81,6 +84,8 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever { settingsStore.update(any()) }.thenReturn(Unit)
         whenever(widgetsStore.data).thenReturn(widgetsData)
+        whenever(watchOnlyAccountStore.data).thenReturn(MutableStateFlow(WatchOnlyAccountData()))
+        whenever { watchOnlyAccountStore.load() }.thenReturn(emptyList())
         whenever { vssBackupClient.getObject(any()) }.thenReturn(Result.success(null))
         whenever { vssBackupClient.putObject(any(), any()) }
             .thenReturn(Result.success(VssItem(key = BackupCategory.SETTINGS.name, value = byteArrayOf(), version = 1)))
@@ -324,6 +329,7 @@ class BackupRepoTest : BaseUnitTest() {
         vssBackupClientLdk = vssBackupClientLdk,
         settingsStore = settingsStore,
         widgetsStore = widgetsStore,
+        watchOnlyAccountStore = watchOnlyAccountStore,
         blocktankRepo = blocktankRepo,
         activityRepo = activityRepo,
         pubkyRepo = pubkyRepo,

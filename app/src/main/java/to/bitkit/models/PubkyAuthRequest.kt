@@ -1,6 +1,32 @@
 package to.bitkit.models
 
 import androidx.compose.runtime.Immutable
+import to.bitkit.utils.AppError
+import java.net.URI
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
+
+enum class PubkyAuthClaim(val wireValue: String) {
+    WATCH_ONLY_ACCOUNT_V1("watch-only-account-v1"),
+    ;
+
+    companion object {
+        /** Query parameter used for Bitkit-specific Pubky auth claims. */
+        const val QUERY_PARAMETER = "x-bitkit-claim"
+
+        /** Capabilities required by the watch-only Paykit Server setup flow. */
+        const val WATCH_ONLY_ACCOUNT_CAPABILITIES = "/pub/paykit/v0/bitkit/server/:rw"
+
+        fun fromWireValue(value: String) = entries.firstOrNull { it.wireValue == value }
+    }
+}
+
+sealed class PubkyAuthRequestError(message: String, cause: Throwable? = null) : AppError(message, cause) {
+    class InvalidUrl(cause: Throwable) : PubkyAuthRequestError("Invalid Pubky auth URL", cause)
+    data object DuplicateBitkitClaim : PubkyAuthRequestError("Duplicate Bitkit claim")
+    data class UnsupportedBitkitClaim(val value: String) : PubkyAuthRequestError("Unsupported Bitkit claim '$value'")
+    data object InvalidBitkitClaimCapabilities : PubkyAuthRequestError("Invalid capabilities for Bitkit claim")
+}
 
 @Immutable
 data class PubkyAuthPermission(
@@ -20,10 +46,69 @@ data class PubkyAuthPermission(
 data class PubkyAuthRequest(
     val rawUrl: String,
     val relay: String,
+    val capabilities: String,
     val permissions: List<PubkyAuthPermission>,
     val serviceNames: List<String>,
+    val bitkitClaim: PubkyAuthClaim?,
 ) {
     companion object {
+        fun parse(
+            rawUrl: String,
+            relay: String,
+            capabilities: String,
+        ): Result<PubkyAuthRequest> = parseBitkitClaim(rawUrl, capabilities).map { bitkitClaim ->
+            val permissions = parseCapabilities(capabilities)
+            PubkyAuthRequest(
+                rawUrl = rawUrl,
+                relay = relay,
+                capabilities = capabilities,
+                permissions = permissions,
+                serviceNames = permissions.mapNotNull { extractServiceName(it.path) }.distinct(),
+                bitkitClaim = bitkitClaim,
+            )
+        }
+
+        fun parseBitkitClaim(rawUrl: String, capabilities: String): Result<PubkyAuthClaim?> =
+            parseBitkitClaimValues(rawUrl).fold(
+                onSuccess = { claimValues -> validateBitkitClaim(claimValues, capabilities) },
+                onFailure = { Result.failure(it) },
+            )
+
+        private fun parseBitkitClaimValues(rawUrl: String): Result<List<String>> = runCatching {
+            URI(rawUrl).rawQuery.orEmpty()
+                .split("&")
+                .filter { it.isNotEmpty() }
+                .map { it.split("=", limit = 2) }
+                .filter { decodeQueryComponent(it.first()) == PubkyAuthClaim.QUERY_PARAMETER }
+                .map { decodeQueryComponent(it.getOrElse(1) { "" }) }
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { Result.failure(PubkyAuthRequestError.InvalidUrl(it)) },
+        )
+
+        private fun validateBitkitClaim(
+            claimValues: List<String>,
+            capabilities: String,
+        ): Result<PubkyAuthClaim?> = when {
+            claimValues.size > 1 -> Result.failure(PubkyAuthRequestError.DuplicateBitkitClaim)
+            claimValues.isEmpty() -> Result.success(null)
+            else -> validateBitkitClaimValue(claimValues.first(), capabilities)
+        }
+
+        private fun validateBitkitClaimValue(
+            claimValue: String,
+            capabilities: String,
+        ): Result<PubkyAuthClaim?> {
+            val claim = PubkyAuthClaim.fromWireValue(claimValue)
+                ?: return Result.failure(PubkyAuthRequestError.UnsupportedBitkitClaim(claimValue))
+
+            return if (capabilities == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES) {
+                Result.success(claim)
+            } else {
+                Result.failure(PubkyAuthRequestError.InvalidBitkitClaimCapabilities)
+            }
+        }
+
         fun parseCapabilities(caps: String): List<PubkyAuthPermission> =
             caps.split(",")
                 .filter { it.isNotBlank() }
@@ -40,5 +125,7 @@ data class PubkyAuthRequest(
             val pubIndex = parts.indexOf("pub")
             return if (pubIndex >= 0 && pubIndex + 1 < parts.size) parts[pubIndex + 1] else null
         }
+
+        private fun decodeQueryComponent(value: String) = URLDecoder.decode(value, StandardCharsets.UTF_8.name())
     }
 }

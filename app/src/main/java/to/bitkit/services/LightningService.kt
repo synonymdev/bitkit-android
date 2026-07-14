@@ -45,6 +45,7 @@ import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
@@ -84,6 +85,7 @@ class LightningService @Inject constructor(
     private val keychain: Keychain,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val settingsStore: SettingsStore,
+    private val watchOnlyAccountStore: WatchOnlyAccountStore,
     private val loggerLdk: LoggerLdk,
 ) : BaseCoroutineScope(bgDispatcher, TAG) {
 
@@ -114,6 +116,10 @@ class LightningService @Inject constructor(
     @Volatile
     var node: Node? = null
 
+    @Volatile
+    var currentWalletIndex: Int = 0
+        private set
+
     private val _syncStatusChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val syncStatusChanged: SharedFlow<Unit> = _syncStatusChanged.asSharedFlow()
 
@@ -131,15 +137,41 @@ class LightningService @Inject constructor(
         Logger.debug("Building node…", context = TAG)
 
         val config = config(walletIndex, trustedPeers)
-        node = build(
+        val builtNode = build(
             walletIndex,
             customServerUrl,
             customRgsServerUrl,
             config,
             channelMigration,
         )
+        registerEnabledWatchOnlyAccounts(builtNode, walletIndex)
+        currentWalletIndex = walletIndex
+        node = builtNode
 
         Logger.info("LDK node setup", context = TAG)
+    }
+
+    private suspend fun registerEnabledWatchOnlyAccounts(node: Node, walletIndex: Int) {
+        val records = watchOnlyAccountStore.load().filter {
+            it.walletIndex == walletIndex && it.isTrackingEnabled
+        }
+        if (records.isEmpty()) return
+
+        ServiceQueue.LDK.background {
+            val registered = node.listOnchainWalletAccounts()
+                .map { it.addressType to it.accountIndex }
+                .toMutableSet()
+            records.forEach { record ->
+                val addressType = when (record.addressType) {
+                    "nativeSegwit" -> LdkAddressType.NATIVE_SEGWIT
+                    else -> throw IllegalArgumentException("Unsupported watch-only account address type")
+                }
+                val accountIndex = record.accountIndex.toUInt()
+                if (registered.add(addressType to accountIndex)) {
+                    node.addOnchainWalletAccount(addressType, accountIndex, record.xpub)
+                }
+            }
+        }
     }
 
     private fun config(

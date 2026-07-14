@@ -115,6 +115,7 @@ fun SettingsScreen(
     val truncatedNodeId by advancedViewModel.truncatedNodeId.collectAsStateWithLifecycle()
     val electrumHost by advancedViewModel.electrumHost.collectAsStateWithLifecycle()
     val coinSelectAuto by advancedViewModel.coinSelectAuto.collectAsStateWithLifecycle()
+    val watchOnlyAccountCount by advancedViewModel.watchOnlyAccountCount.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { languageViewModel.fetchLanguageInfo() }
 
@@ -152,6 +153,7 @@ fun SettingsScreen(
             openChannelCount = openChannelCount,
             truncatedNodeId = truncatedNodeId,
             electrumHost = electrumHost,
+            watchOnlyAccountCount = watchOnlyAccountCount,
         ),
         onEvent = { event ->
             when (event) {
@@ -195,6 +197,7 @@ fun SettingsScreen(
                 SettingsEvent.AddressTypeClick -> navController.navigateTo(Routes.AddressTypePreference)
                 SettingsEvent.CoinSelectionClick -> navController.navigateTo(Routes.CoinSelectPreference)
                 SettingsEvent.AddressViewerClick -> navController.navigateTo(Routes.AddressViewer)
+                SettingsEvent.WatchOnlyAccountsClick -> navController.navigateTo(Routes.WatchOnlyAccounts)
                 SettingsEvent.LightningConnectionsClick -> navController.navigateTo(Routes.LightningConnections)
                 SettingsEvent.LightningNodeClick -> navController.navigateTo(Routes.NodeInfo)
                 SettingsEvent.ElectrumServerClick -> navController.navigateTo(Routes.ElectrumConfig)
@@ -557,6 +560,13 @@ private fun AdvancedTabContent(
             onClick = { onEvent(SettingsEvent.AddressViewerClick) },
             modifier = Modifier.testTag("AddressViewer")
         )
+        SettingsButtonRow(
+            title = stringResource(R.string.watch_only_accounts__title),
+            icon = { SettingsIcon(R.drawable.ic_lock_key) },
+            value = SettingsButtonValue.StringValue(state.watchOnlyAccountCount.toString()),
+            onClick = { onEvent(SettingsEvent.WatchOnlyAccountsClick) },
+            modifier = Modifier.testTag("WatchOnlyAccounts")
+        )
 
         SectionHeader(
             title = stringResource(R.string.settings__adv__section_networks),
@@ -682,6 +692,7 @@ sealed interface SettingsEvent {
     data object AddressTypeClick : SettingsEvent
     data object CoinSelectionClick : SettingsEvent
     data object AddressViewerClick : SettingsEvent
+    data object WatchOnlyAccountsClick : SettingsEvent
     data object LightningConnectionsClick : SettingsEvent
     data object LightningNodeClick : SettingsEvent
     data object ElectrumServerClick : SettingsEvent
@@ -729,4 +740,5 @@ data class AdvancedTabState(
     val openChannelCount: Int = 0,
     val truncatedNodeId: String = "",
     val electrumHost: String = "",
+    val watchOnlyAccountCount: Int = 0,
 )
