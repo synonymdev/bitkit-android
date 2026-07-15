@@ -3,6 +3,7 @@ package to.bitkit.viewmodels
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.nfc.NfcAdapter
 import androidx.annotation.StringRes
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -3064,7 +3065,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun handleDeeplinkIntent(intent: Intent) {
-        if (intent.action != Intent.ACTION_VIEW) return
+        if (intent.action !in DEEPLINK_ACTIONS) return
         intent.data?.let { uri ->
             Logger.debug("Received deeplink '${uri.toString().sanitizedDeeplinkLogValue()}'", context = TAG)
             processDeeplink(uri)
@@ -3290,6 +3291,9 @@ class AppViewModel @Inject constructor(
         private const val PUBKYAUTH_SCHEME = "pubkyauth"
         private const val RECOVERY_MODE_DEEPLINK = "recovery-mode"
         private val LNURL_WITHDRAW_EXPIRY_SEC = 1.hours.inWholeSeconds.toUInt()
+
+        /** Intent actions carrying a deeplink URI: browsers and apps send VIEW, NFC tag taps send NDEF_DISCOVERED. */
+        internal val DEEPLINK_ACTIONS = setOf(Intent.ACTION_VIEW, NfcAdapter.ACTION_NDEF_DISCOVERED)
     }
 }
 

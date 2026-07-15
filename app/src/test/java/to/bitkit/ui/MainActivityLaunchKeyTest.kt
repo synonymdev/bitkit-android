@@ -3,6 +3,7 @@ package to.bitkit.ui
 import android.content.Intent
 import android.hardware.usb.UsbManager
 import android.net.Uri
+import android.nfc.NfcAdapter
 import org.junit.Test
 import org.mockito.kotlin.mock
 import java.net.URLEncoder
@@ -58,6 +59,20 @@ class MainActivityLaunchKeyTest {
         }
 
         assertNull(intent.launchKey())
+    }
+
+    @Test
+    fun `launch key tracks NFC tag intents so they are consumed once`() {
+        val giftUrl = "bitkit://gift-abc123-3000"
+        val uri = mock<Uri> {
+            on { toString() }.thenReturn(giftUrl)
+        }
+        val intent = mock<Intent> {
+            on { action }.thenReturn(NfcAdapter.ACTION_NDEF_DISCOVERED)
+            on { data }.thenReturn(uri)
+        }
+
+        assertEquals(giftUrl, intent.launchKey())
     }
 
     @Test
