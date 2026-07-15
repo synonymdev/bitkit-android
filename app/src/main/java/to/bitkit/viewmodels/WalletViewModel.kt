@@ -387,6 +387,15 @@ class WalletViewModel @Inject constructor(
             }
     }
 
+    /**
+     * Refresh wallet balances and channel state from the running node without a chain sync, so a
+     * just-received payment is reflected immediately (e.g. when entering the transfer-to-savings flow).
+     */
+    fun refreshBalances() = viewModelScope.launch {
+        walletRepo.syncBalances()
+        lightningRepo.syncState()
+    }
+
     fun onPullToRefresh() {
         // Cancel any existing sync, manual or event triggered
         syncJob?.cancel()

@@ -91,6 +91,11 @@ fun SavingsConfirmScreen(
 
     val swapState by transfer.savingsSwapState.collectAsStateWithLifecycle()
 
+    // Pull the latest node balances so a just-received payment is reflected in the amounts below.
+    LaunchedEffect(Unit) {
+        wallet.refreshBalances()
+    }
+
     // Present the swap fee before the user commits. Recomputed when the amount changes.
     LaunchedEffect(amount) {
         if (amount > 0uL) transfer.loadSavingsSwapQuote(amount)
