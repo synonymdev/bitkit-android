@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -45,6 +46,9 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val KNOB_SIZE_DP = 32
+
+/** Horizontal inset so the knob stays clear of the screen edge and its system back-gesture zone. */
+private const val SLIDER_EDGE_INSET_DP = 16
 private const val TRACK_HEIGHT_DP = 8
 private const val STEP_MARKER_WIDTH_DP = 4
 private const val STEP_MARKER_HEIGHT_DP = 16
@@ -278,6 +282,8 @@ fun AmountSlider(
     Box(
         modifier = modifier
             .fillMaxWidth()
+            .systemGestureExclusion()
+            .padding(horizontal = SLIDER_EDGE_INSET_DP.dp)
             .height(KNOB_SIZE_DP.dp)
             .onGloballyPositioned { sliderWidth = it.size.width }
     ) {
