@@ -7,12 +7,14 @@ import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.OnchainPayment
 import org.lightningdevkit.ldknode.OnchainWalletAccount
+import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WatchOnlyAccountReconciliationState
 import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
@@ -33,6 +35,7 @@ class LightningServiceTest : BaseUnitTest() {
     private val watchOnlyAccountStore = mock<WatchOnlyAccountStore>()
     private val loggerLdk = mock<LoggerLdk>()
     private val node = mock<Node>()
+    private val watchOnlyAccountLifecycleCoordinator = WatchOnlyAccountLifecycleCoordinator()
 
     private lateinit var sut: LightningService
 
@@ -45,6 +48,7 @@ class LightningServiceTest : BaseUnitTest() {
             settingsStore = settingsStore,
             watchOnlyAccountStore = watchOnlyAccountStore,
             loggerLdk = loggerLdk,
+            watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
         )
         sut.node = node
     }
@@ -103,7 +107,11 @@ class LightningServiceTest : BaseUnitTest() {
         whenever(node.status()).thenReturn(status)
         whenever(status.isRunning).thenReturn(true)
 
-        sut.reconcileWatchOnlyAccounts(listOf(account))
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenReturn(
+            WatchOnlyAccountReconciliationState(listOf(account), emptyList()),
+        )
+
+        sut.reconcileWatchOnlyAccounts()
 
         verify(node, never()).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 5u, account.xpub)
         verify(onchainPayment).revealReceiveAddressesToAccount(
@@ -119,7 +127,9 @@ class LightningServiceTest : BaseUnitTest() {
         val account = watchOnlyAccount(accountIndex = 5, walletIndex = 0, enabled = true)
             .copy(setupState = WatchOnlyAccountSetupState.Authorizing)
         val onchainPayment = mock<OnchainPayment>()
-        whenever(watchOnlyAccountStore.load()).thenReturn(listOf(account))
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenReturn(
+            WatchOnlyAccountReconciliationState(listOf(account), emptyList()),
+        )
         whenever(node.listOnchainWalletAccounts()).thenReturn(
             listOf(OnchainWalletAccount(AddressType.NATIVE_SEGWIT, 5u))
         )
@@ -133,6 +143,71 @@ class LightningServiceTest : BaseUnitTest() {
             WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
         )
         verify(node, times(1)).syncWallets()
+    }
+
+    @Test
+    fun `restore reconciliation unloads replaced account and loads restored account`() = test {
+        val replacedAccount = watchOnlyAccount(accountIndex = 1, walletIndex = 0, enabled = true)
+        val restoredAccount = watchOnlyAccount(accountIndex = 2, walletIndex = 0, enabled = true)
+        val trackedAccounts = mutableListOf(OnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u))
+        val onchainPayment = mock<OnchainPayment>()
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenReturn(
+            WatchOnlyAccountReconciliationState(
+                accounts = listOf(restoredAccount),
+                accountsPendingRemoval = listOf(replacedAccount),
+            ),
+        )
+        whenever(node.listOnchainWalletAccounts()).thenAnswer { trackedAccounts.toList() }
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        doAnswer {
+            trackedAccounts.remove(OnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u))
+            Unit
+        }
+            .whenever(node).removeOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u)
+        doAnswer { trackedAccounts += OnchainWalletAccount(AddressType.NATIVE_SEGWIT, 2u) }
+            .whenever(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 2u, restoredAccount.xpub)
+
+        sut.reconcileWatchOnlyAccounts(syncAfterReconcile = false)
+
+        assertEquals(listOf(OnchainWalletAccount(AddressType.NATIVE_SEGWIT, 2u)), trackedAccounts)
+        verify(node).removeOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u)
+        verify(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 2u, restoredAccount.xpub)
+        verify(watchOnlyAccountStore).completeReconciliation(walletIndex = 0)
+    }
+
+    @Test
+    fun `failed restore reconciliation retains removals for the next retry`() = test {
+        val replacedAccount = watchOnlyAccount(accountIndex = 1, walletIndex = 0, enabled = true)
+        val restoredAccount = watchOnlyAccount(accountIndex = 2, walletIndex = 0, enabled = true)
+        val trackedAccounts = mutableListOf(OnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u))
+        var failAdd = true
+        val onchainPayment = mock<OnchainPayment>()
+        whenever(watchOnlyAccountStore.loadReconciliationState()).thenReturn(
+            WatchOnlyAccountReconciliationState(
+                accounts = listOf(restoredAccount),
+                accountsPendingRemoval = listOf(replacedAccount),
+            ),
+        )
+        whenever(node.listOnchainWalletAccounts()).thenAnswer { trackedAccounts.toList() }
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        doAnswer {
+            trackedAccounts.remove(OnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u))
+            Unit
+        }
+            .whenever(node).removeOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 1u)
+        doAnswer {
+            check(!failAdd) { "add failed" }
+            trackedAccounts += OnchainWalletAccount(AddressType.NATIVE_SEGWIT, 2u)
+        }.whenever(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 2u, restoredAccount.xpub)
+
+        assertTrue(runCatching { sut.reconcileWatchOnlyAccounts(syncAfterReconcile = false) }.isFailure)
+        verify(watchOnlyAccountStore, never()).completeReconciliation(walletIndex = 0)
+
+        failAdd = false
+        sut.reconcileWatchOnlyAccounts(syncAfterReconcile = false)
+
+        assertEquals(listOf(OnchainWalletAccount(AddressType.NATIVE_SEGWIT, 2u)), trackedAccounts)
+        verify(watchOnlyAccountStore).completeReconciliation(walletIndex = 0)
     }
 
     private fun watchOnlyAccount(accountIndex: Int, walletIndex: Int, enabled: Boolean) = WatchOnlyAccountRecord(

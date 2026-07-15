@@ -92,6 +92,7 @@ class BackupRepo @Inject constructor(
     private val settingsStore: SettingsStore,
     private val widgetsStore: WidgetsStore,
     private val watchOnlyAccountStore: WatchOnlyAccountStore,
+    private val watchOnlyAccountRepo: WatchOnlyAccountRepo,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
     private val pubkyRepo: PubkyRepo,
@@ -647,11 +648,11 @@ class BackupRepo @Inject constructor(
     private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
         val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
         db.transferDao().upsert(parsed.transfers)
-        watchOnlyAccountStore.restore(
+        watchOnlyAccountRepo.restore(
             parsed.watchOnlyAccounts.orEmpty(),
             parsed.watchOnlyAccountAllocationState,
         )
-        lightningService.reconcileWatchOnlyAccounts(parsed.watchOnlyAccounts.orEmpty())
+        lightningService.reconcileWatchOnlyAccounts()
         if (!parsed.privatePaykitHighestReservedReceiveIndexByAddressType.isNullOrEmpty()) {
             cacheStore.update { it.copy(onchainAddress = "", bip21 = "") }
         }

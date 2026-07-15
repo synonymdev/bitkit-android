@@ -57,6 +57,7 @@ import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
+import to.bitkit.models.WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.models.msatFloorOf
@@ -90,7 +91,7 @@ internal fun enabledOnchainWalletAccountConfigs(
     .filter { it.isTrackingEnabled }
     .map { record ->
         val addressType = when (record.addressType) {
-            "nativeSegwit" -> LdkAddressType.NATIVE_SEGWIT
+            WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE -> LdkAddressType.NATIVE_SEGWIT
             else -> throw IllegalArgumentException("Unsupported watch-only account address type")
         }
         OnchainWalletAccountConfig(
@@ -108,7 +109,7 @@ data class AddressDerivationInfo(
     val index: Int,
 )
 
-@Suppress("LargeClass", "TooManyFunctions")
+@Suppress("LargeClass", "LongParameterList", "TooManyFunctions")
 @Singleton
 class LightningService @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
@@ -117,6 +118,7 @@ class LightningService @Inject constructor(
     private val settingsStore: SettingsStore,
     private val watchOnlyAccountStore: WatchOnlyAccountStore,
     private val loggerLdk: LoggerLdk,
+    private val watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
 ) : BaseCoroutineScope(bgDispatcher, TAG) {
 
     companion object {
@@ -365,47 +367,53 @@ class LightningService @Inject constructor(
         }
     }
 
-    suspend fun reconcileWatchOnlyAccounts(
-        records: List<WatchOnlyAccountRecord>? = null,
-        syncAfterReconcile: Boolean = true,
-    ) {
-        val node = node ?: return
-        val walletRecords = (records ?: watchOnlyAccountStore.load()).filter { it.walletIndex == currentWalletIndex }
-        val desiredConfigs = enabledOnchainWalletAccountConfigs(walletRecords, currentWalletIndex)
+    suspend fun reconcileWatchOnlyAccounts(syncAfterReconcile: Boolean = true) {
+        watchOnlyAccountLifecycleCoordinator.withLock {
+            val node = node ?: return@withLock
+            val reconciliationState = watchOnlyAccountStore.loadReconciliationState()
+            val walletRecords = reconciliationState.accounts.filter { it.walletIndex == currentWalletIndex }
+            val accountsPendingRemoval = reconciliationState.accountsPendingRemoval.filter {
+                it.walletIndex == currentWalletIndex
+            }
+            val desiredConfigs = enabledOnchainWalletAccountConfigs(walletRecords, currentWalletIndex)
 
-        ServiceQueue.LDK.background {
-            val trackedAccounts = node.listOnchainWalletAccounts()
-            val managedKeys = walletRecords.mapNotNull { record ->
-                when (record.addressType) {
-                    "nativeSegwit" -> accountKey(LdkAddressType.NATIVE_SEGWIT, record.accountIndex.toUInt())
-                    else -> null
+            ServiceQueue.LDK.background {
+                val trackedAccounts = node.listOnchainWalletAccounts()
+                val managedKeys = (walletRecords + accountsPendingRemoval).mapNotNull { record ->
+                    when (record.addressType) {
+                        "nativeSegwit" -> accountKey(LdkAddressType.NATIVE_SEGWIT, record.accountIndex.toUInt())
+                        else -> null
+                    }
+                }.toSet()
+                val desiredKeys = desiredConfigs.map { accountKey(it.addressType, it.accountIndex) }.toSet()
+
+                trackedAccounts.forEach { trackedAccount ->
+                    val key = accountKey(trackedAccount.addressType, trackedAccount.accountIndex)
+                    if (key in managedKeys && key !in desiredKeys) {
+                        node.removeOnchainWalletAccount(trackedAccount.addressType, trackedAccount.accountIndex)
+                    }
                 }
-            }.toSet()
-            val desiredKeys = desiredConfigs.map { accountKey(it.addressType, it.accountIndex) }.toSet()
 
-            trackedAccounts.forEach { trackedAccount ->
-                val key = accountKey(trackedAccount.addressType, trackedAccount.accountIndex)
-                if (key in managedKeys && key !in desiredKeys) {
-                    node.removeOnchainWalletAccount(trackedAccount.addressType, trackedAccount.accountIndex)
+                desiredConfigs.forEach { config ->
+                    val isTracked = trackedAccounts.any {
+                        it.addressType == config.addressType && it.accountIndex == config.accountIndex
+                    }
+                    if (!isTracked) {
+                        node.addOnchainWalletAccount(config.addressType, config.accountIndex, config.xpub)
+                    }
+                    node.onchainPayment().revealReceiveAddressesToAccount(
+                        config.addressType,
+                        config.accountIndex,
+                        WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
+                    )
+                }
+
+                if (syncAfterReconcile && desiredConfigs.isNotEmpty() && node.status().isRunning) {
+                    node.syncWallets()
                 }
             }
-
-            desiredConfigs.forEach { config ->
-                val isTracked = trackedAccounts.any {
-                    it.addressType == config.addressType && it.accountIndex == config.accountIndex
-                }
-                if (!isTracked) {
-                    node.addOnchainWalletAccount(config.addressType, config.accountIndex, config.xpub)
-                }
-                node.onchainPayment().revealReceiveAddressesToAccount(
-                    config.addressType,
-                    config.accountIndex,
-                    WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
-                )
-            }
-
-            if (syncAfterReconcile && desiredConfigs.isNotEmpty() && node.status().isRunning) {
-                node.syncWallets()
+            if (accountsPendingRemoval.isNotEmpty()) {
+                watchOnlyAccountStore.completeReconciliation(currentWalletIndex)
             }
         }
     }
