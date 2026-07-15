@@ -7,6 +7,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-07-15
+
+### Added
+- Added a dedicated detail screen for paired hardware wallets, showing balances, transaction history, and a remove action. #1022
+- Added a Hardware Wallets settings screen to view and remove paired devices, reachable from Settings under General › Payments. #1032
+- Connect a Trezor hardware wallet from the home suggestion card or Hardware Wallets settings to watch its balance. #1033
+- Transfer funds from a paired Trezor hardware wallet to your spending balance, with safer fee handling and confirmation tracking for device-signed funding transactions. #1039
+- Background payments now include a "Keep Bitkit active in background" option for more reliable payments, and payment notifications always show the amount received. #1053
+- Added the ability to rename saved hardware wallets from Settings. #1057
+- Trezor hardware wallet support with improved connection reliability, native SegWit balance tracking, and transfer to spending. #1062
+- Show paired Trezor hardware wallet balances and activity on the home screen, with sheets to enter pairing code and notify incoming hardware wallet transactions. #999
+
+### Changed
+- Update FX rates endpoint to no longer use old Blocktank service. #1072
+
+### Fixed
+- Connection Details now shows the short channel ID for Lightning connections instead of the long internal channel ID. #1002
+- The system notification permission dialog is now only requested when you tap Enable on the background payments prompt, instead of appearing automatically on every app open. #1004
+- Transfer to Spending now fills in the maximum transferable amount when you enter a value above the limit, instead of only showing an error. #1013
+- Bitkit now handles more unexpected native on-chain wallet sync failures without crashing. #1015
+- Re-adding the Suggestions widget now restores the default suggestion cards when all of them had been dismissed. #1016
+- Transferring to your spending balance now reliably shows the "Spending Balance Ready" confirmation instead of sometimes being mistaken for an incoming payment when an unused instant-payment invoice is still pending. #1017
+- Recovery mode now has a Reset Network Graph option that re-downloads the Lightning network graph to fix "route not found" errors. #1020
+- Error toasts now use the brand orange color to match the design prototype. #1023
+- Channel close and transfer activities, including force closes, now offer an Explore button so the on-chain transaction ID and block explorer details are accessible. #1037
+- Spending balances no longer briefly include cooperatively closed channel funds after opening a new channel. #1043
+- Tapping an NFC tag now opens the gift claim and other deep links instead of being ignored, and the NFC intent filter no longer declares the unused BROWSABLE category that triggered a Play Console deep link warning. #1054
+- Pending transfer funds now stay reflected in the total balance without temporarily inflating it while moving between savings and spending. #1058
+- Fixed a raw technical error appearing when a locked Trezor blocks connecting or signing; Bitkit now asks you to unlock the device and retries automatically. #1065
+- Improved Trezor pairing, Bluetooth recovery, connection and unlock guidance, transfer cancellation, and signed-broadcast retries. #1067
+- Hardware wallet transfer sign screens now show the on-chain mining fee and total outflow that matches Trezor confirmation. #1071
+- Tapping Connect on the Electrum server settings screen no longer freezes the app when the host field contains a long or malformed value. #1077
+- Fixed a crash that could occur when showing the backup-failure notification in some languages. #1080
+- Instant-channel payment notifications now appear once with a correctly formatted amount, and opening a regular channel no longer shows a misleading "payment received" notification. #787
+- The amount number pad now caps entry at the available maximum on the send, LNURL, transfer, and channel-funding screens, stays usable at a zero balance, and lets you delete down from an over-cap amount. #908
+- Home-screen widgets no longer render too tall on Android 10 and 11, matching the size shown on newer Android versions. #994
+- Fixed private contact payment preferences so they only show confirmed endpoint publication or removal state. #997
+
+
+
+
+
 ## [2.3.2] - 2026-07-14
 
 ### Fixed
@@ -105,7 +147,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - About screen (content merged into Support) #857
 - Standalone General, Security, and Advanced settings screens (merged into tabs) #857
 
-[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.3.2...HEAD
+[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/synonymdev/bitkit-android/compare/v2.3.2...v2.4.0
 [2.3.2]: https://github.com/synonymdev/bitkit-android/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/synonymdev/bitkit-android/compare/v2.3.0...v2.3.1
 [2.3.0]: https://github.com/synonymdev/bitkit-android/compare/v2.2.0...v2.3.0
