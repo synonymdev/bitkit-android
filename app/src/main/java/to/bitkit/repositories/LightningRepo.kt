@@ -73,6 +73,7 @@ import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.models.WalletScope
 import to.bitkit.models.safe
 import to.bitkit.models.satsToMsat
 import to.bitkit.models.toAddressType
@@ -88,7 +89,6 @@ import to.bitkit.services.LnurlWithdrawResponse
 import to.bitkit.services.LspNotificationsService
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
-import to.bitkit.models.WalletScope
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.UrlValidator
@@ -340,8 +340,9 @@ class LightningRepo @Inject constructor(
                     }
                 }
 
-                if (getStatus()?.isRunning == true) {
+                if (lightningService.status?.isRunning == true) {
                     Logger.info("LDK node already running", context = TAG)
+                    lightningService.reconcileWatchOnlyAccounts()
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
                     lightningService.startEventListener(::onEvent).onFailure {
                         Logger.warn("Failed to start event listener", it, context = TAG)

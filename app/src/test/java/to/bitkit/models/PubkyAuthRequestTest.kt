@@ -32,6 +32,18 @@ class PubkyAuthRequestTest {
     }
 
     @Test
+    fun `parse rejects watch-only capability without Bitkit claim`() {
+        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
+        val result = PubkyAuthRequest.parse(
+            rawUrl = authUrl(capabilities),
+            relay = "https://httprelay.pubky.app/inbox/",
+            capabilities = capabilities,
+        )
+
+        assertIs<PubkyAuthRequestError.MissingBitkitClaim>(result.exceptionOrNull())
+    }
+
+    @Test
     fun `parse rejects duplicate Bitkit claim`() {
         val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
         val result = PubkyAuthRequest.parse(
