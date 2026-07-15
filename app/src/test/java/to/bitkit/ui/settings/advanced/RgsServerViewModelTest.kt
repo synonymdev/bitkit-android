@@ -279,6 +279,19 @@ class RgsServerViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `setRgsUrl does not hang on long dotless host`() = test {
+        sut = createSut()
+        advanceUntilIdle()
+
+        withTimeout(2.seconds) {
+            sut.setRgsUrl("https://" + "a".repeat(64))
+            advanceUntilIdle()
+        }
+
+        assertFalse(sut.uiState.value.canConnect)
+    }
+
+    @Test
     fun `setRgsUrl accepts valid rgs url with path`() = test {
         sut = createSut()
         advanceUntilIdle()
