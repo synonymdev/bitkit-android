@@ -27,9 +27,11 @@ The signature input is the byte concatenation:
 
 ```text
 UTF8("x-bitkit-claim|watch-only-account-v1|")
-|| SHA256(UTF8(decoded_auth_request_secret))
+|| SHA256(decoded_auth_request_secret)
 || claim_bytes[0..<84]
 ```
+
+`decoded_auth_request_secret` is the raw 32-byte value produced by base64url-no-pad decoding the URL's `secret` parameter, not UTF-8 text.
 
 The server verifies the signature with the creator's Pubky Ed25519 public key from the authenticated session. Binding the signature to the request secret prevents a valid signed claim from being moved to a different request; possession of the relay secret alone is insufficient to substitute an attacker's xpub.
 
@@ -44,6 +46,6 @@ The server verifies the signature with the creator's Pubky Ed25519 public key fr
 - If Paykit reports that companion delivery succeeded but normal AuthToken delivery failed, Bitkit leaves the account authorizing and tracked. Retrying the same request can then finish normal authorization without losing visibility into addresses the server may already have derived.
 - Disabling tracking unloads the account from LDK Node at runtime. It does not delete persisted wallet state, the xpub, or the server session.
 - Enabled active or authorizing accounts are configured before LDK Node starts. Electrum full scans use a batch size of `100` and stop gap of `1000`.
-- Bitkit pre-reveals external receive indexes `0...999` for each tracked account. A v1 Paykit Server must not issue an index above `999`; supporting a higher index requires a future protocol signal that communicates the server's address high-water mark.
-- Startup reconciliation restores runtime tracking and the pre-revealed range. A transient reconciliation failure does not leave the node in a failed-but-running state; the next app-driven wallet sync retries reconciliation.
+- Bitkit pre-reveals external receive indexes `0...999` for each tracked account. LDK then maintains a rolling stop-gap window: the first address with transaction history must be at or below index `999`, and after activity at index `n`, the next active index must be at or below `n + 1000` so there are never `1000` consecutive inactive addresses.
+- Startup reconciliation restores runtime tracking and the pre-revealed range. Reconciliation is serialized with setup, restore, and tracking mutations so a stale snapshot cannot undo the latest account state. When a backup replaces the account list, references to removed accounts remain locally until reconciliation successfully unloads them. A transient reconciliation failure does not leave the node in a failed-but-running state; the next app-driven wallet sync retries reconciliation.
 - Account metadata and monotonic allocation state are included in the existing encrypted wallet backup and use the same JSON field names on iOS and Android.

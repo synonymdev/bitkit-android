@@ -20,13 +20,17 @@ import to.bitkit.R
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthPermission
+import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
+import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.WatchOnlyAccountAuthorizationStartError
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.utils.localizedPubkyAuthMessage
 import to.bitkit.utils.Logger
+import java.util.concurrent.atomic.AtomicReference
 import javax.inject.Inject
 
 @HiltViewModel
@@ -45,8 +49,18 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     private val _effects = MutableSharedFlow<PubkyAuthApprovalEffect>(extraBufferCapacity = 1)
     val effects = _effects.asSharedFlow()
 
+    private val inFlightAuthorization = AtomicReference<InFlightAuthorization?>()
+
     fun load(authUrl: String) {
-        _uiState.value = PubkyAuthApprovalUiState(authUrl = authUrl)
+        inFlightAuthorization.get()?.takeIf { it.authUrl == authUrl }?.let { authorization ->
+            if (_uiState.value.authUrl != authUrl) {
+                authorization.uiState?.let { authorizingState ->
+                    _uiState.update { authorizingState }
+                }
+            }
+            return
+        }
+        if (!resetForLoad(authUrl)) return
         viewModelScope.launch {
             val request = pubkyRepo.parseAuthUrl(authUrl).getOrElse {
                 if (_uiState.value.authUrl != authUrl) return@launch
@@ -96,69 +110,116 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     }
 
     fun confirmAuthorize(authUrl: String) {
-        if (!transitionToAuthorizing(authUrl)) return
+        val authorization = InFlightAuthorization(authUrl)
+        if (!inFlightAuthorization.compareAndSet(null, authorization)) return
+        val authorizingState = transitionToAuthorizing(authUrl)
+        if (authorizingState == null) {
+            inFlightAuthorization.compareAndSet(authorization, null)
+            return
+        }
+        authorization.uiState = authorizingState
 
         viewModelScope.launch {
-            val request = pubkyRepo.parseAuthUrl(authUrl).getOrElse {
-                handleApprovalFailure(it, authUrl)
-                return@launch
-            }
-            if (_uiState.value.authUrl != authUrl) return@launch
-
-            val preparedClaim = runSuspendCatching {
-                if (request.bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1) {
-                    watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, _uiState.value.watchOnlyAccountName)
-                } else {
-                    null
-                }
-            }.getOrElse {
-                handleApprovalFailure(it, authUrl)
-                return@launch
-            }
-
-            preparedClaim?.let { claim ->
-                runSuspendCatching { watchOnlyAccountRepo.beginAuthorization(claim.account.id) }.getOrElse {
-                    cancelIncompleteSetup(claim.account.id)
-                    handleApprovalFailure(it, authUrl)
-                    return@launch
-                }
-            }
-
-            val approvalResult = preparedClaim?.let {
-                pubkyRepo.approveAuthWithCompanionClaim(authUrl, it.payload)
-            } ?: pubkyRepo.approveAuth(authUrl, request.capabilities)
-            if (approvalResult.isFailure) {
-                val approvalError = approvalResult.exceptionOrNull() ?: IllegalStateException("Authorization failed")
-                preparedClaim?.let { claim ->
-                    if (!approvalError.isPostDeliveryAuthorizationFailure()) {
-                        cancelIncompleteSetup(claim.account.id)
-                    }
-                }
-                handleApprovalFailure(approvalError, authUrl)
-                return@launch
-            }
-
-            preparedClaim?.let { claim ->
-                runSuspendCatching { watchOnlyAccountRepo.markActive(claim.account.id) }.getOrElse {
-                    handleApprovalFailure(it, authUrl)
-                    return@launch
-                }
-            }
-            Logger.info("Auth approved for '${request.serviceNames.firstOrNull().orEmpty()}'", context = TAG)
-            _uiState.update { state ->
-                if (state.authUrl == authUrl) state.copy(state = ApprovalState.Success) else state
+            try {
+                authorize(authUrl, authorizingState.watchOnlyAccountName)
+            } finally {
+                inFlightAuthorization.compareAndSet(authorization, null)
             }
         }
     }
 
-    private fun transitionToAuthorizing(authUrl: String): Boolean {
-        val initialState = _uiState.value
-        if (initialState.authUrl != authUrl || initialState.state != ApprovalState.Authorize) return false
-        return _uiState.compareAndSet(initialState, initialState.copy(state = ApprovalState.Authorizing))
+    private suspend fun authorize(authUrl: String, watchOnlyAccountName: String) {
+        val request = pubkyRepo.parseAuthUrl(authUrl).getOrElse {
+            handleApprovalFailure(it, authUrl)
+            return
+        }
+        if (_uiState.value.authUrl != authUrl) return
+        if (!approveRequest(request, authUrl, watchOnlyAccountName)) return
+
+        Logger.info("Auth approved for '${request.serviceNames.firstOrNull().orEmpty()}'", context = TAG)
+        _uiState.update { state ->
+            if (state.authUrl == authUrl) state.copy(state = ApprovalState.Success) else state
+        }
     }
 
-    private suspend fun cancelIncompleteSetup(accountId: String) {
-        runSuspendCatching { watchOnlyAccountRepo.cancelAuthorization(accountId) }
+    private suspend fun approveRequest(
+        request: PubkyAuthRequest,
+        authUrl: String,
+        watchOnlyAccountName: String,
+    ): Boolean {
+        val preparedClaim = runSuspendCatching {
+            if (request.bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1) {
+                watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, watchOnlyAccountName)
+            } else {
+                null
+            }
+        }.getOrElse {
+            handleApprovalFailure(it, authUrl)
+            return false
+        }
+
+        var preserveAuthorizingState = preparedClaim?.account?.setupState == WatchOnlyAccountSetupState.Authorizing
+        preparedClaim?.let { claim ->
+            runSuspendCatching { watchOnlyAccountRepo.beginAuthorization(claim.account.id) }
+                .onSuccess { preserveAuthorizingState = it }
+                .getOrElse {
+                    if (it is WatchOnlyAccountAuthorizationStartError) {
+                        preserveAuthorizingState = it.preserveAuthorizingState
+                    }
+                    cancelIncompleteSetup(claim.account.id, preserveAuthorizingState)
+                    handleApprovalFailure(it, authUrl)
+                    return false
+                }
+        }
+
+        val approvalResult = preparedClaim?.let {
+            pubkyRepo.approveAuthWithCompanionClaim(authUrl, it.payload)
+        } ?: pubkyRepo.approveAuth(authUrl, request.capabilities)
+        if (approvalResult.isFailure) {
+            val approvalError = approvalResult.exceptionOrNull() ?: IllegalStateException("Authorization failed")
+            preparedClaim?.let { claim ->
+                if (!approvalError.isPostDeliveryAuthorizationFailure()) {
+                    cancelIncompleteSetup(
+                        claim.account.id,
+                        preserveAuthorizingState,
+                    )
+                }
+            }
+            handleApprovalFailure(approvalError, authUrl)
+            return false
+        }
+
+        preparedClaim?.let { claim ->
+            runSuspendCatching { watchOnlyAccountRepo.markActive(claim.account.id) }.getOrElse {
+                handleApprovalFailure(it, authUrl)
+                return false
+            }
+        }
+        return true
+    }
+
+    private fun transitionToAuthorizing(authUrl: String): PubkyAuthApprovalUiState? {
+        val initialState = _uiState.value
+        if (initialState.authUrl != authUrl || initialState.state != ApprovalState.Authorize) return null
+        val authorizingState = initialState.copy(state = ApprovalState.Authorizing)
+        return authorizingState.takeIf { _uiState.compareAndSet(initialState, it) }
+    }
+
+    private fun resetForLoad(authUrl: String): Boolean {
+        while (true) {
+            val currentState = _uiState.value
+            if (currentState.authUrl == authUrl && currentState.state == ApprovalState.Authorizing) return false
+            if (_uiState.compareAndSet(currentState, PubkyAuthApprovalUiState(authUrl = authUrl))) return true
+        }
+    }
+
+    private suspend fun cancelIncompleteSetup(
+        accountId: String,
+        preserveAuthorizingState: Boolean,
+    ) {
+        runSuspendCatching {
+            watchOnlyAccountRepo.cancelAuthorization(accountId, preserveAuthorizingState)
+        }
             .onFailure {
                 Logger.error(
                     "Failed to unload incomplete watch-only account",
@@ -206,6 +267,13 @@ sealed interface ApprovalState {
 sealed interface PubkyAuthApprovalEffect {
     data class RequestLocalAuth(val authUrl: String) : PubkyAuthApprovalEffect
     data object Dismiss : PubkyAuthApprovalEffect
+}
+
+private class InFlightAuthorization(
+    val authUrl: String,
+) {
+    @Volatile
+    var uiState: PubkyAuthApprovalUiState? = null
 }
 
 private fun Throwable.isPostDeliveryAuthorizationFailure(): Boolean {

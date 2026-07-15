@@ -64,6 +64,7 @@ class BackupRepoTest : BaseUnitTest() {
     private val settingsStore = mock<SettingsStore>()
     private val widgetsStore = mock<WidgetsStore>()
     private val watchOnlyAccountStore = mock<WatchOnlyAccountStore>()
+    private val watchOnlyAccountRepo = mock<WatchOnlyAccountRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
@@ -340,21 +341,21 @@ class BackupRepoTest : BaseUnitTest() {
             watchOnlyAccounts = listOf(account),
             watchOnlyAccountAllocationState = allocationState,
         )
-        var storeWasRestored = false
-        whenever { watchOnlyAccountStore.restore(listOf(account), allocationState) }.thenAnswer {
-            storeWasRestored = true
+        var accountsWereRestored = false
+        whenever { watchOnlyAccountRepo.restore(listOf(account), allocationState) }.thenAnswer {
+            accountsWereRestored = true
             Unit
         }
-        whenever { lightningService.reconcileWatchOnlyAccounts(listOf(account)) }.thenAnswer {
-            assertTrue(storeWasRestored)
+        whenever { lightningService.reconcileWatchOnlyAccounts() }.thenAnswer {
+            assertTrue(accountsWereRestored)
             Unit
         }
 
         val result = sut.performFullRestoreFromLatestBackup()
 
         assertTrue(result.isSuccess)
-        verifyBlocking(watchOnlyAccountStore) { restore(listOf(account), allocationState) }
-        verifyBlocking(lightningService) { reconcileWatchOnlyAccounts(listOf(account)) }
+        verifyBlocking(watchOnlyAccountRepo) { restore(listOf(account), allocationState) }
+        verifyBlocking(lightningService) { reconcileWatchOnlyAccounts() }
     }
 
     @Test
@@ -435,6 +436,7 @@ class BackupRepoTest : BaseUnitTest() {
         settingsStore = settingsStore,
         widgetsStore = widgetsStore,
         watchOnlyAccountStore = watchOnlyAccountStore,
+        watchOnlyAccountRepo = watchOnlyAccountRepo,
         blocktankRepo = blocktankRepo,
         activityRepo = activityRepo,
         pubkyRepo = pubkyRepo,

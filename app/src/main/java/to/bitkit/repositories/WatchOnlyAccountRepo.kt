@@ -4,22 +4,24 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import org.bitcoinj.base.Base58
 import org.lightningdevkit.ldknode.AddressType
 import to.bitkit.async.ServiceQueue
+import to.bitkit.data.WatchOnlyAccountAllocationState
 import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PreparedWatchOnlyAccountClaim
 import to.bitkit.models.PubkyAuthClaim
+import to.bitkit.models.WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
+import to.bitkit.models.WATCH_ONLY_ACCOUNT_SERIALIZED_XPUB_LENGTH
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.services.LightningService
+import to.bitkit.services.WatchOnlyAccountLifecycleCoordinator
 import to.bitkit.utils.AppError
 import java.net.URI
 import java.net.URLDecoder
@@ -33,10 +35,16 @@ import javax.inject.Singleton
 import kotlin.time.ExperimentalTime
 
 sealed class WatchOnlyAccountError : AppError() {
+    data object AuthorizationAccountMissing : WatchOnlyAccountError()
     data object InvalidAccountName : WatchOnlyAccountError()
     data object InvalidExtendedPublicKey : WatchOnlyAccountError()
     data object NodeUnavailable : WatchOnlyAccountError()
 }
+
+class WatchOnlyAccountAuthorizationStartError(
+    val preserveAuthorizingState: Boolean,
+    cause: Throwable,
+) : AppError(cause.message, cause.cause ?: cause)
 
 @Singleton
 @OptIn(ExperimentalTime::class)
@@ -44,14 +52,13 @@ class WatchOnlyAccountRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val store: WatchOnlyAccountStore,
     private val lightningService: LightningService,
+    private val lifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
 ) {
-    private val mutationMutex = Mutex()
-
     val accounts: Flow<List<WatchOnlyAccountRecord>> = store.data.map { it.accounts }
 
     suspend fun prepareUnsignedClaim(authUrl: String, name: String): PreparedWatchOnlyAccountClaim =
         withContext(bgDispatcher) {
-            mutationMutex.withLock {
+            lifecycleCoordinator.withLock {
                 val normalizedName = normalizeName(name)
                 val walletIndex = lightningService.currentWalletIndex
                 val fingerprint = requestFingerprint(authUrl)
@@ -93,58 +100,84 @@ class WatchOnlyAccountRepo @Inject constructor(
             }
         }
 
-    suspend fun markActive(id: String) {
-        mutationMutex.withLock {
+    suspend fun markActive(id: String) = withContext(NonCancellable) {
+        lifecycleCoordinator.withLock {
+            if (store.load().none { it.id == id }) {
+                throw WatchOnlyAccountError.AuthorizationAccountMissing
+            }
             store.markActive(id)
         }
     }
 
     suspend fun beginAuthorization(id: String) = withContext(NonCancellable) {
-        mutationMutex.withLock {
+        lifecycleCoordinator.withLock {
             val account = store.load().firstOrNull {
                 it.id == id && it.setupState != WatchOnlyAccountSetupState.Active
-            } ?: return@withLock
-            setAccountTracking(account, enabled = true)
-            val updateResult = runSuspendCatching {
-                store.update { accounts ->
-                    accounts.map {
-                        if (it.id == id) {
-                            it.copy(
-                                isTrackingEnabled = true,
-                                setupState = WatchOnlyAccountSetupState.Authorizing,
-                            )
-                        } else {
-                            it
+            } ?: throw WatchOnlyAccountError.AuthorizationAccountMissing
+            val preserveAuthorizingState = account.setupState == WatchOnlyAccountSetupState.Authorizing
+            runSuspendCatching {
+                setAccountTracking(account, enabled = true)
+                val updateResult = runSuspendCatching {
+                    store.update { accounts ->
+                        accounts.map {
+                            if (it.id == id) {
+                                it.copy(
+                                    isTrackingEnabled = true,
+                                    setupState = WatchOnlyAccountSetupState.Authorizing,
+                                )
+                            } else {
+                                it
+                            }
                         }
                     }
                 }
+                updateResult.onFailure {
+                    runSuspendCatching { setAccountTracking(account, enabled = account.isTrackingEnabled) }
+                }
+                updateResult.getOrThrow()
+            }.getOrElse {
+                throw WatchOnlyAccountAuthorizationStartError(preserveAuthorizingState, it)
             }
-            updateResult.onFailure {
-                runSuspendCatching { setAccountTracking(account, enabled = false) }
-            }
-            updateResult.getOrThrow()
+            preserveAuthorizingState
         }
     }
 
-    suspend fun cancelAuthorization(id: String) = withContext(NonCancellable) {
-        mutationMutex.withLock {
+    suspend fun cancelAuthorization(
+        id: String,
+        preserveAuthorizingState: Boolean = false,
+    ) = withContext(NonCancellable) {
+        lifecycleCoordinator.withLock {
             val current = store.load()
             val account = current.firstOrNull {
                 it.id == id && it.setupState != WatchOnlyAccountSetupState.Active
             } ?: return@withLock
-            store.save(
-                current.map {
-                    if (it.id == id) {
-                        it.copy(
-                            isTrackingEnabled = false,
-                            setupState = WatchOnlyAccountSetupState.PendingDelivery,
-                        )
-                    } else {
-                        it
-                    }
-                },
-            )
-            setAccountTracking(account, enabled = false)
+            val shouldPreserveAuthorizingState = preserveAuthorizingState &&
+                account.setupState == WatchOnlyAccountSetupState.Authorizing
+            setAccountTracking(account, enabled = shouldPreserveAuthorizingState)
+            val saveResult = runSuspendCatching {
+                store.save(
+                    current.map {
+                        if (it.id == id) {
+                            it.copy(
+                                isTrackingEnabled = shouldPreserveAuthorizingState,
+                                setupState = if (shouldPreserveAuthorizingState) {
+                                    WatchOnlyAccountSetupState.Authorizing
+                                } else {
+                                    WatchOnlyAccountSetupState.PendingDelivery
+                                },
+                            )
+                        } else {
+                            it
+                        }
+                    },
+                )
+            }
+            saveResult.onFailure {
+                runSuspendCatching {
+                    setAccountTracking(account, enabled = account.isTrackingEnabled)
+                }
+            }
+            saveResult.getOrThrow()
         }
     }
 
@@ -154,7 +187,7 @@ class WatchOnlyAccountRepo @Inject constructor(
     }
 
     suspend fun setTrackingEnabled(id: String, enabled: Boolean) = withContext(NonCancellable) {
-        mutationMutex.withLock {
+        lifecycleCoordinator.withLock {
             val current = store.load()
             val account = current.firstOrNull { it.id == id } ?: return@withLock
             if (account.setupState != WatchOnlyAccountSetupState.Active) return@withLock
@@ -171,8 +204,19 @@ class WatchOnlyAccountRepo @Inject constructor(
         }
     }
 
-    suspend fun restore(accounts: List<WatchOnlyAccountRecord>?) {
-        store.restore(accounts.orEmpty())
+    suspend fun restore(
+        accounts: List<WatchOnlyAccountRecord>?,
+        allocationState: WatchOnlyAccountAllocationState? = null,
+    ) {
+        lifecycleCoordinator.withLock {
+            store.restore(accounts.orEmpty(), allocationState)
+        }
+    }
+
+    suspend fun clear() {
+        lifecycleCoordinator.withLock {
+            store.clear()
+        }
     }
 
     private suspend fun exportAccountXpub(accountIndex: Int): String = ServiceQueue.LDK.background {
@@ -224,7 +268,7 @@ class WatchOnlyAccountRepo @Inject constructor(
     }
 
     private suspend fun updateAccount(id: String, transform: (WatchOnlyAccountRecord) -> WatchOnlyAccountRecord) {
-        mutationMutex.withLock {
+        lifecycleCoordinator.withLock {
             store.update { accounts -> accounts.map { if (it.id == id) transform(it) else it } }
         }
     }
@@ -266,7 +310,7 @@ class WatchOnlyAccountRepo @Inject constructor(
     }
 
     companion object {
-        const val ADDRESS_TYPE_NATIVE_SEGWIT = "nativeSegwit"
+        const val ADDRESS_TYPE_NATIVE_SEGWIT = WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
         private const val MAX_NAME_LENGTH = 64
     }
 }
@@ -282,7 +326,7 @@ private fun decodeQueryComponent(value: String): String =
 object WatchOnlyAccountClaimCodec {
     const val VERSION: Byte = 1
     const val NATIVE_SEGWIT_ADDRESS_TYPE: Byte = 0
-    const val SERIALIZED_XPUB_LENGTH = 78
+    const val SERIALIZED_XPUB_LENGTH = WATCH_ONLY_ACCOUNT_SERIALIZED_XPUB_LENGTH
     const val PAYLOAD_LENGTH = 1 + 4 + 1 + SERIALIZED_XPUB_LENGTH
 
     fun encode(account: WatchOnlyAccountRecord): ByteArray {

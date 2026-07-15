@@ -4,7 +4,6 @@ import com.google.firebase.messaging.FirebaseMessaging
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.runSuspendCatching
@@ -16,6 +15,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.utils.Logger
@@ -32,7 +32,7 @@ class WipeWalletUseCase @Inject constructor(
     private val db: AppDb,
     private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
-    private val watchOnlyAccountStore: WatchOnlyAccountStore,
+    private val watchOnlyAccountRepo: WatchOnlyAccountRepo,
     private val widgetsStore: WidgetsStore,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
@@ -68,7 +68,7 @@ class WipeWalletUseCase @Inject constructor(
 
                 settingsStore.reset()
                 cacheStore.reset()
-                watchOnlyAccountStore.clear()
+                watchOnlyAccountRepo.clear()
                 widgetsStore.reset()
 
                 blocktankRepo.resetState()

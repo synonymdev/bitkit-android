@@ -13,7 +13,6 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.repositories.ActivityRepo
@@ -24,6 +23,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
@@ -39,7 +39,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val db = mock<AppDb>()
     private val settingsStore = mock<SettingsStore>()
     private val cacheStore = mock<CacheStore>()
-    private val watchOnlyAccountStore = mock<WatchOnlyAccountStore>()
+    private val watchOnlyAccountRepo = mock<WatchOnlyAccountRepo>()
     private val widgetsStore = mock<WidgetsStore>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
@@ -74,7 +74,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             db = db,
             settingsStore = settingsStore,
             cacheStore = cacheStore,
-            watchOnlyAccountStore = watchOnlyAccountStore,
+            watchOnlyAccountRepo = watchOnlyAccountRepo,
             widgetsStore = widgetsStore,
             blocktankRepo = blocktankRepo,
             activityRepo = activityRepo,
@@ -103,7 +103,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             db,
             settingsStore,
             cacheStore,
-            watchOnlyAccountStore,
+            watchOnlyAccountRepo,
             widgetsStore,
             blocktankRepo,
             activityRepo,
@@ -125,7 +125,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(db).clearAllTables()
         inOrder.verify(settingsStore).reset()
         inOrder.verify(cacheStore).reset()
-        inOrder.verify(watchOnlyAccountStore).clear()
+        inOrder.verify(watchOnlyAccountRepo).clear()
         inOrder.verify(widgetsStore).reset()
         inOrder.verify(blocktankRepo).resetState()
         inOrder.verify(activityRepo).resetState()
