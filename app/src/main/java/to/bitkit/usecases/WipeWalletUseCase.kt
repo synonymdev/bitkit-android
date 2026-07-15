@@ -68,7 +68,7 @@ class WipeWalletUseCase @Inject constructor(
 
                 settingsStore.reset()
                 cacheStore.reset()
-                watchOnlyAccountStore.save(emptyList())
+                watchOnlyAccountStore.clear()
                 widgetsStore.reset()
 
                 blocktankRepo.resetState()

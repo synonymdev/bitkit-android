@@ -29,6 +29,7 @@ import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyRingAuthCallback
 import to.bitkit.models.PubkyRingAuthCallbackHandlingResult
@@ -204,6 +205,28 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verifyBlocking(pubkyService) { approveAuth(authUrl, capabilities, secretKey) }
+    }
+
+    @Test
+    fun `approveAuthWithCompanionClaim forwards exact claim identifiers and capability`() = test {
+        val authUrl = "pubkyauth://signin?x-bitkit-claim=watch-only-account-v1"
+        val secretKey = "local_secret"
+        val payload = ByteArray(84) { it.toByte() }
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
+
+        val result = sut.approveAuthWithCompanionClaim(authUrl, payload)
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(pubkyService) {
+            approveAuthWithCompanionClaim(
+                authUrl = authUrl,
+                expectedCapabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
+                secretKeyHex = secretKey,
+                queryParameter = PubkyAuthClaim.QUERY_PARAMETER,
+                claimType = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
+                unsignedPayload = payload,
+            )
+        }
     }
 
     @Test

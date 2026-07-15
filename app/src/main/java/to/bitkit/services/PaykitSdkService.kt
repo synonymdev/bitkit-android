@@ -26,6 +26,7 @@ import com.synonym.paykit.PaymentPayload
 import com.synonym.paykit.PaymentTarget
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
+import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkyAuthRequest
 import com.synonym.paykit.PubkyLocalSecretKey
 import com.synonym.paykit.PubkyProfile
@@ -267,6 +268,21 @@ class PaykitSdkService @Inject constructor(
             authUrl = authUrl,
             expectedCapabilities = expectedCapabilities,
             localSecretKey = localSecretKey(secretKeyHex),
+        )
+    }
+
+    suspend fun approveAuthWithCompanionClaim(
+        authUrl: String,
+        expectedCapabilities: String,
+        secretKeyHex: String,
+        claim: PubkyAuthCompanionClaim,
+    ) {
+        isSetup.await()
+        PubkySessionBootstrap().approveAuthWithCompanionClaim(
+            authUrl = authUrl,
+            expectedCapabilities = expectedCapabilities,
+            localSecretKey = localSecretKey(secretKeyHex),
+            claim = claim,
         )
     }
 

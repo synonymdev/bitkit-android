@@ -6,12 +6,13 @@ This document records the client contract implemented by Bitkit iOS and Android 
 
 - The Pubky Auth URL includes `x-bitkit-claim=watch-only-account-v1`.
 - The exact capability is `/pub/paykit/v0/bitkit/server/:rw`.
-- Every distinct auth request creates a fresh native-SegWit account, beginning at BIP84 account index `1`. Retrying the same auth URL reuses its pending account.
+- Missing, unknown, mismatched, or duplicate companion-claim parameters are rejected.
+- Every distinct auth request creates a fresh native-SegWit account, beginning at BIP84 account index `1`. Account indexes increase monotonically and are never reused. Retrying the same logical auth request reuses its incomplete account even if query parameters are reordered.
 - The user assigns a local name to the account. The name is not disclosed in the claim.
 
-## Signed claim
+## Claim payload
 
-The decrypted claim is 148 bytes:
+Bitkit serializes this exact 84-byte unsigned payload:
 
 | Offset | Size | Value |
 | --- | ---: | --- |
@@ -19,7 +20,8 @@ The decrypted claim is 148 bytes:
 | 1 | 4 | BIP account index, unsigned big-endian |
 | 5 | 1 | Address type, `0x00` for native SegWit |
 | 6 | 78 | Base58Check-decoded extended public key, including its 4-byte version |
-| 84 | 64 | Ed25519 signature |
+
+Bitkit passes the payload to Paykit's `approveAuthWithCompanionClaim` API. Paykit appends a 64-byte Ed25519 signature, encrypts the resulting 148-byte claim, delivers it on the companion relay channel, and only then approves normal Pubky Auth.
 
 The signature input is the byte concatenation:
 
@@ -35,14 +37,13 @@ The server verifies the signature with the creator's Pubky Ed25519 public key fr
 
 - The normal AuthToken channel is `base_relay/{base64url_no_pad(BLAKE3(secret))}`.
 - The companion channel is `base_relay/{base64url_no_pad(BLAKE3(ASCII("watch-only-account-v1|") || secret))}`.
-- Bitkit encrypts the complete 148-byte signed claim on the companion channel with the auth request secret using the existing XSalsa20-Poly1305 format.
-- Bitkit delivers the claim before approving the normal Pubky Auth token, avoiding a session that was authorized without its required account claim.
+- Paykit encrypts the complete 148-byte signed claim on the companion channel with the auth request secret using XSalsa20-Poly1305.
+- Paykit delivers the claim before approving the normal Pubky Auth token, avoiding a session that was authorized without its required account claim.
 - Bitkit persists the account before delivery and retries the same pending claim idempotently.
-- Disabling tracking rebuilds LDK Node without registering that account. It does not delete the xpub or revoke the server session.
-- Account metadata is included in the existing encrypted wallet backup and uses the same JSON field names on iOS and Android.
-
-## Required shared protocol work
-
-The current Paykit app bindings do not expose the companion encrypted-relay operation, so both clients deliberately fail closed at delivery. Paykit must provide one shared binding that derives the domain-separated channel, encrypts, and posts the signed claim; duplicating Pubky relay cryptography in each app is not accepted.
-
-The server protocol must also communicate its highest issued external address index. Bitkit can then call LDK Node's account-specific reveal API before syncing. Without that high-water mark, addresses beyond the wallet lookahead cannot be guaranteed to appear, even though initial addresses work normally.
+- Bitkit durably marks and loads an incomplete account as authorizing before calling Paykit. Success marks it active and leaves tracking enabled; preparation or companion-delivery failure returns it to pending and unloads it again.
+- If Paykit reports that companion delivery succeeded but normal AuthToken delivery failed, Bitkit leaves the account authorizing and tracked. Retrying the same request can then finish normal authorization without losing visibility into addresses the server may already have derived.
+- Disabling tracking unloads the account from LDK Node at runtime. It does not delete persisted wallet state, the xpub, or the server session.
+- Enabled active or authorizing accounts are configured before LDK Node starts. Electrum full scans use a batch size of `100` and stop gap of `1000`.
+- Bitkit pre-reveals external receive indexes `0...999` for each tracked account. A v1 Paykit Server must not issue an index above `999`; supporting a higher index requires a future protocol signal that communicates the server's address high-water mark.
+- Startup reconciliation restores runtime tracking and the pre-revealed range. A transient reconciliation failure does not leave the node in a failed-but-running state; the next app-driven wallet sync retries reconciliation.
+- Account metadata and monotonic allocation state are included in the existing encrypted wallet backup and use the same JSON field names on iOS and Android.

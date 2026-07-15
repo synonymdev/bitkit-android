@@ -39,6 +39,7 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HomegateResponse
+import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
@@ -914,6 +915,25 @@ class PubkyRepo @Inject constructor(
                 "No secret key available — use Ring to manage authorizations"
             }
             pubkyService.approveAuth(authUrl, expectedCapabilities, secretKeyHex)
+        }
+    }
+
+    suspend fun approveAuthWithCompanionClaim(
+        authUrl: String,
+        unsignedPayload: ByteArray,
+    ): Result<Unit> = runSuspendCatching {
+        withContext(ioDispatcher) {
+            val secretKeyHex = requireNotNull(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)) {
+                "No secret key available — use Ring to manage authorizations"
+            }
+            pubkyService.approveAuthWithCompanionClaim(
+                authUrl = authUrl,
+                expectedCapabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
+                secretKeyHex = secretKeyHex,
+                queryParameter = PubkyAuthClaim.QUERY_PARAMETER,
+                claimType = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
+                unsignedPayload = unsignedPayload,
+            )
         }
     }
 

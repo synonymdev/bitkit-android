@@ -340,8 +340,9 @@ class LightningRepo @Inject constructor(
                     }
                 }
 
-                if (getStatus()?.isRunning == true) {
+                if (lightningService.status?.isRunning == true) {
                     Logger.info("LDK node already running", context = TAG)
+                    lightningService.reconcileWatchOnlyAccounts()
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
                     lightningService.startEventListener(::onEvent).onFailure {
                         Logger.warn("Failed to start event listener", it, context = TAG)
