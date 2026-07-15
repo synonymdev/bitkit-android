@@ -209,6 +209,26 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `start remains running when watch-only reconciliation fails for an already running node`() = test {
+        sut.setInitNodeLifecycleState()
+        val node = mock<Node>()
+        val status = mock<NodeStatus>()
+        whenever(lightningService.node).thenReturn(node)
+        whenever(lightningService.status).thenReturn(status)
+        whenever(status.isRunning).thenReturn(true)
+        whenever { lightningService.reconcileWatchOnlyAccounts() }
+            .thenThrow(IllegalStateException("reconciliation failed"))
+        whenever { lightningService.startEventListener(any()) }.thenReturn(Result.success(Unit))
+
+        val result = sut.start(shouldRetry = false)
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService) { reconcileWatchOnlyAccounts() }
+        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
+    }
+
+    @Test
     fun `stop should transition to stopped state`() = test {
         startNodeForTesting()
 

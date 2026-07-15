@@ -7,6 +7,8 @@ import org.lightningdevkit.ldknode.Network
 import to.bitkit.env.Env
 
 const val WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX = 999
+const val WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE = "nativeSegwit"
+const val WATCH_ONLY_ACCOUNT_SERIALIZED_XPUB_LENGTH = 78
 
 @Serializable
 enum class WatchOnlyAccountSetupState {

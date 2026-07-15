@@ -65,6 +65,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
@@ -342,7 +343,10 @@ class LightningRepo @Inject constructor(
 
                 if (lightningService.status?.isRunning == true) {
                     Logger.info("LDK node already running", context = TAG)
-                    lightningService.reconcileWatchOnlyAccounts()
+                    runSuspendCatching { lightningService.reconcileWatchOnlyAccounts() }
+                        .onFailure {
+                            Logger.warn("Failed to reconcile Paykit Server accounts during startup", it, context = TAG)
+                        }
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
                     lightningService.startEventListener(::onEvent).onFailure {
                         Logger.warn("Failed to start event listener", it, context = TAG)
