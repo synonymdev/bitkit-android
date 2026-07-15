@@ -37,11 +37,6 @@ class ElectrumConfigViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(ElectrumConfigUiState())
-    val uiState: StateFlow<ElectrumConfigUiState> = _uiState.asStateFlow()
-
-    val defaultElectrumPorts = listOf("51002", "50002", "51001", "50001")
-
     companion object {
         /** One or more dot-separated DNS labels, e.g. `sub.example.` — no nested quantifiers (ReDoS-safe). */
         private const val LABEL = "([a-z\\d](?:[a-z\\d-]*[a-z\\d])?\\.)+"
@@ -55,6 +50,11 @@ class ElectrumConfigViewModel @Inject constructor(
             RegexOption.IGNORE_CASE,
         )
     }
+
+    private val _uiState = MutableStateFlow(ElectrumConfigUiState())
+    val uiState: StateFlow<ElectrumConfigUiState> = _uiState.asStateFlow()
+
+    val defaultElectrumPorts = listOf("51002", "50002", "51001", "50001")
 
     init {
         observeState()
