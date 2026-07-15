@@ -191,12 +191,7 @@ internal fun WatchOnlyAccountData.restoreAccounts(
     allocationState: WatchOnlyAccountAllocationState? = null,
 ): WatchOnlyAccountData {
     val locallyManagedAccounts = this.accounts + accountsPendingRemoval
-    val authorizingAccounts = uniqueLogicalAccounts(
-        prioritizedAccounts = emptyList(),
-        remainingAccounts = locallyManagedAccounts.filter {
-            it.setupState == WatchOnlyAccountSetupState.Authorizing
-        },
-    )
+    val authorizingAccounts = locallyManagedAccounts.uniqueAuthorizingAccounts()
     val authorizingIds = authorizingAccounts.mapTo(mutableSetOf(), WatchOnlyAccountRecord::id)
     val authorizingKeys = authorizingAccounts.mapTo(mutableSetOf(), WatchOnlyAccountRecord::managementKey)
     val authorizingRequestKeys = authorizingAccounts.mapTo(mutableSetOf(), WatchOnlyAccountRecord::allocationRequestKey)
@@ -206,8 +201,10 @@ internal fun WatchOnlyAccountData.restoreAccounts(
             account.setupState != WatchOnlyAccountSetupState.Authorizing &&
                 account.id !in authorizingIds &&
                 account.managementKey() !in authorizingKeys &&
-                (account.setupState == WatchOnlyAccountSetupState.Active ||
-                    account.allocationRequestKey() !in authorizingRequestKeys) &&
+                (
+                    account.setupState == WatchOnlyAccountSetupState.Active ||
+                        account.allocationRequestKey() !in authorizingRequestKeys
+                    ) &&
                 account.shouldProtectFrom(accounts)
         }.map { it.promotedTrackingState(accounts) },
     )
@@ -255,6 +252,12 @@ private fun WatchOnlyAccountRecord.managementKey(): String = "$walletIndex:$addr
 
 private fun WatchOnlyAccountRecord.allocationRequestKey(): String = "$walletIndex:$requestFingerprint"
 
+private fun List<WatchOnlyAccountRecord>.uniqueAuthorizingAccounts(): List<WatchOnlyAccountRecord> =
+    uniqueLogicalAccounts(
+        prioritizedAccounts = emptyList(),
+        remainingAccounts = filter { it.setupState == WatchOnlyAccountSetupState.Authorizing },
+    )
+
 private fun WatchOnlyAccountRecord.normalizedTrackingState(): WatchOnlyAccountRecord = when (setupState) {
     WatchOnlyAccountSetupState.PendingDelivery -> copy(isTrackingEnabled = false)
     WatchOnlyAccountSetupState.Authorizing -> copy(isTrackingEnabled = true)
@@ -285,8 +288,10 @@ private fun WatchOnlyAccountRecord.promotedTrackingState(
     if (setupState != WatchOnlyAccountSetupState.Active) return this
     val restoredOwnerRequiresTracking = restoredAccounts.filter(WatchOnlyAccountRecord::isUsableAccount).any {
         it.managementKey() == managementKey() &&
-            (it.setupState == WatchOnlyAccountSetupState.Authorizing ||
-                it.setupState == WatchOnlyAccountSetupState.Active && it.isTrackingEnabled)
+            (
+                it.setupState == WatchOnlyAccountSetupState.Authorizing ||
+                    it.setupState == WatchOnlyAccountSetupState.Active && it.isTrackingEnabled
+                )
     }
     return if (restoredOwnerRequiresTracking) copy(isTrackingEnabled = true) else this
 }
@@ -373,14 +378,7 @@ private fun Map<String, Int>.withoutAccountIndexConflicts(
         AccountIndexKey(it.walletIndex, it.accountIndex)
     }
     return entries.asSequence()
-        .mapNotNull { (requestKey, accountIndex) ->
-            val walletIndex = requestKey.allocationWalletIndex() ?: return@mapNotNull null
-            if (accountIndex <= 0) return@mapNotNull null
-            PendingAccountIndexReservation(
-                requestKey = requestKey,
-                accountIndexKey = AccountIndexKey(walletIndex, accountIndex),
-            )
-        }
+        .mapNotNull { (requestKey, accountIndex) -> pendingReservation(requestKey, accountIndex) }
         .filter { reservation ->
             if (reservation.accountIndexKey in indexesPendingRemoval) return@filter false
             val localAccountIndex = localPendingAccountIndexes[reservation.requestKey]
@@ -394,7 +392,7 @@ private fun Map<String, Int>.withoutAccountIndexConflicts(
             if (incompleteAccountIndex != null && incompleteAccountIndex != reservation.accountIndexKey) {
                 return@filter false
             }
-            if (reservation.accountIndexKey in restoredAccountIndexes && incompleteAccountIndex != reservation.accountIndexKey) {
+            if (reservation.conflictsWithRestoredAccount(restoredAccountIndexes, incompleteAccountIndex)) {
                 return@filter false
             }
             val occupyingAccounts = accountsByIndex[reservation.accountIndexKey].orEmpty()
@@ -412,6 +410,20 @@ private fun Map<String, Int>.withoutAccountIndexConflicts(
         .distinctBy(PendingAccountIndexReservation::accountIndexKey)
         .associate { it.requestKey to it.accountIndexKey.accountIndex }
 }
+
+private fun pendingReservation(requestKey: String, accountIndex: Int): PendingAccountIndexReservation? {
+    val walletIndex = requestKey.allocationWalletIndex() ?: return null
+    if (accountIndex <= 0) return null
+    return PendingAccountIndexReservation(
+        requestKey = requestKey,
+        accountIndexKey = AccountIndexKey(walletIndex, accountIndex),
+    )
+}
+
+private fun PendingAccountIndexReservation.conflictsWithRestoredAccount(
+    restoredAccountIndexes: Set<AccountIndexKey>,
+    incompleteAccountIndex: AccountIndexKey?,
+): Boolean = accountIndexKey in restoredAccountIndexes && incompleteAccountIndex != accountIndexKey
 
 private fun String.allocationWalletIndex(): Int? {
     val separatorIndex = indexOf(':')

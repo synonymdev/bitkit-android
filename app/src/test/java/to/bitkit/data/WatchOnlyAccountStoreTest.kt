@@ -2,8 +2,8 @@ package to.bitkit.data
 
 import org.junit.Test
 import to.bitkit.di.json
-import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
+import to.bitkit.models.WalletBackupV1
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import kotlin.test.assertEquals
