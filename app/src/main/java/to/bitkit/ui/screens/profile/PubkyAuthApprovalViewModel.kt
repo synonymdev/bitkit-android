@@ -50,6 +50,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     val effects = _effects.asSharedFlow()
 
     private val inFlightAuthorization = AtomicReference<InFlightAuthorization?>()
+    private val accountIdsAwaitingLocalActivation = mutableMapOf<String, String>()
 
     fun load(authUrl: String) {
         inFlightAuthorization.get()?.takeIf { it.authUrl == authUrl }?.let { authorization ->
@@ -146,6 +147,12 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         request: PubkyAuthRequest,
         authUrl: String,
         watchOnlyAccountName: String,
+    ): Boolean = resumeLocalActivation(authUrl) ?: approveNewRequest(request, authUrl, watchOnlyAccountName)
+
+    private suspend fun approveNewRequest(
+        request: PubkyAuthRequest,
+        authUrl: String,
+        watchOnlyAccountName: String,
     ): Boolean {
         val preparedClaim = runSuspendCatching {
             if (request.bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1) {
@@ -190,12 +197,25 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         }
 
         preparedClaim?.let { claim ->
+            accountIdsAwaitingLocalActivation[authUrl] = claim.account.id
             runSuspendCatching { watchOnlyAccountRepo.markActive(claim.account.id) }.getOrElse {
                 handleApprovalFailure(it, authUrl)
                 return false
             }
+            accountIdsAwaitingLocalActivation.remove(authUrl, claim.account.id)
         }
         return true
+    }
+
+    private suspend fun resumeLocalActivation(authUrl: String): Boolean? {
+        val accountId = accountIdsAwaitingLocalActivation[authUrl] ?: return null
+        val result = runSuspendCatching { watchOnlyAccountRepo.markActive(accountId) }
+        if (result.isSuccess) {
+            accountIdsAwaitingLocalActivation.remove(authUrl, accountId)
+            return true
+        }
+        handleApprovalFailure(result.exceptionOrNull() ?: IllegalStateException("Account activation failed"), authUrl)
+        return false
     }
 
     private fun transitionToAuthorizing(authUrl: String): PubkyAuthApprovalUiState? {
