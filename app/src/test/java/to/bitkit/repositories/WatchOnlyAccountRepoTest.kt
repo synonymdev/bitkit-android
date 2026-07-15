@@ -46,6 +46,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
+@Suppress("LargeClass")
 class WatchOnlyAccountRepoTest : BaseUnitTest() {
     @Test
     fun `authorization fails before tracking when the prepared account is missing`() = test {
