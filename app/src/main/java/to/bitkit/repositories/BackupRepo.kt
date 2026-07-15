@@ -267,7 +267,6 @@ class BackupRepo @Inject constructor(
 
         val watchOnlyAccountsJob = scope.launch {
             watchOnlyAccountStore.data
-                .map { it.accounts }
                 .distinctUntilChanged()
                 .drop(1)
                 .collect {
@@ -560,17 +559,20 @@ class BackupRepo @Inject constructor(
         val privateReservations = privatePaykitAddressReservationRepo.get().backupSnapshot().getOrThrow()
         val paykitSdkBackupState = privatePaykitRepo.get().backupSnapshot().getOrThrow()
 
+        val watchOnlyAccountSnapshot = watchOnlyAccountStore.backupSnapshot()
         val payload = WalletBackupV1(
             createdAt = currentTimeMillis(),
             transfers = transfers,
             privatePaykitHighestReservedReceiveIndexByAddressType = privateReservations,
             paykitSdkBackupState = paykitSdkBackupState,
-            watchOnlyAccounts = watchOnlyAccountStore.load(),
+            watchOnlyAccounts = watchOnlyAccountSnapshot.accounts,
+            watchOnlyAccountAllocationState = watchOnlyAccountSnapshot.allocationState,
         )
 
         return json.encodeToString(payload).toByteArray()
     }
 
+    @Suppress("LongMethod")
     suspend fun performFullRestoreFromLatestBackup(
         onCacheRestored: suspend () -> Unit = {},
     ): Result<Unit> = withContext(ioDispatcher) {
@@ -647,7 +649,11 @@ class BackupRepo @Inject constructor(
     private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
         val parsed = json.decodeFromString<WalletBackupV1>(String(dataBytes))
         db.transferDao().upsert(parsed.transfers)
-        watchOnlyAccountStore.save(parsed.watchOnlyAccounts.orEmpty())
+        watchOnlyAccountStore.restore(
+            parsed.watchOnlyAccounts.orEmpty(),
+            parsed.watchOnlyAccountAllocationState,
+        )
+        lightningService.reconcileWatchOnlyAccounts(parsed.watchOnlyAccounts.orEmpty())
         if (!parsed.privatePaykitHighestReservedReceiveIndexByAddressType.isNullOrEmpty()) {
             cacheStore.update { it.copy(onchainAddress = "", bip21 = "") }
         }

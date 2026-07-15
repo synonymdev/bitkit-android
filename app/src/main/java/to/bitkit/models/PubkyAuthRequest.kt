@@ -21,11 +21,12 @@ enum class PubkyAuthClaim(val wireValue: String) {
     }
 }
 
-sealed class PubkyAuthRequestError(message: String, cause: Throwable? = null) : AppError(message, cause) {
-    class InvalidUrl(cause: Throwable) : PubkyAuthRequestError("Invalid Pubky auth URL", cause)
-    data object DuplicateBitkitClaim : PubkyAuthRequestError("Duplicate Bitkit claim")
-    data class UnsupportedBitkitClaim(val value: String) : PubkyAuthRequestError("Unsupported Bitkit claim '$value'")
-    data object InvalidBitkitClaimCapabilities : PubkyAuthRequestError("Invalid capabilities for Bitkit claim")
+sealed class PubkyAuthRequestError(cause: Throwable? = null) : AppError(cause = cause) {
+    class InvalidUrl(cause: Throwable) : PubkyAuthRequestError(cause)
+    data object MissingBitkitClaim : PubkyAuthRequestError()
+    data object DuplicateBitkitClaim : PubkyAuthRequestError()
+    data class UnsupportedBitkitClaim(val value: String) : PubkyAuthRequestError()
+    data object InvalidBitkitClaimCapabilities : PubkyAuthRequestError()
 }
 
 @Immutable
@@ -91,6 +92,8 @@ data class PubkyAuthRequest(
             capabilities: String,
         ): Result<PubkyAuthClaim?> = when {
             claimValues.size > 1 -> Result.failure(PubkyAuthRequestError.DuplicateBitkitClaim)
+            claimValues.isEmpty() && capabilities == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES ->
+                Result.failure(PubkyAuthRequestError.MissingBitkitClaim)
             claimValues.isEmpty() -> Result.success(null)
             else -> validateBitkitClaimValue(claimValues.first(), capabilities)
         }

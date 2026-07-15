@@ -13,22 +13,26 @@ import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.WidgetsData
-import to.bitkit.data.WidgetsStore
+import to.bitkit.data.WatchOnlyAccountAllocationState
+import to.bitkit.data.WatchOnlyAccountBackupSnapshot
 import to.bitkit.data.WatchOnlyAccountData
 import to.bitkit.data.WatchOnlyAccountStore
+import to.bitkit.data.WidgetsData
+import to.bitkit.data.WidgetsStore
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.dao.TransferDao
@@ -37,11 +41,14 @@ import to.bitkit.di.json
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.WalletBackupV1
+import to.bitkit.models.WatchOnlyAccountRecord
+import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import javax.inject.Provider
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
@@ -87,6 +94,9 @@ class BackupRepoTest : BaseUnitTest() {
         whenever(widgetsStore.data).thenReturn(widgetsData)
         whenever(watchOnlyAccountStore.data).thenReturn(MutableStateFlow(WatchOnlyAccountData()))
         whenever { watchOnlyAccountStore.load() }.thenReturn(emptyList())
+        whenever { watchOnlyAccountStore.backupSnapshot() }.thenReturn(
+            WatchOnlyAccountBackupSnapshot(emptyList(), WatchOnlyAccountAllocationState())
+        )
         whenever { vssBackupClient.getObject(any()) }.thenReturn(Result.success(null))
         whenever { vssBackupClient.putObject(any(), any()) }
             .thenReturn(Result.success(VssItem(key = BackupCategory.SETTINGS.name, value = byteArrayOf(), version = 1)))
@@ -298,6 +308,56 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wallet backup includes watch-only accounts and allocator state`() = test {
+        val account = watchOnlyAccount()
+        val allocationState = WatchOnlyAccountAllocationState(
+            highestAccountIndexByWallet = mapOf("0" to 7),
+            pendingAccountIndexByRequest = mapOf("0:pending" to 7),
+        )
+        whenever { watchOnlyAccountStore.backupSnapshot() }.thenReturn(
+            WatchOnlyAccountBackupSnapshot(listOf(account), allocationState)
+        )
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.WALLET)
+
+        verifyBlocking(vssBackupClient) {
+            putObject(eq(BackupCategory.WALLET.name), dataCaptor.capture())
+        }
+        val payload = json.decodeFromString<WalletBackupV1>(dataCaptor.firstValue.decodeToString())
+        assertEquals(listOf(account), payload.watchOnlyAccounts)
+        assertEquals(allocationState, payload.watchOnlyAccountAllocationState)
+    }
+
+    @Test
+    fun `wallet restore restores watch-only accounts and allocator before runtime reconciliation`() = test {
+        val account = watchOnlyAccount()
+        val allocationState = WatchOnlyAccountAllocationState(
+            highestAccountIndexByWallet = mapOf("0" to 7),
+            pendingAccountIndexByRequest = mapOf("0:pending" to 7),
+        )
+        stubWalletBackup(
+            watchOnlyAccounts = listOf(account),
+            watchOnlyAccountAllocationState = allocationState,
+        )
+        var storeWasRestored = false
+        whenever { watchOnlyAccountStore.restore(listOf(account), allocationState) }.thenAnswer {
+            storeWasRestored = true
+            Unit
+        }
+        whenever { lightningService.reconcileWatchOnlyAccounts(listOf(account)) }.thenAnswer {
+            assertTrue(storeWasRestored)
+            Unit
+        }
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(watchOnlyAccountStore) { restore(listOf(account), allocationState) }
+        verifyBlocking(lightningService) { reconcileWatchOnlyAccounts(listOf(account)) }
+    }
+
+    @Test
     fun `full restore should fail when private Paykit reserved indexes fail to reconcile`() = test {
         stubWalletBackup()
         whenever { privatePaykitAddressReservationRepo.reconcileReservedIndexesWithLdk() }
@@ -311,12 +371,16 @@ class BackupRepoTest : BaseUnitTest() {
 
     private fun stubWalletBackup(
         paykitSdkBackupState: String? = null,
+        watchOnlyAccounts: List<WatchOnlyAccountRecord>? = null,
+        watchOnlyAccountAllocationState: WatchOnlyAccountAllocationState? = null,
     ) {
         val walletBackup = WalletBackupV1(
             createdAt = 123,
             transfers = emptyList(),
             privatePaykitHighestReservedReceiveIndexByAddressType = mapOf("nativeSegwit" to 5),
             paykitSdkBackupState = paykitSdkBackupState,
+            watchOnlyAccounts = watchOnlyAccounts,
+            watchOnlyAccountAllocationState = watchOnlyAccountAllocationState,
         )
         whenever { vssBackupClient.getObject(BackupCategory.WALLET.name) }
             .thenReturn(
@@ -384,4 +448,17 @@ class BackupRepoTest : BaseUnitTest() {
     )
 
     private class BackupRepoTestError(message: String) : AppError(message)
+
+    private fun watchOnlyAccount() = WatchOnlyAccountRecord(
+        id = "account-7",
+        walletIndex = 0,
+        accountIndex = 7,
+        addressType = "nativeSegwit",
+        xpub = "xpub-7",
+        requestFingerprint = "pending",
+        createdAt = 1,
+        name = "Server account",
+        isTrackingEnabled = true,
+        setupState = WatchOnlyAccountSetupState.Authorizing,
+    )
 }

@@ -11,6 +11,7 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.SettingsData
+import to.bitkit.data.WatchOnlyAccountAllocationState
 import to.bitkit.data.WidgetsData
 import to.bitkit.data.entities.TransferEntity
 
@@ -22,6 +23,7 @@ data class WalletBackupV1(
     val privatePaykitHighestReservedReceiveIndexByAddressType: Map<String, Int>? = null,
     val paykitSdkBackupState: String? = null,
     val watchOnlyAccounts: List<WatchOnlyAccountRecord>? = null,
+    val watchOnlyAccountAllocationState: WatchOnlyAccountAllocationState? = null,
 )
 
 @Serializable

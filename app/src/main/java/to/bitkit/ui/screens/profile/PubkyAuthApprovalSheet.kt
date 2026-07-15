@@ -11,7 +11,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -113,7 +115,10 @@ fun PubkyAuthApprovalSheet(
     Box {
         Content(
             uiState = uiState,
-            onAuthorize = { viewModel.requestAuthorize(authUrl) },
+            isCurrentRequest = uiState.authUrl == authUrl,
+            onAuthorize = {
+                if (uiState.authUrl == authUrl) viewModel.requestAuthorize(authUrl)
+            },
             onAccountNameChange = viewModel::updateWatchOnlyAccountName,
             onCancel = { viewModel.dismiss() },
             onDismiss = { viewModel.dismiss() },
@@ -170,12 +175,14 @@ internal fun resolvePubkyApprovalLocalAuthMode(
 @Composable
 private fun Content(
     uiState: PubkyAuthApprovalUiState,
+    isCurrentRequest: Boolean,
     onAuthorize: () -> Unit,
     onAccountNameChange: (String) -> Unit,
     onCancel: () -> Unit,
     onDismiss: () -> Unit,
 ) {
-    val headerTitle = if (uiState.state == ApprovalState.Success) {
+    val approvalState = if (isCurrentRequest) uiState.state else ApprovalState.Loading
+    val headerTitle = if (approvalState == ApprovalState.Success) {
         stringResource(R.string.profile__auth_approval_success)
     } else {
         stringResource(R.string.profile__auth_approval_title)
@@ -190,7 +197,7 @@ private fun Content(
     ) {
         SheetTopBar(titleText = headerTitle)
 
-        when (uiState.state) {
+        when (approvalState) {
             ApprovalState.Loading -> LoadingContent()
             ApprovalState.Authorize -> AuthorizeContent(
                 uiState = uiState,
@@ -228,30 +235,11 @@ private fun ColumnScope.AuthorizeContent(
     onAccountNameChange: (String) -> Unit,
     onCancel: () -> Unit,
 ) {
-    DescriptionText(serviceName = uiState.serviceName)
-    VerticalSpacer(32.dp)
-
-    PermissionsSection(permissions = uiState.permissions)
-    VerticalSpacer(16.dp)
-
-    uiState.bitkitClaim?.let {
-        BitkitClaimSection(it)
-        VerticalSpacer(16.dp)
-        WatchOnlyAccountName(
-            value = uiState.watchOnlyAccountName,
-            enabled = true,
-            onValueChange = onAccountNameChange,
-        )
-        VerticalSpacer(16.dp)
-    }
-
-    FillHeight()
-
-    TrustWarning()
-    VerticalSpacer(16.dp)
-
-    uiState.profile?.let { ProfileCard(it) }
-    VerticalSpacer(24.dp)
+    ApprovalDetails(
+        uiState = uiState,
+        accountNameEnabled = true,
+        onAccountNameChange = onAccountNameChange,
+    )
 
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         SecondaryButton(
@@ -272,30 +260,11 @@ private fun ColumnScope.AuthorizeContent(
 private fun ColumnScope.AuthorizingContent(
     uiState: PubkyAuthApprovalUiState,
 ) {
-    DescriptionText(serviceName = uiState.serviceName)
-    VerticalSpacer(32.dp)
-
-    PermissionsSection(permissions = uiState.permissions)
-    VerticalSpacer(16.dp)
-
-    uiState.bitkitClaim?.let {
-        BitkitClaimSection(it)
-        VerticalSpacer(16.dp)
-        WatchOnlyAccountName(
-            value = uiState.watchOnlyAccountName,
-            enabled = false,
-            onValueChange = {},
-        )
-        VerticalSpacer(16.dp)
-    }
-
-    FillHeight()
-
-    TrustWarning()
-    VerticalSpacer(16.dp)
-
-    uiState.profile?.let { ProfileCard(it) }
-    VerticalSpacer(24.dp)
+    ApprovalDetails(
+        uiState = uiState,
+        accountNameEnabled = false,
+        onAccountNameChange = {},
+    )
 
     PrimaryButton(
         text = stringResource(R.string.profile__auth_approval_authorizing),
@@ -304,6 +273,42 @@ private fun ColumnScope.AuthorizingContent(
         enabled = false,
     )
     VerticalSpacer(16.dp)
+}
+
+@Composable
+private fun ColumnScope.ApprovalDetails(
+    uiState: PubkyAuthApprovalUiState,
+    accountNameEnabled: Boolean,
+    onAccountNameChange: (String) -> Unit,
+) {
+    Column(
+        modifier = Modifier
+            .weight(1f)
+            .verticalScroll(rememberScrollState())
+    ) {
+        DescriptionText(serviceName = uiState.serviceName)
+        VerticalSpacer(32.dp)
+
+        PermissionsSection(permissions = uiState.permissions)
+        VerticalSpacer(16.dp)
+
+        uiState.bitkitClaim?.let {
+            BitkitClaimSection(it)
+            VerticalSpacer(16.dp)
+            WatchOnlyAccountName(
+                value = uiState.watchOnlyAccountName,
+                enabled = accountNameEnabled,
+                onValueChange = onAccountNameChange,
+            )
+            VerticalSpacer(16.dp)
+        }
+
+        TrustWarning()
+        VerticalSpacer(16.dp)
+
+        uiState.profile?.let { ProfileCard(it) }
+        VerticalSpacer(24.dp)
+    }
 }
 
 @Composable
@@ -489,6 +494,7 @@ private fun AuthorizePreview() {
                         status = null,
                     ),
                 ),
+                isCurrentRequest = true,
                 onAuthorize = {},
                 onAccountNameChange = {},
                 onCancel = {},
@@ -508,6 +514,7 @@ private fun SuccessPreview() {
                     state = ApprovalState.Success,
                     serviceName = "pubky.app",
                 ),
+                isCurrentRequest = true,
                 onAuthorize = {},
                 onAccountNameChange = {},
                 onCancel = {},

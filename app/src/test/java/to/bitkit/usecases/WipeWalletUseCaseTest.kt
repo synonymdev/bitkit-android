@@ -125,7 +125,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(db).clearAllTables()
         inOrder.verify(settingsStore).reset()
         inOrder.verify(cacheStore).reset()
-        inOrder.verify(watchOnlyAccountStore).save(emptyList())
+        inOrder.verify(watchOnlyAccountStore).clear()
         inOrder.verify(widgetsStore).reset()
         inOrder.verify(blocktankRepo).resetState()
         inOrder.verify(activityRepo).resetState()
