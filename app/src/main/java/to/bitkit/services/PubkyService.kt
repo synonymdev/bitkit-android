@@ -10,7 +10,7 @@ import to.bitkit.utils.AppError
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Suppress("TooManyFunctions", "LongParameterList")
+@Suppress("TooManyFunctions")
 @Singleton
 class PubkyService @Inject constructor(
     private val paykitSdkService: PaykitSdkService,
@@ -122,19 +122,13 @@ class PubkyService @Inject constructor(
         authUrl: String,
         expectedCapabilities: String,
         secretKeyHex: String,
-        queryParameter: String,
-        claimType: String,
-        unsignedPayload: ByteArray,
+        claim: PubkyAuthCompanionClaim,
     ) = ServiceQueue.CORE.background {
         paykitSdkService.approveAuthWithCompanionClaim(
             authUrl = authUrl,
             expectedCapabilities = expectedCapabilities,
             secretKeyHex = secretKeyHex,
-            claim = PubkyAuthCompanionClaim(
-                queryParameter = queryParameter,
-                claimType = claimType,
-                unsignedPayload = unsignedPayload,
-            ),
+            claim = claim,
         )
     }
 

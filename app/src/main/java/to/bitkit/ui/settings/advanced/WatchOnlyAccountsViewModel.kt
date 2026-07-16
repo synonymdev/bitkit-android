@@ -19,7 +19,6 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.Toast
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.repositories.WatchOnlyAccountRepo
-import to.bitkit.services.LightningService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.utils.localizedPubkyAuthMessage
 import javax.inject.Inject
@@ -28,14 +27,12 @@ import javax.inject.Inject
 class WatchOnlyAccountsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val watchOnlyAccountRepo: WatchOnlyAccountRepo,
-    lightningService: LightningService,
 ) : ViewModel() {
-    private val walletIndex = lightningService.currentWalletIndex
-    private val _updatingAccountId = MutableStateFlow<String?>(null)
-    val updatingAccountId = _updatingAccountId.asStateFlow()
+    private val _isUpdating = MutableStateFlow(false)
+    val isUpdating = _isUpdating.asStateFlow()
 
-    val accounts = watchOnlyAccountRepo.accounts
-        .map { accounts -> accounts.filter { it.walletIndex == walletIndex }.toImmutableList() }
+    val accounts = watchOnlyAccountRepo.currentWalletAccounts
+        .map { it.toImmutableList() }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), persistentListOf())
 
     fun rename(account: WatchOnlyAccountRecord, name: String) {
@@ -53,7 +50,7 @@ class WatchOnlyAccountsViewModel @Inject constructor(
 
     fun setTrackingEnabled(account: WatchOnlyAccountRecord, enabled: Boolean) {
         viewModelScope.launch {
-            _updatingAccountId.update { account.id }
+            _isUpdating.update { true }
             try {
                 runSuspendCatching {
                     watchOnlyAccountRepo.setTrackingEnabled(account.id, enabled)
@@ -70,7 +67,7 @@ class WatchOnlyAccountsViewModel @Inject constructor(
                     )
                 }.onFailure { error -> showError(error) }
             } finally {
-                _updatingAccountId.update { null }
+                _isUpdating.update { false }
             }
         }
     }

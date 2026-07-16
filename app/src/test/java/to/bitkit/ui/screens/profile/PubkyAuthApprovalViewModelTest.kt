@@ -7,6 +7,7 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
+import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
@@ -45,6 +46,15 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     }
     private val watchOnlyAccountRepo: WatchOnlyAccountRepo = mock()
 
+    @Before
+    fun setUp() {
+        whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
+        whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
+        whenever(
+            context.getString(R.string.profile__auth_approval_watch_only_account_default_name, "paykit")
+        ).thenReturn("paykit server")
+    }
+
     @Test
     fun `initial state is loading`() {
         val sut = createSut()
@@ -76,8 +86,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     fun `confirmAuthorize ignores a stale auth URL after another request loads`() = test {
         val staleAuthUrl = "pubkyauth://signin?caps=/pub/stale/:rw"
         val currentAuthUrl = "pubkyauth://signin?caps=/pub/current/:rw"
-        whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.parseAuthUrl(currentAuthUrl) }.thenReturn(
             Result.success(authRequest(currentAuthUrl, "/pub/current/:rw")),
         )
@@ -98,9 +106,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     fun `confirmAuthorize reparses the current URL and fails closed when it changes`() = test {
         val authUrl = "pubkyauth://signin?caps=/pub/current/:rw"
         val capabilities = "/pub/current/:rw"
-        whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
-        whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
             Result.success(authRequest(authUrl, capabilities)),
             Result.failure(IllegalArgumentException("request changed")),
@@ -120,11 +125,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     @Test
     fun `load exposes watch-only account claim for approval`() = test {
         val authUrl = "pubkyauth://signin?caps=${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES}"
-        whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
-        whenever(
-            context.getString(R.string.profile__auth_approval_watch_only_account_default_name, "paykit")
-        ).thenReturn("paykit server")
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
             Result.success(
                 authRequest(
@@ -141,7 +141,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         assertEquals(ApprovalState.WatchOnlyConsent, sut.uiState.value.state)
         assertEquals(PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1, sut.uiState.value.bitkitClaim)
-        assertEquals("paykit server", sut.uiState.value.watchOnlyAccountName)
 
         sut.confirmAuthorize(authUrl)
         advanceUntilIdle()
@@ -169,11 +168,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             account = watchOnlyAccount(),
             payload = ByteArray(84),
         )
-        whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
-        whenever(
-            context.getString(R.string.profile__auth_approval_watch_only_account_default_name, "paykit")
-        ).thenReturn("paykit server")
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
             Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1)),
         )
@@ -206,11 +200,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             account = watchOnlyAccount(),
             payload = ByteArray(84),
         )
-        whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
-        whenever(
-            context.getString(R.string.profile__auth_approval_watch_only_account_default_name, "paykit")
-        ).thenReturn("paykit server")
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
             Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1)),
         )
@@ -245,11 +234,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             payload = ByteArray(84),
         )
         val approvalResult = CompletableDeferred<Result<Unit>>()
-        whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
-        whenever(
-            context.getString(R.string.profile__auth_approval_watch_only_account_default_name, "paykit")
-        ).thenReturn("paykit server")
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
             Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1)),
         )
@@ -307,12 +291,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         val authorizationError = PubkyAuthCompanionClaimApprovalException.AuthorizationFailure(
             "AuthToken delivery failed"
         )
-        whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
-        whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
-        whenever(
-            context.getString(R.string.profile__auth_approval_watch_only_account_default_name, "paykit")
-        ).thenReturn("paykit server")
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
             Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1)),
         )
@@ -342,12 +320,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             account = watchOnlyAccount(),
             payload = ByteArray(84),
         )
-        whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
-        whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
-        whenever(
-            context.getString(R.string.profile__auth_approval_watch_only_account_default_name, "paykit")
-        ).thenReturn("paykit server")
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
             Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1)),
         )
@@ -381,12 +353,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             ),
             payload = ByteArray(84),
         )
-        whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
-        whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
-        whenever(
-            context.getString(R.string.profile__auth_approval_watch_only_account_default_name, "paykit")
-        ).thenReturn("paykit server")
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
             Result.success(authRequest(authUrl, capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1)),
         )
@@ -417,12 +383,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             account = watchOnlyAccount(),
             payload = ByteArray(84),
         )
-        whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
-        whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
-        whenever(
-            context.getString(R.string.profile__auth_approval_watch_only_account_default_name, "paykit")
-        ).thenReturn("paykit server")
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
             Result.success(
                 authRequest(
@@ -456,12 +416,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             account = watchOnlyAccount(),
             payload = ByteArray(84),
         )
-        whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
-        whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
-        whenever(
-            context.getString(R.string.profile__auth_approval_watch_only_account_default_name, "paykit")
-        ).thenReturn("paykit server")
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
             Result.success(
                 authRequest(
@@ -500,12 +454,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             account = watchOnlyAccount(),
             payload = ByteArray(84),
         )
-        whenever(context.getString(R.string.profile__auth_approval_service_unknown)).thenReturn("Unknown service")
-        whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
-        whenever(
-            context.getString(R.string.profile__auth_approval_watch_only_account_default_name, "paykit")
-        ).thenReturn("paykit server")
-        whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(null))
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
             Result.success(
                 authRequest(

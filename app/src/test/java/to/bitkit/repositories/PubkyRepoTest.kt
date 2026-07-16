@@ -8,6 +8,7 @@ import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactProfileSource
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PaykitProfile
+import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PublicationStatus
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -222,9 +223,11 @@ class PubkyRepoTest : BaseUnitTest() {
                 authUrl = authUrl,
                 expectedCapabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
                 secretKeyHex = secretKey,
-                queryParameter = PubkyAuthClaim.QUERY_PARAMETER,
-                claimType = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
-                unsignedPayload = payload,
+                claim = PubkyAuthCompanionClaim(
+                    queryParameter = PubkyAuthClaim.QUERY_PARAMETER,
+                    claimType = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
+                    unsignedPayload = payload,
+                ),
             )
         }
     }

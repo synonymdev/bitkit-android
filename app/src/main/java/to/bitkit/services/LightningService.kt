@@ -381,7 +381,8 @@ class LightningService @Inject constructor(
                 val trackedAccounts = node.listOnchainWalletAccounts()
                 val managedKeys = (walletRecords + accountsPendingRemoval).mapNotNull { record ->
                     when (record.addressType) {
-                        "nativeSegwit" -> accountKey(LdkAddressType.NATIVE_SEGWIT, record.accountIndex.toUInt())
+                        WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE ->
+                            accountKey(LdkAddressType.NATIVE_SEGWIT, record.accountIndex.toUInt())
                         else -> null
                     }
                 }.toSet()

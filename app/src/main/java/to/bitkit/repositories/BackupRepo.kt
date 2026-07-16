@@ -572,7 +572,6 @@ class BackupRepo @Inject constructor(
         return json.encodeToString(payload).toByteArray()
     }
 
-    @Suppress("LongMethod")
     suspend fun performFullRestoreFromLatestBackup(
         onCacheRestored: suspend () -> Unit = {},
     ): Result<Unit> = withContext(ioDispatcher) {

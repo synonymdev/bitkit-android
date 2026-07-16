@@ -84,12 +84,6 @@ class PubkyAuthApprovalViewModel @Inject constructor(
                     imageUrl = pubkyRepo.displayImageUri.value,
                 )
             }
-            val accountName = if (request.bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1) {
-                context.getString(R.string.profile__auth_approval_watch_only_account_default_name, serviceName)
-            } else {
-                ""
-            }
-
             _uiState.update {
                 it.copy(
                     state = if (request.bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1) {
@@ -98,10 +92,8 @@ class PubkyAuthApprovalViewModel @Inject constructor(
                         ApprovalState.Authorize
                     },
                     serviceName = serviceName,
-                    requestedCapabilities = request.capabilities,
                     permissions = request.permissions.toImmutableList(),
                     bitkitClaim = request.bitkitClaim,
-                    watchOnlyAccountName = accountName,
                     profile = profile,
                 )
             }
@@ -163,20 +155,20 @@ class PubkyAuthApprovalViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                authorize(authUrl, authorizingState.watchOnlyAccountName)
+                authorize(authUrl)
             } finally {
                 inFlightAuthorization.compareAndSet(authorization, null)
             }
         }
     }
 
-    private suspend fun authorize(authUrl: String, watchOnlyAccountName: String) {
+    private suspend fun authorize(authUrl: String) {
         val request = pubkyRepo.parseAuthUrl(authUrl).getOrElse {
             handleApprovalFailure(it, authUrl)
             return
         }
         if (_uiState.value.authUrl != authUrl) return
-        if (!approveRequest(request, authUrl, watchOnlyAccountName)) return
+        if (!approveRequest(request, authUrl)) return
 
         Logger.info("Auth approved for '${request.serviceNames.firstOrNull().orEmpty()}'", context = TAG)
         _uiState.update { state ->
@@ -187,17 +179,15 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     private suspend fun approveRequest(
         request: PubkyAuthRequest,
         authUrl: String,
-        watchOnlyAccountName: String,
-    ): Boolean = resumeLocalActivation(authUrl) ?: approveNewRequest(request, authUrl, watchOnlyAccountName)
+    ): Boolean = resumeLocalActivation(authUrl) ?: approveNewRequest(request, authUrl)
 
     private suspend fun approveNewRequest(
         request: PubkyAuthRequest,
         authUrl: String,
-        watchOnlyAccountName: String,
     ): Boolean {
         val preparedClaim = runSuspendCatching {
             if (request.bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1) {
-                watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, watchOnlyAccountName)
+                watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, defaultWatchOnlyAccountName(request))
             } else {
                 null
             }
@@ -311,6 +301,12 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         )
     }
 
+    private fun defaultWatchOnlyAccountName(request: PubkyAuthRequest): String {
+        val serviceName = request.serviceNames.firstOrNull()
+            ?: context.getString(R.string.profile__auth_approval_service_unknown)
+        return context.getString(R.string.profile__auth_approval_watch_only_account_default_name, serviceName)
+    }
+
     fun dismiss() {
         viewModelScope.launch { _effects.emit(PubkyAuthApprovalEffect.Dismiss) }
     }
@@ -321,10 +317,8 @@ data class PubkyAuthApprovalUiState(
     val authUrl: String = "",
     val state: ApprovalState = ApprovalState.Loading,
     val serviceName: String = "",
-    val requestedCapabilities: String = "",
     val permissions: ImmutableList<PubkyAuthPermission> = persistentListOf(),
     val bitkitClaim: PubkyAuthClaim? = null,
-    val watchOnlyAccountName: String = "",
     val profile: PubkyProfile? = null,
 )
 

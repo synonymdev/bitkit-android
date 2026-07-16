@@ -5,11 +5,11 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
-import org.bitcoinj.base.Base58
 import org.lightningdevkit.ldknode.AddressType
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.WatchOnlyAccountAllocationState
 import to.bitkit.data.WatchOnlyAccountStore
+import to.bitkit.data.WatchOnlyAccountXpubSerializer
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
@@ -53,8 +53,13 @@ class WatchOnlyAccountRepo @Inject constructor(
     private val store: WatchOnlyAccountStore,
     private val lightningService: LightningService,
     private val lifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
+    private val xpubSerializer: WatchOnlyAccountXpubSerializer,
 ) {
     val accounts: Flow<List<WatchOnlyAccountRecord>> = store.data.map { it.accounts }
+    val currentWalletAccounts: Flow<List<WatchOnlyAccountRecord>> = accounts.map { accounts ->
+        accounts.filter { it.walletIndex == lightningService.currentWalletIndex }
+    }
+    val currentWalletAccountCount: Flow<Int> = currentWalletAccounts.map { it.size }
 
     suspend fun prepareUnsignedClaim(authUrl: String, name: String): PreparedWatchOnlyAccountClaim =
         withContext(bgDispatcher) {
@@ -74,7 +79,7 @@ class WatchOnlyAccountRepo @Inject constructor(
                     }
                     return@withLock PreparedWatchOnlyAccountClaim(
                         account = refreshed,
-                        payload = WatchOnlyAccountClaimCodec.encode(refreshed),
+                        payload = WatchOnlyAccountClaimCodec.encode(refreshed, xpubSerializer::serialize),
                     )
                 }
 
@@ -84,7 +89,7 @@ class WatchOnlyAccountRepo @Inject constructor(
                     id = UUID.randomUUID().toString(),
                     walletIndex = walletIndex,
                     accountIndex = accountIndex,
-                    addressType = ADDRESS_TYPE_NATIVE_SEGWIT,
+                    addressType = WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE,
                     xpub = xpub,
                     requestFingerprint = fingerprint,
                     createdAt = nowMillis(),
@@ -95,7 +100,7 @@ class WatchOnlyAccountRepo @Inject constructor(
                 store.save(current + account)
                 PreparedWatchOnlyAccountClaim(
                     account = account,
-                    payload = WatchOnlyAccountClaimCodec.encode(account),
+                    payload = WatchOnlyAccountClaimCodec.encode(account, xpubSerializer::serialize),
                 )
             }
         }
@@ -230,7 +235,7 @@ class WatchOnlyAccountRepo @Inject constructor(
     ) = ServiceQueue.LDK.background {
         val node = lightningService.node ?: throw WatchOnlyAccountError.NodeUnavailable
         val addressType = when (account.addressType) {
-            ADDRESS_TYPE_NATIVE_SEGWIT -> AddressType.NATIVE_SEGWIT
+            WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE -> AddressType.NATIVE_SEGWIT
             else -> throw WatchOnlyAccountError.InvalidExtendedPublicKey
         }
         val accountIndex = account.accountIndex.toUInt()
@@ -310,7 +315,6 @@ class WatchOnlyAccountRepo @Inject constructor(
     }
 
     companion object {
-        const val ADDRESS_TYPE_NATIVE_SEGWIT = WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
         private const val MAX_NAME_LENGTH = 64
     }
 }
@@ -329,9 +333,12 @@ object WatchOnlyAccountClaimCodec {
     const val SERIALIZED_XPUB_LENGTH = WATCH_ONLY_ACCOUNT_SERIALIZED_XPUB_LENGTH
     const val PAYLOAD_LENGTH = 1 + 4 + 1 + SERIALIZED_XPUB_LENGTH
 
-    fun encode(account: WatchOnlyAccountRecord): ByteArray {
-        val rawXpub = if (account.addressType == WatchOnlyAccountRepo.ADDRESS_TYPE_NATIVE_SEGWIT) {
-            runCatching { Base58.decodeChecked(account.xpub) }.getOrNull()
+    fun encode(
+        account: WatchOnlyAccountRecord,
+        serializeXpub: (String) -> ByteArray,
+    ): ByteArray {
+        val rawXpub = if (account.addressType == WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE) {
+            runCatching { serializeXpub(account.xpub) }.getOrNull()
         } else {
             null
         }

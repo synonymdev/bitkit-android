@@ -50,7 +50,7 @@ class WatchOnlyAccountStoreTest {
             pendingAccountIndexByRequest = mapOf("0:pending" to 10),
         )
 
-        val restored = data.restoreAccounts(listOf(account(accountIndex = 7)))
+        val restored = data.restoreTestAccounts(listOf(account(accountIndex = 7)))
 
         assertEquals(emptyMap(), restored.pendingAccountIndexByRequest)
         assertEquals(11, restored.reserveAccountIndex(walletIndex = 0, requestFingerprint = "pending").accountIndex)
@@ -63,7 +63,7 @@ class WatchOnlyAccountStoreTest {
             pendingAccountIndexByRequest = mapOf("0:pending" to 7),
         )
 
-        val restored = WatchOnlyAccountData().restoreAccounts(
+        val restored = WatchOnlyAccountData().restoreTestAccounts(
             accounts = listOf(account(accountIndex = 5)),
             allocationState = allocationState,
         )
@@ -91,7 +91,7 @@ class WatchOnlyAccountStoreTest {
         )
         val invalid = account(accountIndex = 4).copy(xpub = "invalid")
 
-        val restored = WatchOnlyAccountData().restoreAccounts(
+        val restored = WatchOnlyAccountData().restoreTestAccounts(
             listOf(pending, authorizing, activeDisabled, duplicateSlot, invalid),
         )
 
@@ -106,7 +106,7 @@ class WatchOnlyAccountStoreTest {
         val invalidXpub = account(accountIndex = 8).copy(xpub = "not-an-xpub")
         val accountZero = account(accountIndex = 0)
 
-        val restored = WatchOnlyAccountData().restoreAccounts(
+        val restored = WatchOnlyAccountData().restoreTestAccounts(
             listOf(invalidXpub, accountZero, invalidAddressType, valid),
         )
 
@@ -120,7 +120,7 @@ class WatchOnlyAccountStoreTest {
         val restoredAccount = account(accountIndex = 2)
 
         val restored = WatchOnlyAccountData(accounts = listOf(replacedAccount))
-            .restoreAccounts(accounts = listOf(restoredAccount))
+            .restoreTestAccounts(accounts = listOf(restoredAccount))
         val reloaded = json.decodeFromString<WatchOnlyAccountData>(json.encodeToString(restored))
         val otherWalletPendingRemoval = account(accountIndex = 3, walletIndex = 1)
 
@@ -185,7 +185,7 @@ class WatchOnlyAccountStoreTest {
         val restored = WatchOnlyAccountData(
             accounts = listOf(authorizing),
             pendingAccountIndexByRequest = mapOf(requestKey to authorizing.accountIndex),
-        ).restoreAccounts(listOf(restoredActive))
+        ).restoreTestAccounts(listOf(restoredActive))
 
         assertEquals(listOf(authorizing), restored.accounts)
         assertEquals(authorizing.accountIndex, restored.pendingAccountIndexByRequest[requestKey])
@@ -199,7 +199,7 @@ class WatchOnlyAccountStoreTest {
             requestFingerprint = "restored-request",
         )
 
-        val restored = WatchOnlyAccountData(accounts = listOf(local)).restoreAccounts(listOf(conflictingBackup))
+        val restored = WatchOnlyAccountData(accounts = listOf(local)).restoreTestAccounts(listOf(conflictingBackup))
 
         assertEquals(listOf(local), restored.accounts)
         assertTrue(restored.accountsPendingRemoval.isEmpty())
@@ -226,4 +226,12 @@ class WatchOnlyAccountStoreTest {
         isTrackingEnabled = true,
         setupState = WatchOnlyAccountSetupState.Active,
     )
+
+    private fun WatchOnlyAccountData.restoreTestAccounts(
+        accounts: List<WatchOnlyAccountRecord>,
+        allocationState: WatchOnlyAccountAllocationState? = null,
+    ) = restoreAccounts(accounts, allocationState) { xpub ->
+        require(xpub == TEST_XPUB)
+        ByteArray(78)
+    }
 }
