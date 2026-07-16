@@ -165,9 +165,6 @@ internal fun WatchOnlyAccountData.reserveAccountIndex(
     )
 }
 
-internal fun WatchOnlyAccountData.completeAccountIndexAllocation(requestKey: String): WatchOnlyAccountData =
-    copy(pendingAccountIndexByRequest = pendingAccountIndexByRequest - requestKey)
-
 internal fun WatchOnlyAccountData.markAccountActive(id: String): WatchOnlyAccountData {
     val account = checkNotNull(accounts.firstOrNull { it.id == id }) {
         "Watch-only account '$id' not found"
@@ -190,73 +187,57 @@ internal fun WatchOnlyAccountData.restoreAccounts(
     accounts: List<WatchOnlyAccountRecord>,
     allocationState: WatchOnlyAccountAllocationState? = null,
 ): WatchOnlyAccountData {
-    val locallyManagedAccounts = this.accounts + accountsPendingRemoval
-    val authorizingAccounts = locallyManagedAccounts.uniqueAuthorizingAccounts()
-    val authorizingIds = authorizingAccounts.mapTo(mutableSetOf(), WatchOnlyAccountRecord::id)
-    val authorizingKeys = authorizingAccounts.mapTo(mutableSetOf(), WatchOnlyAccountRecord::managementKey)
-    val authorizingRequestKeys = authorizingAccounts.mapTo(mutableSetOf(), WatchOnlyAccountRecord::allocationRequestKey)
-    val protectedRestorationConflicts = uniqueLogicalAccounts(
-        prioritizedAccounts = emptyList(),
-        remainingAccounts = locallyManagedAccounts.filter { account ->
-            account.setupState != WatchOnlyAccountSetupState.Authorizing &&
-                account.id !in authorizingIds &&
-                account.managementKey() !in authorizingKeys &&
-                (
-                    account.setupState == WatchOnlyAccountSetupState.Active ||
-                        account.allocationRequestKey() !in authorizingRequestKeys
-                    ) &&
-                account.shouldProtectFrom(accounts)
-        }.map { it.promotedTrackingState(accounts) },
-    )
-    val protectedLocalAccounts = authorizingAccounts + protectedRestorationConflicts
-    val mergedAccounts = uniqueLogicalAccounts(
-        prioritizedAccounts = protectedLocalAccounts,
-        remainingAccounts = accounts,
-    )
-    val restoredKeys = mergedAccounts.mapTo(mutableSetOf(), WatchOnlyAccountRecord::managementKey)
-    val updatedAccountsPendingRemoval = uniqueAccountsByManagementKey(
-        (accountsPendingRemoval + this.accounts).filterNot { it.managementKey() in restoredKeys },
-    )
+    val restoredAccounts = accounts.sanitizedAccounts()
+    val locallyManagedAccounts = uniqueAccountsByManagementKey(this.accounts + accountsPendingRemoval)
+    val protectedLocalAccounts = locallyManagedAccounts
+        .filter { localAccount ->
+            localAccount.setupState == WatchOnlyAccountSetupState.Authorizing ||
+                localAccount.shouldPreserveFrom(restoredAccounts)
+        }
+        .sanitizedAccounts()
+    val mergedAccounts = (protectedLocalAccounts + restoredAccounts).sanitizedAccounts()
+    val mergedManagementKeys = mergedAccounts.mapTo(mutableSetOf(), WatchOnlyAccountRecord::managementKey)
+    val updatedAccountsPendingRemoval = uniqueAccountsByManagementKey(this.accounts + accountsPendingRemoval)
+        .filterNot { it.managementKey() in mergedManagementKeys }
+
+    val validLocalPendingAccountIndexes = pendingAccountIndexByRequest.validPendingAccountIndexes()
     val localHighestIndexes = highestAccountIndexByWallet
-        .withAccountIndexes(this.accounts + accountsPendingRemoval)
-        .withPendingAccountIndexes(pendingAccountIndexByRequest)
-    val restoredHighestIndexes = allocationState?.highestAccountIndexByWallet.orEmpty()
-    val mergedHighestIndexes = restoredHighestIndexes.entries
+        .validHighestAccountIndexes()
+        .withAccountIndexes(locallyManagedAccounts)
+        .withPendingAccountIndexes(validLocalPendingAccountIndexes)
+    val highestIndexes = allocationState?.highestAccountIndexByWallet
+        .orEmpty()
+        .validHighestAccountIndexes()
+        .entries
         .fold(localHighestIndexes) { indexes, (wallet, index) ->
             indexes + (wallet to maxOf(indexes[wallet] ?: 0, index))
-        }.withPendingAccountIndexes(allocationState?.pendingAccountIndexByRequest.orEmpty())
-        .withAccountIndexes(accounts + mergedAccounts + updatedAccountsPendingRemoval)
-    val restoredPendingAllocations = allocationState?.pendingAccountIndexByRequest.orEmpty()
-        .withoutAccountIndexConflicts(
-            accounts = mergedAccounts,
-            restoredAccounts = accounts,
-            accountsPendingRemoval = updatedAccountsPendingRemoval,
-            localHighestIndexes = localHighestIndexes,
-            localPendingAccountIndexes = pendingAccountIndexByRequest,
-        )
-    val authorizingAllocations = authorizingAccounts.associate {
-        it.allocationRequestKey() to it.accountIndex
+        }
+        .withAccountIndexes(locallyManagedAccounts + accounts + updatedAccountsPendingRemoval)
+
+    val retainedLocalPendingAccountIndexes = if (allocationState == null) {
+        emptyMap()
+    } else {
+        validLocalPendingAccountIndexes
     }
-    val mergedPendingAllocations = restoredPendingAllocations + authorizingAllocations
-    val finalizedHighestIndexes = mergedHighestIndexes.withPendingAccountIndexes(mergedPendingAllocations)
+    val mergedPendingAccountIndexes = mergedPendingAccountIndexes(
+        accounts = mergedAccounts,
+        blockedAccounts = updatedAccountsPendingRemoval,
+        localPendingAccountIndexes = retainedLocalPendingAccountIndexes,
+        restoredPendingAccountIndexes = allocationState?.pendingAccountIndexByRequest.orEmpty(),
+        localHighestAccountIndexByWallet = localHighestIndexes,
+    )
 
     return copy(
-        accounts = mergedAccounts.sortedBy(WatchOnlyAccountRecord::accountIndex),
+        accounts = mergedAccounts,
         accountsPendingRemoval = updatedAccountsPendingRemoval,
-        highestAccountIndexByWallet = finalizedHighestIndexes,
-        pendingAccountIndexByRequest = mergedPendingAllocations,
+        highestAccountIndexByWallet = highestIndexes.withPendingAccountIndexes(mergedPendingAccountIndexes),
+        pendingAccountIndexByRequest = mergedPendingAccountIndexes,
     )
 }
 
 private fun WatchOnlyAccountRecord.managementKey(): String = "$walletIndex:$addressType:$accountIndex"
 
 private fun WatchOnlyAccountRecord.allocationRequestKey(): String = "$walletIndex:$requestFingerprint"
-
-private fun List<WatchOnlyAccountRecord>.uniqueAuthorizingAccounts(): List<WatchOnlyAccountRecord> =
-    uniqueLogicalAccounts(
-        prioritizedAccounts = emptyList(),
-        remainingAccounts = filter { it.setupState == WatchOnlyAccountSetupState.Authorizing },
-    )
 
 private fun WatchOnlyAccountRecord.normalizedTrackingState(): WatchOnlyAccountRecord = when (setupState) {
     WatchOnlyAccountSetupState.PendingDelivery -> copy(isTrackingEnabled = false)
@@ -270,30 +251,46 @@ private fun WatchOnlyAccountRecord.isUsableAccount(): Boolean = walletIndex >= 0
     runCatching { Base58.decodeChecked(xpub).size == WATCH_ONLY_ACCOUNT_SERIALIZED_XPUB_LENGTH }
         .getOrDefault(false)
 
-private fun WatchOnlyAccountRecord.shouldProtectFrom(restoredAccounts: List<WatchOnlyAccountRecord>): Boolean {
-    val conflicts = restoredAccounts.filter(WatchOnlyAccountRecord::isUsableAccount).filter {
-        it.managementKey() == managementKey() || it.id == id
-    }
-    val highestRestoredPriority = conflicts.minOfOrNull { it.setupState.restorePriority() } ?: return false
-    val localPriority = setupState.restorePriority()
-    if (localPriority != highestRestoredPriority) return localPriority < highestRestoredPriority
-    return conflicts.any {
-        it.setupState.restorePriority() == highestRestoredPriority && !hasSameOwner(it)
-    }
+private fun List<WatchOnlyAccountRecord>.sanitizedAccounts(): List<WatchOnlyAccountRecord> {
+    val ids = mutableSetOf<String>()
+    val managementKeys = mutableSetOf<String>()
+    val incompleteRequestKeys = mutableSetOf<String>()
+
+    return mapNotNull { input ->
+        if (!input.isUsableAccount()) return@mapNotNull null
+        val account = input.normalizedTrackingState()
+        val incompleteRequestKey = account
+            .takeIf { it.setupState != WatchOnlyAccountSetupState.Active }
+            ?.allocationRequestKey()
+        if (account.id in ids || account.managementKey() in managementKeys) return@mapNotNull null
+        if (incompleteRequestKey != null && incompleteRequestKey in incompleteRequestKeys) return@mapNotNull null
+        ids += account.id
+        managementKeys += account.managementKey()
+        incompleteRequestKey?.let(incompleteRequestKeys::add)
+        account
+    }.sortedWith(
+        compareBy(
+            WatchOnlyAccountRecord::walletIndex,
+            WatchOnlyAccountRecord::accountIndex,
+            WatchOnlyAccountRecord::createdAt,
+        ),
+    )
 }
 
-private fun WatchOnlyAccountRecord.promotedTrackingState(
+private fun uniqueAccountsByManagementKey(accounts: List<WatchOnlyAccountRecord>): List<WatchOnlyAccountRecord> =
+    accounts.distinctBy(WatchOnlyAccountRecord::managementKey)
+        .sortedWith(compareBy(WatchOnlyAccountRecord::walletIndex, WatchOnlyAccountRecord::accountIndex))
+
+private fun WatchOnlyAccountRecord.shouldPreserveFrom(
     restoredAccounts: List<WatchOnlyAccountRecord>,
-): WatchOnlyAccountRecord {
-    if (setupState != WatchOnlyAccountSetupState.Active) return this
-    val restoredOwnerRequiresTracking = restoredAccounts.filter(WatchOnlyAccountRecord::isUsableAccount).any {
-        it.managementKey() == managementKey() &&
-            (
-                it.setupState == WatchOnlyAccountSetupState.Authorizing ||
-                    it.setupState == WatchOnlyAccountSetupState.Active && it.isTrackingEnabled
-                )
+): Boolean {
+    val conflicts = restoredAccounts.filter {
+        it.id == id || it.managementKey() == managementKey()
     }
-    return if (restoredOwnerRequiresTracking) copy(isTrackingEnabled = true) else this
+    if (conflicts.isEmpty()) return false
+    if (conflicts.any { !hasSameOwner(it) }) return true
+    return setupState == WatchOnlyAccountSetupState.Active &&
+        conflicts.all { it.setupState != WatchOnlyAccountSetupState.Active }
 }
 
 private fun WatchOnlyAccountRecord.hasSameOwner(other: WatchOnlyAccountRecord): Boolean =
@@ -301,129 +298,67 @@ private fun WatchOnlyAccountRecord.hasSameOwner(other: WatchOnlyAccountRecord): 
         requestFingerprint == other.requestFingerprint &&
         xpub == other.xpub
 
-private val accountRestoreOrder = compareBy<WatchOnlyAccountRecord>(
-    { it.setupState.restorePriority() },
-    WatchOnlyAccountRecord::createdAt,
-    WatchOnlyAccountRecord::walletIndex,
-    WatchOnlyAccountRecord::accountIndex,
-    WatchOnlyAccountRecord::addressType,
-    WatchOnlyAccountRecord::requestFingerprint,
-    WatchOnlyAccountRecord::id,
-    WatchOnlyAccountRecord::xpub,
-    WatchOnlyAccountRecord::name,
-    { !it.isTrackingEnabled },
-)
-
-private fun WatchOnlyAccountSetupState.restorePriority(): Int = when (this) {
-    WatchOnlyAccountSetupState.Active -> 0
-    WatchOnlyAccountSetupState.Authorizing -> 1
-    WatchOnlyAccountSetupState.PendingDelivery -> 2
-}
-
-private fun uniqueLogicalAccounts(
-    prioritizedAccounts: List<WatchOnlyAccountRecord>,
-    remainingAccounts: List<WatchOnlyAccountRecord>,
-): List<WatchOnlyAccountRecord> {
-    val ids = mutableSetOf<String>()
-    val managementKeys = mutableSetOf<String>()
-    val incompleteRequestKeys = mutableSetOf<String>()
-    return buildList {
-        (prioritizedAccounts + remainingAccounts.sortedWith(accountRestoreOrder))
-            .filter(WatchOnlyAccountRecord::isUsableAccount)
-            .forEach { account ->
-                val incompleteRequestKey = account
-                    .takeIf { it.setupState != WatchOnlyAccountSetupState.Active }
-                    ?.allocationRequestKey()
-                if (account.id in ids || account.managementKey() in managementKeys) return@forEach
-                if (incompleteRequestKey != null && incompleteRequestKey in incompleteRequestKeys) return@forEach
-                add(account.normalizedTrackingState())
-                ids += account.id
-                managementKeys += account.managementKey()
-                incompleteRequestKey?.let(incompleteRequestKeys::add)
-            }
-    }
-}
-
-private fun uniqueAccountsByManagementKey(accounts: List<WatchOnlyAccountRecord>): List<WatchOnlyAccountRecord> =
-    accounts.sortedWith(accountRestoreOrder).distinctBy(WatchOnlyAccountRecord::managementKey)
-
 private data class AccountIndexKey(
     val walletIndex: Int,
     val accountIndex: Int,
 )
 
-private data class PendingAccountIndexReservation(
-    val requestKey: String,
-    val accountIndexKey: AccountIndexKey,
-)
-
-private fun Map<String, Int>.withoutAccountIndexConflicts(
+private fun mergedPendingAccountIndexes(
     accounts: List<WatchOnlyAccountRecord>,
-    restoredAccounts: List<WatchOnlyAccountRecord>,
-    accountsPendingRemoval: List<WatchOnlyAccountRecord>,
-    localHighestIndexes: Map<String, Int>,
+    blockedAccounts: List<WatchOnlyAccountRecord>,
     localPendingAccountIndexes: Map<String, Int>,
+    restoredPendingAccountIndexes: Map<String, Int>,
+    localHighestAccountIndexByWallet: Map<String, Int>,
 ): Map<String, Int> {
-    val accountsByIndex = accounts.groupBy { AccountIndexKey(it.walletIndex, it.accountIndex) }
-    val incompleteAccountIndexesByRequest = accounts
-        .filter { it.setupState != WatchOnlyAccountSetupState.Active }
-        .associate { it.allocationRequestKey() to AccountIndexKey(it.walletIndex, it.accountIndex) }
-    val restoredIncompleteRequestKeys = restoredAccounts.asSequence()
-        .filter { it.setupState != WatchOnlyAccountSetupState.Active }
-        .mapTo(mutableSetOf(), WatchOnlyAccountRecord::allocationRequestKey)
-    val restoredAccountIndexes = restoredAccounts.mapTo(mutableSetOf()) {
-        AccountIndexKey(it.walletIndex, it.accountIndex)
-    }
-    val indexesPendingRemoval = accountsPendingRemoval.mapTo(mutableSetOf()) {
-        AccountIndexKey(it.walletIndex, it.accountIndex)
-    }
-    return entries.asSequence()
-        .mapNotNull { (requestKey, accountIndex) -> pendingReservation(requestKey, accountIndex) }
-        .filter { reservation ->
-            if (reservation.accountIndexKey in indexesPendingRemoval) return@filter false
-            val localAccountIndex = localPendingAccountIndexes[reservation.requestKey]
-            if (localAccountIndex != null && localAccountIndex != reservation.accountIndexKey.accountIndex) {
-                return@filter false
-            }
-            val incompleteAccountIndex = incompleteAccountIndexesByRequest[reservation.requestKey]
-            if (reservation.requestKey in restoredIncompleteRequestKeys && incompleteAccountIndex == null) {
-                return@filter false
-            }
-            if (incompleteAccountIndex != null && incompleteAccountIndex != reservation.accountIndexKey) {
-                return@filter false
-            }
-            if (reservation.conflictsWithRestoredAccount(restoredAccountIndexes, incompleteAccountIndex)) {
-                return@filter false
-            }
-            val occupyingAccounts = accountsByIndex[reservation.accountIndexKey].orEmpty()
-            if (occupyingAccounts.isEmpty()) {
-                val localHighestIndex = localHighestIndexes[reservation.accountIndexKey.walletIndex.toString()] ?: 0
-                return@filter localAccountIndex == reservation.accountIndexKey.accountIndex ||
-                    reservation.accountIndexKey.accountIndex > localHighestIndex
-            }
-            occupyingAccounts.all {
-                it.setupState != WatchOnlyAccountSetupState.Active &&
-                    it.allocationRequestKey() == reservation.requestKey
-            }
+    val activeSlots = accounts
+        .filter { it.setupState == WatchOnlyAccountSetupState.Active }
+        .mapTo(mutableSetOf()) { AccountIndexKey(it.walletIndex, it.accountIndex) }
+    val blockedSlots = blockedAccounts
+        .mapTo(mutableSetOf()) { AccountIndexKey(it.walletIndex, it.accountIndex) }
+    val pendingAccountIndexes = linkedMapOf<String, Int>()
+    val reservedSlots = mutableSetOf<AccountIndexKey>()
+
+    fun reserve(requestKey: String, accountIndex: Int, allowsHistoricalIndex: Boolean) {
+        val walletIndex = requestKey.allocationWalletIndex() ?: return
+        val slot = AccountIndexKey(walletIndex, accountIndex)
+        if (requestKey in pendingAccountIndexes || accountIndex <= 0) return
+        if (slot in reservedSlots || slot in activeSlots || slot in blockedSlots) return
+        if (
+            !allowsHistoricalIndex &&
+            accountIndex <= (localHighestAccountIndexByWallet[walletIndex.toString()] ?: 0)
+        ) {
+            return
         }
-        .sortedBy(PendingAccountIndexReservation::requestKey)
-        .distinctBy(PendingAccountIndexReservation::accountIndexKey)
-        .associate { it.requestKey to it.accountIndexKey.accountIndex }
+        pendingAccountIndexes[requestKey] = accountIndex
+        reservedSlots += slot
+    }
+
+    accounts.filter { it.setupState != WatchOnlyAccountSetupState.Active }.forEach {
+        reserve(it.allocationRequestKey(), it.accountIndex, allowsHistoricalIndex = true)
+    }
+    localPendingAccountIndexes.toSortedMap().forEach { (requestKey, accountIndex) ->
+        reserve(requestKey, accountIndex, allowsHistoricalIndex = true)
+    }
+    restoredPendingAccountIndexes.toSortedMap().forEach { (requestKey, accountIndex) ->
+        reserve(requestKey, accountIndex, allowsHistoricalIndex = false)
+    }
+
+    return pendingAccountIndexes
 }
 
-private fun pendingReservation(requestKey: String, accountIndex: Int): PendingAccountIndexReservation? {
-    val walletIndex = requestKey.allocationWalletIndex() ?: return null
-    if (accountIndex <= 0) return null
-    return PendingAccountIndexReservation(
-        requestKey = requestKey,
-        accountIndexKey = AccountIndexKey(walletIndex, accountIndex),
-    )
-}
+private fun Map<String, Int>.validHighestAccountIndexes(): Map<String, Int> =
+    entries.fold(emptyMap()) { indexes, (wallet, index) ->
+        val walletIndex = wallet.toIntOrNull()?.takeIf { it >= 0 }
+            ?: return@fold indexes
+        if (index <= 0) return@fold indexes
+        val walletKey = walletIndex.toString()
+        indexes + (walletKey to maxOf(indexes[walletKey] ?: 0, index))
+    }
 
-private fun PendingAccountIndexReservation.conflictsWithRestoredAccount(
-    restoredAccountIndexes: Set<AccountIndexKey>,
-    incompleteAccountIndex: AccountIndexKey?,
-): Boolean = accountIndexKey in restoredAccountIndexes && incompleteAccountIndex != accountIndexKey
+private fun Map<String, Int>.validPendingAccountIndexes(): Map<String, Int> =
+    filter { (requestKey, accountIndex) ->
+        requestKey.allocationWalletIndex() != null && accountIndex > 0
+    }
 
 private fun String.allocationWalletIndex(): Int? {
     val separatorIndex = indexOf(':')
@@ -437,6 +372,7 @@ private fun Map<String, Int>.withPendingAccountIndexes(
     val updated = toMutableMap()
     pendingAccountIndexes.forEach { (requestKey, accountIndex) ->
         val walletIndex = requestKey.allocationWalletIndex() ?: return@forEach
+        if (accountIndex <= 0) return@forEach
         val walletKey = walletIndex.toString()
         updated[walletKey] = maxOf(updated[walletKey] ?: 0, accountIndex)
     }
@@ -449,10 +385,11 @@ internal fun WatchOnlyAccountData.completeReconciliation(walletIndex: Int): Watc
 
 private fun Map<String, Int>.withAccountIndexes(accounts: List<WatchOnlyAccountRecord>): Map<String, Int> {
     val updated = toMutableMap()
-    accounts.groupBy(WatchOnlyAccountRecord::walletIndex).forEach { (walletIndex, walletAccounts) ->
-        val highestAccountIndex = walletAccounts.maxOf(WatchOnlyAccountRecord::accountIndex)
-        val walletKey = walletIndex.toString()
-        updated[walletKey] = maxOf(updated[walletKey] ?: 0, highestAccountIndex)
-    }
+    accounts.filter { it.walletIndex >= 0 && it.accountIndex > 0 }
+        .groupBy(WatchOnlyAccountRecord::walletIndex).forEach { (walletIndex, walletAccounts) ->
+            val highestAccountIndex = walletAccounts.maxOf(WatchOnlyAccountRecord::accountIndex)
+            val walletKey = walletIndex.toString()
+            updated[walletKey] = maxOf(updated[walletKey] ?: 0, highestAccountIndex)
+        }
     return updated
 }
