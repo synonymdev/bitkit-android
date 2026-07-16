@@ -139,6 +139,18 @@ class PubkyAuthRequestTest {
     }
 
     @Test
+    fun `displayPath removes capability separator`() {
+        val perm = PubkyAuthPermission(path = "/pub/paykit/v0/bitkit/server/", accessLevel = "rw")
+        assertEquals("/pub/paykit/v0/bitkit/server", perm.displayPath)
+    }
+
+    @Test
+    fun `displayPath preserves root`() {
+        val perm = PubkyAuthPermission(path = "/", accessLevel = "r")
+        assertEquals("/", perm.displayPath)
+    }
+
+    @Test
     fun `extractServiceName extracts from pub path`() {
         assertEquals("bitkit.to", PubkyAuthRequest.extractServiceName("/pub/bitkit.to/"))
         assertEquals("pubky.app", PubkyAuthRequest.extractServiceName("/pub/pubky.app/"))
