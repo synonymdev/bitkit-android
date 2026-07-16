@@ -203,21 +203,14 @@ private fun Content(
     onDismiss: () -> Unit,
 ) {
     val approvalState = if (isCurrentRequest) uiState.state else ApprovalState.Loading
-    val headerTitle = when (approvalState) {
-        ApprovalState.WatchOnlyConsent -> stringResource(R.string.profile__auth_approval_watch_only_intro_nav_title)
-        ApprovalState.Success -> stringResource(R.string.profile__auth_approval_success)
-        else -> stringResource(R.string.profile__auth_approval_title)
-    }
-    val onBack = when (approvalState) {
-        ApprovalState.Authorize -> if (uiState.bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1) {
-            onBackToWatchOnly
-        } else {
-            onCancel
-        }
-        ApprovalState.Authenticating, ApprovalState.Authorizing -> onCancel
-        ApprovalState.Success -> onDismiss
-        else -> null
-    }
+    val headerTitle = approvalHeaderTitle(approvalState)
+    val onBack = approvalBackAction(
+        approvalState = approvalState,
+        bitkitClaim = uiState.bitkitClaim,
+        onBackToWatchOnly = onBackToWatchOnly,
+        onCancel = onCancel,
+        onDismiss = onDismiss,
+    )
 
     Column(
         modifier = Modifier
@@ -248,6 +241,26 @@ private fun Content(
             )
         }
     }
+}
+
+@Composable
+private fun approvalHeaderTitle(approvalState: ApprovalState): String = when (approvalState) {
+    ApprovalState.WatchOnlyConsent -> stringResource(R.string.profile__auth_approval_watch_only_intro_nav_title)
+    ApprovalState.Success -> stringResource(R.string.profile__auth_approval_success)
+    else -> stringResource(R.string.profile__auth_approval_title)
+}
+
+private fun approvalBackAction(
+    approvalState: ApprovalState,
+    bitkitClaim: PubkyAuthClaim?,
+    onBackToWatchOnly: () -> Unit,
+    onCancel: () -> Unit,
+    onDismiss: () -> Unit,
+): (() -> Unit)? = when (approvalState) {
+    ApprovalState.Authorize if bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1 -> onBackToWatchOnly
+    ApprovalState.Authorize, ApprovalState.Authenticating, ApprovalState.Authorizing -> onCancel
+    ApprovalState.Success -> onDismiss
+    else -> null
 }
 
 @Composable
