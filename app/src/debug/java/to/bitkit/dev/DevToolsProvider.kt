@@ -207,6 +207,7 @@ private sealed interface DevResult {
         val success: Boolean = true,
         val paymentId: String,
         val paymentHash: String,
+        val routeFeeMsat: ULong? = null,
         val paymentIds: List<String>,
     ) : DevResult
 
@@ -217,6 +218,7 @@ private sealed interface DevResult {
         val paymentId: String? = null,
         val paymentHash: String? = null,
         val shortChannelId: String? = null,
+        val routeFeeMsat: ULong? = null,
         val paymentIds: List<String> = emptyList(),
     ) : DevResult {
         companion object {
@@ -275,6 +277,7 @@ private fun ProbeOutcome.toDevResult(paymentIds: Set<String>): DevResult = when 
     is ProbeOutcome.Success -> DevResult.ProbeSuccess(
         paymentId = paymentId,
         paymentHash = paymentHash,
+        routeFeeMsat = routeFeeMsat,
         paymentIds = paymentIds.toList(),
     )
     is ProbeOutcome.Failure -> DevResult.ProbeFailure(
@@ -282,6 +285,7 @@ private fun ProbeOutcome.toDevResult(paymentIds: Set<String>): DevResult = when 
         paymentId = paymentId,
         paymentHash = paymentHash,
         shortChannelId = shortChannelId,
+        routeFeeMsat = routeFeeMsat,
         paymentIds = paymentIds.toList(),
     )
 }
