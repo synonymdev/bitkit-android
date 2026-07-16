@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -274,6 +275,8 @@ private fun ColumnScope.WatchOnlyConsentContent(
             .padding(horizontal = 16.dp)
             .testTag("PubkyAuthWatchOnlyConsent")
     ) {
+        FillHeight(min = 26.dp)
+
         Image(
             painter = painterResource(R.drawable.coin_stack),
             contentDescription = null,
@@ -294,7 +297,7 @@ private fun ColumnScope.WatchOnlyConsentContent(
             color = Colors.White64,
         )
 
-        FillHeight(min = 12.dp)
+        VerticalSpacer(32.dp)
 
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             SecondaryButton(
@@ -373,6 +376,8 @@ private fun ColumnScope.ApprovalDetails(
     uiState: PubkyAuthApprovalUiState,
 ) {
     Column(modifier = Modifier.weight(1f)) {
+        VerticalSpacer(26.dp)
+
         DescriptionText(serviceName = uiState.serviceName)
         VerticalSpacer(32.dp)
 
@@ -383,7 +388,7 @@ private fun ColumnScope.ApprovalDetails(
         VerticalSpacer(16.dp)
 
         uiState.profile?.let { ProfileCard(it) }
-        VerticalSpacer(24.dp)
+        VerticalSpacer(16.dp)
     }
 }
 
@@ -392,6 +397,8 @@ private fun ColumnScope.SuccessContent(
     uiState: PubkyAuthApprovalUiState,
     onDismiss: () -> Unit,
 ) {
+    VerticalSpacer(26.dp)
+
     SuccessDescriptionText(
         serviceName = uiState.serviceName,
         truncatedKey = uiState.profile?.authDisplayPublicKey.orEmpty(),
@@ -466,7 +473,7 @@ private fun PermissionRow(permission: PubkyAuthPermission) {
         )
         HorizontalSpacer(4.dp)
         BodySSB(
-            text = permission.path,
+            text = permission.displayPath,
             modifier = Modifier.weight(1f),
         )
         Text13Up(
@@ -519,7 +526,11 @@ private fun ProfileCard(profile: PubkyProfile) {
         }
 
         VerticalSpacer(16.dp)
-        Headline(text = AnnotatedString(profile.name))
+        Headline(
+            text = AnnotatedString(profile.name),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
