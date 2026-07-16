@@ -3,13 +3,13 @@ package to.bitkit.data
 import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.dataStore
+import com.synonym.bitkitcore.serializedExtendedPubkey
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import org.bitcoinj.base.Base58
 import to.bitkit.data.serializers.WatchOnlyAccountDataSerializer
 import to.bitkit.di.IoDispatcher
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
@@ -25,9 +25,15 @@ private val Context.watchOnlyAccountDataStore: DataStore<WatchOnlyAccountData> b
 )
 
 @Singleton
+class WatchOnlyAccountXpubSerializer @Inject constructor() {
+    fun serialize(xpub: String): ByteArray = serializedExtendedPubkey(xpub)
+}
+
+@Singleton
 class WatchOnlyAccountStore @Inject constructor(
     @ApplicationContext context: Context,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val xpubSerializer: WatchOnlyAccountXpubSerializer,
 ) {
     private val store = context.watchOnlyAccountDataStore
 
@@ -72,7 +78,9 @@ class WatchOnlyAccountStore @Inject constructor(
         accounts: List<WatchOnlyAccountRecord>,
         allocationState: WatchOnlyAccountAllocationState? = null,
     ) = withContext(ioDispatcher) {
-        store.updateData { current -> current.restoreAccounts(accounts, allocationState) }
+        store.updateData { current ->
+            current.restoreAccounts(accounts, allocationState, xpubSerializer::serialize)
+        }
         Unit
     }
 
@@ -186,16 +194,17 @@ internal fun WatchOnlyAccountData.markAccountActive(id: String): WatchOnlyAccoun
 internal fun WatchOnlyAccountData.restoreAccounts(
     accounts: List<WatchOnlyAccountRecord>,
     allocationState: WatchOnlyAccountAllocationState? = null,
+    serializeXpub: (String) -> ByteArray,
 ): WatchOnlyAccountData {
-    val restoredAccounts = accounts.sanitizedAccounts()
+    val restoredAccounts = accounts.sanitizedAccounts(serializeXpub)
     val locallyManagedAccounts = uniqueAccountsByManagementKey(this.accounts + accountsPendingRemoval)
     val protectedLocalAccounts = locallyManagedAccounts
         .filter { localAccount ->
             localAccount.setupState == WatchOnlyAccountSetupState.Authorizing ||
                 localAccount.shouldPreserveFrom(restoredAccounts)
         }
-        .sanitizedAccounts()
-    val mergedAccounts = (protectedLocalAccounts + restoredAccounts).sanitizedAccounts()
+        .sanitizedAccounts(serializeXpub)
+    val mergedAccounts = (protectedLocalAccounts + restoredAccounts).sanitizedAccounts(serializeXpub)
     val mergedManagementKeys = mergedAccounts.mapTo(mutableSetOf(), WatchOnlyAccountRecord::managementKey)
     val updatedAccountsPendingRemoval = uniqueAccountsByManagementKey(this.accounts + accountsPendingRemoval)
         .filterNot { it.managementKey() in mergedManagementKeys }
@@ -245,19 +254,23 @@ private fun WatchOnlyAccountRecord.normalizedTrackingState(): WatchOnlyAccountRe
     WatchOnlyAccountSetupState.Active -> this
 }
 
-private fun WatchOnlyAccountRecord.isUsableAccount(): Boolean = walletIndex >= 0 &&
+private fun WatchOnlyAccountRecord.isUsableAccount(
+    serializeXpub: (String) -> ByteArray,
+): Boolean = walletIndex >= 0 &&
     accountIndex > 0 &&
     addressType == WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE &&
-    runCatching { Base58.decodeChecked(xpub).size == WATCH_ONLY_ACCOUNT_SERIALIZED_XPUB_LENGTH }
+    runCatching { serializeXpub(xpub).size == WATCH_ONLY_ACCOUNT_SERIALIZED_XPUB_LENGTH }
         .getOrDefault(false)
 
-private fun List<WatchOnlyAccountRecord>.sanitizedAccounts(): List<WatchOnlyAccountRecord> {
+private fun List<WatchOnlyAccountRecord>.sanitizedAccounts(
+    serializeXpub: (String) -> ByteArray,
+): List<WatchOnlyAccountRecord> {
     val ids = mutableSetOf<String>()
     val managementKeys = mutableSetOf<String>()
     val incompleteRequestKeys = mutableSetOf<String>()
 
     return mapNotNull { input ->
-        if (!input.isUsableAccount()) return@mapNotNull null
+        if (!input.isUsableAccount(serializeXpub)) return@mapNotNull null
         val account = input.normalizedTrackingState()
         val incompleteRequestKey = account
             .takeIf { it.setupState != WatchOnlyAccountSetupState.Active }

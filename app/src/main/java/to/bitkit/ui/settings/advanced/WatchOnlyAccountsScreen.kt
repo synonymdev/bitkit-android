@@ -54,11 +54,11 @@ fun WatchOnlyAccountsScreen(
     viewModel: WatchOnlyAccountsViewModel = hiltViewModel(),
 ) {
     val accounts by viewModel.accounts.collectAsStateWithLifecycle()
-    val updatingAccountId by viewModel.updatingAccountId.collectAsStateWithLifecycle()
+    val isUpdating by viewModel.isUpdating.collectAsStateWithLifecycle()
 
     Content(
         accounts = accounts,
-        updatingAccountId = updatingAccountId,
+        isUpdating = isUpdating,
         onBack = { navController.popBackStack() },
         onRename = viewModel::rename,
         onTrackingChange = viewModel::setTrackingEnabled,
@@ -68,7 +68,7 @@ fun WatchOnlyAccountsScreen(
 @Composable
 private fun Content(
     accounts: ImmutableList<WatchOnlyAccountRecord>,
-    updatingAccountId: String?,
+    isUpdating: Boolean,
     onBack: () -> Unit,
     onRename: (WatchOnlyAccountRecord, String) -> Unit,
     onTrackingChange: (WatchOnlyAccountRecord, Boolean) -> Unit,
@@ -104,7 +104,7 @@ private fun Content(
                     items(activeAccounts, key = WatchOnlyAccountRecord::id) { account ->
                         ActiveAccountRows(
                             account = account,
-                            isUpdating = updatingAccountId != null,
+                            isUpdating = isUpdating,
                             onOpenDetails = { selectedAccount = account },
                             onTrackingChange = onTrackingChange,
                         )

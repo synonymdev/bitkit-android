@@ -15,7 +15,6 @@ import to.bitkit.models.addressTypeInfo
 import to.bitkit.models.toAddressType
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
-import to.bitkit.services.LightningService
 import javax.inject.Inject
 
 private const val NODE_ID_PREFIX_LENGTH = 5
@@ -26,10 +25,7 @@ class AdvancedSettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val lightningRepo: LightningRepo,
     watchOnlyAccountRepo: WatchOnlyAccountRepo,
-    lightningService: LightningService,
 ) : ViewModel() {
-
-    private val walletIndex = lightningService.currentWalletIndex
 
     val selectedAddressTypeName = settingsStore.data
         .map { it.selectedAddressType.toAddressType()?.addressTypeInfo()?.shortName ?: "" }
@@ -39,8 +35,7 @@ class AdvancedSettingsViewModel @Inject constructor(
         .map { it.channels.filterOpen().size }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
-    val watchOnlyAccountCount = watchOnlyAccountRepo.accounts
-        .map { accounts -> accounts.count { it.walletIndex == walletIndex } }
+    val watchOnlyAccountCount = watchOnlyAccountRepo.currentWalletAccountCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     val truncatedNodeId = lightningRepo.lightningState

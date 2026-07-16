@@ -15,10 +15,12 @@ import to.bitkit.data.WatchOnlyAccountAllocationState
 import to.bitkit.data.WatchOnlyAccountData
 import to.bitkit.data.WatchOnlyAccountReconciliationState
 import to.bitkit.data.WatchOnlyAccountStore
+import to.bitkit.data.WatchOnlyAccountXpubSerializer
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.restoreAccounts
 import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
+import to.bitkit.models.WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.services.LightningService
@@ -38,6 +40,7 @@ class WatchOnlyAccountRestoreTest : BaseUnitTest() {
                 highestAccountIndexByWallet = mapOf("0" to 5),
                 pendingAccountIndexByRequest = mapOf(requestKey to restoredAccount.accountIndex),
             ),
+            serializeXpub = { ByteArray(78) },
         )
         val store = mock<WatchOnlyAccountStore>()
         val node = mock<Node>()
@@ -51,7 +54,9 @@ class WatchOnlyAccountRestoreTest : BaseUnitTest() {
         whenever(node.listOnchainWalletAccounts()).thenReturn(emptyList())
         whenever(node.onchainPayment()).thenReturn(onchainPayment)
         val lightningService = lightningService(store, node, coordinator)
-        val sut = WatchOnlyAccountRepo(testDispatcher, store, lightningService, coordinator)
+        val xpubSerializer = mock<WatchOnlyAccountXpubSerializer>()
+        whenever(xpubSerializer.serialize(TEST_XPUB)).thenReturn(ByteArray(78))
+        val sut = WatchOnlyAccountRepo(testDispatcher, store, lightningService, coordinator, xpubSerializer)
 
         val prepared = sut.prepareUnsignedClaim(AUTH_URL, restoredAccount.name)
         lightningService.reconcileWatchOnlyAccounts(syncAfterReconcile = false)
@@ -87,7 +92,7 @@ class WatchOnlyAccountRestoreTest : BaseUnitTest() {
         id = id,
         walletIndex = 0,
         accountIndex = accountIndex,
-        addressType = WatchOnlyAccountRepo.ADDRESS_TYPE_NATIVE_SEGWIT,
+        addressType = WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE,
         xpub = TEST_XPUB,
         requestFingerprint = REQUEST_FINGERPRINT,
         createdAt = createdAt,

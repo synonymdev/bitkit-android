@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import coil3.ImageLoader
 import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.PaykitProfile
+import com.synonym.paykit.PubkyAuthCompanionClaim
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
@@ -930,9 +931,11 @@ class PubkyRepo @Inject constructor(
                 authUrl = authUrl,
                 expectedCapabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
                 secretKeyHex = secretKeyHex,
-                queryParameter = PubkyAuthClaim.QUERY_PARAMETER,
-                claimType = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
-                unsignedPayload = unsignedPayload,
+                claim = PubkyAuthCompanionClaim(
+                    queryParameter = PubkyAuthClaim.QUERY_PARAMETER,
+                    claimType = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
+                    unsignedPayload = unsignedPayload,
+                ),
             )
         }
     }
