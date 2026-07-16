@@ -252,7 +252,6 @@ fun ReceiveQrScreen(
                                     tab = tab,
                                     walletState = walletState,
                                     cjitInvoice = cjitInvoice,
-                                    isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
                                     onClickEditInvoice = onClickEditInvoice,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -501,7 +500,6 @@ private fun ReceiveDetailsView(
     tab: ReceiveTab,
     walletState: WalletState,
     cjitInvoice: String?,
-    isNodeRunning: Boolean,
     onClickEditInvoice: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -563,7 +561,7 @@ private fun ReceiveDetailsView(
                             onClickEditInvoice = onClickEditInvoice,
                             testTag = "ReceiveLightningAddress",
                         )
-                    } else if (!isNodeRunning) {
+                    } else {
                         Box(
                             contentAlignment = Alignment.Center,
                             modifier = Modifier
@@ -895,7 +893,6 @@ private fun PreviewDetailsMode() {
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
                 ),
                 cjitInvoice = null,
-                isNodeRunning = true,
                 onClickEditInvoice = {},
                 modifier = Modifier.weight(1f)
             )
@@ -903,9 +900,9 @@ private fun PreviewDetailsMode() {
     }
 }
 
-@Preview(showSystemUi = true, name = "Spending Details Node Not Ready")
+@Preview(showSystemUi = true, name = "Spending Details Loading")
 @Composable
-private fun PreviewDetailsModeSpendingNodeNotReady() {
+private fun PreviewDetailsModeSpendingLoading() {
     AppThemeSurface {
         Column(
             modifier = Modifier
@@ -917,7 +914,6 @@ private fun PreviewDetailsModeSpendingNodeNotReady() {
                 tab = ReceiveTab.SPENDING,
                 walletState = WalletState(),
                 cjitInvoice = null,
-                isNodeRunning = false,
                 onClickEditInvoice = {},
                 modifier = Modifier.weight(1f)
             )
