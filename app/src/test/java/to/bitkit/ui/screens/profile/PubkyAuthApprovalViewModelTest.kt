@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
@@ -120,6 +121,27 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
         verifyBlocking(pubkyRepo, times(2)) { parseAuthUrl(authUrl) }
         verifyBlocking(pubkyRepo, never()) { approveAuth(authUrl, capabilities) }
+    }
+
+    @Test
+    fun `ordinary authorization uses the requested capabilities`() = test {
+        val authUrl = "pubkyauth://signin?caps=/pub/example/:rw"
+        val capabilities = "/pub/example/:rw"
+        whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
+            Result.success(authRequest(authUrl, capabilities)),
+        )
+        whenever { pubkyRepo.approveAuth(authUrl, capabilities) }.thenReturn(Result.success(Unit))
+        val sut = createSut()
+
+        sut.load(authUrl)
+        advanceUntilIdle()
+        sut.confirmAuthorize(authUrl)
+        advanceUntilIdle()
+
+        assertEquals(ApprovalState.Success, sut.uiState.value.state)
+        verifyBlocking(pubkyRepo) { approveAuth(authUrl, capabilities) }
+        verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any()) }
+        verifyBlocking(watchOnlyAccountRepo, never()) { prepareUnsignedClaim(any(), any()) }
     }
 
     @Test
@@ -448,11 +470,17 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `activation persistence retry completes locally without repeating authorization`() = test {
+    fun `retry after process restart reuses account and repeats authorization`() = test {
         val authUrl = "pubkyauth://signin?secret=request&caps=${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES}"
         val prepared = PreparedWatchOnlyAccountClaim(
             account = watchOnlyAccount(),
             payload = ByteArray(84),
+        )
+        val retryPrepared = prepared.copy(
+            account = prepared.account.copy(
+                isTrackingEnabled = true,
+                setupState = WatchOnlyAccountSetupState.Authorizing,
+            ),
         )
         whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
             Result.success(
@@ -463,31 +491,36 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
                 ),
             ),
         )
-        whenever { watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, "paykit server") }.thenReturn(prepared)
-        whenever { watchOnlyAccountRepo.beginAuthorization(prepared.account.id) }.thenReturn(false)
+        whenever { watchOnlyAccountRepo.prepareUnsignedClaim(authUrl, "paykit server") }
+            .thenReturn(prepared, retryPrepared)
+        whenever { watchOnlyAccountRepo.beginAuthorization(prepared.account.id) }.thenReturn(false, true)
         whenever { pubkyRepo.approveAuthWithCompanionClaim(authUrl, prepared.payload) }.thenReturn(Result.success(Unit))
         whenever { watchOnlyAccountRepo.markActive(prepared.account.id) }
             .thenThrow(IllegalStateException("Persistence failed"))
             .thenReturn(Unit)
-        val sut = createSut()
+        val initialSut = createSut()
 
-        sut.load(authUrl)
+        initialSut.load(authUrl)
         advanceUntilIdle()
-        sut.approveWatchOnlyConsent(authUrl)
-        sut.confirmAuthorize(authUrl)
+        initialSut.approveWatchOnlyConsent(authUrl)
+        initialSut.confirmAuthorize(authUrl)
         advanceUntilIdle()
 
-        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        assertEquals(ApprovalState.Authorize, initialSut.uiState.value.state)
         verifyBlocking(watchOnlyAccountRepo) { beginAuthorization(prepared.account.id) }
         verifyBlocking(watchOnlyAccountRepo, never()) { cancelAuthorization(prepared.account.id) }
 
-        sut.confirmAuthorize(authUrl)
+        val restartedSut = createSut()
+        restartedSut.load(authUrl)
+        advanceUntilIdle()
+        restartedSut.approveWatchOnlyConsent(authUrl)
+        restartedSut.confirmAuthorize(authUrl)
         advanceUntilIdle()
 
-        assertEquals(ApprovalState.Success, sut.uiState.value.state)
-        verifyBlocking(watchOnlyAccountRepo, times(1)) { prepareUnsignedClaim(authUrl, "paykit server") }
-        verifyBlocking(watchOnlyAccountRepo, times(1)) { beginAuthorization(prepared.account.id) }
-        verifyBlocking(pubkyRepo, times(1)) { approveAuthWithCompanionClaim(authUrl, prepared.payload) }
+        assertEquals(ApprovalState.Success, restartedSut.uiState.value.state)
+        verifyBlocking(watchOnlyAccountRepo, times(2)) { prepareUnsignedClaim(authUrl, "paykit server") }
+        verifyBlocking(watchOnlyAccountRepo, times(2)) { beginAuthorization(prepared.account.id) }
+        verifyBlocking(pubkyRepo, times(2)) { approveAuthWithCompanionClaim(authUrl, prepared.payload) }
         verifyBlocking(watchOnlyAccountRepo, times(2)) { markActive(prepared.account.id) }
     }
 
