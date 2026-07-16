@@ -17,7 +17,6 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -1010,7 +1009,11 @@ class TransferViewModelTest : BaseUnitTest() {
         assertNull(state.quote)
         assertEquals(0uL, state.maxSat)
         assertEquals(TOO_LOW, state.error)
-        assertEquals(SavingsSwapResult.Failure(TOO_LOW), sut.executeSavingsSwap())
+
+        sut.startSavingsSwap()
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Failure(TOO_LOW), sut.savingsSwapResult.value)
     }
 
     @Test
@@ -1039,53 +1042,76 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `executeSavingsSwap succeeds when the claim event arrives`() = test {
+    fun `startSavingsSwap succeeds when the claim event arrives`() = test {
         stubSavingsSwapHappyPath()
         sut.loadSavingsSwapQuote(REQUESTED_SAT)
         advanceUntilIdle()
 
-        val result = async { sut.executeSavingsSwap() }
+        sut.startSavingsSwap()
         runCurrent()
         boltzEvents.emit(BoltzSwapEvent.Claimed(swapId = SWAP_ID, txid = TXID))
+        advanceUntilIdle()
 
-        assertEquals(SavingsSwapResult.Success(TXID), result.await())
+        assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
     }
 
     @Test
-    fun `executeSavingsSwap fails when the swap reports an error event`() = test {
+    fun `startSavingsSwap fails when the swap reports an error event`() = test {
         stubSavingsSwapHappyPath()
         sut.loadSavingsSwapQuote(REQUESTED_SAT)
         advanceUntilIdle()
 
-        val result = async { sut.executeSavingsSwap() }
+        sut.startSavingsSwap()
         runCurrent()
         boltzEvents.emit(BoltzSwapEvent.Error(swapId = SWAP_ID, message = BOLTZ_ERROR))
+        advanceUntilIdle()
 
-        assertEquals(SavingsSwapResult.Failure(BOLTZ_ERROR), result.await())
+        assertEquals(SavingsSwapResult.Failure(BOLTZ_ERROR), sut.savingsSwapResult.value)
     }
 
     @Test
-    fun `executeSavingsSwap returns pending when the claim does not arrive in time`() = test {
+    fun `startSavingsSwap returns pending when the claim does not arrive in time`() = test {
         stubSavingsSwapHappyPath()
         sut.loadSavingsSwapQuote(REQUESTED_SAT)
         advanceUntilIdle()
 
-        val result = async { sut.executeSavingsSwap() }
+        sut.startSavingsSwap()
         runCurrent()
         advanceTimeBy(61.seconds)
-        runCurrent()
+        advanceUntilIdle()
 
-        assertEquals(SavingsSwapResult.Pending, result.await())
+        assertEquals(SavingsSwapResult.Pending, sut.savingsSwapResult.value)
     }
 
     @Test
-    fun `executeSavingsSwap fails when the invoice payment fails`() = test {
+    fun `startSavingsSwap fails when the invoice payment fails`() = test {
         stubSavingsSwapHappyPath()
         whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.failure(AppError(PAY_ERROR)))
         sut.loadSavingsSwapQuote(REQUESTED_SAT)
         advanceUntilIdle()
 
-        assertEquals(SavingsSwapResult.Failure(PAY_ERROR), sut.executeSavingsSwap())
+        sut.startSavingsSwap()
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Failure(PAY_ERROR), sut.savingsSwapResult.value)
+    }
+
+    @Test
+    fun `startSavingsSwap ignores a second start while a swap is in flight`() = test {
+        stubSavingsSwapHappyPath()
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.startSavingsSwap()
+        runCurrent()
+        sut.startSavingsSwap()
+        runCurrent()
+        boltzEvents.emit(BoltzSwapEvent.Claimed(swapId = SWAP_ID, txid = TXID))
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
+        verify(boltzService).createReverseSwap(any(), any(), anyOrNull(), anyOrNull())
+        verify(lightningRepo).payInvoice(any(), anyOrNull())
     }
 
     private suspend fun stubSavingsSwapHappyPath() {

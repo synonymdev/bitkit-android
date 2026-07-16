@@ -10,6 +10,7 @@ import com.synonym.bitkitcore.BoltzSwapEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -68,6 +69,12 @@ class WalletViewModel @Inject constructor(
     companion object {
         private const val TAG = "WalletViewModel"
         private val TIMEOUT_RESTORE_WAIT = 30.seconds
+
+        /** Attempts to open the Boltz updates stream before giving up until the next wallet start. */
+        private const val SWAP_UPDATES_START_ATTEMPTS = 3
+
+        /** Base backoff between swap updates stream attempts; scales linearly per attempt. */
+        private val SWAP_UPDATES_RETRY_DELAY = 5.seconds
     }
 
     val lightningState = lightningRepo.lightningState
@@ -330,22 +337,31 @@ class WalletViewModel @Inject constructor(
     /**
      * Open the swap updates stream so any pending LN -> onchain swaps resume and auto-claim
      * once their lockup confirms. Uses the wallet's current fee rate for the claim tx.
+     * Retries on failure: without the stream a paid swap has nothing to broadcast its claim.
      */
     private suspend fun startSwapUpdates() {
-        runSuspendCatching {
-            val speed = settingsStore.data.first().defaultTransactionSpeed
-            val feeRate = lightningRepo.getFeeRateForSpeed(speed).getOrNull()?.toDouble()
-            boltzService.startUpdates(feeRateSatPerVb = feeRate)
-        }.onFailure {
-            Logger.error("Failed to start swap updates", it, context = TAG)
+        repeat(SWAP_UPDATES_START_ATTEMPTS) { attempt ->
+            val started = runSuspendCatching {
+                val speed = settingsStore.data.first().defaultTransactionSpeed
+                val feeRate = lightningRepo.getFeeRateForSpeed(speed).getOrNull()?.toDouble()
+                boltzService.startUpdates(feeRateSatPerVb = feeRate)
+            }.onFailure {
+                Logger.warn("Failed to start swap updates, attempt '${attempt + 1}'", context = TAG)
+            }.isSuccess
+
+            if (started) return
+            delay(SWAP_UPDATES_RETRY_DELAY * (attempt + 1))
         }
+        Logger.error("Gave up starting swap updates after '$SWAP_UPDATES_START_ATTEMPTS' attempts", context = TAG)
     }
 
     /** Refresh balances when a swap lands on-chain so savings reflect it without a manual sync. */
     private fun collectSwapEventsOnce() {
         if (swapEventsCollected) return
         swapEventsCollected = true
-        viewModelScope.launch {
+        // UNDISPATCHED so we subscribe before the updates stream starts: the events flow has
+        // no replay, so a swap claimed early would otherwise leave balances stale.
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
             boltzService.events.collect { event ->
                 if (event is BoltzSwapEvent.Claimed) {
                     Logger.info("Savings swap claimed: ${event.swapId}", context = TAG)

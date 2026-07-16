@@ -11,6 +11,7 @@ import com.synonym.bitkitcore.IBtOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
@@ -937,11 +938,19 @@ class TransferViewModel @Inject constructor(
     private val _savingsSwapState = MutableStateFlow(SavingsSwapUiState())
     val savingsSwapState = _savingsSwapState.asStateFlow()
 
+    /** Outcome of the swap started by [startSavingsSwap]; null while none has finished. */
+    private val _savingsSwapResult = MutableStateFlow<SavingsSwapResult?>(null)
+    val savingsSwapResult = _savingsSwapResult.asStateFlow()
+
+    private var savingsSwapJob: Job? = null
+
     /** The amount (sat) that will actually be swapped out; adjustable via the confirm slider. */
     private var pendingSwapAmountSat: ULong = 0uL
 
     /** Cached swap limits so the slider can re-price locally without hitting the network. */
     private var reverseLimits: BoltzPairInfo? = null
+
+    private var savingsSwapQuoteJob: Job? = null
 
     fun setSavingsTransferMode(mode: SavingsTransferMode) = _savingsTransferMode.update { mode }
 
@@ -949,9 +958,11 @@ class TransferViewModel @Inject constructor(
      * Fetch swap limits, derive the adjustable amount range, and publish an initial fee quote
      * (defaulting to the maximum transferable) so the user sees the cost before confirming.
      * The confirm slider then re-prices locally via [onSwapAmountChange]. Errors surface in state.
+     * Cancels any in-flight quote so a slower earlier request cannot overwrite a newer one.
      */
     fun loadSavingsSwapQuote(requestedSat: ULong) {
-        viewModelScope.launch {
+        savingsSwapQuoteJob?.cancel()
+        savingsSwapQuoteJob = viewModelScope.launch {
             _savingsSwapState.update { it.copy(isLoading = true, error = null) }
             awaitNodeRunning()
 
@@ -1023,12 +1034,27 @@ class TransferViewModel @Inject constructor(
     }
 
     /**
+     * Run the swap in [viewModelScope] so it outlives the progress screen: navigating away
+     * mid-flight must not cancel a swap whose hold invoice is already paid. Idempotent while
+     * a swap is in flight, so re-entering the journey cannot create and pay a second swap.
+     * The outcome lands in [savingsSwapResult].
+     */
+    fun startSavingsSwap() {
+        if (savingsSwapJob?.isActive == true) return
+        _savingsSwapResult.update { null }
+        savingsSwapJob = viewModelScope.launch {
+            val result = executeSavingsSwap()
+            _savingsSwapResult.update { result }
+        }
+    }
+
+    /**
      * Execute the LN -> onchain swap: derive a fresh claim address, create the swap,
      * pay the returned hold invoice over Lightning, then wait for the on-chain claim.
      * The claim is auto-broadcast by the updates stream once the lockup confirms, so a
      * timeout here is not a failure; the swap completes in the background.
      */
-    suspend fun executeSavingsSwap(): SavingsSwapResult {
+    private suspend fun executeSavingsSwap(): SavingsSwapResult {
         val amount = pendingSwapAmountSat.takeIf { it > 0uL }
             ?: return SavingsSwapResult.Failure(
                 context.getString(R.string.lightning__savings_confirm__amount_too_low),
@@ -1040,9 +1066,10 @@ class TransferViewModel @Inject constructor(
             Logger.info("Created savings transfer swap ${swap.id}", context = TAG)
 
             coroutineScope {
-                // Subscribe before paying so a claim settling faster than the payment
-                // call returns cannot be missed (the events flow has no replay).
-                val claim = async { awaitSwapClaim(swap.id) }
+                // UNDISPATCHED so the collector actually subscribes before we pay: the events
+                // flow has no replay, so a claim settling faster than the payment call returns
+                // would otherwise be missed and the swap would idle until the claim timeout.
+                val claim = async(start = CoroutineStart.UNDISPATCHED) { awaitSwapClaim(swap.id) }
 
                 // Pay the hold invoice (amount is encoded). It stays pending until Boltz
                 // locks funds on-chain and we claim them, which is the expected happy path.

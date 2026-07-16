@@ -24,6 +24,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.models.Toast
@@ -56,24 +57,14 @@ fun SavingsProgressScreen(
 ) {
     val context = LocalContext.current
     var progressState by remember { mutableStateOf(SavingsProgressState.PROGRESS) }
+    val swapResult by transfer.savingsSwapResult.collectAsStateWithLifecycle()
 
     // Effect to execute the transfer & update UI
-    // TODO move this logic to viewmodel so it can outlive the screen lifecycle
     LaunchedEffect(Unit) {
         when (transfer.savingsTransferMode.value) {
-            SavingsTransferMode.SWAP -> runSavingsSwap(
-                transfer = transfer,
-                wallet = wallet,
-                onSuccess = { progressState = SavingsProgressState.SUCCESS },
-                onFailure = { reason ->
-                    app.toast(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = reason,
-                    )
-                    onTransferUnavailable()
-                },
-            )
+            // The swap itself is owned by the viewmodel so it survives leaving this screen;
+            // the outcome arrives via savingsSwapResult below.
+            SavingsTransferMode.SWAP -> transfer.startSavingsSwap()
 
             SavingsTransferMode.CLOSE -> runChannelClose(
                 transfer = transfer,
@@ -93,28 +84,33 @@ fun SavingsProgressScreen(
         }
     }
 
+    // A pending claim counts as success: the hold invoice is paid and the updates stream
+    // auto-broadcasts the claim once the lockup confirms.
+    LaunchedEffect(swapResult) {
+        when (val result = swapResult) {
+            is SavingsSwapResult.Success, SavingsSwapResult.Pending -> {
+                wallet.refreshState()
+                progressState = SavingsProgressState.SUCCESS
+            }
+
+            is SavingsSwapResult.Failure -> {
+                app.toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.common__error),
+                    description = result.reason,
+                )
+                onTransferUnavailable()
+            }
+
+            null -> Unit
+        }
+    }
+
     Content(
         progressState = progressState,
         onContinueClick = { onContinueClick() },
         modifier = Modifier.keepScreenOn(),
     )
-}
-
-/** Swaps spending funds out to on-chain savings. A pending claim is treated as success. */
-private suspend fun runSavingsSwap(
-    transfer: TransferViewModel,
-    wallet: WalletViewModel,
-    onSuccess: () -> Unit,
-    onFailure: (String) -> Unit,
-) {
-    when (val result = transfer.executeSavingsSwap()) {
-        is SavingsSwapResult.Success, SavingsSwapResult.Pending -> {
-            wallet.refreshState()
-            onSuccess()
-        }
-
-        is SavingsSwapResult.Failure -> onFailure(result.reason)
-    }
 }
 
 /** Legacy path: cooperatively close the selected channel(s), retrying on failure. */
