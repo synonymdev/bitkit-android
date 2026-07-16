@@ -154,9 +154,9 @@ import to.bitkit.ui.settings.LanguageSettingsScreen
 import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
+import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.SwapDetailScreen
 import to.bitkit.ui.settings.SwapsScreen
-import to.bitkit.ui.settings.SettingsScreen
 import to.bitkit.ui.settings.advanced.AddressTypePreferenceScreen
 import to.bitkit.ui.settings.advanced.AddressViewerScreen
 import to.bitkit.ui.settings.advanced.CoinSelectPreferenceScreen

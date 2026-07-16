@@ -28,6 +28,7 @@ import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.of
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -331,7 +332,7 @@ class WalletViewModel @Inject constructor(
      * once their lockup confirms. Uses the wallet's current fee rate for the claim tx.
      */
     private suspend fun startSwapUpdates() {
-        runCatching {
+        runSuspendCatching {
             val speed = settingsStore.data.first().defaultTransactionSpeed
             val feeRate = lightningRepo.getFeeRateForSpeed(speed).getOrNull()?.toDouble()
             boltzService.startUpdates(feeRateSatPerVb = feeRate)
@@ -370,12 +371,18 @@ class WalletViewModel @Inject constructor(
         if (!walletExists) return
 
         viewModelScope.launch(bgDispatcher) {
+            stopSwapUpdates()
             lightningRepo.stop()
                 .onFailure {
                     Logger.error("Node stop error", it)
                     ToastEventBus.send(it)
                 }
         }
+    }
+
+    private suspend fun stopSwapUpdates() {
+        runSuspendCatching { boltzService.stopUpdates() }
+            .onFailure { Logger.error("Failed to stop swap updates", it, context = TAG) }
     }
 
     fun refreshState() = viewModelScope.launch {

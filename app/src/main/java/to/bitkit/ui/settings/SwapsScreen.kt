@@ -27,7 +27,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.BoltzSwap
-import com.synonym.bitkitcore.BoltzSwapType
 import kotlinx.collections.immutable.ImmutableList
 import to.bitkit.models.Toast
 import to.bitkit.models.formatToModernDisplay
@@ -49,6 +48,7 @@ import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.viewmodels.SwapsViewModel
+import to.bitkit.viewmodels.isClaimable
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -178,7 +178,7 @@ fun SwapDetailScreen(
     val app = appViewModel ?: return
     val swaps by viewModel.swaps.collectAsStateWithLifecycle()
     val swap = swaps.find { it.id == swapItem.id }
-    val canClaim = swap != null && swap.swapType == BoltzSwapType.REVERSE && swap.claimTxId == null
+    val canClaim = swap?.isClaimable == true
 
     SwapDetailContent(
         swap = swap,

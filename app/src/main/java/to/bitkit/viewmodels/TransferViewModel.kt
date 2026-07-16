@@ -1,6 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.BoltzPairInfo
@@ -954,7 +955,7 @@ class TransferViewModel @Inject constructor(
             _savingsSwapState.update { it.copy(isLoading = true, error = null) }
             awaitNodeRunning()
 
-            val limits = runCatching { boltzService.reverseLimits() }.getOrElse { e ->
+            val limits = runSuspendCatching { boltzService.reverseLimits() }.getOrElse { e ->
                 Logger.error("Failed to load reverse swap limits", e, context = TAG)
                 reverseLimits = null
                 _savingsSwapState.update { it.copy(isLoading = false, quote = null, error = e.message) }
@@ -1033,19 +1034,24 @@ class TransferViewModel @Inject constructor(
                 context.getString(R.string.lightning__savings_confirm__amount_too_low),
             )
 
-        return runCatching {
+        return runSuspendCatching {
             val claimAddress = lightningRepo.newAddress().getOrThrow()
             val swap = boltzService.createReverseSwap(amountSat = amount, claimAddress = claimAddress)
             Logger.info("Created savings transfer swap ${swap.id}", context = TAG)
 
-            // Pay the hold invoice (amount is encoded). It stays pending until Boltz
-            // locks funds on-chain and we claim them, which is the expected happy path.
-            lightningRepo.payInvoice(bolt11 = swap.invoice).getOrThrow()
+            coroutineScope {
+                // Subscribe before paying so a claim settling faster than the payment
+                // call returns cannot be missed (the events flow has no replay).
+                val claim = async { awaitSwapClaim(swap.id) }
 
-            awaitSwapClaim(swap.id)
+                // Pay the hold invoice (amount is encoded). It stays pending until Boltz
+                // locks funds on-chain and we claim them, which is the expected happy path.
+                lightningRepo.payInvoice(bolt11 = swap.invoice).getOrThrow()
+
+                claim.await()
+            }
         }.getOrElse { e ->
             Logger.error("Savings transfer swap failed", e, context = TAG)
-            ToastEventBus.send(e)
             SavingsSwapResult.Failure(e.message ?: context.getString(R.string.common__error_body))
         }
     }
@@ -1330,6 +1336,7 @@ sealed interface TransferEffect {
 /** Whether a transfer to savings swaps funds out (default) or closes a channel. */
 enum class SavingsTransferMode { SWAP, CLOSE }
 
+@Immutable
 data class SavingsSwapQuote(
     val amountSat: ULong,
     val networkFeeSat: ULong,
@@ -1337,6 +1344,7 @@ data class SavingsSwapQuote(
     val receiveSat: ULong,
 )
 
+@Immutable
 data class SavingsSwapUiState(
     val isLoading: Boolean = false,
     val quote: SavingsSwapQuote? = null,

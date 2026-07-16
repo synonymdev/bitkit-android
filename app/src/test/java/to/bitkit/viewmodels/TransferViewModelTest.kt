@@ -1,11 +1,14 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import com.synonym.bitkitcore.BoltzPairInfo
+import com.synonym.bitkitcore.BoltzSwapEvent
 import com.synonym.bitkitcore.BroadcastException
 import com.synonym.bitkitcore.ChannelLiquidityOptions
 import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtInfoOptions
+import com.synonym.bitkitcore.ReverseSwapResponse
 import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import kotlinx.collections.immutable.persistentListOf
@@ -14,7 +17,9 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -68,6 +73,8 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -91,6 +98,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
     private val balanceState = MutableStateFlow(BalanceState())
     private val blocktankState = MutableStateFlow(BlocktankState())
+    private val boltzEvents = MutableSharedFlow<BoltzSwapEvent>(extraBufferCapacity = 8)
     private val feeResponse = mock<IBtEstimateFeeResponse2>()
 
     @Before
@@ -105,6 +113,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus)))
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(blocktankRepo.blocktankState).thenReturn(blocktankState)
+        whenever(boltzService.events).thenReturn(boltzEvents)
 
         sut = TransferViewModel(
             context = context,
@@ -967,6 +976,144 @@ class TransferViewModelTest : BaseUnitTest() {
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
 
+    @Test
+    fun `loadSavingsSwapQuote defaults to max transferable within limits and spendable balance`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        val state = sut.savingsSwapState.value
+        val expectedMax = SPENDABLE_LN - SPENDABLE_LN / 100uL // 1% routing fee reserve
+        assertEquals(SWAP_MIN, state.minSat)
+        assertEquals(expectedMax, state.maxSat)
+        assertNull(state.error)
+        val quote = assertNotNull(state.quote)
+        assertEquals(expectedMax, quote.amountSat)
+        assertEquals(SWAP_MINER_FEE, quote.networkFeeSat)
+        val expectedSwapFee = (expectedMax.toLong() * SWAP_FEE_PERCENT / 100.0).roundToLong().toULong()
+        assertEquals(expectedSwapFee, quote.swapFeeSat)
+        assertEquals(expectedMax - expectedSwapFee - SWAP_MINER_FEE, quote.receiveSat)
+    }
+
+    @Test
+    fun `loadSavingsSwapQuote reports amount too low when below the swap minimum`() = test {
+        whenever(context.getString(R.string.lightning__savings_confirm__amount_too_low)).thenReturn(TOO_LOW)
+        balanceState.value = BalanceState(maxSendLightningSats = SWAP_MIN - 1uL)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        val state = sut.savingsSwapState.value
+        assertNull(state.quote)
+        assertEquals(0uL, state.maxSat)
+        assertEquals(TOO_LOW, state.error)
+        assertEquals(SavingsSwapResult.Failure(TOO_LOW), sut.executeSavingsSwap())
+    }
+
+    @Test
+    fun `loadSavingsSwapQuote surfaces an error when the limits fetch fails`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenAnswer { throw AppError(BOLTZ_ERROR) }
+
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        val state = sut.savingsSwapState.value
+        assertNull(state.quote)
+        assertEquals(BOLTZ_ERROR, state.error)
+    }
+
+    @Test
+    fun `onSwapAmountChange clamps to the allowed range and reprices`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.onSwapAmountChange(SWAP_MIN - 10_000uL)
+
+        assertEquals(SWAP_MIN, sut.savingsSwapState.value.quote?.amountSat)
+    }
+
+    @Test
+    fun `executeSavingsSwap succeeds when the claim event arrives`() = test {
+        stubSavingsSwapHappyPath()
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        val result = async { sut.executeSavingsSwap() }
+        runCurrent()
+        boltzEvents.emit(BoltzSwapEvent.Claimed(swapId = SWAP_ID, txid = TXID))
+
+        assertEquals(SavingsSwapResult.Success(TXID), result.await())
+    }
+
+    @Test
+    fun `executeSavingsSwap fails when the swap reports an error event`() = test {
+        stubSavingsSwapHappyPath()
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        val result = async { sut.executeSavingsSwap() }
+        runCurrent()
+        boltzEvents.emit(BoltzSwapEvent.Error(swapId = SWAP_ID, message = BOLTZ_ERROR))
+
+        assertEquals(SavingsSwapResult.Failure(BOLTZ_ERROR), result.await())
+    }
+
+    @Test
+    fun `executeSavingsSwap returns pending when the claim does not arrive in time`() = test {
+        stubSavingsSwapHappyPath()
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        val result = async { sut.executeSavingsSwap() }
+        runCurrent()
+        advanceTimeBy(61.seconds)
+        runCurrent()
+
+        assertEquals(SavingsSwapResult.Pending, result.await())
+    }
+
+    @Test
+    fun `executeSavingsSwap fails when the invoice payment fails`() = test {
+        stubSavingsSwapHappyPath()
+        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.failure(AppError(PAY_ERROR)))
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Failure(PAY_ERROR), sut.executeSavingsSwap())
+    }
+
+    private suspend fun stubSavingsSwapHappyPath() {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+        whenever(lightningRepo.newAddress()).thenReturn(Result.success(CLAIM_ADDRESS))
+        whenever(boltzService.createReverseSwap(any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(reverseSwapResponse())
+        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.success("paymentId"))
+    }
+
+    private fun reverseLimits() = BoltzPairInfo(
+        hash = "hash",
+        rate = 1.0,
+        minimalSat = SWAP_MIN,
+        maximalSat = SWAP_MAX,
+        feePercentage = SWAP_FEE_PERCENT,
+        minerFeesSat = SWAP_MINER_FEE,
+    )
+
+    private fun reverseSwapResponse() = ReverseSwapResponse(
+        id = SWAP_ID,
+        invoice = "lnbc1invoice",
+        lockupAddress = "bcrt1qlockup",
+        onchainAmountSat = SWAP_MIN,
+        timeoutBlockHeight = 800uL,
+    )
+
     private fun signedFunding(
         funding: HwFundingTransaction,
         feeRate: ULong = FEE_RATE,
@@ -1029,5 +1176,16 @@ class TransferViewModelTest : BaseUnitTest() {
         const val FEE_RATE = 2uL
         const val FALLBACK_FEE_RATE = 1uL
         const val MINING_FEE = 1_250uL
+        const val SPENDABLE_LN = 150_000uL
+        const val REQUESTED_SAT = 200_000uL
+        const val SWAP_MIN = 25_000uL
+        const val SWAP_MAX = 1_000_000uL
+        const val SWAP_FEE_PERCENT = 0.5
+        const val SWAP_MINER_FEE = 300uL
+        const val SWAP_ID = "swap1"
+        const val CLAIM_ADDRESS = "bcrt1qclaim"
+        const val TOO_LOW = "Amount is too low"
+        const val PAY_ERROR = "no route found"
+        const val BOLTZ_ERROR = "boltz unavailable"
     }
 }
