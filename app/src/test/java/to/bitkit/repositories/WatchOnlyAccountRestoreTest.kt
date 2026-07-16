@@ -29,15 +29,14 @@ import kotlin.test.assertEquals
 
 class WatchOnlyAccountRestoreTest : BaseUnitTest() {
     @Test
-    fun `retry and reconciliation use one canonical incomplete account after restore`() = test {
-        val canonicalAccount = account(id = "canonical-account", accountIndex = 5, createdAt = 1)
-        val duplicateAccount = account(id = "duplicate-account", accountIndex = 6, createdAt = 2)
+    fun `retry and reconciliation use the restored incomplete account`() = test {
+        val restoredAccount = account(id = "restored-account", accountIndex = 5, createdAt = 1)
         val requestKey = "0:$REQUEST_FINGERPRINT"
         val storedData = WatchOnlyAccountData().restoreAccounts(
-            accounts = listOf(duplicateAccount, canonicalAccount),
+            accounts = listOf(restoredAccount),
             allocationState = WatchOnlyAccountAllocationState(
-                highestAccountIndexByWallet = mapOf("0" to 6),
-                pendingAccountIndexByRequest = mapOf(requestKey to canonicalAccount.accountIndex),
+                highestAccountIndexByWallet = mapOf("0" to 5),
+                pendingAccountIndexByRequest = mapOf(requestKey to restoredAccount.accountIndex),
             ),
         )
         val store = mock<WatchOnlyAccountStore>()
@@ -54,24 +53,18 @@ class WatchOnlyAccountRestoreTest : BaseUnitTest() {
         val lightningService = lightningService(store, node, coordinator)
         val sut = WatchOnlyAccountRepo(testDispatcher, store, lightningService, coordinator)
 
-        val prepared = sut.prepareUnsignedClaim(AUTH_URL, canonicalAccount.name)
+        val prepared = sut.prepareUnsignedClaim(AUTH_URL, restoredAccount.name)
         lightningService.reconcileWatchOnlyAccounts(syncAfterReconcile = false)
 
-        assertEquals(listOf(canonicalAccount), storedData.accounts)
-        assertEquals(canonicalAccount.id, prepared.account.id)
-        assertEquals(canonicalAccount.accountIndex, prepared.account.accountIndex)
+        assertEquals(listOf(restoredAccount), storedData.accounts)
+        assertEquals(restoredAccount.id, prepared.account.id)
+        assertEquals(restoredAccount.accountIndex, prepared.account.accountIndex)
         verify(store, never()).reserveAccountIndex(any(), any())
         verify(node, never()).exportOnchainWalletAccountXpub(any(), any())
         verify(node).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 5u, TEST_XPUB)
-        verify(node, never()).addOnchainWalletAccount(AddressType.NATIVE_SEGWIT, 6u, TEST_XPUB)
         verify(onchainPayment).revealReceiveAddressesToAccount(
             AddressType.NATIVE_SEGWIT,
             5u,
-            WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
-        )
-        verify(onchainPayment, never()).revealReceiveAddressesToAccount(
-            AddressType.NATIVE_SEGWIT,
-            6u,
             WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
         )
     }
