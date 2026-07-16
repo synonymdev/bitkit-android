@@ -34,6 +34,9 @@ data class PubkyAuthPermission(
     val path: String,
     val accessLevel: String,
 ) {
+    val displayPath: String
+        get() = if (path.length > 1) path.removeSuffix("/") else path
+
     val displayAccess: String
         get() = accessLevel.map { char ->
             when (char) {

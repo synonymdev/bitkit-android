@@ -84,11 +84,13 @@ fun Headline(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
+    textAlign: TextAlign = TextAlign.Start,
 ) {
     Text(
         text = text.toUpperCase(),
         style = AppTextStyles.Headline.merge(
             color = color,
+            textAlign = textAlign,
         ),
         modifier = modifier
     )
