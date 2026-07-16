@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Test
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -19,6 +20,7 @@ import to.bitkit.models.PreparedWatchOnlyAccountClaim
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthPermission
 import to.bitkit.models.PubkyAuthRequest
+import to.bitkit.models.PubkyProfile
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.repositories.PubkyRepo
@@ -31,7 +33,16 @@ import kotlin.test.assertEquals
 @OptIn(ExperimentalCoroutinesApi::class)
 class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
-    private val pubkyRepo: PubkyRepo = mock()
+    private val profileFlow = MutableStateFlow<PubkyProfile?>(null)
+    private val publicKeyFlow = MutableStateFlow<String?>(null)
+    private val displayNameFlow = MutableStateFlow<String?>(null)
+    private val displayImageUriFlow = MutableStateFlow<String?>(null)
+    private val pubkyRepo: PubkyRepo = mock {
+        on { profile } doReturn profileFlow
+        on { publicKey } doReturn publicKeyFlow
+        on { displayName } doReturn displayNameFlow
+        on { displayImageUri } doReturn displayImageUriFlow
+    }
     private val watchOnlyAccountRepo: WatchOnlyAccountRepo = mock()
 
     @Test
@@ -39,6 +50,12 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         val sut = createSut()
 
         assertEquals(ApprovalState.Loading, sut.uiState.value.state)
+    }
+
+    @Test
+    fun `auth display public key omits pubky prefix`() {
+        assertEquals("3rsd...w5xg", pubkyAuthDisplayPublicKey("pubky3rsd123456789w5xg"))
+        assertEquals("3rsd...w5xg", pubkyAuthDisplayPublicKey("3rsd123456789w5xg"))
     }
 
     @Test
@@ -122,9 +139,26 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         sut.load(authUrl)
         advanceUntilIdle()
 
-        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+        assertEquals(ApprovalState.WatchOnlyConsent, sut.uiState.value.state)
         assertEquals(PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1, sut.uiState.value.bitkitClaim)
         assertEquals("paykit server", sut.uiState.value.watchOnlyAccountName)
+
+        sut.confirmAuthorize(authUrl)
+        advanceUntilIdle()
+        assertEquals(ApprovalState.WatchOnlyConsent, sut.uiState.value.state)
+
+        sut.approveWatchOnlyConsent(authUrl)
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+
+        sut.requestAuthorize(authUrl)
+        runCurrent()
+        assertEquals(ApprovalState.Authenticating, sut.uiState.value.state)
+
+        sut.cancelLocalAuth(authUrl)
+        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+
+        sut.returnToWatchOnlyConsent(authUrl)
+        assertEquals(ApprovalState.WatchOnlyConsent, sut.uiState.value.state)
     }
 
     @Test
@@ -151,6 +185,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         sut.load(authUrl)
         advanceUntilIdle()
+        sut.approveWatchOnlyConsent(authUrl)
         sut.confirmAuthorize(authUrl)
         advanceUntilIdle()
 
@@ -187,6 +222,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         sut.load(authUrl)
         advanceUntilIdle()
+        sut.approveWatchOnlyConsent(authUrl)
         sut.confirmAuthorize(authUrl)
         sut.confirmAuthorize(authUrl)
         advanceUntilIdle()
@@ -229,6 +265,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         sut.load(authUrl)
         advanceUntilIdle()
+        sut.approveWatchOnlyConsent(authUrl)
         sut.confirmAuthorize(authUrl)
         runCurrent()
         assertEquals(ApprovalState.Authorizing, sut.uiState.value.state)
@@ -287,6 +324,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         sut.load(authUrl)
         advanceUntilIdle()
+        sut.approveWatchOnlyConsent(authUrl)
         sut.confirmAuthorize(authUrl)
         advanceUntilIdle()
 
@@ -321,6 +359,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         sut.load(authUrl)
         advanceUntilIdle()
+        sut.approveWatchOnlyConsent(authUrl)
         sut.confirmAuthorize(authUrl)
         advanceUntilIdle()
 
@@ -359,6 +398,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         sut.load(authUrl)
         advanceUntilIdle()
+        sut.approveWatchOnlyConsent(authUrl)
         sut.confirmAuthorize(authUrl)
         advanceUntilIdle()
 
@@ -399,6 +439,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         sut.load(authUrl)
         advanceUntilIdle()
+        sut.approveWatchOnlyConsent(authUrl)
         sut.confirmAuthorize(authUrl)
         advanceUntilIdle()
 
@@ -441,6 +482,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         sut.load(authUrl)
         advanceUntilIdle()
+        sut.approveWatchOnlyConsent(authUrl)
         sut.confirmAuthorize(authUrl)
         advanceUntilIdle()
 
@@ -483,6 +525,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
 
         sut.load(authUrl)
         advanceUntilIdle()
+        sut.approveWatchOnlyConsent(authUrl)
         sut.confirmAuthorize(authUrl)
         advanceUntilIdle()
 

@@ -77,7 +77,13 @@ class PubkyAuthApprovalViewModel @Inject constructor(
             if (_uiState.value.authUrl != authUrl) return@launch
             val unknownService = context.getString(R.string.profile__auth_approval_service_unknown)
             val serviceName = request.serviceNames.firstOrNull() ?: unknownService
-            val profile = pubkyRepo.profile.value
+            val profile = pubkyRepo.profile.value ?: pubkyRepo.publicKey.value?.let { publicKey ->
+                PubkyProfile.forDisplay(
+                    publicKey = publicKey,
+                    name = pubkyRepo.displayName.value,
+                    imageUrl = pubkyRepo.displayImageUri.value,
+                )
+            }
             val accountName = if (request.bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1) {
                 context.getString(R.string.profile__auth_approval_watch_only_account_default_name, serviceName)
             } else {
@@ -86,7 +92,11 @@ class PubkyAuthApprovalViewModel @Inject constructor(
 
             _uiState.update {
                 it.copy(
-                    state = ApprovalState.Authorize,
+                    state = if (request.bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1) {
+                        ApprovalState.WatchOnlyConsent
+                    } else {
+                        ApprovalState.Authorize
+                    },
                     serviceName = serviceName,
                     requestedCapabilities = request.capabilities,
                     permissions = request.permissions.toImmutableList(),
@@ -101,13 +111,44 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     fun requestAuthorize(authUrl: String) {
         val state = _uiState.value
         if (state.authUrl != authUrl || state.state != ApprovalState.Authorize) return
+        if (!_uiState.compareAndSet(state, state.copy(state = ApprovalState.Authenticating))) return
         viewModelScope.launch {
             _effects.emit(PubkyAuthApprovalEffect.RequestLocalAuth(authUrl))
         }
     }
 
-    fun updateWatchOnlyAccountName(name: String) {
-        _uiState.update { it.copy(watchOnlyAccountName = name) }
+    fun approveWatchOnlyConsent(authUrl: String) {
+        _uiState.update { state ->
+            if (state.authUrl == authUrl && state.state == ApprovalState.WatchOnlyConsent) {
+                state.copy(state = ApprovalState.Authorize)
+            } else {
+                state
+            }
+        }
+    }
+
+    fun returnToWatchOnlyConsent(authUrl: String) {
+        _uiState.update { state ->
+            if (
+                state.authUrl == authUrl &&
+                state.state == ApprovalState.Authorize &&
+                state.bitkitClaim == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1
+            ) {
+                state.copy(state = ApprovalState.WatchOnlyConsent)
+            } else {
+                state
+            }
+        }
+    }
+
+    fun cancelLocalAuth(authUrl: String) {
+        _uiState.update { state ->
+            if (state.authUrl == authUrl && state.state == ApprovalState.Authenticating) {
+                state.copy(state = ApprovalState.Authorize)
+            } else {
+                state
+            }
+        }
     }
 
     fun confirmAuthorize(authUrl: String) {
@@ -220,7 +261,12 @@ class PubkyAuthApprovalViewModel @Inject constructor(
 
     private fun transitionToAuthorizing(authUrl: String): PubkyAuthApprovalUiState? {
         val initialState = _uiState.value
-        if (initialState.authUrl != authUrl || initialState.state != ApprovalState.Authorize) return null
+        if (
+            initialState.authUrl != authUrl ||
+            (initialState.state != ApprovalState.Authorize && initialState.state != ApprovalState.Authenticating)
+        ) {
+            return null
+        }
         val authorizingState = initialState.copy(state = ApprovalState.Authorizing)
         return authorizingState.takeIf { _uiState.compareAndSet(initialState, it) }
     }
@@ -228,7 +274,12 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     private fun resetForLoad(authUrl: String): Boolean {
         while (true) {
             val currentState = _uiState.value
-            if (currentState.authUrl == authUrl && currentState.state == ApprovalState.Authorizing) return false
+            if (
+                currentState.authUrl == authUrl &&
+                currentState.state in setOf(ApprovalState.Authenticating, ApprovalState.Authorizing)
+            ) {
+                return false
+            }
             if (_uiState.compareAndSet(currentState, PubkyAuthApprovalUiState(authUrl = authUrl))) return true
         }
     }
@@ -279,7 +330,9 @@ data class PubkyAuthApprovalUiState(
 
 sealed interface ApprovalState {
     data object Loading : ApprovalState
+    data object WatchOnlyConsent : ApprovalState
     data object Authorize : ApprovalState
+    data object Authenticating : ApprovalState
     data object Authorizing : ApprovalState
     data object Success : ApprovalState
 }
