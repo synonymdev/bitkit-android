@@ -252,6 +252,7 @@ fun ReceiveQrScreen(
                                     tab = tab,
                                     walletState = walletState,
                                     cjitInvoice = cjitInvoice,
+                                    isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
                                     onClickEditInvoice = onClickEditInvoice,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -500,6 +501,7 @@ private fun ReceiveDetailsView(
     tab: ReceiveTab,
     walletState: WalletState,
     cjitInvoice: String?,
+    isNodeRunning: Boolean,
     onClickEditInvoice: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -553,10 +555,11 @@ private fun ReceiveDetailsView(
                 }
 
                 ReceiveTab.SPENDING -> {
-                    if (cjitInvoice != null || walletState.bolt11.isNotEmpty()) {
+                    val lightningInvoice = cjitInvoice ?: walletState.bolt11.takeIf { isNodeRunning }
+                    if (!lightningInvoice.isNullOrEmpty()) {
                         CopyAddressCard(
                             title = stringResource(R.string.wallet__receive_lightning_invoice),
-                            address = cjitInvoice ?: walletState.bolt11,
+                            address = lightningInvoice,
                             type = CopyAddressType.LIGHTNING,
                             onClickEditInvoice = onClickEditInvoice,
                             testTag = "ReceiveLightningAddress",
@@ -893,6 +896,7 @@ private fun PreviewDetailsMode() {
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
                 ),
                 cjitInvoice = null,
+                isNodeRunning = true,
                 onClickEditInvoice = {},
                 modifier = Modifier.weight(1f)
             )
@@ -900,6 +904,7 @@ private fun PreviewDetailsMode() {
     }
 }
 
+@Suppress("SpellCheckingInspection")
 @Preview(showSystemUi = true, name = "Spending Details Loading")
 @Composable
 private fun PreviewDetailsModeSpendingLoading() {
@@ -910,10 +915,15 @@ private fun PreviewDetailsModeSpendingLoading() {
                 .fillMaxSize()
                 .padding(16.dp)
         ) {
+            // Cached bolt11 with a node that is not running: the stale invoice is withheld in favor of loading
             ReceiveDetailsView(
                 tab = ReceiveTab.SPENDING,
-                walletState = WalletState(),
+                walletState = WalletState(
+                    bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
+                        "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
+                ),
                 cjitInvoice = null,
+                isNodeRunning = false,
                 onClickEditInvoice = {},
                 modifier = Modifier.weight(1f)
             )
