@@ -587,6 +587,10 @@
     <string name="profile__auth_approval_watch_only_account_name">ACCOUNT NAME</string>
     <string name="profile__auth_approval_watch_only_account_name_placeholder">Name this account</string>
     <string name="profile__auth_approval_watch_only_account_title">Watch-only Bitcoin account</string>
+    <string name="profile__auth_approval_watch_only_intro_approve">Approve</string>
+    <string name="profile__auth_approval_watch_only_intro_description">To earn, you need to share a watch-only Bitcoin account with Paykit. It can view sales activity, but cannot spend funds.</string>
+    <string name="profile__auth_approval_watch_only_intro_nav_title">Earn</string>
+    <string name="profile__auth_approval_watch_only_intro_title">&lt;accent&gt;EARN BITCOIN&lt;/accent&gt;\nFROM YOUR\nCONTENT</string>
     <string name="profile__auth_error_duplicate_claim">This authorization contains more than one Bitkit claim.</string>
     <string name="profile__auth_error_invalid_capabilities">The requested access does not match this Bitkit claim.</string>
     <string name="profile__auth_error_invalid_url">This Pubky authorization link is invalid.</string>
