@@ -381,9 +381,6 @@ dependencies {
     implementation(libs.camera.view)
     // Crypto
     implementation(libs.bouncycastle.provider.jdk)
-    implementation(libs.bitcoinj.core) {
-        exclude(group = "org.bouncycastle", module = "bcprov-jdk15to18")
-    }
     implementation(libs.ldk.node.android) { exclude(group = "net.java.dev.jna", module = "jna") }
     implementation(libs.bitkit.core)
     implementation(libs.paykit)
