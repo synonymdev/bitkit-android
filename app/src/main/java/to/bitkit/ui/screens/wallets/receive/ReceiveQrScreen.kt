@@ -64,6 +64,7 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.TertiaryButton
@@ -251,6 +252,7 @@ fun ReceiveQrScreen(
                                     tab = tab,
                                     walletState = walletState,
                                     cjitInvoice = cjitInvoice,
+                                    isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
                                     onClickEditInvoice = onClickEditInvoice,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -499,6 +501,7 @@ private fun ReceiveDetailsView(
     tab: ReceiveTab,
     walletState: WalletState,
     cjitInvoice: String?,
+    isNodeRunning: Boolean,
     onClickEditInvoice: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -560,6 +563,15 @@ private fun ReceiveDetailsView(
                             onClickEditInvoice = onClickEditInvoice,
                             testTag = "ReceiveLightningAddress",
                         )
+                    } else if (!isNodeRunning) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .testTag("ReceiveLightningLoading")
+                        ) {
+                            GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        }
                     }
                 }
             }
@@ -883,6 +895,29 @@ private fun PreviewDetailsMode() {
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
                 ),
                 cjitInvoice = null,
+                isNodeRunning = true,
+                onClickEditInvoice = {},
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true, name = "Spending Details Node Not Ready")
+@Composable
+private fun PreviewDetailsModeSpendingNodeNotReady() {
+    AppThemeSurface {
+        Column(
+            modifier = Modifier
+                .gradientBackground()
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            ReceiveDetailsView(
+                tab = ReceiveTab.SPENDING,
+                walletState = WalletState(),
+                cjitInvoice = null,
+                isNodeRunning = false,
                 onClickEditInvoice = {},
                 modifier = Modifier.weight(1f)
             )
