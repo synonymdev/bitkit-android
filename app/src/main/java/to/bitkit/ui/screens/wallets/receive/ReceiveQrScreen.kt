@@ -1,7 +1,6 @@
 package to.bitkit.ui.screens.wallets.receive
 
 import android.graphics.Bitmap
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.snapping.SnapPosition
@@ -288,63 +287,61 @@ fun ReceiveQrScreen(
 
             VerticalSpacer(24.dp)
 
-            AnimatedVisibility(visible = lightningState.nodeLifecycleState.isRunning()) {
-                val showCjitButton = showingCjitOnboarding && selectedTab == ReceiveTab.SPENDING
-                val buttonVariant = when {
-                    showCjitButton -> BottomButtonVariant.CJIT
-                    showDetails -> BottomButtonVariant.SHOW_QR
-                    else -> BottomButtonVariant.SHOW_DETAILS
-                }
-                Crossfade(
-                    targetState = buttonVariant,
-                    label = "ReceiveBottomButtonCrossfade",
-                ) { variant ->
-                    when (variant) {
-                        BottomButtonVariant.CJIT -> PrimaryButton(
-                            text = stringResource(R.string.wallet__receive__cjit),
-                            icon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_lightning_alt),
-                                    tint = Colors.Purple,
-                                    contentDescription = null,
-                                )
-                            },
-                            onClick = {
-                                onClickReceiveCjit()
-                                showDetails = false
-                            },
-                            fullWidth = true,
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .testTag("ShowDetails")
-                        )
+            val showCjitButton = showingCjitOnboarding && selectedTab == ReceiveTab.SPENDING
+            val buttonVariant = when {
+                showCjitButton -> BottomButtonVariant.CJIT
+                showDetails -> BottomButtonVariant.SHOW_QR
+                else -> BottomButtonVariant.SHOW_DETAILS
+            }
+            Crossfade(
+                targetState = buttonVariant,
+                label = "ReceiveBottomButtonCrossfade",
+            ) { variant ->
+                when (variant) {
+                    BottomButtonVariant.CJIT -> PrimaryButton(
+                        text = stringResource(R.string.wallet__receive__cjit),
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_lightning_alt),
+                                tint = Colors.Purple,
+                                contentDescription = null,
+                            )
+                        },
+                        onClick = {
+                            onClickReceiveCjit()
+                            showDetails = false
+                        },
+                        fullWidth = true,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .testTag("ShowDetails")
+                    )
 
-                        BottomButtonVariant.SHOW_QR -> PrimaryButton(
-                            text = stringResource(R.string.wallet__receive_show_qr),
-                            icon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_qr_purple),
-                                    tint = Colors.White,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            onClick = { showDetails = false },
-                            fullWidth = true,
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .testTag("QRCode")
-                        )
+                    BottomButtonVariant.SHOW_QR -> PrimaryButton(
+                        text = stringResource(R.string.wallet__receive_show_qr),
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_qr_purple),
+                                tint = Colors.White,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        onClick = { showDetails = false },
+                        fullWidth = true,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .testTag("QRCode")
+                    )
 
-                        BottomButtonVariant.SHOW_DETAILS -> TertiaryButton(
-                            text = stringResource(R.string.wallet__receive_show_details),
-                            onClick = { showDetails = true },
-                            fullWidth = true,
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .testTag("ShowDetails")
-                        )
-                    }
+                    BottomButtonVariant.SHOW_DETAILS -> TertiaryButton(
+                        text = stringResource(R.string.wallet__receive_show_details),
+                        onClick = { showDetails = true },
+                        fullWidth = true,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .testTag("ShowDetails")
+                    )
                 }
             }
 
