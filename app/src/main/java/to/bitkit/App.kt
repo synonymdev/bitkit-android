@@ -14,6 +14,7 @@ import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.services.BluetoothInit
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltAndroidApp
@@ -34,6 +35,7 @@ internal open class App : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        installUncaughtExceptionLogger()
         Env.initAppStoragePath(filesDir.absolutePath)
         SingletonImageLoader.setSafe { imageLoader }
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
@@ -42,7 +44,17 @@ internal open class App : Application(), Configuration.Provider {
         BluetoothInit.ensureInitialized()
     }
 
+    private fun installUncaughtExceptionLogger() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Logger.error("Uncaught exception on thread '${thread.name}'", throwable, context = TAG)
+            previous?.uncaughtException(thread, throwable)
+        }
+    }
+
     companion object {
+        private const val TAG = "App"
+
         @SuppressLint("StaticFieldLeak") // Should be safe given its manual memory management
         internal var currentActivity: CurrentActivity? = null
     }
