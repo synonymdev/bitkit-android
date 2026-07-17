@@ -7,7 +7,8 @@ import kotlin.coroutines.CoroutineContext
 
 open class BaseCoroutineScope(
     private val dispatcher: CoroutineDispatcher,
-) : CoroutineScope by CoroutineScope(SupervisorJob() + dispatcher) {
+    tag: String,
+) : CoroutineScope by CoroutineScope(SupervisorJob() + dispatcher + loggingExceptionHandler(tag)) {
 
     @Throws(InterruptedException::class)
     protected fun <T> runBlocking(

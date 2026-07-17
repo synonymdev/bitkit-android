@@ -11,9 +11,7 @@ import io.ktor.client.call.body
 import io.ktor.client.request.post
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -33,6 +31,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import to.bitkit.async.appScope
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.hasPublicPaykitPublicationState
@@ -94,7 +93,7 @@ class PubkyRepo @Inject constructor(
         private const val AVATAR_QUALITY = 80
     }
 
-    private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
+    private val scope = appScope(ioDispatcher, TAG)
     private val serviceInitializeMutex = Mutex()
     private val initializeMutex = Mutex()
     private val loadProfileMutex = Mutex()
