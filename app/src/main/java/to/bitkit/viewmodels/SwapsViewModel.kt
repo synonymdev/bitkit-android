@@ -73,18 +73,29 @@ class SwapsViewModel @Inject constructor(
 }
 
 /**
- * Whether a manual claim can succeed for this swap: reverse direction, lockup funds visible
- * on-chain (mempool or confirmed), and no claim broadcast yet. Freshly created, expired,
- * failed, and refunded swaps have nothing to claim.
+ * Whether a manual claim is worth attempting: a reverse swap with no claim broadcast yet that has
+ * not reached a terminal state.
+ *
+ * Deliberately permissive about [BoltzSwapStatus]. The persisted status only advances while the
+ * updates stream is delivering events, so gating on it hides the recovery tool in exactly the case
+ * it exists for: a stalled stream leaves the swap at [BoltzSwapStatus.SwapCreated] locally even
+ * after Boltz has locked up on-chain and the funds are claimable. The chain, not the cached status,
+ * is the source of truth here, so offer the claim and let [boltzClaimReverseSwap] decide; when
+ * there is nothing to claim it fails harmlessly and the error surfaces to the caller.
  */
 val BoltzSwap.isClaimable: Boolean
     get() = swapType == BoltzSwapType.REVERSE &&
         claimTxId == null &&
         when (status) {
-            BoltzSwapStatus.TransactionMempool,
-            BoltzSwapStatus.TransactionConfirmed,
-            BoltzSwapStatus.TransactionClaimPending,
-            -> true
+            BoltzSwapStatus.InvoiceExpired,
+            BoltzSwapStatus.InvoiceFailedToPay,
+            BoltzSwapStatus.InvoiceSettled,
+            BoltzSwapStatus.SwapExpired,
+            BoltzSwapStatus.TransactionClaimed,
+            BoltzSwapStatus.TransactionFailed,
+            BoltzSwapStatus.TransactionLockupFailed,
+            BoltzSwapStatus.TransactionRefunded,
+            -> false
 
-            else -> false
+            else -> true
         }

@@ -333,6 +333,8 @@
     <string name="lightning__savings_intro__title">Transfer\n&lt;accent&gt;to savings&lt;/accent&gt;</string>
     <string name="lightning__savings_progress__text">Please wait, your funds transfer is in progress. This should take &lt;accent&gt;±10 seconds.&lt;/accent&gt;</string>
     <string name="lightning__savings_progress__title">Funds\n&lt;accent&gt;in transfer&lt;/accent&gt;</string>
+    <string name="lightning__savings_settling__text">Your transfer has been initiated and is &lt;accent&gt;settling on-chain&lt;/accent&gt;. Your savings balance will update automatically once it completes.</string>
+    <string name="lightning__savings_settling__title">Transfer\n&lt;accent&gt;on the way&lt;/accent&gt;</string>
     <string name="lightning__scores_sync_time">Pathfinding Scores Sync Time</string>
     <string name="lightning__setting_up_button">Continue Using Bitkit</string>
     <string name="lightning__setting_up_step1">Processing Payment</string>

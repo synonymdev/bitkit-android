@@ -63,8 +63,12 @@ fun SavingsProgressScreen(
     LaunchedEffect(Unit) {
         when (transfer.savingsTransferMode.value) {
             // The swap itself is owned by the viewmodel so it survives leaving this screen;
-            // the outcome arrives via savingsSwapResult below.
-            SavingsTransferMode.SWAP -> transfer.startSavingsSwap()
+            // the outcome arrives via savingsSwapResult below. Ensure the updates stream is
+            // running first so the new swap is tracked and auto-claimed once its lockup confirms.
+            SavingsTransferMode.SWAP -> {
+                wallet.ensureSwapUpdatesRunning()
+                transfer.startSavingsSwap()
+            }
 
             SavingsTransferMode.CLOSE -> runChannelClose(
                 transfer = transfer,
@@ -84,13 +88,19 @@ fun SavingsProgressScreen(
         }
     }
 
-    // A pending claim counts as success: the hold invoice is paid and the updates stream
-    // auto-broadcasts the claim once the lockup confirms.
     LaunchedEffect(swapResult) {
         when (val result = swapResult) {
-            is SavingsSwapResult.Success, SavingsSwapResult.Pending -> {
+            is SavingsSwapResult.Success -> {
                 wallet.refreshState()
                 progressState = SavingsProgressState.SUCCESS
+            }
+
+            // The hold invoice is paid but the on-chain claim has not landed within the wait
+            // window. The claim is auto-broadcast once the lockup confirms, so the transfer is
+            // committed and settling; show that honestly instead of a completed success.
+            SavingsSwapResult.Pending -> {
+                wallet.refreshState()
+                progressState = SavingsProgressState.SETTLING
             }
 
             is SavingsSwapResult.Failure -> {
@@ -156,12 +166,22 @@ private fun Content(
     modifier: Modifier = Modifier,
 ) {
     val inProgress = progressState == SavingsProgressState.PROGRESS
+    val showAnimation = inProgress || progressState == SavingsProgressState.SETTLING
     ScreenColumn(
-        modifier = modifier.testTag(if (inProgress) "TransferSettingUp" else "TransferSuccess")
+        modifier = modifier.testTag(
+            when (progressState) {
+                SavingsProgressState.PROGRESS -> "TransferSettingUp"
+                SavingsProgressState.SETTLING -> "TransferSettling"
+                else -> "TransferSuccess"
+            }
+        )
     ) {
         AppTopBar(
             titleText = when (progressState) {
-                SavingsProgressState.PROGRESS -> stringResource(R.string.lightning__transfer__nav_title)
+                SavingsProgressState.PROGRESS,
+                SavingsProgressState.SETTLING,
+                -> stringResource(R.string.lightning__transfer__nav_title)
+
                 SavingsProgressState.SUCCESS -> stringResource(R.string.lightning__transfer_success__nav_title)
                 SavingsProgressState.INTERRUPTED -> stringResource(R.string.lightning__savings_interrupted__nav_title)
                     .removeAccentTags().replace("\n", " ")
@@ -177,38 +197,9 @@ private fun Content(
                 .padding(horizontal = 16.dp)
         ) {
             Spacer(modifier = Modifier.height(12.dp))
-            when (progressState) {
-                SavingsProgressState.PROGRESS -> {
-                    Display(
-                        text = stringResource(R.string.lightning__savings_progress__title).withAccent(),
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    BodyM(
-                        text = stringResource(R.string.lightning__savings_progress__text).withAccentBoldBright(),
-                        color = Colors.White64,
-                    )
-                }
-
-                SavingsProgressState.SUCCESS -> {
-                    Display(text = stringResource(R.string.lightning__transfer_success__title_savings).withAccent())
-                    Spacer(modifier = Modifier.height(8.dp))
-                    BodyM(
-                        text = stringResource(R.string.lightning__transfer_success__text_savings),
-                        color = Colors.White64,
-                    )
-                }
-
-                SavingsProgressState.INTERRUPTED -> {
-                    Display(text = stringResource(R.string.lightning__savings_interrupted__title).withAccent())
-                    Spacer(modifier = Modifier.height(8.dp))
-                    BodyM(
-                        text = stringResource(R.string.lightning__savings_interrupted__text).withAccentBoldBright(),
-                        color = Colors.White64,
-                    )
-                }
-            }
+            ProgressMessage(progressState = progressState)
             Spacer(modifier = Modifier.weight(1f))
-            if (progressState == SavingsProgressState.PROGRESS) {
+            if (showAnimation) {
                 TransferAnimationView(
                     largeCircleRes = R.drawable.onchain_sync_large,
                     smallCircleRes = R.drawable.onchain_sync_small,
@@ -250,7 +241,30 @@ private fun Content(
     }
 }
 
-enum class SavingsProgressState { PROGRESS, SUCCESS, INTERRUPTED }
+@Composable
+private fun ProgressMessage(progressState: SavingsProgressState) {
+    val (titleRes, textRes) = when (progressState) {
+        SavingsProgressState.PROGRESS ->
+            R.string.lightning__savings_progress__title to R.string.lightning__savings_progress__text
+
+        SavingsProgressState.SETTLING ->
+            R.string.lightning__savings_settling__title to R.string.lightning__savings_settling__text
+
+        SavingsProgressState.SUCCESS ->
+            R.string.lightning__transfer_success__title_savings to R.string.lightning__transfer_success__text_savings
+
+        SavingsProgressState.INTERRUPTED ->
+            R.string.lightning__savings_interrupted__title to R.string.lightning__savings_interrupted__text
+    }
+    Display(text = stringResource(titleRes).withAccent())
+    Spacer(modifier = Modifier.height(8.dp))
+    BodyM(
+        text = stringResource(textRes).withAccentBoldBright(),
+        color = Colors.White64,
+    )
+}
+
+enum class SavingsProgressState { PROGRESS, SETTLING, SUCCESS, INTERRUPTED }
 
 @Preview(showSystemUi = true)
 @Composable
@@ -258,6 +272,16 @@ private fun PreviewProgress() {
     AppThemeSurface {
         Content(
             progressState = SavingsProgressState.PROGRESS,
+        )
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewSettling() {
+    AppThemeSurface {
+        Content(
+            progressState = SavingsProgressState.SETTLING,
         )
     }
 }

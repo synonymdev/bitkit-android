@@ -335,6 +335,16 @@ class WalletViewModel @Inject constructor(
     private var swapEventsCollected = false
 
     /**
+     * Ensure the swap updates stream is running so a swap created now is tracked and auto-claimed.
+     * Restarting re-subscribes and reconciles every pending swap in bitkit-core, so calling this as
+     * a swap begins closes the window where the stream was down when the swap was created.
+     */
+    fun ensureSwapUpdatesRunning() {
+        collectSwapEventsOnce()
+        viewModelScope.launch { startSwapUpdates() }
+    }
+
+    /**
      * Open the swap updates stream so any pending LN -> onchain swaps resume and auto-claim
      * once their lockup confirms. Uses the wallet's current fee rate for the claim tx.
      * Retries on failure: without the stream a paid swap has nothing to broadcast its claim.

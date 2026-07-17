@@ -62,16 +62,27 @@ class SwapsViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `isClaimable only while the reverse swap lockup is on-chain and unclaimed`() {
+    fun `isClaimable while a reverse swap is unclaimed and not in a terminal state`() {
         assertTrue(swap(status = BoltzSwapStatus.TransactionMempool).isClaimable)
         assertTrue(swap(status = BoltzSwapStatus.TransactionConfirmed).isClaimable)
         assertTrue(swap(status = BoltzSwapStatus.TransactionClaimPending).isClaimable)
+        assertTrue(swap(status = BoltzSwapStatus.InvoicePending).isClaimable)
 
-        assertFalse(swap(status = BoltzSwapStatus.SwapCreated).isClaimable)
+        // A stalled updates stream leaves the swap at SwapCreated locally even once Boltz has
+        // locked up on-chain, so the claim must stay reachable: this is the recovery case.
+        assertTrue(swap(status = BoltzSwapStatus.SwapCreated).isClaimable)
+    }
+
+    @Test
+    fun `isClaimable is false for terminal, already claimed, and submarine swaps`() {
         assertFalse(swap(status = BoltzSwapStatus.SwapExpired).isClaimable)
         assertFalse(swap(status = BoltzSwapStatus.TransactionFailed).isClaimable)
+        assertFalse(swap(status = BoltzSwapStatus.TransactionLockupFailed).isClaimable)
         assertFalse(swap(status = BoltzSwapStatus.TransactionRefunded).isClaimable)
+        assertFalse(swap(status = BoltzSwapStatus.TransactionClaimed).isClaimable)
         assertFalse(swap(status = BoltzSwapStatus.InvoiceSettled).isClaimable)
+        assertFalse(swap(status = BoltzSwapStatus.InvoiceExpired).isClaimable)
+        assertFalse(swap(status = BoltzSwapStatus.InvoiceFailedToPay).isClaimable)
         assertFalse(swap(status = BoltzSwapStatus.TransactionConfirmed, claimTxId = TXID).isClaimable)
         assertFalse(
             swap(swapType = BoltzSwapType.SUBMARINE, status = BoltzSwapStatus.TransactionConfirmed).isClaimable,
