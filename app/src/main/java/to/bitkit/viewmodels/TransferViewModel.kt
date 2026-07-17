@@ -433,9 +433,19 @@ class TransferViewModel @Inject constructor(
         viewModelScope.launch {
             _spendingUiState.update { it.copy(isLoading = true) }
 
-            val availableAmount = walletRepo.balanceState.value.maxSendOnchainSats
-
             awaitNodeRunning()
+
+            // Match iOS: size the order against spendable minus fast send-all mining fee so
+            // max transfer leaves room to fund the order on-chain.
+            val spendable = walletRepo.balanceState.value.maxSendOnchainSats
+            val miningFee = lightningRepo.estimateSendAllFee(
+                speed = TransactionSpeed.Fast,
+            ).getOrElse {
+                Logger.warn("Failed to estimate transfer mining fee reserve", it, context = TAG)
+                0uL
+            }
+            val availableAmount =
+                if (miningFee >= spendable) 0uL else spendable - miningFee
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
             if (initialLspFees == null) {

@@ -52,6 +52,7 @@ import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
 import to.bitkit.models.Toast
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
 import to.bitkit.models.safe
@@ -104,6 +105,9 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus)))
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(blocktankRepo.blocktankState).thenReturn(blocktankState)
+        // Default: no mining-fee reserve so existing limit tests keep their balances.
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(0uL))
 
         sut = TransferViewModel(
             context = context,
@@ -168,6 +172,33 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(0L, sut.spendingUiState.value.maxAllowedToSend)
+    }
+
+    @Test
+    fun `updateLimits reserves fast mining fee before sizing max transfer`() = test {
+        // multi_address_2-style tight balance: without this reserve, feeSat + miningFee > spendable.
+        val spendable = 100_000uL
+        val miningFee = 1_058uL
+        val availableAfterMining = spendable - miningFee
+        balanceState.value = BalanceState(maxSendOnchainSats = spendable)
+        blocktankState.value = BlocktankState(info = null)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(miningFee))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = spendable)))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(feeResponse))
+
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        val expectedMax = (availableAfterMining - LSP_FEE).toLong()
+        assertEquals(expectedMax, sut.spendingUiState.value.maxAllowedToSend)
+        verify(lightningRepo).estimateSendAllFee(
+            address = anyOrNull(),
+            speed = eq(TransactionSpeed.Fast),
+            feeRates = anyOrNull(),
+        )
+        verify(blocktankRepo).estimateOrderFee(eq(availableAfterMining), any(), any())
     }
 
     @Test
