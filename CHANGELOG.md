@@ -23,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update FX rates endpoint to no longer use old Blocktank service. #1072
 
 ### Fixed
+- Hardware wallet transfers to spending now use a faster on-chain fee rate so funding confirms more reliably. #1089
 - Connection Details now shows the short channel ID for Lightning connections instead of the long internal channel ID. #1002
 - The system notification permission dialog is now only requested when you tap Enable on the background payments prompt, instead of appearing automatically on every app open. #1004
 - Transfer to Spending now fills in the maximum transferable amount when you enter a value above the limit, instead of only showing an error. #1013
