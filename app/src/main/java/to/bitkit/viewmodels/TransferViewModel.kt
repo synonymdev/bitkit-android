@@ -892,10 +892,8 @@ class TransferViewModel @Inject constructor(
     private suspend fun hwFundingSatsPerVByte(): ULong =
         fetchHwFundingSatsPerVByte().getOrDefault(HW_FUNDING_FALLBACK_SATS_PER_VBYTE)
 
-    private suspend fun fetchHwFundingSatsPerVByte(): Result<ULong> {
-        val speed = settingsStore.data.first().defaultTransactionSpeed
-        return lightningRepo.getFeeRateForSpeed(speed)
-    }
+    private suspend fun fetchHwFundingSatsPerVByte(): Result<ULong> =
+        lightningRepo.getFeeRateForSpeed(TransactionSpeed.Fast)
 
     // endregion
 
@@ -1108,7 +1106,7 @@ class TransferViewModel @Inject constructor(
         private const val HW_FUNDING_TX_VBYTES = 1_200uL
 
         /** Minimum fallback fee rate when fee estimates are temporarily unavailable. */
-        private const val HW_FUNDING_FALLBACK_SATS_PER_VBYTE = 1uL
+        private const val HW_FUNDING_FALLBACK_SATS_PER_VBYTE = 3uL
 
         /** Upper bound for reconnecting a known device before the UI asks for reconnect. */
         private val HW_RECONNECT_TIMEOUT = 30.seconds
