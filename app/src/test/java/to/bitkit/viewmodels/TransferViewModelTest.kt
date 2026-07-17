@@ -27,6 +27,7 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.NodeStatus
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -298,6 +299,136 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(999uL, sut.spendingUiState.value.hwMiningFeeSats)
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm uses send-all when expected change is dust`() = test {
+        val order = previewBtOrder(feeSat = 99_000uL)
+        stubSpendableBalances(spendable = 100_000u)
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull())).thenReturn(Result.success(500uL))
+        stubSendOnChainSuccess()
+
+        sut.onTransferToSpendingConfirm(order)
+        advanceUntilIdle()
+
+        verify(lightningRepo).sendOnChain(
+            address = eq(order.payment?.onchain?.address.orEmpty()),
+            sats = eq(order.feeSat),
+            speed = eq(TransactionSpeed.Fast),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = eq(true),
+            channelId = anyOrNull(),
+            isMaxAmount = eq(true),
+            tags = any(),
+        )
+        verify(lightningRepo, never()).calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull())
+        verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm retries send-all when fixed send fails but drain still covers order`() =
+        test {
+            val order = previewBtOrder(feeSat = 98_000uL)
+            stubSpendableBalances(spendable = 100_000u)
+            whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull()))
+                .thenReturn(Result.success(1_000uL))
+            whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+                .thenReturn(Result.success(1_000uL))
+            whenever(
+                lightningRepo.sendOnChain(
+                    any(),
+                    any(),
+                    any(),
+                    anyOrNull(),
+                    anyOrNull(),
+                    any(),
+                    anyOrNull(),
+                    any(),
+                    any(),
+                ),
+            ).thenReturn(
+                Result.failure(AppError("Coin selection failed")),
+                Result.success(TXID),
+            )
+
+            sut.onTransferToSpendingConfirm(order)
+            advanceUntilIdle()
+
+            verify(lightningRepo).sendOnChain(
+                address = eq(order.payment?.onchain?.address.orEmpty()),
+                sats = eq(order.feeSat),
+                speed = eq(TransactionSpeed.Fast),
+                utxosToSpend = anyOrNull(),
+                feeRates = anyOrNull(),
+                isTransfer = eq(true),
+                channelId = anyOrNull(),
+                isMaxAmount = eq(false),
+                tags = any(),
+            )
+            verify(lightningRepo).sendOnChain(
+                address = eq(order.payment?.onchain?.address.orEmpty()),
+                sats = eq(order.feeSat),
+                speed = eq(TransactionSpeed.Fast),
+                utxosToSpend = anyOrNull(),
+                feeRates = anyOrNull(),
+                isTransfer = eq(true),
+                channelId = anyOrNull(),
+                isMaxAmount = eq(true),
+                tags = any(),
+            )
+            verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
+        }
+
+    @Test
+    fun `onTransferToSpendingConfirm does not drain when send-all would underpay the order`() = test {
+        // CI multi_address_2 numbers: drain fee leaves maxSendable < feeSat.
+        val order = previewBtOrder(feeSat = 99_457uL)
+        stubSpendableBalances(spendable = 100_000u)
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull()))
+            .thenReturn(Result.success(1_058uL))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever(
+            lightningRepo.sendOnChain(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+            ),
+        ).thenReturn(Result.failure(AppError("Coin selection failed")))
+
+        sut.onTransferToSpendingConfirm(order)
+        advanceUntilIdle()
+
+        verify(lightningRepo, times(1)).sendOnChain(
+            address = eq(order.payment?.onchain?.address.orEmpty()),
+            sats = eq(order.feeSat),
+            speed = eq(TransactionSpeed.Fast),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = eq(true),
+            channelId = anyOrNull(),
+            isMaxAmount = eq(false),
+            tags = any(),
+        )
+        verify(lightningRepo, never()).sendOnChain(
+            address = any(),
+            sats = any(),
+            speed = any(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = eq(true),
+            tags = any(),
+        )
+        verify(cacheStore, never()).addPaidOrder(any(), any())
     }
 
     @Test
@@ -1002,6 +1133,34 @@ class TransferViewModelTest : BaseUnitTest() {
         val options = mock<IBtInfoOptions>()
         whenever(options.maxClientBalanceSat).thenReturn(lspMaxClientBalance)
         return mock<IBtInfo>().also { whenever(it.options).thenReturn(options) }
+    }
+
+    private suspend fun stubSpendableBalances(spendable: ULong) {
+        val balances = BalanceDetails(
+            totalOnchainBalanceSats = spendable,
+            spendableOnchainBalanceSats = spendable,
+            totalAnchorChannelsReserveSats = 0u,
+            totalLightningBalanceSats = 0u,
+            lightningBalances = emptyList(),
+            pendingBalancesFromChannelClosures = emptyList(),
+        )
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
+    }
+
+    private suspend fun stubSendOnChainSuccess() {
+        whenever(
+            lightningRepo.sendOnChain(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+            ),
+        ).thenReturn(Result.success(TXID))
     }
 
     private companion object {

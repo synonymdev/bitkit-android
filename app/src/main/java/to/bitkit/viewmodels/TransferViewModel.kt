@@ -212,7 +212,8 @@ class TransferViewModel @Inject constructor(
     }
 
     /** Pays for the order and start watching it for state updates */
-    fun onTransferToSpendingConfirm(order: IBtOrder, speed: TransactionSpeed? = null) {
+    @Suppress("LongMethod")
+    fun onTransferToSpendingConfirm(order: IBtOrder, speed: TransactionSpeed = TransactionSpeed.Fast) {
         viewModelScope.launch {
             val address = order.payment?.onchain?.address.orEmpty()
 
@@ -230,26 +231,12 @@ class TransferViewModel @Inject constructor(
 
             val expectedChange =
                 spendableBalance.toLong() - order.feeSat.toLong() - sendAllFee.toLong()
+            // Match iOS: proactive drain only for dust change. Negative change means the drain
+            // output would underpay the order — never send-all in that case.
             val shouldUseSendAll =
                 expectedChange >= 0 && expectedChange < TRANSFER_SEND_ALL_THRESHOLD_SATS
-
-            val miningFee = if (shouldUseSendAll) {
-                sendAllFee
-            } else {
-                lightningRepo.calculateTotalFee(
-                    amountSats = order.feeSat,
-                    address = address,
-                    speed = speed,
-                ).getOrElse {
-                    Logger.warn("Failed to estimate transfer funding fee", it, context = TAG)
-                    0uL
-                }
-            }
-            val txTotalSats = if (shouldUseSendAll) {
-                spendableBalance
-            } else {
-                order.feeSat.safe() + miningFee.safe()
-            }
+            val maxSendable =
+                if (sendAllFee >= spendableBalance) 0uL else spendableBalance - sendAllFee
 
             Logger.debug(
                 "BT confirm: spendable=$spendableBalance, feeSat=${order.feeSat}, " +
@@ -257,26 +244,57 @@ class TransferViewModel @Inject constructor(
                 context = TAG,
             )
 
-            lightningRepo
+            suspend fun fund(isMaxAmount: Boolean, txTotalSats: ULong) = lightningRepo
                 .sendOnChain(
                     address = address,
                     sats = order.feeSat,
                     speed = speed,
                     isTransfer = true,
                     channelId = order.channel?.shortChannelId,
-                    isMaxAmount = shouldUseSendAll,
+                    isMaxAmount = isMaxAmount,
                 )
                 .onSuccess { txId ->
                     fundPaidOrder(
                         order = order,
                         txId = txId,
                         txTotalSats = txTotalSats,
-                        preTransferOnchainSats = balanceDetails?.totalOnchainBalanceSats ?: spendableBalance,
+                        preTransferOnchainSats = balanceDetails?.totalOnchainBalanceSats
+                            ?: spendableBalance,
                     )
                 }
-                .onFailure { error ->
+
+            if (shouldUseSendAll) {
+                fund(isMaxAmount = true, txTotalSats = spendableBalance)
+                    .onFailure { ToastEventBus.send(it) }
+                return@launch
+            }
+
+            val miningFee = lightningRepo.calculateTotalFee(
+                amountSats = order.feeSat,
+                address = address,
+                speed = speed,
+            ).getOrElse {
+                Logger.warn("Failed to estimate transfer funding fee", it, context = TAG)
+                0uL
+            }
+            fund(
+                isMaxAmount = false,
+                txTotalSats = order.feeSat.safe() + miningFee.safe(),
+            ).onFailure { error ->
+                // Match iOS: if fixed send fails (e.g. coin selection), drain only when the
+                // drain output still covers order.feeSat — never underpay by emptying the wallet.
+                if (maxSendable >= order.feeSat) {
+                    Logger.warn(
+                        "Normal transfer funding failed, retrying send-all",
+                        error,
+                        context = TAG,
+                    )
+                    fund(isMaxAmount = true, txTotalSats = spendableBalance)
+                        .onFailure { ToastEventBus.send(it) }
+                } else {
                     ToastEventBus.send(error)
                 }
+            }
         }
     }
 
