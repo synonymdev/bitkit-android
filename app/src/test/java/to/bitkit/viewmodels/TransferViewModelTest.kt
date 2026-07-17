@@ -124,7 +124,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
     @Test
     fun `updateLimits caps spending max at LSP max client balance when on-chain balance exceeds it`() = test {
-        balanceState.value = BalanceState(maxSendOnchainSats = ON_CHAIN_BALANCE)
+        stubSpendableBalances(ON_CHAIN_BALANCE)
         blocktankState.value = BlocktankState(info = btInfo(lspMaxClientBalance = LSP_MAX_CLIENT_BALANCE))
         // The LSP reports no room for receiving liquidity (maxLspBalanceSat = 0) because the
         // client balance saturates the channel — the regression this guards against.
@@ -146,7 +146,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
     @Test
     fun `updateLimits uses the full balance when LSP info is unavailable`() = test {
-        balanceState.value = BalanceState(maxSendOnchainSats = ON_CHAIN_BALANCE)
+        stubSpendableBalances(ON_CHAIN_BALANCE)
         blocktankState.value = BlocktankState(info = null)
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
@@ -162,7 +162,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
     @Test
     fun `updateLimits sets max to zero when LSP reports zero client balance`() = test {
-        balanceState.value = BalanceState(maxSendOnchainSats = ON_CHAIN_BALANCE)
+        stubSpendableBalances(ON_CHAIN_BALANCE)
         blocktankState.value = BlocktankState(info = btInfo(lspMaxClientBalance = LSP_MAX_CLIENT_BALANCE))
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = 0uL)))
@@ -180,7 +180,10 @@ class TransferViewModelTest : BaseUnitTest() {
         val spendable = 100_000uL
         val miningFee = 1_058uL
         val availableAfterMining = spendable - miningFee
-        balanceState.value = BalanceState(maxSendOnchainSats = spendable)
+        // maxSendOnchainSats is already fee-adjusted for send UI — limits must ignore it and
+        // reserve exactly one fast fee from raw spendable (not double-subtract).
+        balanceState.value = BalanceState(maxSendOnchainSats = spendable - miningFee)
+        stubSpendableBalances(spendable)
         blocktankState.value = BlocktankState(info = null)
         whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(miningFee))
@@ -198,6 +201,26 @@ class TransferViewModelTest : BaseUnitTest() {
             speed = eq(TransactionSpeed.Fast),
             feeRates = anyOrNull(),
         )
+        verify(blocktankRepo).estimateOrderFee(eq(availableAfterMining), any(), any())
+    }
+
+    @Test
+    fun `updateLimits uses percent fallback when fast mining fee estimate fails`() = test {
+        val spendable = 100_000uL
+        val fallbackMiningFee = (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
+        val availableAfterMining = spendable - fallbackMiningFee
+        stubSpendableBalances(spendable)
+        blocktankState.value = BlocktankState(info = null)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.failure(AppError("fee unavailable")))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = spendable)))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(feeResponse))
+
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        assertEquals((availableAfterMining - LSP_FEE).toLong(), sut.spendingUiState.value.maxAllowedToSend)
         verify(blocktankRepo).estimateOrderFee(eq(availableAfterMining), any(), any())
     }
 
