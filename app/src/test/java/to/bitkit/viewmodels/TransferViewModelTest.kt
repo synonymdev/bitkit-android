@@ -55,6 +55,7 @@ import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWallet
 import to.bitkit.models.Toast
+import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
 import to.bitkit.models.safe
@@ -399,6 +400,7 @@ class TransferViewModelTest : BaseUnitTest() {
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
 
+        verify(lightningRepo).getFeeRateForSpeed(eq(TransactionSpeed.Fast), anyOrNull())
         verify(hwWalletRepo).composeFundingTransaction(
             eq(DEVICE_ID),
             eq(order.payment?.onchain?.address.orEmpty()),
@@ -1200,7 +1202,7 @@ class TransferViewModelTest : BaseUnitTest() {
         const val XPUB = "zpub-test"
         const val TXID = "tx-abc"
         const val FEE_RATE = 2uL
-        const val FALLBACK_FEE_RATE = 1uL
+        const val FALLBACK_FEE_RATE = 3uL
         const val MINING_FEE = 1_250uL
         const val SPENDABLE_LN = 150_000uL
         const val REQUESTED_SAT = 200_000uL

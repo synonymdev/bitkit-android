@@ -1,6 +1,9 @@
 package to.bitkit.ext
 
 import android.icu.text.MessageFormat
+import to.bitkit.utils.Logger
+
+private const val TAG = "StringExt"
 
 fun String.ellipsisMiddle(totalLength: Int): String {
     return when {
@@ -31,7 +34,9 @@ fun String.toLongOrDefault(defaultValue: Long = 0): Long = toLongOrNull() ?: def
  *
  * @param argMap A map of arguments to be formatted into the string for pluralization.
  */
-fun String.formatPlural(argMap: Map<Any, Any>): String {
-    val messageFormat = MessageFormat(this)
-    return messageFormat.format(argMap)
-}
+fun String.formatPlural(argMap: Map<Any, Any>): String =
+    runCatching { MessageFormat(this).format(argMap) }
+        .getOrElse {
+            Logger.warn("Failed to format plural pattern '$this'", it, context = TAG)
+            this
+        }
