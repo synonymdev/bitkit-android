@@ -94,7 +94,7 @@ internal object PaykitReceiverPaths {
     const val SERVER = "bitkit/server"
 
     /** Current Bitkit flows only route its own receivers; cross-wallet routing can broaden this allowlist. */
-    val supported = listOf(WALLET, SERVER)
+    val supported = setOf(WALLET, SERVER)
 }
 
 @Singleton

@@ -34,6 +34,20 @@ sealed class PrivatePaykitAddressReservationError(message: String) : AppError(me
     )
 }
 
+internal data class ContactAssignmentKey(
+    val publicKey: String,
+    val receiverPath: String,
+) {
+    fun encoded(): String =
+        if (receiverPath == PaykitReceiverPaths.WALLET) publicKey else "$publicKey$SEPARATOR$receiverPath"
+
+    companion object {
+        private const val SEPARATOR = '#'
+
+        fun publicKeyOf(encoded: String): String = encoded.substringBefore(SEPARATOR)
+    }
+}
+
 @Singleton
 @Suppress("TooManyFunctions")
 class PrivatePaykitAddressReservationRepo @Inject constructor(
@@ -378,12 +392,10 @@ class PrivatePaykitAddressReservationRepo @Inject constructor(
     private fun normalizedPublicKeyOrNull(publicKey: String): String? =
         PubkyPublicKeyFormat.normalized(publicKey)
 
-    private fun contactAssignmentKey(publicKey: String, receiverPath: String): String {
-        val normalizedKey = normalizedPublicKey(publicKey)
-        return if (receiverPath == PaykitReceiverPaths.WALLET) normalizedKey else "$normalizedKey#$receiverPath"
-    }
+    private fun contactAssignmentKey(publicKey: String, receiverPath: String): String =
+        ContactAssignmentKey(normalizedPublicKey(publicKey), receiverPath).encoded()
 
-    private fun String.publicKeyFromAssignmentKey(): String = substringBefore("#")
+    private fun String.publicKeyFromAssignmentKey(): String = ContactAssignmentKey.publicKeyOf(this)
 
     private fun redacted(publicKey: String): String =
         PubkyPublicKeyFormat.redacted(publicKey)

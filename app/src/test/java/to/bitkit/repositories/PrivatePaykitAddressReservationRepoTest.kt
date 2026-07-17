@@ -17,6 +17,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
+import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -57,6 +58,22 @@ class PrivatePaykitAddressReservationRepoTest : BaseUnitTest() {
             coreService = coreService,
             lightningRepo = lightningRepo,
         )
+    }
+
+    @Test
+    fun `wallet assignment key keeps bare public key`() {
+        val key = ContactAssignmentKey(CONTACT_KEY, PaykitReceiverPaths.WALLET)
+
+        assertEquals(CONTACT_KEY, key.encoded())
+        assertEquals(CONTACT_KEY, ContactAssignmentKey.publicKeyOf(key.encoded()))
+    }
+
+    @Test
+    fun `server assignment key includes receiver path`() {
+        val key = ContactAssignmentKey(CONTACT_KEY, PaykitReceiverPaths.SERVER)
+
+        assertEquals("$CONTACT_KEY#${PaykitReceiverPaths.SERVER}", key.encoded())
+        assertEquals(CONTACT_KEY, ContactAssignmentKey.publicKeyOf(key.encoded()))
     }
 
     @Test
