@@ -35,8 +35,8 @@ internal open class App : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        installUncaughtExceptionLogger()
         Env.initAppStoragePath(filesDir.absolutePath)
+        installUncaughtExceptionLogger()
         SingletonImageLoader.setSafe { imageLoader }
         currentActivity = CurrentActivity().also { registerActivityLifecycleCallbacks(it) }
         appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.APP_START)
