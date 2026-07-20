@@ -5,6 +5,8 @@ import com.synonym.paykit.EndpointManagementScope
 import com.synonym.paykit.PublicContactSharingPolicy
 import org.junit.Test
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.ext.fromHex
+import to.bitkit.ext.toHex
 import to.bitkit.utils.AppError
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -19,17 +21,37 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `receiver noise key is generated persisted and reused`() {
+    fun `receiver noise derivation matches versioned cross platform vector`() {
+        val seed = (
+            "c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e534955" +
+                "31f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04"
+            ).fromHex()
+
+        val key = PaykitReceiverNoiseKeyDerivation.derive(
+            seed = seed,
+            network = "bitcoin",
+            receiverPath = "bitkit/wallet",
+        )
+
+        assertEquals("500f4799bbb2d02103e3b74b365ddb478a3187333c053fa9eb62f4052ba6a327", key.toHex())
+    }
+
+    @Test
+    fun `receiver noise key is derived persisted and reused`() {
         var persistedBytes: ByteArray? = null
+        val derivedBytes = ByteArray(32) { 7 }
         val store = keyStore(
             loadBytes = { persistedBytes },
             upsertBytes = { persistedBytes = it.copyOf() },
+            deriveBytes = { derivedBytes },
         )
 
-        val first = store.loadOrCreateBytes { ByteArray(32) { 7 } }
-        val second = store.loadOrCreateBytes { error("Existing key must be reused") }
-        val restored = keyStore(loadBytes = { persistedBytes })
-            .loadOrCreateBytes { error("Persisted key must be reused") }
+        val first = store.loadOrDeriveBytes()
+        val second = store.loadOrDeriveBytes()
+        val restored = keyStore(
+            loadBytes = { persistedBytes },
+            deriveBytes = { derivedBytes },
+        ).loadOrDeriveBytes()
 
         assertEquals(32, first.size)
         assertContentEquals(first, persistedBytes)
@@ -41,7 +63,10 @@ class PaykitSdkServiceTest {
     @Test
     fun `receiver noise key cannot be replaced`() {
         val persistedBytes = ByteArray(32) { 1 }
-        val store = keyStore(loadBytes = { persistedBytes })
+        val store = keyStore(
+            loadBytes = { persistedBytes },
+            deriveBytes = { ByteArray(32) { 1 } },
+        )
 
         assertFailsWith<AppError> {
             store.persistBytes(ByteArray(32) { 2 })
@@ -51,13 +76,27 @@ class PaykitSdkServiceTest {
 
     @Test
     fun `invalid persisted receiver noise key fails closed`() {
-        val store = keyStore(loadBytes = { ByteArray(31) })
+        val store = keyStore(
+            loadBytes = { ByteArray(31) },
+            deriveBytes = { ByteArray(32) },
+        )
 
-        assertFailsWith<AppError> { store.loadOrCreateBytes { ByteArray(32) } }
+        assertFailsWith<AppError> { store.loadOrDeriveBytes() }
+    }
+
+    @Test
+    fun `cached receiver noise key from another wallet seed fails closed`() {
+        val store = keyStore(
+            loadBytes = { ByteArray(32) { 1 } },
+            deriveBytes = { ByteArray(32) { 2 } },
+        )
+
+        assertFailsWith<AppError> { store.loadOrDeriveBytes() }
     }
 
     private fun keyStore(
         loadBytes: () -> ByteArray?,
         upsertBytes: (ByteArray) -> Unit = {},
-    ) = PaykitReceiverNoiseKeyStore(loadBytes, upsertBytes)
+        deriveBytes: () -> ByteArray,
+    ) = PaykitReceiverNoiseKeyStore(loadBytes, upsertBytes, deriveBytes)
 }
