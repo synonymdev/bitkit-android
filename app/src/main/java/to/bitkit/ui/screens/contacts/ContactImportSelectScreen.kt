@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -31,13 +32,13 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
-import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.TagButton
+import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -101,7 +102,7 @@ private fun Content(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 32.dp)
+                .padding(horizontal = 16.dp)
         ) {
             VerticalSpacer(24.dp)
 
@@ -125,10 +126,16 @@ private fun Content(
                     .fillMaxWidth()
             ) {
                 items(uiState.contacts, key = { it.profile.publicKey }) { contact ->
-                    SelectableContactRow(
-                        contact = contact,
-                        onToggle = { onToggleContact(contact.profile.publicKey) },
-                    )
+                    Column {
+                        HorizontalDivider(color = Colors.White10)
+                        SelectableContactRow(
+                            contact = contact,
+                            onToggle = { onToggleContact(contact.profile.publicKey) },
+                        )
+                    }
+                }
+                if (uiState.contacts.isNotEmpty()) {
+                    item { HorizontalDivider(color = Colors.White10) }
                 }
             }
 
@@ -163,7 +170,7 @@ private fun SelectableContactRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickableAlpha(onClick = onToggle)
-            .padding(vertical = 12.dp)
+            .padding(vertical = 24.dp)
     ) {
         ContactAvatar(profile = contact.profile)
 
@@ -173,7 +180,7 @@ private fun SelectableContactRow(
             verticalArrangement = Arrangement.spacedBy(2.dp),
             modifier = Modifier.weight(1f)
         ) {
-            BodyS(
+            Text13Up(
                 text = contact.profile.truncatedPublicKey,
                 color = Colors.White64,
                 maxLines = 1,
@@ -236,14 +243,14 @@ private fun FooterBar(
 
         HorizontalSpacer(16.dp)
 
-        val allSelected = selectedCount == totalCount
         TagButton(
-            text = if (allSelected) {
-                stringResource(R.string.contacts__import_select_none)
-            } else {
-                stringResource(R.string.contacts__import_select_all)
-            },
-            onClick = if (allSelected) onSelectNone else onSelectAll,
+            text = stringResource(R.string.contacts__import_select_all),
+            onClick = onSelectAll.takeIf { selectedCount < totalCount },
+        )
+        HorizontalSpacer(8.dp)
+        TagButton(
+            text = stringResource(R.string.contacts__import_select_none),
+            onClick = onSelectNone.takeIf { selectedCount > 0 },
         )
     }
 }

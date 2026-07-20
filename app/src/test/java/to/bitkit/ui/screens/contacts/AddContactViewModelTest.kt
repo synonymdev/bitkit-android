@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.contacts
 
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
+import app.cash.turbine.test
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
@@ -78,6 +79,23 @@ class AddContactViewModelTest : BaseUnitTest() {
 
         assertEquals(profile, sut.uiState.value.fetchedProfile)
         assertNull(sut.uiState.value.error)
+    }
+
+    @Test
+    fun `saving emits saved contact key`() = test {
+        val profile = PubkyProfile.placeholder(TEST_PUBLIC_KEY)
+        whenever(pubkyRepo.fetchContactProfile(TEST_PUBLIC_KEY)).thenReturn(Result.success(profile))
+        whenever(publicPaykitRepo.hasPayablePublicEndpoint(TEST_PUBLIC_KEY)).thenReturn(Result.success(false))
+        whenever { pubkyRepo.addContact(TEST_PUBLIC_KEY, profile) }.thenReturn(Result.success(Unit))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.effects.test {
+            sut.saveContact()
+            advanceUntilIdle()
+
+            assertEquals(AddContactEffect.ContactSaved(TEST_PUBLIC_KEY), awaitItem())
+        }
     }
 
     private fun createSut(publicKey: String = TEST_PUBLIC_KEY): AddContactViewModel {

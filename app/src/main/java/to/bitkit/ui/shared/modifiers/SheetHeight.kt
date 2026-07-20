@@ -46,6 +46,7 @@ fun Modifier.sheetHeight(
             maxOf(preferred, min)
         }
 
+        SheetSize.COMPACT -> 460.dp + Insets.Bottom
         SheetSize.SMALL -> 400.dp + Insets.Bottom
     }
 

@@ -35,7 +35,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.BodyS
+import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.PrimaryButton
@@ -43,6 +43,7 @@ import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppTextStyles
@@ -108,6 +109,7 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(navTitleRes),
             onBackClick = onBackClick,
+            actions = { DrawerNavIcon() },
         )
 
         if (uiState.isLoading) {
@@ -128,7 +130,7 @@ private fun Content(
                     modifier = Modifier.testTag("CreateProfileAvatar"),
                 )
 
-                VerticalSpacer(24.dp)
+                VerticalSpacer(32.dp)
 
                 TextInput(
                     value = uiState.name,
@@ -151,7 +153,7 @@ private fun Content(
                     color = Colors.White64,
                 )
                 VerticalSpacer(8.dp)
-                BodyS(
+                BodyMSB(
                     text = uiState.derivedPublicKey ?: "...",
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth(),
@@ -182,7 +184,7 @@ private fun AvatarPickerButton(
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
-            .size(100.dp)
+            .size(96.dp)
             .clip(CircleShape)
             .background(Colors.Gray5)
             .clickable(onClick = onClick),

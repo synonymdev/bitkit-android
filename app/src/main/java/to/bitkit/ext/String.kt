@@ -15,6 +15,11 @@ fun String.ellipsisMiddle(totalLength: Int): String {
     }
 }
 
+fun String.pubkyDisplayPublicKey(): String {
+    val rawKey = removePrefix("pubky")
+    return if (rawKey.length > 8) "${rawKey.take(4)}...${rawKey.takeLast(4)}" else rawKey
+}
+
 fun String.truncate(length: Int): String {
     return if (this.length > length) {
         "${this.substring(0, length - 3)}..."
