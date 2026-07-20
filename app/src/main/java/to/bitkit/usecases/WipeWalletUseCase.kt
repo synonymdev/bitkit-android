@@ -6,9 +6,11 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
@@ -36,6 +38,7 @@ class WipeWalletUseCase @Inject constructor(
     private val hwWalletRepo: HwWalletRepo,
     private val lightningRepo: LightningRepo,
     private val pubkyRepo: PubkyRepo,
+    private val contactPaymentSettingsRepo: Provider<ContactPaymentSettingsRepo>,
     private val privatePaykitRepo: Provider<PrivatePaykitRepo>,
     private val privatePaykitAddressReservationRepo: PrivatePaykitAddressReservationRepo,
     private val firebaseMessaging: FirebaseMessaging,
@@ -46,14 +49,14 @@ class WipeWalletUseCase @Inject constructor(
         resetWalletState: () -> Unit,
         onSuccess: () -> Unit,
     ): Result<Unit> {
-        return runCatching {
+        return runSuspendCatching {
             backupRepo.setWiping(true)
             backupRepo.reset()
 
-            privatePaykitRepo.get().removePublishedEndpointsForCleanup(TAG)
+            contactPaymentSettingsRepo.get().setEnabled(false).getOrThrow()
             pubkyRepo.removeBitkitPaymentEndpoints()
                 .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
-            privatePaykitRepo.get().closeAndClear()
+            privatePaykitRepo.get().closeAndClear().getOrThrow()
             privatePaykitAddressReservationRepo.clear()
             pubkyRepo.wipeLocalState()
             keychain.wipe()

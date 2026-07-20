@@ -1196,6 +1196,8 @@ class PubkyRepo @Inject constructor(
             it.copy(
                 hasConfirmedPublicPaykitEndpoints = false,
                 sharesPublicPaykitEndpoints = false,
+                sharesPrivatePaykitEndpoints = false,
+                pendingContactPaymentsEnabled = if (publicPaykitCleanupPending) false else null,
                 publicPaykitBolt11 = "",
                 publicPaykitBolt11PaymentHash = "",
                 publicPaykitBolt11ExpiresAtMillis = 0,

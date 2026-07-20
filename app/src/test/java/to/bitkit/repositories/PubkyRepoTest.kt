@@ -511,6 +511,8 @@ class PubkyRepoTest : BaseUnitTest() {
         settingsFlow.value = SettingsData(
             hasConfirmedPublicPaykitEndpoints = true,
             sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+            pendingContactPaymentsEnabled = true,
             publicPaykitBolt11 = "lnbc1old",
             publicPaykitBolt11PaymentHash = "010203",
             publicPaykitBolt11ExpiresAtMillis = 123L,
@@ -521,6 +523,8 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertFalse(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
         assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertNull(settingsFlow.value.pendingContactPaymentsEnabled)
         assertEquals("", settingsFlow.value.publicPaykitBolt11)
         assertEquals("", settingsFlow.value.publicPaykitBolt11PaymentHash)
         assertEquals(0, settingsFlow.value.publicPaykitBolt11ExpiresAtMillis)
@@ -542,6 +546,8 @@ class PubkyRepoTest : BaseUnitTest() {
         settingsFlow.value = SettingsData(
             hasConfirmedPublicPaykitEndpoints = true,
             sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+            pendingContactPaymentsEnabled = true,
             publicPaykitBolt11 = "lnbc1old",
             publicPaykitBolt11PaymentHash = "010203",
             publicPaykitBolt11ExpiresAtMillis = 123L,
@@ -556,6 +562,8 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(settingsFlow.value.publicPaykitCleanupPending)
         assertFalse(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
         assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertEquals(false, settingsFlow.value.pendingContactPaymentsEnabled)
         assertEquals("", settingsFlow.value.publicPaykitBolt11)
         assertEquals("", settingsFlow.value.publicPaykitBolt11PaymentHash)
         assertEquals(0, settingsFlow.value.publicPaykitBolt11ExpiresAtMillis)

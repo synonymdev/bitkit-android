@@ -1,11 +1,15 @@
 package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.withContext
-import to.bitkit.data.SettingsData
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.areContactPaymentsEnabled
 import to.bitkit.di.IoDispatcher
@@ -21,173 +25,126 @@ class ContactPaymentSettingsRepo @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
+    private val transitionScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val transitionMutex = Mutex()
+
     val isEnabled: Flow<Boolean> = settingsStore.data.map { it.areContactPaymentsEnabled() }
 
-    suspend fun setEnabled(isEnabled: Boolean): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun setEnabled(isEnabled: Boolean): Result<Unit> = runTransition {
+        if (!isEnabled && !hasDisableWork()) return@runTransition
+        val expectedPublicKey = if (isEnabled) {
+            pubkyRepo.publicKey.value
+                ?: pubkyRepo.currentPublicKey().getOrThrow()
+                ?: throw PublicPaykitError.SessionNotActive
+        } else {
+            null
+        }
+        settingsStore.update { it.copy(pendingContactPaymentsEnabled = isEnabled) }
         val contacts = pubkyRepo.contacts.value.map { it.publicKey }
-        if (isEnabled) enable(contacts) else disable(contacts)
+        if (isEnabled) {
+            enable(contacts, checkNotNull(expectedPublicKey))
+        } else {
+            completeDisable(contacts)
+        }
     }
 
-    private suspend fun enable(contacts: List<String>): Result<Unit> {
-        val previous = settingsStore.data.first()
-        publicPaykitRepo.syncPublishedEndpoints(publish = true)
-            .onFailure {
-                rollbackEnabled(previous, contacts, it)
-                return Result.failure(it)
-            }
+    private suspend fun hasDisableWork(): Boolean {
+        val settings = settingsStore.data.first()
+        return settings.pendingContactPaymentsEnabled != null ||
+            settings.sharesPublicPaykitEndpoints ||
+            settings.sharesPrivatePaykitEndpoints ||
+            settings.publicPaykitCleanupPending ||
+            settings.publicPaykitBolt11.isNotBlank() ||
+            settings.publicPaykitBolt11PaymentHash.isNotBlank() ||
+            settings.publicPaykitBolt11ExpiresAtMillis > 0L ||
+            privatePaykitRepo.hasPendingEndpointCleanup()
+    }
 
+    suspend fun recoverPendingTransition(): Result<Unit> = runTransition {
+        settingsStore.data.first().pendingContactPaymentsEnabled ?: return@runTransition
+        val contacts = pubkyRepo.contacts.value.map { it.publicKey }
+        completeDisable(contacts)
+    }
+
+    private suspend fun enable(contacts: List<String>, expectedPublicKey: String) {
+        runSuspendCatching {
+            completeEnable(contacts, expectedPublicKey)
+        }.onFailure { error ->
+            runSuspendCatching {
+                settingsStore.update { it.copy(pendingContactPaymentsEnabled = false) }
+            }.onFailure(error::addSuppressed)
+            runSuspendCatching { completeDisable(contacts) }
+                .onFailure(error::addSuppressed)
+            throw error
+        }
+    }
+
+    private suspend fun completeEnable(contacts: List<String>, expectedPublicKey: String) {
+        requireActiveProfile(expectedPublicKey)
+        publicPaykitRepo.syncPublishedEndpoints(publish = true).getOrThrow()
+        requireActiveProfile(expectedPublicKey)
         val canUsePrivateContactPayments = pubkyRepo.hasSecretKey()
         if (canUsePrivateContactPayments) {
-            privatePaykitRepo.setContactSharingCleanupPending(false)
-                .onFailure {
-                    rollbackEnabled(previous, contacts, it)
-                    return Result.failure(it)
-                }
+            privatePaykitRepo.setContactSharingCleanupPending(false).getOrThrow()
         }
-
-        runSuspendCatching {
-            settingsStore.update {
-                it.copy(
-                    hasConfirmedPublicPaykitEndpoints = true,
-                    sharesPublicPaykitEndpoints = true,
-                    sharesPrivatePaykitEndpoints = canUsePrivateContactPayments,
-                    publicPaykitLightningEnabled = true,
-                    publicPaykitOnchainEnabled = true,
-                )
-            }
-        }.onFailure {
-            rollbackEnabled(previous, contacts, it)
-            return Result.failure(it)
+        settingsStore.update {
+            it.copy(
+                hasConfirmedPublicPaykitEndpoints = true,
+                sharesPublicPaykitEndpoints = true,
+                sharesPrivatePaykitEndpoints = canUsePrivateContactPayments,
+                publicPaykitLightningEnabled = true,
+                publicPaykitOnchainEnabled = true,
+            )
         }
-
         if (canUsePrivateContactPayments) {
-            privatePaykitRepo.prepareSavedContacts(contacts)
-                .onFailure {
-                    rollbackEnabled(previous, contacts, it)
-                    return Result.failure(it)
-                }
+            privatePaykitRepo.prepareSavedContacts(
+                publicKeys = contacts,
+                requireImmediatePublication = true,
+            ).getOrThrow()
         }
-
-        return Result.success(Unit)
+        requireActiveProfile(expectedPublicKey)
+        settingsStore.update { it.copy(pendingContactPaymentsEnabled = null) }
     }
 
-    private suspend fun rollbackEnabled(
-        previous: SettingsData,
-        contacts: List<String>,
-        error: Throwable,
-    ) {
-        runSuspendCatching {
-            settingsStore.update {
-                it.copy(
-                    hasConfirmedPublicPaykitEndpoints = previous.hasConfirmedPublicPaykitEndpoints,
-                    sharesPublicPaykitEndpoints = previous.sharesPublicPaykitEndpoints,
-                    sharesPrivatePaykitEndpoints = previous.sharesPrivatePaykitEndpoints,
-                )
-            }
-        }.onFailure(error::addSuppressed)
-        publicPaykitRepo.syncPublishedEndpoints(publish = previous.sharesPublicPaykitEndpoints)
-            .onFailure {
-                error.addSuppressed(it)
-                markPublicPaykitRetry(error)
-            }
-        if (!previous.sharesPrivatePaykitEndpoints) {
-            privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
-                .onFailure(error::addSuppressed)
-        }
+    private suspend fun requireActiveProfile(expectedPublicKey: String) {
+        val currentPublicKey = pubkyRepo.publicKey.value
+            ?: pubkyRepo.currentPublicKey().getOrThrow()
+        if (currentPublicKey != expectedPublicKey) throw PublicPaykitError.SessionNotActive
     }
 
-    private suspend fun disable(contacts: List<String>): Result<Unit> {
-        val previous = settingsStore.data.first()
+    private suspend fun completeDisable(contacts: List<String>) {
+        val errors = mutableListOf<Throwable>()
+        privatePaykitRepo.setContactSharingCleanupPending(true).onFailure(errors::add)
         runSuspendCatching {
             settingsStore.update {
                 it.copy(
                     hasConfirmedPublicPaykitEndpoints = true,
                     sharesPublicPaykitEndpoints = false,
                     sharesPrivatePaykitEndpoints = false,
+                    pendingContactPaymentsEnabled = false,
+                    publicPaykitCleanupPending = true,
                     publicPaykitLightningEnabled = true,
                     publicPaykitOnchainEnabled = true,
                 )
             }
-        }.onFailure {
-            return Result.failure(it)
+        }.onFailure(errors::add)
+
+        publicPaykitRepo.syncPublishedEndpoints(publish = false).onFailure(errors::add)
+        privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts).onFailure(errors::add)
+
+        errors.firstOrNull()?.let { error ->
+            privatePaykitRepo.setContactSharingCleanupPending(true).onFailure(errors::add)
+            errors.drop(1).forEach(error::addSuppressed)
+            throw error
         }
 
-        var publicCleanupError: Throwable? = null
-        var privateCleanupError: Throwable? = null
-        publicPaykitRepo.syncPublishedEndpoints(publish = false)
-            .onFailure { publicCleanupError = it }
+        settingsStore.update { it.copy(pendingContactPaymentsEnabled = null) }
+    }
 
-        privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
-            .onFailure { privateCleanupError = it }
-
-        publicCleanupError?.let { error ->
-            runSuspendCatching {
-                settingsStore.update { settings ->
-                    settings.copy(sharesPublicPaykitEndpoints = previous.sharesPublicPaykitEndpoints)
-                }
-            }.onFailure(error::addSuppressed)
-            publicPaykitRepo.syncPublishedEndpoints(publish = previous.sharesPublicPaykitEndpoints)
-                .onFailure {
-                    error.addSuppressed(it)
-                    markPublicPaykitRetry(error)
-                }
-        }
-        privateCleanupError?.let { error ->
-            if (previous.sharesPrivatePaykitEndpoints) {
-                restorePrivate(contacts, error)
-            } else {
-                updatePrivatePreference(isEnabled = false, error = error)
+    private suspend fun runTransition(block: suspend () -> Unit): Result<Unit> =
+        transitionScope.async(start = CoroutineStart.UNDISPATCHED) {
+            transitionMutex.withLock {
+                runSuspendCatching { block() }
             }
-        }
-
-        val cleanupError = publicCleanupError ?: privateCleanupError
-        publicCleanupError?.let { publicError ->
-            privateCleanupError?.let { publicError.addSuppressed(it) }
-        }
-        cleanupError?.let { return Result.failure(it) }
-
-        privatePaykitRepo.setContactSharingCleanupPending(false)
-            .onFailure { return Result.failure(it) }
-
-        return Result.success(Unit)
-    }
-
-    private suspend fun restorePrivate(
-        contacts: List<String>,
-        error: Throwable,
-    ) {
-        if (!updatePrivatePreference(isEnabled = true, error = error)) return
-
-        privatePaykitRepo.prepareSavedContacts(
-            publicKeys = contacts,
-            requireImmediatePublication = true,
-        ).exceptionOrNull()?.let {
-            error.addSuppressed(it)
-            updatePrivatePreference(isEnabled = false, error = error)
-            return
-        }
-
-        privatePaykitRepo.setContactSharingCleanupPending(false).exceptionOrNull()?.let {
-            error.addSuppressed(it)
-            updatePrivatePreference(isEnabled = false, error = error)
-        }
-    }
-
-    private suspend fun markPublicPaykitRetry(error: Throwable) {
-        runSuspendCatching {
-            settingsStore.update {
-                it.copy(
-                    sharesPublicPaykitEndpoints = false,
-                    publicPaykitCleanupPending = true,
-                )
-            }
-        }.onFailure(error::addSuppressed)
-    }
-
-    private suspend fun updatePrivatePreference(
-        isEnabled: Boolean,
-        error: Throwable,
-    ): Boolean = runSuspendCatching {
-        settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = isEnabled) }
-    }.onFailure(error::addSuppressed).isSuccess
+        }.await()
 }

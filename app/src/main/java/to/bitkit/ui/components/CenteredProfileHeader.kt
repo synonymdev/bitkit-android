@@ -17,7 +17,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.ext.pubkyDisplayPublicKey
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -36,7 +36,7 @@ fun CenteredProfileHeader(
         modifier = modifier
     ) {
         Text13Up(
-            text = publicKey.pubkyDisplayPublicKey(),
+            text = PubkyPublicKeyFormat.display(publicKey),
             color = Colors.White64,
             textAlign = TextAlign.Center,
         )

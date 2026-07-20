@@ -21,16 +21,13 @@ import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.hasPaykitState
-import to.bitkit.data.hasPublicPaykitPublicationState
 import to.bitkit.data.paykitDisabled
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.repositories.ContactPaymentSettingsRepo
-import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitError
-import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -43,8 +40,6 @@ class SettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val pubkyRepo: PubkyRepo,
     private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
-    private val publicPaykitRepo: PublicPaykitRepo,
-    private val privatePaykitRepo: PrivatePaykitRepo,
     private val widgetsStore: WidgetsStore,
     private val widgetsRepo: WidgetsRepo,
 ) : ViewModel() {
@@ -211,15 +206,19 @@ class SettingsViewModel @Inject constructor(
 
         viewModelScope.launch {
             _isUpdatingContactPayments.update { true }
-            contactPaymentSettingsRepo.setEnabled(value)
-                .onFailure {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = contactPaymentSyncErrorMessage(it),
-                    )
-                }
-            _isUpdatingContactPayments.update { false }
+            try {
+                contactPaymentSettingsRepo.setEnabled(value)
+                    .onFailure {
+                        Logger.error("Failed to update contact payments", it, context = TAG)
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = contactPaymentSyncErrorMessage(it),
+                        )
+                    }
+            } finally {
+                _isUpdatingContactPayments.update { false }
+            }
         }
     }
 
@@ -239,35 +238,17 @@ class SettingsViewModel @Inject constructor(
 
     private suspend fun updatePaykitEnabled(value: Boolean) {
         val shouldEnable = value && PaykitFeatureFlags.isUiAvailable
-        val hadPublicPaykitState = settingsStore.data.first().hasPublicPaykitPublicationState()
         settingsStore.setIsPaykitEnabled(shouldEnable)
 
         if (!shouldEnable) {
-            settingsStore.update {
-                it.paykitDisabled(markPublicCleanupPending = it.hasPublicPaykitPublicationState())
-            }
-            removePaykitEndpoints(hadPublicPaykitState)
-        }
-    }
-
-    private suspend fun removePaykitEndpoints(hadPublicPaykitState: Boolean) {
-        val contacts = pubkyRepo.contacts.value.map { it.publicKey }
-
-        if (hadPublicPaykitState) {
-            publicPaykitRepo.syncPublishedEndpoints(publish = false)
+            contactPaymentSettingsRepo.setEnabled(false)
                 .onSuccess {
-                    settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                    settingsStore.update { it.paykitDisabled() }
                 }
                 .onFailure {
-                    settingsStore.update { it.copy(publicPaykitCleanupPending = true) }
-                    Logger.warn("Failed to remove public Paykit endpoints after disabling Paykit UI", it, context = TAG)
+                    Logger.warn("Failed to disable contact payments after disabling Paykit UI", it, context = TAG)
                 }
         }
-
-        privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
-            .onFailure {
-                Logger.warn("Failed to remove private Paykit endpoints after disabling Paykit UI", it, context = TAG)
-            }
     }
 
     val isPinEnabled = settingsStore.data.map { it.isPinEnabled }

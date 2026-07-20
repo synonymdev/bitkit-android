@@ -125,6 +125,7 @@ import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.HwWalletRepo
@@ -205,6 +206,7 @@ class AppViewModel @Inject constructor(
     private val coreService: CoreService,
     private val nodeServiceFgState: NodeServiceFgState,
     private val pubkyRepo: PubkyRepo,
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val samRockRepo: SamRockRepo,
@@ -551,6 +553,10 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun retryPendingPaykitEndpointRemoval(contactKeys: Collection<String>, reason: String) {
+        contactPaymentSettingsRepo.recoverPendingTransition()
+            .onFailure {
+                Logger.warn("Failed to recover contact payments transition for '$reason'", it, context = TAG)
+            }
         val settings = settingsStore.data.first()
         if (settings.publicPaykitCleanupPending) {
             if (settings.sharesPublicPaykitEndpoints) {

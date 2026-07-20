@@ -6,9 +6,11 @@ import to.bitkit.data.PrivatePaykitStoredInvoiceData
 import to.bitkit.data.PrivatePaykitStoredPaymentEntryData
 import to.bitkit.utils.AppError
 
-sealed class PrivatePaykitError(message: String) : AppError(message) {
+sealed class PrivatePaykitError(message: String, cause: Throwable? = null) : AppError(message, cause) {
     data object PrivateUnavailable : PrivatePaykitError("Private Paykit is not available")
     data object RouteHintsUnavailable : PrivatePaykitError("Reachable private Lightning endpoint is not available yet")
+    class EndpointCleanupFailed(cause: Throwable) :
+        PrivatePaykitError("Failed to remove private Paykit endpoints", cause)
 }
 
 internal data class PrivatePaykitState(
@@ -20,12 +22,14 @@ internal data class PrivatePaykitState(
 
     fun cacheState(
         cleanupPending: Boolean,
+        contactSharingPublicKeys: Set<String>,
         deletedContactCleanupPendingPublicKeys: Set<String>,
     ) = PrivatePaykitCacheData(
         contacts = contacts.mapNotNull { (publicKey, contactState) ->
             (publicKey to contactState.cacheState()).takeIf { contactState.hasCacheState }
         }.toMap(),
         cleanupPending = cleanupPending,
+        contactSharingPublicKeys = contactSharingPublicKeys,
         deletedContactCleanupPendingPublicKeys = deletedContactCleanupPendingPublicKeys,
     )
 }

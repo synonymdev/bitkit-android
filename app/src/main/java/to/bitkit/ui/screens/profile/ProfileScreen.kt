@@ -32,6 +32,7 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.ui.components.ActionButton
+import to.bitkit.ui.components.AddTagSheet
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CenteredProfileHeader
@@ -80,6 +81,10 @@ fun ProfileScreen(
         onDismissSignOutDialog = { viewModel.dismissSignOutDialog() },
         onConfirmSignOut = { viewModel.signOut() },
         onClickRetry = { viewModel.loadProfile() },
+        onClickAddTag = { viewModel.showAddTagSheet() },
+        onRemoveTag = { viewModel.removeTag(it) },
+        onDismissAddTagSheet = { viewModel.dismissAddTagSheet() },
+        onSaveTag = { viewModel.addTag(it) },
     )
 }
 
@@ -94,6 +99,10 @@ private fun Content(
     onDismissSignOutDialog: () -> Unit,
     onConfirmSignOut: () -> Unit,
     onClickRetry: () -> Unit,
+    onClickAddTag: () -> Unit,
+    onRemoveTag: (String) -> Unit,
+    onDismissAddTagSheet: () -> Unit,
+    onSaveTag: (String) -> Unit,
 ) {
     val currentProfile = uiState.profile
 
@@ -111,6 +120,8 @@ private fun Content(
                 onClickEdit = onClickEdit,
                 onClickCopy = onClickCopy,
                 onClickShare = onClickShare,
+                onClickAddTag = onClickAddTag,
+                onRemoveTag = onRemoveTag,
             )
             else -> EmptyState(onClickRetry = onClickRetry, onClickSignOut = onClickSignOut)
         }
@@ -125,6 +136,13 @@ private fun Content(
             onDismiss = onDismissSignOutDialog,
         )
     }
+
+    if (uiState.showAddTagSheet) {
+        AddTagSheet(
+            onDismiss = onDismissAddTagSheet,
+            onSave = onSaveTag,
+        )
+    }
 }
 
 @Composable
@@ -133,6 +151,8 @@ private fun ProfileBody(
     onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
     onClickShare: () -> Unit,
+    onClickAddTag: () -> Unit,
+    onRemoveTag: (String) -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -229,13 +249,14 @@ private fun ProfileBody(
             profile.tags.forEach { tag ->
                 TagButton(
                     text = tag,
-                    onClick = onClickEdit,
+                    onClick = { onRemoveTag(tag) },
+                    accessibilityLabel = stringResource(R.string.common__remove_tag, tag),
                     displayIconClose = true,
                 )
             }
             TagButton(
                 text = stringResource(R.string.profile__add_tag),
-                onClick = onClickEdit,
+                onClick = onClickAddTag,
                 icon = painterResource(R.drawable.ic_tag),
                 displayIconClose = true,
                 modifier = Modifier.testTag("ProfileAddTag")
@@ -309,6 +330,10 @@ private fun Preview() {
             onDismissSignOutDialog = {},
             onConfirmSignOut = {},
             onClickRetry = {},
+            onClickAddTag = {},
+            onRemoveTag = {},
+            onDismissAddTagSheet = {},
+            onSaveTag = {},
         )
     }
 }

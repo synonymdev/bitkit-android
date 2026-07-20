@@ -54,7 +54,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import to.bitkit.R
 import to.bitkit.ext.getClipboardText
-import to.bitkit.ext.pubkyDisplayPublicKey
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -302,7 +301,7 @@ private fun LoadingContent(publicKey: String) {
         VerticalSpacer(24.dp)
 
         Text13Up(
-            text = publicKey.pubkyDisplayPublicKey(),
+            text = PubkyPublicKeyFormat.display(publicKey),
             color = Colors.White64,
         )
 

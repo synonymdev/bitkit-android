@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.Toast
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.components.ProfileEditLink
@@ -32,6 +33,7 @@ class EditProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "EditProfileViewModel"
@@ -227,7 +229,16 @@ class EditProfileViewModel @Inject constructor(
     fun disconnectProfile() {
         viewModelScope.launch {
             _uiState.update { it.copy(showDeleteFailureDialog = false, isSaving = true) }
-            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
+            disableContactPayments().onFailure { error ->
+                Logger.error("Failed to disable contact payments during disconnect", error, context = TAG)
+                _uiState.update { it.copy(isSaving = false) }
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.profile__disconnect_error),
+                    description = error.message,
+                )
+                return@launch
+            }
             val result = pubkyRepo.signOut()
             privatePaykitRepo.closeAndClear()
             if (result.isSuccess) {
@@ -254,7 +265,16 @@ class EditProfileViewModel @Inject constructor(
                 isSaving = true,
             )
         }
-        privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
+        disableContactPayments().onFailure { error ->
+            Logger.error("Failed to disable contact payments during profile delete", error, context = TAG)
+            _uiState.update {
+                it.copy(
+                    isSaving = false,
+                    showDeleteFailureDialog = true,
+                )
+            }
+            return
+        }
         val result = pubkyRepo.deleteProfileWithSessionRetry()
         if (result.isSuccess) {
             privatePaykitRepo.closeAndClear()
@@ -275,6 +295,8 @@ class EditProfileViewModel @Inject constructor(
             }
         }
     }
+
+    private suspend fun disableContactPayments(): Result<Unit> = contactPaymentSettingsRepo.setEnabled(false)
 }
 
 @Stable

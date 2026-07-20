@@ -11,10 +11,12 @@ import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
@@ -32,6 +34,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val privatePaykitRepo: PrivatePaykitRepo = mock()
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo = mock()
 
     @Test
     fun `updateLinkUrl should update existing profile link`() = test {
@@ -57,8 +60,8 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        inOrder(privatePaykitRepo, pubkyRepo).apply {
-            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+        inOrder(contactPaymentSettingsRepo, pubkyRepo, privatePaykitRepo).apply {
+            verify(contactPaymentSettingsRepo).setEnabled(false)
             verify(pubkyRepo).deleteProfileWithSessionRetry()
             verify(privatePaykitRepo).closeAndClear()
         }
@@ -78,8 +81,8 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        inOrder(privatePaykitRepo, pubkyRepo).apply {
-            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+        inOrder(contactPaymentSettingsRepo, pubkyRepo, privatePaykitRepo).apply {
+            verify(contactPaymentSettingsRepo).setEnabled(false)
             verify(pubkyRepo).deleteProfileWithSessionRetry()
             verify(privatePaykitRepo).closeAndClear()
         }
@@ -112,7 +115,7 @@ class EditProfileViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
         sut.deleteProfile()
         advanceUntilIdle()
-        clearInvocations(privatePaykitRepo)
+        clearInvocations(contactPaymentSettingsRepo, privatePaykitRepo)
 
         sut.effects.test {
             sut.disconnectProfile()
@@ -121,17 +124,17 @@ class EditProfileViewModelTest : BaseUnitTest() {
             assertEquals(EditProfileEffect.DisconnectSuccess, awaitItem())
         }
         assertFalse(sut.uiState.value.showDeleteFailureDialog)
-        inOrder(privatePaykitRepo, pubkyRepo).apply {
-            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+        inOrder(contactPaymentSettingsRepo, pubkyRepo, privatePaykitRepo).apply {
+            verify(contactPaymentSettingsRepo).setEnabled(false)
             verify(pubkyRepo).signOut()
             verify(privatePaykitRepo).closeAndClear()
         }
     }
 
     @Test
-    fun `disconnectProfile continues when private cleanup fails`() = test {
+    fun `disconnectProfile preserves the profile when contact payment cleanup fails`() = test {
         val sut = createSut()
-        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
+        whenever(contactPaymentSettingsRepo.setEnabled(false))
             .thenReturn(Result.failure(TestAppError("cleanup failed")))
         whenever(pubkyRepo.signOut()).thenReturn(Result.success(Unit))
         advanceUntilIdle()
@@ -140,11 +143,11 @@ class EditProfileViewModelTest : BaseUnitTest() {
             sut.disconnectProfile()
             advanceUntilIdle()
 
-            assertEquals(EditProfileEffect.DisconnectSuccess, awaitItem())
+            expectNoEvents()
         }
         assertFalse(sut.uiState.value.isSaving)
-        verify(pubkyRepo).signOut()
-        verify(privatePaykitRepo).closeAndClear()
+        verify(pubkyRepo, never()).signOut()
+        verify(privatePaykitRepo, never()).closeAndClear()
     }
 
     @Test
@@ -161,9 +164,9 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `deleteProfile should continue when private cleanup fails`() = test {
+    fun `deleteProfile should preserve the profile when contact payment cleanup fails`() = test {
         val sut = createSut()
-        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
+        whenever(contactPaymentSettingsRepo.setEnabled(false))
             .thenReturn(Result.failure(TestAppError("cleanup failed")))
         whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
         advanceUntilIdle()
@@ -172,12 +175,12 @@ class EditProfileViewModelTest : BaseUnitTest() {
             sut.deleteProfile()
             advanceUntilIdle()
 
-            assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
+            expectNoEvents()
         }
-        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        assertTrue(sut.uiState.value.showDeleteFailureDialog)
         assertFalse(sut.uiState.value.isSaving)
-        verify(pubkyRepo).deleteProfileWithSessionRetry()
-        verify(privatePaykitRepo).closeAndClear()
+        verify(pubkyRepo, never()).deleteProfileWithSessionRetry()
+        verify(privatePaykitRepo, never()).closeAndClear()
     }
 
     @Test
@@ -200,14 +203,14 @@ class EditProfileViewModelTest : BaseUnitTest() {
         whenever(context.getString(any<Int>())).thenReturn("")
         whenever(pubkyRepo.profile).thenReturn(MutableStateFlow(createProfile()))
         whenever(pubkyRepo.publicKey).thenReturn(MutableStateFlow(TEST_PUBLIC_KEY))
-        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
-            .thenReturn(Result.success(Unit))
+        whenever { contactPaymentSettingsRepo.setEnabled(false) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
 
         return EditProfileViewModel(
             context = context,
             pubkyRepo = pubkyRepo,
             privatePaykitRepo = privatePaykitRepo,
+            contactPaymentSettingsRepo = contactPaymentSettingsRepo,
         )
     }
 

@@ -8,12 +8,16 @@ import com.synonym.paykit.EndpointSyncChange
 import com.synonym.paykit.EndpointSyncReport
 import com.synonym.paykit.PaymentEndpointSource
 import com.synonym.paykit.PublicationStatus
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.update
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verifyBlocking
@@ -81,6 +85,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
     @Test
     fun `syncCurrentPublishedEndpoints configures SDK public endpoints`() = test {
+        settingsFlow.value = SettingsData(sharesPublicPaykitEndpoints = true)
         walletState.value = WalletState(onchainAddress = "bc1ptest")
         stubPublicInvoice("lnbc1public", byteArrayOf(1, 2, 3))
 
@@ -101,11 +106,12 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @Test
     fun `syncPublishedEndpoints creates reusable onchain endpoint when cached address is blank`() = test {
         settingsFlow.value = SettingsData(
+            pendingContactPaymentsEnabled = true,
             publicPaykitLightningEnabled = false,
             publicPaykitOnchainEnabled = true,
         )
         walletState.value = WalletState()
-        whenever { walletRepo.refreshReusableReceiveAddress() }.thenAnswer {
+        whenever(walletRepo.refreshReusableReceiveAddress()).thenAnswer {
             walletState.value = WalletState(onchainAddress = "bc1qfresh")
             Result.success(Unit)
         }
@@ -118,6 +124,19 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         verifyBlocking(paykitSdkService) { syncPublicEndpoints(captor.capture()) }
         assertEquals(listOf(MethodId.P2wpkh), captor.firstValue.map { it.methodId })
         assertEquals("bc1qfresh", captor.firstValue.single().value)
+    }
+
+    @Test
+    fun `ordinary refresh does not publish during a pending enable`() = test {
+        settingsFlow.value = SettingsData(
+            pendingContactPaymentsEnabled = true,
+            sharesPublicPaykitEndpoints = true,
+        )
+
+        val result = sut.syncCurrentPublishedEndpoints()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(paykitSdkService, never()) { syncPublicEndpoints(any()) }
     }
 
     @Test
@@ -139,6 +158,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
     @Test
     fun `syncCurrentPublishedEndpoints returns publication failed when SDK sync fails`() = test {
+        settingsFlow.value = SettingsData(sharesPublicPaykitEndpoints = true)
         walletState.value = WalletState(onchainAddress = "bc1ptest")
         whenever(paykitSdkService.syncPublicEndpoints(any())).thenReturn(
             syncReport(
@@ -159,7 +179,10 @@ class PublicPaykitRepoTest : BaseUnitTest() {
 
     @Test
     fun `syncCurrentPublishedEndpoints returns NoSupportedEndpoint when endpoint is required`() = test {
-        settingsFlow.value = SettingsData(publicPaykitOnchainEnabled = false)
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitOnchainEnabled = false,
+        )
         whenever(lightningRepo.canReceive()).thenReturn(false)
 
         val error = sut.syncCurrentPublishedEndpoints(requireEndpoint = true).exceptionOrNull()
@@ -169,10 +192,37 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `refresh removes endpoints when sharing is disabled while preparing`() = test {
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+        )
+        walletState.value = WalletState(onchainAddress = "bc1ptest")
+        val preparationStarted = CompletableDeferred<Unit>()
+        val releasePreparation = CompletableDeferred<Unit>()
+        whenever(walletRepo.refreshReusableReceiveAddress()).doSuspendableAnswer {
+            preparationStarted.complete(Unit)
+            releasePreparation.await()
+            Result.success(Unit)
+        }
+
+        val refresh = async { sut.syncCurrentPublishedEndpoints() }
+        preparationStarted.await()
+        settingsFlow.update {
+            it.copy(
+                sharesPublicPaykitEndpoints = false,
+                pendingContactPaymentsEnabled = false,
+            )
+        }
+        releasePreparation.complete(Unit)
+
+        assertTrue(refresh.await().isSuccess)
+        verifyBlocking(paykitSdkService) { syncPublicEndpoints(emptyList()) }
+    }
+
+    @Test
     fun `beginPayment opens SDK resolved public endpoint`() = test {
-        whenever {
-            paykitSdkService.resolvePublicContactPayment("pubkycontact")
-        }.thenReturn(
+        whenever(paykitSdkService.resolvePublicContactPayment("pubkycontact")).thenReturn(
             resolution(
                 resolvedEndpoint(
                     methodId = MethodId.Bolt11,

@@ -47,7 +47,10 @@ class SettingsStore @Inject constructor(
 
     suspend fun restoreFromBackup(payload: SettingsBackupV1) =
         runCatching {
-            val data = payload.settings.resetPin().withDefaultPaykitPaymentMethods()
+            val data = payload.settings
+                .resetPin()
+                .withDefaultPaykitPaymentMethods()
+                .withSafePendingContactPaymentsState()
             store.updateData { data }
 
             val monitored = data.addressTypesToMonitor
@@ -118,6 +121,7 @@ data class SettingsData(
     val hasConfirmedPublicPaykitEndpoints: Boolean = false,
     val sharesPublicPaykitEndpoints: Boolean = false,
     val sharesPrivatePaykitEndpoints: Boolean = false,
+    val pendingContactPaymentsEnabled: Boolean? = null,
     val publicPaykitCleanupPending: Boolean = false,
     val publicPaykitLightningEnabled: Boolean = true,
     val publicPaykitOnchainEnabled: Boolean = true,
@@ -165,12 +169,18 @@ fun SettingsData.resetPin() = this.copy(
 )
 
 fun SettingsData.areContactPaymentsEnabled(): Boolean =
-    sharesPublicPaykitEndpoints || sharesPrivatePaykitEndpoints
+    pendingContactPaymentsEnabled == null &&
+        (sharesPublicPaykitEndpoints || sharesPrivatePaykitEndpoints)
 
 fun SettingsData.withDefaultPaykitPaymentMethods() = copy(
     publicPaykitLightningEnabled = true,
     publicPaykitOnchainEnabled = true,
 )
+
+fun SettingsData.withSafePendingContactPaymentsState() = when (pendingContactPaymentsEnabled) {
+    null, false -> this
+    true -> copy(pendingContactPaymentsEnabled = false)
+}
 
 fun SettingsData.hasPublicPaykitPublicationState(): Boolean =
     hasConfirmedPublicPaykitEndpoints ||
@@ -182,12 +192,14 @@ fun SettingsData.hasPublicPaykitPublicationState(): Boolean =
 
 fun SettingsData.hasPaykitState(): Boolean =
     hasPublicPaykitPublicationState() ||
-        sharesPrivatePaykitEndpoints
+        sharesPrivatePaykitEndpoints ||
+        pendingContactPaymentsEnabled != null
 
 fun SettingsData.paykitDisabled(markPublicCleanupPending: Boolean = false) = copy(
     hasConfirmedPublicPaykitEndpoints = false,
     sharesPublicPaykitEndpoints = false,
     sharesPrivatePaykitEndpoints = false,
+    pendingContactPaymentsEnabled = null,
     publicPaykitCleanupPending = publicPaykitCleanupPending || markPublicCleanupPending,
     publicPaykitBolt11 = "",
     publicPaykitBolt11PaymentHash = "",

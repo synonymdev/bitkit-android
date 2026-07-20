@@ -40,6 +40,7 @@ import to.bitkit.data.WidgetsStore
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.resetPin
+import to.bitkit.data.withSafePendingContactPaymentsState
 import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
 import to.bitkit.ext.formatPlural
@@ -463,7 +464,7 @@ class BackupRepo @Inject constructor(
 
     private suspend fun getBackupDataBytes(category: BackupCategory): ByteArray = when (category) {
         BackupCategory.SETTINGS -> {
-            val data = settingsStore.data.first().resetPin()
+            val data = settingsStore.data.first().resetPin().withSafePendingContactPaymentsState()
             val payload = SettingsBackupV1(
                 createdAt = currentTimeMillis(),
                 settings = data,

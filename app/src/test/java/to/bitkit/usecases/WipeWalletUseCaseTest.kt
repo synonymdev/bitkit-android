@@ -4,9 +4,9 @@ import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
-import org.mockito.kotlin.any
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppDb
@@ -17,6 +17,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
@@ -42,10 +43,12 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val lightningRepo = mock<LightningRepo>()
     private val pubkyRepo = mock<PubkyRepo>()
+    private val contactPaymentSettingsRepo = mock<ContactPaymentSettingsRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val privatePaykitAddressReservationRepo = mock<PrivatePaykitAddressReservationRepo>()
     private val firebaseMessaging = mock<FirebaseMessaging>()
     private val migrationService = mock<MigrationService>()
+    private val contactPaymentSettingsRepoProvider = Provider { contactPaymentSettingsRepo }
     private val privatePaykitRepoProvider = Provider { privatePaykitRepo }
 
     private lateinit var sut: WipeWalletUseCase
@@ -56,8 +59,8 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.success(Unit))
+        whenever { contactPaymentSettingsRepo.setEnabled(false) }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitAddressReservationRepo.clear() }.thenReturn(Unit)
         onWipeCalled = false
@@ -76,6 +79,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             hwWalletRepo = hwWalletRepo,
             lightningRepo = lightningRepo,
             pubkyRepo = pubkyRepo,
+            contactPaymentSettingsRepo = contactPaymentSettingsRepoProvider,
             privatePaykitRepo = privatePaykitRepoProvider,
             privatePaykitAddressReservationRepo = privatePaykitAddressReservationRepo,
             firebaseMessaging = firebaseMessaging,
@@ -104,12 +108,13 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             hwWalletRepo,
             lightningRepo,
             pubkyRepo,
+            contactPaymentSettingsRepo,
             privatePaykitRepo,
             privatePaykitAddressReservationRepo,
         )
         inOrder.verify(backupRepo).setWiping(true)
         inOrder.verify(backupRepo).reset()
-        inOrder.verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+        inOrder.verify(contactPaymentSettingsRepo).setEnabled(false)
         inOrder.verify(pubkyRepo).removeBitkitPaymentEndpoints()
         inOrder.verify(privatePaykitRepo).closeAndClear()
         inOrder.verify(privatePaykitAddressReservationRepo).clear()
@@ -172,6 +177,24 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         verify(pubkyRepo).wipeLocalState()
         verify(keychain).wipe()
+        verify(backupRepo).setWiping(false)
+    }
+
+    @Test
+    fun `invoke should preserve wallet state when contact payment cleanup fails`() = runTest {
+        whenever(contactPaymentSettingsRepo.setEnabled(false)).thenReturn(
+            Result.failure(RuntimeException("Cleanup failed")),
+        )
+
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertTrue(result.isFailure)
+        verify(privatePaykitRepo, never()).closeAndClear()
+        verify(pubkyRepo, never()).wipeLocalState()
+        verify(keychain, never()).wipe()
         verify(backupRepo).setWiping(false)
     }
 

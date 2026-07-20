@@ -15,10 +15,13 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -30,6 +33,7 @@ class ProfileViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val pubkyRepo: PubkyRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
 ) : ViewModel() {
     companion object {
         private const val TAG = "ProfileViewModel"
@@ -37,20 +41,29 @@ class ProfileViewModel @Inject constructor(
 
     private val _showSignOutDialog = MutableStateFlow(false)
     private val _isSigningOut = MutableStateFlow(false)
+    private val _showAddTagSheet = MutableStateFlow(false)
+    private val tagUpdateMutex = Mutex()
+    private val controls = combine(
+        _showSignOutDialog,
+        _isSigningOut,
+        _showAddTagSheet,
+    ) { showSignOutDialog, isSigningOut, showAddTagSheet ->
+        ProfileControls(showSignOutDialog, isSigningOut, showAddTagSheet)
+    }
 
     val uiState: StateFlow<ProfileUiState> = combine(
         pubkyRepo.profile,
         pubkyRepo.publicKey,
         pubkyRepo.isLoadingProfile,
-        _showSignOutDialog,
-        _isSigningOut,
-    ) { profile, publicKey, isLoading, showSignOutDialog, isSigningOut ->
+        controls,
+    ) { profile, publicKey, isLoading, controls ->
         ProfileUiState(
             profile = profile,
             publicKey = publicKey,
             isLoading = isLoading,
-            showSignOutDialog = showSignOutDialog,
-            isSigningOut = isSigningOut,
+            showSignOutDialog = controls.showSignOutDialog,
+            isSigningOut = controls.isSigningOut,
+            showAddTagSheet = controls.showAddTagSheet,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProfileUiState())
 
@@ -73,11 +86,39 @@ class ProfileViewModel @Inject constructor(
         _showSignOutDialog.update { false }
     }
 
+    fun showAddTagSheet() {
+        _showAddTagSheet.update { true }
+    }
+
+    fun dismissAddTagSheet() {
+        _showAddTagSheet.update { false }
+    }
+
+    fun addTag(tag: String) {
+        updateTags(
+            transform = { (it + tag).distinct() },
+            onSuccess = { _showAddTagSheet.update { false } },
+        )
+    }
+
+    fun removeTag(tag: String) {
+        updateTags(transform = { tags -> tags.filterNot { it == tag } })
+    }
+
     fun signOut() {
         viewModelScope.launch {
             _isSigningOut.update { true }
             _showSignOutDialog.update { false }
-            privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
+            contactPaymentSettingsRepo.setEnabled(false).onFailure { error ->
+                Logger.error("Failed to disable contact payments during sign out", error, context = TAG)
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.profile__sign_out_title),
+                    description = error.message,
+                )
+                _isSigningOut.update { false }
+                return@launch
+            }
             val result = pubkyRepo.signOut()
             privatePaykitRepo.closeAndClear()
             if (result.isSuccess) {
@@ -106,6 +147,39 @@ class ProfileViewModel @Inject constructor(
             )
         }
     }
+
+    private fun updateTags(
+        transform: (List<String>) -> List<String>,
+        onSuccess: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            tagUpdateMutex.withLock {
+                val profile = pubkyRepo.profile.value ?: return@withLock
+                val tags = transform(profile.tags)
+                if (tags == profile.tags) {
+                    onSuccess()
+                    return@withLock
+                }
+
+                pubkyRepo.saveProfile(
+                    name = profile.name,
+                    bio = profile.bio,
+                    links = profile.links,
+                    tags = tags,
+                    imageUrl = profile.imageUrl,
+                ).onSuccess {
+                    onSuccess()
+                }.onFailure {
+                    Logger.error("Failed to update profile tags", it, context = TAG)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.profile__edit_save_error),
+                        description = it.message,
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Stable
@@ -115,6 +189,13 @@ data class ProfileUiState(
     val isLoading: Boolean = false,
     val showSignOutDialog: Boolean = false,
     val isSigningOut: Boolean = false,
+    val showAddTagSheet: Boolean = false,
+)
+
+private data class ProfileControls(
+    val showSignOutDialog: Boolean,
+    val isSigningOut: Boolean,
+    val showAddTagSheet: Boolean,
 )
 
 sealed interface ProfileEffect {

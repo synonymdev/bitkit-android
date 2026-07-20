@@ -52,6 +52,7 @@ import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.HwWalletRepo
@@ -122,6 +123,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val activityService = mock<ActivityService>()
     private val keychain = mock<Keychain>()
     private val pubkyRepo = mock<PubkyRepo>()
+    private val contactPaymentSettingsRepo = mock<ContactPaymentSettingsRepo>()
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val samRockRepo = mock<SamRockRepo>()
@@ -182,6 +184,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
         whenever(pubkyRepo.contacts).thenReturn(pubkyContacts)
         whenever(pubkyRepo.contactsLoadVersion).thenReturn(pubkyContactsLoadVersion)
+        whenever { contactPaymentSettingsRepo.recoverPendingTransition() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>()) }
@@ -252,6 +255,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         migrationService = migrationService,
         coreService = coreService,
         nodeServiceFgState = nodeServiceFgState,
+        contactPaymentSettingsRepo = contactPaymentSettingsRepo,
         publicPaykitRepo = publicPaykitRepo,
         privatePaykitRepo = privatePaykitRepo,
         samRockRepo = samRockRepo,
@@ -1319,11 +1323,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `private Paykit refresh retries public cleanup while UI is disabled`() = test {
         settingsData.value = SettingsData(publicPaykitCleanupPending = true)
-        whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }.thenReturn(Result.success(Unit))
+        whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false)).thenReturn(Result.success(Unit))
 
         sut.refreshPrivatePaykitEndpoints()
         advanceUntilIdle()
 
+        verify(contactPaymentSettingsRepo).recoverPendingTransition()
         verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
         assertFalse(settingsData.value.publicPaykitCleanupPending)
         verify(privatePaykitRepo).retryPendingEndpointRemoval(emptyList())
@@ -1376,7 +1381,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     )
 
     private suspend fun enablePublicPaykitSharing() {
-        whenever { publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any())).thenReturn(Result.success(Unit))
         walletState.value = WalletState(onchainAddress = "bc1qtest")
         isPaykitEnabled.value = true
         settingsData.value = SettingsData(sharesPublicPaykitEndpoints = true)

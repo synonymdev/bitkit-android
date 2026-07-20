@@ -39,6 +39,7 @@ import to.bitkit.di.json as appJson
 sealed class PublicPaykitError(message: String) : AppError(message) {
     data object InvalidPayload : PublicPaykitError("Invalid Paykit payment endpoint payload")
     data object NoSupportedEndpoint : PublicPaykitError("No supported public payment endpoint is available")
+    data object PublicationDisabled : PublicPaykitError("Public Paykit endpoint publication is disabled")
     data object RouteHintsUnavailable : PublicPaykitError("Reachable Lightning payment endpoint is not available yet")
     data object SessionNotActive : PublicPaykitError("No active Paykit session")
     data object WalletNotReady : PublicPaykitError("Wallet is not ready to publish Paykit endpoints")
@@ -180,15 +181,25 @@ class PublicPaykitRepo @Inject constructor(
 
     suspend fun syncPublishedEndpoints(publish: Boolean): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
-            if (!publish) {
-                removePublishedEndpoints()
-                settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
-                return@runSuspendCatching
-            }
+            publishMutex.withLock {
+                val expectedPublicKey = requireCurrentPublicKey()
+                if (!publish) {
+                    removePublishedEndpoints(expectedPublicKey)
+                    settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                    return@withLock
+                }
 
-            val desired = buildWalletEndpoints(refresh = true)
-            applyPublishedEndpoints(desired)
-            settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                if (!canPublishPublicEndpoints(allowPendingEnable = true)) {
+                    throw PublicPaykitError.PublicationDisabled
+                }
+                val desired = buildWalletEndpoints(refresh = true)
+                if (!canPublishPublicEndpoints(allowPendingEnable = true)) {
+                    removePublishedEndpoints(expectedPublicKey)
+                    throw PublicPaykitError.PublicationDisabled
+                }
+                applyPublishedEndpoints(desired, expectedPublicKey)
+                settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+            }
         }
     }
 
@@ -197,25 +208,40 @@ class PublicPaykitRepo @Inject constructor(
         requireEndpoint: Boolean = false,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val desired = buildWalletEndpoints(
-                refresh = false,
-                forceRefreshLightning = forceRefreshLightning,
-                requireEndpoint = requireEndpoint,
-            )
-            applyPublishedEndpoints(desired)
-            settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+            publishMutex.withLock {
+                if (!canPublishPublicEndpoints()) return@withLock
+                val expectedPublicKey = requireCurrentPublicKey()
+                val desired = buildWalletEndpoints(
+                    refresh = false,
+                    forceRefreshLightning = forceRefreshLightning,
+                    requireEndpoint = requireEndpoint,
+                )
+                if (canPublishPublicEndpoints()) {
+                    applyPublishedEndpoints(desired, expectedPublicKey)
+                } else {
+                    removePublishedEndpoints(expectedPublicKey)
+                }
+                settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+            }
         }
     }
 
     suspend fun refreshPublishedBolt11ForPayment(paymentHash: String): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val settings = settingsStore.data.first()
-            if (!settings.sharesPublicPaykitEndpoints) return@runSuspendCatching
-            if (settings.publicPaykitBolt11PaymentHash != paymentHash) return@runSuspendCatching
+            publishMutex.withLock {
+                val settings = settingsStore.data.first()
+                if (!canPublishPublicEndpoints(settings)) return@withLock
+                if (settings.publicPaykitBolt11PaymentHash != paymentHash) return@withLock
 
-            clearPublicBolt11Metadata()
-            val desired = buildWalletEndpoints(refresh = true)
-            applyPublishedEndpoints(desired)
+                val expectedPublicKey = requireCurrentPublicKey()
+                clearPublicBolt11Metadata()
+                val desired = buildWalletEndpoints(refresh = true)
+                if (canPublishPublicEndpoints()) {
+                    applyPublishedEndpoints(desired, expectedPublicKey)
+                } else {
+                    removePublishedEndpoints(expectedPublicKey)
+                }
+            }
         }
     }
 
@@ -230,17 +256,27 @@ class PublicPaykitRepo @Inject constructor(
         }
     }
 
-    private suspend fun removePublishedEndpoints() {
-        applyPublishedEndpoints(emptyList())
+    private suspend fun removePublishedEndpoints(expectedPublicKey: String) {
+        applyPublishedEndpoints(emptyList(), expectedPublicKey)
         clearPublicBolt11Metadata()
     }
 
-    private suspend fun applyPublishedEndpoints(desiredEndpoints: List<Endpoint>) {
-        publishMutex.withLock {
-            requireCurrentPublicKey()
-            val report = paykitSdkService.syncPublicEndpoints(desiredEndpoints)
-            if (report.failed.isNotEmpty()) throw PublicPaykitError.PublicationFailed
-        }
+    private suspend fun applyPublishedEndpoints(desiredEndpoints: List<Endpoint>, expectedPublicKey: String) {
+        if (requireCurrentPublicKey() != expectedPublicKey) throw PublicPaykitError.SessionNotActive
+        val report = paykitSdkService.syncPublicEndpoints(desiredEndpoints)
+        if (report.failed.isNotEmpty()) throw PublicPaykitError.PublicationFailed
+    }
+
+    private suspend fun canPublishPublicEndpoints(allowPendingEnable: Boolean = false): Boolean =
+        canPublishPublicEndpoints(settingsStore.data.first(), allowPendingEnable)
+
+    private fun canPublishPublicEndpoints(
+        settings: SettingsData,
+        allowPendingEnable: Boolean = false,
+    ): Boolean = when (settings.pendingContactPaymentsEnabled) {
+        null -> settings.sharesPublicPaykitEndpoints
+        true -> allowPendingEnable
+        false -> false
     }
 
     private suspend fun requireCurrentPublicKey(): String {

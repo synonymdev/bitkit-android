@@ -9,10 +9,12 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.serialization.decodeFromString
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -34,12 +36,14 @@ import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.json
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
+import to.bitkit.models.SettingsBackupV1
 import to.bitkit.models.WalletBackupV1
 import to.bitkit.services.LightningService
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import javax.inject.Provider
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -225,6 +229,24 @@ class BackupRepoTest : BaseUnitTest() {
         } finally {
             sut.stopObservingBackups()
         }
+    }
+
+    @Test
+    fun `settings backup converts an interrupted contact payment enable to disable`() = test {
+        settingsData.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+            pendingContactPaymentsEnabled = true,
+        )
+
+        sut.triggerBackup(BackupCategory.SETTINGS)
+
+        val data = argumentCaptor<ByteArray>()
+        verify(vssBackupClient).putObject(eq(BackupCategory.SETTINGS.name), data.capture())
+        val payload = json.decodeFromString<SettingsBackupV1>(data.firstValue.decodeToString())
+        assertEquals(false, payload.settings.pendingContactPaymentsEnabled)
+        assertTrue(payload.settings.sharesPublicPaykitEndpoints)
+        assertTrue(payload.settings.sharesPrivatePaykitEndpoints)
     }
 
     @Test

@@ -62,6 +62,7 @@ class PrivatePaykitReservationStore @Inject constructor(
 data class PrivatePaykitCacheData(
     val contacts: Map<String, PrivatePaykitContactCacheData> = emptyMap(),
     val cleanupPending: Boolean = false,
+    val contactSharingPublicKeys: Set<String> = emptySet(),
     val deletedContactCleanupPendingPublicKeys: Set<String> = emptySet(),
 )
 
