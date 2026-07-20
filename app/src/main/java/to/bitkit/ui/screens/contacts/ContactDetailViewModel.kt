@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
@@ -47,6 +49,7 @@ class ContactDetailViewModel @Inject constructor(
     ) { "publicKey not found in SavedStateHandle" }
 
     private val redactedPublicKey = PubkyPublicKeyFormat.redacted(publicKey)
+    private val tagPersistenceMutex = Mutex()
 
     private val _uiState = MutableStateFlow(ContactDetailUiState())
     val uiState: StateFlow<ContactDetailUiState> = _uiState.asStateFlow()
@@ -184,29 +187,52 @@ class ContactDetailViewModel @Inject constructor(
     }
 
     fun addTag(tag: String) {
-        val newTags = (_uiState.value.tags + tag).distinct().toImmutableList()
-        _uiState.update { it.copy(tags = newTags, showAddTagSheet = false) }
-        persistTags(newTags)
+        updateTags(
+            transform = { (it + tag).distinct().toImmutableList() },
+            onSuccess = { _uiState.update { it.copy(showAddTagSheet = false) } },
+        )
     }
 
-    fun removeTag(index: Int) {
-        val newTags = _uiState.value.tags.filterIndexed { i, _ -> i != index }.toImmutableList()
-        _uiState.update { it.copy(tags = newTags) }
-        persistTags(newTags)
+    fun removeTag(tag: String) {
+        updateTags(transform = { tags -> tags.filterNot { it == tag }.toImmutableList() })
     }
 
-    private fun persistTags(tags: List<String>) {
-        val profile = _uiState.value.profile ?: return
+    private fun updateTags(
+        transform: (ImmutableList<String>) -> ImmutableList<String>,
+        onSuccess: () -> Unit = {},
+    ) {
         viewModelScope.launch {
-            pubkyRepo.updateContact(
-                publicKey = publicKey,
-                name = profile.name,
-                bio = profile.bio,
-                imageUrl = profile.imageUrl,
-                links = profile.links.map { PubkyProfileLink(it.label, it.url) },
-                tags = tags,
-            ).onFailure {
-                Logger.error("Failed to update tags for contact '$redactedPublicKey'", it, context = TAG)
+            tagPersistenceMutex.withLock {
+                val state = _uiState.value
+                val profile = state.profile ?: return@withLock
+                val tags = transform(state.tags)
+                if (tags == state.tags) {
+                    onSuccess()
+                    return@withLock
+                }
+                pubkyRepo.updateContact(
+                    publicKey = publicKey,
+                    name = profile.name,
+                    bio = profile.bio,
+                    imageUrl = profile.imageUrl,
+                    links = profile.links.map { PubkyProfileLink(it.label, it.url) },
+                    tags = tags,
+                ).onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            profile = it.profile?.copy(tags = tags),
+                            tags = tags,
+                        )
+                    }
+                    onSuccess()
+                }.onFailure {
+                    Logger.error("Failed to update tags for contact '$redactedPublicKey'", it, context = TAG)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.contacts__edit_save_error),
+                        description = it.message,
+                    )
+                }
             }
         }
     }

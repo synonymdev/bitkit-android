@@ -5,6 +5,7 @@ import to.bitkit.ext.ellipsisMiddle
 import java.util.Locale
 
 object PubkyPublicKeyFormat {
+    private const val displayEdgeLength = 4
     private const val redactedLength = 16
     const val maximumInputLength = 57
 
@@ -23,6 +24,15 @@ object PubkyPublicKeyFormat {
         val normalizedLhs = lhs?.let(::normalized) ?: return false
         val normalizedRhs = rhs?.let(::normalized) ?: return false
         return normalizedLhs == normalizedRhs
+    }
+
+    fun display(input: String): String {
+        val rawKey = bounded(input).removePrefix("pubky")
+        return if (rawKey.length > displayEdgeLength * 2) {
+            "${rawKey.take(displayEdgeLength)}...${rawKey.takeLast(displayEdgeLength)}"
+        } else {
+            rawKey
+        }
     }
 
     fun redacted(input: String): String {

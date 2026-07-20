@@ -18,6 +18,7 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PublicPaykitError
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -25,6 +26,10 @@ class PayContactsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
 ) : ViewModel() {
+    companion object {
+        private const val TAG = "PayContactsViewModel"
+    }
+
     private val _uiState = MutableStateFlow(PayContactsUiState())
     val uiState: StateFlow<PayContactsUiState> = _uiState.asStateFlow()
 
@@ -34,20 +39,22 @@ class PayContactsViewModel @Inject constructor(
     fun continueToProfile() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-
-            contactPaymentSettingsRepo.setEnabled(true)
-                .onSuccess {
-                    _uiState.update { it.copy(isLoading = false) }
-                    _effects.emit(PayContactsEffect.Continue)
-                }
-                .onFailure {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.common__error),
-                        description = syncErrorMessage(it),
-                    )
-                    _uiState.update { it.copy(isLoading = false) }
-                }
+            try {
+                contactPaymentSettingsRepo.setEnabled(true)
+                    .onSuccess {
+                        _effects.emit(PayContactsEffect.Continue)
+                    }
+                    .onFailure {
+                        Logger.error("Failed to enable contact payments", it, context = TAG)
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = syncErrorMessage(it),
+                        )
+                    }
+            } finally {
+                _uiState.update { it.copy(isLoading = false) }
+            }
         }
     }
 
