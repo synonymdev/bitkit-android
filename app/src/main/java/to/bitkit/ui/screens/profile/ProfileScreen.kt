@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -138,7 +139,7 @@ private fun ProfileBody(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 32.dp)
+            .padding(horizontal = 16.dp)
     ) {
         VerticalSpacer(24.dp)
 
@@ -161,7 +162,7 @@ private fun ProfileBody(
         ) {
             QrCodeImage(
                 content = profile.publicKey,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.size(279.dp),
                 testTag = "ProfileQRCode",
             )
             if (profile.imageUrl != null) {
@@ -210,26 +211,35 @@ private fun ProfileBody(
             }
         }
 
-        if (profile.tags.isNotEmpty()) {
-            VerticalSpacer(16.dp)
-            Text13Up(
-                text = stringResource(R.string.profile__edit_tags),
-                color = Colors.White64,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("ProfileViewTagsHeader")
-            )
-            VerticalSpacer(8.dp)
-            @OptIn(ExperimentalLayoutApi::class)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                profile.tags.forEach { tag ->
-                    TagButton(text = tag, onClick = null)
-                }
+        VerticalSpacer(16.dp)
+        Text13Up(
+            text = stringResource(R.string.profile__edit_tags),
+            color = Colors.White64,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("ProfileViewTagsHeader")
+        )
+        VerticalSpacer(8.dp)
+        @OptIn(ExperimentalLayoutApi::class)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            profile.tags.forEach { tag ->
+                TagButton(
+                    text = tag,
+                    onClick = onClickEdit,
+                    displayIconClose = true,
+                )
             }
+            TagButton(
+                text = stringResource(R.string.profile__add_tag),
+                onClick = onClickEdit,
+                icon = painterResource(R.drawable.ic_tag),
+                displayIconClose = true,
+                modifier = Modifier.testTag("ProfileAddTag")
+            )
         }
 
         VerticalSpacer(16.dp)

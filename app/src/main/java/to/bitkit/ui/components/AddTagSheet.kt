@@ -95,7 +95,7 @@ private fun TagFormContent(
 ) {
     Column(
         modifier = Modifier
-            .sheetHeight(isModal = true)
+            .sheetHeight(SheetSize.COMPACT, isModal = true)
             .gradientBackground()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp),

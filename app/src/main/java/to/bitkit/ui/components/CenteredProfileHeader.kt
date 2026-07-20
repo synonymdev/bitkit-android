@@ -17,11 +17,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.ext.ellipsisMiddle
+import to.bitkit.ext.pubkyDisplayPublicKey
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-
-private const val TRUNCATED_PK_LENGTH = 11
 
 @Composable
 fun CenteredProfileHeader(
@@ -38,7 +36,7 @@ fun CenteredProfileHeader(
         modifier = modifier
     ) {
         Text13Up(
-            text = publicKey.ellipsisMiddle(TRUNCATED_PK_LENGTH),
+            text = publicKey.pubkyDisplayPublicKey(),
             color = Colors.White64,
             textAlign = TextAlign.Center,
         )
@@ -46,12 +44,12 @@ fun CenteredProfileHeader(
         VerticalSpacer(16.dp)
 
         if (imageUrl != null) {
-            PubkyImage(uri = imageUrl, size = 100.dp)
+            PubkyImage(uri = imageUrl, size = 96.dp)
         } else {
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(100.dp)
+                    .size(96.dp)
                     .clip(CircleShape)
                     .background(Colors.Gray5)
             ) {

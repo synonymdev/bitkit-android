@@ -37,6 +37,7 @@ import to.bitkit.ui.components.ProfileEditLink
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -131,6 +132,7 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(R.string.profile__edit_nav_title),
             onBackClick = onBackClick,
+            actions = { DrawerNavIcon() },
         )
 
         if (uiState.isLoading) {
@@ -220,7 +222,7 @@ private fun AvatarSection(
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(100.dp)
+            .size(96.dp)
             .clip(CircleShape)
             .background(Colors.Gray5)
             .testTag("EditProfileAvatar")
@@ -233,7 +235,7 @@ private fun AvatarSection(
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
             )
-            imageUrl != null -> PubkyImage(uri = imageUrl, size = 100.dp)
+            imageUrl != null -> PubkyImage(uri = imageUrl, size = 96.dp)
             else -> Icon(
                 painter = painterResource(R.drawable.ic_user_square),
                 contentDescription = null,

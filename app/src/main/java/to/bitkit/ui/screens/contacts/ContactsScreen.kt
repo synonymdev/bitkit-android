@@ -31,9 +31,7 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.BodyS
-import to.bitkit.ui.components.BodySSB
-import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
@@ -95,6 +93,7 @@ private fun Content(
         )
 
         Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+            VerticalSpacer(16.dp)
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
@@ -111,7 +110,7 @@ private fun Content(
                     modifier = Modifier.testTag("ContactsAddButton")
                 )
             }
-            VerticalSpacer(8.dp)
+            VerticalSpacer(16.dp)
         }
 
         when {
@@ -164,12 +163,12 @@ private fun ContactsList(
                     color = Colors.White64,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
                 )
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
                 ContactRow(
                     profile = myProfile,
                     onClick = onClickMyProfile,
                     modifier = Modifier.testTag("ContactsMyProfile")
                 )
-                HorizontalDivider()
             }
         }
 
@@ -180,7 +179,7 @@ private fun ContactsList(
                     color = Colors.White64,
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
                 )
-                HorizontalDivider()
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
             }
 
             items(contacts, key = { it.publicKey }) { contact ->
@@ -189,7 +188,7 @@ private fun ContactsList(
                     onClick = { onClickContact(contact.publicKey) },
                     modifier = Modifier.testTag("Contact_${contact.publicKey}")
                 )
-                HorizontalDivider()
+                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
             }
         }
     }
@@ -207,7 +206,7 @@ private fun ContactRow(
         modifier = modifier
             .fillMaxWidth()
             .clickableAlpha(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .padding(horizontal = 16.dp, vertical = 24.dp)
     ) {
         PubkyContactAvatar(profile = profile)
 
@@ -215,13 +214,13 @@ private fun ContactRow(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.weight(1f)
         ) {
-            BodyS(
+            Text13Up(
                 text = profile.truncatedPublicKey,
                 color = Colors.White64,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            BodySSB(
+            BodyMSB(
                 text = profile.name,
                 color = Colors.White,
                 maxLines = 1,
@@ -248,45 +247,44 @@ private fun EmptyState(
     onAddContact: () -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
+        modifier = Modifier.fillMaxSize()
     ) {
         myProfile?.let {
-            VerticalSpacer(16.dp)
             Text13Up(
                 text = stringResource(R.string.contacts__my_profile),
                 color = Colors.White64,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
             )
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
             ContactRow(
                 profile = it,
                 onClick = onClickMyProfile,
                 modifier = Modifier.testTag("ContactsMyProfile")
             )
-            HorizontalDivider()
         }
 
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+        Text13Up(
+            text = stringResource(R.string.contacts__contacts_header),
+            color = Colors.White64,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(top = 48.dp)
+                .padding(horizontal = 16.dp, vertical = 16.dp)
+        )
+        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+        Column(
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
         ) {
+            BodyM(
+                text = stringResource(R.string.contacts__intro_description),
+                color = Colors.White64,
+            )
             PrimaryButton(
                 text = stringResource(R.string.contacts__intro_add_contact),
                 onClick = onAddContact,
                 modifier = Modifier.testTag("ContactsEmptyAddButton")
             )
-            BodyM(
-                text = stringResource(R.string.contacts__empty_state),
-                color = Colors.White64,
-            )
         }
-
-        FillHeight()
     }
 }
 

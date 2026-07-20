@@ -53,4 +53,17 @@ class StringExtTest : BaseUnitTest() {
 
         assertEquals(malformed, result)
     }
+
+    @Test
+    fun `pubky display key strips scheme and keeps four characters on each side`() {
+        assertEquals(
+            "3rsd...yw5x",
+            "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5x".pubkyDisplayPublicKey(),
+        )
+    }
+
+    @Test
+    fun `pubky display key leaves short raw key unchanged`() {
+        assertEquals("short", "pubkyshort".pubkyDisplayPublicKey())
+    }
 }

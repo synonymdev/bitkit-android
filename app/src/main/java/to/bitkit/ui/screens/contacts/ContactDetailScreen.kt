@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -39,6 +40,7 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -52,6 +54,8 @@ fun ContactDetailScreen(
     onBackClick: () -> Unit,
     onPayContact: (String, String) -> Unit,
     onActivityClick: (String) -> Unit,
+    showDeleteAction: Boolean = false,
+    onContactDeleted: () -> Unit = {},
     onEditContact: (String) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -61,6 +65,7 @@ fun ContactDetailScreen(
         viewModel.effects.collect {
             when (it) {
                 is ContactDetailEffect.OpenPayment -> onPayContact(it.paymentRequest, it.publicKey)
+                ContactDetailEffect.ContactDeleted -> onContactDeleted()
             }
         }
     }
@@ -69,6 +74,8 @@ fun ContactDetailScreen(
         uiState = uiState,
         onBackClick = onBackClick,
         onClickEdit = { uiState.profile?.publicKey?.let { onEditContact(it) } },
+        showDeleteAction = showDeleteAction,
+        onClickDelete = { viewModel.showDeleteConfirmation() },
         onClickCopy = { viewModel.copyPublicKey() },
         onClickPay = { viewModel.payContact() },
         onClickActivity = { uiState.profile?.publicKey?.let { onActivityClick(it) } },
@@ -78,6 +85,8 @@ fun ContactDetailScreen(
         onRemoveTag = { viewModel.removeTag(it) },
         onDismissAddTagSheet = { viewModel.dismissAddTagSheet() },
         onSaveTag = { viewModel.addTag(it) },
+        onDismissDeleteDialog = { viewModel.dismissDeleteConfirmation() },
+        onConfirmDelete = { viewModel.deleteContact() },
     )
 }
 
@@ -86,6 +95,8 @@ private fun Content(
     uiState: ContactDetailUiState,
     onBackClick: () -> Unit,
     onClickEdit: () -> Unit,
+    showDeleteAction: Boolean,
+    onClickDelete: () -> Unit,
     onClickCopy: () -> Unit,
     onClickPay: () -> Unit,
     onClickActivity: () -> Unit,
@@ -95,6 +106,8 @@ private fun Content(
     onRemoveTag: (Int) -> Unit,
     onDismissAddTagSheet: () -> Unit,
     onSaveTag: (String) -> Unit,
+    onDismissDeleteDialog: () -> Unit,
+    onConfirmDelete: () -> Unit,
 ) {
     val currentProfile = uiState.profile
 
@@ -111,7 +124,9 @@ private fun Content(
                 profile = currentProfile,
                 tags = uiState.tags,
                 showPayButton = uiState.showPayButton,
+                showDeleteAction = showDeleteAction,
                 onClickEdit = onClickEdit,
+                onClickDelete = onClickDelete,
                 onClickCopy = onClickCopy,
                 onClickPay = onClickPay,
                 onClickActivity = onClickActivity,
@@ -129,6 +144,16 @@ private fun Content(
             onSave = onSaveTag,
         )
     }
+
+    if (uiState.showDeleteDialog && currentProfile != null) {
+        AppAlertDialog(
+            title = stringResource(R.string.contacts__delete_confirm_title, currentProfile.name),
+            text = stringResource(R.string.contacts__delete_confirm_text, currentProfile.name),
+            confirmText = stringResource(R.string.common__delete_yes),
+            onConfirm = onConfirmDelete,
+            onDismiss = onDismissDeleteDialog,
+        )
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -137,7 +162,9 @@ private fun ContactBody(
     profile: PubkyProfile,
     tags: ImmutableList<String>,
     showPayButton: Boolean,
+    showDeleteAction: Boolean,
     onClickEdit: () -> Unit,
+    onClickDelete: () -> Unit,
     onClickCopy: () -> Unit,
     onClickPay: () -> Unit,
     onClickActivity: () -> Unit,
@@ -150,7 +177,7 @@ private fun ContactBody(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 32.dp)
+            .padding(horizontal = 16.dp)
     ) {
         VerticalSpacer(24.dp)
 
@@ -163,7 +190,13 @@ private fun ContactBody(
             notesTestTag = "ContactViewNotes",
         )
 
-        VerticalSpacer(24.dp)
+        if (showDeleteAction) {
+            VerticalSpacer(16.dp)
+            HorizontalDivider(color = Colors.White10)
+            VerticalSpacer(16.dp)
+        } else {
+            VerticalSpacer(24.dp)
+        }
 
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterHorizontally),
@@ -192,14 +225,24 @@ private fun ContactBody(
                 iconRes = R.drawable.ic_share,
                 modifier = Modifier.testTag("ContactShare")
             )
-            ActionButton(
-                onClick = onClickEdit,
-                iconRes = R.drawable.ic_edit,
-                modifier = Modifier.testTag("ContactEdit")
-            )
+            if (showDeleteAction) {
+                ActionButton(
+                    onClick = onClickDelete,
+                    iconRes = R.drawable.ic_trash,
+                    modifier = Modifier.testTag("ContactDelete")
+                )
+            } else {
+                ActionButton(
+                    onClick = onClickEdit,
+                    iconRes = R.drawable.ic_edit,
+                    modifier = Modifier.testTag("ContactEdit")
+                )
+            }
         }
 
-        VerticalSpacer(32.dp)
+        VerticalSpacer(16.dp)
+        HorizontalDivider(color = Colors.White10)
+        VerticalSpacer(16.dp)
 
         profile.links.forEachIndexed { index, link ->
             LinkRow(label = link.label, value = link.url, linkIndex = index)
@@ -292,6 +335,8 @@ private fun Preview() {
             ),
             onBackClick = {},
             onClickEdit = {},
+            showDeleteAction = true,
+            onClickDelete = {},
             onClickCopy = {},
             onClickPay = {},
             onClickActivity = {},
@@ -301,6 +346,8 @@ private fun Preview() {
             onRemoveTag = {},
             onDismissAddTagSheet = {},
             onSaveTag = {},
+            onDismissDeleteDialog = {},
+            onConfirmDelete = {},
         )
     }
 }

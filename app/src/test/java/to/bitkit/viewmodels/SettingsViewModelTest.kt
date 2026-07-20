@@ -1,5 +1,6 @@
 package to.bitkit.viewmodels
 
+import android.content.Context
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -15,6 +16,7 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.models.PubkyProfile
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
@@ -29,15 +31,18 @@ import kotlin.test.assertTrue
 class SettingsViewModelTest : BaseUnitTest() {
     private lateinit var sut: SettingsViewModel
 
+    private val context = mock<Context>()
     private val settingsStore = mock<SettingsStore>()
     private val pubkyRepo = mock<PubkyRepo>()
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val widgetsStore = mock<WidgetsStore>()
     private val widgetsRepo = mock<WidgetsRepo>()
+    private val contactPaymentSettingsRepo = mock<ContactPaymentSettingsRepo>()
 
     private val settingsData = MutableStateFlow(SettingsData())
     private val isPaykitEnabled = MutableStateFlow(false)
+    private val contactPaymentsEnabled = MutableStateFlow(false)
     private val contacts = MutableStateFlow(
         listOf(
             PubkyProfile(
@@ -55,6 +60,8 @@ class SettingsViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
+        whenever(contactPaymentSettingsRepo.isEnabled).thenReturn(contactPaymentsEnabled)
+        whenever { contactPaymentSettingsRepo.setEnabled(any()) }.thenReturn(Result.success(Unit))
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsData.value = transform(settingsData.value)
@@ -177,9 +184,20 @@ class SettingsViewModelTest : BaseUnitTest() {
         assertFalse(settingsData.value.keepBitkitActiveInBackground)
     }
 
+    @Test
+    fun `contact payment switch delegates to shared settings repo`() = test {
+        sut.setContactPaymentsEnabled(true)
+        advanceUntilIdle()
+
+        verify(contactPaymentSettingsRepo).setEnabled(true)
+        assertFalse(sut.isUpdatingContactPayments.value)
+    }
+
     private fun createViewModel() = SettingsViewModel(
+        context = context,
         settingsStore = settingsStore,
         pubkyRepo = pubkyRepo,
+        contactPaymentSettingsRepo = contactPaymentSettingsRepo,
         publicPaykitRepo = publicPaykitRepo,
         privatePaykitRepo = privatePaykitRepo,
         widgetsStore = widgetsStore,

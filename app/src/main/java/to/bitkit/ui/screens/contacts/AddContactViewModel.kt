@@ -149,12 +149,7 @@ class AddContactViewModel @Inject constructor(
             _uiState.update { it.copy(isLoading = true) }
             pubkyRepo.addContact(profile.publicKey, profile)
                 .onSuccess {
-                    ToastEventBus.send(
-                        type = Toast.ToastType.SUCCESS,
-                        title = context.getString(R.string.contacts__add_contact_saved),
-                        testTag = "ContactSavedToast",
-                    )
-                    _effects.emit(AddContactEffect.ContactSaved)
+                    _effects.emit(AddContactEffect.ContactSaved(profile.publicKey))
                 }
                 .onFailure {
                     Logger.error("Failed to save contact", it, context = TAG)
@@ -179,6 +174,6 @@ data class AddContactUiState(
 )
 
 sealed interface AddContactEffect {
-    data object ContactSaved : AddContactEffect
+    data class ContactSaved(val publicKey: String) : AddContactEffect
     data class OpenPayment(val paymentRequest: String, val publicKey: String) : AddContactEffect
 }
