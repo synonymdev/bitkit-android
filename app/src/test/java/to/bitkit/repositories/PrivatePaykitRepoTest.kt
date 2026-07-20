@@ -14,7 +14,6 @@ import com.synonym.paykit.PaymentEndpointSource
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
 import com.synonym.paykit.PrivatePaymentListSyncChange
-import com.synonym.paykit.PubkyIdentityCapability
 import com.synonym.paykit.PublicationStatus
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -118,9 +117,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.identityStatus()).thenReturn(
             IdentityStatus(
                 publicKey = OWN_KEY,
-                capability = PubkyIdentityCapability.PRIVATE_LINK_CAPABLE,
                 liveSessionAvailable = true,
-                privateLinkCapable = true,
             ),
         )
         whenever(walletRepo.walletExists()).thenReturn(true)
@@ -708,14 +705,12 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `beginSavedContactPayment uses public SDK endpoint when private capability is unavailable`() = test {
+    fun `beginSavedContactPayment uses public SDK endpoint when live session is unavailable`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
         whenever(paykitSdkService.identityStatus()).thenReturn(
             IdentityStatus(
                 publicKey = OWN_KEY,
-                capability = PubkyIdentityCapability.PUBLIC_ONLY,
-                liveSessionAvailable = true,
-                privateLinkCapable = false,
+                liveSessionAvailable = false,
             ),
         )
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
