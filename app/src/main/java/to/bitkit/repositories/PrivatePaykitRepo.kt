@@ -615,7 +615,7 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     private suspend fun prepareRelevantPrivateLinksIfAvailable(publicKeys: Collection<String>, reason: String) {
-        if (!hasLocalSecretKeyForCurrentProfile()) return
+        if (!hasLiveSessionForCurrentProfile()) return
 
         val retryKeys = mutableListOf<PrivateMessageDrainRetryKey>()
         for (publicKey in publicKeys) {
@@ -1233,16 +1233,16 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun canPublishPrivateEndpoints(): Boolean {
         val settings = settingsStore.data.first()
         return settings.sharesPrivatePaykitEndpoints &&
-            hasLocalSecretKeyForCurrentProfile() &&
+            hasLiveSessionForCurrentProfile() &&
             App.currentActivity?.value != null &&
             walletRepo.walletExists() &&
             lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
     }
 
-    private suspend fun hasLocalSecretKeyForCurrentProfile(): Boolean = runSuspendCatching {
+    private suspend fun hasLiveSessionForCurrentProfile(): Boolean = runSuspendCatching {
         pubkyService.currentPublicKey() ?: return@runSuspendCatching false
         val status = paykitSdkService.identityStatus() ?: return@runSuspendCatching false
-        status.privateLinkCapable
+        status.liveSessionAvailable
     }.getOrDefault(false)
 
     private suspend fun isContactSharingCleanupPending(): Boolean =

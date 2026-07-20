@@ -33,6 +33,7 @@ import com.synonym.paykit.PubkyProfile
 import com.synonym.paykit.PubkySessionAccess
 import com.synonym.paykit.PubkySessionBootstrap
 import com.synonym.paykit.PubkySessionBootstrapResult
+import com.synonym.paykit.ReceiverNoiseSecretKey
 import com.synonym.paykit.ReceivingDetail
 import com.synonym.paykit.ReceivingDetailReservationResponse
 import com.synonym.paykit.ReceivingDetailReservationResponseKind
@@ -67,6 +68,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -129,7 +131,10 @@ class PaykitSdkService @Inject constructor(
             try {
                 PaykitAndroid.initializeOrThrow(context)
                 operationMutex.withLock {
-                    handle().initialize()
+                    sessionProvider.loadOrCreateReceiverNoiseSecretKey()
+                    val handle = handle()
+                    handle.initialize()
+                    publishReceiverMarkerIfLiveSessionAvailable(handle)
                 }
                 isSetup.complete(Unit)
             } catch (t: Throwable) {
@@ -162,9 +167,11 @@ class PaykitSdkService @Inject constructor(
     ): PubkySessionBootstrapResult {
         isSetup.await()
         val previousPublicKey = operationMutex.withLock { currentSdkStatePublicKeyLocked() }
+        val receiverNoiseSecretKey = sessionProvider.loadOrCreateReceiverNoiseSecretKey()
         val result = PubkySessionBootstrap().importSession(
             sessionSecret = secret,
             localSecretKey = if (includeLocalSecret) sessionProvider.loadLocalSecretKey() else null,
+            receiverNoiseSecretKey = receiverNoiseSecretKey,
             requiredCapabilities = requiredSessionCapabilities(paykitSdkConfig()),
         )
         operationMutex.withLock {
@@ -185,8 +192,10 @@ class PaykitSdkService @Inject constructor(
     ): PubkySessionBootstrapResult {
         isSetup.await()
         val previousPublicKey = operationMutex.withLock { currentSdkStatePublicKeyLocked() }
+        val receiverNoiseSecretKey = sessionProvider.loadOrCreateReceiverNoiseSecretKey()
         val result = PubkySessionBootstrap().signUp(
             localSecretKey = localSecretKey(secretKeyHex),
+            receiverNoiseSecretKey = receiverNoiseSecretKey,
             homeserverPublicKey = homeserverPublicKey,
             signupCode = signupCode,
             requiredCapabilities = requiredCapabilities(),
@@ -205,8 +214,10 @@ class PaykitSdkService @Inject constructor(
     suspend fun signIn(secretKeyHex: String): PubkySessionBootstrapResult {
         isSetup.await()
         val previousPublicKey = operationMutex.withLock { currentSdkStatePublicKeyLocked() }
+        val receiverNoiseSecretKey = sessionProvider.loadOrCreateReceiverNoiseSecretKey()
         val result = PubkySessionBootstrap().signIn(
             localSecretKey = localSecretKey(secretKeyHex),
+            receiverNoiseSecretKey = receiverNoiseSecretKey,
             requiredCapabilities = requiredCapabilities(),
         )
         operationMutex.withLock {
@@ -238,6 +249,7 @@ class PaykitSdkService @Inject constructor(
             try {
                 request.complete(
                     localSecretKey = null,
+                    receiverNoiseSecretKey = sessionProvider.loadOrCreateReceiverNoiseSecretKey(),
                     requiredCapabilities = requiredCapabilities(),
                 ).also {
                     activateBootstrapResult(
@@ -443,15 +455,7 @@ class PaykitSdkService @Inject constructor(
                     return@withStateRevisionTracking
                 }
 
-                val status = handle.identityStatus()
-                handle.publishPaykitReceiverMarker(
-                    PaykitReceiverCapabilities(
-                        privatePayments = status?.privateLinkCapable == true,
-                        paymentRequests = false,
-                        receipts = false,
-                        outgoingPayments = true,
-                    ),
-                )
+                handle.publishPaykitReceiverMarker(receiverCapabilities(handle))
             }
         }
     }
@@ -660,6 +664,7 @@ class PaykitSdkService @Inject constructor(
         shouldStoreLocalSecret: Boolean,
     ) {
         keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, access.exportSessionSecret())
+        sessionProvider.persistReceiverNoiseSecretKey(access.exportReceiverNoiseSecretKey())
         val localSecret = access.exportLocalSecretKey()
         if (shouldStoreLocalSecret && localSecret != null) {
             keychain.upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, secretKeyHex(localSecret))
@@ -679,7 +684,30 @@ class PaykitSdkService @Inject constructor(
             keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)
         }
         resetRuntime()
-        handle().initialize()
+        val handle = handle()
+        handle.initialize()
+        publishReceiverMarkerIfLiveSessionAvailable(handle)
+    }
+
+    private suspend fun publishReceiverMarkerIfLiveSessionAvailable(handle: PaykitSdk) {
+        runSuspendCatching {
+            val capabilities = receiverCapabilities(handle)
+            if (capabilities.privatePayments) {
+                handle.publishPaykitReceiverMarker(capabilities)
+            }
+        }.onFailure {
+            Logger.warn("Failed to publish Paykit receiver marker", it, context = TAG)
+        }
+    }
+
+    private suspend fun receiverCapabilities(handle: PaykitSdk): PaykitReceiverCapabilities {
+        val status = handle.identityStatus()
+        return PaykitReceiverCapabilities(
+            privatePayments = status?.liveSessionAvailable == true,
+            paymentRequests = false,
+            receipts = false,
+            outgoingPayments = true,
+        )
     }
 
     private fun notifyBackupStateChanged() {
@@ -734,6 +762,8 @@ class PaykitSdkService @Inject constructor(
         this?.capabilities?.let { it.privatePayments && it.outgoingPayments } == true
 
     companion object {
+        private const val TAG = "PaykitSdkService"
+
         fun localSecretKey(secretKeyHex: String): PubkyLocalSecretKey =
             PubkyLocalSecretKey(secretKeyHex.fromHex())
 
@@ -806,6 +836,7 @@ private class PaykitSdkSessionProvider(
     private val keychain: Keychain,
 ) : SdkPubkySessionProvider {
     private val lock = Any()
+    private val receiverNoiseKeyStore = PaykitReceiverNoiseKeyStore(keychain)
     private var liveSessionAccess: PubkySessionAccess? = null
 
     fun setLiveSessionAccess(access: PubkySessionAccess) = synchronized(lock) {
@@ -830,6 +861,7 @@ private class PaykitSdkSessionProvider(
         return PubkySessionAccess(
             sessionSecret = sessionSecret,
             localSecretKey = loadLocalSecretKey(),
+            receiverNoiseSecretKey = loadOrCreateReceiverNoiseSecretKey(),
         )
     }
 
@@ -848,6 +880,75 @@ private class PaykitSdkSessionProvider(
             ?.takeIf { it.isNotBlank() }
             ?: return null
         return PaykitSdkService.localSecretKey(secretKeyHex)
+    }
+
+    fun loadOrCreateReceiverNoiseSecretKey(): ReceiverNoiseSecretKey =
+        receiverNoiseKeyStore.loadOrCreate()
+
+    fun persistReceiverNoiseSecretKey(key: ReceiverNoiseSecretKey) {
+        receiverNoiseKeyStore.persist(key)
+    }
+}
+
+internal class PaykitReceiverNoiseKeyStore(
+    private val loadBytes: () -> ByteArray?,
+    private val upsertBytes: (ByteArray) -> Unit,
+) {
+    constructor(keychain: Keychain) : this(
+        loadBytes = {
+            keychain.accessBlocking {
+                load(Keychain.Key.PAYKIT_RECEIVER_NOISE_SECRET_KEY.name)
+            }
+        },
+        upsertBytes = { bytes ->
+            keychain.accessBlocking {
+                upsert(Keychain.Key.PAYKIT_RECEIVER_NOISE_SECRET_KEY.name, bytes)
+            }
+        },
+    )
+
+    @Synchronized
+    fun loadOrCreate(): ReceiverNoiseSecretKey {
+        val bytes = loadOrCreateBytes { ReceiverNoiseSecretKey.random().exportBytes() }
+        return ReceiverNoiseSecretKey(bytes)
+    }
+
+    @Synchronized
+    fun persist(key: ReceiverNoiseSecretKey) {
+        persistBytes(key.exportBytes())
+    }
+
+    @Synchronized
+    internal fun loadOrCreateBytes(generateBytes: () -> ByteArray): ByteArray {
+        loadBytes()?.let { storedBytes ->
+            checkKeyLength(storedBytes, "Stored Paykit receiver Noise key is invalid")
+            return storedBytes
+        }
+
+        val bytes = generateBytes()
+        checkKeyLength(bytes, "Generated Paykit receiver Noise key is invalid")
+        upsertBytes(bytes)
+        return bytes
+    }
+
+    @Synchronized
+    internal fun persistBytes(bytes: ByteArray) {
+        checkKeyLength(bytes, "Paykit returned an invalid receiver Noise key")
+        loadBytes()?.let { storedBytes ->
+            if (!storedBytes.contentEquals(bytes)) {
+                throw AppError("Paykit receiver Noise key changed unexpectedly")
+            }
+            return
+        }
+        upsertBytes(bytes)
+    }
+
+    private fun checkKeyLength(bytes: ByteArray, message: String) {
+        if (bytes.size != RECEIVER_NOISE_KEY_LENGTH) throw AppError(message)
+    }
+
+    private companion object {
+        const val RECEIVER_NOISE_KEY_LENGTH = 32
     }
 }
 
