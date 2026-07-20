@@ -5,6 +5,7 @@ import androidx.compose.runtime.Stable
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import to.bitkit.ext.ellipsisMiddle
+import to.bitkit.ext.pubkyDisplayPublicKey
 import com.synonym.paykit.PaykitProfile as SdkPaykitProfile
 import com.synonym.paykit.PubkyProfile as SdkPubkyProfile
 
@@ -67,7 +68,7 @@ data class PubkyProfile(
     }
 
     val truncatedPublicKey: String
-        get() = publicKey.ellipsisMiddle(TRUNCATED_PK_LENGTH)
+        get() = publicKey.pubkyDisplayPublicKey()
 
     fun withNameFallback(fallbackName: String?): PubkyProfile {
         return if (name.isBlank() && !fallbackName.isNullOrBlank()) copy(name = fallbackName) else this

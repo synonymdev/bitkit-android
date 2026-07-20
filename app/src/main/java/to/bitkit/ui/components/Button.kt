@@ -101,6 +101,7 @@ fun PrimaryButton(
     fullWidth: Boolean = true,
     color: Color? = null,
     enableGradient: Boolean = true,
+    contentColor: Color = Colors.White,
 ) {
     val contentPadding = PaddingValues(horizontal = size.primaryHorizontalPadding.takeIf { text != null } ?: 0.dp)
     val buttonShape = MaterialTheme.shapes.extraLarge
@@ -110,7 +111,8 @@ fun PrimaryButton(
         enabled = enabled && !isLoading,
         colors = AppButtonDefaults.primaryColors.copy(
             containerColor = Color.Transparent,
-            disabledContainerColor = Color.Transparent
+            disabledContainerColor = Color.Transparent,
+            contentColor = contentColor,
         ),
         contentPadding = contentPadding,
         shape = buttonShape,

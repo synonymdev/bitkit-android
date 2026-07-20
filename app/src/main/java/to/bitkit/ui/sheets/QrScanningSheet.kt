@@ -4,13 +4,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.viewmodels.AppViewModel
 
 @Composable
-fun QrScanningSheet(appViewModel: AppViewModel) {
+fun QrScanningSheet(
+    sheet: Sheet.QrScanner,
+    appViewModel: AppViewModel,
+) {
     Content(
+        isPubkyScan = sheet.isPubkyScan,
         onBack = { appViewModel.hideScannerSheet() },
         onScanSuccess = { appViewModel.onScannerSheetResult(it) },
     )
@@ -18,6 +23,7 @@ fun QrScanningSheet(appViewModel: AppViewModel) {
 
 @Composable
 private fun Content(
+    isPubkyScan: Boolean,
     onBack: () -> Unit,
     onScanSuccess: (String) -> Unit,
 ) {
@@ -27,6 +33,7 @@ private fun Content(
             .sheetHeight()
     ) {
         QrScanningScreen(
+            isPubkyScan = isPubkyScan,
             onScanSuccess = onScanSuccess,
             onBack = onBack,
         )

@@ -2844,9 +2844,12 @@ class AppViewModel @Inject constructor(
     // region Sheets
     private var scanResultHandler: ((String) -> Unit)? = null
 
-    fun showScannerSheet(onResult: ((String) -> Unit)? = null) {
+    fun showScannerSheet(
+        isPubkyScan: Boolean = false,
+        onResult: ((String) -> Unit)? = null,
+    ) {
         scanResultHandler = onResult
-        showSheet(Sheet.QrScanner)
+        showSheet(Sheet.QrScanner(isPubkyScan = isPubkyScan))
     }
 
     fun onScannerSheetResult(data: String) {
