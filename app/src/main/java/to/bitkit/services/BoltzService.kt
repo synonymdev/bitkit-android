@@ -147,11 +147,14 @@ class BoltzService @Inject constructor(
 
     /**
      * Open the Boltz updates WebSocket, subscribe all pending swaps and auto-claim
-     * confirmed reverse swaps. [feeRateSatPerVb] is the rate used for those
-     * auto-claims (Bitkit owns fee estimation). Replaces any running stream.
+     * reverse swaps. [feeRateSatPerVb] is the rate used for those auto-claims
+     * (Bitkit owns fee estimation). [acceptZeroConf] claims a reverse swap as soon
+     * as its lockup hits the mempool instead of waiting for its confirmation.
+     * Replaces any running stream.
      */
     suspend fun startUpdates(
         feeRateSatPerVb: Double?,
+        acceptZeroConf: Boolean,
         network: BoltzNetwork = boltzNetwork(),
     ) {
         val (mnemonic, passphrase) = credentials()
@@ -161,6 +164,7 @@ class BoltzService @Inject constructor(
             mnemonic = mnemonic,
             bip39Passphrase = passphrase,
             feeRateSatPerVb = feeRateSatPerVb,
+            acceptZeroConf = acceptZeroConf,
         )
         Logger.info("Started Boltz updates stream on $network", context = TAG)
     }

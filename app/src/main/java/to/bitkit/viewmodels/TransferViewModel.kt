@@ -1049,8 +1049,8 @@ class TransferViewModel @Inject constructor(
     /**
      * Execute the LN -> onchain swap: derive a fresh claim address, create the swap,
      * pay the returned hold invoice over Lightning, then wait for the on-chain claim.
-     * The claim is auto-broadcast by the updates stream once the lockup confirms, so a
-     * timeout here is not a failure; the swap completes in the background.
+     * The claim is auto-broadcast by the updates stream as soon as the lockup hits the
+     * mempool, so a timeout here is not a failure; the swap completes in the background.
      */
     private suspend fun executeSavingsSwap(): SavingsSwapResult {
         val amount = pendingSwapAmountSat.takeIf { it > 0uL }
@@ -1297,7 +1297,7 @@ class TransferViewModel @Inject constructor(
         private val HW_BROADCAST_TIMEOUT = 120.seconds
 
         /** How long the confirm/progress flow waits for the on-chain claim before backgrounding it. */
-        private val SWAP_CLAIM_TIMEOUT = 60.seconds
+        private val SWAP_CLAIM_TIMEOUT = 30.seconds
 
         /** Minimum sats held back from a swap to cover Lightning routing fees. */
         private const val MIN_LN_ROUTING_FEE_RESERVE_SATS = 10L

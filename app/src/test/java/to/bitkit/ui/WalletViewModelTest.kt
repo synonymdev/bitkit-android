@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
@@ -16,6 +17,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.of
 import to.bitkit.models.BalanceState
@@ -68,6 +70,8 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever { migrationService.getRNRemoteBackupTimestamp() }.thenReturn(null)
         whenever(connectivityRepo.isOnline).thenReturn(isOnline)
         whenever(boltzService.events).thenReturn(MutableSharedFlow())
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(1uL))
 
         sut = WalletViewModel(
             context = context,

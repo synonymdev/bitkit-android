@@ -64,7 +64,7 @@ fun SavingsProgressScreen(
         when (transfer.savingsTransferMode.value) {
             // The swap itself is owned by the viewmodel so it survives leaving this screen;
             // the outcome arrives via savingsSwapResult below. Ensure the updates stream is
-            // running first so the new swap is tracked and auto-claimed once its lockup confirms.
+            // running first so the new swap is tracked and auto-claimed once its lockup appears.
             SavingsTransferMode.SWAP -> {
                 wallet.ensureSwapUpdatesRunning()
                 transfer.startSavingsSwap()
@@ -96,7 +96,7 @@ fun SavingsProgressScreen(
             }
 
             // The hold invoice is paid but the on-chain claim has not landed within the wait
-            // window. The claim is auto-broadcast once the lockup confirms, so the transfer is
+            // window. The claim is auto-broadcast once the lockup appears, so the transfer is
             // committed and settling; show that honestly instead of a completed success.
             SavingsSwapResult.Pending -> {
                 wallet.refreshState()

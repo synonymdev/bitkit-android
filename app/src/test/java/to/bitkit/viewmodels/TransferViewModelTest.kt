@@ -1079,7 +1079,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
         sut.startSavingsSwap()
         runCurrent()
-        advanceTimeBy(61.seconds)
+        advanceTimeBy(31.seconds)
         advanceUntilIdle()
 
         assertEquals(SavingsSwapResult.Pending, sut.savingsSwapResult.value)

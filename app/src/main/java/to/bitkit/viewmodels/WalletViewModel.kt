@@ -70,11 +70,11 @@ class WalletViewModel @Inject constructor(
         private const val TAG = "WalletViewModel"
         private val TIMEOUT_RESTORE_WAIT = 30.seconds
 
-        /** Attempts to open the Boltz updates stream before giving up until the next wallet start. */
-        private const val SWAP_UPDATES_START_ATTEMPTS = 3
-
         /** Base backoff between swap updates stream attempts; scales linearly per attempt. */
         private val SWAP_UPDATES_RETRY_DELAY = 5.seconds
+
+        /** Upper bound for the backoff between swap updates stream attempts. */
+        private val SWAP_UPDATES_RETRY_CAP = 60.seconds
     }
 
     val lightningState = lightningRepo.lightningState
@@ -320,8 +320,7 @@ class WalletViewModel @Inject constructor(
                 if (_restoreState.value.isIdle()) {
                     walletRepo.refreshBip21()
                 }
-                collectSwapEventsOnce()
-                viewModelScope.launch { startSwapUpdates() }
+                ensureSwapUpdatesRunning()
                 // checkForOrphanedChannelMonitorRecovery()
             }
             .onFailure {
@@ -333,36 +332,48 @@ class WalletViewModel @Inject constructor(
     }
 
     private var swapEventsCollected = false
+    private var swapUpdatesJob: Job? = null
+
+    @Volatile
+    private var swapUpdatesRunning = false
 
     /**
-     * Ensure the swap updates stream is running so a swap created now is tracked and auto-claimed.
-     * Restarting re-subscribes and reconciles every pending swap in bitkit-core, so calling this as
-     * a swap begins closes the window where the stream was down when the swap was created.
+     * Ensure the swap updates stream is running so pending LN -> onchain swaps are tracked and
+     * auto-claimed. A live stream is left untouched: restarting it would abort bitkit-core's
+     * background tasks and could race an in-flight claim. New swaps are reconciled at creation
+     * inside bitkit-core, and the stream reconciles every pending swap periodically, so a
+     * running stream is always enough.
      */
     fun ensureSwapUpdatesRunning() {
         collectSwapEventsOnce()
-        viewModelScope.launch { startSwapUpdates() }
+        if (swapUpdatesRunning || swapUpdatesJob?.isActive == true) return
+        swapUpdatesJob = viewModelScope.launch { startSwapUpdates() }
     }
 
     /**
-     * Open the swap updates stream so any pending LN -> onchain swaps resume and auto-claim
-     * once their lockup confirms. Uses the wallet's current fee rate for the claim tx.
-     * Retries on failure: without the stream a paid swap has nothing to broadcast its claim.
+     * Open the swap updates stream so any pending LN -> onchain swaps resume and auto-claim.
+     * Uses the wallet's current fee rate for the claim tx. Retries until started: without
+     * the stream a paid swap has nothing to broadcast its claim. Once started, bitkit-core
+     * keeps the WebSocket alive with its own reconnect loop.
      */
     private suspend fun startSwapUpdates() {
-        repeat(SWAP_UPDATES_START_ATTEMPTS) { attempt ->
+        var attempt = 0
+        while (true) {
             val started = runSuspendCatching {
                 val speed = settingsStore.data.first().defaultTransactionSpeed
                 val feeRate = lightningRepo.getFeeRateForSpeed(speed).getOrNull()?.toDouble()
-                boltzService.startUpdates(feeRateSatPerVb = feeRate)
+                boltzService.startUpdates(feeRateSatPerVb = feeRate, acceptZeroConf = true)
             }.onFailure {
                 Logger.warn("Failed to start swap updates, attempt '${attempt + 1}'", context = TAG)
             }.isSuccess
 
-            if (started) return
-            delay(SWAP_UPDATES_RETRY_DELAY * (attempt + 1))
+            if (started) {
+                swapUpdatesRunning = true
+                return
+            }
+            attempt++
+            delay((SWAP_UPDATES_RETRY_DELAY * attempt).coerceAtMost(SWAP_UPDATES_RETRY_CAP))
         }
-        Logger.error("Gave up starting swap updates after '$SWAP_UPDATES_START_ATTEMPTS' attempts", context = TAG)
     }
 
     /** Refresh balances when a swap lands on-chain so savings reflect it without a manual sync. */
@@ -396,6 +407,8 @@ class WalletViewModel @Inject constructor(
     fun stop() {
         if (!walletExists) return
 
+        swapUpdatesJob?.cancel()
+        swapUpdatesRunning = false
         viewModelScope.launch(bgDispatcher) {
             stopSwapUpdates()
             lightningRepo.stop()
