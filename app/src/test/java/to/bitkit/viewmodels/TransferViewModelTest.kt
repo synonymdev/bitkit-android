@@ -611,6 +611,7 @@ class TransferViewModelTest : BaseUnitTest() {
         sut.onTransferToSpendingHwConfirm(order, DEVICE_ID)
         advanceUntilIdle()
 
+        verify(lightningRepo).getFeeRateForSpeed(eq(TransactionSpeed.Fast), anyOrNull())
         verify(hwWalletRepo).composeFundingTransaction(
             eq(DEVICE_ID),
             eq(order.payment?.onchain?.address.orEmpty()),
@@ -1279,7 +1280,7 @@ class TransferViewModelTest : BaseUnitTest() {
         const val XPUB = "zpub-test"
         const val TXID = "tx-abc"
         const val FEE_RATE = 2uL
-        const val FALLBACK_FEE_RATE = 1uL
+        const val FALLBACK_FEE_RATE = 3uL
         const val MINING_FEE = 1_250uL
     }
 }
