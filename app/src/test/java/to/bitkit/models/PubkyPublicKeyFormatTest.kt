@@ -46,6 +46,18 @@ class PubkyPublicKeyFormatTest {
     }
 
     @Test
+    fun `display normalizes and shortens a prefixed key`() {
+        val key = "  PUBKY3RSDUHCXPW74SNWYCT86M38C63J3PQ8X4YCQIKXG64ROIK8YW5X  "
+
+        assertEquals("3rsd...yw5x", PubkyPublicKeyFormat.display(key))
+    }
+
+    @Test
+    fun `display leaves a short raw key unchanged`() {
+        assertEquals("short", PubkyPublicKeyFormat.display("pubkyshort"))
+    }
+
+    @Test
     fun `matches compares equivalent pubky representations`() {
         val rawKey = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         val prefixedKey = "pubky$rawKey"

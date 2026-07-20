@@ -86,6 +86,7 @@
     <string name="common__preview">Preview</string>
     <string name="common__ready">Ready</string>
     <string name="common__remove">Remove</string>
+    <string name="common__remove_tag">Remove %1$s tag</string>
     <string name="common__reset">Reset</string>
     <string name="common__retry">Retry</string>
     <string name="common__sat_vbyte">₿ / vbyte</string>
@@ -127,6 +128,7 @@
     <string name="contacts__edit_contact_saved">Contact updated</string>
     <string name="contacts__edit_contact_title">Edit Contact</string>
     <string name="contacts__edit_public_note">Please note contact information is stored in public files. Changes you make to a contact in Bitkit will not update their profile.</string>
+    <string name="contacts__edit_save_error">Failed to save contact</string>
     <string name="contacts__import_all">Import All</string>
     <string name="contacts__import_friends_count">%1$d friends</string>
     <string name="contacts__import_overview_headline">Found\n&lt;accent&gt;profile &amp; contacts&lt;/accent&gt;</string>
@@ -145,7 +147,7 @@
     <string name="contacts__nav_title">Contacts</string>
     <string name="contacts__pubky">Pubky</string>
     <string name="contacts__scanner_paste">Paste QR Or Link</string>
-    <string name="contacts__scanner_status">SCANNING QR, NFC &amp; BLUETOOTH</string>
+    <string name="contacts__scanner_status">SCANNING QR &amp; NFC</string>
     <string name="fee__custom__description">Depends on the fee</string>
     <string name="fee__custom__shortDescription">Depends on the fee</string>
     <string name="fee__custom__title">Custom</string>
