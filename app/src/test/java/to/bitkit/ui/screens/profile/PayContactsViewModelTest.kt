@@ -44,7 +44,7 @@ class PayContactsViewModelTest : BaseUnitTest() {
 
     @Test
     fun `continue stays on screen when enabling fails`() = test {
-        whenever { contactPaymentSettingsRepo.setEnabled(true) }
+        whenever(contactPaymentSettingsRepo.setEnabled(true))
             .thenReturn(Result.failure(PayContactsTestAppError("sync failed")))
         val sut = createSut()
 

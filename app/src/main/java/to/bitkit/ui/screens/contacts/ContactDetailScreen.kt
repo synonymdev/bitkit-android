@@ -103,7 +103,7 @@ private fun Content(
     onClickShare: () -> Unit,
     onClickRetry: () -> Unit,
     onAddTag: () -> Unit,
-    onRemoveTag: (Int) -> Unit,
+    onRemoveTag: (String) -> Unit,
     onDismissAddTagSheet: () -> Unit,
     onSaveTag: (String) -> Unit,
     onDismissDeleteDialog: () -> Unit,
@@ -170,7 +170,7 @@ private fun ContactBody(
     onClickActivity: () -> Unit,
     onClickShare: () -> Unit,
     onAddTag: () -> Unit,
-    onRemoveTag: (Int) -> Unit,
+    onRemoveTag: (String) -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -262,10 +262,11 @@ private fun ContactBody(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            tags.forEachIndexed { index, tag ->
+            tags.forEach { tag ->
                 TagButton(
                     text = tag,
-                    onClick = { onRemoveTag(index) },
+                    onClick = { onRemoveTag(tag) },
+                    accessibilityLabel = stringResource(R.string.common__remove_tag, tag),
                     displayIconClose = true,
                 )
             }
