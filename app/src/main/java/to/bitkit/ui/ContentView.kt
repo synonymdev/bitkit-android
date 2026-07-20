@@ -174,7 +174,6 @@ import to.bitkit.ui.settings.lightning.ChannelDetailScreen
 import to.bitkit.ui.settings.lightning.CloseConnectionScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsScreen
 import to.bitkit.ui.settings.lightning.LightningConnectionsViewModel
-import to.bitkit.ui.settings.paymentPreference.PaymentPreferenceScreen
 import to.bitkit.ui.settings.pin.PinManagementScreen
 import to.bitkit.ui.settings.quickPay.QuickPayIntroScreen
 import to.bitkit.ui.settings.quickPay.QuickPaySettingsScreen
@@ -499,7 +498,7 @@ fun ContentView(
 
                         is Sheet.BTCPayConnection -> BTCPayConnectionSheet(sheet, appViewModel)
                         is Sheet.Gift -> GiftSheet(sheet, appViewModel)
-                        Sheet.QrScanner -> QrScanningSheet(appViewModel)
+                        is Sheet.QrScanner -> QrScanningSheet(sheet, appViewModel)
                         is Sheet.PubkyAuth -> PubkyAuthApprovalSheet(
                             authUrl = sheet.authUrl,
                             viewModel = hiltViewModel(),
@@ -1170,7 +1169,7 @@ private fun NavGraphBuilder.contacts(
                 onClickContact = { navController.navigateTo(Routes.ContactDetail(it)) },
                 onAddContact = { navController.navigateTo(Routes.AddContact(it)) },
                 onScanQr = {
-                    appViewModel.showScannerSheet { scannedData ->
+                    appViewModel.showScannerSheet(isPubkyScan = true) { scannedData ->
                         navController.navigateTo(Routes.AddContact(scannedData))
                     }
                 },
@@ -1198,8 +1197,9 @@ private fun NavGraphBuilder.contacts(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.ContactDetail> {
+    composableWithDefaultTransitions<Routes.ContactDetail> { backStackEntry ->
         PaykitRouteGuard(settingsViewModel, navController) {
+            val route = backStackEntry.toRoute<Routes.ContactDetail>()
             val viewModel: ContactDetailViewModel = hiltViewModel()
             ContactDetailScreen(
                 viewModel = viewModel,
@@ -1208,6 +1208,10 @@ private fun NavGraphBuilder.contacts(
                     appViewModel.openContactPayment(paymentRequest, publicKey)
                 },
                 onActivityClick = { navController.navigateTo(Routes.ContactActivity(it)) },
+                showDeleteAction = route.showDeleteAction,
+                onContactDeleted = {
+                    navController.navigateTo(Routes.Contacts()) { popUpTo(Routes.Home) }
+                },
                 onEditContact = { navController.navigateTo(Routes.EditContact(it)) },
             )
         }
@@ -1228,7 +1232,13 @@ private fun NavGraphBuilder.contacts(
             AddContactScreen(
                 viewModel = viewModel,
                 onBackClick = { navController.popBackStack() },
-                onContactSaved = { navController.popBackStack() },
+                onContactSaved = { publicKey ->
+                    navController.navigateTo(
+                        Routes.ContactDetail(publicKey, showDeleteAction = true)
+                    ) {
+                        popUpTo(Routes.AddContact(publicKey)) { inclusive = true }
+                    }
+                },
                 onPayContact = { paymentRequest, publicKey ->
                     navController.popBackStack()
                     appViewModel.openContactPayment(paymentRequest, publicKey)
@@ -1434,14 +1444,6 @@ private fun NavGraphBuilder.generalSettingsSubScreens(
             onBack = { navController.popBackStack() },
         )
     }
-    composableWithDefaultTransitions<Routes.PaymentPreferenceSettings> {
-        PaykitRouteGuard(settingsViewModel, navController) {
-            PaymentPreferenceScreen(
-                onBack = { navController.popBackStack() },
-            )
-        }
-    }
-
     composableWithDefaultTransitions<Routes.BackgroundPaymentsIntro> {
         val notificationPermissionLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission()
@@ -1870,8 +1872,6 @@ fun NavController.navigateToLogDetail(fileName: String) = navigateTo(Routes.LogD
 
 fun NavController.navigateToTransactionSpeedSettings() = navigateTo(Routes.TransactionSpeedSettings)
 
-fun NavController.navigateToPaymentPreferenceSettings() = navigateTo(Routes.PaymentPreferenceSettings)
-
 fun NavController.navigateToCustomFeeSettings() = navigateTo(Routes.CustomFeeSettings)
 
 fun NavController.navigateToWidgetsSettings() = navigateTo(Routes.WidgetsSettings)
@@ -1907,9 +1907,6 @@ sealed interface Routes {
 
     @Serializable
     data object TransactionSpeedSettings : Routes
-
-    @Serializable
-    data object PaymentPreferenceSettings : Routes
 
     @Serializable
     data object WidgetsSettings : Routes
@@ -2127,7 +2124,10 @@ sealed interface Routes {
     data object ContactsIntro : Routes
 
     @Serializable
-    data class ContactDetail(val publicKey: String) : Routes
+    data class ContactDetail(
+        val publicKey: String,
+        val showDeleteAction: Boolean = false,
+    ) : Routes
 
     @Serializable
     data class ContactActivity(val publicKey: String) : Routes

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -52,19 +53,21 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import to.bitkit.R
-import to.bitkit.ext.ellipsisMiddle
 import to.bitkit.ext.getClipboardText
+import to.bitkit.ext.pubkyDisplayPublicKey
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheet
+import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.CenteredProfileHeader
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
@@ -72,9 +75,10 @@ import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.withAccent
 
 // region AddContactSheet (bottom sheet)
 
@@ -144,7 +148,13 @@ private fun AddContactSheetContent(
     onScanQr: () -> Unit,
     onSubmit: () -> Unit,
 ) {
-    Column(modifier = Modifier.padding(horizontal = 16.dp)) {
+    Column(
+        modifier = Modifier
+            .sheetHeight(SheetSize.SMALL, isModal = true)
+            .gradientBackground()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp)
+    ) {
         SheetTopBar(titleText = stringResource(R.string.contacts__add_sheet_title))
         VerticalSpacer(16.dp)
 
@@ -160,7 +170,8 @@ private fun AddContactSheetContent(
             value = publicKeyInput,
             onValueChange = onPublicKeyChange,
             placeholder = stringResource(R.string.contacts__add_pubky_placeholder),
-            singleLine = true,
+            minLines = 2,
+            maxLines = 2,
             isError = validationMessage != null,
             keyboardOptions = KeyboardOptions(
                 capitalization = KeyboardCapitalization.None,
@@ -197,6 +208,13 @@ private fun AddContactSheetContent(
             SecondaryButton(
                 text = stringResource(R.string.contacts__add_scan_qr),
                 onClick = onScanQr,
+                icon = {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_scan),
+                        contentDescription = null,
+                        modifier = Modifier.size(24.dp)
+                    )
+                },
                 modifier = Modifier
                     .weight(1f)
                     .testTag("AddContactScanQR")
@@ -222,7 +240,7 @@ private fun AddContactSheetContent(
 fun AddContactScreen(
     viewModel: AddContactViewModel,
     onBackClick: () -> Unit,
-    onContactSaved: () -> Unit,
+    onContactSaved: (String) -> Unit,
     onPayContact: (String, String) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -230,7 +248,7 @@ fun AddContactScreen(
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                AddContactEffect.ContactSaved -> onContactSaved()
+                is AddContactEffect.ContactSaved -> onContactSaved(it.publicKey)
                 is AddContactEffect.OpenPayment -> onPayContact(it.paymentRequest, it.publicKey)
             }
         }
@@ -273,14 +291,12 @@ private fun Content(
                 isLoading = uiState.isLoading,
                 hasPublicPaymentEndpoint = uiState.hasPublicPaymentEndpoint,
                 onPay = onPay,
-                onDiscard = onBackClick,
                 onSave = onSave,
             )
         }
     }
 }
 
-private const val TRUNCATED_PK_LENGTH = 11
 private const val ELLIPSE_ANIMATION_DURATION_MS = 8000
 
 @Composable
@@ -294,7 +310,7 @@ private fun LoadingContent(publicKey: String) {
         VerticalSpacer(24.dp)
 
         Text13Up(
-            text = publicKey.ellipsisMiddle(TRUNCATED_PK_LENGTH),
+            text = publicKey.pubkyDisplayPublicKey(),
             color = Colors.White64,
         )
 
@@ -303,7 +319,7 @@ private fun LoadingContent(publicKey: String) {
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(80.dp)
+                .size(96.dp)
                 .clip(CircleShape)
                 .background(Colors.Gray5)
         ) {
@@ -313,11 +329,12 @@ private fun LoadingContent(publicKey: String) {
             )
         }
 
-        VerticalSpacer(24.dp)
+        VerticalSpacer(16.dp)
 
         Display(
-            text = stringResource(R.string.contacts__add_retrieving)
-                .withAccent(accentColor = Colors.PubkyGreen),
+            text = stringResource(R.string.contacts__add_retrieving),
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
         )
 
         Box(
@@ -447,14 +464,13 @@ private fun LoadedContent(
     isLoading: Boolean,
     hasPublicPaymentEndpoint: Boolean,
     onPay: () -> Unit,
-    onDiscard: () -> Unit,
     onSave: () -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 32.dp)
+            .padding(horizontal = 16.dp)
     ) {
         VerticalSpacer(24.dp)
 
@@ -474,32 +490,32 @@ private fun LoadedContent(
         VerticalSpacer(16.dp)
 
         if (hasPublicPaymentEndpoint) {
-            SecondaryButton(
-                text = stringResource(R.string.wallet__send),
-                onClick = onPay,
-                modifier = Modifier.testTag("AddContactPay")
-            )
-            VerticalSpacer(16.dp)
-        }
-
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            SecondaryButton(
-                text = stringResource(R.string.contacts__add_discard),
-                onClick = onDiscard,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("AddContactDiscard")
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                SecondaryButton(
+                    text = stringResource(R.string.contacts__add_pay),
+                    onClick = onPay,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("AddContactPay")
+                )
+                PrimaryButton(
+                    text = stringResource(R.string.common__save),
+                    onClick = onSave,
+                    enabled = !isLoading,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("AddContactSave")
+                )
+            }
+        } else {
             PrimaryButton(
                 text = stringResource(R.string.common__save),
                 onClick = onSave,
                 enabled = !isLoading,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("AddContactSave")
+                modifier = Modifier.testTag("AddContactSave")
             )
         }
         VerticalSpacer(16.dp)
@@ -514,15 +530,17 @@ private fun LoadedContent(
 @Composable
 private fun SheetPreview() {
     AppThemeSurface {
-        AddContactSheetContent(
-            publicKeyInput = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
-            validationMessage = null,
-            isSubmitEnabled = true,
-            onPublicKeyChange = {},
-            onPaste = {},
-            onScanQr = {},
-            onSubmit = {},
-        )
+        BottomSheetPreview {
+            AddContactSheetContent(
+                publicKeyInput = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
+                validationMessage = null,
+                isSubmitEnabled = true,
+                onPublicKeyChange = {},
+                onPaste = {},
+                onScanQr = {},
+                onSubmit = {},
+            )
+        }
     }
 }
 
