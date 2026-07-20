@@ -95,6 +95,20 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failed private preparation restores disabled settings`() = test {
+        whenever(privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), eq(false)))
+            .thenReturn(Result.failure(ContactPaymentSettingsTestError("private preparation failed")))
+
+        val result = createSut().setEnabled(true)
+
+        assertTrue(result.isFailure)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
+    }
+
+    @Test
     fun `disabling removes public and private contact payments`() = test {
         settingsFlow.value = SettingsData(
             hasConfirmedPublicPaykitEndpoints = true,

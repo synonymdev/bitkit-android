@@ -62,6 +62,10 @@ class ContactPaymentSettingsRepo @Inject constructor(
 
         if (canUsePrivateContactPayments) {
             privatePaykitRepo.prepareSavedContacts(contacts)
+                .onFailure {
+                    rollbackEnabled(previous, contacts, it)
+                    return Result.failure(it)
+                }
         }
 
         return Result.success(Unit)

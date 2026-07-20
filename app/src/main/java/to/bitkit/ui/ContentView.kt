@@ -1225,7 +1225,7 @@ private fun NavGraphBuilder.contacts(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.AddContact> {
+    composableWithDefaultTransitions<Routes.AddContact> { backStackEntry ->
         PaykitRouteGuard(settingsViewModel, navController) {
             val viewModel: AddContactViewModel = hiltViewModel()
             AddContactScreen(
@@ -1235,7 +1235,7 @@ private fun NavGraphBuilder.contacts(
                     navController.navigateTo(
                         Routes.ContactDetail(publicKey, showDeleteAction = true)
                     ) {
-                        popUpTo(Routes.AddContact(publicKey)) { inclusive = true }
+                        popUpTo(backStackEntry.destination.id) { inclusive = true }
                     }
                 },
                 onPayContact = { paymentRequest, publicKey ->
