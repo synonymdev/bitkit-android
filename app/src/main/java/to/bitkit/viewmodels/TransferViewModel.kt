@@ -213,9 +213,10 @@ class TransferViewModel @Inject constructor(
 
     /** Pays for the order and start watching it for state updates */
     @Suppress("LongMethod")
-    fun onTransferToSpendingConfirm(order: IBtOrder, speed: TransactionSpeed = TransactionSpeed.Fast) {
+    fun onTransferToSpendingConfirm(order: IBtOrder) {
         viewModelScope.launch {
             val address = order.payment?.onchain?.address.orEmpty()
+            val speed = TransactionSpeed.Fast
 
             // Use live spendableOnchainBalanceSats (not cached) to respect anchor reserves
             val balanceDetails = lightningRepo.getBalancesAsync().getOrNull()
@@ -233,10 +234,8 @@ class TransferViewModel @Inject constructor(
                 spendableBalance.toLong() - order.feeSat.toLong() - sendAllFee.toLong()
             // Match iOS: proactive drain only for dust change. Negative change means the drain
             // output would underpay the order — never send-all in that case.
-            val shouldUseSendAll =
-                expectedChange >= 0 && expectedChange < TRANSFER_SEND_ALL_THRESHOLD_SATS
-            val maxSendable =
-                if (sendAllFee >= spendableBalance) 0uL else spendableBalance - sendAllFee
+            val shouldUseSendAll = expectedChange in 0 until TRANSFER_SEND_ALL_THRESHOLD_SATS
+            val maxSendable = spendableBalance.safe() - sendAllFee.safe()
 
             Logger.debug(
                 "BT confirm: spendable=$spendableBalance, feeSat=${order.feeSat}, " +
@@ -445,8 +444,7 @@ class TransferViewModel @Inject constructor(
                 Logger.warn("Failed to estimate transfer mining fee reserve", it, context = TAG)
                 (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
             }
-            val availableAmount =
-                if (miningFee >= spendable) 0uL else spendable - miningFee
+            val availableAmount = spendable.safe() - miningFee.safe()
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
             if (initialLspFees == null) {
