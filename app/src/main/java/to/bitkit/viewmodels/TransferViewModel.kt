@@ -103,6 +103,8 @@ class TransferViewModel @Inject constructor(
     var maxLspFee = 0uL
     private var hwTransferSignJob: Job? = null
     private var hwFeeEstimateJob: Job? = null
+    private var confirmFeeJob: Job? = null
+    private var spendingConfirmFundingPlan: SpendingConfirmFundingPlan? = null
     private var pendingHwFundingBroadcast: PendingHwFundingBroadcast? = null
     private var activeHwTransferDeviceId: String? = null
 
@@ -213,119 +215,175 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    /** Pays for the order and start watching it for state updates */
-    @Suppress("LongMethod", "CyclomaticComplexMethod")
-    fun onTransferToSpendingConfirm(order: IBtOrder) {
-        viewModelScope.launch {
-            val address = order.payment?.onchain?.address.orEmpty()
-            val speed = TransactionSpeed.Fast
-
-            // Use live spendableOnchainBalanceSats (not cached) to respect anchor reserves
-            val balanceDetails = lightningRepo.getBalancesAsync().getOrNull()
-            val spendableBalance = balanceDetails?.spendableOnchainBalanceSats ?: 0uL
-            val sendAllFee = lightningRepo.estimateSendAllFee(
-                address = address,
-                speed = speed,
-            ).getOrElse {
-                Logger.error("Failed to estimate send-all fee", it, context = TAG)
-                ToastEventBus.send(it)
-                return@launch
+    /**
+     * Match iOS SpendingConfirm.task: compute real mining fee + drain decision before swipe,
+     * so confirm UI can show fees up-front.
+     */
+    fun prepareSpendingConfirmFunding(order: IBtOrder) {
+        confirmFeeJob?.cancel()
+        confirmFeeJob = viewModelScope.launch {
+            _spendingUiState.update {
+                it.copy(isConfirmFeeReady = false, miningFeeSats = 0uL)
             }
-            val maxSendable = spendableBalance.safe() - sendAllFee.safe()
-
-            // Match iOS SpendingConfirm: try normal coin selection + fee first; drain only for
-            // real dust change on the selected inputs (never use send-all fee for this check).
-            var shouldUseSendAll = false
-            var selectedUtxos: List<SpendableUtxo>? = null
-            var normalFee = 0uL
-
-            val satsPerVByte = lightningRepo.getFeeRateForSpeed(speed).getOrElse {
-                Logger.error("Failed to get transfer fee rate", it, context = TAG)
-                ToastEventBus.send(it)
-                return@launch
-            }
-
-            lightningRepo.selectUtxosWithAlgorithm(
-                targetAmountSats = order.feeSat,
-                satsPerVByte = satsPerVByte,
-                algorithm = CoinSelectionAlgorithm.LARGEST_FIRST,
-            ).onSuccess { utxos ->
-                normalFee = lightningRepo.calculateTotalFee(
-                    amountSats = order.feeSat,
-                    address = address,
-                    speed = speed,
-                    utxosToSpend = utxos,
-                ).getOrElse {
-                    Logger.warn("Failed to estimate transfer funding fee", it, context = TAG)
-                    0uL
+            buildSpendingConfirmFundingPlan(order)
+                .onSuccess { plan ->
+                    spendingConfirmFundingPlan = plan
+                    _spendingUiState.update {
+                        it.copy(
+                            isConfirmFeeReady = true,
+                            miningFeeSats = plan.miningFeeSats,
+                            shouldUseSendAll = plan.shouldUseSendAll,
+                        )
+                    }
                 }
-                selectedUtxos = utxos
-                val totalInput = utxos.fold(0uL) { acc, utxo -> acc.safe() + utxo.valueSats.safe() }
-                shouldUseSendAll = wouldCreateDustChange(
-                    totalInput = totalInput,
-                    amountSats = order.feeSat,
-                    normalFee = normalFee,
-                )
-            }.onFailure {
-                Logger.warn("Normal coin selection failed, using sendAll", it, context = TAG)
-                shouldUseSendAll = true
-            }
+                .onFailure {
+                    spendingConfirmFundingPlan = null
+                    _spendingUiState.update {
+                        it.copy(isConfirmFeeReady = false, miningFeeSats = 0uL, shouldUseSendAll = false)
+                    }
+                    Logger.error("Failed to prepare transfer funding fee", it, context = TAG)
+                    if (it is AppError) {
+                        ToastEventBus.send(it)
+                    } else {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__try_again),
+                        )
+                    }
+                }
+        }
+    }
 
-            Logger.debug(
-                "BT confirm: spendable=$spendableBalance, feeSat=${order.feeSat}, " +
-                    "sendAllFee=$sendAllFee, normalFee=$normalFee, " +
-                    "selectedUtxos=${selectedUtxos?.size}, sendAll=$shouldUseSendAll",
+    /** Pays for the order using the prepared confirm plan and starts watching it. */
+    suspend fun onTransferToSpendingConfirm(order: IBtOrder): Boolean {
+        val plan = spendingConfirmFundingPlan?.takeIf { it.orderId == order.id }
+            ?: buildSpendingConfirmFundingPlan(order).getOrElse {
+                Logger.error("Failed to prepare transfer funding fee", it, context = TAG)
+                ToastEventBus.send(it)
+                return false
+            }.also { spendingConfirmFundingPlan = it }
+
+        Logger.debug(
+            "BT confirm: spendable=${plan.spendableBalance}, feeSat=${order.feeSat}, " +
+                "miningFee=${plan.miningFeeSats}, selectedUtxos=${plan.selectedUtxos?.size}, " +
+                "sendAll=${plan.shouldUseSendAll}",
+            context = TAG,
+        )
+
+        if (plan.shouldUseSendAll && plan.maxSendable < order.feeSat) {
+            Logger.error(
+                "Insufficient balance for transfer: maxSendable=${plan.maxSendable}, " +
+                    "orderFee=${order.feeSat}",
                 context = TAG,
             )
-
-            suspend fun fund(
-                isMaxAmount: Boolean,
-                txTotalSats: ULong,
-                utxosToSpend: List<SpendableUtxo>? = null,
-            ) = lightningRepo
-                .sendOnChain(
-                    address = address,
-                    sats = order.feeSat,
-                    speed = speed,
-                    utxosToSpend = utxosToSpend,
-                    isTransfer = true,
-                    channelId = order.channel?.shortChannelId,
-                    isMaxAmount = isMaxAmount,
-                )
-                .onSuccess { txId ->
-                    fundPaidOrder(
-                        order = order,
-                        txId = txId,
-                        txTotalSats = txTotalSats,
-                        preTransferOnchainSats = balanceDetails?.totalOnchainBalanceSats
-                            ?: spendableBalance,
-                    )
-                }
-
-            if (shouldUseSendAll) {
-                if (maxSendable < order.feeSat) {
-                    Logger.error(
-                        "Insufficient balance for transfer: maxSendable=$maxSendable, " +
-                            "orderFee=${order.feeSat}",
-                        context = TAG,
-                    )
-                    ToastEventBus.send(
-                        type = Toast.ToastType.ERROR,
-                        title = context.getString(R.string.other__pay_insufficient_savings),
-                    )
-                    return@launch
-                }
-                fund(isMaxAmount = true, txTotalSats = spendableBalance)
-                    .onFailure { ToastEventBus.send(it) }
-                return@launch
-            }
-
-            fund(
-                isMaxAmount = false,
-                txTotalSats = order.feeSat.safe() + normalFee.safe(),
-                utxosToSpend = selectedUtxos,
-            ).onFailure { ToastEventBus.send(it) }
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__pay_insufficient_savings),
+            )
+            return false
         }
+
+        val address = order.payment?.onchain?.address.orEmpty()
+        return lightningRepo
+            .sendOnChain(
+                address = address,
+                sats = order.feeSat,
+                speed = TransactionSpeed.Fast,
+                utxosToSpend = if (plan.shouldUseSendAll) null else plan.selectedUtxos,
+                isTransfer = true,
+                channelId = order.channel?.shortChannelId,
+                isMaxAmount = plan.shouldUseSendAll,
+            )
+            .onSuccess { txId ->
+                fundPaidOrder(
+                    order = order,
+                    txId = txId,
+                    txTotalSats = if (plan.shouldUseSendAll) {
+                        plan.spendableBalance
+                    } else {
+                        order.feeSat.safe() + plan.miningFeeSats.safe()
+                    },
+                    preTransferOnchainSats = plan.totalOnchainBalance,
+                )
+            }
+            .onFailure { ToastEventBus.send(it) }
+            .isSuccess
+    }
+
+    @Suppress("LongMethod")
+    private suspend fun buildSpendingConfirmFundingPlan(
+        order: IBtOrder,
+    ): Result<SpendingConfirmFundingPlan> = runSuspendCatching {
+        val address = order.payment?.onchain?.address.orEmpty()
+        require(address.isNotEmpty()) { "Order payment onchain address is nil" }
+
+        val speed = TransactionSpeed.Fast
+        val balanceDetails = lightningRepo.getBalancesAsync().getOrThrow()
+        val spendableBalance = balanceDetails.spendableOnchainBalanceSats
+        val totalOnchainBalance = balanceDetails.totalOnchainBalanceSats
+        val satsPerVByte = lightningRepo.getFeeRateForSpeed(speed).getOrThrow()
+
+        // Match iOS SpendingConfirm: normal coin selection + fee first; drain only for real dust.
+        var shouldUseSendAll = false
+        var selectedUtxos: List<SpendableUtxo>? = null
+        var normalFee = 0uL
+
+        lightningRepo.selectUtxosWithAlgorithm(
+            targetAmountSats = order.feeSat,
+            satsPerVByte = satsPerVByte,
+            algorithm = CoinSelectionAlgorithm.LARGEST_FIRST,
+        ).onSuccess { utxos ->
+            normalFee = lightningRepo.calculateTotalFee(
+                amountSats = order.feeSat,
+                address = address,
+                speed = speed,
+                utxosToSpend = utxos,
+            ).getOrElse {
+                Logger.warn("Failed to estimate transfer funding fee", it, context = TAG)
+                0uL
+            }
+            selectedUtxos = utxos
+            val totalInput = utxos.fold(0uL) { acc, utxo -> acc.safe() + utxo.valueSats.safe() }
+            shouldUseSendAll = wouldCreateDustChange(
+                totalInput = totalInput,
+                amountSats = order.feeSat,
+                normalFee = normalFee,
+            )
+        }.onFailure {
+            Logger.warn("Normal coin selection failed, using sendAll", it, context = TAG)
+            shouldUseSendAll = true
+        }
+
+        if (!shouldUseSendAll) {
+            return@runSuspendCatching SpendingConfirmFundingPlan(
+                orderId = order.id,
+                miningFeeSats = normalFee,
+                shouldUseSendAll = false,
+                selectedUtxos = selectedUtxos,
+                spendableBalance = spendableBalance,
+                totalOnchainBalance = totalOnchainBalance,
+                maxSendable = 0uL,
+            )
+        }
+
+        val sendAllFee = lightningRepo.estimateSendAllFee(
+            address = address,
+            speed = speed,
+        ).getOrThrow()
+        val maxSendable = spendableBalance.safe() - sendAllFee.safe()
+        if (maxSendable < order.feeSat) {
+            throw AppError(context.getString(R.string.other__pay_insufficient_savings))
+        }
+
+        SpendingConfirmFundingPlan(
+            orderId = order.id,
+            miningFeeSats = sendAllFee,
+            shouldUseSendAll = true,
+            selectedUtxos = null,
+            spendableBalance = spendableBalance,
+            totalOnchainBalance = totalOnchainBalance,
+            maxSendable = maxSendable,
+        )
     }
 
     private fun wouldCreateDustChange(
@@ -589,6 +647,9 @@ class TransferViewModel @Inject constructor(
         hwTransferSignJob = null
         hwFeeEstimateJob?.cancel()
         hwFeeEstimateJob = null
+        confirmFeeJob?.cancel()
+        confirmFeeJob = null
+        spendingConfirmFundingPlan = null
         pendingHwFundingBroadcast = null
         activeHwTransferDeviceId = null
         _spendingUiState.update { TransferToSpendingUiState() }
@@ -1226,8 +1287,22 @@ data class TransferToSpendingUiState(
     val isSigning: Boolean = false,
     val hasPendingHwBroadcast: Boolean = false,
     val hwMiningFeeSats: ULong = 0uL,
+    /** Real on-chain mining fee for soft-wallet confirm (iOS transactionFee). */
+    val miningFeeSats: ULong = 0uL,
+    val isConfirmFeeReady: Boolean = false,
+    val shouldUseSendAll: Boolean = false,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
+)
+
+private data class SpendingConfirmFundingPlan(
+    val orderId: String,
+    val miningFeeSats: ULong,
+    val shouldUseSendAll: Boolean,
+    val selectedUtxos: List<SpendableUtxo>?,
+    val spendableBalance: ULong,
+    val totalOnchainBalance: ULong,
+    val maxSendable: ULong,
 )
 
 data class TransferValues(
