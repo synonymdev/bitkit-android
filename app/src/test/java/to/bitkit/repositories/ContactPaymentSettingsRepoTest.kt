@@ -127,6 +127,24 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failed public cleanup and restore leaves public payments disabled for retry`() = test {
+        settingsFlow.value = SettingsData(
+            hasConfirmedPublicPaykitEndpoints = true,
+            sharesPublicPaykitEndpoints = true,
+        )
+        whenever { publicPaykitRepo.syncPublishedEndpoints(any()) }
+            .thenReturn(Result.failure(ContactPaymentSettingsTestError("sync failed")))
+
+        val result = createSut().setEnabled(false)
+
+        assertTrue(result.isFailure)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = true)
+    }
+
+    @Test
     fun `failed private cleanup restores private contact payments`() = test {
         settingsFlow.value = SettingsData(
             hasConfirmedPublicPaykitEndpoints = true,

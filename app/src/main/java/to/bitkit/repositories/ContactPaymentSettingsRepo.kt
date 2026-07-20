@@ -175,7 +175,12 @@ class ContactPaymentSettingsRepo @Inject constructor(
 
     private suspend fun markPublicPaykitRetry(error: Throwable) {
         runSuspendCatching {
-            settingsStore.update { it.copy(publicPaykitCleanupPending = true) }
+            settingsStore.update {
+                it.copy(
+                    sharesPublicPaykitEndpoints = false,
+                    publicPaykitCleanupPending = true,
+                )
+            }
         }.onFailure(error::addSuppressed)
     }
 
