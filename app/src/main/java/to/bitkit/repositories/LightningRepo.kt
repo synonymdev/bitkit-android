@@ -46,6 +46,7 @@ import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ClosureReason
+import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
@@ -1260,6 +1261,20 @@ class LightningRepo @Inject constructor(
 
     suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> = executeWhenNodeRunning("listSpendableOutputs") {
         lightningService.listSpendableOutputs()
+    }
+
+    suspend fun selectUtxosWithAlgorithm(
+        targetAmountSats: ULong,
+        satsPerVByte: ULong,
+        algorithm: CoinSelectionAlgorithm = CoinSelectionAlgorithm.LARGEST_FIRST,
+        utxos: List<SpendableUtxo>? = null,
+    ): Result<List<SpendableUtxo>> = executeWhenNodeRunning("selectUtxosWithAlgorithm") {
+        lightningService.selectUtxosWithAlgorithm(
+            targetAmountSats = targetAmountSats,
+            satsPerVByte = satsPerVByte,
+            algorithm = algorithm,
+            utxos = utxos,
+        )
     }
 
     suspend fun calculateTotalFee(
