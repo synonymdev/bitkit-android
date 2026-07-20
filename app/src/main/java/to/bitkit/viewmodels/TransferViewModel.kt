@@ -961,7 +961,7 @@ class TransferViewModel @Inject constructor(
     fun loadSavingsSwapQuote(requestedSat: ULong) {
         savingsSwapQuoteJob?.cancel()
         savingsSwapQuoteJob = viewModelScope.launch {
-            _savingsSwapState.update { it.copy(isLoading = true, error = null) }
+            _savingsSwapState.update { it.copy(isLoading = true, error = null, amountTooLow = false) }
             awaitNodeRunning()
 
             val limits = runSuspendCatching { boltzService.reverseLimits() }.getOrElse { e ->
@@ -982,6 +982,8 @@ class TransferViewModel @Inject constructor(
             val minSat = limits.minimalSat
 
             if (maxSat < minSat) {
+                // Below the swap minimum: revert to the pre-swap view where the swipe closes
+                // the channel instead. No error text or extra close action is shown.
                 pendingSwapAmountSat = 0uL
                 _savingsSwapState.update {
                     it.copy(
@@ -989,7 +991,8 @@ class TransferViewModel @Inject constructor(
                         quote = null,
                         minSat = 0uL,
                         maxSat = 0uL,
-                        error = context.getString(R.string.lightning__savings_confirm__amount_too_low),
+                        error = null,
+                        amountTooLow = true,
                     )
                 }
                 return@launch
@@ -1001,6 +1004,7 @@ class TransferViewModel @Inject constructor(
                 it.copy(
                     isLoading = false,
                     error = null,
+                    amountTooLow = false,
                     minSat = minSat,
                     maxSat = maxSat,
                     quote = buildQuote(maxSat, limits),
@@ -1377,6 +1381,8 @@ data class SavingsSwapUiState(
     val minSat: ULong = 0uL,
     val maxSat: ULong = 0uL,
     val error: String? = null,
+    /** Swap amount is below the swap minimum; the screen falls back to closing the channel. */
+    val amountTooLow: Boolean = false,
 )
 
 sealed interface SavingsSwapResult {

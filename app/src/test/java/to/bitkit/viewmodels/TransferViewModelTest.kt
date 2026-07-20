@@ -999,7 +999,7 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `loadSavingsSwapQuote reports amount too low when below the swap minimum`() = test {
+    fun `loadSavingsSwapQuote flags amount too low when below the swap minimum`() = test {
         whenever(context.getString(R.string.lightning__savings_confirm__amount_too_low)).thenReturn(TOO_LOW)
         balanceState.value = BalanceState(maxSendLightningSats = SWAP_MIN - 1uL)
         whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
@@ -1010,7 +1010,8 @@ class TransferViewModelTest : BaseUnitTest() {
         val state = sut.savingsSwapState.value
         assertNull(state.quote)
         assertEquals(0uL, state.maxSat)
-        assertEquals(TOO_LOW, state.error)
+        assertNull(state.error)
+        assertTrue(state.amountTooLow)
 
         sut.startSavingsSwap()
         advanceUntilIdle()

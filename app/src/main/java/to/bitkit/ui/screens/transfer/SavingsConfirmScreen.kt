@@ -107,6 +107,7 @@ fun SavingsConfirmScreen(
             quote = swapState.quote,
             isQuoteLoading = swapState.isLoading,
             quoteError = swapState.error,
+            amountTooLow = swapState.amountTooLow,
             minSat = swapState.minSat,
             maxSat = swapState.maxSat,
             onAmountChange = { transfer.onSwapAmountChange(it.toULong()) },
@@ -147,6 +148,7 @@ private fun SavingsConfirmContent(
     quote: SavingsSwapQuote?,
     isQuoteLoading: Boolean,
     quoteError: String?,
+    amountTooLow: Boolean,
     minSat: ULong,
     maxSat: ULong,
     onAmountChange: (Long) -> Unit,
@@ -271,26 +273,30 @@ private fun SavingsConfirmContent(
             }
 
             // Swapping funds out is the default; it only fires once the fee quote is ready.
+            // Below the swap minimum we revert to the pre-swap behaviour: the swipe closes the
+            // channel and the extra "close instead" action is hidden.
             var isLoading by remember { mutableStateOf(false) }
             SwipeToConfirm(
                 text = stringResource(R.string.lightning__transfer__swipe),
                 loading = isLoading || (quote == null && isQuoteLoading),
                 color = Colors.Brand,
                 onConfirm = {
-                    if (quote == null) return@SwipeToConfirm
+                    if (!amountTooLow && quote == null) return@SwipeToConfirm
                     scope.launch {
                         isLoading = true
                         delay(300)
-                        onSwapConfirm()
+                        if (amountTooLow) onCloseConfirm() else onSwapConfirm()
                     }
                 }
             )
-            Spacer(modifier = Modifier.height(12.dp))
-            // Fallback: drain a whole channel on-chain by closing it instead of swapping.
-            TertiaryButton(
-                text = stringResource(R.string.lightning__savings_confirm__close_instead),
-                onClick = onCloseConfirm,
-            )
+            if (!amountTooLow) {
+                Spacer(modifier = Modifier.height(12.dp))
+                // Fallback: drain a whole channel on-chain by closing it instead of swapping.
+                TertiaryButton(
+                    text = stringResource(R.string.lightning__savings_confirm__close_instead),
+                    onClick = onCloseConfirm,
+                )
+            }
             Spacer(modifier = Modifier.height(16.dp))
         }
     }
@@ -310,6 +316,7 @@ private fun SavingsConfirmScreenPreview() {
             ),
             isQuoteLoading = false,
             quoteError = null,
+            amountTooLow = false,
             minSat = 25_000u,
             maxSat = 72_000u,
             onAmountChange = {},
