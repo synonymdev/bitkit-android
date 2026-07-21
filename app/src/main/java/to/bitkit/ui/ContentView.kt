@@ -649,8 +649,10 @@ private fun RootNavHost(
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         transferViewModel.transferEffects.collect { effect ->
-            if (effect is TransferEffect.OnHwTxSigned) {
-                navController.navigateTo(Routes.SpendingHwSigned)
+            when (effect) {
+                TransferEffect.OnHwTxSigned -> navController.navigateTo(Routes.SpendingHwSigned)
+                TransferEffect.OnSpendingFundingPaid -> navController.navigateTo(Routes.SettingUp)
+                else -> Unit
             }
         }
     }
@@ -830,7 +832,6 @@ private fun RootNavHost(
                     onCloseClick = { navController.navigateToHome() },
                     onLearnMoreClick = { navController.navigateTo(Routes.TransferLiquidity) },
                     onAdvancedClick = { navController.navigateTo(Routes.SpendingAdvanced) },
-                    onConfirm = { navController.navigateTo(Routes.SettingUp) },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingAdvanced> {

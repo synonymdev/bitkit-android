@@ -19,10 +19,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
@@ -45,7 +41,6 @@ import com.synonym.bitkitcore.IBtOnchainTransactions
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IBtPayment
 import com.synonym.bitkitcore.ILspNode
-import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.safe
 import to.bitkit.ui.components.ButtonSize
@@ -80,7 +75,6 @@ fun SpendingConfirmScreen(
     onCloseClick: () -> Unit = {},
     onLearnMoreClick: () -> Unit = {},
     onAdvancedClick: () -> Unit = {},
-    onConfirm: () -> Unit = {},
     settingsViewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val context = LocalContext.current
@@ -94,6 +88,7 @@ fun SpendingConfirmScreen(
     val isAdvanced = state.isAdvanced
     val miningFeeSats = state.miningFeeSats
     val isConfirmFeeReady = state.isConfirmFeeReady
+    val isConfirmPaying = state.isConfirmPaying
 
     LaunchedEffect(order.id, order.feeSat) {
         viewModel.prepareSpendingConfirmFunding(order)
@@ -119,12 +114,12 @@ fun SpendingConfirmScreen(
             onBackClick = onBackClick,
             onLearnMoreClick = onLearnMoreClick,
             onAdvancedClick = onAdvancedClick,
-            onConfirm = onConfirm,
             onUseDefaultLspBalanceClick = viewModel::onUseDefaultLspBalanceClick,
-            onTransferToSpendingConfirm = viewModel::onTransferToSpendingConfirm,
+            onTransferToSpendingConfirm = { viewModel.onTransferToSpendingConfirm(order) },
             order = order,
             miningFeeSats = miningFeeSats,
             isConfirmFeeReady = isConfirmFeeReady,
+            isConfirmPaying = isConfirmPaying,
             hasNotificationPermission = notificationsGranted,
             onSwitchClick = onNotificationSwitchClick,
             isAdvanced = isAdvanced,
@@ -148,18 +143,16 @@ private fun Content(
     onBackClick: () -> Unit,
     onLearnMoreClick: () -> Unit,
     onAdvancedClick: () -> Unit,
-    onConfirm: () -> Unit,
     onUseDefaultLspBalanceClick: () -> Unit,
     onSwitchClick: () -> Unit,
     hasNotificationPermission: Boolean,
-    onTransferToSpendingConfirm: suspend (IBtOrder) -> Boolean,
+    onTransferToSpendingConfirm: () -> Unit,
     order: IBtOrder,
     miningFeeSats: ULong,
     isConfirmFeeReady: Boolean,
+    isConfirmPaying: Boolean,
     isAdvanced: Boolean,
 ) {
-    val scope = rememberCoroutineScope()
-
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.lightning__transfer__nav_title),
@@ -278,24 +271,15 @@ private fun Content(
 
                 FillHeight()
 
-                var isLoading by remember { mutableStateOf(false) }
                 // Match iOS: keep swipe in loading state until mining fee is ready.
-                val canConfirm = isConfirmFeeReady && miningFeeSats > 0uL && !isLoading
+                val canConfirm = isConfirmFeeReady && miningFeeSats > 0uL && !isConfirmPaying
                 SwipeToConfirm(
                     text = stringResource(R.string.lightning__transfer__swipe),
-                    loading = isLoading || !isConfirmFeeReady,
+                    loading = isConfirmPaying || !isConfirmFeeReady,
                     color = Colors.Purple,
                     onConfirm = {
                         if (!canConfirm) return@SwipeToConfirm
-                        scope.launch {
-                            isLoading = true
-                            val paid = onTransferToSpendingConfirm(order)
-                            if (paid) {
-                                onConfirm()
-                            } else {
-                                isLoading = false
-                            }
-                        }
+                        onTransferToSpendingConfirm()
                     },
                 )
                 VerticalSpacer(16.dp)
@@ -312,9 +296,8 @@ private fun Preview() {
             onBackClick = {},
             onLearnMoreClick = {},
             onAdvancedClick = {},
-            onConfirm = {},
             onUseDefaultLspBalanceClick = {},
-            onTransferToSpendingConfirm = { true },
+            onTransferToSpendingConfirm = {},
             order = IBtOrder(
                 id = "order_7e6f3b7c-486a-4f5a-8b1e-2c9d7f0a8b9d",
                 state = BtOrderState.CREATED,
@@ -378,6 +361,7 @@ private fun Preview() {
             hasNotificationPermission = true,
             miningFeeSats = 250uL,
             isConfirmFeeReady = true,
+            isConfirmPaying = false,
             isAdvanced = false
         )
     }
@@ -391,9 +375,8 @@ private fun Preview2() {
             onBackClick = {},
             onLearnMoreClick = {},
             onAdvancedClick = {},
-            onConfirm = {},
             onUseDefaultLspBalanceClick = {},
-            onTransferToSpendingConfirm = { true },
+            onTransferToSpendingConfirm = {},
             order = IBtOrder(
                 id = "order_7e6f3b7c-486a-4f5a-8b1e-2c9d7f0a8b9d",
                 state = BtOrderState.CREATED,
@@ -457,6 +440,7 @@ private fun Preview2() {
             hasNotificationPermission = true,
             miningFeeSats = 250uL,
             isConfirmFeeReady = true,
+            isConfirmPaying = false,
             isAdvanced = true
         )
     }
@@ -470,9 +454,8 @@ private fun Preview3() {
             onBackClick = {},
             onLearnMoreClick = {},
             onAdvancedClick = {},
-            onConfirm = {},
             onUseDefaultLspBalanceClick = {},
-            onTransferToSpendingConfirm = { true },
+            onTransferToSpendingConfirm = {},
             order = IBtOrder(
                 id = "order_7e6f3b7c-486a-4f5a-8b1e-2c9d7f0a8b9d",
                 state = BtOrderState.CREATED,
@@ -536,6 +519,7 @@ private fun Preview3() {
             hasNotificationPermission = false,
             miningFeeSats = 250uL,
             isConfirmFeeReady = true,
+            isConfirmPaying = false,
             isAdvanced = false
         )
     }
@@ -549,9 +533,8 @@ private fun Preview4() {
             onBackClick = {},
             onLearnMoreClick = {},
             onAdvancedClick = {},
-            onConfirm = {},
             onUseDefaultLspBalanceClick = {},
-            onTransferToSpendingConfirm = { true },
+            onTransferToSpendingConfirm = {},
             order = IBtOrder(
                 id = "order_7e6f3b7c-486a-4f5a-8b1e-2c9d7f0a8b9d",
                 state = BtOrderState.CREATED,
@@ -615,6 +598,7 @@ private fun Preview4() {
             hasNotificationPermission = true,
             miningFeeSats = 250uL,
             isConfirmFeeReady = true,
+            isConfirmPaying = false,
             isAdvanced = true
         )
     }

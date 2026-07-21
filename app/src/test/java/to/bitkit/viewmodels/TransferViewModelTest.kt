@@ -397,10 +397,10 @@ class TransferViewModelTest : BaseUnitTest() {
             .thenReturn(Result.success(500uL))
         stubSendOnChainSuccess()
 
-        val paid = sut.onTransferToSpendingConfirm(order)
+        sut.onTransferToSpendingConfirm(order)
         advanceUntilIdle()
 
-        assertEquals(true, paid)
+        assertEquals(true, sut.spendingUiState.value.isConfirmPaying)
         verify(lightningRepo).selectUtxosWithAlgorithm(
             targetAmountSats = eq(order.feeSat),
             satsPerVByte = any(),
@@ -437,10 +437,10 @@ class TransferViewModelTest : BaseUnitTest() {
             .thenReturn(Result.success(2_830uL))
         stubSendOnChainSuccess()
 
-        val paid = sut.onTransferToSpendingConfirm(order)
+        sut.onTransferToSpendingConfirm(order)
         advanceUntilIdle()
 
-        assertEquals(true, paid)
+        assertEquals(true, sut.spendingUiState.value.isConfirmPaying)
         verify(lightningRepo).sendOnChain(
             address = eq(order.payment?.onchain?.address.orEmpty()),
             sats = eq(order.feeSat),
@@ -494,10 +494,10 @@ class TransferViewModelTest : BaseUnitTest() {
             ),
         ).thenReturn(Result.failure(AppError("Coin selection failed")))
 
-        val paid = sut.onTransferToSpendingConfirm(order)
+        sut.onTransferToSpendingConfirm(order)
         advanceUntilIdle()
 
-        assertEquals(false, paid)
+        assertEquals(false, sut.spendingUiState.value.isConfirmPaying)
         verify(lightningRepo, times(1)).sendOnChain(
             address = eq(order.payment?.onchain?.address.orEmpty()),
             sats = eq(order.feeSat),
