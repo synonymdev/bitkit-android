@@ -396,11 +396,20 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(Result.success(500uL))
         stubSendOnChainSuccess()
+        var fundingPaidEmitted = false
+        backgroundScope.launch {
+            sut.transferEffects.collect { effect ->
+                if (effect is TransferEffect.OnSpendingFundingPaid) {
+                    fundingPaidEmitted = true
+                }
+            }
+        }
 
         sut.onTransferToSpendingConfirm(order)
         advanceUntilIdle()
 
         assertEquals(true, sut.spendingUiState.value.isConfirmPaying)
+        assertTrue(fundingPaidEmitted)
         verify(lightningRepo).selectUtxosWithAlgorithm(
             targetAmountSats = eq(order.feeSat),
             satsPerVByte = any(),

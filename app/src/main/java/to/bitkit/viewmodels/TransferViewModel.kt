@@ -277,9 +277,6 @@ class TransferViewModel @Inject constructor(
                 } else {
                     _spendingUiState.update { it.copy(isConfirmPaying = false) }
                 }
-            } catch (e: CancellationException) {
-                _spendingUiState.update { it.copy(isConfirmPaying = false) }
-                throw e
             } finally {
                 confirmPayJob = null
             }
@@ -869,9 +866,7 @@ class TransferViewModel @Inject constructor(
                 }
             broadcastHardwareFunding(signedTx)
         }
-        result.exceptionOrNull()?.let {
-            if (it is CancellationException && it !is TimeoutCancellationException) throw it
-        }
+        result.exceptionOrNull()?.rethrowIfCancellation()
         return result
     }
 
@@ -899,7 +894,7 @@ class TransferViewModel @Inject constructor(
                 hwWalletRepo.ensureConnected(deviceId).getOrThrow()
             }
         }.getOrElse {
-            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            it.rethrowIfCancellation()
             if (it.isTrezorUserCancellation()) throw it
             throw HardwareReconnectError(it)
         }
@@ -920,7 +915,7 @@ class TransferViewModel @Inject constructor(
             ).getOrThrow()
         }
     }.getOrElse {
-        if (it is CancellationException && it !is TimeoutCancellationException) throw it
+        it.rethrowIfCancellation()
         throw HardwareFundingError(it)
     }
 
@@ -937,7 +932,7 @@ class TransferViewModel @Inject constructor(
                 ).getOrThrow()
             }
         }.getOrElse {
-            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            it.rethrowIfCancellation()
             if (it is TimeoutCancellationException) {
                 hwWalletRepo.disconnectStaleSession(deviceId)
                 throw HardwareSigningTimeoutError(it)
@@ -954,7 +949,7 @@ class TransferViewModel @Inject constructor(
                 hwWalletRepo.broadcastFunding(signedTx).getOrThrow()
             }
         }.getOrElse {
-            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            it.rethrowIfCancellation()
             throw HardwareBroadcastError(it)
         }
     }
@@ -1376,3 +1371,7 @@ sealed interface TransferEffect {
     data class ToastError(val title: String, val description: String) : TransferEffect
 }
 // endregion
+
+private fun Throwable.rethrowIfCancellation() {
+    if (this is CancellationException && this !is TimeoutCancellationException) throw this
+}

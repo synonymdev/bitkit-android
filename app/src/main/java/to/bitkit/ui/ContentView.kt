@@ -649,11 +649,7 @@ private fun RootNavHost(
     val scope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         transferViewModel.transferEffects.collect { effect ->
-            when (effect) {
-                TransferEffect.OnHwTxSigned -> navController.navigateTo(Routes.SpendingHwSigned)
-                TransferEffect.OnSpendingFundingPaid -> navController.navigateTo(Routes.SettingUp)
-                else -> Unit
-            }
+            transferEffectDestination(effect)?.let { navController.navigateTo(it) }
         }
     }
 
@@ -1841,6 +1837,12 @@ fun NavController.navigateToTransferSpendingStart(
     hasSeenSpendingIntro: Boolean,
     deviceId: String,
 ) = navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro, deviceId))
+
+internal fun transferEffectDestination(effect: TransferEffect): Routes? = when (effect) {
+    TransferEffect.OnHwTxSigned -> Routes.SpendingHwSigned
+    TransferEffect.OnSpendingFundingPaid -> Routes.SettingUp
+    else -> null
+}
 
 internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean): Routes = when {
     hasSeenSpendingIntro -> Routes.SpendingAmount
