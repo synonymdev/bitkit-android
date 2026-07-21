@@ -34,7 +34,7 @@ class Keychain @Inject constructor(
     private val db: AppDb,
     @ApplicationContext private val context: Context,
     @IoDispatcher private val dispatcher: CoroutineDispatcher,
-) : BaseCoroutineScope(dispatcher) {
+) : BaseCoroutineScope(dispatcher, TAG) {
     companion object {
         private const val TAG = "Keychain"
         private const val CAUSE_CHAIN_DEPTH = 4

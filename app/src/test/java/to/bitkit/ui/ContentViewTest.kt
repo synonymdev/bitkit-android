@@ -1,7 +1,9 @@
 package to.bitkit.ui
 
 import org.junit.Test
+import to.bitkit.viewmodels.TransferEffect
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class ContentViewTest {
     @Test
@@ -16,5 +18,12 @@ class ContentViewTest {
 
         assertEquals(Routes.SpendingIntroHw(deviceId), transferSpendingStartRoute(false, deviceId))
         assertEquals(Routes.SpendingAmountHw(deviceId), transferSpendingStartRoute(true, deviceId))
+    }
+
+    @Test
+    fun `transfer effect destinations cover funding paid and hw signed`() {
+        assertEquals(Routes.SettingUp, transferEffectDestination(TransferEffect.OnSpendingFundingPaid))
+        assertEquals(Routes.SpendingHwSigned, transferEffectDestination(TransferEffect.OnHwTxSigned))
+        assertNull(transferEffectDestination(TransferEffect.OnOrderCreated))
     }
 }
