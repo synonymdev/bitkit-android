@@ -40,6 +40,13 @@ internal object Env {
             else -> listOf()
         }
 
+    /**
+     * Whether LN -> onchain swaps can reach a Boltz backend. Boltz only serves a public API on
+     * mainnet: its testnet deployment is deprecated and regtest resolves to a local backend that
+     * no build of ours can reach. Elsewhere the transfer to savings closes a channel instead.
+     */
+    val isSwapSupported get() = network == Network.BITCOIN
+
     const val fxRateRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis
     const val fxRateStaleThreshold = 10 * 60 * 1000L // 10 minutes in millis
     const val lspOrdersRefreshInterval = 2 * 60 * 1000L // 2 minutes in millis

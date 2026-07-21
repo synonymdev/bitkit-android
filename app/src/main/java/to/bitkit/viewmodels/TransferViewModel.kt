@@ -926,11 +926,11 @@ class TransferViewModel @Inject constructor(
     private var channelsToClose = emptyList<ChannelDetails>()
 
     /**
-     * How the LN -> onchain "transfer to savings" is executed. Swapping funds out
-     * (default) keeps channels open; closing a channel is the fallback the user can
-     * pick to drain a whole channel on-chain.
+     * How the LN -> onchain "transfer to savings" is executed. Closing a channel is the
+     * default because it always works; swapping funds out keeps channels open and is used
+     * whenever a priced quote is available.
      */
-    private val _savingsTransferMode = MutableStateFlow(SavingsTransferMode.SWAP)
+    private val _savingsTransferMode = MutableStateFlow(SavingsTransferMode.CLOSE)
     val savingsTransferMode = _savingsTransferMode.asStateFlow()
 
     private val _savingsSwapState = MutableStateFlow(SavingsSwapUiState())
@@ -950,24 +950,30 @@ class TransferViewModel @Inject constructor(
 
     private var savingsSwapQuoteJob: Job? = null
 
-    fun setSavingsTransferMode(mode: SavingsTransferMode) = _savingsTransferMode.update { mode }
-
     /**
      * Fetch swap limits, derive the adjustable amount range, and publish an initial fee quote
      * (defaulting to the maximum transferable) so the user sees the cost before confirming.
-     * The confirm slider then re-prices locally via [onSwapAmountChange]. Errors surface in state.
+     * The confirm slider then re-prices locally via [onSwapAmountChange]. A quote is the only
+     * thing that unlocks the swap, so every failure simply leaves it null and the transfer
+     * falls back to closing a channel.
      * Cancels any in-flight quote so a slower earlier request cannot overwrite a newer one.
      */
     fun loadSavingsSwapQuote(requestedSat: ULong) {
+        if (!boltzService.isSwapSupported) return
         savingsSwapQuoteJob?.cancel()
         savingsSwapQuoteJob = viewModelScope.launch {
-            _savingsSwapState.update { it.copy(isLoading = true, error = null, amountTooLow = false) }
+            _savingsSwapState.update { it.copy(isLoading = true) }
             awaitNodeRunning()
 
-            val limits = runSuspendCatching { boltzService.reverseLimits() }.getOrElse { e ->
-                Logger.error("Failed to load reverse swap limits", e, context = TAG)
+            // Bounded so a hanging Boltz request cannot leave the confirm swipe stuck loading.
+            val limits = withTimeoutOrNull(SWAP_QUOTE_TIMEOUT) {
+                runSuspendCatching { boltzService.reverseLimits() }
+                    .onFailure { Logger.error("Failed to load reverse swap limits", it, context = TAG) }
+                    .getOrNull()
+            }
+            if (limits == null) {
                 reverseLimits = null
-                _savingsSwapState.update { it.copy(isLoading = false, quote = null, error = e.message) }
+                _savingsSwapState.update { it.copy(isLoading = false, quote = null) }
                 return@launch
             }
             reverseLimits = limits
@@ -991,8 +997,6 @@ class TransferViewModel @Inject constructor(
                         quote = null,
                         minSat = 0uL,
                         maxSat = 0uL,
-                        error = null,
-                        amountTooLow = true,
                     )
                 }
                 return@launch
@@ -1003,8 +1007,6 @@ class TransferViewModel @Inject constructor(
             _savingsSwapState.update {
                 it.copy(
                     isLoading = false,
-                    error = null,
-                    amountTooLow = false,
                     minSat = minSat,
                     maxSat = maxSat,
                     quote = buildQuote(maxSat, limits),
@@ -1103,10 +1105,24 @@ class TransferViewModel @Inject constructor(
         _selectedChannelIdsState.update { channelIds }
     }
 
-    fun onTransferToSavingsConfirm(channels: List<ChannelDetails>) {
+    /**
+     * Commit the transfer and pick how it runs. A swap needs a priced quote, so without one
+     * (swaps unsupported on this network, Boltz unreachable, or an amount below the swap
+     * minimum) the transfer closes a channel exactly as it did before swaps existed.
+     */
+    fun onTransferToSavingsConfirm(
+        channels: List<ChannelDetails>,
+        mode: SavingsTransferMode = resolveSavingsTransferMode(),
+    ) {
+        _savingsTransferMode.update { mode }
+        // Drop any outcome from an earlier attempt so the progress screen cannot act on it.
+        _savingsSwapResult.update { null }
         _selectedChannelIdsState.update { emptySet() }
         channelsToClose = channels
     }
+
+    private fun resolveSavingsTransferMode(): SavingsTransferMode =
+        if (_savingsSwapState.value.quote != null) SavingsTransferMode.SWAP else SavingsTransferMode.CLOSE
 
     /** Closes the channels selected earlier, pending closure */
     suspend fun closeSelectedChannels() = closeChannels(channelsToClose)
@@ -1303,6 +1319,9 @@ class TransferViewModel @Inject constructor(
         /** How long the confirm/progress flow waits for the on-chain claim before backgrounding it. */
         private val SWAP_CLAIM_TIMEOUT = 30.seconds
 
+        /** Upper bound for fetching swap limits before the confirm screen gives up on a quote. */
+        private val SWAP_QUOTE_TIMEOUT = 15.seconds
+
         /** Minimum sats held back from a swap to cover Lightning routing fees. */
         private const val MIN_LN_ROUTING_FEE_RESERVE_SATS = 10L
 
@@ -1362,7 +1381,7 @@ sealed interface TransferEffect {
     data class ToastError(val title: String, val description: String) : TransferEffect
 }
 
-/** Whether a transfer to savings swaps funds out (default) or closes a channel. */
+/** Whether a transfer to savings swaps funds out or closes a channel (default). */
 enum class SavingsTransferMode { SWAP, CLOSE }
 
 @Immutable
@@ -1380,9 +1399,6 @@ data class SavingsSwapUiState(
     /** Inclusive adjustable range for the confirm slider (sat). Equal/zero when unavailable. */
     val minSat: ULong = 0uL,
     val maxSat: ULong = 0uL,
-    val error: String? = null,
-    /** Swap amount is below the swap minimum; the screen falls back to closing the channel. */
-    val amountTooLow: Boolean = false,
 )
 
 sealed interface SavingsSwapResult {

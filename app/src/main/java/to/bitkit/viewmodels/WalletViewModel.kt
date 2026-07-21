@@ -345,6 +345,7 @@ class WalletViewModel @Inject constructor(
      * running stream is always enough.
      */
     fun ensureSwapUpdatesRunning() {
+        if (!boltzService.isSwapSupported) return
         collectSwapEventsOnce()
         if (swapUpdatesRunning || swapUpdatesJob?.isActive == true) return
         swapUpdatesJob = viewModelScope.launch { startSwapUpdates() }

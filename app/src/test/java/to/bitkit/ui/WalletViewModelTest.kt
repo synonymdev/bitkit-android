@@ -89,6 +89,26 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `ensureSwapUpdatesRunning should start updates when swaps are supported`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        verify(boltzService).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `ensureSwapUpdatesRunning should do nothing when swaps are unsupported`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(false)
+
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        verify(boltzService, never()).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    @Test
     fun `setInitNodeLifecycleState should call lightningRepo`() = test {
         sut.setInitNodeLifecycleState()
         verify(lightningRepo).setInitNodeLifecycleState()

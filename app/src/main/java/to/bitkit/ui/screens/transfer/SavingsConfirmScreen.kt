@@ -39,7 +39,6 @@ import to.bitkit.R
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.filterOpen
 import to.bitkit.ui.components.AmountSlider
-import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.ConnectionIssuesView
@@ -106,8 +105,6 @@ fun SavingsConfirmScreen(
             fallbackAmount = amount,
             quote = swapState.quote,
             isQuoteLoading = swapState.isLoading,
-            quoteError = swapState.error,
-            amountTooLow = swapState.amountTooLow,
             minSat = swapState.minSat,
             maxSat = swapState.maxSat,
             onAmountChange = { transfer.onSwapAmountChange(it.toULong()) },
@@ -117,14 +114,12 @@ fun SavingsConfirmScreen(
             onAmountClick = { currency.switchUnit() },
             onAdvancedClick = onAdvancedClick,
             onSelectAllClick = { transfer.setSelectedChannelIds(emptySet()) },
-            onSwapConfirm = {
-                transfer.setSavingsTransferMode(SavingsTransferMode.SWAP)
+            onSwipeConfirm = {
                 transfer.onTransferToSavingsConfirm(channels)
                 onConfirm()
             },
             onCloseConfirm = {
-                transfer.setSavingsTransferMode(SavingsTransferMode.CLOSE)
-                transfer.onTransferToSavingsConfirm(channels)
+                transfer.onTransferToSavingsConfirm(channels, SavingsTransferMode.CLOSE)
                 onConfirm()
             },
         )
@@ -147,8 +142,6 @@ private fun SavingsConfirmContent(
     fallbackAmount: ULong,
     quote: SavingsSwapQuote?,
     isQuoteLoading: Boolean,
-    quoteError: String?,
-    amountTooLow: Boolean,
     minSat: ULong,
     maxSat: ULong,
     onAmountChange: (Long) -> Unit,
@@ -158,7 +151,7 @@ private fun SavingsConfirmContent(
     onAmountClick: () -> Unit = {},
     onAdvancedClick: () -> Unit = {},
     onSelectAllClick: () -> Unit = {},
-    onSwapConfirm: () -> Unit = {},
+    onSwipeConfirm: () -> Unit = {},
     onCloseConfirm: () -> Unit = {},
 ) {
     val scope = rememberCoroutineScope()
@@ -222,9 +215,6 @@ private fun SavingsConfirmContent(
                         onValueChange = onAmountChange,
                     )
                 }
-            } else if (quoteError != null) {
-                Spacer(modifier = Modifier.height(16.dp))
-                BodyM(text = quoteError, color = Colors.White64)
             }
 
             if (hasMultiple) {
@@ -272,24 +262,22 @@ private fun SavingsConfirmContent(
                 }
             }
 
-            // Swapping funds out is the default; it only fires once the fee quote is ready.
-            // Below the swap minimum we revert to the pre-swap behaviour: the swipe closes the
-            // channel and the extra "close instead" action is hidden.
+            // The swipe always commits the transfer: it swaps when a quote is ready and otherwise
+            // falls back to the pre-swap behaviour of closing the channel, so it is never inert.
             var isLoading by remember { mutableStateOf(false) }
             SwipeToConfirm(
                 text = stringResource(R.string.lightning__transfer__swipe),
                 loading = isLoading || (quote == null && isQuoteLoading),
                 color = Colors.Brand,
                 onConfirm = {
-                    if (!amountTooLow && quote == null) return@SwipeToConfirm
                     scope.launch {
                         isLoading = true
                         delay(300)
-                        if (amountTooLow) onCloseConfirm() else onSwapConfirm()
+                        onSwipeConfirm()
                     }
                 }
             )
-            if (!amountTooLow) {
+            if (quote != null) {
                 Spacer(modifier = Modifier.height(12.dp))
                 // Fallback: drain a whole channel on-chain by closing it instead of swapping.
                 TertiaryButton(
@@ -315,8 +303,6 @@ private fun SavingsConfirmScreenPreview() {
                 receiveSat = 49_678u,
             ),
             isQuoteLoading = false,
-            quoteError = null,
-            amountTooLow = false,
             minSat = 25_000u,
             maxSat = 72_000u,
             onAmountChange = {},

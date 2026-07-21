@@ -73,6 +73,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -114,6 +115,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(blocktankRepo.blocktankState).thenReturn(blocktankState)
         whenever(boltzService.events).thenReturn(boltzEvents)
+        whenever(boltzService.isSwapSupported).thenReturn(true)
 
         sut = TransferViewModel(
             context = context,
@@ -989,7 +991,6 @@ class TransferViewModelTest : BaseUnitTest() {
         val expectedMax = SPENDABLE_LN - SPENDABLE_LN / 100uL // 1% routing fee reserve
         assertEquals(SWAP_MIN, state.minSat)
         assertEquals(expectedMax, state.maxSat)
-        assertNull(state.error)
         val quote = assertNotNull(state.quote)
         assertEquals(expectedMax, quote.amountSat)
         assertEquals(SWAP_MINER_FEE, quote.networkFeeSat)
@@ -999,7 +1000,7 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `loadSavingsSwapQuote flags amount too low when below the swap minimum`() = test {
+    fun `loadSavingsSwapQuote falls back to close when below the swap minimum`() = test {
         whenever(context.getString(R.string.lightning__savings_confirm__amount_too_low)).thenReturn(TOO_LOW)
         balanceState.value = BalanceState(maxSendLightningSats = SWAP_MIN - 1uL)
         whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
@@ -1010,8 +1011,9 @@ class TransferViewModelTest : BaseUnitTest() {
         val state = sut.savingsSwapState.value
         assertNull(state.quote)
         assertEquals(0uL, state.maxSat)
-        assertNull(state.error)
-        assertTrue(state.amountTooLow)
+
+        sut.onTransferToSavingsConfirm(emptyList())
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
 
         sut.startSavingsSwap()
         advanceUntilIdle()
@@ -1020,16 +1022,62 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `loadSavingsSwapQuote surfaces an error when the limits fetch fails`() = test {
+    fun `loadSavingsSwapQuote falls back to close when the limits fetch fails`() = test {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
         whenever(boltzService.reverseLimits(anyOrNull())).thenAnswer { throw AppError(BOLTZ_ERROR) }
 
         sut.loadSavingsSwapQuote(REQUESTED_SAT)
         advanceUntilIdle()
 
-        val state = sut.savingsSwapState.value
-        assertNull(state.quote)
-        assertEquals(BOLTZ_ERROR, state.error)
+        assertNull(sut.savingsSwapState.value.quote)
+        assertFalse(sut.savingsSwapState.value.isLoading)
+
+        sut.onTransferToSavingsConfirm(emptyList())
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
+    }
+
+    @Test
+    fun `loadSavingsSwapQuote skips the network when swaps are unsupported`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.isSwapSupported).thenReturn(false)
+
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapUiState(), sut.savingsSwapState.value)
+        verify(boltzService, never()).reverseLimits(anyOrNull())
+
+        sut.onTransferToSavingsConfirm(emptyList())
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
+    }
+
+    @Test
+    fun `onTransferToSavingsConfirm swaps when a quote is ready and closes when the user opts out`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.onTransferToSavingsConfirm(emptyList())
+        assertEquals(SavingsTransferMode.SWAP, sut.savingsTransferMode.value)
+
+        sut.onTransferToSavingsConfirm(emptyList(), SavingsTransferMode.CLOSE)
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
+    }
+
+    @Test
+    fun `onTransferToSavingsConfirm clears the outcome of an earlier swap`() = test {
+        stubSavingsSwapHappyPath()
+        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.failure(AppError(PAY_ERROR)))
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+        sut.startSavingsSwap()
+        advanceUntilIdle()
+        assertEquals(SavingsSwapResult.Failure(PAY_ERROR), sut.savingsSwapResult.value)
+
+        sut.onTransferToSavingsConfirm(emptyList())
+
+        assertNull(sut.savingsSwapResult.value)
     }
 
     @Test

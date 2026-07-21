@@ -178,6 +178,9 @@ class BoltzService @Inject constructor(
 
     // region Helpers
 
+    /** Whether the configured network has a reachable Boltz backend. See [Env.isSwapSupported]. */
+    val isSwapSupported: Boolean get() = Env.isSwapSupported
+
     /** The Boltz network matching the app's configured network. */
     fun boltzNetwork(network: Network = Env.network): BoltzNetwork = when (network) {
         Network.BITCOIN -> BoltzNetwork.MAINNET
