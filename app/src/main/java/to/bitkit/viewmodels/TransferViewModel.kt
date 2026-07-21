@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -24,7 +25,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -264,7 +264,13 @@ class TransferViewModel @Inject constructor(
         confirmPayJob = viewModelScope.launch {
             _spendingUiState.update { it.copy(isConfirmPaying = true) }
             try {
-                val paid = paySpendingConfirmOrder(order)
+                val paid = runSuspendCatching {
+                    paySpendingConfirmOrder(order)
+                }.onFailure {
+                    Logger.error("Failed to pay spending confirm order", it, context = TAG)
+                    ToastEventBus.send(it)
+                }.getOrDefault(false)
+
                 if (paid) {
                     // Emit from this job (not a nested launch) so navigation is not raced/lost.
                     transferEffects.emit(TransferEffect.OnSpendingFundingPaid)
@@ -274,10 +280,6 @@ class TransferViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 _spendingUiState.update { it.copy(isConfirmPaying = false) }
                 throw e
-            } catch (e: Throwable) {
-                Logger.error("Failed to pay spending confirm order", e, context = TAG)
-                _spendingUiState.update { it.copy(isConfirmPaying = false) }
-                ToastEventBus.send(e)
             } finally {
                 confirmPayJob = null
             }
