@@ -14,14 +14,13 @@ import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
 import to.bitkit.R
 import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.AppWidgetRefreshScheduler
+import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
 import to.bitkit.di.UiDispatcher
 import to.bitkit.domain.commands.NotifyChannelReady
@@ -53,7 +52,7 @@ class LightningNodeService : Service() {
     @UiDispatcher
     lateinit var uiDispatcher: CoroutineDispatcher
 
-    private val serviceScope by lazy { CoroutineScope(SupervisorJob() + uiDispatcher) }
+    private val serviceScope by lazy { appScope(uiDispatcher, TAG) }
 
     @Inject
     lateinit var lightningRepo: LightningRepo

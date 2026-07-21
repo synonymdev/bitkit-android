@@ -6,6 +6,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.AppError
 import java.util.concurrent.Executors
 import java.util.concurrent.ThreadFactory
@@ -20,14 +21,14 @@ enum class ServiceQueue {
         coroutineContext: CoroutineContext = scope.coroutineContext,
         block: suspend CoroutineScope.() -> T,
     ): T = runBlocking(coroutineContext) {
-        runCatching { block() }.getOrElse { throw AppError(it) }
+        runSuspendCatching { block() }.getOrElse { throw AppError(it) }
     }
 
     suspend fun <T> background(
         coroutineContext: CoroutineContext = scope.coroutineContext,
         block: suspend CoroutineScope.() -> T,
     ): T = withContext(coroutineContext) {
-        runCatching { block() }.getOrElse { throw AppError(it) }
+        runSuspendCatching { block() }.getOrElse { throw AppError(it) }
     }
 }
 
