@@ -27,6 +27,7 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
@@ -82,6 +83,44 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertEquals("invoice-123", request.paymentReference)
         assertEquals("""{"order":"123"}""", request.metadata)
         assertEquals(listOf(MethodId.Bolt11.rawValue), request.acceptedPaymentEndpointIdentifiers)
+    }
+
+    @Test
+    fun `refresh rejects amounts outside the app payment range`() = test {
+        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(
+            listOf(
+                paymentRequestRecord(id = "millisatoshi-safe-max", amount = "184467440.73709551"),
+                paymentRequestRecord(id = "millisatoshi-overflow", amount = "184467440.73709552"),
+                paymentRequestRecord(id = "long-max", amount = "92233720368.54775807"),
+                paymentRequestRecord(id = "long-overflow", amount = "92233720368.54775808"),
+                paymentRequestRecord(id = "ulong-max", amount = "184467440737.09551615"),
+            ),
+        )
+
+        sut.refresh().getOrThrow()
+
+        assertEquals(listOf("millisatoshi-safe-max"), sut.pendingRequests.value.map { it.paymentRequestId })
+        assertEquals(listOf(ULong.MAX_VALUE / 1000uL), sut.pendingRequests.value.map { it.amountSats })
+    }
+
+    @Test
+    fun `lightning invoice amount must exactly match the request in millisatoshis`() {
+        val request = PaykitPaymentRequest(
+            paymentRequestId = PAYMENT_REQUEST_ID,
+            counterparty = COUNTERPARTY,
+            counterpartyReceiverPath = PaykitReceiverPaths.SERVER,
+            amountValue = "0.000025",
+            amountSats = 2_500uL,
+            paymentReference = "reference",
+            expiresAt = null,
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.Bolt11.rawValue),
+            metadata = "",
+        )
+
+        assertTrue(request.acceptsLightningInvoiceAmountMsats(null))
+        assertTrue(request.acceptsLightningInvoiceAmountMsats(2_500_000uL))
+        assertFalse(request.acceptsLightningInvoiceAmountMsats(2_499_999uL))
+        assertFalse(request.acceptsLightningInvoiceAmountMsats(2_500_001uL))
     }
 
     @Test
@@ -149,6 +188,17 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verifyBlocking(paykitSdkService, never()) {
             acceptPaymentRequest(COUNTERPARTY, PaykitReceiverPaths.SERVER, PAYMENT_REQUEST_ID)
         }
+    }
+
+    @Test
+    fun `expired request is no longer pending before the expiration job runs`() = test {
+        val record = paymentRequestRecord(expiresAt = clock.now().plus(1.seconds).toString())
+        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(listOf(record))
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        advanceTimeBy(1_000)
+
+        assertTrue(!sut.isPending(request))
     }
 
     @Suppress("LongParameterList")

@@ -88,6 +88,7 @@ class PrivatePaykitRepo @Inject constructor(
             45.seconds,
             90.seconds,
         )
+        private val privatePaymentResolutionRetryDelays = privateMessageDrainRetryDelays.take(3)
 
         fun isDuplicatePaymentError(error: Throwable): Boolean =
             PrivatePaykitErrorClassifier.isDuplicatePaymentError(error)
@@ -299,7 +300,7 @@ class PrivatePaykitRepo @Inject constructor(
             runSuspendCatching {
                 val normalizedKey = knownSavedContact(publicKey)
                     ?: return@runSuspendCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
-                beginContactPayment(normalizedKey, paymentRequest = null).getOrThrow()
+                beginSavedContactPaymentWithRetry(normalizedKey)
             }
         }
 
@@ -496,12 +497,6 @@ class PrivatePaykitRepo @Inject constructor(
     ): Result<PublicPaykitPaymentResult> =
         withContext(serializedDispatcher) {
             runSuspendCatching {
-                if (!hasLiveSessionForCurrentProfile()) {
-                    if (paymentRequest != null) throw PrivatePaykitError.PrivateUnavailable
-                    return@runSuspendCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
-                }
-                if (paymentRequest == null) refreshPrivateEndpointsBeforePayment(publicKey)
-
                 val receiverPath = paymentRequest?.counterpartyReceiverPath ?: PaykitReceiverPaths.WALLET
                 val consumedVersion = ensureState().contacts[publicKey]
                     ?.consumedPrivatePaymentListVersionsByReceiverPath
@@ -525,14 +520,29 @@ class PrivatePaykitRepo @Inject constructor(
                     return@runSuspendCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
                 }
 
-                privatePaymentResult(
+                val result = privatePaymentResult(
                     publicKey = publicKey,
                     receiverPath = receiverPath,
                     resolution = resolution,
                     acceptedEndpointIdentifiers = paymentRequest?.acceptedPaymentEndpointIdentifiers?.toSet(),
                 )
+                if (paymentRequest?.isExpired(clock.now()) == true) {
+                    throw PaykitPaymentRequestError.RequestExpired
+                }
+                result
             }
         }
+
+    private suspend fun beginSavedContactPaymentWithRetry(publicKey: String): PublicPaykitPaymentResult {
+        refreshPrivateEndpointsBeforePayment(publicKey)
+        var result = beginContactPayment(publicKey, paymentRequest = null).getOrThrow()
+        for (retryDelay in privatePaymentResolutionRetryDelays) {
+            if (result != PublicPaykitPaymentResult.WaitingForUpdatedPaymentList) return result
+            delay(retryDelay)
+            result = beginContactPayment(publicKey, paymentRequest = null).getOrThrow()
+        }
+        return result
+    }
 
     private suspend fun refreshPrivateEndpointsBeforePayment(publicKey: String) {
         if (!canPublishPrivateEndpoints()) return

@@ -60,6 +60,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
@@ -135,6 +136,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.PaykitPaymentRequest
+import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaymentPendingException
@@ -288,6 +290,7 @@ class AppViewModel @Inject constructor(
     private val pendingContactPaymentContexts = mutableMapOf<String, ContactPaymentContext>()
     private val presentedPaymentRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     private var isPresentingPaymentRequest = false
+    private var isSubmittingPaymentRequest = false
     private var paykitPaymentRequestPollingJob: Job? = null
     private val timedSheetManager = timedSheetManagerProvider(viewModelScope).apply {
         registerSheet(appUpdateSheet)
@@ -609,7 +612,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun refreshIncomingPaykitPaymentRequests() {
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
-        paykitPaymentRequestRepo.refresh()
+        paykitPaymentRequestRepo.refresh().onSuccess { presentNextIncomingPaykitPaymentRequest() }
     }
 
     fun startPaykitPaymentRequestPolling() {
@@ -630,31 +633,49 @@ class AppViewModel @Inject constructor(
 
     private fun observeIncomingPaykitPaymentRequests() {
         viewModelScope.launch {
-            combine(paykitPaymentRequestRepo.pendingRequests, currentSheet) { requests, sheet -> requests to sheet }
-                .collect { (requests, sheet) ->
-                    presentedPaymentRequestIds.retainAll(requests.mapTo(mutableSetOf()) { it.id })
-                    if (sheet != null || isPresentingPaymentRequest) return@collect
-                    val request = requests.firstOrNull { it.id !in presentedPaymentRequestIds } ?: return@collect
-                    presentIncomingPaykitPaymentRequest(request)
+            currentSheet.collect {
+                if (it == null) presentNextIncomingPaykitPaymentRequest()
+            }
+        }
+        viewModelScope.launch {
+            paykitPaymentRequestRepo.pendingRequests.drop(1).collect { requests ->
+                val activeRequest = activeIncomingPaymentRequest() ?: return@collect
+                if (
+                    !isSubmittingPaymentRequest &&
+                    currentSheet.value is Sheet.Send &&
+                    requests.none { it.id == activeRequest.id }
+                ) {
+                    hideSheet()
                 }
+            }
         }
     }
 
-    private suspend fun presentIncomingPaykitPaymentRequest(request: PaykitPaymentRequest) {
+    private suspend fun presentNextIncomingPaykitPaymentRequest() {
+        val requests = paykitPaymentRequestRepo.pendingRequests.value
+        presentedPaymentRequestIds.retainAll(requests.mapTo(mutableSetOf()) { it.id })
+        if (currentSheet.value != null || isPresentingPaymentRequest || hasActiveContactPaymentContext()) return
         isPresentingPaymentRequest = true
-        privatePaykitRepo.beginPaymentRequest(request)
-            .onSuccess { result ->
-                if (result is PublicPaykitPaymentResult.Opened && currentSheet.value == null) {
-                    presentedPaymentRequestIds += request.id
-                    openContactPayment(
-                        paymentRequest = result.paymentRequest,
-                        publicKey = request.counterparty,
-                        privatePaymentContext = result.privatePaymentContext,
-                        incomingPaymentRequest = request,
-                    )
+        try {
+            for (request in requests.filter { it.id !in presentedPaymentRequestIds }) {
+                val result = privatePaykitRepo.beginPaymentRequest(request).getOrNull()
+                if (currentSheet.value != null || hasActiveContactPaymentContext()) return
+                if (result !is PublicPaykitPaymentResult.Opened || !paykitPaymentRequestRepo.isPending(request)) {
+                    continue
                 }
+
+                presentedPaymentRequestIds += request.id
+                openContactPayment(
+                    paymentRequest = result.paymentRequest,
+                    publicKey = request.counterparty,
+                    privatePaymentContext = result.privatePaymentContext,
+                    incomingPaymentRequest = request,
+                )
+                return
             }
-        isPresentingPaymentRequest = false
+        } finally {
+            isPresentingPaymentRequest = false
+        }
     }
 
     private suspend fun refreshPrivateOnlyPaykitReceiverMarker(reason: String) {
@@ -1995,8 +2016,10 @@ class AppViewModel @Inject constructor(
         }
         val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
 
-        val lnInvoice = extractViableLightningInvoice(invoice.params)
         val incomingPaymentRequest = activeIncomingPaymentRequest()
+        val lnInvoice = extractViableLightningInvoice(invoice.params)?.takeIf {
+            incomingPaymentRequest?.acceptsLightningInvoiceAmountSats(it.amountSatoshis) != false
+        }
         val amount = incomingPaymentRequest?.amountSats
             ?: lnInvoice?.amountSatoshis?.takeIf { it > 0uL }
             ?: invoice.amountSatoshis
@@ -2133,7 +2156,13 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val amount = activeIncomingPaymentRequest()?.amountSats ?: invoice.amountSatoshis
+        val incomingPaymentRequest = activeIncomingPaymentRequest()
+        if (incomingPaymentRequest?.acceptsLightningInvoiceAmountSats(invoice.amountSatoshis) == false) {
+            rejectMismatchedPaymentRequest()
+            return
+        }
+
+        val amount = incomingPaymentRequest?.amountSats ?: invoice.amountSatoshis
         val quickPayHandled = handleQuickPayIfApplicable(
             amountSats = amount,
             invoice = invoice,
@@ -2497,15 +2526,12 @@ class AppViewModel @Inject constructor(
     }
 
     @Suppress("LongMethod")
-    private suspend fun proceedWithPayment() {
+    private suspend fun proceedWithPayment(contactPaymentContext: ContactPaymentContext?) {
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
-        acceptIncomingPaymentRequestIfNeeded().onFailure {
-            toast(it)
-            return
-        }
+        if (!validateAndAcceptIncomingPaymentRequest(contactPaymentContext)) return
 
-        consumePrivatePaymentListIfNeeded().onFailure {
+        consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
             toast(it)
             hideSheet()
             return
@@ -2626,6 +2652,53 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun hasMismatchedIncomingPaymentRequest(contactPaymentContext: ContactPaymentContext?): Boolean {
+        val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest ?: return false
+        if (!incomingPaymentRequest.acceptsPaymentAmount(_sendUiState.value.amount)) return true
+        if (_sendUiState.value.payMethod != SendMethod.LIGHTNING) return false
+
+        val lightningInvoice = _sendUiState.value.decodedInvoice ?: return false
+        return !incomingPaymentRequest.acceptsLightningInvoice(lightningInvoice)
+    }
+
+    private fun PaykitPaymentRequest.acceptsLightningInvoice(invoice: LightningInvoice): Boolean {
+        val amountMsats = runCatching { Bolt11Invoice.fromStr(invoice.bolt11).amountMilliSatoshis() }
+            .getOrElse { return false }
+        return acceptsLightningInvoiceAmountMsats(amountMsats)
+    }
+
+    private suspend fun validateAndAcceptIncomingPaymentRequest(
+        contactPaymentContext: ContactPaymentContext?,
+    ): Boolean {
+        if (
+            (_sendUiState.value.isPaymentRequest && contactPaymentContext?.incomingPaymentRequest == null) ||
+            hasMismatchedIncomingPaymentRequest(contactPaymentContext)
+        ) {
+            rejectMismatchedPaymentRequest()
+            return false
+        }
+
+        val error = acceptIncomingPaymentRequestIfNeeded(contactPaymentContext).exceptionOrNull() ?: return true
+        toast(error)
+        if (
+            error is PaykitPaymentRequestError.RequestExpired ||
+            error is PaykitPaymentRequestError.RequestUnavailable
+        ) {
+            hideSheet()
+        }
+        return false
+    }
+
+    private fun rejectMismatchedPaymentRequest() {
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.wallet__toast_payment_failed_title),
+            description = context.getString(R.string.wallet__payment_request_mismatch),
+            testTag = "PaymentFailedToast",
+        )
+        hideSheet()
     }
 
     private fun getLnurlInvoiceFetchErrorMessage(error: Throwable): String = when (error) {
@@ -3268,9 +3341,22 @@ class AppViewModel @Inject constructor(
 
     private fun onConfirmPay() {
         Logger.debug("Payment checks confirmed, proceeding…", context = TAG)
+        if (isSubmittingPaymentRequest) return
+
+        val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        if (_sendUiState.value.isPaymentRequest && contactPaymentContext?.incomingPaymentRequest == null) {
+            rejectMismatchedPaymentRequest()
+            return
+        }
+
+        isSubmittingPaymentRequest = contactPaymentContext?.incomingPaymentRequest != null
         viewModelScope.launch {
-            _sendUiState.update { it.copy(shouldConfirmPay = false) }
-            proceedWithPayment()
+            try {
+                _sendUiState.update { it.copy(shouldConfirmPay = false) }
+                proceedWithPayment(contactPaymentContext)
+            } finally {
+                isSubmittingPaymentRequest = false
+            }
         }
     }
 
@@ -3308,17 +3394,14 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun consumePrivatePaymentListIfNeeded(): Result<Unit> {
-        val context = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
-            ?: return Result.success(Unit)
+    private suspend fun consumePrivatePaymentListIfNeeded(context: ContactPaymentContext?): Result<Unit> {
+        context ?: return Result.success(Unit)
         val privatePaymentContext = context.privatePaymentContext ?: return Result.success(Unit)
         return privatePaykitRepo.consumePrivatePaymentList(context.publicKey, privatePaymentContext)
     }
 
-    private suspend fun acceptIncomingPaymentRequestIfNeeded(): Result<Unit> {
-        val request = synchronized(contactPaymentContextLock) {
-            activeContactPaymentContext?.incomingPaymentRequest
-        } ?: return Result.success(Unit)
+    private suspend fun acceptIncomingPaymentRequestIfNeeded(context: ContactPaymentContext?): Result<Unit> {
+        val request = context?.incomingPaymentRequest ?: return Result.success(Unit)
         return paykitPaymentRequestRepo.accept(request)
     }
 

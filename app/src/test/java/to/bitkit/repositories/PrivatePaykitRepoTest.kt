@@ -37,6 +37,7 @@ import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
@@ -723,7 +724,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `beginSavedContactPayment uses public resolution without live Noise session`() = test {
+    fun `beginSavedContactPayment uses cached private resolution without live SDK session`() = test {
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
         whenever(paykitSdkService.identityStatus()).thenReturn(
             IdentityStatus(
@@ -731,14 +732,22 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 liveSessionAvailable = false,
             ),
         )
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
+        }.thenReturn(resolution(resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11), version = 7uL))
+        whenever(coreService.decode(PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
 
         val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
 
-        assertEquals(PublicPaykitPaymentResult.Opened("bitcoin:bcrt1qpublic"), result)
-        verifyBlocking(publicPaykitRepo) { beginPayment(CONTACT_KEY) }
-        verifyBlocking(paykitSdkService, never()) {
-            prepareAndResolvePrivateContactPayment(any(), any(), any(), any())
-        }
+        assertEquals(
+            PublicPaykitPaymentResult.Opened(
+                paymentRequest = PRIVATE_BOLT11,
+                privatePaymentContext = PrivatePaykitPaymentContext(WALLET_RECEIVER_PATH, 7uL),
+            ),
+            result,
+        )
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
 
     @Test
@@ -783,7 +792,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `beginSavedContactPayment waits for newer private list without public fallback`() = test {
+    fun `beginSavedContactPayment retries a newer private list without public fallback`() = test {
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
         whenever {
             paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
@@ -794,11 +803,23 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 linkState = LinkedPeerState.LINKED,
                 version = null,
             ),
+            resolution(resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11), version = 7uL),
         )
+        whenever(coreService.decode(PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
 
         val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
 
-        assertEquals(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList, result)
+        assertEquals(
+            PublicPaykitPaymentResult.Opened(
+                paymentRequest = PRIVATE_BOLT11,
+                privatePaymentContext = PrivatePaykitPaymentContext(WALLET_RECEIVER_PATH, 7uL),
+            ),
+            result,
+        )
+        verifyBlocking(paykitSdkService, times(2)) {
+            prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
+        }
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
 
@@ -866,7 +887,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
 
-        verifyBlocking(paykitSdkService) {
+        verifyBlocking(paykitSdkService, times(4)) {
             prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, 7uL)
         }
     }
@@ -928,16 +949,67 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `beginPaymentRequest never falls back to public resolution without live Noise session`() = test {
+    fun `beginPaymentRequest uses cached private resolution without live SDK session`() = test {
+        val request = paymentRequest()
         whenever(paykitSdkService.identityStatus()).thenReturn(
             IdentityStatus(
                 publicKey = OWN_KEY,
                 liveSessionAvailable = false,
             ),
         )
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(
+                eq(CONTACT_KEY),
+                eq(SERVER_RECEIVER_PATH),
+                eq(null),
+                any(),
+            )
+        }.thenReturn(
+            resolution(
+                resolvedEndpoint(MethodId.Bolt11, SERVER_PRIVATE_BOLT11),
+                version = 7uL,
+            ),
+        )
+        whenever(coreService.decode(SERVER_PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(SERVER_PRIVATE_BOLT11, byteArrayOf(8, 8, 8))))
 
-        assertFailsWith<PrivatePaykitError.PrivateUnavailable> {
-            sut.beginPaymentRequest(paymentRequest()).getOrThrow()
+        val result = sut.beginPaymentRequest(request).getOrThrow()
+
+        assertEquals(
+            PublicPaykitPaymentResult.Opened(
+                paymentRequest = SERVER_PRIVATE_BOLT11,
+                privatePaymentContext = PrivatePaykitPaymentContext(SERVER_RECEIVER_PATH, 7uL),
+            ),
+            result,
+        )
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginPaymentRequest rechecks expiration after private resolution`() = test {
+        val request = paymentRequest()
+        whenever(clock.now()).thenReturn(
+            Instant.fromEpochSeconds(NOW_SECONDS),
+            Instant.fromEpochSeconds(NOW_SECONDS + 61),
+        )
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(
+                eq(CONTACT_KEY),
+                eq(SERVER_RECEIVER_PATH),
+                eq(null),
+                any(),
+            )
+        }.thenReturn(
+            resolution(
+                resolvedEndpoint(MethodId.Bolt11, SERVER_PRIVATE_BOLT11),
+                version = 7uL,
+            ),
+        )
+        whenever(coreService.decode(SERVER_PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(SERVER_PRIVATE_BOLT11, byteArrayOf(8, 8, 8))))
+
+        assertFailsWith<PaykitPaymentRequestError.RequestExpired> {
+            sut.beginPaymentRequest(request).getOrThrow()
         }
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }

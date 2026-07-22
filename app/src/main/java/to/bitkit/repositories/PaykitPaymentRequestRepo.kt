@@ -56,6 +56,14 @@ data class PaykitPaymentRequest(
         get() = PaykitPaymentRequestId(paymentRequestId, counterparty, counterpartyReceiverPath)
 
     fun isExpired(now: Instant): Boolean = expiresAt?.let { it <= now } == true
+
+    fun acceptsLightningInvoiceAmountMsats(amountMsats: ULong?): Boolean =
+        amountMsats == null || amountSats <= ULong.MAX_VALUE / 1000uL && amountMsats == amountSats * 1000uL
+
+    fun acceptsLightningInvoiceAmountSats(amountSats: ULong): Boolean =
+        amountSats == 0uL || acceptsPaymentAmount(amountSats)
+
+    fun acceptsPaymentAmount(amountSats: ULong): Boolean = amountSats == this.amountSats
 }
 
 sealed class PaykitPaymentRequestError(message: String) : AppError(message) {
@@ -104,6 +112,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }.onFailure {
         Logger.warn("Failed to accept incoming Paykit payment request", it, context = TAG)
     }
+
+    fun isPending(request: PaykitPaymentRequest): Boolean =
+        !request.isExpired(clock.now()) && _pendingRequests.value.any { it.id == request.id }
 
     suspend fun clear() {
         stateGeneration.incrementAndGet()
@@ -206,7 +217,9 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(now: Instant): PaykitPay
     if (localRole != PaymentRequestLocalRole.PAYER || state != PaymentRequestLifecycleState.PROPOSED) return null
     val requestTerms = terms ?: return null
     if (requestTerms.recurrence != null || requestTerms.amount.asset != "btc") return null
-    val amountSats = requestTerms.amount.value.toSats() ?: return null
+    val amountSats = requestTerms.amount.value.toSats()
+        ?.takeIf { it <= ULong.MAX_VALUE / 1000uL }
+        ?: return null
     val endpoints = requestTerms.acceptedPaymentEndpointIdentifiers
         .filter { MethodId.fromRawValue(it) != null }
         .distinct()
