@@ -56,6 +56,9 @@ data class PaykitPaymentRequest(
         get() = PaykitPaymentRequestId(paymentRequestId, counterparty, counterpartyReceiverPath)
 
     fun isExpired(now: Instant): Boolean = expiresAt?.let { it <= now } == true
+
+    fun acceptsLightningInvoiceAmount(amountSats: ULong): Boolean =
+        amountSats == 0uL || amountSats == this.amountSats
 }
 
 sealed class PaykitPaymentRequestError(message: String) : AppError(message) {
