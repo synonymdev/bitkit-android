@@ -34,7 +34,7 @@ import kotlinx.coroutines.withContext
 import to.bitkit.async.appScope
 import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
-import to.bitkit.data.hasPublicPaykitPublicationState
+import to.bitkit.data.hasPaykitState
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
@@ -48,6 +48,7 @@ import to.bitkit.models.PubkyRingAuthCallback
 import to.bitkit.models.PubkyRingAuthCallbackHandlingResult
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
+import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PubkyService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -768,13 +769,23 @@ class PubkyRepo @Inject constructor(
             val profile = existingProfile?.copy(publicKey = prefixedKey)
                 ?: resolveContactProfile(prefixedKey).getOrThrow()
                 ?: PubkyProfile.placeholder(prefixedKey)
-            pubkyService.saveContact(prefixedKey, profile.name)
+            pubkyService.saveContact(prefixedKey, profile.name, relevantReceiverPaths(prefixedKey))
             _contacts.update { current ->
                 (current.filter { it.publicKey != prefixedKey } + profile)
                     .sortedBy { it.name.lowercase() }
             }
             markContactsLoaded()
             Logger.info("Added contact '${redacted(prefixedKey)}'", context = TAG)
+        }
+    }
+
+    suspend fun refreshContactReceiverPaths(publicKey: String): Result<Unit> = runSuspendCatching {
+        withContext(ioDispatcher) {
+            val prefixedKey = requireAddableContactPublicKey(publicKey = publicKey, allowExisting = true)
+            val contact = _contacts.value.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, prefixedKey) }
+                ?: return@withContext
+            pubkyService.saveContact(prefixedKey, contact.name, relevantReceiverPaths(prefixedKey))
+            Logger.info("Refreshed contact receiver paths for '${redacted(prefixedKey)}'", context = TAG)
         }
     }
 
@@ -829,7 +840,7 @@ class PubkyRepo @Inject constructor(
                         runSuspendCatching {
                             val profile = resolveContactProfile(prefixedKey).getOrThrow()
                                 ?: PubkyProfile.placeholder(prefixedKey)
-                            pubkyService.saveContact(prefixedKey, profile.name)
+                            pubkyService.saveContact(prefixedKey, profile.name, relevantReceiverPaths(prefixedKey))
                             profile
                         }.onFailure {
                             Logger.warn("Failed to import contact '${redacted(prefixedKey)}'", it, context = TAG)
@@ -999,7 +1010,7 @@ class PubkyRepo @Inject constructor(
     // region Sign out
 
     suspend fun signOut(): Result<Unit> {
-        val hadPublicPaykitState = settingsStore.data.first().hasPublicPaykitPublicationState()
+        val hadPaykitState = settingsStore.data.first().hasPaykitState()
         val endpointCleanupResult = removeBitkitPaymentEndpoints()
             .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
 
@@ -1013,7 +1024,7 @@ class PubkyRepo @Inject constructor(
             },
         )
 
-        clearLocalState(publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPublicPaykitState)
+        clearLocalState(publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPaykitState)
         return result
     }
 
@@ -1110,6 +1121,14 @@ class PubkyRepo @Inject constructor(
         )
     }
 
+    private suspend fun relevantReceiverPaths(publicKey: String): List<String> =
+        runSuspendCatching {
+            pubkyService.discoverRelevantReceiverPaths(publicKey)
+        }.onFailure {
+            Logger.warn("Failed to discover Paykit receivers for '${redacted(publicKey)}'", it, context = TAG)
+        }.getOrNull()
+            ?: listOf(PaykitReceiverPaths.WALLET)
+
     private suspend fun upsertContactProfileOverride(profile: PubkyProfile) {
         val prefixedKey = profile.publicKey.ensurePubkyPrefix()
         pubkyStore.update { data ->
@@ -1195,6 +1214,7 @@ class PubkyRepo @Inject constructor(
             it.copy(
                 hasConfirmedPublicPaykitEndpoints = false,
                 sharesPublicPaykitEndpoints = false,
+                sharesPrivatePaykitEndpoints = false,
                 publicPaykitBolt11 = "",
                 publicPaykitBolt11PaymentHash = "",
                 publicPaykitBolt11ExpiresAtMillis = 0,

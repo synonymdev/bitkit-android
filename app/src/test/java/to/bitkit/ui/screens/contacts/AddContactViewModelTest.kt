@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
@@ -14,6 +15,7 @@ import to.bitkit.repositories.PubkyContactError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
@@ -22,6 +24,7 @@ class AddContactViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val publicPaykitRepo: PublicPaykitRepo = mock()
+    private val refreshContactPaykitReceivers = mock<RefreshContactPaykitReceiversUseCase>()
 
     @Test
     fun `self add failure should show dedicated error`() = test {
@@ -54,12 +57,14 @@ class AddContactViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.contacts__add_error_existing)).thenReturn("existing contact")
         whenever(pubkyRepo.fetchContactProfile(any()))
             .thenReturn(Result.failure(PubkyContactError.AlreadyExists))
+        whenever { refreshContactPaykitReceivers(TEST_PUBLIC_KEY) }.thenReturn(Result.success(Unit))
 
         val sut = createSut()
         advanceUntilIdle()
 
         assertEquals("existing contact", sut.uiState.value.error)
         assertNull(sut.uiState.value.fetchedProfile)
+        verify(refreshContactPaykitReceivers).invoke(TEST_PUBLIC_KEY)
     }
 
     @Test
@@ -80,6 +85,7 @@ class AddContactViewModelTest : BaseUnitTest() {
             context = context,
             pubkyRepo = pubkyRepo,
             publicPaykitRepo = publicPaykitRepo,
+            refreshContactPaykitReceivers = refreshContactPaykitReceivers,
             savedStateHandle = SavedStateHandle(mapOf("publicKey" to publicKey)),
         )
     }

@@ -511,6 +511,7 @@ class PubkyRepoTest : BaseUnitTest() {
         settingsFlow.value = SettingsData(
             hasConfirmedPublicPaykitEndpoints = true,
             sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
             publicPaykitBolt11 = "lnbc1old",
             publicPaykitBolt11PaymentHash = "010203",
             publicPaykitBolt11ExpiresAtMillis = 123L,
@@ -521,6 +522,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertFalse(settingsFlow.value.hasConfirmedPublicPaykitEndpoints)
         assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
         assertEquals("", settingsFlow.value.publicPaykitBolt11)
         assertEquals("", settingsFlow.value.publicPaykitBolt11PaymentHash)
         assertEquals(0, settingsFlow.value.publicPaykitBolt11ExpiresAtMillis)
@@ -559,6 +561,23 @@ class PubkyRepoTest : BaseUnitTest() {
         assertEquals("", settingsFlow.value.publicPaykitBolt11)
         assertEquals("", settingsFlow.value.publicPaykitBolt11PaymentHash)
         assertEquals(0, settingsFlow.value.publicPaykitBolt11ExpiresAtMillis)
+        verifyBlocking(pubkyService) { signOut() }
+        verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+    }
+
+    @Test
+    fun `signOut should keep cleanup pending when private-only endpoint cleanup fails`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        settingsFlow.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        whenever(pubkyService.removeBitkitPaymentEndpoints()).thenAnswer { throw TestAppError("Cleanup failed") }
+
+        val result = sut.signOut()
+
+        assertTrue(result.isSuccess)
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.isAuthenticated.value)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
         verifyBlocking(pubkyService) { signOut() }
         verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
     }
@@ -919,6 +938,35 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `refreshContactReceiverPaths should update saved contact receiver paths`() = test {
+        authenticateForTesting()
+        val contact = PubkyProfile(
+            publicKey = VALID_CONTACT_KEY_B,
+            name = "Alice",
+            bio = "",
+            imageUrl = null,
+            links = emptyList(),
+            tags = emptyList(),
+            status = null,
+        )
+        sut.addContact(VALID_CONTACT_KEY_B, existingProfile = contact)
+        clearInvocations(pubkyService)
+        whenever(pubkyService.discoverRelevantReceiverPaths(VALID_CONTACT_KEY_B))
+            .thenReturn(listOf("bitkit/wallet", "bitkit/server"))
+
+        val result = sut.refreshContactReceiverPaths(VALID_CONTACT_KEY_B)
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(pubkyService) {
+            saveContact(
+                VALID_CONTACT_KEY_B,
+                "Alice",
+                listOf("bitkit/wallet", "bitkit/server"),
+            )
+        }
+    }
+
+    @Test
     fun `loadProfile should ignore stale result when authenticated key changes`() = test {
         val oldSecret = "old_secret"
         val oldPublicKey = "old_public_key"
@@ -1275,12 +1323,14 @@ class PubkyRepoTest : BaseUnitTest() {
         profile: PaykitProfile? = null,
     ) = ContactRecord(
         publicKey = publicKey,
+        receiverPaths = listOf("bitkit/wallet"),
         label = label,
         profile = profile,
         profileFetchedAt = null,
         createdAt = "2026-01-01T00:00:00Z",
         updatedAt = "2026-01-01T00:00:00Z",
         publicContactMarkerStatus = PublicationStatus.NOT_PUBLISHED,
+        publicContactMarkerReceiverPath = null,
         publicContactPublishedAt = null,
         publicContactRemovedAt = null,
         publicContactLastError = null,

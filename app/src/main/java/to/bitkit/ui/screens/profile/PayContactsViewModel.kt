@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
@@ -91,19 +92,23 @@ class PayContactsViewModel @Inject constructor(
     }
 
     private suspend fun enableContactPayments(contacts: List<String>): Result<Unit> {
+        val previous = settingsStore.data.first()
         publicPaykitRepo.syncPublishedEndpoints(publish = true)
-            .onFailure { return Result.failure(it) }
+            .onFailure {
+                rollbackEnabledContactPayments(previous, contacts, it)
+                return Result.failure(it)
+            }
 
         val canUsePrivateContactPayments = pubkyRepo.hasSecretKey()
         if (canUsePrivateContactPayments) {
             privatePaykitRepo.setContactSharingCleanupPending(false)
                 .onFailure {
-                    publicPaykitRepo.syncPublishedEndpoints(publish = false)
+                    rollbackEnabledContactPayments(previous, contacts, it)
                     return Result.failure(it)
                 }
         }
 
-        runCatching {
+        runSuspendCatching {
             settingsStore.update {
                 it.copy(
                     hasConfirmedPublicPaykitEndpoints = true,
@@ -112,6 +117,7 @@ class PayContactsViewModel @Inject constructor(
                 )
             }
         }.onFailure {
+            rollbackEnabledContactPayments(previous, contacts, it)
             return Result.failure(it)
         }
 
@@ -122,9 +128,34 @@ class PayContactsViewModel @Inject constructor(
         return Result.success(Unit)
     }
 
+    private suspend fun rollbackEnabledContactPayments(
+        previous: SettingsData,
+        contacts: List<String>,
+        error: Throwable,
+    ) {
+        runSuspendCatching {
+            settingsStore.update {
+                it.copy(
+                    hasConfirmedPublicPaykitEndpoints = previous.hasConfirmedPublicPaykitEndpoints,
+                    sharesPublicPaykitEndpoints = previous.sharesPublicPaykitEndpoints,
+                    sharesPrivatePaykitEndpoints = previous.sharesPrivatePaykitEndpoints,
+                )
+            }
+        }.onFailure(error::addSuppressed)
+        publicPaykitRepo.syncPublishedEndpoints(publish = previous.sharesPublicPaykitEndpoints)
+            .onFailure { rollbackError ->
+                error.addSuppressed(rollbackError)
+                markPublicPaykitRetry(error)
+            }
+        if (!previous.sharesPrivatePaykitEndpoints) {
+            privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
+                .onFailure(error::addSuppressed)
+        }
+    }
+
     private suspend fun disableContactPayments(contacts: List<String>): Result<Unit> {
         val previous = settingsStore.data.first()
-        runCatching {
+        runSuspendCatching {
             settingsStore.update {
                 it.copy(
                     hasConfirmedPublicPaykitEndpoints = true,
@@ -145,13 +176,18 @@ class PayContactsViewModel @Inject constructor(
             .onFailure { privateCleanupError = it }
 
         publicCleanupError?.let { error ->
-            runCatching {
+            runSuspendCatching {
                 settingsStore.update { settings ->
                     settings.copy(sharesPublicPaykitEndpoints = previous.sharesPublicPaykitEndpoints)
                 }
             }.onFailure { rollbackError ->
                 error.addSuppressed(rollbackError)
             }
+            publicPaykitRepo.syncPublishedEndpoints(publish = previous.sharesPublicPaykitEndpoints)
+                .onFailure { rollbackError ->
+                    error.addSuppressed(rollbackError)
+                    markPublicPaykitRetry(error)
+                }
         }
         privateCleanupError?.let { error ->
             if (previous.sharesPrivatePaykitEndpoints) {
@@ -185,23 +221,30 @@ class PayContactsViewModel @Inject constructor(
         privatePaykitRepo.prepareSavedContacts(
             publicKeys = contacts,
             requireImmediatePublication = true,
-        ).onFailure {
+        ).exceptionOrNull()?.let {
             error.addSuppressed(it)
             updatePrivateContactsPreference(isEnabled = false, error = error)
+            publicPaykitRepo.syncLocalReceiverMarker().onFailure(error::addSuppressed)
             return
         }
 
-        privatePaykitRepo.setContactSharingCleanupPending(false)
-            .onFailure {
-                error.addSuppressed(it)
-                updatePrivateContactsPreference(isEnabled = false, error = error)
-            }
+        privatePaykitRepo.setContactSharingCleanupPending(false).exceptionOrNull()?.let {
+            error.addSuppressed(it)
+            updatePrivateContactsPreference(isEnabled = false, error = error)
+        }
+        publicPaykitRepo.syncLocalReceiverMarker().onFailure(error::addSuppressed)
+    }
+
+    private suspend fun markPublicPaykitRetry(error: Throwable) {
+        runSuspendCatching {
+            settingsStore.update { it.copy(publicPaykitCleanupPending = true) }
+        }.onFailure(error::addSuppressed)
     }
 
     private suspend fun updatePrivateContactsPreference(
         isEnabled: Boolean,
         error: Throwable,
-    ): Boolean = runCatching {
+    ): Boolean = runSuspendCatching {
         settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = isEnabled) }
     }.onFailure(error::addSuppressed).isSuccess
 

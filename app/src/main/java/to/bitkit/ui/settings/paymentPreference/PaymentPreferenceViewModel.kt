@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
@@ -81,14 +82,13 @@ class PaymentPreferenceViewModel @Inject constructor(
             val previous = settingsStore.data.first()
             privateContactsPendingValue.update { _uiState.value.privateContactsEnabled }
             _uiState.update { it.copy(isUpdatingPrivateContacts = true) }
-            val result = runCatching {
+            val result = runSuspendCatching {
                 settingsStore.update {
                     it.copy(
                         hasConfirmedPublicPaykitEndpoints = true,
                         sharesPrivatePaykitEndpoints = isEnabled,
                     )
                 }
-            }.mapCatching {
                 if (isEnabled) {
                     privatePaykitRepo.enableSharingAndPrepareSavedContacts(
                         publicKeys = contactPublicKeys(),
@@ -96,6 +96,9 @@ class PaymentPreferenceViewModel @Inject constructor(
                     ).getOrThrow()
                 } else {
                     privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contactPublicKeys()).getOrThrow()
+                }
+                if (!previous.sharesPublicPaykitEndpoints) {
+                    publicPaykitRepo.syncLocalReceiverMarker(privateSharingEnabled = isEnabled).getOrThrow()
                 }
             }
 
@@ -128,11 +131,9 @@ class PaymentPreferenceViewModel @Inject constructor(
                 )
             }
 
-            publicPaykitRepo.syncPublishedEndpoints(publish = isEnabled).exceptionOrNull()?.let {
-                settingsStore.update { settings ->
-                    settings.copy(sharesPublicPaykitEndpoints = previous.sharesPublicPaykitEndpoints)
-                }
-                showSyncError(it)
+            publicPaykitRepo.syncPublishedEndpoints(publish = isEnabled).exceptionOrNull()?.let { error ->
+                rollbackPublicContactsPreference(previous, error)
+                showSyncError(error)
             }
             _uiState.update { it.copy(isUpdatingPublicContacts = false) }
         }
@@ -179,7 +180,7 @@ class PaymentPreferenceViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refreshPublishedPreferences(): Result<Unit> = runCatching {
+    private suspend fun refreshPublishedPreferences(): Result<Unit> = runSuspendCatching {
         val settings = settingsStore.data.first()
         if (settings.sharesPublicPaykitEndpoints) {
             publicPaykitRepo.syncCurrentPublishedEndpoints(
@@ -195,12 +196,29 @@ class PaymentPreferenceViewModel @Inject constructor(
                 ).getOrThrow()
             } else {
                 settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
+                publicPaykitRepo.syncLocalReceiverMarker(privateSharingEnabled = false).getOrThrow()
             }
         }
     }
 
     private fun contactPublicKeys(): List<String> =
         pubkyRepo.contacts.value.map { it.publicKey }
+
+    private suspend fun rollbackPublicContactsPreference(previous: SettingsData, error: Throwable) {
+        runSuspendCatching {
+            settingsStore.update { settings ->
+                settings.copy(sharesPublicPaykitEndpoints = previous.sharesPublicPaykitEndpoints)
+            }
+        }.onFailure(error::addSuppressed)
+
+        publicPaykitRepo.syncPublishedEndpoints(publish = previous.sharesPublicPaykitEndpoints)
+            .onFailure { rollbackError ->
+                error.addSuppressed(rollbackError)
+                runSuspendCatching {
+                    settingsStore.update { it.copy(publicPaykitCleanupPending = true) }
+                }.onFailure(error::addSuppressed)
+            }
+    }
 
     private suspend fun rollbackPrivateContactsPreference(
         requestedEnabled: Boolean,
@@ -213,9 +231,13 @@ class PaymentPreferenceViewModel @Inject constructor(
             return
         }
 
-        runCatching {
+        runSuspendCatching {
             settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = previous.sharesPrivatePaykitEndpoints) }
         }.onFailure(error::addSuppressed)
+        if (!previous.sharesPublicPaykitEndpoints) {
+            publicPaykitRepo.syncLocalReceiverMarker(privateSharingEnabled = previous.sharesPrivatePaykitEndpoints)
+                .onFailure(error::addSuppressed)
+        }
 
         if (requestedEnabled && !previous.sharesPrivatePaykitEndpoints) {
             privatePaykitRepo.disableSharingAndPruneUnsavedContactState(contacts)
@@ -233,23 +255,24 @@ class PaymentPreferenceViewModel @Inject constructor(
         privatePaykitRepo.prepareSavedContacts(
             publicKeys = contacts,
             requireImmediatePublication = true,
-        ).onFailure {
+        ).exceptionOrNull()?.let {
             error.addSuppressed(it)
             updatePrivateContactsPreference(isEnabled = false, error = error)
+            publicPaykitRepo.syncLocalReceiverMarker().onFailure(error::addSuppressed)
             return
         }
 
-        privatePaykitRepo.setContactSharingCleanupPending(false)
-            .onFailure {
-                error.addSuppressed(it)
-                updatePrivateContactsPreference(isEnabled = false, error = error)
-            }
+        privatePaykitRepo.setContactSharingCleanupPending(false).exceptionOrNull()?.let {
+            error.addSuppressed(it)
+            updatePrivateContactsPreference(isEnabled = false, error = error)
+        }
+        publicPaykitRepo.syncLocalReceiverMarker().onFailure(error::addSuppressed)
     }
 
     private suspend fun updatePrivateContactsPreference(
         isEnabled: Boolean,
         error: Throwable,
-    ): Boolean = runCatching {
+    ): Boolean = runSuspendCatching {
         settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = isEnabled) }
     }.onFailure(error::addSuppressed).isSuccess
 

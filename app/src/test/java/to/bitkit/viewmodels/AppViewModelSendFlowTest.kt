@@ -81,6 +81,7 @@ import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.usecases.FormatMoneyValue
+import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import to.bitkit.utils.AppError
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import java.net.URLEncoder
@@ -127,6 +128,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val samRockRepo = mock<SamRockRepo>()
     private val widgetsRepo = mock<WidgetsRepo>()
     private val formatMoneyValue = mock<FormatMoneyValue>()
+    private val refreshContactPaykitReceivers = mock<RefreshContactPaykitReceiversUseCase>()
     private val clipboardManager = mock<ClipboardManager>()
     private val toastManager = mock<ToastQueueManager>()
 
@@ -181,6 +183,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
         whenever(pubkyRepo.contacts).thenReturn(pubkyContacts)
+        whenever { refreshContactPaykitReceivers(any()) }.thenReturn(Result.success(Unit))
+        whenever { publicPaykitRepo.syncLocalReceiverMarker(anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(Unit))
         whenever(pubkyRepo.contactsLoadVersion).thenReturn(pubkyContactsLoadVersion)
         whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
@@ -254,6 +259,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         nodeServiceFgState = nodeServiceFgState,
         publicPaykitRepo = publicPaykitRepo,
         privatePaykitRepo = privatePaykitRepo,
+        refreshContactPaykitReceivers = refreshContactPaykitReceivers,
         samRockRepo = samRockRepo,
         appUpdateSheet = mock(),
         backupSheet = mock(),
@@ -685,6 +691,31 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
             assertEquals(MainScreenEffect.Navigate(Routes.AddContact(testPublicKey)), awaitItem())
         }
+    }
+
+    @Test
+    fun `existing contact scan refreshes Paykit receivers`() = test {
+        enablePaykitUi()
+        pubkyContacts.value = listOf(
+            PubkyProfile(
+                publicKey = testPublicKey,
+                name = "Bob",
+                bio = "",
+                imageUrl = null,
+                links = emptyList(),
+                status = null,
+            ),
+        )
+        advanceUntilIdle()
+
+        sut.mainScreenEffect.test {
+            sut.onScanResult(testPublicKey, routePubkyKeys = true)
+
+            assertEquals(MainScreenEffect.Navigate(Routes.ContactDetail(testPublicKey)), awaitItem())
+            advanceUntilIdle()
+        }
+
+        verify(refreshContactPaykitReceivers).invoke(testPublicKey)
     }
 
     @Test
@@ -1270,14 +1301,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `private Paykit waits for contacts load before pruning`() = test {
+    fun `private Paykit refreshes marker but waits for contacts load before pruning`() = test {
         enablePaykitUi()
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
         advanceUntilIdle()
-        clearInvocations(privatePaykitRepo)
+        clearInvocations(privatePaykitRepo, publicPaykitRepo)
 
         pubkyPublicKey.value = testPublicKey
         advanceUntilIdle()
 
+        verify(publicPaykitRepo).syncLocalReceiverMarker()
         verify(privatePaykitRepo, never()).prepareSavedContacts(any<Collection<String>>(), any())
         verify(privatePaykitRepo, never()).pruneUnsavedContactState(any<Collection<String>>())
 
@@ -1331,19 +1364,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `private Paykit refresh clears stale public cleanup when public sharing is enabled`() = test {
+    fun `private Paykit refresh reconciles pending public state when sharing is enabled`() = test {
         isPaykitEnabled.value = true
         settingsData.value = SettingsData(
             sharesPublicPaykitEndpoints = true,
             publicPaykitCleanupPending = true,
         )
+        whenever { publicPaykitRepo.syncCurrentPublishedEndpoints() }.thenReturn(Result.success(Unit))
 
         sut.refreshPrivatePaykitEndpoints()
         advanceUntilIdle()
 
-        verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = false)
+        verify(publicPaykitRepo).syncCurrentPublishedEndpoints()
         assertFalse(settingsData.value.publicPaykitCleanupPending)
         verify(privatePaykitRepo).retryPendingEndpointRemoval(emptyList())
+    }
+
+    @Test
+    fun `private Paykit refresh republishes marker for private-only sharing`() = test {
+        isPaykitEnabled.value = true
+        pubkyPublicKey.value = testPublicKey
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+
+        sut.refreshPrivatePaykitEndpoints()
+        advanceUntilIdle()
+
+        verify(publicPaykitRepo).syncLocalReceiverMarker()
     }
 
     private suspend fun TestScope.confirmCurrentPayment() {

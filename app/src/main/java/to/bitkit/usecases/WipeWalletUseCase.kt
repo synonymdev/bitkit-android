@@ -6,6 +6,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -46,39 +47,41 @@ class WipeWalletUseCase @Inject constructor(
         resetWalletState: () -> Unit,
         onSuccess: () -> Unit,
     ): Result<Unit> {
-        return runCatching {
-            backupRepo.setWiping(true)
-            backupRepo.reset()
+        backupRepo.setWiping(true)
+        return try {
+            runSuspendCatching {
+                backupRepo.reset()
 
-            privatePaykitRepo.get().removePublishedEndpointsForCleanup(TAG)
-            pubkyRepo.removeBitkitPaymentEndpoints()
-                .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
-            privatePaykitRepo.get().closeAndClear()
-            privatePaykitAddressReservationRepo.clear()
-            pubkyRepo.wipeLocalState()
-            keychain.wipe()
-            firebaseMessaging.deleteToken()
+                privatePaykitRepo.get().removePublishedEndpointsForCleanup(TAG)
+                pubkyRepo.removeBitkitPaymentEndpoints()
+                    .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
+                privatePaykitRepo.get().closeAndClear()
+                privatePaykitAddressReservationRepo.clear()
+                pubkyRepo.wipeLocalState()
+                keychain.wipe()
+                firebaseMessaging.deleteToken()
 
-            coreService.wipeData()
-            db.clearAllTables()
+                coreService.wipeData()
+                db.clearAllTables()
 
-            settingsStore.reset()
-            cacheStore.reset()
-            widgetsStore.reset()
+                settingsStore.reset()
+                cacheStore.reset()
+                widgetsStore.reset()
 
-            blocktankRepo.resetState()
-            activityRepo.resetState()
-            hwWalletRepo.resetState()
-            resetWalletState()
+                blocktankRepo.resetState()
+                activityRepo.resetState()
+                hwWalletRepo.resetState()
+                resetWalletState()
 
-            migrationService.markMigrationChecked()
+                migrationService.markMigrationChecked()
 
-            lightningRepo.wipeStorage(walletIndex)
-                .onSuccess { onSuccess() }
-                .getOrThrow()
-        }.onFailure {
-            Logger.error("Wipe wallet error", it, context = TAG)
-        }.also {
+                lightningRepo.wipeStorage(walletIndex)
+                    .onSuccess { onSuccess() }
+                    .getOrThrow()
+            }.onFailure {
+                Logger.error("Failed to wipe wallet", it, context = TAG)
+            }
+        } finally {
             backupRepo.setWiping(false)
         }
     }

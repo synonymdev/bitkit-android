@@ -42,10 +42,12 @@ class PrivatePaykitContactResolverTest : BaseUnitTest() {
         cacheData.value = PrivatePaykitCacheData(
             contacts = mapOf(
                 CONTACT_KEY to PrivatePaykitContactCacheData(
-                    localInvoice = PrivatePaykitStoredInvoiceData(
-                        bolt11 = "lnbcrt1private",
-                        paymentHash = PAYMENT_HASH,
-                        expiresAt = 1_700_000_000L,
+                    localInvoicesByReceiverPath = mapOf(
+                        "bitkit/wallet" to PrivatePaykitStoredInvoiceData(
+                            bolt11 = "lnbcrt1private",
+                            paymentHash = PAYMENT_HASH,
+                            expiresAt = 1_700_000_000L,
+                        ),
                     ),
                 ),
             ),

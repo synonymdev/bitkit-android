@@ -6,6 +6,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -67,6 +68,7 @@ class SettingsViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.isAuthenticated).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.contacts).thenReturn(contacts)
         whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }.thenReturn(Result.success(Unit))
+        whenever { publicPaykitRepo.syncLocalReceiverMarker(anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.disableSharingAndPruneUnsavedContactState(any<Collection<String>>()) }
             .thenReturn(Result.success(Unit))
 
@@ -131,6 +133,31 @@ class SettingsViewModelTest : BaseUnitTest() {
 
         assertFalse(settingsData.value.publicPaykitCleanupPending)
         verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = false)
+        verify(publicPaykitRepo).syncLocalReceiverMarker(publicSharingEnabled = false, privateSharingEnabled = false)
+        verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
+    }
+
+    @Test
+    fun `disabling Paykit with private-only state keeps cleanup pending when marker removal fails`() = test {
+        clearInvocations(publicPaykitRepo)
+        whenever {
+            publicPaykitRepo.syncLocalReceiverMarker(
+                publicSharingEnabled = false,
+                privateSharingEnabled = false,
+            )
+        }
+            .thenReturn(Result.failure(SettingsViewModelTestError("marker cleanup failed")))
+        isPaykitEnabled.value = true
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+        )
+
+        sut.setIsPaykitEnabled(false)
+        advanceUntilIdle()
+
+        assertTrue(settingsData.value.publicPaykitCleanupPending)
+        verify(publicPaykitRepo, never()).syncPublishedEndpoints(publish = false)
+        verify(publicPaykitRepo).syncLocalReceiverMarker(publicSharingEnabled = false, privateSharingEnabled = false)
         verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(contacts.value.map { it.publicKey })
     }
 
