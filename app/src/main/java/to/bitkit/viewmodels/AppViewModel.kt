@@ -582,7 +582,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun refreshIncomingPaykitPaymentRequests() {
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
-        paykitPaymentRequestRepo.refresh()
+        paykitPaymentRequestRepo.refresh().onSuccess { presentNextIncomingPaykitPaymentRequest() }
     }
 
     fun startPaykitPaymentRequestPolling() {
@@ -603,14 +603,18 @@ class AppViewModel @Inject constructor(
 
     private fun observeIncomingPaykitPaymentRequests() {
         viewModelScope.launch {
-            combine(paykitPaymentRequestRepo.pendingRequests, currentSheet) { requests, sheet -> requests to sheet }
-                .collect { (requests, sheet) ->
-                    presentedPaymentRequestIds.retainAll(requests.mapTo(mutableSetOf()) { it.id })
-                    if (sheet != null || isPresentingPaymentRequest) return@collect
-                    val request = requests.firstOrNull { it.id !in presentedPaymentRequestIds } ?: return@collect
-                    presentIncomingPaykitPaymentRequest(request)
-                }
+            currentSheet.collect {
+                if (it == null) presentNextIncomingPaykitPaymentRequest()
+            }
         }
+    }
+
+    private suspend fun presentNextIncomingPaykitPaymentRequest() {
+        val requests = paykitPaymentRequestRepo.pendingRequests.value
+        presentedPaymentRequestIds.retainAll(requests.mapTo(mutableSetOf()) { it.id })
+        if (currentSheet.value != null || isPresentingPaymentRequest) return
+        val request = requests.firstOrNull { it.id !in presentedPaymentRequestIds } ?: return
+        presentIncomingPaykitPaymentRequest(request)
     }
 
     private suspend fun presentIncomingPaykitPaymentRequest(request: PaykitPaymentRequest) {
@@ -1934,8 +1938,10 @@ class AppViewModel @Inject constructor(
         }
         val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
 
-        val lnInvoice = extractViableLightningInvoice(invoice.params)
         val incomingPaymentRequest = activeIncomingPaymentRequest()
+        val lnInvoice = extractViableLightningInvoice(invoice.params)?.takeIf {
+            incomingPaymentRequest?.acceptsLightningInvoiceAmount(it.amountSatoshis) != false
+        }
         val amount = incomingPaymentRequest?.amountSats
             ?: lnInvoice?.amountSatoshis?.takeIf { it > 0uL }
             ?: invoice.amountSatoshis
@@ -2072,7 +2078,13 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val amount = activeIncomingPaymentRequest()?.amountSats ?: invoice.amountSatoshis
+        val incomingPaymentRequest = activeIncomingPaymentRequest()
+        if (incomingPaymentRequest?.acceptsLightningInvoiceAmount(invoice.amountSatoshis) == false) {
+            rejectMismatchedPaymentRequestInvoice()
+            return
+        }
+
+        val amount = incomingPaymentRequest?.amountSats ?: invoice.amountSatoshis
         val quickPayHandled = handleQuickPayIfApplicable(
             amountSats = amount,
             invoice = invoice,
@@ -2439,6 +2451,11 @@ class AppViewModel @Inject constructor(
     private suspend fun proceedWithPayment() {
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
+        if (hasMismatchedIncomingPaymentRequestInvoice()) {
+            rejectMismatchedPaymentRequestInvoice()
+            return
+        }
+
         acceptIncomingPaymentRequestIfNeeded().onFailure {
             toast(it)
             return
@@ -2560,6 +2577,24 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private fun hasMismatchedIncomingPaymentRequestInvoice(): Boolean {
+        val incomingPaymentRequest = activeIncomingPaymentRequest() ?: return false
+        if (_sendUiState.value.payMethod != SendMethod.LIGHTNING) return false
+
+        val lightningInvoice = _sendUiState.value.decodedInvoice ?: return false
+        return !incomingPaymentRequest.acceptsLightningInvoiceAmount(lightningInvoice.amountSatoshis)
+    }
+
+    private fun rejectMismatchedPaymentRequestInvoice() {
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.wallet__toast_payment_failed_title),
+            description = context.getString(R.string.wallet__payment_request_invoice_mismatch),
+            testTag = "PaymentFailedToast",
+        )
+        hideSheet()
     }
 
     private fun getLnurlInvoiceFetchErrorMessage(error: Throwable): String = when (error) {

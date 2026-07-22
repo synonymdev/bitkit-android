@@ -30,6 +30,7 @@ import org.mockito.kotlin.check
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
@@ -317,6 +318,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
 
         verify(paykitPaymentRequestRepo, never()).refresh()
+    }
+
+    @Test
+    fun `payment request waiting for a newer private list is retried on refresh`() = test {
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1updatedpaymentrequest"
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 8uL)
+        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.beginPaymentRequest(request) }.thenReturn(
+            Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList),
+            Result.success(
+                PublicPaykitPaymentResult.Opened(
+                    paymentRequest = bolt11,
+                    privatePaymentContext = privateContext,
+                ),
+            ),
+        )
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+        whenever(lightningRepo.canSend(request.amountSats)).thenReturn(true)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        pendingPaykitPaymentRequests.value = listOf(request)
+        isPaykitEnabled.value = true
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+
+        sut.startPaykitPaymentRequestPolling()
+        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        runCurrent()
+        assertNull(sut.currentSheet.value)
+
+        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        runCurrent()
+        sut.stopPaykitPaymentRequestPolling()
+
+        verify(privatePaykitRepo, times(2)).beginPaymentRequest(request)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
     }
 
     @Test
@@ -1070,9 +1107,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 ),
             ),
         )
+        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(Unit))
 
         pendingPaykitPaymentRequests.value = listOf(request)
-        advanceUntilIdle()
+        sut.startPaykitPaymentRequestPolling()
+        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        runCurrent()
+        sut.stopPaykitPaymentRequestPolling()
 
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         assertEquals(request.amountSats, sut.sendUiState.value.amount)
@@ -1081,6 +1122,24 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             ContactPaymentContext(testPublicKey, privateContext, request),
             activeContactPaymentContext(),
         )
+    }
+
+    @Test
+    fun `incoming payment request rejects a mismatched fixed invoice before confirmation`() = test {
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1mismatchedconfirmation"
+        stubLightningScan(bolt11 = bolt11, amountSats = 2_501uL)
+
+        sut.openContactPayment(
+            paymentRequest = bolt11,
+            publicKey = testPublicKey,
+            privatePaymentContext = PrivatePaykitPaymentContext("bitkit/server", 7uL),
+            incomingPaymentRequest = request,
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        assertNull(activeContactPaymentContext())
     }
 
     @Test
@@ -1173,6 +1232,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(paykitPaymentRequestRepo).accept(request)
         verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
+    }
+
+    @Test
+    fun `incoming payment request rejects mismatched fixed invoice amount before acceptance`() = test {
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1mismatchedrequest"
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = request.amountSats,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 2_501uL),
+                isPaymentRequest = true,
+            ),
+        )
+
+        confirmCurrentPayment()
+
+        verify(paykitPaymentRequestRepo, never()).accept(any())
+        verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
     }
 
     @Test
