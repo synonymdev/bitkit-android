@@ -1,6 +1,7 @@
 package to.bitkit.usecases
 
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
@@ -26,6 +27,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
 import javax.inject.Provider
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
 class WipeWalletUseCaseTest : BaseUnitTest() {
@@ -159,6 +161,21 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     }
 
     @Test
+    fun `invoke should set wiping to false when cancelled`() = runTest {
+        whenever(keychain.wipe()).thenThrow(CancellationException("Cancelled"))
+
+        assertFailsWith<CancellationException> {
+            sut.invoke(
+                resetWalletState = { onWipeCalled = true },
+                onSuccess = { onSetWalletExistsStateCalled = true },
+            )
+        }
+
+        verify(backupRepo).setWiping(true)
+        verify(backupRepo).setWiping(false)
+    }
+
+    @Test
     fun `invoke should continue when endpoint cleanup fails`() = runTest {
         whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(
             Result.failure(RuntimeException("Cleanup failed")),
@@ -170,6 +187,24 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         )
 
         assertTrue(result.isSuccess)
+        verify(pubkyRepo).wipeLocalState()
+        verify(keychain).wipe()
+        verify(backupRepo).setWiping(false)
+    }
+
+    @Test
+    fun `invoke should continue when private endpoint cleanup fails`() = runTest {
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.thenReturn(
+            Result.failure(RuntimeException("Private cleanup failed")),
+        )
+
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertTrue(result.isSuccess)
+        verify(privatePaykitRepo).closeAndClear()
         verify(pubkyRepo).wipeLocalState()
         verify(keychain).wipe()
         verify(backupRepo).setWiping(false)

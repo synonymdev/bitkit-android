@@ -85,6 +85,7 @@ fun AddContactSheet(
     contacts: ImmutableList<PubkyProfile>,
     onDismiss: () -> Unit,
     onSubmit: (publicKey: String) -> Unit,
+    onExistingContact: (publicKey: String) -> Unit,
     onScanQr: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -96,12 +97,11 @@ fun AddContactSheet(
     )
     val validationMessage = when (validationResult) {
         AddContactValidationResult.Empty -> null
-        AddContactValidationResult.ExistingContact -> context.getString(R.string.contacts__add_error_existing)
+        is AddContactValidationResult.ExistingContact -> context.getString(R.string.contacts__add_error_existing)
         AddContactValidationResult.InvalidKey -> context.getString(R.string.contacts__add_error_invalid_key)
         AddContactValidationResult.OwnKey -> context.getString(R.string.contacts__add_error_self)
         is AddContactValidationResult.Valid -> null
     }
-
     BottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -114,6 +114,14 @@ fun AddContactSheet(
             onPaste = {
                 context.getClipboardText()?.trim()?.let {
                     publicKeyInput = PubkyPublicKeyFormat.bounded(it)
+                    val pastedValidation = resolveAddContactValidation(
+                        input = publicKeyInput,
+                        ownPublicKey = currentPublicKey,
+                        contacts = contacts,
+                    )
+                    if (pastedValidation is AddContactValidationResult.ExistingContact) {
+                        onExistingContact(pastedValidation.normalizedKey)
+                    }
                 }
             },
             onScanQr = onScanQr,

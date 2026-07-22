@@ -205,18 +205,20 @@ class SettingsViewModel @Inject constructor(
 
     private suspend fun updatePaykitEnabled(value: Boolean) {
         val shouldEnable = value && PaykitFeatureFlags.isUiAvailable
-        val hadPublicPaykitState = settingsStore.data.first().hasPublicPaykitPublicationState()
+        val previousSettings = settingsStore.data.first()
+        val hadPublicPaykitState = previousSettings.hasPublicPaykitPublicationState()
+        val hadPrivatePaykitState = previousSettings.sharesPrivatePaykitEndpoints
         settingsStore.setIsPaykitEnabled(shouldEnable)
 
         if (!shouldEnable) {
             settingsStore.update {
                 it.paykitDisabled(markPublicCleanupPending = it.hasPublicPaykitPublicationState())
             }
-            removePaykitEndpoints(hadPublicPaykitState)
+            removePaykitEndpoints(hadPublicPaykitState, hadPrivatePaykitState)
         }
     }
 
-    private suspend fun removePaykitEndpoints(hadPublicPaykitState: Boolean) {
+    private suspend fun removePaykitEndpoints(hadPublicPaykitState: Boolean, hadPrivatePaykitState: Boolean) {
         val contacts = pubkyRepo.contacts.value.map { it.publicKey }
 
         if (hadPublicPaykitState) {
@@ -227,6 +229,12 @@ class SettingsViewModel @Inject constructor(
                 .onFailure {
                     settingsStore.update { it.copy(publicPaykitCleanupPending = true) }
                     Logger.warn("Failed to remove public Paykit endpoints after disabling Paykit UI", it, context = TAG)
+                }
+        } else if (hadPrivatePaykitState) {
+            publicPaykitRepo.syncLocalReceiverMarker(publicSharingEnabled = false, privateSharingEnabled = false)
+                .onFailure {
+                    settingsStore.update { settings -> settings.copy(publicPaykitCleanupPending = true) }
+                    Logger.warn("Failed to remove Paykit receiver marker after disabling Paykit UI", it, context = TAG)
                 }
         }
 
