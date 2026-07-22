@@ -130,6 +130,7 @@ import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
+import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentNotification
 import to.bitkit.repositories.PendingPaymentRepo
@@ -263,6 +264,13 @@ class AppViewModel @Inject constructor(
     private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
     val currentSheet = _currentSheet.asStateFlow()
     private var queuedPairingCodeRequestId: Long? = null
+    private var receiveSheetContext: ReceiveSheetContext? = null
+
+    private data class ReceiveSheetContext(
+        val sheet: Sheet.Receive,
+        val bolt11: String,
+        val onchainAddress: String,
+    )
 
     private val processedPaymentsLock = Any()
     private val processedPayments = mutableSetOf<String>()
@@ -383,6 +391,7 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+        observeReceiveSheetInvoice()
         observeLdkNodeEvents()
         observeLightningUsableChannels()
         observePublicPaykitEndpoints()
@@ -420,7 +429,23 @@ class AppViewModel @Inject constructor(
 
     private fun observeLdkNodeEvents() {
         viewModelScope.launch {
-            lightningRepo.nodeEvents.collect { handleLdkEvent(it) }
+            lightningRepo.nodeEventUpdates.collect { handleLdkEvent(it) }
+        }
+    }
+
+    private fun observeReceiveSheetInvoice() {
+        viewModelScope.launch {
+            walletRepo.walletState
+                .map { it.bolt11 }
+                .distinctUntilChanged()
+                .collect { bolt11 ->
+                    if (bolt11.isEmpty()) return@collect
+                    val receiveSheet = _currentSheet.value as? Sheet.Receive ?: return@collect
+                    receiveSheetContext = receiveSheetContext
+                        ?.takeIf { it.sheet === receiveSheet }
+                        ?.copy(bolt11 = bolt11)
+                        ?: ReceiveSheetContext(receiveSheet, bolt11, walletRepo.getOnchainAddress())
+                }
         }
     }
 
@@ -595,9 +620,20 @@ class AppViewModel @Inject constructor(
     }
 
     @Suppress("CyclomaticComplexMethod")
-    private fun handleLdkEvent(event: Event) {
+    private fun handleLdkEvent(update: NodeEventUpdate) {
+        val event = update.event
         if (!walletRepo.walletExists()) return
         Logger.debug("LDK-node event received in $TAG: ${jsonLogOf(event)}", context = TAG)
+
+        val receiveSheetToClose = receiveSheetContext?.takeIf { context ->
+            val matchesSettledRequest = when (event) {
+                is Event.PaymentReceived -> update.settledReceiveInvoice?.bolt11 == context.bolt11
+                is Event.OnchainTransactionReceived -> update.settledReceiveAddress?.address == context.onchainAddress
+                else -> false
+            }
+            matchesSettledRequest &&
+                _currentSheet.value === context.sheet
+        }
 
         viewModelScope.launch {
             runCatching {
@@ -608,13 +644,13 @@ class AppViewModel @Inject constructor(
                     is Event.ChannelReady -> handleChannelReady(event)
                     is Event.OnchainTransactionConfirmed -> handleOnchainTransactionConfirmed(event)
                     is Event.OnchainTransactionEvicted -> handleOnchainTransactionEvicted(event)
-                    is Event.OnchainTransactionReceived -> handleOnchainTransactionReceived(event)
+                    is Event.OnchainTransactionReceived -> handleOnchainTransactionReceived(event, receiveSheetToClose)
                     is Event.OnchainTransactionReorged -> handleOnchainTransactionReorged(event)
                     is Event.OnchainTransactionReplaced -> handleOnchainTransactionReplaced(event)
                     is Event.PaymentClaimable -> Unit
                     is Event.PaymentFailed -> handlePaymentFailed(event)
                     is Event.PaymentForwarded -> Unit
-                    is Event.PaymentReceived -> handlePaymentReceived(event)
+                    is Event.PaymentReceived -> handlePaymentReceived(event, receiveSheetToClose)
                     is Event.PaymentSuccessful -> handlePaymentSuccessful(event)
                     is Event.ProbeFailed -> Unit
                     is Event.ProbeSuccessful -> Unit
@@ -865,7 +901,11 @@ class AppViewModel @Inject constructor(
         notifyTransactionRemoved(event)
     }
 
-    private suspend fun handleOnchainTransactionReceived(event: Event.OnchainTransactionReceived) {
+    private suspend fun handleOnchainTransactionReceived(
+        event: Event.OnchainTransactionReceived,
+        receiveSheetToClose: ReceiveSheetContext?,
+    ) {
+        closeSettledReceiveSheet(receiveSheetToClose)
         val addresses = event.details.outputs.mapNotNull { it.scriptpubkeyAddress }
         val contactPublicKey = privatePaykitRepo.contactPublicKeyForPrivateOnchainAddresses(addresses)
         notifyPaymentReceived(event)
@@ -934,9 +974,13 @@ class AppViewModel @Inject constructor(
         return true
     }
 
-    private suspend fun handlePaymentReceived(event: Event.PaymentReceived) {
+    private suspend fun handlePaymentReceived(
+        event: Event.PaymentReceived,
+        receiveSheetToClose: ReceiveSheetContext?,
+    ) {
         event.paymentHash.let { paymentHash ->
-            activityRepo.handlePaymentEvent(paymentHash)
+            closeSettledReceiveSheet(receiveSheetToClose)
+            activityRepo.notifyPaymentActivityChanged()
             privatePaykitRepo.contactPublicKeyForPrivateInvoicePaymentHash(paymentHash)?.let { publicKey ->
                 activityRepo.setContact(
                     contactPublicKey = publicKey,
@@ -962,6 +1006,12 @@ class AppViewModel @Inject constructor(
                 }
         }
         notifyPaymentReceived(event)
+    }
+
+    private fun closeSettledReceiveSheet(context: ReceiveSheetContext?) {
+        if (context == null) return
+        if (receiveSheetContext !== context || _currentSheet.value !== context.sheet) return
+        hideSheet()
     }
 
     private suspend fun handlePaymentSuccessful(event: Event.PaymentSuccessful) {
@@ -1014,7 +1064,7 @@ class AppViewModel @Inject constructor(
         val command = NotifyPaymentReceived.Command.from(event) ?: return
         val result = notifyPaymentReceivedHandler(command).getOrNull()
         if (result !is NotifyPaymentReceived.Result.ShowSheet) return
-        showTransactionSheet(result.sheet)
+        notifyPaymentReceivedHandler.present(command) { showTransactionSheet(result.sheet) }
     }
 
     private fun notifyTransactionUnconfirmed() = toast(
@@ -2849,9 +2899,17 @@ class AppViewModel @Inject constructor(
 
     fun showSheet(sheetType: Sheet) {
         viewModelScope.launch {
+            receiveSheetContext = null
             _currentSheet.value?.let {
                 _currentSheet.update { null }
                 delay(SCREEN_TRANSITION_DELAY)
+            }
+            receiveSheetContext = (sheetType as? Sheet.Receive)?.let { receiveSheet ->
+                ReceiveSheetContext(
+                    sheet = receiveSheet,
+                    bolt11 = walletRepo.getBolt11(),
+                    onchainAddress = walletRepo.getOnchainAddress(),
+                )
             }
             _currentSheet.update { sheetType }
         }
@@ -2859,6 +2917,7 @@ class AppViewModel @Inject constructor(
 
     fun hideSheet() {
         scanResultHandler = null
+        receiveSheetContext = null
         when {
             currentSheet.value is Sheet.TimedSheet -> {
                 // Only dismiss if manager still has a sheet (user initiated)

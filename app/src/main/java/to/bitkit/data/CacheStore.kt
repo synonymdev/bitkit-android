@@ -55,12 +55,38 @@ class CacheStore @Inject constructor(
         store.updateData { it.copy(onchainAddress = address) }
     }
 
-    suspend fun saveBolt11(bolt11: String) {
-        store.updateData { it.copy(bolt11 = bolt11) }
+    suspend fun saveBolt11(bolt11: String, paymentHash: String) {
+        store.updateData { it.copy(bolt11 = bolt11, bolt11PaymentHash = paymentHash) }
     }
 
     suspend fun setBip21(bip21: String) {
         store.updateData { it.copy(bip21 = bip21) }
+    }
+
+    suspend fun invalidateReceiveLightningInvoice(expectedBolt11: String): Boolean {
+        var invalidated = false
+        store.updateData {
+            if (it.bolt11 == expectedBolt11) {
+                invalidated = true
+                it.invalidateReceiveLightningInvoice()
+            } else {
+                it
+            }
+        }
+        return invalidated
+    }
+
+    suspend fun invalidateReceiveOnchainAddress(expectedAddress: String): Boolean {
+        var invalidated = false
+        store.updateData {
+            if (it.onchainAddress == expectedAddress) {
+                invalidated = true
+                it.invalidateReceiveOnchainAddress()
+            } else {
+                it
+            }
+        }
+        return invalidated
     }
 
     suspend fun cacheBalance(balanceState: BalanceState) {
@@ -123,6 +149,7 @@ data class AppCacheData(
     val paidOrders: Map<String, String> = mapOf(),
     val onchainAddress: String = "",
     val bolt11: String = "",
+    val bolt11PaymentHash: String = "",
     val bip21: String = "",
     val balance: BalanceState? = null,
     val backupStatuses: Map<BackupCategory, BackupItemStatus> = mapOf(),
@@ -132,5 +159,9 @@ data class AppCacheData(
     val addressSearchLastUsedReceiveIndexes: Map<String, Int> = mapOf(),
     val addressSearchLastUsedChangeIndexes: Map<String, Int> = mapOf(),
 ) {
-    fun resetBip21() = copy(bip21 = "", bolt11 = "", onchainAddress = "")
+    fun resetBip21() = copy(bip21 = "", bolt11 = "", bolt11PaymentHash = "", onchainAddress = "")
+
+    fun invalidateReceiveLightningInvoice() = copy(bip21 = "", bolt11 = "", bolt11PaymentHash = "")
+
+    fun invalidateReceiveOnchainAddress() = copy(bip21 = "", onchainAddress = "")
 }

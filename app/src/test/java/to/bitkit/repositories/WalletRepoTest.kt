@@ -15,6 +15,7 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Network
+import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
@@ -62,6 +63,7 @@ class WalletRepoTest : BaseUnitTest() {
         const val ADDRESS = "bc1qTest"
         const val ADDRESS_NEW = "newAddress"
         const val INVOICE = "testInvoice"
+        const val INVOICE_REPLACEMENT = "replacementInvoice"
         const val SATS = 1000uL
         val error = RuntimeException("Test Error")
         val channels = listOf(
@@ -89,7 +91,7 @@ class WalletRepoTest : BaseUnitTest() {
         whenever { cacheStore.update(any()) }.thenReturn(Unit)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(hwWalletRepo.wallets).thenReturn(MutableStateFlow(persistentListOf()))
-        whenever(lightningRepo.nodeEvents).thenReturn(MutableSharedFlow())
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(MutableSharedFlow())
         whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.success(emptyList()))
         whenever(lightningRepo.calculateTotalFee(any(), any(), any(), any(), anyOrNull()))
             .thenReturn(Result.success(SATS))
@@ -392,7 +394,7 @@ class WalletRepoTest : BaseUnitTest() {
         sut.setBolt11(INVOICE)
 
         assertEquals(INVOICE, sut.walletState.value.bolt11)
-        verify(cacheStore).saveBolt11(INVOICE)
+        verify(cacheStore).saveBolt11(INVOICE, "")
     }
 
     @Test
@@ -631,7 +633,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21ForEvent PaymentReceived should refresh address if used`() = test {
-        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = ADDRESS)))
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = ADDRESS, bolt11 = INVOICE)))
         whenever(coreService.isAddressUsed(any())).thenReturn(true)
         sut = createSut()
         sut.loadFromCache()
@@ -641,8 +643,9 @@ class WalletRepoTest : BaseUnitTest() {
                 paymentId = "testPaymentId",
                 paymentHash = "testPaymentHash",
                 amountMsat = 1000uL,
-                customRecords = emptyList()
-            )
+                customRecords = emptyList(),
+            ),
+            settledReceiveInvoice = SettledReceiveInvoice(INVOICE),
         )
 
         verify(privatePaykitAddressReservationRepo).nextReusableReceiveAddress()
@@ -650,7 +653,7 @@ class WalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `refreshBip21ForEvent PaymentReceived should not refresh address if not used`() = test {
-        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = ADDRESS)))
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = ADDRESS, bolt11 = INVOICE)))
         whenever(coreService.isAddressUsed(any())).thenReturn(false)
         sut = createSut()
         sut.loadFromCache()
@@ -660,11 +663,147 @@ class WalletRepoTest : BaseUnitTest() {
                 paymentId = "testPaymentId",
                 paymentHash = "testPaymentHash",
                 amountMsat = 1000uL,
-                customRecords = emptyList()
-            )
+                customRecords = emptyList(),
+            ),
+            settledReceiveInvoice = SettledReceiveInvoice(INVOICE),
         )
 
         verify(privatePaykitAddressReservationRepo, never()).nextReusableReceiveAddress()
+    }
+
+    @Test
+    fun `refreshBip21ForEvent PaymentReceived should invalidate the settled invoice`() = test {
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.success(INVOICE_REPLACEMENT))
+        sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE)
+        sut.setBip21("bitcoin:$ADDRESS?lightning=$INVOICE")
+
+        sut.refreshBip21ForEvent(
+            Event.PaymentReceived(
+                paymentId = "testPaymentId",
+                paymentHash = "testPaymentHash",
+                amountMsat = 1000uL,
+                customRecords = emptyList(),
+            ),
+            settledReceiveInvoice = SettledReceiveInvoice(INVOICE),
+        )
+
+        assertEquals("", sut.walletState.value.bolt11)
+        assertFalse(sut.walletState.value.bip21.contains(INVOICE))
+        assertTrue(sut.walletState.value.bip21.contains(ADDRESS))
+        verify(cacheStore, never()).invalidateReceiveLightningInvoice(any())
+        verify(lightningRepo, never()).createInvoice(anyOrNull(), any(), any())
+        verify(preActivityMetadataRepo, never()).addPreActivityMetadata(any())
+    }
+
+    @Test
+    fun `refreshBip21ForEvent PaymentReceived should preserve an unrelated receive invoice`() = test {
+        sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE)
+        sut.setBip21("bitcoin:$ADDRESS?lightning=$INVOICE")
+
+        sut.refreshBip21ForEvent(
+            Event.PaymentReceived(
+                paymentId = "testPaymentId",
+                paymentHash = "unrelatedPaymentHash",
+                amountMsat = 1000uL,
+                customRecords = emptyList(),
+            ),
+        )
+
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
+        assertTrue(sut.walletState.value.bip21.contains(INVOICE))
+        verify(cacheStore, never()).invalidateReceiveLightningInvoice(any())
+    }
+
+    @Test
+    fun `refreshBip21ForEvent PaymentReceived should preserve a replacement invoice`() = test {
+        sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE_REPLACEMENT)
+        sut.setBip21("bitcoin:$ADDRESS?lightning=$INVOICE_REPLACEMENT")
+
+        sut.refreshBip21ForEvent(
+            event = Event.PaymentReceived(
+                paymentId = "testPaymentId",
+                paymentHash = "testPaymentHash",
+                amountMsat = 1000uL,
+                customRecords = emptyList(),
+            ),
+            settledReceiveInvoice = SettledReceiveInvoice(INVOICE),
+        )
+
+        assertEquals(INVOICE_REPLACEMENT, sut.walletState.value.bolt11)
+        assertTrue(sut.walletState.value.bip21.contains(INVOICE_REPLACEMENT))
+        verify(privatePaykitAddressReservationRepo, never()).nextReusableReceiveAddress()
+    }
+
+    @Test
+    fun `refreshBip21ForEvent OnchainTransactionReceived rotates the settled address`() = test {
+        sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE)
+        sut.setBip21("bitcoin:$ADDRESS?lightning=$INVOICE")
+
+        sut.refreshBip21ForEvent(
+            event = Event.OnchainTransactionReceived(
+                txid = "txid",
+                details = mock<TransactionDetails>(),
+            ),
+            settledReceiveAddress = SettledReceiveAddress(ADDRESS),
+        )
+
+        assertEquals(ADDRESS_NEW, sut.walletState.value.onchainAddress)
+        assertTrue(sut.walletState.value.bip21.contains(ADDRESS_NEW))
+        assertTrue(sut.walletState.value.bip21.contains(INVOICE))
+        verify(privatePaykitAddressReservationRepo).nextReusableReceiveAddress()
+        verify(coreService, never()).isAddressUsed(any())
+    }
+
+    @Test
+    fun `refreshBip21ForEvent OnchainTransactionReceived preserves a replacement address`() = test {
+        sut.setOnchainAddress(ADDRESS_NEW)
+        sut.setBolt11(INVOICE)
+        sut.setBip21("bitcoin:$ADDRESS_NEW?lightning=$INVOICE")
+
+        sut.refreshBip21ForEvent(
+            event = Event.OnchainTransactionReceived(
+                txid = "txid",
+                details = mock<TransactionDetails>(),
+            ),
+            settledReceiveAddress = SettledReceiveAddress(ADDRESS),
+        )
+
+        assertEquals(ADDRESS_NEW, sut.walletState.value.onchainAddress)
+        assertTrue(sut.walletState.value.bip21.contains(ADDRESS_NEW))
+        verify(privatePaykitAddressReservationRepo, never()).nextReusableReceiveAddress()
+        verify(coreService, never()).isAddressUsed(any())
+    }
+
+    @Test
+    fun `refreshBip21 should create a fresh invoice after PaymentReceived invalidates the old one`() = test {
+        whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
+            .thenReturn(Result.success(INVOICE_REPLACEMENT))
+        sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE)
+        sut.setBip21("bitcoin:$ADDRESS?lightning=$INVOICE")
+
+        sut.refreshBip21ForEvent(
+            Event.PaymentReceived(
+                paymentId = "testPaymentId",
+                paymentHash = "testPaymentHash",
+                amountMsat = 1000uL,
+                customRecords = emptyList(),
+            ),
+            settledReceiveInvoice = SettledReceiveInvoice(INVOICE),
+        )
+        assertEquals("", sut.walletState.value.bolt11)
+
+        sut.refreshBip21()
+
+        assertEquals(INVOICE_REPLACEMENT, sut.walletState.value.bolt11)
+        assertTrue(sut.walletState.value.bip21.contains(INVOICE_REPLACEMENT))
     }
 
     @Test
