@@ -139,6 +139,8 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.SamRockRepo
+import to.bitkit.repositories.SendSwapQuote
+import to.bitkit.repositories.SwapRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WidgetsRepo
@@ -210,6 +212,7 @@ class AppViewModel @Inject constructor(
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val refreshContactPaykitReceivers: RefreshContactPaykitReceiversUseCase,
     private val samRockRepo: SamRockRepo,
+    private val swapRepo: SwapRepo,
     private val appUpdateSheet: AppUpdateTimedSheet,
     private val backupSheet: BackupTimedSheet,
     private val notificationsSheet: NotificationsTimedSheet,
@@ -1286,7 +1289,8 @@ class AppViewModel @Inject constructor(
 
         val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
 
-        if (maxSendOnchain == 0uL) {
+        // Savings falling short is not a dead end while a swap can pay the address from spending.
+        if (maxSendOnchain == 0uL && !trySwitchToSwapSend(invoice.amountSatoshis)) {
             showAddressValidationError(
                 titleRes = R.string.other__pay_insufficient_savings,
                 descriptionRes = R.string.other__pay_insufficient_savings_description,
@@ -1295,7 +1299,11 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        if (invoice.amountSatoshis > 0uL && invoice.amountSatoshis > maxSendOnchain) {
+        val exceedsSavings = invoice.amountSatoshis > 0uL &&
+            invoice.amountSatoshis > maxSendOnchain &&
+            _sendUiState.value.payMethod == SendMethod.ONCHAIN
+
+        if (exceedsSavings && !trySwitchToSwapSend(invoice.amountSatoshis)) {
             val shortfall = invoice.amountSatoshis - maxSendOnchain
             showAddressValidationError(
                 titleRes = R.string.other__pay_insufficient_savings,
@@ -1399,6 +1407,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun onAmountChange(amount: ULong) {
+        resolveSwapSendMethod(amount)
         _sendUiState.update {
             it.copy(
                 amount = amount,
@@ -1458,12 +1467,18 @@ class AppViewModel @Inject constructor(
 
     private fun updateCanSwitchWallet() {
         val state = _sendUiState.value
-        if (!state.isUnified) {
-            _sendUiState.update { it.copy(canSwitchWallet = false) }
-            return
-        }
         val amount = state.amount
         val balance = walletRepo.balanceState.value
+        if (!state.isUnified) {
+            // A plain onchain address gains a toggle only once a swap has been priced for it, so
+            // an ordinary send never probes Boltz just to decide whether to light the button up.
+            val canSwap = state.swapMaxSendSats > 0uL &&
+                amount > Defaults.dustLimit.toULong() &&
+                amount <= balance.maxSendOnchainSats &&
+                amount <= state.swapMaxSendSats
+            _sendUiState.update { it.copy(canSwitchWallet = canSwap) }
+            return
+        }
         val canSwitch = amount > Defaults.dustLimit.toULong() &&
             amount <= balance.maxSendOnchainSats &&
             amount <= balance.maxSendLightningSats
@@ -1472,11 +1487,12 @@ class AppViewModel @Inject constructor(
 
     private suspend fun onPaymentMethodSwitch() {
         val current = _sendUiState.value
-        if (!current.isUnified) return
+        if (!current.isUnified && current.swapMaxSendSats == 0uL) return
 
         val nextMethod = when (current.payMethod) {
-            SendMethod.ONCHAIN -> SendMethod.LIGHTNING
+            SendMethod.ONCHAIN -> if (current.isUnified) SendMethod.LIGHTNING else SendMethod.SWAP
             SendMethod.LIGHTNING -> SendMethod.ONCHAIN
+            SendMethod.SWAP -> SendMethod.ONCHAIN
         }
         _sendUiState.update {
             it.copy(
@@ -1488,13 +1504,73 @@ class AppViewModel @Inject constructor(
         when (nextMethod) {
             SendMethod.ONCHAIN -> {
                 val defaultSpeed = settingsStore.data.first().defaultTransactionSpeed
-                _sendUiState.update { it.copy(speed = defaultSpeed) }
+                _sendUiState.update { it.copy(speed = defaultSpeed, swapQuote = null) }
                 refreshFeeEstimates()
             }
             SendMethod.LIGHTNING -> {
                 _sendUiState.update { it.copy(fee = SendFee.Lightning(0)) }
                 estimateLightningRoutingFeesIfNeeded()
             }
+            SendMethod.SWAP -> refreshSwapQuote(current.amount)
+        }
+    }
+
+    /**
+     * Switch a send to the spending balance, paying the onchain address through a Boltz reverse
+     * swap. Returns false when no swap can deliver [amount], leaving the send untouched so the
+     * caller keeps the pre-swap behaviour. An [amount] of zero is not priceable yet, so only the
+     * swap ceiling is established and the amount screen prices the rest.
+     */
+    private suspend fun trySwitchToSwapSend(amount: ULong): Boolean {
+        val maxSwapSat = swapRepo.maxRecipientSats().getOrNull()?.takeIf { it > 0uL } ?: return false
+        val quote = amount.takeIf { it > 0uL }?.let {
+            swapRepo.quoteForRecipientAmount(it).getOrNull() ?: return false
+        }
+        Logger.info("Offering swap send for '$amount' sat, max '$maxSwapSat' sat", context = TAG)
+        _sendUiState.update {
+            it.copy(
+                payMethod = SendMethod.SWAP,
+                swapMaxSendSats = maxSwapSat,
+                swapQuote = quote,
+                fee = SendFee.Swap(quote?.networkFeeSat?.toLong() ?: 0L),
+            )
+        }
+        return true
+    }
+
+    /** Re-price the swap for [amount] and publish it, clearing the quote when it no longer holds. */
+    private suspend fun refreshSwapQuote(amount: ULong): SendSwapQuote? {
+        val quote = swapRepo.quoteForRecipientAmount(amount).getOrNull()
+        _sendUiState.update {
+            it.copy(
+                swapQuote = quote,
+                fee = SendFee.Swap(quote?.networkFeeSat?.toLong() ?: 0L),
+            )
+        }
+        return quote
+    }
+
+    /**
+     * Keep a plain onchain send on the rail that can pay it: savings while the amount fits there,
+     * spending via a swap once it does not. A method picked by hand on the review screen is not
+     * revisited, since this only runs while the amount is being edited.
+     */
+    private suspend fun resolveSwapSendMethod(amount: ULong) {
+        val state = _sendUiState.value
+        if (state.isUnified || state.decodedInvoice != null || state.lnurl != null) return
+
+        val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
+        when (state.payMethod) {
+            SendMethod.ONCHAIN if amount > maxSendOnchain -> trySwitchToSwapSend(amount)
+            SendMethod.SWAP if amount in 1uL..maxSendOnchain -> {
+                val defaultSpeed = settingsStore.data.first().defaultTransactionSpeed
+                _sendUiState.update {
+                    it.copy(payMethod = SendMethod.ONCHAIN, speed = defaultSpeed, swapQuote = null)
+                }
+                refreshFeeEstimates()
+            }
+            SendMethod.SWAP -> refreshSwapQuote(amount)
+            else -> Unit
         }
     }
 
@@ -1519,7 +1595,8 @@ class AppViewModel @Inject constructor(
             )
         }
 
-        if (_sendUiState.value.payMethod != SendMethod.LIGHTNING && !settingsStore.data.first().coinSelectAuto) {
+        // A swap send spends no utxos, so manual coin selection has nothing to offer it.
+        if (_sendUiState.value.payMethod == SendMethod.ONCHAIN && !settingsStore.data.first().coinSelectAuto) {
             setSendEffect(SendEffect.NavigateToCoinSelection)
             return
         }
@@ -1546,6 +1623,8 @@ class AppViewModel @Inject constructor(
         _sendUiState.update { it.copy(isLoading = true) }
         refreshOnchainSendIfNeeded()
         estimateLightningRoutingFeesIfNeeded()
+        // Price the swap before navigating so the confirm screen never renders a half-priced send.
+        if (_sendUiState.value.payMethod == SendMethod.SWAP) refreshSwapQuote(_sendUiState.value.amount)
         _sendUiState.update { it.copy(isLoading = false) }
         updateCanSwitchWallet()
 
@@ -1582,6 +1661,12 @@ class AppViewModel @Inject constructor(
             SendMethod.ONCHAIN -> {
                 val maxSendable = walletRepo.balanceState.value.maxSendOnchainSats
                 amount > Defaults.dustLimit.toULong() && amount <= maxSendable
+            }
+
+            SendMethod.SWAP -> {
+                amount > Defaults.dustLimit.toULong() &&
+                    amount <= _sendUiState.value.swapMaxSendSats &&
+                    swapRepo.quoteForRecipientAmount(amount).isSuccess
             }
         }
     }
@@ -1877,8 +1962,12 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        // Check on-chain balance before proceeding to amount screen
-        if (maxSendOnchain == 0uL && _sendUiState.value.payMethod == SendMethod.ONCHAIN) {
+        // Check on-chain balance before proceeding to amount screen, falling back to a swap out of
+        // the spending balance when savings cannot cover the send.
+        if (maxSendOnchain == 0uL &&
+            _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
+            !trySwitchToSwapSend(invoice.amountSatoshis)
+        ) {
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__pay_insufficient_savings),
@@ -1890,11 +1979,11 @@ class AppViewModel @Inject constructor(
         }
 
         // Check if on-chain invoice amount exceeds available balance
-        if (
-            invoice.amountSatoshis > 0uL &&
+        val exceedsSavings = invoice.amountSatoshis > 0uL &&
             invoice.amountSatoshis > maxSendOnchain &&
             _sendUiState.value.payMethod == SendMethod.ONCHAIN
-        ) {
+
+        if (exceedsSavings && !trySwitchToSwapSend(invoice.amountSatoshis)) {
             val shortfall = invoice.amountSatoshis - maxSendOnchain
             toast(
                 type = Toast.ToastType.ERROR,
@@ -2224,7 +2313,7 @@ class AppViewModel @Inject constructor(
         val settings = settingsStore.data.first()
         val balanceToCheck = when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> walletRepo.balanceState.value.maxSendOnchainSats
-            SendMethod.LIGHTNING -> walletRepo.balanceState.value.maxSendLightningSats
+            SendMethod.LIGHTNING, SendMethod.SWAP -> walletRepo.balanceState.value.maxSendLightningSats
         }
         if (
             amountSats > BigDecimal.valueOf(balanceToCheck.toLong())
@@ -2345,6 +2434,8 @@ class AppViewModel @Inject constructor(
                         hideSheet()
                     }
             }
+
+            SendMethod.SWAP -> paySwap(amount)
 
             SendMethod.LIGHTNING -> {
                 val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
@@ -2534,6 +2625,42 @@ class AppViewModel @Inject constructor(
                 amount == walletRepo.balanceState.value.maxSendOnchainSats,
             tags = tags,
         )
+    }
+
+    /**
+     * Pay an onchain address out of the spending balance through a Boltz reverse swap.
+     *
+     * The claim that pays the recipient is broadcast by the swap updates stream, which
+     * [WalletViewModel] starts when the node comes up, so a claim we stop waiting for still lands.
+     * That makes a pending outcome a success here: the invoice is paid and the payout is on its way.
+     */
+    private suspend fun paySwap(amount: ULong) {
+        val address = _sendUiState.value.address
+        val contactPublicKey = activeContactPaymentPublicKey()
+
+        swapRepo.payToAddress(address = address, recipientSat = amount)
+            .onSuccess { receipt ->
+                discardContactOnchainEndpoint(contactPublicKey, address)
+                Logger.info("Swap send claim txid: '${receipt.claimTxId}'", context = TAG)
+                onSendSuccess(
+                    NewTransactionSheetDetails(
+                        type = NewTransactionSheetType.LIGHTNING,
+                        direction = NewTransactionSheetDirection.SENT,
+                        paymentHashOrTxId = receipt.paymentHash,
+                        sats = amount.toLong(),
+                    )
+                )
+                lightningRepo.sync()
+                activityRepo.syncActivities()
+            }.onFailure { e ->
+                Logger.error("Error sending swap payment", e, context = TAG)
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.wallet__error_sending_title),
+                    description = e.message ?: context.getString(R.string.common__error_body)
+                )
+                hideSheet()
+            }
     }
 
     private suspend fun sendLightning(
@@ -3350,6 +3477,8 @@ data class SendUiState(
     val estimatedRoutingFee: ULong = 0uL,
     val lastLightningFee: Long = 0L,
     val contactPaymentProfile: PubkyProfile? = null,
+    val swapQuote: SendSwapQuote? = null,
+    val swapMaxSendSats: ULong = 0uL,
 )
 
 enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
@@ -3363,9 +3492,13 @@ enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
 sealed class SendFee(open val value: Long) {
     data class OnChain(override val value: Long) : SendFee(value)
     data class Lightning(override val value: Long) : SendFee(value)
+
+    /** Boltz's miner fee estimate for a swap send; the service fee is shown in its own cell. */
+    data class Swap(override val value: Long) : SendFee(value)
 }
 
-enum class SendMethod { ONCHAIN, LIGHTNING }
+/** How a send is funded. [SWAP] pays an onchain address out of the spending balance via Boltz. */
+enum class SendMethod { ONCHAIN, LIGHTNING, SWAP }
 
 data class ContactPaymentContext(val publicKey: String)
 

@@ -65,6 +65,9 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.SamRockRepo
+import to.bitkit.repositories.SendSwapQuote
+import to.bitkit.repositories.SendSwapReceipt
+import to.bitkit.repositories.SwapRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
@@ -126,6 +129,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val samRockRepo = mock<SamRockRepo>()
+    private val swapRepo = mock<SwapRepo>()
     private val widgetsRepo = mock<WidgetsRepo>()
     private val formatMoneyValue = mock<FormatMoneyValue>()
     private val refreshContactPaykitReceivers = mock<RefreshContactPaykitReceiversUseCase>()
@@ -219,6 +223,30 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(2u))
         whenever(lightningRepo.canSend(any())).thenReturn(true)
         whenever(toastManager.currentToast).thenReturn(MutableStateFlow(null))
+        // Swaps off by default so the pre-swap send behaviour is what every other test exercises.
+        whenever { swapRepo.maxRecipientSats() }.thenReturn(Result.failure(AppError(SWAPS_OFF)))
+        whenever { swapRepo.quoteForRecipientAmount(any()) }.thenReturn(Result.failure(AppError(SWAPS_OFF)))
+    }
+
+    /**
+     * Turn the swap fallback on for exactly [quotableSat]; every other amount keeps the default
+     * "no swap covers this" stub, which is how the flow sees an amount outside the swap range.
+     */
+    private suspend fun stubSwapAvailable(
+        maxRecipientSat: ULong = SWAP_MAX_RECIPIENT,
+        quotableSat: ULong = SWAP_AMOUNT,
+    ) {
+        whenever(swapRepo.maxRecipientSats()).thenReturn(Result.success(maxRecipientSat))
+        whenever(swapRepo.quoteForRecipientAmount(quotableSat)).thenReturn(
+            Result.success(
+                SendSwapQuote(
+                    recipientSat = quotableSat,
+                    invoiceSat = quotableSat + SWAP_SERVICE_FEE,
+                    serviceFeeSat = SWAP_SERVICE_FEE,
+                    networkFeeSat = SWAP_NETWORK_FEE,
+                )
+            )
+        )
     }
 
     private fun stubSettingsStore() {
@@ -261,6 +289,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         privatePaykitRepo = privatePaykitRepo,
         refreshContactPaykitReceivers = refreshContactPaykitReceivers,
         samRockRepo = samRockRepo,
+        swapRepo = swapRepo,
         appUpdateSheet = mock(),
         backupSheet = mock(),
         notificationsSheet = mock(),
@@ -868,6 +897,114 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertEquals(before, sut.sendUiState.value.payMethod)
     }
+
+    // region swap send
+
+    @Test
+    fun `amount above savings switches an onchain send to a swap`() = test {
+        stubSwapAvailable()
+        balanceState.value = BalanceState(maxSendOnchainSats = 10_000u, maxSendLightningSats = 500_000u)
+        setSendState(SendUiState(address = ONCHAIN_ADDRESS, speed = TransactionSpeed.Medium))
+
+        sut.setSendEvent(SendEvent.AmountChange(SWAP_AMOUNT))
+        advanceUntilIdle()
+
+        val state = sut.sendUiState.value
+        assertEquals(SendMethod.SWAP, state.payMethod)
+        assertTrue(state.isAmountInputValid)
+        assertEquals(SWAP_SERVICE_FEE, state.swapQuote?.serviceFeeSat)
+        assertEquals(SendFee.Swap(SWAP_NETWORK_FEE.toLong()), state.fee)
+    }
+
+    @Test
+    fun `amount back within savings returns a swap send to onchain`() = test {
+        stubSwapAvailable()
+        balanceState.value = BalanceState(maxSendOnchainSats = 10_000u, maxSendLightningSats = 500_000u)
+        setSendState(SendUiState(address = ONCHAIN_ADDRESS, speed = TransactionSpeed.Medium))
+        sut.setSendEvent(SendEvent.AmountChange(SWAP_AMOUNT))
+        advanceUntilIdle()
+
+        sut.setSendEvent(SendEvent.AmountChange(5_000u))
+        advanceUntilIdle()
+
+        val state = sut.sendUiState.value
+        assertEquals(SendMethod.ONCHAIN, state.payMethod)
+        assertNull(state.swapQuote)
+    }
+
+    @Test
+    fun `amount above savings stays onchain when no swap covers it`() = test {
+        balanceState.value = BalanceState(maxSendOnchainSats = 10_000u, maxSendLightningSats = 500_000u)
+        setSendState(SendUiState(address = ONCHAIN_ADDRESS, speed = TransactionSpeed.Medium))
+
+        sut.setSendEvent(SendEvent.AmountChange(SWAP_AMOUNT))
+        advanceUntilIdle()
+
+        val state = sut.sendUiState.value
+        assertEquals(SendMethod.ONCHAIN, state.payMethod)
+        assertFalse(state.isAmountInputValid)
+        assertNull(state.swapQuote)
+    }
+
+    @Test
+    fun `amount above what a swap can deliver is rejected`() = test {
+        stubSwapAvailable(maxRecipientSat = SWAP_AMOUNT, quotableSat = SWAP_AMOUNT)
+        balanceState.value = BalanceState(maxSendOnchainSats = 10_000u, maxSendLightningSats = 500_000u)
+        setSendState(SendUiState(address = ONCHAIN_ADDRESS, speed = TransactionSpeed.Medium))
+
+        sut.setSendEvent(SendEvent.AmountChange(SWAP_AMOUNT + 1u))
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `a swap send can be switched back to savings and forward again`() = test {
+        stubSwapAvailable()
+        balanceState.value = BalanceState(maxSendOnchainSats = 500_000u, maxSendLightningSats = 500_000u)
+        setSendState(
+            SendUiState(
+                address = ONCHAIN_ADDRESS,
+                amount = SWAP_AMOUNT,
+                payMethod = SendMethod.SWAP,
+                swapMaxSendSats = SWAP_MAX_RECIPIENT,
+                speed = TransactionSpeed.Medium,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        advanceUntilIdle()
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertNull(sut.sendUiState.value.swapQuote)
+
+        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        advanceUntilIdle()
+        assertEquals(SendMethod.SWAP, sut.sendUiState.value.payMethod)
+        assertEquals(SWAP_SERVICE_FEE, sut.sendUiState.value.swapQuote?.serviceFeeSat)
+    }
+
+    @Test
+    fun `confirming a swap send pays the recipient address through the swap repo`() = test {
+        stubSwapAvailable()
+        whenever(swapRepo.payToAddress(any(), any()))
+            .thenReturn(Result.success(SendSwapReceipt(paymentHash = "hash", claimTxId = "claim-txid")))
+        balanceState.value = BalanceState(maxSendLightningSats = 500_000u)
+        setSendState(
+            SendUiState(
+                address = ONCHAIN_ADDRESS,
+                amount = SWAP_AMOUNT,
+                payMethod = SendMethod.SWAP,
+                swapMaxSendSats = SWAP_MAX_RECIPIENT,
+                speed = TransactionSpeed.Medium,
+            ),
+        )
+
+        confirmCurrentPayment()
+
+        verify(swapRepo).payToAddress(ONCHAIN_ADDRESS, SWAP_AMOUNT)
+    }
+
+    // endregion
 
     @Test
     fun `pending contact lightning success tags activity`() = test {
@@ -1538,3 +1675,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
 private const val SAMROCK_SETUP_URL =
     "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
+
+private const val SWAPS_OFF = "swaps unavailable"
+private const val ONCHAIN_ADDRESS = "bcrt1qswaprecipient"
+private const val SWAP_AMOUNT = 100_000uL
+private const val SWAP_MAX_RECIPIENT = 250_000uL
+private const val SWAP_SERVICE_FEE = 570uL
+private const val SWAP_NETWORK_FEE = 320uL
