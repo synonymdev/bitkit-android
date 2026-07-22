@@ -3,6 +3,7 @@ package to.bitkit.services
 import com.synonym.bitkitcore.AddressType
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -325,10 +326,18 @@ class LightningService @Inject constructor(
         }
 
         Logger.debug("Stopping node…", context = TAG)
-        ServiceQueue.LDK.background {
-            runCatching { node.stop() }
-                .onFailure { if (it !is NodeException.NotRunning) throw it }
-            this@LightningService.node = null
+        // Teardown must not be abandoned midway: a cancelled caller would leave the rust node alive
+        // and let the GC free it later on the finalizer thread, racing the next node.
+        withContext(NonCancellable) {
+            ServiceQueue.LDK.background {
+                runCatching { node.stop() }
+                    .onFailure {
+                        if (it !is NodeException.NotRunning) Logger.warn("Node stop error", it, context = TAG)
+                    }
+                this@LightningService.node = null
+                // Release the handle on the LDK queue instead of leaving it to the GC finalizer
+                node.destroy()
+            }
         }
         Logger.info("Node stopped", context = TAG)
     }
