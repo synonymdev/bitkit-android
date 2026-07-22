@@ -6,10 +6,8 @@ import com.synonym.bitkitcore.migrateBackupActivityTagsJson
 import com.synonym.bitkitcore.migrateBackupPreActivityMetadataJson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -33,6 +31,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
 import to.bitkit.R
+import to.bitkit.async.appScope
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
@@ -102,7 +101,7 @@ class BackupRepo @Inject constructor(
     private val clock: Clock,
     private val db: AppDb,
 ) {
-    private val scope = CoroutineScope(ioDispatcher + SupervisorJob())
+    private val scope = appScope(ioDispatcher, TAG)
 
     private val backupJobs = mutableMapOf<BackupCategory, Job>()
     private val statusObserverJobs = mutableListOf<Job>()

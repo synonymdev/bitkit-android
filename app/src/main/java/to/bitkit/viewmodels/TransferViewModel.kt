@@ -9,6 +9,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -25,9 +26,12 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.ChannelDetails
+import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
+import org.lightningdevkit.ldknode.SpendableUtxo
 import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
@@ -101,6 +105,9 @@ class TransferViewModel @Inject constructor(
     var maxLspFee = 0uL
     private var hwTransferSignJob: Job? = null
     private var hwFeeEstimateJob: Job? = null
+    private var confirmFeeJob: Job? = null
+    private var confirmPayJob: Job? = null
+    private var spendingConfirmFundingPlan: SpendingConfirmFundingPlan? = null
     private var pendingHwFundingBroadcast: PendingHwFundingBroadcast? = null
     private var activeHwTransferDeviceId: String? = null
 
@@ -211,73 +218,235 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    /** Pays for the order and start watching it for state updates */
-    fun onTransferToSpendingConfirm(order: IBtOrder, speed: TransactionSpeed? = null) {
-        viewModelScope.launch {
-            val address = order.payment?.onchain?.address.orEmpty()
-
-            // Use live spendableOnchainBalanceSats (not cached) to respect anchor reserves
-            val balanceDetails = lightningRepo.getBalancesAsync().getOrNull()
-            val spendableBalance = balanceDetails?.spendableOnchainBalanceSats ?: 0uL
-            val sendAllFee = lightningRepo.estimateSendAllFee(
-                address = address,
-                speed = speed,
-            ).getOrElse {
-                Logger.error("Failed to estimate send-all fee", it, context = TAG)
-                ToastEventBus.send(it)
-                return@launch
+    /**
+     * Match iOS SpendingConfirm.task: compute real mining fee + drain decision before swipe,
+     * so confirm UI can show fees up-front.
+     */
+    fun prepareSpendingConfirmFunding(order: IBtOrder) {
+        confirmFeeJob?.cancel()
+        confirmFeeJob = viewModelScope.launch {
+            _spendingUiState.update {
+                it.copy(isConfirmFeeReady = false, miningFeeSats = 0uL)
             }
-
-            val expectedChange =
-                spendableBalance.toLong() - order.feeSat.toLong() - sendAllFee.toLong()
-            val shouldUseSendAll =
-                expectedChange >= 0 && expectedChange < TRANSFER_SEND_ALL_THRESHOLD_SATS
-
-            val miningFee = if (shouldUseSendAll) {
-                sendAllFee
-            } else {
-                lightningRepo.calculateTotalFee(
-                    amountSats = order.feeSat,
-                    address = address,
-                    speed = speed,
-                ).getOrElse {
-                    Logger.warn("Failed to estimate transfer funding fee", it, context = TAG)
-                    0uL
+            buildSpendingConfirmFundingPlan(order)
+                .onSuccess { plan ->
+                    spendingConfirmFundingPlan = plan
+                    _spendingUiState.update {
+                        it.copy(
+                            isConfirmFeeReady = true,
+                            miningFeeSats = plan.miningFeeSats,
+                            shouldUseSendAll = plan.shouldUseSendAll,
+                        )
+                    }
                 }
-            }
-            val txTotalSats = if (shouldUseSendAll) {
-                spendableBalance
-            } else {
-                order.feeSat.safe() + miningFee.safe()
-            }
+                .onFailure {
+                    spendingConfirmFundingPlan = null
+                    _spendingUiState.update {
+                        it.copy(isConfirmFeeReady = false, miningFeeSats = 0uL, shouldUseSendAll = false)
+                    }
+                    Logger.error("Failed to prepare transfer funding fee", it, context = TAG)
+                    if (it is AppError) {
+                        ToastEventBus.send(it)
+                    } else {
+                        ToastEventBus.send(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__try_again),
+                        )
+                    }
+                }
+        }
+    }
 
-            Logger.debug(
-                "BT confirm: spendable=$spendableBalance, feeSat=${order.feeSat}, " +
-                    "sendAllFee=$sendAllFee, expectedChange=$expectedChange, sendAll=$shouldUseSendAll",
+    /** Pays for the order using the prepared confirm plan and starts watching it. */
+    fun onTransferToSpendingConfirm(order: IBtOrder) {
+        if (confirmPayJob?.isActive == true) return
+
+        confirmPayJob = viewModelScope.launch {
+            _spendingUiState.update { it.copy(isConfirmPaying = true) }
+            try {
+                val paid = runSuspendCatching {
+                    paySpendingConfirmOrder(order)
+                }.onFailure {
+                    Logger.error("Failed to pay spending confirm order", it, context = TAG)
+                    ToastEventBus.send(it)
+                }.getOrDefault(false)
+
+                if (paid) {
+                    // Emit from this job (not a nested launch) so navigation is not raced/lost.
+                    transferEffects.emit(TransferEffect.OnSpendingFundingPaid)
+                } else {
+                    _spendingUiState.update { it.copy(isConfirmPaying = false) }
+                }
+            } finally {
+                confirmPayJob = null
+            }
+        }
+    }
+
+    private suspend fun paySpendingConfirmOrder(order: IBtOrder): Boolean {
+        val plan = spendingConfirmFundingPlan?.takeIf { it.orderId == order.id }
+            ?: buildSpendingConfirmFundingPlan(order).getOrElse {
+                Logger.error("Failed to prepare transfer funding fee", it, context = TAG)
+                ToastEventBus.send(it)
+                return false
+            }.also { spendingConfirmFundingPlan = it }
+
+        Logger.debug(
+            "BT confirm: spendable=${plan.spendableBalance}, feeSat=${order.feeSat}, " +
+                "miningFee=${plan.miningFeeSats}, selectedUtxos=${plan.selectedUtxos?.size}, " +
+                "sendAll=${plan.shouldUseSendAll}",
+            context = TAG,
+        )
+
+        if (plan.shouldUseSendAll && plan.maxSendable < order.feeSat) {
+            Logger.error(
+                "Insufficient balance for transfer: maxSendable=${plan.maxSendable}, " +
+                    "orderFee=${order.feeSat}",
                 context = TAG,
             )
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__pay_insufficient_savings),
+            )
+            return false
+        }
 
-            lightningRepo
-                .sendOnChain(
-                    address = address,
-                    sats = order.feeSat,
-                    speed = speed,
-                    isTransfer = true,
-                    channelId = order.channel?.shortChannelId,
-                    isMaxAmount = shouldUseSendAll,
-                )
-                .onSuccess { txId ->
+        val address = order.payment?.onchain?.address.orEmpty()
+        return lightningRepo
+            .sendOnChain(
+                address = address,
+                sats = order.feeSat,
+                speed = TransactionSpeed.Fast,
+                utxosToSpend = if (plan.shouldUseSendAll) null else plan.selectedUtxos,
+                isTransfer = true,
+                channelId = order.channel?.shortChannelId,
+                isMaxAmount = plan.shouldUseSendAll,
+            )
+            .onSuccess { txId ->
+                // Survive ViewModel clearance between broadcast and paid-order cache write.
+                withContext(NonCancellable) {
                     fundPaidOrder(
                         order = order,
                         txId = txId,
-                        txTotalSats = txTotalSats,
-                        preTransferOnchainSats = balanceDetails?.totalOnchainBalanceSats ?: spendableBalance,
+                        txTotalSats = if (plan.shouldUseSendAll) {
+                            plan.spendableBalance
+                        } else {
+                            order.feeSat.safe() + plan.miningFeeSats.safe()
+                        },
+                        preTransferOnchainSats = plan.totalOnchainBalance,
                     )
                 }
-                .onFailure { error ->
-                    ToastEventBus.send(error)
-                }
+            }
+            .onFailure { ToastEventBus.send(it) }
+            .isSuccess
+    }
+
+    private suspend fun buildSpendingConfirmFundingPlan(
+        order: IBtOrder,
+    ): Result<SpendingConfirmFundingPlan> = runSuspendCatching {
+        val address = order.payment?.onchain?.address.orEmpty()
+        require(address.isNotEmpty()) { "Order payment onchain address is nil" }
+
+        val speed = TransactionSpeed.Fast
+        val balanceDetails = lightningRepo.getBalancesAsync().getOrThrow()
+        val spendableBalance = balanceDetails.spendableOnchainBalanceSats
+        val totalOnchainBalance = balanceDetails.totalOnchainBalanceSats
+        val satsPerVByte = lightningRepo.getFeeRateForSpeed(speed).getOrThrow()
+
+        // Match iOS SpendingConfirm: normal coin selection + fee first; drain only for real dust.
+        resolveNormalSpendingConfirmFunding(
+            order = order,
+            address = address,
+            speed = speed,
+            satsPerVByte = satsPerVByte,
+            spendableBalance = spendableBalance,
+            totalOnchainBalance = totalOnchainBalance,
+        ) ?: resolveSendAllSpendingConfirmFunding(
+            order = order,
+            address = address,
+            speed = speed,
+            spendableBalance = spendableBalance,
+            totalOnchainBalance = totalOnchainBalance,
+        )
+    }
+
+    private suspend fun resolveNormalSpendingConfirmFunding(
+        order: IBtOrder,
+        address: String,
+        speed: TransactionSpeed,
+        satsPerVByte: ULong,
+        spendableBalance: ULong,
+        totalOnchainBalance: ULong,
+    ): SpendingConfirmFundingPlan? {
+        val utxos = lightningRepo.selectUtxosWithAlgorithm(
+            targetAmountSats = order.feeSat,
+            satsPerVByte = satsPerVByte,
+            algorithm = CoinSelectionAlgorithm.LARGEST_FIRST,
+        ).getOrElse {
+            Logger.warn("Normal coin selection failed, using sendAll", it, context = TAG)
+            return null
         }
+
+        val normalFee = lightningRepo.calculateTotalFee(
+            amountSats = order.feeSat,
+            address = address,
+            speed = speed,
+            utxosToSpend = utxos,
+        ).getOrElse {
+            Logger.warn("Failed to estimate transfer funding fee", it, context = TAG)
+            0uL
+        }
+        val totalInput = utxos.fold(0uL) { acc, utxo -> acc.safe() + utxo.valueSats.safe() }
+        if (wouldCreateDustChange(totalInput = totalInput, amountSats = order.feeSat, normalFee = normalFee)) {
+            return null
+        }
+
+        return SpendingConfirmFundingPlan(
+            orderId = order.id,
+            miningFeeSats = normalFee,
+            shouldUseSendAll = false,
+            selectedUtxos = utxos,
+            spendableBalance = spendableBalance,
+            totalOnchainBalance = totalOnchainBalance,
+            maxSendable = 0uL,
+        )
+    }
+
+    private suspend fun resolveSendAllSpendingConfirmFunding(
+        order: IBtOrder,
+        address: String,
+        speed: TransactionSpeed,
+        spendableBalance: ULong,
+        totalOnchainBalance: ULong,
+    ): SpendingConfirmFundingPlan {
+        val sendAllFee = lightningRepo.estimateSendAllFee(
+            address = address,
+            speed = speed,
+        ).getOrThrow()
+        val maxSendable = spendableBalance.safe() - sendAllFee.safe()
+        if (maxSendable < order.feeSat) {
+            throw AppError(context.getString(R.string.other__pay_insufficient_savings))
+        }
+
+        return SpendingConfirmFundingPlan(
+            orderId = order.id,
+            miningFeeSats = sendAllFee,
+            shouldUseSendAll = true,
+            selectedUtxos = null,
+            spendableBalance = spendableBalance,
+            totalOnchainBalance = totalOnchainBalance,
+            maxSendable = maxSendable,
+        )
+    }
+
+    private fun wouldCreateDustChange(
+        totalInput: ULong,
+        amountSats: ULong,
+        normalFee: ULong,
+        dustLimit: ULong = Defaults.dustLimit.toULong(),
+    ): Boolean {
+        val expectedChange = totalInput.toLong() - amountSats.toLong() - normalFee.toLong()
+        return expectedChange in 0 until dustLimit.toLong()
     }
 
     /** Records a paid order and starts watching it, after the funding tx was broadcast (local or HW signed). */
@@ -415,9 +584,19 @@ class TransferViewModel @Inject constructor(
         viewModelScope.launch {
             _spendingUiState.update { it.copy(isLoading = true) }
 
-            val availableAmount = walletRepo.balanceState.value.maxSendOnchainSats
-
             awaitNodeRunning()
+
+            // Match iOS: start from raw spendable (not maxSendOnchainSats — that already reserved
+            // a default-tier send-all fee), then subtract exactly one fast mining fee.
+            val spendable = lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats
+                ?: 0uL
+            val miningFee = lightningRepo.estimateSendAllFee(
+                speed = TransactionSpeed.Fast,
+            ).getOrElse {
+                Logger.warn("Failed to estimate transfer mining fee reserve", it, context = TAG)
+                (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
+            }
+            val availableAmount = spendable.safe() - miningFee.safe()
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
             if (initialLspFees == null) {
@@ -521,6 +700,10 @@ class TransferViewModel @Inject constructor(
         hwTransferSignJob = null
         hwFeeEstimateJob?.cancel()
         hwFeeEstimateJob = null
+        confirmFeeJob?.cancel()
+        confirmFeeJob = null
+        // Do not cancel confirmPayJob: broadcast + paid-order cache must finish.
+        spendingConfirmFundingPlan = null
         pendingHwFundingBroadcast = null
         activeHwTransferDeviceId = null
         _spendingUiState.update { TransferToSpendingUiState() }
@@ -683,9 +866,7 @@ class TransferViewModel @Inject constructor(
                 }
             broadcastHardwareFunding(signedTx)
         }
-        result.exceptionOrNull()?.let {
-            if (it is CancellationException && it !is TimeoutCancellationException) throw it
-        }
+        result.exceptionOrNull()?.rethrowIfCancellation()
         return result
     }
 
@@ -713,7 +894,7 @@ class TransferViewModel @Inject constructor(
                 hwWalletRepo.ensureConnected(deviceId).getOrThrow()
             }
         }.getOrElse {
-            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            it.rethrowIfCancellation()
             if (it.isTrezorUserCancellation()) throw it
             throw HardwareReconnectError(it)
         }
@@ -734,7 +915,7 @@ class TransferViewModel @Inject constructor(
             ).getOrThrow()
         }
     }.getOrElse {
-        if (it is CancellationException && it !is TimeoutCancellationException) throw it
+        it.rethrowIfCancellation()
         throw HardwareFundingError(it)
     }
 
@@ -751,7 +932,7 @@ class TransferViewModel @Inject constructor(
                 ).getOrThrow()
             }
         }.getOrElse {
-            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            it.rethrowIfCancellation()
             if (it is TimeoutCancellationException) {
                 hwWalletRepo.disconnectStaleSession(deviceId)
                 throw HardwareSigningTimeoutError(it)
@@ -768,7 +949,7 @@ class TransferViewModel @Inject constructor(
                 hwWalletRepo.broadcastFunding(signedTx).getOrThrow()
             }
         }.getOrElse {
-            if (it is CancellationException && it !is TimeoutCancellationException) throw it
+            it.rethrowIfCancellation()
             throw HardwareBroadcastError(it)
         }
     }
@@ -892,10 +1073,8 @@ class TransferViewModel @Inject constructor(
     private suspend fun hwFundingSatsPerVByte(): ULong =
         fetchHwFundingSatsPerVByte().getOrDefault(HW_FUNDING_FALLBACK_SATS_PER_VBYTE)
 
-    private suspend fun fetchHwFundingSatsPerVByte(): Result<ULong> {
-        val speed = settingsStore.data.first().defaultTransactionSpeed
-        return lightningRepo.getFeeRateForSpeed(speed)
-    }
+    private suspend fun fetchHwFundingSatsPerVByte(): Result<ULong> =
+        lightningRepo.getFeeRateForSpeed(TransactionSpeed.Fast)
 
     // endregion
 
@@ -1099,7 +1278,6 @@ class TransferViewModel @Inject constructor(
 
     companion object {
         private const val TAG = "TransferViewModel"
-        private const val TRANSFER_SEND_ALL_THRESHOLD_SATS = 1000
         private const val MIN_STEP_DELAY_MS = 500L
         private const val POLL_INTERVAL_MS = 2_500L
         private const val MAX_CONSECUTIVE_ERRORS = 5
@@ -1108,7 +1286,7 @@ class TransferViewModel @Inject constructor(
         private const val HW_FUNDING_TX_VBYTES = 1_200uL
 
         /** Minimum fallback fee rate when fee estimates are temporarily unavailable. */
-        private const val HW_FUNDING_FALLBACK_SATS_PER_VBYTE = 1uL
+        private const val HW_FUNDING_FALLBACK_SATS_PER_VBYTE = 3uL
 
         /** Upper bound for reconnecting a known device before the UI asks for reconnect. */
         private val HW_RECONNECT_TIMEOUT = 30.seconds
@@ -1159,8 +1337,23 @@ data class TransferToSpendingUiState(
     val isSigning: Boolean = false,
     val hasPendingHwBroadcast: Boolean = false,
     val hwMiningFeeSats: ULong = 0uL,
+    /** Real on-chain mining fee for soft-wallet confirm (iOS transactionFee). */
+    val miningFeeSats: ULong = 0uL,
+    val isConfirmFeeReady: Boolean = false,
+    val isConfirmPaying: Boolean = false,
+    val shouldUseSendAll: Boolean = false,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
+)
+
+private data class SpendingConfirmFundingPlan(
+    val orderId: String,
+    val miningFeeSats: ULong,
+    val shouldUseSendAll: Boolean,
+    val selectedUtxos: List<SpendableUtxo>?,
+    val spendableBalance: ULong,
+    val totalOnchainBalance: ULong,
+    val maxSendable: ULong,
 )
 
 data class TransferValues(
@@ -1172,8 +1365,13 @@ data class TransferValues(
 
 sealed interface TransferEffect {
     data object OnOrderCreated : TransferEffect
+    data object OnSpendingFundingPaid : TransferEffect
     data object OnHwTxSigned : TransferEffect
     data class ToastException(val e: Throwable) : TransferEffect
     data class ToastError(val title: String, val description: String) : TransferEffect
 }
 // endregion
+
+private fun Throwable.rethrowIfCancellation() {
+    if (this is CancellationException && this !is TimeoutCancellationException) throw this
+}

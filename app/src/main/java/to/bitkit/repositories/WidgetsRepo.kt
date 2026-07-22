@@ -1,9 +1,7 @@
 package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +16,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import to.bitkit.async.appScope
 import to.bitkit.data.WidgetsData
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.dto.ArticleDTO
@@ -57,7 +56,7 @@ class WidgetsRepo @Inject constructor(
     private val priceService: PriceService,
     private val widgetsStore: WidgetsStore,
 ) {
-    private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
+    private val repoScope = appScope(bgDispatcher, TAG)
     private val widgetJobs = ConcurrentHashMap<WidgetType, Job>()
 
     val widgetsDataFlow: StateFlow<WidgetsData> = widgetsStore.data

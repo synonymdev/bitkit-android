@@ -574,7 +574,7 @@
     <string name="settings__backup__category_transaction_log">Log delle transazioni</string>
     <string name="settings__backup__category_wallet">Boost e Trasferimenti</string>
     <string name="settings__backup__category_widgets">Widget</string>
-    <string name="settings__backup__failed_message">Bitkit non è riuscito a eseguire il backup dei dati del portafoglio. Riprova tra {interval, plural, one {# minute} o {# minutes}}.</string>
+    <string name="settings__backup__failed_message">Bitkit non è riuscito a eseguire il backup dei dati del portafoglio. Riprova tra {interval, plural, one {# minute} other {# minutes}}.</string>
     <string name="settings__backup__failed_title">Fallimento del backup dei dati</string>
     <string name="settings__backup__reset">Resettare e ripristinare il wallet</string>
     <string name="settings__backup__status_failed">Backup fallito: {time}</string>

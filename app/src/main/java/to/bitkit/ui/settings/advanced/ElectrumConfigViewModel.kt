@@ -37,6 +37,20 @@ class ElectrumConfigViewModel @Inject constructor(
     private val lightningRepo: LightningRepo,
 ) : ViewModel() {
 
+    companion object {
+        /** One or more dot-separated DNS labels, e.g. `sub.example.` — no nested quantifiers (ReDoS-safe). */
+        private const val LABEL = "([a-z\\d](?:[a-z\\d-]*[a-z\\d])?\\.)+"
+
+        /** A dotted IPv4 address, e.g. `192.168.1.1`. */
+        private const val IPV4 = "(\\d{1,3}\\.){3}\\d{1,3}"
+
+        /** Accepts domains, custom TLDs, and IPv4, e.g. `example.com`, `foo.local`, `192.168.1.1`. */
+        private val HOSTNAME_PATTERN = Regex(
+            "^$LABEL[a-z\\d-]+$|^$IPV4$",
+            RegexOption.IGNORE_CASE,
+        )
+    }
+
     private val _uiState = MutableStateFlow(ElectrumConfigUiState())
     val uiState: StateFlow<ElectrumConfigUiState> = _uiState.asStateFlow()
 
@@ -205,13 +219,7 @@ class ElectrumConfigViewModel @Inject constructor(
             val url = normalizedData.toUri()
             val hostname = url.host ?: return false
 
-            // Allow standard domains, custom TLDs like .local, and IPv4 addresses
-            val isValidDomainOrIP = hostname.matches(
-                Regex(
-                    "^([a-z\\d]([a-z\\d-]*[a-z\\d])*\\.)+[a-z\\d-]+|(\\d{1,3}\\.){3}\\d{1,3}$",
-                    RegexOption.IGNORE_CASE
-                )
-            )
+            val isValidDomainOrIP = HOSTNAME_PATTERN.matches(hostname)
 
             // Always allow .local domains
             if (hostname.endsWith(".local")) {
@@ -245,7 +253,7 @@ class ElectrumConfigViewModel @Inject constructor(
     }
 
     fun onClickConnect() {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             val validationError = validateInput()
             if (validationError != null) {
                 ToastEventBus.send(
@@ -260,7 +268,7 @@ class ElectrumConfigViewModel @Inject constructor(
     }
 
     fun onScan(data: String) {
-        viewModelScope.launch {
+        viewModelScope.launch(bgDispatcher) {
             val parseResult = parseElectrumScanData(data)
             val serverPeer = parseResult.getOrDefault(ElectrumServerPeer("", "", ElectrumProtocol.TCP))
 

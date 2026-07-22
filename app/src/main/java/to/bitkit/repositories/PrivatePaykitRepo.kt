@@ -9,10 +9,8 @@ import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +25,7 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.App
+import to.bitkit.async.appScope
 import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
@@ -87,7 +86,7 @@ class PrivatePaykitRepo @Inject constructor(
 
     private val publicationMutex = Mutex()
     private val serializedDispatcher = ioDispatcher.limitedParallelism(1)
-    private val retryScope = CoroutineScope(serializedDispatcher + SupervisorJob())
+    private val retryScope = appScope(serializedDispatcher, TAG)
     private val knownSavedContactKeys = mutableSetOf<String>()
     private var state: PrivatePaykitState? = null
     private val pendingMessageDrainRetryLock = Any()

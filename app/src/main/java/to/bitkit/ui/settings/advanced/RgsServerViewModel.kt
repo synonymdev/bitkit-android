@@ -30,8 +30,15 @@ class RgsServerViewModel @Inject constructor(
 ) : ViewModel() {
 
     companion object {
+        /** One or more dot-separated DNS labels, e.g. `sub.example.` — no nested quantifiers (ReDoS-safe). */
+        private const val LABEL = "([a-z\\d](?:[a-z\\d-]*[a-z\\d])?\\.)+"
+
+        /** A dotted IPv4 address, e.g. `192.168.1.1`. */
+        private const val IPV4 = "(\\d{1,3}\\.){3}\\d{1,3}"
+
+        /** Accepts domains and IPv4, e.g. `rgs.example.com`, `192.168.1.1`. */
         private val HOSTNAME_PATTERN = Regex(
-            "^([a-z\\d]([a-z\\d-]*[a-z\\d])*\\.)+[a-z]{2,}|(\\d{1,3}\\.){3}\\d{1,3}$",
+            "^$LABEL[a-z]{2,}$|^$IPV4$",
             RegexOption.IGNORE_CASE,
         )
         private val PATH_PATTERN = Regex("^(/[a-zA-Z\\d_.~%+-]*)*$")

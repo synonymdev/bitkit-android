@@ -21,14 +21,13 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.async.appScope
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.models.HwWalletId
@@ -51,10 +50,14 @@ class TrezorViewModel @Inject constructor(
     private val trezorRepo: TrezorRepo,
 ) : ViewModel() {
 
+    companion object {
+        private const val TAG = "TrezorViewModel"
+    }
+
     @Volatile
     private var isCleared = false
 
-    private val watcherStartScope = CoroutineScope(SupervisorJob() + bgDispatcher)
+    private val watcherStartScope = appScope(bgDispatcher, TAG)
 
     init {
         observeWatcherEvents()

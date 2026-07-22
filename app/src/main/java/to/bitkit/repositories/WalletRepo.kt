@@ -10,9 +10,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -23,6 +21,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.WordCount
+import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
@@ -36,6 +35,7 @@ import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.AddressModel
 import to.bitkit.models.BalanceState
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
+import to.bitkit.models.WalletScope
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toBalance
@@ -45,7 +45,6 @@ import to.bitkit.services.CoreService
 import to.bitkit.usecases.DeriveBalanceStateUseCase
 import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.Bip21Utils
-import to.bitkit.models.WalletScope
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.measured
@@ -71,7 +70,7 @@ class WalletRepo @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val hwWalletRepo: HwWalletRepo,
 ) {
-    private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
+    private val repoScope = appScope(bgDispatcher, TAG)
 
     private val _walletState = MutableStateFlow(WalletState(walletExists = walletExists()))
     val walletState = _walletState.asStateFlow()
