@@ -43,6 +43,7 @@ import to.bitkit.ui.components.settings.SectionHeader
 import to.bitkit.ui.components.settings.SettingsButtonRow
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.AppTopBar
+import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.theme.Colors
@@ -81,6 +82,7 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(R.string.watch_only_accounts__title),
             onBackClick = onBack,
+            actions = { DrawerNavIcon() },
         )
         LazyColumn(
             modifier = Modifier

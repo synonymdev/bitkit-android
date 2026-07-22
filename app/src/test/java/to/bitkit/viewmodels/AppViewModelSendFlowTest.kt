@@ -41,6 +41,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.App
 import to.bitkit.CurrentActivity
+import to.bitkit.R
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
@@ -842,6 +843,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `pubky auth deeplink shows approval sheet when Paykit UI is enabled`() = test {
         enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
         whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
         val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
 
@@ -849,6 +851,108 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `pubky auth deeplink shows identity required toast without a Pubky identity`() = test {
+        enablePaykitUi()
+        whenever(context.getString(R.string.pubky_auth__no_identity)).thenReturn("Pubky Identity Required")
+        whenever(context.getString(R.string.pubky_auth__no_identity_desc)).thenReturn("Create a Pubky identity")
+        advanceUntilIdle()
+
+        val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("Pubky Identity Required", it.title)
+                assertEquals("Create a Pubky identity", it.description)
+            }
+        )
+    }
+
+    @Test
+    fun `pubky auth deeplink keeps Ring-only guidance for an imported identity`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(false)
+        whenever(context.getString(R.string.profile__auth_approval_ring_only)).thenReturn("Use Ring")
+        advanceUntilIdle()
+
+        val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("Use Ring", it.title)
+                assertNull(it.description)
+            }
+        )
+    }
+
+    @Test
+    fun `main scanner accepts pubky auth when Paykit UI is enabled`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
+
+        sut.onScanResult(authUrl)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `send paste rejects pubky auth`() = test {
+        val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
+        val clipData = mock<ClipData>()
+        val item = mock<ClipData.Item>()
+        whenever(item.text).thenReturn(authUrl)
+        whenever(clipData.getItemAt(0)).thenReturn(item)
+        whenever(clipboardManager.primaryClip).thenReturn(clipData)
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+
+        sut.setSendEvent(SendEvent.Paste)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(coreService, never()).decode(any())
+        verify(toastManager).enqueue(any())
+    }
+
+    @Test
+    fun `send scanner rejects pubky auth`() = test {
+        val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+
+        sut.onScanResult(authUrl)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(coreService, never()).decode(any())
+        verify(toastManager).enqueue(any())
+    }
+
+    @Test
+    fun `manual address input rejects pubky auth without decoding`() = test {
+        val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
+
+        sut.setSendEvent(SendEvent.AddressChange(authUrl))
+        advanceUntilIdle()
+
+        assertEquals(authUrl, sut.sendUiState.value.addressInput)
+        assertFalse(sut.sendUiState.value.isAddressInputValid)
+        verify(coreService, never()).decode(any())
     }
 
     @Test
