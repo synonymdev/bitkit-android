@@ -148,6 +148,7 @@ fun SettingsScreen(
         ),
         advancedState = AdvancedTabState(
             isDevModeEnabled = isDevModeEnabled,
+            isPaykitEnabled = isPaykitEnabled,
             selectedAddressTypeName = selectedAddressTypeName,
             coinSelectAuto = coinSelectAuto,
             openChannelCount = openChannelCount,
@@ -560,13 +561,15 @@ private fun AdvancedTabContent(
             onClick = { onEvent(SettingsEvent.AddressViewerClick) },
             modifier = Modifier.testTag("AddressViewer")
         )
-        SettingsButtonRow(
-            title = stringResource(R.string.watch_only_accounts__title),
-            icon = { SettingsIcon(R.drawable.ic_lock_key) },
-            value = SettingsButtonValue.StringValue(state.watchOnlyAccountCount.toString()),
-            onClick = { onEvent(SettingsEvent.WatchOnlyAccountsClick) },
-            modifier = Modifier.testTag("WatchOnlyAccounts")
-        )
+        if (state.isPaykitEnabled) {
+            SettingsButtonRow(
+                title = stringResource(R.string.watch_only_accounts__title),
+                icon = { SettingsIcon(R.drawable.ic_lock_key) },
+                value = SettingsButtonValue.StringValue(state.watchOnlyAccountCount.toString()),
+                onClick = { onEvent(SettingsEvent.WatchOnlyAccountsClick) },
+                modifier = Modifier.testTag("WatchOnlyAccounts")
+            )
+        }
 
         SectionHeader(
             title = stringResource(R.string.settings__adv__section_networks),
@@ -735,6 +738,7 @@ data class SecurityTabState(
 @Immutable
 data class AdvancedTabState(
     val isDevModeEnabled: Boolean = false,
+    val isPaykitEnabled: Boolean = false,
     val selectedAddressTypeName: String = "",
     val coinSelectAuto: Boolean = true,
     val openChannelCount: Int = 0,
