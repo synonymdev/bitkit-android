@@ -342,13 +342,17 @@ class WalletViewModel @Inject constructor(
      * auto-claimed. A live stream is left untouched: restarting it would abort bitkit-core's
      * background tasks and could race an in-flight claim. New swaps are reconciled at creation
      * inside bitkit-core, and the stream reconciles every pending swap periodically, so a
-     * running stream is always enough.
+     * running stream is always enough. Runs only where swaps are supported and enabled in dev
+     * settings, see [BoltzService.isSwapEnabled].
      */
     fun ensureSwapUpdatesRunning() {
         if (!boltzService.isSwapSupported) return
-        collectSwapEventsOnce()
         if (swapUpdatesRunning || swapUpdatesJob?.isActive == true) return
-        swapUpdatesJob = viewModelScope.launch { startSwapUpdates() }
+        swapUpdatesJob = viewModelScope.launch {
+            if (!boltzService.isSwapEnabled()) return@launch
+            collectSwapEventsOnce()
+            startSwapUpdates()
+        }
     }
 
     /**

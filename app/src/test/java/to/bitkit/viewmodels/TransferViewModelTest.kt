@@ -120,6 +120,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(blocktankRepo.blocktankState).thenReturn(blocktankState)
         whenever(boltzService.events).thenReturn(boltzEvents)
         whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever { boltzService.isSwapEnabled() }.thenReturn(true)
         // Default: no mining-fee reserve so existing limit tests keep their balances.
         whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(0uL))
@@ -1271,6 +1272,21 @@ class TransferViewModelTest : BaseUnitTest() {
     fun `loadSavingsSwapQuote skips the network when swaps are unsupported`() = test {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
         whenever(boltzService.isSwapSupported).thenReturn(false)
+
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapUiState(), sut.savingsSwapState.value)
+        verify(boltzService, never()).reverseLimits(anyOrNull())
+
+        sut.onTransferToSavingsConfirm(emptyList())
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
+    }
+
+    @Test
+    fun `loadSavingsSwapQuote skips the network when swaps are disabled in dev settings`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.isSwapEnabled()).thenReturn(false)
 
         sut.loadSavingsSwapQuote(REQUESTED_SAT)
         advanceUntilIdle()

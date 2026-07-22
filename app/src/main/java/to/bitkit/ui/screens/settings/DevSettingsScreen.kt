@@ -49,6 +49,7 @@ fun DevSettingsScreen(
     val settings = settingsViewModel ?: return
     val context = LocalContext.current
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
+    val isSavingsSwapEnabled by settings.isSavingsSwapEnabled.collectAsStateWithLifecycle()
     var showPaykitWarning by remember { mutableStateOf(false) }
 
     ScreenColumn {
@@ -64,10 +65,18 @@ fun DevSettingsScreen(
         ) {
             SettingsButtonRow("Fee Settings") { navController.navigateTo(Routes.FeeSettings) }
             SettingsButtonRow("Channel Orders") { navController.navigateTo(Routes.ChannelOrdersSettings) }
-            SettingsButtonRow("Swaps") { navController.navigateTo(Routes.SwapsSettings) }
             SettingsButtonRow("LDK") { navController.navigateTo(Routes.LdkDebug) }
             SettingsButtonRow("VSS") { navController.navigateTo(Routes.VssDebug) }
             SettingsButtonRow("Probing Tool") { navController.navigateTo(Routes.ProbingTool) }
+
+            SectionHeader("SWAPS")
+            SettingsButtonRow("Swaps") { navController.navigateTo(Routes.SwapsSettings) }
+            SettingsSwitchRow(
+                title = "Enable Savings Swap",
+                isChecked = isSavingsSwapEnabled,
+                onClick = { settings.setIsSavingsSwapEnabled(!isSavingsSwapEnabled) },
+                switchTestTag = "SavingsSwapToggle",
+            )
 
             SectionHeader("RECOVERY")
             SettingsButtonRow("Legacy Close Recovery") { navController.navigateTo(Routes.LegacyRnRecovery) }

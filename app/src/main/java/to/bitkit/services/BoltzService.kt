@@ -181,6 +181,12 @@ class BoltzService @Inject constructor(
     /** Whether the configured network has a reachable Boltz backend. See [Env.isSwapSupported]. */
     val isSwapSupported: Boolean get() = Env.isSwapSupported
 
+    /**
+     * Whether swaps may run: the network needs a reachable Boltz backend and the savings swap
+     * flow must be switched on in dev settings, since its UI is not final yet.
+     */
+    suspend fun isSwapEnabled(): Boolean = isSwapSupported && settingsStore.data.first().isSavingsSwapEnabled
+
     /** The Boltz network matching the app's configured network. */
     fun boltzNetwork(network: Network = Env.network): BoltzNetwork = when (network) {
         Network.BITCOIN -> BoltzNetwork.MAINNET

@@ -89,8 +89,9 @@ class WalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `ensureSwapUpdatesRunning should start updates when swaps are supported`() = test {
+    fun `ensureSwapUpdatesRunning should start updates when swaps are enabled`() = test {
         whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(true)
 
         sut.ensureSwapUpdatesRunning()
         advanceUntilIdle()
@@ -101,6 +102,17 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `ensureSwapUpdatesRunning should do nothing when swaps are unsupported`() = test {
         whenever(boltzService.isSwapSupported).thenReturn(false)
+
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        verify(boltzService, never()).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `ensureSwapUpdatesRunning should do nothing when swaps are disabled in dev settings`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(false)
 
         sut.ensureSwapUpdatesRunning()
         advanceUntilIdle()

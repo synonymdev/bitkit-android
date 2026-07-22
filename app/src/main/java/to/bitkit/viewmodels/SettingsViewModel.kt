@@ -182,6 +182,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    val isSavingsSwapEnabled = settingsStore.data.map { it.isSavingsSwapEnabled }
+        .asStateFlow(initialValue = false)
+
+    fun setIsSavingsSwapEnabled(value: Boolean) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(isSavingsSwapEnabled = value) }
+        }
+    }
+
     val isPaykitEnabled = settingsStore.isPaykitEnabled.map { PaykitFeatureFlags.isUiEnabled(it) }
         .asStateFlow(initialValue = false)
 

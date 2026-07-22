@@ -1143,6 +1143,7 @@ class TransferViewModel @Inject constructor(
         if (!boltzService.isSwapSupported) return
         savingsSwapQuoteJob?.cancel()
         savingsSwapQuoteJob = viewModelScope.launch {
+            if (!boltzService.isSwapEnabled()) return@launch
             _savingsSwapState.update { it.copy(isLoading = true) }
             awaitNodeRunning()
 
