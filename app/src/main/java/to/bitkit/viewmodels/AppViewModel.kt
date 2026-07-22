@@ -97,6 +97,7 @@ import to.bitkit.ext.setClipboardText
 import to.bitkit.ext.toHex
 import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.totalValue
+import to.bitkit.ext.walletId
 import to.bitkit.ext.watchUntil
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.FeeRate
@@ -346,6 +347,7 @@ class AppViewModel @Inject constructor(
                         direction = NewTransactionSheetDirection.RECEIVED,
                         paymentHashOrTxId = tx.txid,
                         activityId = tx.txid,
+                        activityWalletId = tx.walletId,
                         sats = tx.sats.toLong(),
                     ),
                 )
@@ -2525,9 +2527,14 @@ class AppViewModel @Inject constructor(
     }
 
     fun onClickActivityDetail() {
-        _transactionSheet.value.activityId?.let {
+        val transactionDetails = _transactionSheet.value
+        transactionDetails.activityId?.let {
             hideNewTransactionSheet()
-            mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(it)))
+            mainScreenEffect(
+                MainScreenEffect.Navigate(
+                    Routes.ActivityDetail(it, transactionDetails.activityWalletId)
+                )
+            )
             return
         }
 
@@ -2544,7 +2551,7 @@ class AppViewModel @Inject constructor(
             ).onSuccess { activity ->
                 hideNewTransactionSheet()
                 _transactionSheet.update { it.copy(isLoadingDetails = false) }
-                val nextRoute = Routes.ActivityDetail(activity.rawId())
+                val nextRoute = Routes.ActivityDetail(activity.rawId(), activity.walletId())
                 mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)
@@ -2568,7 +2575,7 @@ class AppViewModel @Inject constructor(
             ).onSuccess { activity ->
                 hideSheet()
                 _successSendUiState.update { it.copy(isLoadingDetails = false) }
-                val nextRoute = Routes.ActivityDetail(activity.rawId())
+                val nextRoute = Routes.ActivityDetail(activity.rawId(), activity.walletId())
                 mainScreenEffect(MainScreenEffect.Navigate(nextRoute))
             }.onFailure { e ->
                 Logger.error(msg = "Activity not found", context = TAG)

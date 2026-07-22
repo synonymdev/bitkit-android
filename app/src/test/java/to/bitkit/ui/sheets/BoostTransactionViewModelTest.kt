@@ -235,7 +235,7 @@ class BoostTransactionViewModelTest : BaseUnitTest() {
         verify(lightningRepo).accelerateByCpfp(any(), any(), any())
         verify(lightningRepo).syncAsync()
         verify(activityRepo).updateActivity(any(), any(), any())
-        verify(activityRepo, never()).deleteActivity(any())
+        verify(activityRepo, never()).deleteActivity(any(), any())
     }
 
     // region estimateTime dynamic tier tests

@@ -62,7 +62,7 @@ fun SavingsWalletScreen(
     onchainActivities: ImmutableList<Activity>,
     onAllActivityButtonClick: () -> Unit,
     onEmptyActivityRowClick: () -> Unit,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (Activity) -> Unit,
     onTransferToSpendingClick: () -> Unit,
     onBackClick: () -> Unit,
     forceCloseRemainingDuration: String? = null,

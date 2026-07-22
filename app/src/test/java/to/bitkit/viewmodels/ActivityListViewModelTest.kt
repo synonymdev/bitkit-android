@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
@@ -34,7 +35,12 @@ class ActivityListViewModelTest : BaseUnitTest() {
     private val settingsStore = mock<SettingsStore>()
 
     private val dbActivity = onchainActivity(id = "db1", txType = PaymentType.SENT, timestamp = 200uL)
-    private val hwActivity = onchainActivity(id = "hw1", txType = PaymentType.RECEIVED, timestamp = 100uL)
+    private val hwActivity = onchainActivity(
+        id = "hw1",
+        txType = PaymentType.RECEIVED,
+        timestamp = 100uL,
+        walletId = "hardware-wallet",
+    )
     private lateinit var hardwareActivities: MutableStateFlow<ImmutableList<Activity>>
 
     @Before
@@ -43,9 +49,10 @@ class ActivityListViewModelTest : BaseUnitTest() {
         whenever(activityRepo.state).thenReturn(MutableStateFlow(ActivityState()))
         whenever(activityRepo.activitiesChanged).thenReturn(MutableStateFlow(0L))
         whenever { activityRepo.syncActivities() }.thenReturn(Result.success(Unit))
-        whenever { activityRepo.getTxIdsInBoostTxIds() }.thenReturn(emptySet())
+        whenever { activityRepo.getTxIdsInBoostTxIds(any()) }.thenReturn(emptySet())
         whenever {
             activityRepo.getActivities(
+                anyOrNull(),
                 anyOrNull(),
                 anyOrNull(),
                 anyOrNull(),
@@ -101,27 +108,38 @@ class ActivityListViewModelTest : BaseUnitTest() {
         val job = launch { sut.hardwareIds.collect {} }
         advanceUntilIdle()
 
-        assertEquals(setOf("hw1"), sut.hardwareIds.value)
+        assertEquals(setOf("hardware-wallet:hw1"), sut.hardwareIds.value)
         job.cancel()
     }
 
     @Test
-    fun `hardware duplicates of local activities are excluded`() = test {
+    fun `same raw id in different wallets remains visible`() = test {
         hardwareActivities.value = persistentListOf(
             hwActivity,
-            onchainActivity(id = "db1", txType = PaymentType.RECEIVED, timestamp = 300uL),
+            onchainActivity(
+                id = "db1",
+                txType = PaymentType.RECEIVED,
+                timestamp = 300uL,
+                walletId = "hardware-wallet",
+            ),
         )
         val sut = createViewModel()
         val job = launch { sut.hardwareIds.collect {} }
         advanceUntilIdle()
 
-        assertEquals(listOf("db1", "hw1"), sut.filteredActivities.value?.map { it.rawId() })
-        assertEquals(setOf("hw1"), sut.hardwareIds.value)
+        assertEquals(listOf("db1", "db1", "hw1"), sut.filteredActivities.value?.map { it.rawId() })
+        assertEquals(setOf("hardware-wallet:db1", "hardware-wallet:hw1"), sut.hardwareIds.value)
         job.cancel()
     }
 
-    private fun onchainActivity(id: String, txType: PaymentType, timestamp: ULong) = Activity.Onchain(
-        OnchainActivity.create(walletId = "wallet0",
+    private fun onchainActivity(
+        id: String,
+        txType: PaymentType,
+        timestamp: ULong,
+        walletId: String = "wallet0",
+    ) = Activity.Onchain(
+        OnchainActivity.create(
+            walletId = walletId,
             id = id,
             txType = txType,
             txId = id,

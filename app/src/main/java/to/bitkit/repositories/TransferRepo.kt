@@ -4,6 +4,7 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.IBtOrder
+import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -20,6 +21,7 @@ import to.bitkit.ext.channelId
 import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.TransferType
+import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.utils.BlockTimeHelpers
 import to.bitkit.utils.Logger
@@ -107,6 +109,7 @@ class TransferRepo @Inject constructor(
         txId: String,
         fee: ULong,
         feeRate: ULong,
+        walletId: String = WalletScope.default,
     ): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
             val address = requireNotNull(order.payment?.onchain?.address?.takeIf { it.isNotEmpty() }) {
@@ -120,6 +123,7 @@ class TransferRepo @Inject constructor(
                 feeRate = feeRate,
                 isTransfer = true,
                 channelId = order.channel?.shortChannelId,
+                walletId = walletId,
             )
         }.onFailure {
             Logger.error("Failed to create pending transfer activity for '$txId'", it, context = TAG)
@@ -260,7 +264,21 @@ class TransferRepo @Inject constructor(
     }
 
     private suspend fun markActivityAsTransfer(txid: String, channelId: String) {
-        val activity = coreService.activity.getOnchainActivityByTxId(txid) ?: return
+        val activity = coreService.activity.get(
+            walletId = null,
+            filter = ActivityFilter.ONCHAIN,
+            search = txid,
+            limit = 10u,
+            sortDirection = SortDirection.DESC,
+        ).filterIsInstance<Activity.Onchain>()
+            .filter { it.v1.txId == txid }
+            .let { matches ->
+                matches.firstOrNull { it.v1.isTransfer }
+                    ?: matches.firstOrNull {
+                        it.v1.walletId != WalletScope.default && it.v1.txType == PaymentType.SENT
+                    }
+                    ?: matches.firstOrNull()
+            }?.v1 ?: return
         if (activity.isTransfer && activity.channelId == channelId) return
         val updated = activity.copy(isTransfer = true, channelId = channelId)
         coreService.activity.update(activity.id, Activity.Onchain(updated))
