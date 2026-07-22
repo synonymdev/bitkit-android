@@ -424,12 +424,8 @@ class WalletViewModel @Inject constructor(
         swapUpdatesRunning = false
         viewModelScope.launch(bgDispatcher) {
             stopSwapUpdates()
-            lightningRepo.stop()
-                .onFailure {
-                    Logger.error("Node stop error", it)
-                    ToastEventBus.send(it)
-                }
         }
+        lightningRepo.stopDebounced()
     }
 
     private suspend fun stopSwapUpdates() {

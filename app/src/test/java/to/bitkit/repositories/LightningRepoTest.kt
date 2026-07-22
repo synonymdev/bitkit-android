@@ -15,10 +15,12 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
@@ -82,6 +84,7 @@ import kotlin.time.Duration.Companion.seconds
 class LightningRepoTest : BaseUnitTest() {
     companion object {
         private const val NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS = 2_500L
+        private const val BACKGROUND_STOP_DELAY_MS = 3_000L
     }
 
     private lateinit var sut: LightningRepo
@@ -351,6 +354,79 @@ class LightningRepoTest : BaseUnitTest() {
             assertEquals(NodeLifecycleState.Stopped, awaitItem().nodeLifecycleState)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `stopDebounced does not stop the node before the delay elapses`() = test {
+        startNodeForTesting()
+
+        sut.stopDebounced()
+        testScheduler.advanceTimeBy(BACKGROUND_STOP_DELAY_MS - 1)
+
+        verify(lightningService, never()).stop()
+    }
+
+    @Test
+    fun `stopDebounced stops the node after the delay elapses`() = test {
+        startNodeForTesting()
+
+        sut.stopDebounced()
+        testScheduler.advanceTimeBy(BACKGROUND_STOP_DELAY_MS)
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService).stop()
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `stopDebounced called twice only stops once`() = test {
+        startNodeForTesting()
+
+        sut.stopDebounced()
+        sut.stopDebounced()
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(1)).stop()
+    }
+
+    // Regression: a brief background and foreground cycle must not tear the node down and rebuild it
+    @Test
+    fun `a background and foreground cycle within the debounce window never stops the node`() = test {
+        startNodeForTesting()
+
+        sut.stopDebounced()
+        testScheduler.advanceTimeBy(BACKGROUND_STOP_DELAY_MS - 1)
+        sut.start()
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, never()).stop()
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    // Regression: node teardown must complete before the next start rebuilds, never overlap it
+    @Test
+    fun `stop tears down the node before a subsequent start rebuilds it`() = test {
+        startNodeForTesting()
+        whenever(lightningService.node).thenReturn(null)
+
+        sut.stop()
+        sut.start()
+
+        val inOrder = inOrder(lightningService)
+        inOrder.verify(lightningService).stop()
+        inOrder.verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+        inOrder.verify(lightningService).start(anyOrNull(), any())
+    }
+
+    // Regression: a cancelled caller must not strand lifecycle state at Stopping
+    @Test
+    fun `stop leaves lifecycle state Stopped when the caller is cancelled`() = test {
+        startNodeForTesting()
+
+        val job = launch { sut.stop() }
+        job.cancelAndJoin()
+
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
     }
 
     @Test

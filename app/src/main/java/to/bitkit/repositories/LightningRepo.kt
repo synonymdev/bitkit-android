@@ -18,6 +18,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -144,6 +145,7 @@ class LightningRepo @Inject constructor(
     private val syncMutex = Mutex()
     private val syncPending = AtomicBoolean(false)
     private val syncRetryJob = AtomicReference<Job?>(null)
+    private val pendingStopJob = AtomicReference<Job?>(null)
     private val lifecycleMutex = Mutex()
     private val isChangingAddressType = AtomicBoolean(false)
 
@@ -309,6 +311,8 @@ class LightningRepo @Inject constructor(
         if (_isRecoveryMode.value) {
             return@withContext Result.failure(RecoveryModeError())
         }
+
+        cancelPendingStop()
 
         eventHandler?.let { _eventHandlers.add(it) }
 
@@ -537,6 +541,20 @@ class LightningRepo @Inject constructor(
         _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Initializing) }
     }
 
+    /**
+     * Defers [stop] so a brief background/foreground cycle does not tear the node down and rebuild it.
+     * Runs on the repo scope so a cancelled ViewModel cannot drop the pending stop.
+     */
+    fun stopDebounced() {
+        val job = scope.launch {
+            delay(BACKGROUND_STOP_DELAY)
+            stop()
+        }
+        pendingStopJob.getAndSet(job)?.cancel()
+    }
+
+    fun cancelPendingStop() = run { pendingStopJob.getAndSet(null)?.cancel() }
+
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
         lifecycleMutex.withLock {
             if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
@@ -545,10 +563,12 @@ class LightningRepo @Inject constructor(
             }
 
             runCatching {
-                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
-                lightningService.stop()
-                clearProbeOutcomes()
-                _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                withContext(NonCancellable) {
+                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
+                    lightningService.stop()
+                    clearProbeOutcomes()
+                    _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+                }
             }.onFailure {
                 Logger.error("Node stop error", it, context = TAG)
                 // On failure, check actual node state and update accordingly
@@ -1809,6 +1829,7 @@ class LightningRepo @Inject constructor(
         private const val VSS_KEY_EXTERNAL_SCORES_CACHE = "external_pathfinding_scores_cache"
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
+        private val BACKGROUND_STOP_DELAY = 3.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
         private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
         val SEND_LN_TIMEOUT = 10.seconds
