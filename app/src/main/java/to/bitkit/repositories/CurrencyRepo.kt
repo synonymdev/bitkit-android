@@ -5,8 +5,6 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -22,6 +20,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
@@ -58,7 +57,7 @@ class CurrencyRepo @Inject constructor(
     private val clock: Clock,
     @Named("enablePolling") private val enablePolling: Boolean,
 ) : AmountInputHandler {
-    private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
+    private val repoScope = appScope(bgDispatcher, TAG)
     private val _currencyState = MutableStateFlow(CurrencyState())
     val currencyState: StateFlow<CurrencyState> = _currencyState.asStateFlow()
 

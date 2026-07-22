@@ -33,10 +33,8 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -53,6 +51,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import to.bitkit.async.appScope
 import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
@@ -126,7 +125,7 @@ class TrezorRepo @Inject constructor(
     private val _state = MutableStateFlow(TrezorState())
     val state = _state.asStateFlow()
 
-    private val scope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val scope = appScope(ioDispatcher, TAG)
     private var isSetup = CompletableDeferred<Unit>()
     private val setupMutex = Mutex()
 

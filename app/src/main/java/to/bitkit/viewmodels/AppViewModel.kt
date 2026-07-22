@@ -154,6 +154,7 @@ import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.usecases.FormatMoneyValue
+import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
@@ -207,6 +208,7 @@ class AppViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
+    private val refreshContactPaykitReceivers: RefreshContactPaykitReceiversUseCase,
     private val samRockRepo: SamRockRepo,
     private val appUpdateSheet: AppUpdateTimedSheet,
     private val backupSheet: BackupTimedSheet,
@@ -507,6 +509,8 @@ class AppViewModel @Inject constructor(
                         lastPrivatePaykitContactKeys = emptySet()
                         return@collect
                     }
+
+                    refreshPrivateOnlyPaykitReceiverMarker("contact sync")
                     if (!state.contactsLoaded) return@collect
 
                     val removedKeys = lastPrivatePaykitContactKeys - state.contactKeys
@@ -543,6 +547,7 @@ class AppViewModel @Inject constructor(
 
         if (!isPaykitEnabled.value) return
 
+        refreshPrivateOnlyPaykitReceiverMarker(reason)
         privatePaykitRepo.reconcileReservedReceiveIndexes()
             .onFailure {
                 Logger.warn("Failed to reconcile private Paykit receive indexes for '$reason'", it, context = TAG)
@@ -550,11 +555,28 @@ class AppViewModel @Inject constructor(
         privatePaykitRepo.refreshKnownSavedContactEndpoints(reason, forceRefreshLightning = forceRefreshLightning)
     }
 
+    private suspend fun refreshPrivateOnlyPaykitReceiverMarker(reason: String) {
+        val settings = settingsStore.data.first()
+        if (!settings.sharesPrivatePaykitEndpoints || settings.sharesPublicPaykitEndpoints) return
+        if (pubkyRepo.publicKey.value == null) return
+
+        publicPaykitRepo.syncLocalReceiverMarker()
+            .onFailure {
+                Logger.warn("Failed to refresh private Paykit receiver marker for '$reason'", it, context = TAG)
+            }
+    }
+
     private suspend fun retryPendingPaykitEndpointRemoval(contactKeys: Collection<String>, reason: String) {
         val settings = settingsStore.data.first()
         if (settings.publicPaykitCleanupPending) {
             if (settings.sharesPublicPaykitEndpoints) {
-                settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                publicPaykitRepo.syncCurrentPublishedEndpoints()
+                    .onSuccess {
+                        settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                    }
+                    .onFailure {
+                        Logger.warn("Failed to retry public Paykit endpoint sync for '$reason'", it, context = TAG)
+                    }
             } else {
                 publicPaykitRepo.syncPublishedEndpoints(publish = false)
                     .onSuccess {
@@ -1682,6 +1704,9 @@ class AppViewModel @Inject constructor(
                 clearActiveContactPaymentContext()
                 if (currentSheet.value is Sheet.Send) hideSheet()
                 mainScreenEffect(MainScreenEffect.Navigate(route))
+                if (route is Routes.ContactDetail) {
+                    refreshContactPaykitReceivers(route.publicKey)
+                }
                 return@withContext
             }
         }

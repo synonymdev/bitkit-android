@@ -85,7 +85,7 @@ class LightningService @Inject constructor(
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val settingsStore: SettingsStore,
     private val loggerLdk: LoggerLdk,
-) : BaseCoroutineScope(bgDispatcher) {
+) : BaseCoroutineScope(bgDispatcher, TAG) {
 
     companion object {
         private const val TAG = "LightningService"
@@ -886,7 +886,7 @@ class LightningService @Inject constructor(
         liquidityPenaltyMultiplierMsat = SCORING_LIQUIDITY_PENALTY_MULTIPLIER_MSAT,
         liquidityPenaltyAmountMultiplierMsat = SCORING_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT,
         historicalLiquidityPenaltyAmountMultiplierMsat =
-            SCORING_HISTORICAL_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT,
+        SCORING_HISTORICAL_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT,
         consideredImpossiblePenaltyMsat = SCORING_CONSIDERED_IMPOSSIBLE_PENALTY_MSAT,
         probingDiversityPenaltyMsat = SCORING_PROBING_DIVERSITY_PENALTY_MSAT,
     )

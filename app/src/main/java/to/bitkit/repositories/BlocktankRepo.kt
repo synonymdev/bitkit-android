@@ -21,9 +21,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -50,6 +48,7 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.async.ServiceQueue
+import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -82,7 +81,7 @@ class BlocktankRepo @Inject constructor(
     @Named("enablePolling") private val enablePolling: Boolean,
     private val lightningRepo: LightningRepo,
 ) {
-    private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
+    private val repoScope = appScope(bgDispatcher, TAG)
 
     private val _blocktankState = MutableStateFlow(BlocktankState())
     val blocktankState: StateFlow<BlocktankState> = _blocktankState.asStateFlow()

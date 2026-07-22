@@ -1,7 +1,6 @@
 package to.bitkit.ui.screens.wallets.receive
 
 import android.graphics.Bitmap
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.snapping.SnapPosition
@@ -65,6 +64,7 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
 import to.bitkit.ui.components.TertiaryButton
@@ -252,6 +252,7 @@ fun ReceiveQrScreen(
                                     tab = tab,
                                     walletState = walletState,
                                     cjitInvoice = cjitInvoice,
+                                    isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
                                     onClickEditInvoice = onClickEditInvoice,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -288,63 +289,61 @@ fun ReceiveQrScreen(
 
             VerticalSpacer(24.dp)
 
-            AnimatedVisibility(visible = lightningState.nodeLifecycleState.isRunning()) {
-                val showCjitButton = showingCjitOnboarding && selectedTab == ReceiveTab.SPENDING
-                val buttonVariant = when {
-                    showCjitButton -> BottomButtonVariant.CJIT
-                    showDetails -> BottomButtonVariant.SHOW_QR
-                    else -> BottomButtonVariant.SHOW_DETAILS
-                }
-                Crossfade(
-                    targetState = buttonVariant,
-                    label = "ReceiveBottomButtonCrossfade",
-                ) { variant ->
-                    when (variant) {
-                        BottomButtonVariant.CJIT -> PrimaryButton(
-                            text = stringResource(R.string.wallet__receive__cjit),
-                            icon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_lightning_alt),
-                                    tint = Colors.Purple,
-                                    contentDescription = null,
-                                )
-                            },
-                            onClick = {
-                                onClickReceiveCjit()
-                                showDetails = false
-                            },
-                            fullWidth = true,
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .testTag("ShowDetails")
-                        )
+            val showCjitButton = showingCjitOnboarding && selectedTab == ReceiveTab.SPENDING
+            val buttonVariant = when {
+                showCjitButton -> BottomButtonVariant.CJIT
+                showDetails -> BottomButtonVariant.SHOW_QR
+                else -> BottomButtonVariant.SHOW_DETAILS
+            }
+            Crossfade(
+                targetState = buttonVariant,
+                label = "ReceiveBottomButtonCrossfade",
+            ) { variant ->
+                when (variant) {
+                    BottomButtonVariant.CJIT -> PrimaryButton(
+                        text = stringResource(R.string.wallet__receive__cjit),
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_lightning_alt),
+                                tint = Colors.Purple,
+                                contentDescription = null,
+                            )
+                        },
+                        onClick = {
+                            onClickReceiveCjit()
+                            showDetails = false
+                        },
+                        fullWidth = true,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .testTag("ShowDetails")
+                    )
 
-                        BottomButtonVariant.SHOW_QR -> PrimaryButton(
-                            text = stringResource(R.string.wallet__receive_show_qr),
-                            icon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_qr_purple),
-                                    tint = Colors.White,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            onClick = { showDetails = false },
-                            fullWidth = true,
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .testTag("QRCode")
-                        )
+                    BottomButtonVariant.SHOW_QR -> PrimaryButton(
+                        text = stringResource(R.string.wallet__receive_show_qr),
+                        icon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_qr_purple),
+                                tint = Colors.White,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        onClick = { showDetails = false },
+                        fullWidth = true,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .testTag("QRCode")
+                    )
 
-                        BottomButtonVariant.SHOW_DETAILS -> TertiaryButton(
-                            text = stringResource(R.string.wallet__receive_show_details),
-                            onClick = { showDetails = true },
-                            fullWidth = true,
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp)
-                                .testTag("ShowDetails")
-                        )
-                    }
+                    BottomButtonVariant.SHOW_DETAILS -> TertiaryButton(
+                        text = stringResource(R.string.wallet__receive_show_details),
+                        onClick = { showDetails = true },
+                        fullWidth = true,
+                        modifier = Modifier
+                            .padding(horizontal = 16.dp)
+                            .testTag("ShowDetails")
+                    )
                 }
             }
 
@@ -502,6 +501,7 @@ private fun ReceiveDetailsView(
     tab: ReceiveTab,
     walletState: WalletState,
     cjitInvoice: String?,
+    isNodeRunning: Boolean,
     onClickEditInvoice: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -555,14 +555,24 @@ private fun ReceiveDetailsView(
                 }
 
                 ReceiveTab.SPENDING -> {
-                    if (cjitInvoice != null || walletState.bolt11.isNotEmpty()) {
+                    val lightningInvoice = cjitInvoice ?: walletState.bolt11.takeIf { isNodeRunning }
+                    if (!lightningInvoice.isNullOrEmpty()) {
                         CopyAddressCard(
                             title = stringResource(R.string.wallet__receive_lightning_invoice),
-                            address = cjitInvoice ?: walletState.bolt11,
+                            address = lightningInvoice,
                             type = CopyAddressType.LIGHTNING,
                             onClickEditInvoice = onClickEditInvoice,
                             testTag = "ReceiveLightningAddress",
                         )
+                    } else {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .testTag("ReceiveLightningLoading")
+                        ) {
+                            GradientCircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        }
                     }
                 }
             }
@@ -886,6 +896,34 @@ private fun PreviewDetailsMode() {
                         "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
                 ),
                 cjitInvoice = null,
+                isNodeRunning = true,
+                onClickEditInvoice = {},
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Suppress("SpellCheckingInspection")
+@Preview(showSystemUi = true, name = "Spending Details Loading")
+@Composable
+private fun PreviewDetailsModeSpendingLoading() {
+    AppThemeSurface {
+        Column(
+            modifier = Modifier
+                .gradientBackground()
+                .fillMaxSize()
+                .padding(16.dp)
+        ) {
+            // Cached bolt11 with a node that is not running: the stale invoice is withheld in favor of loading
+            ReceiveDetailsView(
+                tab = ReceiveTab.SPENDING,
+                walletState = WalletState(
+                    bolt11 = "lnbcrt500u1pn7umn7pp5x0s9lt9fwrff6rp70pz3guwnjgw97sjuv79vhx9n2ps8q6tcdehhxapqd9h8vmmfv" +
+                        "djjqen0wgsyqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxqcrqvpsxq"
+                ),
+                cjitInvoice = null,
+                isNodeRunning = false,
                 onClickEditInvoice = {},
                 modifier = Modifier.weight(1f)
             )

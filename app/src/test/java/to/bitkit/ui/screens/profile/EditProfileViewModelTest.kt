@@ -11,6 +11,7 @@ import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.PubkyProfile
@@ -129,22 +130,19 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `disconnectProfile continues when private cleanup fails`() = test {
+    fun `disconnectProfile stops when private cleanup fails`() = test {
         val sut = createSut()
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
             .thenReturn(Result.failure(TestAppError("cleanup failed")))
         whenever(pubkyRepo.signOut()).thenReturn(Result.success(Unit))
         advanceUntilIdle()
 
-        sut.effects.test {
-            sut.disconnectProfile()
-            advanceUntilIdle()
+        sut.disconnectProfile()
+        advanceUntilIdle()
 
-            assertEquals(EditProfileEffect.DisconnectSuccess, awaitItem())
-        }
         assertFalse(sut.uiState.value.isSaving)
-        verify(pubkyRepo).signOut()
-        verify(privatePaykitRepo).closeAndClear()
+        verify(pubkyRepo, never()).signOut()
+        verify(privatePaykitRepo, never()).closeAndClear()
     }
 
     @Test
@@ -161,23 +159,20 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `deleteProfile should continue when private cleanup fails`() = test {
+    fun `deleteProfile should stop when private cleanup fails`() = test {
         val sut = createSut()
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
             .thenReturn(Result.failure(TestAppError("cleanup failed")))
         whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
         advanceUntilIdle()
 
-        sut.effects.test {
-            sut.deleteProfile()
-            advanceUntilIdle()
+        sut.deleteProfile()
+        advanceUntilIdle()
 
-            assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
-        }
-        assertFalse(sut.uiState.value.showDeleteFailureDialog)
+        assertTrue(sut.uiState.value.showDeleteFailureDialog)
         assertFalse(sut.uiState.value.isSaving)
-        verify(pubkyRepo).deleteProfileWithSessionRetry()
-        verify(privatePaykitRepo).closeAndClear()
+        verify(pubkyRepo, never()).deleteProfileWithSessionRetry()
+        verify(privatePaykitRepo, never()).closeAndClear()
     }
 
     @Test

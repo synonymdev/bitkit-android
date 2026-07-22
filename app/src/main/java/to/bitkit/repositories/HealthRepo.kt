@@ -1,8 +1,6 @@
 package to.bitkit.repositories
 
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -12,6 +10,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
+import to.bitkit.async.appScope
 import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.models.BackupCategory
@@ -33,7 +32,11 @@ class HealthRepo @Inject constructor(
     private val cacheStore: CacheStore,
     private val clock: Clock,
 ) {
-    private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
+    companion object {
+        private const val TAG = "HealthRepo"
+    }
+
+    private val repoScope = appScope(bgDispatcher, TAG)
 
     private val _healthState = MutableStateFlow(AppHealthState())
     val healthState: StateFlow<AppHealthState> = _healthState.asStateFlow()

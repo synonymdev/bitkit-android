@@ -8,6 +8,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -59,6 +60,10 @@ class PaymentPreferenceViewModelTest : BaseUnitTest() {
         }
         whenever { publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any()) }
             .thenReturn(Result.success(Unit))
+        whenever { publicPaykitRepo.syncPublishedEndpoints(any()) }
+            .thenReturn(Result.success(Unit))
+        whenever { publicPaykitRepo.syncLocalReceiverMarker(anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.setContactSharingCleanupPending(any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.enableSharingAndPrepareSavedContacts(any<Collection<String>>(), any()) }
@@ -79,6 +84,54 @@ class PaymentPreferenceViewModelTest : BaseUnitTest() {
 
         assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
         verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY), true)
+        verify(publicPaykitRepo).syncLocalReceiverMarker(privateSharingEnabled = true)
+    }
+
+    @Test
+    fun `setPrivateContactsEnabled does not republish marker while public sharing is enabled`() = test {
+        settingsFlow.value = SettingsData(sharesPublicPaykitEndpoints = true)
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.setPrivateContactsEnabled(true)
+        advanceUntilIdle()
+
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY), true)
+        verify(publicPaykitRepo, never()).syncLocalReceiverMarker(anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `setPublicContactsEnabled republishes previous state when disabling fails`() = test {
+        settingsFlow.value = SettingsData(sharesPublicPaykitEndpoints = true)
+        whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }
+            .thenReturn(Result.failure(PublicPaykitError.PublicationFailed))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.setPublicContactsEnabled(false)
+        advanceUntilIdle()
+
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = true)
+    }
+
+    @Test
+    fun `setPrivateContactsEnabled rolls back when receiver marker sync fails`() = test {
+        whenever { publicPaykitRepo.syncLocalReceiverMarker(privateSharingEnabled = true) }
+            .thenReturn(Result.failure(PublicPaykitError.WalletNotReady))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.setPrivateContactsEnabled(true)
+        advanceUntilIdle()
+
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertFalse(sut.uiState.value.privateContactsEnabled)
+        verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY), true)
+        verify(privatePaykitRepo).disableSharingAndPruneUnsavedContactState(listOf(CONTACT_KEY))
     }
 
     @Test

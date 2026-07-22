@@ -69,6 +69,7 @@ fun ContactsScreen(
         onClickContact = onClickContact,
         onSearchTextChange = { viewModel.onSearchTextChange(it) },
         onAddContact = onAddContact,
+        onExistingContact = viewModel::refreshExistingContact,
         onScanQr = onScanQr,
         openAddContactSheet = openAddContactSheet,
     )
@@ -82,6 +83,7 @@ private fun Content(
     onClickContact: (String) -> Unit,
     onSearchTextChange: (String) -> Unit,
     onAddContact: (String) -> Unit,
+    onExistingContact: (String) -> Unit,
     onScanQr: () -> Unit,
     openAddContactSheet: Boolean,
 ) {
@@ -134,12 +136,13 @@ private fun Content(
     if (showAddContactSheet) {
         AddContactSheet(
             currentPublicKey = uiState.myProfile?.publicKey,
-            contacts = uiState.contacts,
+            contacts = uiState.allContacts,
             onDismiss = { showAddContactSheet = false },
             onSubmit = { publicKey ->
                 showAddContactSheet = false
                 onAddContact(publicKey)
             },
+            onExistingContact = onExistingContact,
             onScanQr = {
                 showAddContactSheet = false
                 onScanQr()
@@ -309,6 +312,7 @@ private fun Preview() {
             onClickContact = {},
             onSearchTextChange = {},
             onAddContact = {},
+            onExistingContact = {},
             onScanQr = {},
             openAddContactSheet = false,
         )

@@ -27,7 +27,11 @@ import kotlinx.coroutines.test.setMain
 import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.BalanceDetails
+import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.NodeStatus
+import org.lightningdevkit.ldknode.OutPoint
+import org.lightningdevkit.ldknode.SpendableUtxo
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
@@ -104,6 +108,14 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus)))
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(blocktankRepo.blocktankState).thenReturn(blocktankState)
+        // Default: no mining-fee reserve so existing limit tests keep their balances.
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(0uL))
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }
+            .thenReturn(Result.success(2uL))
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(listOf(stubUtxo(ON_CHAIN_BALANCE))))
 
         sut = TransferViewModel(
             context = context,
@@ -120,7 +132,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
     @Test
     fun `updateLimits caps spending max at LSP max client balance when on-chain balance exceeds it`() = test {
-        balanceState.value = BalanceState(maxSendOnchainSats = ON_CHAIN_BALANCE)
+        stubSpendableBalances(ON_CHAIN_BALANCE)
         blocktankState.value = BlocktankState(info = btInfo(lspMaxClientBalance = LSP_MAX_CLIENT_BALANCE))
         // The LSP reports no room for receiving liquidity (maxLspBalanceSat = 0) because the
         // client balance saturates the channel — the regression this guards against.
@@ -142,7 +154,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
     @Test
     fun `updateLimits uses the full balance when LSP info is unavailable`() = test {
-        balanceState.value = BalanceState(maxSendOnchainSats = ON_CHAIN_BALANCE)
+        stubSpendableBalances(ON_CHAIN_BALANCE)
         blocktankState.value = BlocktankState(info = null)
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
@@ -158,7 +170,7 @@ class TransferViewModelTest : BaseUnitTest() {
 
     @Test
     fun `updateLimits sets max to zero when LSP reports zero client balance`() = test {
-        balanceState.value = BalanceState(maxSendOnchainSats = ON_CHAIN_BALANCE)
+        stubSpendableBalances(ON_CHAIN_BALANCE)
         blocktankState.value = BlocktankState(info = btInfo(lspMaxClientBalance = LSP_MAX_CLIENT_BALANCE))
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = 0uL)))
@@ -168,6 +180,56 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(0L, sut.spendingUiState.value.maxAllowedToSend)
+    }
+
+    @Test
+    fun `updateLimits reserves fast mining fee before sizing max transfer`() = test {
+        // multi_address_2-style tight balance: without this reserve, feeSat + miningFee > spendable.
+        val spendable = 100_000uL
+        val miningFee = 1_058uL
+        val availableAfterMining = spendable - miningFee
+        // maxSendOnchainSats is already fee-adjusted for send UI — limits must ignore it and
+        // reserve exactly one fast fee from raw spendable (not double-subtract).
+        balanceState.value = BalanceState(maxSendOnchainSats = spendable - miningFee)
+        stubSpendableBalances(spendable)
+        blocktankState.value = BlocktankState(info = null)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(miningFee))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = spendable)))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(feeResponse))
+
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        val expectedMax = (availableAfterMining - LSP_FEE).toLong()
+        assertEquals(expectedMax, sut.spendingUiState.value.maxAllowedToSend)
+        verify(lightningRepo).estimateSendAllFee(
+            address = anyOrNull(),
+            speed = eq(TransactionSpeed.Fast),
+            feeRates = anyOrNull(),
+        )
+        verify(blocktankRepo).estimateOrderFee(eq(availableAfterMining), any(), any())
+    }
+
+    @Test
+    fun `updateLimits uses percent fallback when fast mining fee estimate fails`() = test {
+        val spendable = 100_000uL
+        val fallbackMiningFee = (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
+        val availableAfterMining = spendable - fallbackMiningFee
+        stubSpendableBalances(spendable)
+        blocktankState.value = BlocktankState(info = null)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.failure(AppError("fee unavailable")))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = spendable)))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(feeResponse))
+
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        assertEquals((availableAfterMining - LSP_FEE).toLong(), sut.spendingUiState.value.maxAllowedToSend)
+        verify(blocktankRepo).estimateOrderFee(eq(availableAfterMining), any(), any())
     }
 
     @Test
@@ -299,6 +361,175 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(999uL, sut.spendingUiState.value.hwMiningFeeSats)
+    }
+
+    @Test
+    fun `prepareSpendingConfirmFunding exposes real mining fee for confirm UI`() = test {
+        val order = previewBtOrder(feeSat = 98_000uL)
+        val selected = listOf(stubUtxo(100_000u))
+        stubSpendableBalances(spendable = 100_000u)
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(selected))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+
+        sut.prepareSpendingConfirmFunding(order)
+        advanceUntilIdle()
+
+        val state = sut.spendingUiState.value
+        assertEquals(true, state.isConfirmFeeReady)
+        assertEquals(1_000uL, state.miningFeeSats)
+        assertEquals(false, state.shouldUseSendAll)
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm uses send-all when selected inputs would create dust change`() = test {
+        val order = previewBtOrder(feeSat = 99_000uL)
+        val selected = listOf(stubUtxo(100_000u))
+        stubSpendableBalances(spendable = 100_000u)
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull())).thenReturn(Result.success(500uL))
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(selected))
+        // totalInput 100000 - feeSat 99000 - normalFee 500 = 500 dust (< Defaults.dustLimit)
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(500uL))
+        stubSendOnChainSuccess()
+        var fundingPaidEmitted = false
+        backgroundScope.launch {
+            sut.transferEffects.collect { effect ->
+                if (effect is TransferEffect.OnSpendingFundingPaid) {
+                    fundingPaidEmitted = true
+                }
+            }
+        }
+
+        sut.onTransferToSpendingConfirm(order)
+        advanceUntilIdle()
+
+        assertEquals(true, sut.spendingUiState.value.isConfirmPaying)
+        assertTrue(fundingPaidEmitted)
+        verify(lightningRepo).selectUtxosWithAlgorithm(
+            targetAmountSats = eq(order.feeSat),
+            satsPerVByte = any(),
+            algorithm = eq(CoinSelectionAlgorithm.LARGEST_FIRST),
+            utxos = anyOrNull(),
+        )
+        verify(lightningRepo).sendOnChain(
+            address = eq(order.payment?.onchain?.address.orEmpty()),
+            sats = eq(order.feeSat),
+            speed = eq(TransactionSpeed.Fast),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = eq(true),
+            channelId = anyOrNull(),
+            isMaxAmount = eq(true),
+            tags = any(),
+        )
+        verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm does not drain when normal fee leaves non-dust change`() = test {
+        // Regression: 41x1k UTXOs — send-all fee made expectedChange look like 0, but normal
+        // coin selection fee leaves real change and must not wipe the wallet.
+        val order = previewBtOrder(feeSat = 35_341uL)
+        val selected = listOf(stubUtxo(41_000u))
+        stubSpendableBalances(spendable = 41_000u)
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull()))
+            .thenReturn(Result.success(5_659uL))
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(selected))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(2_830uL))
+        stubSendOnChainSuccess()
+
+        sut.onTransferToSpendingConfirm(order)
+        advanceUntilIdle()
+
+        assertEquals(true, sut.spendingUiState.value.isConfirmPaying)
+        verify(lightningRepo).sendOnChain(
+            address = eq(order.payment?.onchain?.address.orEmpty()),
+            sats = eq(order.feeSat),
+            speed = eq(TransactionSpeed.Fast),
+            utxosToSpend = eq(selected),
+            feeRates = anyOrNull(),
+            isTransfer = eq(true),
+            channelId = anyOrNull(),
+            isMaxAmount = eq(false),
+            tags = any(),
+        )
+        verify(lightningRepo, never()).sendOnChain(
+            address = any(),
+            sats = any(),
+            speed = any(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = eq(true),
+            tags = any(),
+        )
+        verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm surfaces error when fixed send fails without draining`() = test {
+        // Match iOS: dust was already decided up front; do not surprise-drain on send failure.
+        val order = previewBtOrder(feeSat = 98_000uL)
+        val selected = listOf(stubUtxo(100_000u))
+        stubSpendableBalances(spendable = 100_000u)
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(selected))
+        // 100000 - 98000 - 1000 = 1000, above dust → fixed send; drain would still cover order.
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever(
+            lightningRepo.sendOnChain(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+            ),
+        ).thenReturn(Result.failure(AppError("Coin selection failed")))
+
+        sut.onTransferToSpendingConfirm(order)
+        advanceUntilIdle()
+
+        assertEquals(false, sut.spendingUiState.value.isConfirmPaying)
+        verify(lightningRepo, times(1)).sendOnChain(
+            address = eq(order.payment?.onchain?.address.orEmpty()),
+            sats = eq(order.feeSat),
+            speed = eq(TransactionSpeed.Fast),
+            utxosToSpend = eq(selected),
+            feeRates = anyOrNull(),
+            isTransfer = eq(true),
+            channelId = anyOrNull(),
+            isMaxAmount = eq(false),
+            tags = any(),
+        )
+        verify(lightningRepo, never()).sendOnChain(
+            address = any(),
+            sats = any(),
+            speed = any(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = eq(true),
+            tags = any(),
+        )
+        verify(cacheStore, never()).addPaidOrder(any(), any())
     }
 
     @Test
@@ -1004,6 +1235,39 @@ class TransferViewModelTest : BaseUnitTest() {
         val options = mock<IBtInfoOptions>()
         whenever(options.maxClientBalanceSat).thenReturn(lspMaxClientBalance)
         return mock<IBtInfo>().also { whenever(it.options).thenReturn(options) }
+    }
+
+    private suspend fun stubSpendableBalances(spendable: ULong) {
+        val balances = BalanceDetails(
+            totalOnchainBalanceSats = spendable,
+            spendableOnchainBalanceSats = spendable,
+            totalAnchorChannelsReserveSats = 0u,
+            totalLightningBalanceSats = 0u,
+            lightningBalances = emptyList(),
+            pendingBalancesFromChannelClosures = emptyList(),
+        )
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
+    }
+
+    private fun stubUtxo(valueSats: ULong): SpendableUtxo = SpendableUtxo(
+        outpoint = OutPoint(txid = "stub-utxo-txid", vout = 0u),
+        valueSats = valueSats,
+    )
+
+    private suspend fun stubSendOnChainSuccess() {
+        whenever(
+            lightningRepo.sendOnChain(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+            ),
+        ).thenReturn(Result.success(TXID))
     }
 
     private companion object {

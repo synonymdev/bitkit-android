@@ -9,8 +9,6 @@ import android.os.Handler
 import android.os.Looper
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -19,6 +17,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import to.bitkit.async.appScope
 import to.bitkit.di.BgDispatcher
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -29,11 +28,12 @@ class ConnectivityRepo @Inject constructor(
     @ApplicationContext private val context: Context,
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
 ) {
-    private val repoScope = CoroutineScope(bgDispatcher + SupervisorJob())
+    private val repoScope = appScope(bgDispatcher, TAG)
     private val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
     private val mainHandler = Handler(Looper.getMainLooper())
 
     companion object {
+        private const val TAG = "ConnectivityRepo"
         private const val DELAY_MS = 250L
     }
 

@@ -9,6 +9,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.repositories.PrivatePaykitRepo
@@ -16,6 +17,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileViewModelTest : BaseUnitTest() {
@@ -43,20 +45,18 @@ class ProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `signOut continues when private cleanup fails`() = test {
+    fun `signOut stops when private cleanup fails`() = test {
         val sut = createSut()
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
             .thenReturn(Result.failure(ProfileTestAppError("cleanup failed")))
         advanceUntilIdle()
 
-        sut.effects.test {
-            sut.signOut()
-            advanceUntilIdle()
+        sut.signOut()
+        advanceUntilIdle()
 
-            assertEquals(ProfileEffect.SignedOut, awaitItem())
-        }
-        verify(pubkyRepo).signOut()
-        verify(privatePaykitRepo).closeAndClear()
+        assertFalse(sut.uiState.value.isSigningOut)
+        verify(pubkyRepo, never()).signOut()
+        verify(privatePaykitRepo, never()).closeAndClear()
     }
 
     @Test
