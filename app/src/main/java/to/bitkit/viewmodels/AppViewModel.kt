@@ -1180,6 +1180,8 @@ class AppViewModel @Inject constructor(
         // Skip validation for empty input
         if (valueWithoutSpaces.isEmpty()) return
 
+        if (valueWithoutSpaces.startsWith("$PUBKYAUTH_SCHEME://", ignoreCase = true)) return
+
         if (PubkyPublicKeyFormat.normalized(valueWithoutSpaces) != null) {
             if (isPaykitEnabled.value) {
                 _sendUiState.update { it.copy(isAddressInputValid = true) }
@@ -1677,9 +1679,16 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        if (input.startsWith("$PUBKYAUTH_SCHEME://")) {
+        if (input.startsWith("$PUBKYAUTH_SCHEME://", ignoreCase = true)) {
             clearActiveContactPaymentContext()
-            if (isPaykitEnabled.value) {
+            if (!fromMainScanner) {
+                hideSheet()
+                toast(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.other__qr_error_header),
+                    description = context.getString(R.string.other__qr_error_text),
+                )
+            } else if (isPaykitEnabled.value) {
                 handlePubkyAuth(input)
             } else {
                 hideSheet()
@@ -3220,6 +3229,15 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handlePubkyAuth(authUrl: String) {
+        if (pubkyRepo.publicKey.value == null) {
+            ToastEventBus.send(
+                type = Toast.ToastType.WARNING,
+                title = context.getString(R.string.pubky_auth__no_identity),
+                description = context.getString(R.string.pubky_auth__no_identity_desc),
+            )
+            return
+        }
+
         if (!pubkyRepo.hasSecretKey()) {
             ToastEventBus.send(
                 type = Toast.ToastType.WARNING,

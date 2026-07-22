@@ -645,6 +645,8 @@
     <string name="profile__suggestions_to_add">Suggestions To Add</string>
     <string name="profile__your_name">Your Name</string>
     <string name="profile__your_pubky">Your Pubky</string>
+    <string name="pubky_auth__no_identity">Pubky Identity Required</string>
+    <string name="pubky_auth__no_identity_desc">Create a Pubky identity in your profile to approve auth requests.</string>
     <string name="security__backup_button">Back Up</string>
     <string name="security__backup_funds">Now that you have some funds in your wallet, it is time to back up your money!</string>
     <string name="security__backup_funds_no">There are no funds in your wallet yet, but you can create a backup if you wish.</string>
@@ -1257,9 +1259,9 @@
     <string name="wallet__withdraw_error">Your withdrawal was unsuccessful. Please scan the QR code again or contact support.</string>
     <string name="watch_only_accounts__active_section">Active accounts</string>
     <string name="watch_only_accounts__copy_xpub">Copy xpub</string>
-    <string name="watch_only_accounts__description">Each approved service gets a separate Bitcoin account. Turn tracking off to unload an account without deleting its wallet history or revoking the service session.</string>
+    <string name="watch_only_accounts__description">Each approved Paykit server gets a separate Bitcoin account. Turn tracking off to unload an account without deleting its wallet history.</string>
     <string name="watch_only_accounts__details_title">Account details</string>
-    <string name="watch_only_accounts__empty_description">Accounts you approve for Paykit servers will appear here.</string>
+    <string name="watch_only_accounts__empty_description">Accounts appear here after you approve a Paykit server setup request.</string>
     <string name="watch_only_accounts__empty_title">No server accounts</string>
     <string name="watch_only_accounts__error_invalid_name">Enter an account name between 1 and 64 characters.</string>
     <string name="watch_only_accounts__error_invalid_xpub">Bitkit could not create a valid account xpub.</string>
@@ -1272,7 +1274,7 @@
     <string name="watch_only_accounts__save_name">Save name</string>
     <string name="watch_only_accounts__setup_not_confirmed">Setup not confirmed</string>
     <string name="watch_only_accounts__setup_not_finished">Setup did not finish. Retry the same authorization to use this account.</string>
-    <string name="watch_only_accounts__title">Server accounts</string>
+    <string name="watch_only_accounts__title">Server Accounts</string>
     <string name="watch_only_accounts__tracking">Track account</string>
     <string name="watch_only_accounts__tracking_disabled">Account tracking disabled</string>
     <string name="watch_only_accounts__tracking_enabled">Account tracking enabled</string>
