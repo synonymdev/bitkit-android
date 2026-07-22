@@ -4,7 +4,6 @@ import android.content.Context
 import com.synonym.bitkitcore.migrateBackupActivitiesJson
 import com.synonym.bitkitcore.migrateBackupActivityTagsJson
 import com.synonym.bitkitcore.migrateBackupPreActivityMetadataJson
-import com.synonym.vssclient.VssItem
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.FlowPreview
@@ -426,7 +425,7 @@ class BackupRepo @Inject constructor(
         }
     }
 
-    suspend fun triggerBackup(category: BackupCategory): Result<VssItem> = withContext(ioDispatcher) {
+    suspend fun triggerBackup(category: BackupCategory): Result<Unit> = withContext(ioDispatcher) {
         Logger.debug("Backup starting for: '$category'", context = TAG)
 
         val backupRequired = currentTimeMillis()
@@ -437,8 +436,10 @@ class BackupRepo @Inject constructor(
         }
 
         val data = runSuspendCatching { getBackupDataBytes(category) }
-            .onFailure { markBackupFailed(category, backupRequired, it) }
-            .getOrElse { return@withContext Result.failure(it) }
+            .getOrElse {
+                markBackupFailed(category, backupRequired, it)
+                return@withContext Result.failure(it)
+            }
 
         vssBackupClient.putObject(key = category.name, data = data)
             .onSuccess {
@@ -453,6 +454,7 @@ class BackupRepo @Inject constructor(
                 Logger.info("Backup succeeded for: '$category'", context = TAG)
             }
             .onFailure { markBackupFailed(category, backupRequired, it) }
+            .map {}
     }
 
     private suspend fun markBackupFailed(category: BackupCategory, backupRequired: Long, e: Throwable) {
@@ -541,16 +543,8 @@ class BackupRepo @Inject constructor(
 
     private suspend fun getWalletBackupDataBytes(): ByteArray {
         val transfers = db.transferDao().getAll()
-        val privateReservations = privatePaykitAddressReservationRepo.get().backupSnapshot()
-            .onFailure {
-                Logger.warn("Failed to snapshot private Paykit reservations", it, context = TAG)
-            }
-            .getOrThrow()
-        val paykitSdkBackupState = privatePaykitRepo.get().backupSnapshot()
-            .onFailure {
-                Logger.warn("Failed to snapshot Paykit SDK state", it, context = TAG)
-            }
-            .getOrThrow()
+        val privateReservations = privatePaykitAddressReservationRepo.get().backupSnapshot().getOrThrow()
+        val paykitSdkBackupState = privatePaykitRepo.get().backupSnapshot().getOrThrow()
 
         val payload = WalletBackupV1(
             createdAt = currentTimeMillis(),

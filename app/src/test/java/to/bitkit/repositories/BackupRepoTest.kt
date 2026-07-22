@@ -144,7 +144,8 @@ class BackupRepoTest : BaseUnitTest() {
             advanceTimeBy(5_000)
             runCurrent()
 
-            verify(privatePaykitRepo).backupSnapshot()
+            // still one attempt: the failed timestamp suppresses a retry until data changes again
+            verify(privatePaykitRepo, times(1)).backupSnapshot()
             verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
         } finally {
             sut.stopObservingBackups()
