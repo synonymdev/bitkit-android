@@ -632,6 +632,51 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertTrue(result.isFailure)
         assertTrue(cacheData.value.cleanupPending)
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
+        assertEquals(
+            setOf(WALLET_RECEIVER_PATH),
+            cacheData.value.contacts.getValue(CONTACT_KEY).publishedPrivatePaymentReceiverPaths,
+        )
+    }
+
+    @Test
+    fun `cleanup falls back per contact when shared linked receiver inspection fails`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to cachedPublishedContact(WALLET_RECEIVER_PATH),
+                OTHER_CONTACT_KEY to cachedPublishedContact(SERVER_RECEIVER_PATH),
+            ),
+        )
+        sut = createSut()
+        var linkedPeerReads = 0
+        whenever { paykitSdkService.linkedPeers() }.thenAnswer {
+            linkedPeerReads += 1
+            if (linkedPeerReads <= 2) error("link inspection failed")
+            emptyList<LinkedPeerRecord>()
+        }
+
+        val result = sut.removePublishedEndpointsForCleanup("test")
+
+        assertTrue(result.isFailure)
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(OTHER_CONTACT_KEY, SERVER_RECEIVER_PATH) }
+        assertTrue(CONTACT_KEY in cacheData.value.contacts)
+        assertTrue(OTHER_CONTACT_KEY !in cacheData.value.contacts)
+        assertTrue(cacheData.value.cleanupPending)
+    }
+
+    @Test
+    fun `invalid deleted contact key remains pending for cleanup`() = test {
+        val invalidPublicKey = "not-a-pubky"
+        cacheData.value = PrivatePaykitCacheData(
+            deletedContactCleanupPendingPublicKeys = setOf(invalidPublicKey),
+        )
+        sut = createSut()
+
+        val result = sut.retryPendingEndpointRemoval(emptyList())
+
+        assertTrue(result.isFailure)
+        assertEquals(setOf(invalidPublicKey), cacheData.value.deletedContactCleanupPendingPublicKeys)
         verifyBlocking(paykitSdkService, never()) { clearPrivatePaymentList(any(), any()) }
     }
 
