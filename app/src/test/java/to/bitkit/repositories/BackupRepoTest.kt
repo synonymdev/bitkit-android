@@ -114,6 +114,7 @@ class BackupRepoTest : BaseUnitTest() {
 
     @Test
     fun `automatic wallet backup marks failure when Paykit snapshot fails`() = test {
+        whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(3_000))
         whenever { privatePaykitRepo.backupSnapshot() }
             .thenReturn(Result.failure(BackupRepoTestError("paykit session missing capabilities")))
         val backupStatuses = MutableStateFlow(
@@ -134,8 +135,17 @@ class BackupRepoTest : BaseUnitTest() {
             advanceTimeBy(5_000)
             runCurrent()
 
+            verify(privatePaykitRepo).backupSnapshot()
             verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
-            assertFalse(backupStatuses.value.getValue(BackupCategory.WALLET).running)
+            val status = backupStatuses.value.getValue(BackupCategory.WALLET)
+            assertTrue(status.isRequired)
+            assertFalse(status.running)
+
+            advanceTimeBy(5_000)
+            runCurrent()
+
+            verify(privatePaykitRepo).backupSnapshot()
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
         } finally {
             sut.stopObservingBackups()
         }

@@ -4,6 +4,7 @@ import android.content.Context
 import com.synonym.bitkitcore.migrateBackupActivitiesJson
 import com.synonym.bitkitcore.migrateBackupActivityTagsJson
 import com.synonym.bitkitcore.migrateBackupPreActivityMetadataJson
+import com.synonym.vssclient.VssItem
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.FlowPreview
@@ -425,7 +426,7 @@ class BackupRepo @Inject constructor(
         }
     }
 
-    suspend fun triggerBackup(category: BackupCategory) = withContext(ioDispatcher) {
+    suspend fun triggerBackup(category: BackupCategory): Result<VssItem> = withContext(ioDispatcher) {
         Logger.debug("Backup starting for: '$category'", context = TAG)
 
         val backupRequired = currentTimeMillis()
@@ -437,7 +438,7 @@ class BackupRepo @Inject constructor(
 
         val data = runSuspendCatching { getBackupDataBytes(category) }
             .onFailure { markBackupFailed(category, backupRequired, it) }
-            .getOrNull() ?: return@withContext
+            .getOrElse { return@withContext Result.failure(it) }
 
         vssBackupClient.putObject(key = category.name, data = data)
             .onSuccess {
