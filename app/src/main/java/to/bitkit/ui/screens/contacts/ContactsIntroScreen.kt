@@ -68,7 +68,7 @@ private fun Content(
             PrimaryButton(
                 text = stringResource(R.string.contacts__intro_add_contact),
                 onClick = onContinue,
-                modifier = Modifier.testTag("ContactsIntroButton")
+                modifier = Modifier.testTag("ContactsIntro-button")
             )
             VerticalSpacer(16.dp)
         }

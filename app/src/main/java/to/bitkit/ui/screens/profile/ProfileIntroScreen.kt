@@ -56,7 +56,7 @@ fun ProfileIntroScreen(
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
                 onClick = onContinue,
-                modifier = Modifier.testTag("ProfileIntroButton")
+                modifier = Modifier.testTag("ProfileIntro-button")
             )
             VerticalSpacer(16.dp)
         }
