@@ -32,10 +32,10 @@ import to.bitkit.ext.DatePattern
 import to.bitkit.ext.formatted
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
-import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.txType
+import to.bitkit.ext.walletId
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.PubkyProfile
@@ -65,7 +65,7 @@ import java.time.ZoneId
 @Composable
 fun ActivityRow(
     item: Activity,
-    onClick: (String) -> Unit,
+    onClick: (Activity) -> Unit,
     testTag: String,
     title: String? = null,
     isHardware: Boolean = false,
@@ -101,7 +101,7 @@ fun ActivityRow(
 
     LaunchedEffect(item) {
         isCpfpChild = if (item is Activity.Onchain && activityListViewModel != null) {
-            activityListViewModel.isCpfpChildTransaction(item.v1.txId)
+            activityListViewModel.isCpfpChildTransaction(item.v1.txId, item.walletId())
         } else {
             false
         }
@@ -111,7 +111,7 @@ fun ActivityRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickableAlpha { onClick(item.rawId()) }
+            .clickableAlpha { onClick(item) }
             .background(color = Colors.Gray6, shape = Shapes.medium)
             .padding(16.dp)
             .testTag(testTag)

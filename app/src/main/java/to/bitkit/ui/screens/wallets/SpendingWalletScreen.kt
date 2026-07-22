@@ -63,7 +63,7 @@ fun SpendingWalletScreen(
     channels: ImmutableList<ChannelDetails>,
     lightningActivities: ImmutableList<Activity>,
     onAllActivityButtonClick: () -> Unit,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (Activity) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
     onTransferToSavingsClick: () -> Unit,
     onTransferFromSavingsClick: () -> Unit,

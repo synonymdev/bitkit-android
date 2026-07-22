@@ -291,13 +291,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.mainScreenEffect.test {
             advanceUntilIdle()
-            hwReceivedTxs.emit(HwWalletReceivedTx(txid = txId, sats = 21uL))
+            hwReceivedTxs.emit(HwWalletReceivedTx(txid = txId, sats = 21uL, walletId = "hardware-wallet"))
             advanceUntilIdle()
 
             assertEquals(txId, sut.transactionSheet.value.activityId)
             sut.onClickActivityDetail()
 
-            assertEquals(MainScreenEffect.Navigate(Routes.ActivityDetail(txId)), awaitItem())
+            assertEquals(
+                MainScreenEffect.Navigate(Routes.ActivityDetail(txId, "hardware-wallet")),
+                awaitItem(),
+            )
         }
         verify(activityRepo, never()).findActivityByPaymentId(any(), any(), any(), any())
     }

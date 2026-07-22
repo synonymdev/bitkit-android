@@ -42,6 +42,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.synonym.bitkitcore.Activity
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -52,6 +53,8 @@ import kotlinx.serialization.Serializable
 import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.appWidgetRefreshScheduler
 import to.bitkit.env.Env
+import to.bitkit.ext.rawId
+import to.bitkit.ext.walletId
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.repositories.ConnectivityState
@@ -1039,7 +1042,7 @@ private fun NavGraphBuilder.home(
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         HardwareWalletScreen(
             deviceId = deviceId,
-            onActivityItemClick = { id -> navController.navigateToActivityItem(id) },
+            onActivityItemClick = { navController.navigateToActivityItem(it) },
             onTransferToSpendingClick = { selectedDeviceId ->
                 navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, selectedDeviceId)
             },
@@ -1056,7 +1059,7 @@ private fun NavGraphBuilder.allActivity(
         AllActivityScreen(
             viewModel = activityListViewModel,
             onBack = { navController.popBackStack() },
-            onActivityItemClick = { id -> navController.navigateToActivityItem(id) },
+            onActivityItemClick = { navController.navigateToActivityItem(it) },
         )
     }
 }
@@ -1595,10 +1598,11 @@ private fun NavGraphBuilder.activityItem(
     settingsViewModel: SettingsViewModel,
 ) {
     composableWithDefaultTransitions<Routes.ActivityDetail> {
+        val route = it.toRoute<Routes.ActivityDetail>()
         ActivityDetailScreen(
             listViewModel = activityListViewModel,
-            route = it.toRoute(),
-            onExploreClick = { id -> navController.navigateToActivityExplore(id) },
+            route = route,
+            onExploreClick = { id -> navController.navigateToActivityExplore(id, route.walletId) },
             onAssignContactClick = { id -> navController.navigateTo(Routes.ActivityAssignContact(id)) },
             onChannelClick = { channelId ->
                 navController.navigateTo(Routes.ChannelDetail(channelId))
@@ -1861,9 +1865,15 @@ fun NavController.navigateToTransferIntro() = navigateTo(Routes.TransferIntro)
 
 fun NavController.navigateToTransferFunding() = navigateTo(Routes.Funding)
 
-fun NavController.navigateToActivityItem(id: String) = navigateTo(Routes.ActivityDetail(id))
+fun NavController.navigateToActivityItem(activity: Activity) = navigateTo(
+    Routes.ActivityDetail(
+        id = activity.rawId(),
+        walletId = activity.walletId(),
+    )
+)
 
-fun NavController.navigateToActivityExplore(id: String) = navigateTo(Routes.ActivityExplore(id))
+fun NavController.navigateToActivityExplore(id: String, walletId: String?) =
+    navigateTo(Routes.ActivityExplore(id, walletId))
 
 fun NavController.navigateToLogDetail(fileName: String) = navigateTo(Routes.LogDetail(fileName))
 
@@ -2084,13 +2094,13 @@ sealed interface Routes {
     data class LnurlChannel(val uri: String, val callback: String, val k1: String) : Routes
 
     @Serializable
-    data class ActivityDetail(val id: String) : Routes
+    data class ActivityDetail(val id: String, val walletId: String? = null) : Routes
 
     @Serializable
     data class ActivityAssignContact(val id: String) : Routes
 
     @Serializable
-    data class ActivityExplore(val id: String) : Routes
+    data class ActivityExplore(val id: String, val walletId: String? = null) : Routes
 
     @Serializable
     data object BuyIntro : Routes

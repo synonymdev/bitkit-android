@@ -27,13 +27,17 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.isFromHardwareWallet
 import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
+import to.bitkit.ext.scopedId
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.txType
+import to.bitkit.ext.walletId
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.PubkyProfile
+import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PubkyRepo
@@ -60,16 +64,17 @@ class ActivityListViewModel @Inject constructor(
     val onchainActivities = _onchainActivities.asStateFlow()
 
     private val _latestActivities = MutableStateFlow<ImmutableList<Activity>?>(null)
-    private val _localActivityIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _persistedActivityIds = MutableStateFlow<Set<String>>(emptySet())
+    private val _persistedHardwareIds = MutableStateFlow<Set<String>>(emptySet())
 
     // Merge the device's watch-only hardware-wallet activity into the home list,
     // newest first, capped at the same limit as the on-chain/lightning list.
     val latestActivities: StateFlow<ImmutableList<Activity>?> = combine(
         _latestActivities,
         hwWalletRepo.activities,
-        _localActivityIds,
-    ) { localActivities, hardwareActivities, localActivityIds ->
-        val visibleHardwareActivities = hardwareActivities.withoutLocalDuplicates(localActivityIds)
+        _persistedActivityIds,
+    ) { localActivities, hardwareActivities, persistedActivityIds ->
+        val visibleHardwareActivities = hardwareActivities.withoutPersistedDuplicates(persistedActivityIds)
         if (localActivities == null && visibleHardwareActivities.isEmpty()) {
             null
         } else {
@@ -93,10 +98,9 @@ class ActivityListViewModel @Inject constructor(
 
     val hardwareIds: StateFlow<ImmutableSet<String>> = combine(
         hwWalletRepo.activities,
-        _localActivityIds,
-    ) { activities, localActivityIds ->
-        activities.withoutLocalDuplicates(localActivityIds)
-            .map { it.rawId() }
+        _persistedHardwareIds,
+    ) { activities, persistedHardwareIds ->
+        (activities.map { it.scopedId() } + persistedHardwareIds)
             .toImmutableSet()
     }
         .stateInScope(persistentSetOf())
@@ -144,11 +148,11 @@ class ActivityListViewModel @Inject constructor(
             _filters.map { it.copy(searchText = "") },
             activityRepo.activitiesChanged,
             hwWalletRepo.activities,
-            _localActivityIds,
-        ) { debouncedSearch, filtersWithoutSearch, _, hardwareActivities, localActivityIds ->
+            _persistedActivityIds,
+        ) { debouncedSearch, filtersWithoutSearch, _, hardwareActivities, persistedActivityIds ->
             val filters = filtersWithoutSearch.copy(searchText = debouncedSearch)
             fetchFilteredActivities(filters)?.let { activities ->
-                (activities + hardwareActivities.withoutLocalDuplicates(localActivityIds).filteredWith(filters))
+                (activities + hardwareActivities.withoutPersistedDuplicates(persistedActivityIds).filteredWith(filters))
                     .sortedByDescending { it.timestamp() }
             }
         }.collect { activities ->
@@ -156,10 +160,6 @@ class ActivityListViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Watch-only hardware-wallet activities live outside the activity database, so the
-     * list filters are applied to them here. They carry no tags and are never transfers.
-     */
     private fun List<Activity>.filteredWith(filters: ActivityFilters): List<Activity> {
         if (filters.tags.isNotEmpty() || filters.tab == ActivityTab.OTHER) return emptyList()
 
@@ -181,17 +181,28 @@ class ActivityListViewModel @Inject constructor(
         }
     }
 
-    private fun List<Activity>.withoutLocalDuplicates(localActivityIds: Set<String>) = filterNot {
-        it.rawId() in localActivityIds
+    private fun List<Activity>.withoutPersistedDuplicates(persistedActivityIds: Set<String>) = filterNot {
+        it.scopedId() in persistedActivityIds
     }
 
     private suspend fun refreshActivityState() {
-        val all = activityRepo.getActivities(filter = ActivityFilter.ALL).getOrNull() ?: emptyList()
+        val all = activityRepo.getActivities(walletId = null, filter = ActivityFilter.ALL).getOrNull() ?: emptyList()
         val filtered = filterOutReplacedSentTransactions(all)
-        _localActivityIds.update { filtered.map { it.rawId() }.toSet() }
+        _persistedActivityIds.update { filtered.map { it.scopedId() }.toSet() }
+        _persistedHardwareIds.update {
+            filtered.filter { it.isFromHardwareWallet() }.map { it.scopedId() }.toSet()
+        }
         _latestActivities.update { filtered.take(SIZE_LATEST).toImmutableList() }
-        _lightningActivities.update { filtered.filterIsInstance<Activity.Lightning>().toImmutableList() }
-        _onchainActivities.update { filtered.filterIsInstance<Activity.Onchain>().toImmutableList() }
+        _lightningActivities.update {
+            filtered.filterIsInstance<Activity.Lightning>()
+                .filter { it.v1.walletId == WalletScope.default }
+                .toImmutableList()
+        }
+        _onchainActivities.update {
+            filtered.filterIsInstance<Activity.Onchain>()
+                .filter { it.v1.walletId == WalletScope.default }
+                .toImmutableList()
+        }
     }
 
     private suspend fun fetchFilteredActivities(filters: ActivityFilters): List<Activity>? {
@@ -202,6 +213,7 @@ class ActivityListViewModel @Inject constructor(
         }
 
         val activities = activityRepo.getActivities(
+            walletId = null,
             filter = ActivityFilter.ALL,
             txType = txType,
             tags = filters.tags.takeIf { it.isNotEmpty() }?.toList(),
@@ -223,8 +235,12 @@ class ActivityListViewModel @Inject constructor(
     }
 
     private suspend fun filterOutReplacedSentTransactions(activities: List<Activity>): List<Activity> {
-        val txIdsInBoostTxIds = activityRepo.getTxIdsInBoostTxIds()
-        return activities.filterNot { it.isReplacedSentTransaction(txIdsInBoostTxIds) }
+        val boostTxIdsByWallet = activities.map { it.walletId() }.distinct().associateWith {
+            activityRepo.getTxIdsInBoostTxIds(it)
+        }
+        return activities.filterNot {
+            it.isReplacedSentTransaction(boostTxIdsByWallet[it.walletId()].orEmpty())
+        }
     }
 
     fun updateAvailableTags() {
@@ -251,8 +267,8 @@ class ActivityListViewModel @Inject constructor(
         activityRepo.removeAllActivities()
     }
 
-    suspend fun isCpfpChildTransaction(txId: String): Boolean {
-        return activityRepo.isCpfpChildTransaction(txId)
+    suspend fun isCpfpChildTransaction(txId: String, walletId: String): Boolean {
+        return activityRepo.isCpfpChildTransaction(txId, walletId)
     }
 
     private fun <T> Flow<T>.stateInScope(

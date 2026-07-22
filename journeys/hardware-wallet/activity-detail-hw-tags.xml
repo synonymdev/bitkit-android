@@ -1,0 +1,42 @@
+<journey name="Hardware Wallet Activity Tags And Inputs Outputs">
+  <description>
+    Verifies wallet-scoped Core tags and Electrum transaction details for a hardware activity.
+    Requires a paired Bridge emulator with at least two confirmed hardware receives and the
+    tag "hwtest" absent from the selected activity before the run.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Tap "Show All" beneath the activity list
+    </action>
+    <action>
+      Tap a blue hardware received row that is not the Transfer row
+    </action>
+    <action>
+      Verify the activity detail screen shows a blue icon and the selected received amount
+    </action>
+    <action>
+      Tap "Add Tag", enter "hwtest", and confirm the tag
+    </action>
+    <action>
+      Verify a tag chip labelled "hwtest" is shown
+    </action>
+    <action>
+      Navigate back, reopen the same blue hardware row, and verify the "hwtest" tag is still shown
+    </action>
+    <action>
+      Tap "Explore"
+    </action>
+    <action>
+      Verify the Activity Explorer screen shows an Inputs section and an Outputs section, each with at least one entry
+    </action>
+    <action>
+      Navigate back to All Activity, open the tag filter, and select "hwtest"
+    </action>
+    <action>
+      Verify the tagged blue hardware activity remains listed and the other untagged hardware rows are absent
+    </action>
+  </actions>
+</journey>

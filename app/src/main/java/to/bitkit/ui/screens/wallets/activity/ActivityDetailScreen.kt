@@ -115,8 +115,8 @@ fun ActivityDetailScreen(
     val uiState by detailViewModel.uiState.collectAsStateWithLifecycle()
 
     // Load activity on composition
-    LaunchedEffect(route.id) {
-        detailViewModel.loadActivity(route.id)
+    LaunchedEffect(route.id, route.walletId) {
+        detailViewModel.loadActivity(route.id, route.walletId)
     }
 
     // Clear state on disposal
@@ -598,60 +598,55 @@ private fun ActivityDetailContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            val showTagAction = !isHardware
-            if (showContactActions || showTagAction) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    if (showContactActions) {
-                        PrimaryButton(
-                            text = stringResource(
-                                if (assignedContact != null) {
-                                    R.string.wallet__activity_detach
-                                } else {
-                                    R.string.wallet__activity_assign
-                                }
-                            ),
-                            size = ButtonSize.Small,
-                            onClick = if (assignedContact != null) onDetachClick else onAssignClick,
-                            enabled = !isSelfSend,
-                            icon = {
-                                Icon(
-                                    painter = painterResource(
-                                        if (assignedContact != null) {
-                                            R.drawable.ic_user_minus
-                                        } else {
-                                            R.drawable.ic_user_plus
-                                        }
-                                    ),
-                                    contentDescription = null,
-                                    tint = accentColor,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    if (showTagAction) {
-                        PrimaryButton(
-                            text = stringResource(R.string.wallet__activity_tag),
-                            size = ButtonSize.Small,
-                            onClick = onAddTagClick,
-                            icon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_tag),
-                                    contentDescription = null,
-                                    tint = accentColor,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                            },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("ActivityTag")
-                        )
-                    }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (showContactActions) {
+                    PrimaryButton(
+                        text = stringResource(
+                            if (assignedContact != null) {
+                                R.string.wallet__activity_detach
+                            } else {
+                                R.string.wallet__activity_assign
+                            }
+                        ),
+                        size = ButtonSize.Small,
+                        onClick = if (assignedContact != null) onDetachClick else onAssignClick,
+                        enabled = !isSelfSend,
+                        icon = {
+                            Icon(
+                                painter = painterResource(
+                                    if (assignedContact != null) {
+                                        R.drawable.ic_user_minus
+                                    } else {
+                                        R.drawable.ic_user_plus
+                                    }
+                                ),
+                                contentDescription = null,
+                                tint = accentColor,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        },
+                        modifier = Modifier.weight(1f)
+                    )
                 }
+                PrimaryButton(
+                    text = stringResource(R.string.wallet__activity_tag),
+                    size = ButtonSize.Small,
+                    onClick = onAddTagClick,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_tag),
+                            contentDescription = null,
+                            tint = accentColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("ActivityTag")
+                )
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),

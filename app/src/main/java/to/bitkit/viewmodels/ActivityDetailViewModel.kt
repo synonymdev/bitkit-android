@@ -1,6 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import androidx.compose.runtime.Stable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.synonym.bitkitcore.Activity
@@ -18,13 +19,17 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
+import to.bitkit.ext.isFromHardwareWallet
 import to.bitkit.ext.rawId
+import to.bitkit.ext.walletId
+import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwWalletRepo
@@ -46,6 +51,9 @@ class ActivityDetailViewModel @Inject constructor(
     private val _txDetails = MutableStateFlow<TransactionDetails?>(null)
     val txDetails = _txDetails.asStateFlow()
 
+    private val _isTransactionDetailsLoading = MutableStateFlow(false)
+    val isTransactionDetailsLoading = _isTransactionDetailsLoading.asStateFlow()
+
     private val _tags = MutableStateFlow<ImmutableList<String>>(persistentListOf())
     val tags = _tags.asStateFlow()
 
@@ -58,30 +66,30 @@ class ActivityDetailViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ActivityDetailUiState())
     val uiState: StateFlow<ActivityDetailUiState> = _uiState.asStateFlow()
 
-    fun loadActivity(activityId: String) {
+    fun loadActivity(activityId: String, walletId: String? = null) {
+        val resolvedWalletId = walletId ?: WalletScope.default
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(activityLoadState = ActivityLoadState.Loading) }
 
-            activityRepo.getActivity(activityId)
+            activityRepo.getActivity(activityId, resolvedWalletId)
                 .onSuccess { activity ->
                     if (activity != null) {
                         this@ActivityDetailViewModel.activity = activity
-                        _uiState.update { it.copy(activityLoadState = ActivityLoadState.Success(activity)) }
+                        _uiState.update {
+                            it.copy(
+                                activityLoadState = ActivityLoadState.Success(activity),
+                                isHardwareActivity = activity.isFromHardwareWallet(),
+                            )
+                        }
                         loadTags()
-                        observeActivityChanges(activityId)
+                        observeActivityChanges(activityId, resolvedWalletId)
                     } else {
-                        loadHwWalletActivity(activityId)
+                        loadHwWalletActivity(activityId, resolvedWalletId)
                     }
                 }
-                .onFailure { e ->
-                    Logger.error("Failed to load activity $activityId", e, TAG)
-                    _uiState.update {
-                        it.copy(
-                            activityLoadState = ActivityLoadState.Error(
-                                e.message ?: context.getString(R.string.wallet__activity_error_load_failed)
-                            )
-                        )
-                    }
+                .onFailure {
+                    Logger.warn("Failed to load activity '$activityId' from Core", it, context = TAG)
+                    loadHwWalletActivity(activityId, resolvedWalletId, it)
                 }
         }
     }
@@ -92,73 +100,71 @@ class ActivityDetailViewModel @Inject constructor(
         _uiState.update { it.copy(activityLoadState = ActivityLoadState.Initial, isHardwareActivity = false) }
         activity = null
         _tags.update { persistentListOf() }
+        clearTransactionDetails()
     }
 
-    private fun loadHwWalletActivity(activityId: String) {
-        val hwActivity = hwWalletRepo.activities.value.find { it.rawId() == activityId }
+    private fun loadHwWalletActivity(
+        activityId: String,
+        walletId: String,
+        coreError: Throwable? = null,
+        observeChanges: Boolean = true,
+    ) {
+        val hwActivity = hwWalletRepo.activities.value.find {
+            it.rawId() == activityId && it.walletId() == walletId
+        }
         if (hwActivity != null) {
             activity = hwActivity
             _uiState.update {
                 it.copy(activityLoadState = ActivityLoadState.Success(hwActivity), isHardwareActivity = true)
             }
-            observeHwWalletActivityChanges(activityId)
+            if (observeChanges) observeActivityChanges(activityId, walletId)
         } else {
             _uiState.update {
                 it.copy(
                     activityLoadState = ActivityLoadState.Error(
-                        context.getString(R.string.wallet__activity_error_not_found)
+                        coreError?.message ?: context.getString(R.string.wallet__activity_error_not_found)
                     )
                 )
             }
         }
     }
 
-    private fun observeHwWalletActivityChanges(activityId: String) {
+    private fun observeActivityChanges(activityId: String, walletId: String) {
         observeJob?.cancel()
         observeJob = viewModelScope.launch(bgDispatcher) {
-            hwWalletRepo.activities.collect { activities ->
-                val updatedActivity = activities.find { it.rawId() == activityId } ?: return@collect
-                activity = updatedActivity
-                _uiState.update {
-                    it.copy(
-                        activityLoadState = ActivityLoadState.Success(updatedActivity),
-                        isHardwareActivity = true,
-                    )
-                }
+            combine(activityRepo.activitiesChanged, hwWalletRepo.activities) { _, _ -> Unit }.collect {
+                reloadActivity(activityId, walletId)
             }
         }
     }
 
-    private fun observeActivityChanges(activityId: String) {
-        observeJob?.cancel()
-        observeJob = viewModelScope.launch(bgDispatcher) {
-            activityRepo.activitiesChanged.collect {
-                reloadActivity(activityId)
-            }
-        }
-    }
-
-    private suspend fun reloadActivity(activityId: String) {
-        activityRepo.getActivity(activityId)
+    private suspend fun reloadActivity(activityId: String, walletId: String) {
+        activityRepo.getActivity(activityId, walletId)
             .onSuccess { updatedActivity ->
                 if (updatedActivity != null) {
                     activity = updatedActivity
                     _uiState.update {
-                        it.copy(activityLoadState = ActivityLoadState.Success(updatedActivity))
+                        it.copy(
+                            activityLoadState = ActivityLoadState.Success(updatedActivity),
+                            isHardwareActivity = updatedActivity.isFromHardwareWallet(),
+                        )
                     }
                     loadTags()
+                } else {
+                    loadHwWalletActivity(activityId, walletId, observeChanges = false)
                 }
             }
-            .onFailure { error ->
-                Logger.warn("Failed to reload activity $activityId", error, context = TAG)
+            .onFailure {
+                Logger.warn("Failed to reload activity '$activityId'", it, context = TAG)
                 // Keep showing the last known state on reload failure
             }
     }
 
     fun loadTags() {
-        val id = activity?.rawId() ?: return
+        val currentActivity = activity ?: return
+        val id = currentActivity.rawId()
         viewModelScope.launch(bgDispatcher) {
-            activityRepo.getActivityTags(id)
+            activityRepo.getActivityTags(id, currentActivity.walletId())
                 .onSuccess { activityTags ->
                     _tags.update { activityTags.toImmutableList() }
                 }
@@ -170,9 +176,10 @@ class ActivityDetailViewModel @Inject constructor(
     }
 
     fun removeTag(tag: String) {
-        val id = activity?.rawId() ?: return
+        val currentActivity = activity ?: return
+        val id = currentActivity.rawId()
         viewModelScope.launch(bgDispatcher) {
-            activityRepo.removeTagsFromActivity(id, listOf(tag))
+            activityRepo.removeTagsFromActivity(id, listOf(tag), currentActivity.walletId())
                 .onSuccess {
                     loadTags()
                 }
@@ -183,9 +190,10 @@ class ActivityDetailViewModel @Inject constructor(
     }
 
     fun addTag(tag: String) {
-        val id = activity?.rawId() ?: return
+        val currentActivity = activity ?: return
+        val id = currentActivity.rawId()
         viewModelScope.launch(bgDispatcher) {
-            activityRepo.addTagsToActivity(id, listOf(tag))
+            activityRepo.addTagsToActivity(id, listOf(tag), currentActivity.walletId())
                 .onSuccess {
                     settingsStore.addLastUsedTag(tag)
                     loadTags()
@@ -197,13 +205,14 @@ class ActivityDetailViewModel @Inject constructor(
     }
 
     fun detachContact() {
-        val id = activity?.rawId() ?: return
+        val currentActivity = activity ?: return
+        val id = currentActivity.rawId()
         viewModelScope.launch(bgDispatcher) {
             activityRepo.clearContact(
                 forPaymentId = id,
                 syncLdkPayments = false,
             ).onSuccess {
-                reloadActivity(id)
+                reloadActivity(id, currentActivity.walletId())
             }.onFailure {
                 Logger.error("Failed to detach contact for activity '$id'", it, context = TAG)
             }
@@ -211,8 +220,10 @@ class ActivityDetailViewModel @Inject constructor(
     }
 
     fun fetchTransactionDetails(txid: String) {
+        val walletId = activity?.walletId() ?: return
         viewModelScope.launch(bgDispatcher) {
-            activityRepo.getTransactionDetails(txid)
+            _isTransactionDetailsLoading.update { true }
+            activityRepo.getTransactionDetails(txid, walletId)
                 .onSuccess { transactionDetails ->
                     _txDetails.update { transactionDetails }
                 }
@@ -220,11 +231,13 @@ class ActivityDetailViewModel @Inject constructor(
                     Logger.error("fetchTransactionDetails error", e, context = TAG)
                     _txDetails.update { null }
                 }
+            _isTransactionDetailsLoading.update { false }
         }
     }
 
     fun clearTransactionDetails() {
         _txDetails.update { null }
+        _isTransactionDetailsLoading.update { false }
     }
 
     fun onClickBoost() {
@@ -236,10 +249,10 @@ class ActivityDetailViewModel @Inject constructor(
     }
 
     suspend fun getBoostTxDoesExist(boostTxIds: List<String>): ImmutableMap<String, Boolean> =
-        activityRepo.getBoostTxDoesExist(boostTxIds).toImmutableMap()
+        activityRepo.getBoostTxDoesExist(boostTxIds, activity?.walletId() ?: WalletScope.default).toImmutableMap()
 
     suspend fun isCpfpChildTransaction(txId: String): Boolean {
-        return activityRepo.isCpfpChildTransaction(txId)
+        return activityRepo.isCpfpChildTransaction(txId, activity?.walletId() ?: WalletScope.default)
     }
 
     suspend fun findOrderForTransfer(
@@ -284,6 +297,7 @@ class ActivityDetailViewModel @Inject constructor(
         data class Error(val message: String) : ActivityLoadState
     }
 
+    @Stable
     data class ActivityDetailUiState(
         val activityLoadState: ActivityLoadState = ActivityLoadState.Initial,
         val isHardwareActivity: Boolean = false,

@@ -40,7 +40,7 @@ import to.bitkit.viewmodels.ActivityListViewModel
 fun AllActivityScreen(
     viewModel: ActivityListViewModel,
     onBack: () -> Unit,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (Activity) -> Unit,
 ) {
     val app = appViewModel ?: return
     val filteredActivities by viewModel.filteredActivities.collectAsStateWithLifecycle()
@@ -90,7 +90,7 @@ private fun AllActivityScreenContent(
     onBackClick: () -> Unit,
     onTagClick: () -> Unit,
     onDateRangeClick: () -> Unit,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (Activity) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
 ) {
     val listState = rememberLazyListState()

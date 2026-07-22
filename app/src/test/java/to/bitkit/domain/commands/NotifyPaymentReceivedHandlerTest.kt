@@ -9,6 +9,7 @@ import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -20,6 +21,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.test.BaseUnitTest
@@ -73,7 +75,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
             on { paymentHash } doReturn "hash123"
             on { paymentId } doReturn "paymentId123"
         }
-        whenever(activityRepo.isActivitySeen(any())).thenReturn(false)
+        whenever(activityRepo.isActivitySeen(any(), eq(WalletScope.default))).thenReturn(false)
         val command = NotifyPaymentReceived.Command.Lightning(event = event)
 
         val result = sut(command)
@@ -85,7 +87,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertEquals(NewTransactionSheetDirection.RECEIVED, paymentResult.sheet.direction)
         assertEquals("hash123", paymentResult.sheet.paymentHashOrTxId)
         assertEquals(1000L, paymentResult.sheet.sats)
-        verify(activityRepo).markActivityAsSeen("paymentId123")
+        verify(activityRepo).markActivityAsSeen("paymentId123", WalletScope.default)
     }
 
     @Test
@@ -95,7 +97,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
             on { paymentHash } doReturn "hash123"
             on { paymentId } doReturn "paymentId123"
         }
-        whenever(activityRepo.isActivitySeen(any())).thenReturn(false)
+        whenever(activityRepo.isActivitySeen(any(), eq(WalletScope.default))).thenReturn(false)
         val command = NotifyPaymentReceived.Command.Lightning(
             event = event,
             includeNotification = true,
@@ -133,7 +135,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertEquals(NewTransactionSheetDirection.RECEIVED, paymentResult.sheet.direction)
         assertEquals("txid456", paymentResult.sheet.paymentHashOrTxId)
         assertEquals(5000L, paymentResult.sheet.sats)
-        verify(activityRepo).markOnchainActivityAsSeen("txid456")
+        verify(activityRepo).markOnchainActivityAsSeen("txid456", WalletScope.default)
     }
 
     @Test
@@ -172,7 +174,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         inOrder(activityRepo) {
             verify(activityRepo).handleOnchainTransactionReceived("txid789", details)
             verify(activityRepo).shouldShowReceivedSheet("txid789", 7500uL)
-            verify(activityRepo).markOnchainActivityAsSeen("txid789")
+            verify(activityRepo).markOnchainActivityAsSeen("txid789", WalletScope.default)
         }
     }
 
@@ -190,7 +192,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
 
         sut(command)
 
-        verify(activityRepo, never()).markOnchainActivityAsSeen(any())
+        verify(activityRepo, never()).markOnchainActivityAsSeen(any(), any())
     }
 
     @Test
@@ -200,14 +202,14 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
             on { paymentHash } doReturn "hash123"
             on { paymentId } doReturn "paymentId123"
         }
-        whenever(activityRepo.isActivitySeen(any())).thenReturn(false)
+        whenever(activityRepo.isActivitySeen(any(), eq(WalletScope.default))).thenReturn(false)
         val command = NotifyPaymentReceived.Command.Lightning(event = event)
 
         sut(command)
 
         verify(activityRepo, never()).handleOnchainTransactionReceived(any(), any())
         verify(activityRepo, never()).shouldShowReceivedSheet(any(), any())
-        verify(activityRepo, never()).markOnchainActivityAsSeen(any())
+        verify(activityRepo, never()).markOnchainActivityAsSeen(any(), any())
     }
 
     @Test
@@ -217,7 +219,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
             on { paymentHash } doReturn "hash123"
             on { paymentId } doReturn "paymentId123"
         }
-        whenever(activityRepo.isActivitySeen("paymentId123")).thenReturn(true)
+        whenever(activityRepo.isActivitySeen("paymentId123", WalletScope.default)).thenReturn(true)
         val command = NotifyPaymentReceived.Command.Lightning(event = event)
 
         val result = sut(command)
@@ -225,7 +227,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         val paymentResult = result.getOrThrow()
         assertTrue(paymentResult is NotifyPaymentReceived.Result.Skip)
-        verify(activityRepo, never()).markActivityAsSeen(any())
+        verify(activityRepo, never()).markActivityAsSeen(any(), any())
     }
 
     @Test

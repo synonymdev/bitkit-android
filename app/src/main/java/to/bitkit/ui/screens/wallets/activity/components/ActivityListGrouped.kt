@@ -28,7 +28,7 @@ import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import to.bitkit.R
-import to.bitkit.ext.rawId
+import to.bitkit.ext.scopedId
 import to.bitkit.ui.activityListViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Caption13Up
@@ -47,7 +47,7 @@ import java.util.Locale
 @Composable
 fun ActivityListGrouped(
     items: ImmutableList<Activity>?,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (Activity) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
     modifier: Modifier = Modifier,
     listState: LazyListState = rememberLazyListState(),
@@ -82,8 +82,8 @@ fun ActivityListGrouped(
                         when (item) {
                             is String -> "header_$item"
                             is Activity -> when (item) {
-                                is Activity.Lightning -> "lightning_${item.rawId()}"
-                                is Activity.Onchain -> "onchain_${item.rawId()}"
+                                is Activity.Lightning -> "lightning_${item.scopedId()}"
+                                is Activity.Onchain -> "onchain_${item.scopedId()}"
                             }
 
                             else -> "item_$index"
@@ -120,7 +120,7 @@ fun ActivityListGrouped(
                                     onClick = onActivityItemClick,
                                     testTag = "$activityTestTagPrefix-$index",
                                     title = titleProvider(item) ?: contactActivityTitle(item, contacts),
-                                    isHardware = item.rawId() in hardwareIds,
+                                    isHardware = item.scopedId() in hardwareIds,
                                     contact = if (showContactAvatar) contactForActivity(item, contacts) else null,
                                 )
                                 VerticalSpacer(16.dp)
@@ -165,7 +165,7 @@ fun ActivityListGrouped(
 @Suppress("LongMethod", "LongParameterList")
 fun LazyListScope.activityListGroupedItems(
     items: ImmutableList<Activity>?,
-    onActivityItemClick: (String) -> Unit,
+    onActivityItemClick: (Activity) -> Unit,
     onEmptyActivityRowClick: () -> Unit,
     showFooter: Boolean = false,
     onAllActivityButtonClick: () -> Unit = {},
@@ -180,8 +180,8 @@ fun LazyListScope.activityListGroupedItems(
                 when (item) {
                     is String -> "header_$item"
                     is Activity -> when (item) {
-                        is Activity.Lightning -> "lightning_${item.rawId()}"
-                        is Activity.Onchain -> "onchain_${item.rawId()}"
+                        is Activity.Lightning -> "lightning_${item.scopedId()}"
+                        is Activity.Onchain -> "onchain_${item.scopedId()}"
                     }
 
                     else -> "item_$index"
@@ -217,7 +217,7 @@ fun LazyListScope.activityListGroupedItems(
                             item = item,
                             onClick = onActivityItemClick,
                             testTag = "Activity-$index",
-                            isHardware = item.rawId() in hardwareIds,
+                            isHardware = item.scopedId() in hardwareIds,
                         )
                         VerticalSpacer(16.dp)
                     }
