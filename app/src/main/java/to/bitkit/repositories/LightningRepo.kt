@@ -146,6 +146,7 @@ class LightningRepo @Inject constructor(
     private val syncPending = AtomicBoolean(false)
     private val syncRetryJob = AtomicReference<Job?>(null)
     private val pendingStopJob = AtomicReference<Job?>(null)
+    private val pendingStopLock = Any()
     private val lifecycleMutex = Mutex()
     private val isChangingAddressType = AtomicBoolean(false)
 
@@ -544,8 +545,12 @@ class LightningRepo @Inject constructor(
     /**
      * Defers [stop] so a brief background/foreground cycle does not tear the node down and rebuild it.
      * Runs on the repo scope so a cancelled ViewModel cannot drop the pending stop.
+     *
+     * Scheduling and cancelling are atomic: [cancelPendingStop] runs on the repo dispatcher while this
+     * runs on the caller thread, so an interleaved cancel could otherwise miss the job being installed
+     * and stop the node after the app is back in the foreground.
      */
-    fun stopDebounced() {
+    fun stopDebounced() = synchronized(pendingStopLock) {
         val job = scope.launch {
             delay(BACKGROUND_STOP_DELAY)
             stop()
@@ -553,7 +558,7 @@ class LightningRepo @Inject constructor(
         pendingStopJob.getAndSet(job)?.cancel()
     }
 
-    fun cancelPendingStop() = run { pendingStopJob.getAndSet(null)?.cancel() }
+    fun cancelPendingStop() = synchronized(pendingStopLock) { pendingStopJob.getAndSet(null)?.cancel() }
 
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
         lifecycleMutex.withLock {
