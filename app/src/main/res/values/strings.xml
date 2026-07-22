@@ -1148,6 +1148,7 @@
     <string name="wallet__minimum">MINIMUM</string>
     <string name="wallet__note">Note</string>
     <string name="wallet__payment_received">Received Bitcoin</string>
+    <string name="wallet__payment_request">Payment Request</string>
     <string name="wallet__peer_disconnected">Peer disconnected.</string>
     <string name="wallet__receive">Receive</string>
     <string name="wallet__receive__cjit">Receive Lightning funds</string>

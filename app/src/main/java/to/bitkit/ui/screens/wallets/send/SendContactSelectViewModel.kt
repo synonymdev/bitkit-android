@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
+import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
@@ -69,11 +70,19 @@ class SendContactSelectViewModel @Inject constructor(
                 .onSuccess { result ->
                     when (result) {
                         is PublicPaykitPaymentResult.Opened ->
-                            _effects.emit(SendContactSelectEffect.OpenPayment(result.paymentRequest, publicKey))
+                            _effects.emit(
+                                SendContactSelectEffect.OpenPayment(
+                                    result.paymentRequest,
+                                    publicKey,
+                                    result.privatePaymentContext,
+                                )
+                            )
                         PublicPaykitPaymentResult.NoEndpoint ->
                             showPayError(R.string.slashtags__error_pay_empty_msg)
                         PublicPaykitPaymentResult.NotOpened ->
                             showPayError(R.string.slashtags__error_pay_not_opened_msg)
+                        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList ->
+                            showPayError(R.string.slashtags__error_pay_empty_msg)
                     }
                 }
                 .onFailure {
@@ -105,5 +114,9 @@ data class SendContactSelectUiState(
 )
 
 sealed interface SendContactSelectEffect {
-    data class OpenPayment(val paymentRequest: String, val publicKey: String) : SendContactSelectEffect
+    data class OpenPayment(
+        val paymentRequest: String,
+        val publicKey: String,
+        val privatePaymentContext: PrivatePaykitPaymentContext?,
+    ) : SendContactSelectEffect
 }
