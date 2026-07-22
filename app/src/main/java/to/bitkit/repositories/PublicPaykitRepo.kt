@@ -47,10 +47,20 @@ sealed class PublicPaykitError(message: String) : AppError(message) {
 }
 
 sealed interface PublicPaykitPaymentResult {
-    data class Opened(val paymentRequest: String) : PublicPaykitPaymentResult
+    data class Opened(
+        val paymentRequest: String,
+        val privatePaymentContext: PrivatePaykitPaymentContext? = null,
+    ) : PublicPaykitPaymentResult
+
     data object NoEndpoint : PublicPaykitPaymentResult
     data object NotOpened : PublicPaykitPaymentResult
+    data object WaitingForUpdatedPaymentList : PublicPaykitPaymentResult
 }
+
+data class PrivatePaykitPaymentContext(
+    val receiverPath: String,
+    val paymentListVersion: ULong,
+)
 
 @OptIn(ExperimentalTime::class)
 @Suppress("LongParameterList")

@@ -2,8 +2,6 @@ package to.bitkit.services
 
 import android.content.Context
 import com.synonym.bitkitcore.mnemonicToSeed
-import com.synonym.paykit.ContactPaymentResolution
-import com.synonym.paykit.ContactPaymentResolutionPrivateState
 import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
@@ -11,6 +9,8 @@ import com.synonym.paykit.CounterpartyReceiver
 import com.synonym.paykit.EndpointSyncReport
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
+import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.OutboundPrivateCounterpartySendReport
 import com.synonym.paykit.PaykitAndroid
 import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitProfile
@@ -19,14 +19,22 @@ import com.synonym.paykit.PaykitReceiverCapabilities
 import com.synonym.paykit.PaykitReceiverMarker
 import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitSdkDefaults
-import com.synonym.paykit.PaymentEndpointCandidate
-import com.synonym.paykit.PaymentEndpointReservationCancellation
-import com.synonym.paykit.PaymentEndpointSelectionRequest
-import com.synonym.paykit.PaymentEndpointSource
+import com.synonym.paykit.PaymentAmountContext
 import com.synonym.paykit.PaymentPayload
+import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentTarget
+import com.synonym.paykit.PrivateContactPaymentResolution
+import com.synonym.paykit.PrivatePaymentEndpointCandidate
+import com.synonym.paykit.PrivatePaymentEndpointReservationCancellation
+import com.synonym.paykit.PrivatePaymentEndpointSelectionRequest
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
+import com.synonym.paykit.PrivatePaymentResolutionState
+import com.synonym.paykit.PrivatePaymentResolutionStatus
+import com.synonym.paykit.PrivateReceivingDetail
+import com.synonym.paykit.PrivateReceivingDetailReservationResponse
+import com.synonym.paykit.PrivateReceivingDetailReservationResponseKind
+import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkyAuthRequest
 import com.synonym.paykit.PubkyLocalSecretKey
@@ -34,11 +42,11 @@ import com.synonym.paykit.PubkyProfile
 import com.synonym.paykit.PubkySessionAccess
 import com.synonym.paykit.PubkySessionBootstrap
 import com.synonym.paykit.PubkySessionBootstrapResult
+import com.synonym.paykit.PublicContactPaymentResolution
+import com.synonym.paykit.PublicPaymentEndpointCandidate
+import com.synonym.paykit.PublicPaymentEndpointSelectionRequest
+import com.synonym.paykit.PublicReceivingDetail
 import com.synonym.paykit.ReceiverNoiseSecretKey
-import com.synonym.paykit.ReceivingDetail
-import com.synonym.paykit.ReceivingDetailReservationResponse
-import com.synonym.paykit.ReceivingDetailReservationResponseKind
-import com.synonym.paykit.ReceivingDetailScope
 import com.synonym.paykit.SdkPaymentAdapter
 import com.synonym.paykit.SdkPubkySessionProvider
 import com.synonym.paykit.SdkStateBlob
@@ -77,14 +85,23 @@ import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
 
-data class PaykitContactPaymentResolution(
-    val privateState: ContactPaymentResolutionPrivateState,
+data class PaykitPreparedPrivateContactPayment(
+    val resolution: PaykitPrivateContactPaymentResolution,
+    val linkState: LinkedPeerState?,
+)
+
+data class PaykitPrivateContactPaymentResolution(
+    val status: PrivatePaymentResolutionStatus,
+    val state: PrivatePaymentResolutionState,
+    val privatePaymentListVersion: ULong?,
+    val payableEndpoints: List<PaykitResolvedPaymentEndpoint>,
+)
+
+data class PaykitPublicContactPaymentResolution(
     val payableEndpoints: List<PaykitResolvedPaymentEndpoint>,
 )
 
 data class PaykitResolvedPaymentEndpoint(
-    val counterparty: String,
-    val source: PaymentEndpointSource,
     val identifier: String,
     val payload: String,
 )
@@ -105,7 +122,7 @@ internal object PaykitReceiverPaths {
 }
 
 @Singleton
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LargeClass")
 class PaykitSdkService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val keychain: Keychain,
@@ -467,7 +484,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationMutex.withLock {
             withStateRevisionTracking { handle ->
-                handle.syncPublicEndpointsWithReceivingDetails(endpoints.map { it.toReceivingDetail() })
+                handle.syncPublicEndpointsWithReceivingDetails(endpoints.map { it.toPublicReceivingDetail() })
             }
         }
     }
@@ -514,20 +531,40 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun receivePrivateMessagesFromLinkedPeers() {
+    suspend fun receivePrivateMessagesFromLinkedPeers(): List<PrivateStreamCounterpartyIntakeReport> {
         isSetup.await()
-        operationMutex.withLock {
+        return operationMutex.withLock {
             withStateRevisionTracking { handle ->
                 handle.receivePrivateMessagesFromLinkedPeers()
             }
         }
     }
 
-    suspend fun processPendingPrivateMessages() {
+    suspend fun processPendingPrivateMessages(): List<OutboundPrivateCounterpartySendReport> {
         isSetup.await()
-        operationMutex.withLock {
+        return operationMutex.withLock {
             withStateRevisionTracking { handle ->
                 handle.processPendingPrivateMessages()
+            }
+        }
+    }
+
+    suspend fun actionableReceivedPaymentRequests(): List<PaymentRequestRecord> {
+        isSetup.await()
+        return operationMutex.withLock {
+            handle().actionableReceivedPaymentRequests()
+        }
+    }
+
+    suspend fun acceptPaymentRequest(
+        counterparty: String,
+        counterpartyReceiverPath: String,
+        paymentRequestId: String,
+    ): PaymentRequestRecord {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.acceptPaymentRequest(counterparty, counterpartyReceiverPath, paymentRequestId)
             }
         }
     }
@@ -546,50 +583,63 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun prepareAndResolveContactPayment(
+    suspend fun prepareAndResolvePrivateContactPayment(
         counterparty: String,
         receiverPath: String,
-        includePublicEndpoints: Boolean,
-    ): PaykitContactPaymentResolution {
+        afterPrivatePaymentListVersion: ULong?,
+        amount: PaymentAmountContext? = null,
+    ): PaykitPreparedPrivateContactPayment {
         isSetup.await()
         val prepared = operationMutex.withLock {
             withStateRevisionTracking { handle ->
-                handle.prepareAndResolveContactPayment(
+                handle.prepareAndResolvePrivateContactPayment(
                     counterparty = counterparty,
                     counterpartyReceiverPath = receiverPath,
-                    amount = null,
-                    includePublicEndpoints = includePublicEndpoints,
+                    amount = amount,
+                    afterPrivatePaymentListVersion = afterPrivatePaymentListVersion,
                     maxAdvanceSteps = 8u,
                 )
             }
         }
-        return prepared.resolution.toPaykitContactPaymentResolution()
+        return PaykitPreparedPrivateContactPayment(
+            resolution = prepared.resolution.toPaykitPrivateContactPaymentResolution(),
+            linkState = prepared.linkReport?.state,
+        )
     }
 
     suspend fun resolvePublicContactPayment(
         counterparty: String,
         receiverPath: String,
-    ): PaykitContactPaymentResolution {
+    ): PaykitPublicContactPaymentResolution {
         isSetup.await()
         val resolution = operationMutex.withLock {
             handle().resolvePublicContactPayment(counterparty, receiverPath, amount = null)
         }
-        return resolution.toPaykitContactPaymentResolution()
+        return resolution.toPaykitPublicContactPaymentResolution()
     }
 
-    private fun ContactPaymentResolution.toPaykitContactPaymentResolution(): PaykitContactPaymentResolution {
-        return PaykitContactPaymentResolution(
-            privateState = privateState,
+    private fun PrivateContactPaymentResolution.toPaykitPrivateContactPaymentResolution() =
+        PaykitPrivateContactPaymentResolution(
+            status = status,
+            state = state,
+            privatePaymentListVersion = privatePaymentListVersion,
             payableEndpoints = payableEndpoints.map {
                 PaykitResolvedPaymentEndpoint(
-                    counterparty = it.counterparty,
-                    source = it.source,
                     identifier = it.identifier,
                     payload = it.target.payload.exportText(),
                 )
             },
         )
-    }
+
+    private fun PublicContactPaymentResolution.toPaykitPublicContactPaymentResolution() =
+        PaykitPublicContactPaymentResolution(
+            payableEndpoints = payableEndpoints.map {
+                PaykitResolvedPaymentEndpoint(
+                    identifier = it.identifier,
+                    payload = it.target.payload.exportText(),
+                )
+            },
+        )
 
     suspend fun exportBackupState(): String {
         isSetup.await()
@@ -707,7 +757,7 @@ class PaykitSdkService @Inject constructor(
         val status = handle.identityStatus()
         return PaykitReceiverCapabilities(
             privatePayments = status?.liveSessionAvailable == true,
-            paymentRequests = false,
+            paymentRequests = status?.liveSessionAvailable == true,
             receipts = false,
             outgoingPayments = true,
         )
@@ -1008,20 +1058,27 @@ internal class PaykitReceiverNoiseKeyStore(
 }
 
 class PaykitSdkPaymentAdapter : SdkPaymentAdapter {
-    override fun currentReceivingDetails(scope: ReceivingDetailScope): List<ReceivingDetail> = emptyList()
+    override fun currentPublicReceivingDetails(): List<PublicReceivingDetail> = emptyList()
 
-    override fun reserveReceivingDetails(
+    override fun currentPrivateReceivingDetails(
         counterparty: String,
         counterpartyReceiverPath: String,
-    ): ReceivingDetailReservationResponse =
-        ReceivingDetailReservationResponse(
-            kind = ReceivingDetailReservationResponseKind.USE_CURRENT_RECEIVING_DETAILS,
+    ): List<PrivateReceivingDetail> = emptyList()
+
+    override fun reservePrivateReceivingDetails(
+        counterparty: String,
+        counterpartyReceiverPath: String,
+    ): PrivateReceivingDetailReservationResponse =
+        PrivateReceivingDetailReservationResponse(
+            kind = PrivateReceivingDetailReservationResponseKind.USE_CURRENT_RECEIVING_DETAILS,
             reservations = emptyList(),
         )
 
-    override fun cancelReceivingDetailReservation(cancellation: PaymentEndpointReservationCancellation) = Unit
+    override fun cancelPrivateReceivingDetailReservation(
+        cancellation: PrivatePaymentEndpointReservationCancellation,
+    ) = Unit
 
-    override fun selectPaymentEndpointIds(request: PaymentEndpointSelectionRequest): List<String> {
+    override fun selectPublicPaymentEndpointIds(request: PublicPaymentEndpointSelectionRequest): List<String> {
         val parsed = request.candidates.mapNotNull { candidate ->
             PublicPaykitRepo.parseEndpoint(
                 methodId = candidate.identifier,
@@ -1033,11 +1090,26 @@ class PaykitSdkPaymentAdapter : SdkPaymentAdapter {
         }
     }
 
-    override fun buildPaymentTarget(endpoint: PaymentEndpointCandidate): PaymentTarget =
+    override fun buildPublicPaymentTarget(endpoint: PublicPaymentEndpointCandidate): PaymentTarget =
+        PaymentTarget(endpoint.payload)
+
+    override fun selectPrivatePaymentEndpointIds(request: PrivatePaymentEndpointSelectionRequest): List<String> {
+        val parsed = request.candidates.mapNotNull { candidate ->
+            PublicPaykitRepo.parseEndpoint(
+                methodId = candidate.identifier,
+                endpointData = candidate.payload.exportText(),
+            )?.let { candidate.candidateId to it }
+        }
+        return PublicPaykitRepo.payablePreferenceOrder.flatMap { methodId ->
+            parsed.mapNotNull { (id, endpoint) -> id.takeIf { endpoint.methodId == methodId } }
+        }
+    }
+
+    override fun buildPrivatePaymentTarget(endpoint: PrivatePaymentEndpointCandidate): PaymentTarget =
         PaymentTarget(endpoint.payload)
 }
 
-private fun Endpoint.toReceivingDetail() = ReceivingDetail(
+private fun Endpoint.toPublicReceivingDetail() = PublicReceivingDetail(
     identifier = methodId.rawValue,
     payload = PaymentPayload(rawPayload),
 )

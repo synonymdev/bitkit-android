@@ -3,10 +3,8 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
-import com.synonym.paykit.ContactPaymentResolutionPrivateState
 import com.synonym.paykit.EndpointSyncChange
 import com.synonym.paykit.EndpointSyncReport
-import com.synonym.paykit.PaymentEndpointSource
 import com.synonym.paykit.PublicationStatus
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
@@ -21,7 +19,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.services.CoreService
-import to.bitkit.services.PaykitContactPaymentResolution
+import to.bitkit.services.PaykitPublicContactPaymentResolution
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
 import to.bitkit.services.PaykitSdkService
@@ -253,8 +251,7 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         clock = clock,
     )
 
-    private fun resolution(vararg endpoints: PaykitResolvedPaymentEndpoint) = PaykitContactPaymentResolution(
-        privateState = ContactPaymentResolutionPrivateState.NO_PRIVATE_ENDPOINT,
+    private fun resolution(vararg endpoints: PaykitResolvedPaymentEndpoint) = PaykitPublicContactPaymentResolution(
         payableEndpoints = endpoints.toList(),
     )
 
@@ -263,8 +260,6 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         value: String,
     ): PaykitResolvedPaymentEndpoint {
         return PaykitResolvedPaymentEndpoint(
-            counterparty = "pubkycontact",
-            source = PaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT,
             identifier = methodId.rawValue,
             payload = PublicPaykitRepo.serializePayload(value),
         )
