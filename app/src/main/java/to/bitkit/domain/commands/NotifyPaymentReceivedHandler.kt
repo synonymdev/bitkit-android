@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.di.IoDispatcher
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -19,16 +20,21 @@ class NotifyPaymentReceivedHandler @Inject constructor(
     private val activityRepo: ActivityRepo,
     private val receivedNotificationContent: ReceivedNotificationContent,
 ) {
+    private val presentationClaimsLock = Any()
+    private val presentationClaims = mutableSetOf<String>()
+
     suspend operator fun invoke(
         command: NotifyPaymentReceived.Command,
     ): Result<NotifyPaymentReceived.Result> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
+            if (isPresentationClaimed(command)) return@runSuspendCatching NotifyPaymentReceived.Result.Skip
+
             val shouldShow = when (command) {
                 is NotifyPaymentReceived.Command.Lightning -> shouldShowLightning(command)
                 is NotifyPaymentReceived.Command.Onchain -> shouldShowOnchain(command)
             }
 
-            if (!shouldShow) return@runCatching NotifyPaymentReceived.Result.Skip
+            if (!shouldShow) return@runSuspendCatching NotifyPaymentReceived.Result.Skip
 
             val details = buildSheetDetails(command)
 
@@ -43,12 +49,50 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         }
     }
 
+    fun claimPresentation(command: NotifyPaymentReceived.Command): Boolean = claimPresentation(command) { true }
+
+    fun claimPresentation(
+        command: NotifyPaymentReceived.Command,
+        canPresent: () -> Boolean,
+    ): Boolean {
+        val key = presentationKey(command) ?: return false
+        return synchronized(presentationClaimsLock) {
+            canPresent() && presentationClaims.add(key)
+        }
+    }
+
+    suspend fun present(
+        command: NotifyPaymentReceived.Command,
+        canPresent: () -> Boolean = { true },
+        block: () -> Unit,
+    ): Boolean {
+        if (!claimPresentation(command, canPresent)) return false
+        block()
+        recordPresentation(command)
+        return true
+    }
+
+    suspend fun recordPresentation(command: NotifyPaymentReceived.Command) {
+        withContext(ioDispatcher) {
+            runSuspendCatching { markAsSeen(command) }
+                .onFailure { Logger.error("Failed to mark payment notification as presented", it, context = TAG) }
+        }
+    }
+
+    private fun isPresentationClaimed(command: NotifyPaymentReceived.Command): Boolean {
+        val key = presentationKey(command) ?: return false
+        return synchronized(presentationClaimsLock) { key in presentationClaims }
+    }
+
+    private fun presentationKey(command: NotifyPaymentReceived.Command): String? = when (command) {
+        is NotifyPaymentReceived.Command.Lightning -> command.event.paymentId?.let { "lightning:$it" }
+        is NotifyPaymentReceived.Command.Onchain -> "onchain:${command.event.txid}"
+    }
+
     private suspend fun shouldShowLightning(command: NotifyPaymentReceived.Command.Lightning): Boolean {
         val paymentId = command.event.paymentId ?: return false
         delay(DELAY_FOR_ACTIVITY_SYNC_MS)
-        if (activityRepo.isActivitySeen(paymentId)) return false
-        activityRepo.markActivityAsSeen(paymentId)
-        return true
+        return !activityRepo.isActivitySeen(paymentId)
     }
 
     private suspend fun shouldShowOnchain(command: NotifyPaymentReceived.Command.Onchain): Boolean {
@@ -60,10 +104,18 @@ class NotifyPaymentReceivedHandler @Inject constructor(
             command.event.txid,
             command.event.details.amountSats.toULong(),
         )
-        if (shouldShowSheet) {
-            activityRepo.markOnchainActivityAsSeen(command.event.txid)
-        }
         return shouldShowSheet
+    }
+
+    private suspend fun markAsSeen(command: NotifyPaymentReceived.Command) {
+        when (command) {
+            is NotifyPaymentReceived.Command.Lightning -> {
+                val paymentId = command.event.paymentId ?: return
+                activityRepo.markActivityAsSeen(paymentId)
+            }
+
+            is NotifyPaymentReceived.Command.Onchain -> activityRepo.markOnchainActivityAsSeen(command.event.txid)
+        }
     }
 
     private suspend fun retryShouldShowReceivedSheet(txid: String, amountSats: ULong): Boolean {
