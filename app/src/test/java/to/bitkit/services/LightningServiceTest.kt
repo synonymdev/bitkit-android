@@ -34,6 +34,7 @@ class LightningServiceTest : BaseUnitTest() {
     fun setUp() {
         sut = LightningService(
             bgDispatcher = testDispatcher,
+            ioDispatcher = testDispatcher,
             keychain = keychain,
             vssStoreIdProvider = vssStoreIdProvider,
             settingsStore = settingsStore,

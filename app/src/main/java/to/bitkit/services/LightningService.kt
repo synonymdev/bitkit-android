@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.AddressTypeBalance
@@ -49,8 +50,10 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
@@ -69,6 +72,7 @@ import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.Path
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import org.lightningdevkit.ldknode.AddressType as LdkAddressType
 
 typealias NodeEventHandler = suspend (Event) -> Unit
@@ -82,6 +86,7 @@ data class AddressDerivationInfo(
 @Singleton
 class LightningService @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val settingsStore: SettingsStore,
@@ -97,6 +102,9 @@ class LightningService @Inject constructor(
         private const val SCORING_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT = 10_000uL
         private const val SCORING_HISTORICAL_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT = 20_000uL
         private const val SCORING_CONSIDERED_IMPOSSIBLE_PENALTY_MSAT = 1_000_000_000_000uL
+
+        /** How long a node stop waits for the rust handle to be released before moving on. */
+        private val NODE_RELEASE_TIMEOUT = 1.seconds
 
         private val DEFAULT_SCORING_FEE_PARAMETERS = ScoringFeeParameters(
             basePenaltyMsat = 1_024uL,
@@ -335,11 +343,28 @@ class LightningService @Inject constructor(
                         if (it !is NodeException.NotRunning) Logger.warn("Node stop error", it, context = TAG)
                     }
                 this@LightningService.node = null
-                // Release the handle on the LDK queue instead of leaving it to the GC finalizer
-                node.destroy()
             }
+            releaseHandle(node)
         }
         Logger.info("Node stopped", context = TAG)
+    }
+
+    /**
+     * Releases the rust handle instead of leaving it to the GC finalizer, keeping it off the
+     * single-threaded LDK queue and off the lifecycle critical path.
+     *
+     * `free_node` only returns once the node's background tasks drain, which takes tens of seconds
+     * when a failed start left them wedged, so the wait is bounded and the release is joined rather
+     * than run inline: cancelling a blocking FFI call does nothing, but abandoning the join lets the
+     * caller continue while the release finishes on its own.
+     */
+    private suspend fun releaseHandle(node: Node) {
+        val release = launch(ioDispatcher) {
+            runSuspendCatching { node.destroy() }
+                .onFailure { Logger.warn("Node handle release error", it, context = TAG) }
+        }
+        withTimeoutOrNull(NODE_RELEASE_TIMEOUT) { release.join() }
+            ?: Logger.warn("Node handle release still pending after $NODE_RELEASE_TIMEOUT", context = TAG)
     }
 
     fun wipeStorage(walletIndex: Int) {
