@@ -1,5 +1,6 @@
 package to.bitkit.viewmodels
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -12,26 +13,33 @@ import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.check
 import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.App
+import to.bitkit.CurrentActivity
 import to.bitkit.R
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
@@ -39,9 +47,13 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.domain.commands.NotifyChannelReadyHandler
+import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.BalanceState
 import to.bitkit.models.HwWalletReceivedTx
+import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.NewTransactionSheetDirection
+import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
@@ -58,6 +70,7 @@ import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.PendingPaymentResolution
@@ -66,6 +79,8 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.SamRockRepo
+import to.bitkit.repositories.SettledReceiveAddress
+import to.bitkit.repositories.SettledReceiveInvoice
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
@@ -140,7 +155,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val settingsData = MutableStateFlow(SettingsData())
     private val isPaykitEnabled = MutableStateFlow(false)
     private val walletState = MutableStateFlow(WalletState())
-    private val nodeEvents = MutableSharedFlow<Event>()
+    private val nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>()
     private val pubkyPublicKey = MutableStateFlow<String?>(null)
     private val pubkyContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
     private val pubkyContactsLoadVersion = MutableStateFlow(0L)
@@ -154,6 +169,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut = createViewModel()
     }
 
+    @After
+    fun tearDown() {
+        App.currentActivity = null
+    }
+
     @Suppress("LongMethod")
     private fun stubRepositories() {
         whenever(context.getString(any())).thenReturn("")
@@ -161,13 +181,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(mock()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
-        whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
+        whenever(lightningRepo.nodeEventUpdates).thenReturn(nodeEventUpdates)
+        whenever(lightningRepo.nodeEvents).thenReturn(nodeEventUpdates.map { it.event })
         whenever(hwWalletRepo.receivedTxs).thenReturn(hwReceivedTxs)
         whenever(hwWalletRepo.needsPairingCode).thenReturn(needsPairingCode)
         whenever(hwWalletRepo.pairingCodeRequestId).thenReturn(pairingCodeRequestId)
         whenever(coreService.activity).thenReturn(activityService)
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(walletRepo.walletState).thenReturn(walletState)
+        whenever(walletRepo.getBolt11()).thenAnswer { walletState.value.bolt11 }
+        whenever(walletRepo.getOnchainAddress()).thenAnswer { walletState.value.onchainAddress }
         whenever(walletRepo.walletExists()).thenReturn(true)
         whenever(backupRepo.isRestoring).thenReturn(MutableStateFlow(false))
         stubSettingsStore()
@@ -206,6 +229,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.contactPublicKeyForPrivateInvoicePaymentHash(any()) }
             .thenReturn(null)
+        whenever { publicPaykitRepo.refreshPublishedBolt11ForPayment(any()) }
+            .thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.handleReceivedPayment(any()) }
+            .thenReturn(Result.success(Unit))
+        whenever { notifyPaymentReceivedHandler(any()) }
+            .thenReturn(Result.success(NotifyPaymentReceived.Result.Skip))
+        whenever { notifyPaymentReceivedHandler.present(any(), any(), any()) }.thenAnswer {
+            val canPresent = it.getArgument<() -> Boolean>(1)
+            if (!canPresent()) {
+                false
+            } else {
+                it.getArgument<() -> Unit>(2).invoke()
+                true
+            }
+        }
         whenever { privatePaykitRepo.contactPublicKeyForPrivateOnchainAddresses(any<Collection<String>>()) }
             .thenReturn(null)
         whenever { privatePaykitRepo.discardRemoteLightningEndpoints(any(), any()) }
@@ -271,6 +309,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         widgetsRepo = widgetsRepo,
         pubkyRepo = pubkyRepo,
     )
+
+    private suspend fun emitNodeEvent(
+        event: Event,
+        settledReceiveInvoice: SettledReceiveInvoice? = null,
+        settledReceiveAddress: SettledReceiveAddress? = null,
+    ) {
+        nodeEventUpdates.emit(
+            NodeEventUpdate(
+                event = event,
+                settledReceiveInvoice = settledReceiveInvoice,
+                settledReceiveAddress = settledReceiveAddress,
+            ),
+        )
+    }
 
     @Test
     fun `onUsbDeviceAttached forwards to the hardware wallet repo`() = test {
@@ -983,7 +1035,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         setPendingContactPaymentContext(paymentHash, contactKey)
-        nodeEvents.emit(
+        emitNodeEvent(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -1005,7 +1057,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         setPendingContactPaymentContext(paymentHash, "pubkycontact")
-        nodeEvents.emit(
+        emitNodeEvent(
             Event.PaymentFailed(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -1034,13 +1086,306 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.showSheet(Sheet.Send())
         advanceUntilIdle()
 
-        nodeEvents.emit(
+        emitNodeEvent(
             Event.PaymentFailed(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
                 reason = null,
             ),
         )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `received lightning payment closes the active receive sheet after wallet invoice is cleared`() = test {
+        walletState.value = WalletState(bolt11 = "settled-invoice")
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+        walletState.value = WalletState(bolt11 = "")
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "payment-hash",
+                amountMsat = 1_000uL,
+                customRecords = emptyList(),
+            ),
+            settledReceiveInvoice = SettledReceiveInvoice("settled-invoice"),
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(activityRepo).notifyPaymentActivityChanged()
+        verify(activityRepo, never()).handlePaymentEvent("payment-hash")
+        verify(notifyPaymentReceivedHandler).invoke(any())
+    }
+
+    @Test
+    fun `received unrelated lightning payment preserves the active receive sheet`() = test {
+        val sheet = Sheet.Receive()
+        sut.showSheet(sheet)
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "unrelated-payment-hash",
+                amountMsat = 1_000uL,
+                customRecords = emptyList(),
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(sheet, sut.currentSheet.value)
+        verify(activityRepo).notifyPaymentActivityChanged()
+        verify(activityRepo, never()).handlePaymentEvent("unrelated-payment-hash")
+    }
+
+    @Test
+    fun `received onchain payment closes the receive sheet for the settled address`() = test {
+        val address = "bcrt1qsettled"
+        walletState.value = WalletState(onchainAddress = address)
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            event = Event.OnchainTransactionReceived(
+                txid = "txid",
+                details = TransactionDetails(amountSats = 1_000L, inputs = emptyList(), outputs = emptyList()),
+            ),
+            settledReceiveAddress = SettledReceiveAddress(address),
+        )
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `received onchain payment preserves a receive sheet for another address`() = test {
+        val sheet = Sheet.Receive()
+        walletState.value = WalletState(onchainAddress = "bcrt1qcurrent")
+        sut.showSheet(sheet)
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            event = Event.OnchainTransactionReceived(
+                txid = "txid",
+                details = TransactionDetails(amountSats = 1_000L, inputs = emptyList(), outputs = emptyList()),
+            ),
+            settledReceiveAddress = SettledReceiveAddress("bcrt1qold"),
+        )
+        advanceUntilIdle()
+
+        assertTrue(sut.currentSheet.value === sheet)
+    }
+
+    @Test
+    fun `received onchain payment preserves a replacement receive sheet`() = test {
+        val processingStarted = CompletableDeferred<Unit>()
+        val resumeProcessing = CompletableDeferred<Unit>()
+        whenever { privatePaykitRepo.contactPublicKeyForPrivateOnchainAddresses(any<Collection<String>>()) }
+            .doSuspendableAnswer {
+                processingStarted.complete(Unit)
+                resumeProcessing.await()
+                null
+            }
+        val settledAddress = "bcrt1qsettled"
+        walletState.value = WalletState(onchainAddress = settledAddress)
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            event = Event.OnchainTransactionReceived(
+                txid = "txid",
+                details = TransactionDetails(amountSats = 1_000L, inputs = emptyList(), outputs = emptyList()),
+            ),
+            settledReceiveAddress = SettledReceiveAddress(settledAddress),
+        )
+        processingStarted.await()
+        assertNull(sut.currentSheet.value)
+
+        walletState.value = WalletState(onchainAddress = "bcrt1qreplacement")
+        val replacementSheet = Sheet.Receive()
+        sut.showSheet(replacementSheet)
+        advanceUntilIdle()
+        resumeProcessing.complete(Unit)
+        advanceUntilIdle()
+
+        assertTrue(sut.currentSheet.value === replacementSheet)
+    }
+
+    @Test
+    fun `received lightning payment preserves a non-receive sheet`() = test {
+        val sheet = Sheet.Pin()
+        walletState.value = WalletState(bolt11 = "settled-invoice")
+        sut.showSheet(sheet)
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "payment-hash",
+                amountMsat = 1_000uL,
+                customRecords = emptyList(),
+            ),
+            settledReceiveInvoice = SettledReceiveInvoice("settled-invoice"),
+        )
+        advanceUntilIdle()
+
+        assertEquals(sheet, sut.currentSheet.value)
+    }
+
+    @Test
+    fun `received lightning payment is claimed by the UI while foregrounded`() = test {
+        val details = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.LIGHTNING,
+            direction = NewTransactionSheetDirection.RECEIVED,
+            paymentHashOrTxId = "payment-hash",
+            sats = 1L,
+        )
+        whenever(notifyPaymentReceivedHandler(any()))
+            .thenReturn(Result.success(NotifyPaymentReceived.Result.ShowSheet(details)))
+        whenever { notifyPaymentReceivedHandler.present(any(), any(), any()) }.thenAnswer {
+            it.getArgument<() -> Unit>(2).invoke()
+            true
+        }
+        App.currentActivity = CurrentActivity().also { it.onActivityStarted(mock<Activity>()) }
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "payment-hash",
+                amountMsat = 1_000uL,
+                customRecords = emptyList(),
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(notifyPaymentReceivedHandler).present(any(), any(), any())
+        assertEquals(details, sut.transactionSheet.value)
+    }
+
+    @Test
+    fun `received lightning payment uses the UI handoff after the app backgrounds`() = test {
+        val details = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.LIGHTNING,
+            direction = NewTransactionSheetDirection.RECEIVED,
+            paymentHashOrTxId = "payment-hash",
+            sats = 1L,
+        )
+        whenever(notifyPaymentReceivedHandler(any()))
+            .thenReturn(Result.success(NotifyPaymentReceived.Result.ShowSheet(details)))
+        whenever { notifyPaymentReceivedHandler.present(any(), any(), any()) }.thenAnswer {
+            it.getArgument<() -> Unit>(2).invoke()
+            true
+        }
+        App.currentActivity = CurrentActivity()
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "payment-hash",
+                amountMsat = 1_000uL,
+                customRecords = emptyList(),
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(notifyPaymentReceivedHandler).present(any(), any(), any())
+        assertEquals(details, sut.transactionSheet.value)
+    }
+
+    @Test
+    fun `received lightning payment skips the sheet when the service owns the presentation`() = test {
+        val details = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.LIGHTNING,
+            direction = NewTransactionSheetDirection.RECEIVED,
+            paymentHashOrTxId = "payment-hash",
+            sats = 1L,
+        )
+        whenever(notifyPaymentReceivedHandler(any()))
+            .thenReturn(Result.success(NotifyPaymentReceived.Result.ShowSheet(details)))
+        whenever { notifyPaymentReceivedHandler.present(any(), any(), any()) }.thenReturn(false)
+        App.currentActivity = CurrentActivity()
+
+        emitNodeEvent(
+            Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "payment-hash",
+                amountMsat = 1_000uL,
+                customRecords = emptyList(),
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(notifyPaymentReceivedHandler).present(any(), any(), any())
+        assertEquals(NewTransactionSheetDetails.EMPTY, sut.transactionSheet.value)
+    }
+
+    @Test
+    fun `received lightning payment preserves a receive sheet opened during activity sync`() = test {
+        val processingStarted = CompletableDeferred<Unit>()
+        val resumeProcessing = CompletableDeferred<Unit>()
+        whenever(activityRepo.notifyPaymentActivityChanged()).doSuspendableAnswer {
+            processingStarted.complete(Unit)
+            resumeProcessing.await()
+        }
+        walletState.value = WalletState(bolt11 = "settled-invoice")
+        sut.showSheet(Sheet.Receive())
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            event = Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "payment-hash",
+                amountMsat = 1_000uL,
+                customRecords = emptyList(),
+            ),
+            settledReceiveInvoice = SettledReceiveInvoice("settled-invoice"),
+        )
+        processingStarted.await()
+
+        walletState.value = WalletState(bolt11 = "replacement-invoice")
+        val replacementSheet = Sheet.Receive()
+        sut.showSheet(replacementSheet)
+        advanceUntilIdle()
+        resumeProcessing.complete(Unit)
+        advanceUntilIdle()
+
+        assertTrue(sut.currentSheet.value === replacementSheet)
+    }
+
+    @Test
+    fun `received lightning payment dismisses the settled receive sheet before activity sync`() = test {
+        val processingStarted = CompletableDeferred<Unit>()
+        val resumeProcessing = CompletableDeferred<Unit>()
+        whenever(activityRepo.notifyPaymentActivityChanged()).doSuspendableAnswer {
+            processingStarted.complete(Unit)
+            resumeProcessing.await()
+        }
+        walletState.value = WalletState(bolt11 = "settled-invoice")
+        val receiveSheet = Sheet.Receive()
+        sut.showSheet(receiveSheet)
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            event = Event.PaymentReceived(
+                paymentId = "payment-id",
+                paymentHash = "payment-hash",
+                amountMsat = 1_000uL,
+                customRecords = emptyList(),
+            ),
+            settledReceiveInvoice = SettledReceiveInvoice("settled-invoice"),
+        )
+        processingStarted.await()
+        assertNull(sut.currentSheet.value)
+
+        walletState.value = WalletState(bolt11 = "replacement-invoice")
+        advanceUntilIdle()
+        resumeProcessing.complete(Unit)
         advanceUntilIdle()
 
         assertNull(sut.currentSheet.value)
@@ -1222,7 +1567,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceUntilIdle()
-        nodeEvents.emit(
+        emitNodeEvent(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -1299,7 +1644,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceUntilIdle()
-        nodeEvents.emit(
+        emitNodeEvent(
             Event.PaymentSuccessful(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
@@ -1318,7 +1663,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
         clearInvocations(publicPaykitRepo)
 
-        nodeEvents.emit(
+        emitNodeEvent(
             Event.ChannelReady(
                 channelId = "testChannelId",
                 userChannelId = "testUserChannelId",
@@ -1338,7 +1683,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
         clearInvocations(publicPaykitRepo)
 
-        nodeEvents.emit(
+        emitNodeEvent(
             Event.ChannelClosed(
                 channelId = "testChannelId",
                 userChannelId = "testUserChannelId",

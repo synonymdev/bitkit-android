@@ -154,6 +154,15 @@ class LightningNodeServiceTest : BaseUnitTest() {
         )
         whenever(notifyPaymentReceivedHandler.invoke(any()))
             .thenReturn(Result.success(NotifyPaymentReceived.Result.ShowNotification(sheet, notification)))
+        whenever { notifyPaymentReceivedHandler.present(any(), any(), any()) }.thenAnswer {
+            val canPresent = it.getArgument<() -> Boolean>(1)
+            if (!canPresent()) {
+                false
+            } else {
+                it.getArgument<() -> Unit>(2).invoke()
+                true
+            }
+        }
 
         // Default: not a CJIT channel ready unless a test overrides it
         whenever(notifyChannelReadyHandler.invoke(any()))
@@ -306,10 +315,11 @@ class LightningNodeServiceTest : BaseUnitTest() {
             sats = 100L,
         )
         verify(cacheStore).setBackgroundReceive(expected)
+        verify(notifyPaymentReceivedHandler).present(any(), any(), any())
     }
 
     @Test
-    fun `payment received in foreground does nothing`() = test {
+    fun `payment received in foreground is left for the UI`() = test {
         // Simulate foreground by setting App.currentActivity.value via lifecycle callback
         val mockActivity: Activity = mock()
         App.currentActivity?.onActivityStarted(mockActivity)
@@ -337,6 +347,85 @@ class LightningNodeServiceTest : BaseUnitTest() {
         assertNull(paymentNotification, "Payment notification should NOT be present in foreground")
 
         verify(cacheStore, never()).setBackgroundReceive(any())
+        verify(notifyPaymentReceivedHandler).invoke(any())
+        verify(notifyPaymentReceivedHandler).present(any(), any(), any())
+    }
+
+    @Test
+    fun `payment received while app foregrounds is left for the UI`() = test {
+        val mockActivity: Activity = mock()
+        whenever(notifyPaymentReceivedHandler.invoke(any())).doSuspendableAnswer {
+            App.currentActivity?.onActivityStarted(mockActivity)
+            val sheet = NewTransactionSheetDetails(
+                type = NewTransactionSheetType.LIGHTNING,
+                direction = NewTransactionSheetDirection.RECEIVED,
+                paymentHashOrTxId = "test_hash",
+                sats = 100L,
+            )
+            val notification = NotificationDetails(
+                title = context.getString(R.string.notification__received__title),
+                body = "Received ₿ 100 ($0.10)",
+            )
+            Result.success(NotifyPaymentReceived.Result.ShowNotification(sheet, notification))
+        }
+        startService()
+        testScheduler.advanceUntilIdle()
+
+        capturedHandler?.invoke(
+            Event.PaymentReceived(
+                paymentId = "payment_id",
+                paymentHash = "test_hash",
+                amountMsat = 100000u,
+                customRecords = emptyList(),
+            ),
+        )
+        testScheduler.advanceUntilIdle()
+
+        val notification = Shadows.shadowOf(context.notificationManager).allNotifications.find {
+            it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification__received__title)
+        }
+        assertNull(notification)
+        verify(notifyPaymentReceivedHandler).present(any(), any(), any())
+        verify(cacheStore, never()).setBackgroundReceive(any())
+    }
+
+    @Test
+    fun `payment received while app backgrounds is presented by the service`() = test {
+        val mockActivity: Activity = mock()
+        App.currentActivity?.onActivityStarted(mockActivity)
+        whenever(notifyPaymentReceivedHandler.invoke(any())).doSuspendableAnswer {
+            App.currentActivity?.onActivityStopped(mockActivity)
+            val sheet = NewTransactionSheetDetails(
+                type = NewTransactionSheetType.LIGHTNING,
+                direction = NewTransactionSheetDirection.RECEIVED,
+                paymentHashOrTxId = "test_hash",
+                sats = 100L,
+            )
+            val notification = NotificationDetails(
+                title = context.getString(R.string.notification__received__title),
+                body = "Received ₿ 100 ($0.10)",
+            )
+            Result.success(NotifyPaymentReceived.Result.ShowNotification(sheet, notification))
+        }
+        startService()
+        testScheduler.advanceUntilIdle()
+
+        capturedHandler?.invoke(
+            Event.PaymentReceived(
+                paymentId = "payment_id",
+                paymentHash = "test_hash",
+                amountMsat = 100000u,
+                customRecords = emptyList(),
+            ),
+        )
+        testScheduler.advanceUntilIdle()
+
+        val notification = Shadows.shadowOf(context.notificationManager).allNotifications.find {
+            it.extras.getString(Notification.EXTRA_TITLE) == context.getString(R.string.notification__received__title)
+        }
+        assertNotNull(notification)
+        verify(notifyPaymentReceivedHandler).present(any(), any(), any())
+        verify(cacheStore).setBackgroundReceive(any())
     }
 
     @Test

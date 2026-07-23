@@ -11,11 +11,13 @@ import com.synonym.bitkitcore.LnurlException
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
@@ -29,10 +31,13 @@ import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PeerDetails
 import org.lightningdevkit.ldknode.SpendableUtxo
+import org.lightningdevkit.ldknode.TransactionDetails
+import org.lightningdevkit.ldknode.TxOutput
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.isNull
@@ -43,6 +48,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
+import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
@@ -54,6 +60,7 @@ import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.services.ActivityService
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
@@ -103,6 +110,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever(coreService.isGeoBlocked()).thenReturn(false)
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
         whenever(lightningService.aresRequiredPeersInNetworkGraph()).thenReturn(true)
@@ -226,6 +234,146 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
         verifyBlocking(lightningService) { reconcileWatchOnlyAccounts() }
         verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `PaymentReceived invalidates the cached invoice without decoding during event handling`() = test {
+        val bolt11 = "lnbc1"
+        val activityService = mock<ActivityService>()
+        val processingStarted = CompletableDeferred<Unit>()
+        val resumeProcessing = CompletableDeferred<Unit>()
+        whenever(cacheStore.data).thenReturn(
+            flowOf(AppCacheData(bolt11 = bolt11, bolt11PaymentHash = "010203"))
+        )
+        whenever(coreService.decode(bolt11)).thenThrow(IllegalStateException("decoder unavailable"))
+        whenever(cacheStore.invalidateReceiveLightningInvoice(bolt11)).thenReturn(true)
+        whenever(coreService.activity).thenReturn(activityService)
+        whenever(activityService.handlePaymentEvent("payment-id")).doSuspendableAnswer {
+            processingStarted.complete(Unit)
+            resumeProcessing.await()
+        }
+        val eventHandler = startNodeAndCaptureEvents()
+        val event = Event.PaymentReceived(
+            paymentId = "payment-id",
+            paymentHash = "010203",
+            amountMsat = 1_000uL,
+            customRecords = emptyList(),
+        )
+        val publishedUpdate = async { sut.nodeEventUpdates.first() }
+
+        val handling = async { eventHandler(event) }
+        processingStarted.await()
+
+        verify(cacheStore).invalidateReceiveLightningInvoice(bolt11)
+        verify(coreService, never()).decode(bolt11)
+        assertFalse(publishedUpdate.isCompleted)
+
+        resumeProcessing.complete(Unit)
+        handling.await()
+        val update = publishedUpdate.await()
+        assertEquals(event, update.event)
+        assertEquals(
+            SettledReceiveInvoice(bolt11 = bolt11),
+            update.settledReceiveInvoice,
+        )
+    }
+
+    @Test
+    fun `PaymentReceived preserves a cached invoice with a different payment hash`() = test {
+        val bolt11 = "lnbc1"
+        val activityService = mock<ActivityService>()
+        whenever(cacheStore.data).thenReturn(
+            flowOf(AppCacheData(bolt11 = bolt11, bolt11PaymentHash = "010203"))
+        )
+        whenever(coreService.activity).thenReturn(activityService)
+        val eventHandler = startNodeAndCaptureEvents()
+        val event = Event.PaymentReceived(
+            paymentId = "payment-id",
+            paymentHash = "different-payment-hash",
+            amountMsat = 1_000uL,
+            customRecords = emptyList(),
+        )
+
+        val publishedUpdate = async { sut.nodeEventUpdates.first() }
+
+        eventHandler(event)
+
+        verify(cacheStore, never()).invalidateReceiveLightningInvoice(any())
+        val update = publishedUpdate.await()
+        assertEquals(event, update.event)
+        assertNull(update.settledReceiveInvoice)
+        verify(activityService).handlePaymentEvent("payment-id")
+    }
+
+    @Test
+    fun `PaymentReceived does not publish settlement when cache invalidation fails`() = test {
+        val bolt11 = "lnbc1"
+        val activityService = mock<ActivityService>()
+        whenever(cacheStore.data).thenReturn(
+            flowOf(AppCacheData(bolt11 = bolt11, bolt11PaymentHash = "010203"))
+        )
+        whenever(
+            cacheStore.invalidateReceiveLightningInvoice(bolt11)
+        ).thenThrow(
+            IllegalStateException("disk unavailable")
+        )
+        whenever(coreService.activity).thenReturn(activityService)
+        val eventHandler = startNodeAndCaptureEvents()
+        val event = Event.PaymentReceived(
+            paymentId = "payment-id",
+            paymentHash = "010203",
+            amountMsat = 1_000uL,
+            customRecords = emptyList(),
+        )
+        val publishedUpdate = async { sut.nodeEventUpdates.first() }
+
+        eventHandler(event)
+
+        val update = publishedUpdate.await()
+        assertEquals(event, update.event)
+        assertNull(update.settledReceiveInvoice)
+        verify(activityService).handlePaymentEvent("payment-id")
+    }
+
+    @Test
+    fun `OnchainTransactionReceived invalidates the matching cached receive address`() = test {
+        val address = "bcrt1qsettled"
+        val output = mock<TxOutput>()
+        whenever(output.scriptpubkeyAddress).thenReturn(address)
+        val details = mock<TransactionDetails>()
+        whenever(details.outputs).thenReturn(listOf(output))
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = address)))
+        whenever(cacheStore.invalidateReceiveOnchainAddress(address)).thenReturn(true)
+        val eventHandler = startNodeAndCaptureEvents()
+        val event = Event.OnchainTransactionReceived(txid = "txid", details = details)
+        val publishedUpdate = async { sut.nodeEventUpdates.first() }
+
+        eventHandler(event)
+
+        val update = publishedUpdate.await()
+        assertEquals(event, update.event)
+        assertEquals(SettledReceiveAddress(address), update.settledReceiveAddress)
+        verify(cacheStore).invalidateReceiveOnchainAddress(address)
+    }
+
+    @Test
+    fun `OnchainTransactionReceived preserves an unrelated cached receive address`() = test {
+        val cachedAddress = "bcrt1qcurrent"
+        val output = mock<TxOutput>()
+        whenever(output.scriptpubkeyAddress).thenReturn("bcrt1qold")
+        val details = mock<TransactionDetails>()
+        whenever(details.outputs).thenReturn(listOf(output))
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(onchainAddress = cachedAddress)))
+        val eventHandler = startNodeAndCaptureEvents()
+        val event = Event.OnchainTransactionReceived(txid = "txid", details = details)
+        val publishedUpdate = async { sut.nodeEventUpdates.first() }
+
+        eventHandler(event)
+
+        val update = publishedUpdate.await()
+        assertEquals(event, update.event)
+        assertNull(update.settledReceiveAddress)
+        verify(cacheStore, never()).invalidateReceiveOnchainAddress(any())
     }
 
     @Test

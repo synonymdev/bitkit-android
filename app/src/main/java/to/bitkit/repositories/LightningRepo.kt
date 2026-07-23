@@ -40,6 +40,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.BestBlock
+import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelConfig
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ChannelDetails
@@ -126,8 +127,9 @@ class LightningRepo @Inject constructor(
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
 
-    private val _nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 64)
-    val nodeEvents = _nodeEvents.asSharedFlow()
+    private val _nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>(extraBufferCapacity = 64)
+    val nodeEventUpdates = _nodeEventUpdates.asSharedFlow()
+    val nodeEvents = nodeEventUpdates.map { it.event }
 
     private val scope = appScope(bgDispatcher, TAG)
 
@@ -444,10 +446,87 @@ class LightningRepo @Inject constructor(
     private suspend fun onEvent(event: Event) {
         handleLdkEvent(event)
         recordProbeOutcome(event)
+        val settledReceiveInvoice: SettledReceiveInvoice?
+        val settledReceiveAddress: SettledReceiveAddress?
+        when (event) {
+            is Event.PaymentReceived -> {
+                settledReceiveInvoice = invalidateSettledReceiveInvoice(event)
+                settledReceiveAddress = null
+                val paymentId = event.paymentId ?: event.paymentHash
+                runSuspendCatching { coreService.activity.handlePaymentEvent(paymentId) }
+                    .onFailure { Logger.error("Failed to record received payment '$paymentId'", it, context = TAG) }
+            }
+
+            is Event.OnchainTransactionReceived -> {
+                settledReceiveInvoice = null
+                settledReceiveAddress = invalidateSettledReceiveAddress(event)
+            }
+
+            else -> {
+                settledReceiveInvoice = null
+                settledReceiveAddress = null
+            }
+        }
         _eventHandlers.toList().forEach {
             runCatching { it.invoke(event) }
         }
-        _nodeEvents.emit(event)
+        _nodeEventUpdates.emit(
+            NodeEventUpdate(
+                event = event,
+                settledReceiveInvoice = settledReceiveInvoice,
+                settledReceiveAddress = settledReceiveAddress,
+            ),
+        )
+    }
+
+    private suspend fun invalidateSettledReceiveInvoice(event: Event.PaymentReceived): SettledReceiveInvoice? {
+        val cachedReceive = runSuspendCatching {
+            cacheStore.data.first()
+        }.onFailure {
+            Logger.error("Failed to read cached receive invoice", it, context = TAG)
+        }.getOrNull() ?: return null
+        val cachedBolt11 = cachedReceive.bolt11
+        if (cachedBolt11.isEmpty()) return null
+
+        val cachedPaymentHash = cachedReceive.bolt11PaymentHash.takeIf { it.isNotEmpty() } ?: runCatching {
+            Bolt11Invoice.fromStr(cachedBolt11).paymentHash()
+        }.onFailure {
+            Logger.error("Failed to parse cached receive invoice", it, context = TAG)
+        }.getOrNull()
+        if (cachedPaymentHash != event.paymentHash) return null
+
+        val invalidated = runSuspendCatching {
+            cacheStore.invalidateReceiveLightningInvoice(expectedBolt11 = cachedBolt11)
+        }.onFailure {
+            Logger.error("Failed to invalidate settled receive invoice", it, context = TAG)
+        }.getOrDefault(false)
+
+        return if (invalidated) {
+            SettledReceiveInvoice(
+                bolt11 = cachedBolt11,
+            )
+        } else {
+            null
+        }
+    }
+
+    private suspend fun invalidateSettledReceiveAddress(
+        event: Event.OnchainTransactionReceived,
+    ): SettledReceiveAddress? {
+        val cachedAddress = runSuspendCatching {
+            cacheStore.data.first().onchainAddress
+        }.onFailure {
+            Logger.error("Failed to read cached receive address", it, context = TAG)
+        }.getOrNull()?.takeIf { it.isNotEmpty() } ?: return null
+        if (event.details.outputs.none { it.scriptpubkeyAddress == cachedAddress }) return null
+
+        val invalidated = runSuspendCatching {
+            cacheStore.invalidateReceiveOnchainAddress(expectedAddress = cachedAddress)
+        }.onFailure {
+            Logger.error("Failed to invalidate settled receive address", it, context = TAG)
+        }.getOrDefault(false)
+
+        return if (invalidated) SettledReceiveAddress(cachedAddress) else null
     }
 
     fun setRecoveryMode(enabled: Boolean) = _isRecoveryMode.update { enabled }
@@ -1748,6 +1827,21 @@ class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node t
 class GetPaymentsError : AppError("It wasn't possible get the payments")
 class SyncUnhealthyError : AppError("Wallet sync failed before send")
 class LnurlPayInvoiceMismatchError : AppError("The invoice did not match the requested payment. Payment cancelled.")
+
+data class NodeEventUpdate(
+    val event: Event,
+    val settledReceiveInvoice: SettledReceiveInvoice? = null,
+    val settledReceiveAddress: SettledReceiveAddress? = null,
+)
+
+data class SettledReceiveInvoice(
+    val bolt11: String,
+)
+
+data class SettledReceiveAddress(
+    val address: String,
+)
+
 sealed class ProbeError(message: String) : AppError(message) {
     class NoProbeHandles : ProbeError("No probe handles returned")
     class TimedOut : ProbeError("Probe timed out")

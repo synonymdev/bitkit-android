@@ -254,6 +254,8 @@ class ActivityRepo @Inject constructor(
         notifyActivitiesChanged()
     }
 
+    suspend fun notifyPaymentActivityChanged() = notifyActivitiesChanged()
+
     suspend fun shouldShowReceivedSheet(txid: String, value: ULong): Boolean {
         return coreService.activity.shouldShowReceivedSheet(txid, value)
     }
