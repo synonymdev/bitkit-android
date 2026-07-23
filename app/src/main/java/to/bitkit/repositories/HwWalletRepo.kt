@@ -415,7 +415,7 @@ class HwWalletRepo @Inject constructor(
                         activities.map { it.scopedId() }.toSet()
                     }
 
-                    val persistedActivities = activityRepo.persistHardware(
+                    val persistedActivities = activityRepo.persistHwSnapshot(
                         walletId = walletId,
                         activities = activities,
                         transactionDetails = transactionDetails,

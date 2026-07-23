@@ -136,8 +136,7 @@ fun ActivityExploreScreen(
                 val context = LocalContext.current
 
                 val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
-                val isTransactionDetailsLoading by
-                    detailViewModel.isTransactionDetailsLoading.collectAsStateWithLifecycle()
+                val isTxDetailsLoading by detailViewModel.isTxDetailsLoading.collectAsStateWithLifecycle()
                 var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
 
                 LaunchedEffect(item) {
@@ -168,7 +167,7 @@ fun ActivityExploreScreen(
                     item = item,
                     isHardware = uiState.isHardwareActivity,
                     txDetails = txDetails,
-                    isTransactionDetailsLoading = isTransactionDetailsLoading,
+                    isTxDetailsLoading = isTxDetailsLoading,
                     boostTxDoesExist = boostTxDoesExist,
                     onCopy = { text ->
                         app.toast(
@@ -193,7 +192,7 @@ private fun ActivityExploreContent(
     item: Activity,
     isHardware: Boolean = false,
     txDetails: TransactionDetails? = null,
-    isTransactionDetailsLoading: Boolean = false,
+    isTxDetailsLoading: Boolean = false,
     boostTxDoesExist: Map<String, Boolean> = emptyMap(),
     onCopy: (String) -> Unit = {},
     onClickExplore: (String) -> Unit = {},
@@ -227,7 +226,7 @@ private fun ActivityExploreContent(
                     onchain = item,
                     onCopy = onCopy,
                     txDetails = txDetails,
-                    isTransactionDetailsLoading = isTransactionDetailsLoading,
+                    isTxDetailsLoading = isTxDetailsLoading,
                     boostTxDoesExist = boostTxDoesExist,
                 )
                 Spacer(modifier = Modifier.weight(1f))
@@ -290,7 +289,7 @@ private fun ColumnScope.OnchainDetails(
     onchain: Activity.Onchain,
     onCopy: (String) -> Unit,
     txDetails: TransactionDetails?,
-    isTransactionDetailsLoading: Boolean,
+    isTxDetailsLoading: Boolean,
     boostTxDoesExist: Map<String, Boolean> = emptyMap(),
 ) {
     val txId = onchain.v1.txId
@@ -331,7 +330,7 @@ private fun ColumnScope.OnchainDetails(
                 }
             },
         )
-    } else if (isTransactionDetailsLoading && !onchain.v1.isTransfer) {
+    } else if (isTxDetailsLoading && !onchain.v1.isTransfer) {
         CircularProgressIndicator(
             strokeWidth = 2.dp,
             modifier = Modifier

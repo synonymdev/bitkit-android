@@ -18,6 +18,7 @@ import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.channelId
+import to.bitkit.ext.isFromHardwareWallet
 import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.TransferType
@@ -275,7 +276,7 @@ class TransferRepo @Inject constructor(
             .let { matches ->
                 matches.firstOrNull { it.v1.isTransfer }
                     ?: matches.firstOrNull {
-                        it.v1.walletId != WalletScope.default && it.v1.txType == PaymentType.SENT
+                        it.isFromHardwareWallet() && it.v1.txType == PaymentType.SENT
                     }
                     ?: matches.firstOrNull()
             }?.v1 ?: return

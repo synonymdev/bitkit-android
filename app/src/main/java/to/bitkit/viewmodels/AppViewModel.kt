@@ -2469,12 +2469,12 @@ class AppViewModel @Inject constructor(
     }
 
     fun onClickActivityDetail() {
-        val transactionDetails = _transactionSheet.value
-        transactionDetails.activityId?.let {
+        val details = _transactionSheet.value
+        details.activityId?.let {
             hideNewTransactionSheet()
             mainScreenEffect(
                 MainScreenEffect.Navigate(
-                    Routes.ActivityDetail(it, transactionDetails.activityWalletId)
+                    Routes.ActivityDetail(it, details.activityWalletId)
                 )
             )
             return

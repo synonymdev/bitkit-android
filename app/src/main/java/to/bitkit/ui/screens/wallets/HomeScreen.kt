@@ -150,8 +150,8 @@ import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
+import to.bitkit.ui.navToActivityDetail
 import to.bitkit.ui.navigateTo
-import to.bitkit.ui.navigateToActivityItem
 import to.bitkit.ui.navigateToAllActivity
 import to.bitkit.ui.navigateToProfile
 import to.bitkit.ui.navigateToTransferFunding
@@ -379,7 +379,7 @@ fun HomeScreen(
         onNavigateToAppStatus = { rootNavController.navigate(Routes.AppStatus) },
         onNavigateToSettingUp = { rootNavController.navigate(Routes.SettingUp) },
         onNavigateToAllActivity = { rootNavController.navigateToAllActivity(activityListViewModel::clearFilters) },
-        onNavigateToActivityItem = { rootNavController.navigateToActivityItem(it) },
+        onNavigateToActivityItem = { rootNavController.navToActivityDetail(it) },
         onNavigateToSavings = { walletNavController.navigate(Routes.Savings) },
         onNavigateToSpending = { walletNavController.navigate(Routes.Spending) },
         onClickHardwareWallet = { walletNavController.navigateTo(Routes.HardwareWallet(it)) },

@@ -290,7 +290,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         verify(activityRepo).addTagsToActivity(ACTIVITY_ID, listOf("cold"), HARDWARE_WALLET_ID)
         verify(activityRepo).getTransactionDetails(activity.v1.txId, HARDWARE_WALLET_ID)
         assertEquals(transactionDetails, sut.txDetails.value)
-        assertFalse(sut.isTransactionDetailsLoading.value)
+        assertFalse(sut.isTxDetailsLoading.value)
     }
 
     private fun createTestActivity(

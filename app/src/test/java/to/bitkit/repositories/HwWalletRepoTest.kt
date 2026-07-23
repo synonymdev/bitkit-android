@@ -96,7 +96,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             "derived-${xpubs.values.sorted().joinToString()}"
         }
         whenever {
-            activityRepo.persistHardware(
+            activityRepo.persistHwSnapshot(
                 any<String>(),
                 any<List<Activity>>(),
                 any<List<TransactionDetails>>(),
@@ -178,7 +178,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(1, wallet.activities.size)
         assertEquals(1, sut.activities.value.size)
         assertEquals(Activity.Onchain::class, wallet.activities.single()::class)
-        verify(activityRepo).persistHardware(
+        verify(activityRepo).persistHwSnapshot(
             walletId = HARDWARE_WALLET_ID,
             activities = wallet.activities,
             transactionDetails = emptyList(),
@@ -565,7 +565,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         )
         runCurrent()
         assertEquals(listOf("t1", "t2"), sut.activities.value.map { (it as Activity.Onchain).v1.txId })
-        verify(activityRepo, times(2)).persistHardware(
+        verify(activityRepo, times(2)).persistHwSnapshot(
             walletId = eq(HARDWARE_WALLET_ID),
             activities = any(),
             transactionDetails = any(),
@@ -600,10 +600,10 @@ class HwWalletRepoTest : BaseUnitTest() {
         val baseline = listOf(watcherActivity(amount = 100uL))
         val updated = baseline + watcherActivity(amount = 50uL, txid = "retry-receive")
         whenever {
-            activityRepo.persistHardware(HARDWARE_WALLET_ID, baseline, emptyList())
+            activityRepo.persistHwSnapshot(HARDWARE_WALLET_ID, baseline, emptyList())
         }.thenReturn(Result.success(baseline))
         whenever {
-            activityRepo.persistHardware(HARDWARE_WALLET_ID, updated, emptyList())
+            activityRepo.persistHwSnapshot(HARDWARE_WALLET_ID, updated, emptyList())
         }.thenReturn(
             Result.failure(AppError("persist failed")),
             Result.success(updated),

@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.SortDirection
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
@@ -32,6 +33,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -270,23 +272,35 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `persistHardware replaces the wallet snapshot and notifies observers`() = test {
+    fun `getActivity rethrows cancellation`() = test {
+        val cancellation = CancellationException("cancelled")
+        whenever(coreService.activity.getActivity("activity123", WalletScope.default)).thenThrow(cancellation)
+
+        val thrown = assertFailsWith<CancellationException> {
+            sut.getActivity("activity123")
+        }
+
+        assertEquals(cancellation.message, thrown.message)
+    }
+
+    @Test
+    fun `persistHwSnapshot replaces the wallet snapshot and notifies observers`() = test {
         val walletId = "hardware-wallet"
         val activity = createOnchainActivity().copy(
             v1 = baseOnchainActivity.copy(walletId = walletId)
         )
         whenever(
-            coreService.activity.replaceHardwareSnapshot(
+            coreService.activity.replaceHwSnapshot(
                 walletId = walletId,
                 activities = listOf(activity),
                 transactionDetails = emptyList(),
             )
         ).thenReturn(listOf(activity))
 
-        val result = sut.persistHardware(walletId, listOf(activity), emptyList())
+        val result = sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
 
         assertEquals(listOf(activity), result.getOrThrow())
-        verify(coreService.activity).replaceHardwareSnapshot(walletId, listOf(activity), emptyList())
+        verify(coreService.activity).replaceHwSnapshot(walletId, listOf(activity), emptyList())
     }
 
     @Test
