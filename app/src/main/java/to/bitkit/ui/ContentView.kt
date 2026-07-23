@@ -1009,7 +1009,7 @@ private fun NavGraphBuilder.home(
             isGeoBlocked = isGeoBlocked,
             onchainActivities = onchainActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
-            onActivityItemClick = { navController.navigateToActivityItem(it) },
+            onActivityItemClick = { navController.navToActivityDetail(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSpendingClick = {
                 navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
@@ -1028,7 +1028,7 @@ private fun NavGraphBuilder.home(
             channels = lightningState.channels,
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
-            onActivityItemClick = { navController.navigateToActivityItem(it) },
+            onActivityItemClick = { navController.navToActivityDetail(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSavingsClick = {
                 if (!hasSeenSavingsIntro) {
@@ -1048,7 +1048,7 @@ private fun NavGraphBuilder.home(
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         HardwareWalletScreen(
             deviceId = deviceId,
-            onActivityItemClick = { navController.navigateToActivityItem(it) },
+            onActivityItemClick = { navController.navToActivityDetail(it) },
             onTransferToSpendingClick = { selectedDeviceId ->
                 navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, selectedDeviceId)
             },
@@ -1065,7 +1065,7 @@ private fun NavGraphBuilder.allActivity(
         AllActivityScreen(
             viewModel = activityListViewModel,
             onBack = { navController.popBackStack() },
-            onActivityItemClick = { navController.navigateToActivityItem(it) },
+            onActivityItemClick = { navController.navToActivityDetail(it) },
         )
     }
 }
@@ -1223,7 +1223,7 @@ private fun NavGraphBuilder.contacts(
             ContactActivityScreen(
                 viewModel = viewModel,
                 onBackClick = { navController.popBackStack() },
-                onActivityItemClick = { navController.navigateToActivityItem(it) },
+                onActivityItemClick = { navController.navToActivityDetail(it) },
             )
         }
     }
@@ -1894,7 +1894,7 @@ fun NavController.navigateToTransferIntro() = navigateTo(Routes.TransferIntro)
 
 fun NavController.navigateToTransferFunding() = navigateTo(Routes.Funding)
 
-fun NavController.navigateToActivityItem(activity: Activity) = navigateTo(
+fun NavController.navToActivityDetail(activity: Activity) = navigateTo(
     Routes.ActivityDetail(
         id = activity.rawId(),
         walletId = activity.walletId(),

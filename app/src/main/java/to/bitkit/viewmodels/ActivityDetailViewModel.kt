@@ -51,8 +51,8 @@ class ActivityDetailViewModel @Inject constructor(
     private val _txDetails = MutableStateFlow<TransactionDetails?>(null)
     val txDetails = _txDetails.asStateFlow()
 
-    private val _isTransactionDetailsLoading = MutableStateFlow(false)
-    val isTransactionDetailsLoading = _isTransactionDetailsLoading.asStateFlow()
+    private val _isTxDetailsLoading = MutableStateFlow(false)
+    val isTxDetailsLoading = _isTxDetailsLoading.asStateFlow()
 
     private val _tags = MutableStateFlow<ImmutableList<String>>(persistentListOf())
     val tags = _tags.asStateFlow()
@@ -88,7 +88,7 @@ class ActivityDetailViewModel @Inject constructor(
                     }
                 }
                 .onFailure {
-                    Logger.warn("Failed to load activity '$activityId' from Core", it, context = TAG)
+                    Logger.warn("Failed to load activity '$activityId'", it, context = TAG)
                     loadHwWalletActivity(activityId, resolvedWalletId, it)
                 }
         }
@@ -222,7 +222,7 @@ class ActivityDetailViewModel @Inject constructor(
     fun fetchTransactionDetails(txid: String) {
         val walletId = activity?.walletId() ?: return
         viewModelScope.launch(bgDispatcher) {
-            _isTransactionDetailsLoading.update { true }
+            _isTxDetailsLoading.update { true }
             activityRepo.getTransactionDetails(txid, walletId)
                 .onSuccess { transactionDetails ->
                     _txDetails.update { transactionDetails }
@@ -231,13 +231,13 @@ class ActivityDetailViewModel @Inject constructor(
                     Logger.error("fetchTransactionDetails error", e, context = TAG)
                     _txDetails.update { null }
                 }
-            _isTransactionDetailsLoading.update { false }
+            _isTxDetailsLoading.update { false }
         }
     }
 
     fun clearTransactionDetails() {
         _txDetails.update { null }
-        _isTransactionDetailsLoading.update { false }
+        _isTxDetailsLoading.update { false }
     }
 
     fun onClickBoost() {

@@ -74,7 +74,7 @@ class ActivityListViewModel @Inject constructor(
         hwWalletRepo.activities,
         _persistedActivityIds,
     ) { localActivities, hardwareActivities, persistedActivityIds ->
-        val visibleHardwareActivities = hardwareActivities.withoutPersistedDuplicates(persistedActivityIds)
+        val visibleHardwareActivities = hardwareActivities.excludingPersisted(persistedActivityIds)
         if (localActivities == null && visibleHardwareActivities.isEmpty()) {
             null
         } else {
@@ -152,7 +152,7 @@ class ActivityListViewModel @Inject constructor(
         ) { debouncedSearch, filtersWithoutSearch, _, hardwareActivities, persistedActivityIds ->
             val filters = filtersWithoutSearch.copy(searchText = debouncedSearch)
             fetchFilteredActivities(filters)?.let { activities ->
-                (activities + hardwareActivities.withoutPersistedDuplicates(persistedActivityIds).filteredWith(filters))
+                (activities + hardwareActivities.excludingPersisted(persistedActivityIds).filteredWith(filters))
                     .sortedByDescending { it.timestamp() }
             }
         }.collect { activities ->
@@ -181,7 +181,7 @@ class ActivityListViewModel @Inject constructor(
         }
     }
 
-    private fun List<Activity>.withoutPersistedDuplicates(persistedActivityIds: Set<String>) = filterNot {
+    private fun List<Activity>.excludingPersisted(persistedActivityIds: Set<String>) = filterNot {
         it.scopedId() in persistedActivityIds
     }
 

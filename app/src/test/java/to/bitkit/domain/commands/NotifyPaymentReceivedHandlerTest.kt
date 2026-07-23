@@ -119,13 +119,13 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertEquals("hash123", paymentResult.sheet.paymentHashOrTxId)
         assertNotNull(paymentResult.notification)
         assertEquals("Payment Received", paymentResult.notification.title)
-        verify(activityRepo, never()).markActivityAsSeen(any())
+        verify(activityRepo, never()).markActivityAsSeen(any(), eq(WalletScope.default))
 
         val claimed = sut.claimPresentation(command)
 
         assertTrue(claimed)
         sut.recordPresentation(command)
-        verify(activityRepo).markActivityAsSeen("paymentId123")
+        verify(activityRepo).markActivityAsSeen("paymentId123", WalletScope.default)
     }
 
     @Test
@@ -275,7 +275,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
             on { paymentHash } doReturn "hash123"
             on { paymentId } doReturn "paymentId123"
         }
-        whenever(activityRepo.markActivityAsSeen("paymentId123"))
+        whenever(activityRepo.markActivityAsSeen("paymentId123", WalletScope.default))
             .thenThrow(IllegalStateException("activity store unavailable"))
         val command = NotifyPaymentReceived.Command.Lightning(event = event)
 
@@ -296,7 +296,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
 
         assertTrue(presented)
         assertEquals(1, presentationCount)
-        verify(activityRepo).markActivityAsSeen("paymentId123")
+        verify(activityRepo).markActivityAsSeen("paymentId123", WalletScope.default)
         assertFalse(sut.claimPresentation(command))
     }
 
@@ -313,7 +313,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         val result = sut(command)
 
         assertTrue(result.getOrThrow() is NotifyPaymentReceived.Result.Skip)
-        verify(activityRepo, never()).isActivitySeen(any())
+        verify(activityRepo, never()).isActivitySeen(any(), eq(WalletScope.default))
     }
 
     @Test

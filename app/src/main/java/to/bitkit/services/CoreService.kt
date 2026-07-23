@@ -290,7 +290,7 @@ class ActivityService(
         upsertActivities(activities)
     }
 
-    suspend fun replaceHardwareSnapshot(
+    suspend fun replaceHwSnapshot(
         walletId: String,
         activities: List<Activity>,
         transactionDetails: List<BitkitCoreTransactionDetails>,

@@ -218,13 +218,13 @@ class ActivityRepo @Inject constructor(
         notifyActivitiesChanged()
     }
 
-    suspend fun persistHardware(
+    suspend fun persistHwSnapshot(
         walletId: String,
         activities: List<Activity>,
         transactionDetails: List<BitkitCoreTransactionDetails>,
     ): Result<List<Activity>> = withContext(bgDispatcher) {
         runSuspendCatching {
-            val persistedActivities = coreService.activity.replaceHardwareSnapshot(
+            val persistedActivities = coreService.activity.replaceHwSnapshot(
                 walletId = walletId,
                 activities = activities,
                 transactionDetails = transactionDetails,
@@ -371,7 +371,7 @@ class ActivityRepo @Inject constructor(
         limit: UInt? = null,
         sortDirection: SortDirection? = null,
     ): Result<List<Activity>> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             coreService.activity.get(
                 walletId = walletId,
                 filter = filter,
@@ -404,7 +404,7 @@ class ActivityRepo @Inject constructor(
         id: String,
         walletId: String = WalletScope.default,
     ): Result<Activity?> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             coreService.activity.getActivity(id, walletId)
         }.onFailure {
             Logger.error("getActivity error for ID: $id", it, context = TAG)
@@ -642,14 +642,11 @@ class ActivityRepo @Inject constructor(
         id: String,
         walletId: String = WalletScope.default,
     ): Result<Unit> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val deleted = coreService.activity.delete(id, walletId)
-            if (deleted) {
-                cacheStore.addActivityToDeletedList(id)
-                notifyActivitiesChanged()
-            } else {
-                return@withContext Result.failure(Exception("Activity not deleted"))
-            }
+            check(deleted) { "Activity not deleted" }
+            cacheStore.addActivityToDeletedList(id)
+            notifyActivitiesChanged()
         }.onFailure {
             Logger.error("deleteActivity error for ID: $id", it, context = TAG)
         }
@@ -737,7 +734,7 @@ class ActivityRepo @Inject constructor(
         tags: List<String>,
         walletId: String = WalletScope.default,
     ): Result<Unit> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             checkNotNull(coreService.activity.getActivity(activityId, walletId)) {
                 "Activity with ID $activityId not found"
             }
@@ -786,7 +783,7 @@ class ActivityRepo @Inject constructor(
         walletId: String = WalletScope.default,
     ): Result<Unit> =
         withContext(bgDispatcher) {
-            runCatching {
+            runSuspendCatching {
                 checkNotNull(coreService.activity.getActivity(activityId, walletId)) {
                     "Activity with ID $activityId not found"
                 }
@@ -806,7 +803,7 @@ class ActivityRepo @Inject constructor(
         activityId: String,
         walletId: String = WalletScope.default,
     ): Result<List<String>> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             coreService.activity.tags(activityId, walletId)
         }.onFailure {
             Logger.error("getActivityTags error for activity $activityId", it, context = TAG)

@@ -17,6 +17,5 @@ data class KnownDevice(
     val xpubs: Map<String, String> = emptyMap(),
     /** Bitkit-side funds label set by the user while pairing; null until renamed within Bitkit. */
     val customLabel: String? = null,
-    /** Stable Bitkit Core wallet scope for hardware activity metadata. */
     val walletId: String = "",
 )
