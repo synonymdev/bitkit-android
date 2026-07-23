@@ -75,6 +75,12 @@ class WalletViewModel @Inject constructor(
 
         /** Upper bound for the backoff between swap updates stream attempts. */
         private val SWAP_UPDATES_RETRY_CAP = 60.seconds
+
+        /**
+         * Ceiling on swap updates stream start attempts per run (~14 min of backoff). Giving up is
+         * safe: the stream is retried on the next node start and when entering a swap flow.
+         */
+        private const val SWAP_UPDATES_MAX_ATTEMPTS = 20
     }
 
     val lightningState = lightningRepo.lightningState
@@ -357,19 +363,20 @@ class WalletViewModel @Inject constructor(
 
     /**
      * Open the swap updates stream so any pending LN -> onchain swaps resume and auto-claim.
-     * Uses the wallet's current fee rate for the claim tx. Retries until started: without
-     * the stream a paid swap has nothing to broadcast its claim. Once started, bitkit-core
+     * Uses the wallet's current fee rate for the claim tx. Retries up to a ceiling: without the
+     * stream a paid swap has nothing to broadcast its claim, so give up only after
+     * [SWAP_UPDATES_MAX_ATTEMPTS] and leave the next trigger to retry. Once started, bitkit-core
      * keeps the WebSocket alive with its own reconnect loop.
      */
     private suspend fun startSwapUpdates() {
         var attempt = 0
-        while (true) {
+        while (attempt < SWAP_UPDATES_MAX_ATTEMPTS) {
             val started = runSuspendCatching {
                 val speed = settingsStore.data.first().defaultTransactionSpeed
                 val feeRate = lightningRepo.getFeeRateForSpeed(speed).getOrNull()?.toDouble()
                 boltzService.startUpdates(feeRateSatPerVb = feeRate, acceptZeroConf = true)
             }.onFailure {
-                Logger.warn("Failed to start swap updates, attempt '${attempt + 1}'", context = TAG)
+                Logger.warn("Failed to start swap updates, attempt '${attempt + 1}'", it, context = TAG)
             }.isSuccess
 
             if (started) {
@@ -379,6 +386,7 @@ class WalletViewModel @Inject constructor(
             attempt++
             delay((SWAP_UPDATES_RETRY_DELAY * attempt).coerceAtMost(SWAP_UPDATES_RETRY_CAP))
         }
+        Logger.warn("Gave up starting swap updates after '$attempt' attempts", context = TAG)
     }
 
     /** Refresh balances when a swap lands on-chain so savings reflect it without a manual sync. */

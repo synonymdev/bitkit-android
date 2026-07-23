@@ -11,6 +11,7 @@ import com.synonym.bitkitcore.IBtOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -24,6 +25,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -35,6 +37,8 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
+import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
 import to.bitkit.R
 import to.bitkit.data.CacheStore
@@ -46,6 +50,7 @@ import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.ext.isTrezorFirmwareError
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.toUserMessage
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
@@ -1143,7 +1148,9 @@ class TransferViewModel @Inject constructor(
         if (!boltzService.isSwapSupported) return
         savingsSwapQuoteJob?.cancel()
         savingsSwapQuoteJob = viewModelScope.launch {
-            if (!boltzService.isSwapEnabled()) return@launch
+            val isSwapEnabled = boltzService.isSwapEnabled()
+            _savingsSwapState.update { it.copy(isSwapEnabled = isSwapEnabled) }
+            if (!isSwapEnabled) return@launch
             _savingsSwapState.update { it.copy(isLoading = true) }
             awaitNodeRunning()
 
@@ -1221,13 +1228,13 @@ class TransferViewModel @Inject constructor(
 
     /**
      * Run the swap in [viewModelScope] so it outlives the progress screen: navigating away
-     * mid-flight must not cancel a swap whose hold invoice is already paid. Idempotent while
-     * a swap is in flight, so re-entering the journey cannot create and pay a second swap.
-     * The outcome lands in [savingsSwapResult].
+     * mid-flight must not cancel a swap whose hold invoice is already paid. Idempotent once
+     * started: a swap already in flight, or one whose outcome is already in [savingsSwapResult],
+     * is never re-run, so re-entering the screen or a configuration change cannot create and pay
+     * a second swap. A fresh journey clears the outcome in [onTransferToSavingsConfirm].
      */
     fun startSavingsSwap() {
-        if (savingsSwapJob?.isActive == true) return
-        _savingsSwapResult.update { null }
+        if (savingsSwapJob?.isActive == true || _savingsSwapResult.value != null) return
         savingsSwapJob = viewModelScope.launch {
             val result = executeSavingsSwap()
             _savingsSwapResult.update { result }
@@ -1252,16 +1259,33 @@ class TransferViewModel @Inject constructor(
             Logger.info("Created savings transfer swap ${swap.id}", context = TAG)
 
             coroutineScope {
+                // Whichever resolves first wins: an on-chain claim, a Boltz error, or a Lightning
+                // routing failure. The losing watcher is cancelled so this scope can return.
+                val outcome = CompletableDeferred<SavingsSwapResult>()
+
                 // UNDISPATCHED so the collector actually subscribes before we pay: the events
                 // flow has no replay, so a claim settling faster than the payment call returns
                 // would otherwise be missed and the swap would idle until the claim timeout.
-                val claim = async(start = CoroutineStart.UNDISPATCHED) { awaitSwapClaim(swap.id) }
+                val claim = launch(start = CoroutineStart.UNDISPATCHED) {
+                    outcome.complete(awaitSwapClaim(swap.id))
+                }
 
                 // Pay the hold invoice (amount is encoded). It stays pending until Boltz
                 // locks funds on-chain and we claim them, which is the expected happy path.
-                lightningRepo.payInvoice(bolt11 = swap.invoice).getOrThrow()
+                val paymentHash = lightningRepo.payInvoice(bolt11 = swap.invoice).getOrThrow()
 
-                claim.await()
+                // payInvoice returns as soon as the HTLC is dispatched, and a hold invoice never
+                // settles until Boltz claims, so nothing else notices a payment that fails to route.
+                // Watch for it so an unroutable payment surfaces as an error instead of idling into
+                // the claim timeout and reporting a settling transfer that never completes.
+                val failure = launch {
+                    outcome.complete(awaitPaymentFailure(paymentHash))
+                }
+
+                outcome.await().also {
+                    claim.cancel()
+                    failure.cancel()
+                }
             }
         }.getOrElse { e ->
             Logger.error("Savings transfer swap failed", e, context = TAG)
@@ -1281,6 +1305,14 @@ class TransferViewModel @Inject constructor(
             is BoltzSwapEvent.Error -> SavingsSwapResult.Failure(event.message)
             else -> SavingsSwapResult.Pending
         }
+    }
+
+    /** Suspends until the paid hold invoice fails to route on Lightning, then maps it to a reason. */
+    private suspend fun awaitPaymentFailure(paymentHash: PaymentId): SavingsSwapResult {
+        val event = lightningRepo.nodeEvents
+            .filterIsInstance<Event.PaymentFailed>()
+            .first { it.paymentHash == paymentHash }
+        return SavingsSwapResult.Failure(event.reason.toUserMessage(context))
     }
 
     fun setSelectedChannelIds(channelIds: Set<String>) {
@@ -1591,6 +1623,8 @@ data class SavingsSwapQuote(
 
 @Immutable
 data class SavingsSwapUiState(
+    /** Whether swaps are switched on for this network and in dev settings; see [BoltzService.isSwapEnabled]. */
+    val isSwapEnabled: Boolean = false,
     val isLoading: Boolean = false,
     val quote: SavingsSwapQuote? = null,
     /** Inclusive adjustable range for the confirm slider (sat). Equal/zero when unavailable. */

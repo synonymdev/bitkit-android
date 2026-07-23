@@ -103,6 +103,7 @@ fun SavingsConfirmScreen(
     Box {
         SavingsConfirmContent(
             fallbackAmount = amount,
+            isSwapEnabled = swapState.isSwapEnabled,
             quote = swapState.quote,
             isQuoteLoading = swapState.isLoading,
             minSat = swapState.minSat,
@@ -140,6 +141,7 @@ fun SavingsConfirmScreen(
 @Composable
 private fun SavingsConfirmContent(
     fallbackAmount: ULong,
+    isSwapEnabled: Boolean,
     quote: SavingsSwapQuote?,
     isQuoteLoading: Boolean,
     minSat: ULong,
@@ -156,6 +158,9 @@ private fun SavingsConfirmContent(
 ) {
     val scope = rememberCoroutineScope()
     val headlineAmount = quote?.amountSat ?: fallbackAmount
+    // Only show the swap-pricing spinner while swaps are enabled and a quote is still being fetched;
+    // otherwise the swipe just falls back to closing the channel and there is nothing to wait for.
+    val isPricingSwap = isSwapEnabled && quote == null && isQuoteLoading
     ScreenColumn {
         AppTopBar(
             titleText = stringResource(R.string.lightning__transfer__nav_title),
@@ -245,7 +250,7 @@ private fun SavingsConfirmContent(
                     .padding(vertical = 16.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                if (quote == null && isQuoteLoading) {
+                if (isPricingSwap) {
                     GradientCircularProgressIndicator(
                         modifier = Modifier.size(48.dp),
                         strokeWidth = 3.dp,
@@ -267,7 +272,7 @@ private fun SavingsConfirmContent(
             var isLoading by remember { mutableStateOf(false) }
             SwipeToConfirm(
                 text = stringResource(R.string.lightning__transfer__swipe),
-                loading = isLoading || (quote == null && isQuoteLoading),
+                loading = isLoading || isPricingSwap,
                 color = Colors.Brand,
                 onConfirm = {
                     scope.launch {
@@ -296,6 +301,7 @@ private fun SavingsConfirmScreenPreview() {
     AppThemeSurface {
         SavingsConfirmContent(
             fallbackAmount = 50_123u,
+            isSwapEnabled = true,
             quote = SavingsSwapQuote(
                 amountSat = 50_123u,
                 networkFeeSat = 320u,

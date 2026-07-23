@@ -31,16 +31,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Thin wrapper around the bitkit-core Boltz swaps FFI (submarine + reverse swaps
- * between onchain Bitcoin and Lightning).
- *
- * Mirrors the existing service pattern (e.g. [TrezorService]): a Hilt singleton
- * that wraps the FFI and bridges the [BoltzEventListener] foreign callback to a
- * [SharedFlow]. bitkit-core persists only a derivation index, never key material;
- * swap keys are re-derived on demand from the wallet mnemonic.
- *
- * The Lightning side (issuing/paying invoices, fresh onchain addresses) is owned
- * by [LightningService]; this service only talks to Boltz + the chain.
+ * Thin wrapper around the bitkit-core Boltz swaps FFI (submarine + reverse swaps between onchain
+ * Bitcoin and Lightning). A Hilt singleton that bridges the [BoltzEventListener] callback to a
+ * [SharedFlow]; swap keys are re-derived from the wallet mnemonic on demand, never persisted.
  */
 @Suppress("TooManyFunctions")
 @Singleton

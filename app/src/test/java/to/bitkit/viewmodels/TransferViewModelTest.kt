@@ -33,8 +33,10 @@ import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.OutPoint
+import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -104,6 +106,7 @@ class TransferViewModelTest : BaseUnitTest() {
     private val balanceState = MutableStateFlow(BalanceState())
     private val blocktankState = MutableStateFlow(BlocktankState())
     private val boltzEvents = MutableSharedFlow<BoltzSwapEvent>(extraBufferCapacity = 8)
+    private val nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 8)
     private val feeResponse = mock<IBtEstimateFeeResponse2>()
 
     @Before
@@ -119,6 +122,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(blocktankRepo.blocktankState).thenReturn(blocktankState)
         whenever(boltzService.events).thenReturn(boltzEvents)
+        whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
         whenever(boltzService.isSwapSupported).thenReturn(true)
         whenever { boltzService.isSwapEnabled() }.thenReturn(true)
         // Default: no mining-fee reserve so existing limit tests keep their balances.
@@ -1412,13 +1416,57 @@ class TransferViewModelTest : BaseUnitTest() {
         verify(lightningRepo).payInvoice(any(), anyOrNull())
     }
 
+    @Test
+    fun `startSavingsSwap fails when the paid invoice reports a lightning routing failure`() = test {
+        stubSavingsSwapHappyPath()
+        whenever(context.getString(R.string.wallet__toast_payment_failed_route_not_found))
+            .thenReturn(ROUTE_NOT_FOUND_MSG)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.startSavingsSwap()
+        runCurrent()
+        // payInvoice returns as soon as the HTLC is dispatched; the routing failure lands later.
+        nodeEvents.emit(
+            Event.PaymentFailed(
+                paymentId = PAYMENT_ID,
+                paymentHash = PAYMENT_ID,
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Failure(ROUTE_NOT_FOUND_MSG), sut.savingsSwapResult.value)
+    }
+
+    @Test
+    fun `startSavingsSwap ignores a restart once an outcome is already delivered`() = test {
+        stubSavingsSwapHappyPath()
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.startSavingsSwap()
+        runCurrent()
+        boltzEvents.emit(BoltzSwapEvent.Claimed(swapId = SWAP_ID, txid = TXID))
+        advanceUntilIdle()
+        assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
+
+        // A configuration change re-fires startSavingsSwap; the delivered outcome must block a rerun.
+        sut.startSavingsSwap()
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
+        verify(boltzService).createReverseSwap(any(), any(), anyOrNull(), anyOrNull())
+        verify(lightningRepo).payInvoice(any(), anyOrNull())
+    }
+
     private suspend fun stubSavingsSwapHappyPath() {
         balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
         whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
         whenever(lightningRepo.newAddress()).thenReturn(Result.success(CLAIM_ADDRESS))
         whenever(boltzService.createReverseSwap(any(), any(), anyOrNull(), anyOrNull()))
             .thenReturn(reverseSwapResponse())
-        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.success("paymentId"))
+        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.success(PAYMENT_ID))
     }
 
     private fun reverseLimits() = BoltzPairInfo(
@@ -1544,5 +1592,7 @@ class TransferViewModelTest : BaseUnitTest() {
         const val TOO_LOW = "Amount is too low"
         const val PAY_ERROR = "no route found"
         const val BOLTZ_ERROR = "boltz unavailable"
+        const val PAYMENT_ID = "paymentId"
+        const val ROUTE_NOT_FOUND_MSG = "No route to destination"
     }
 }
