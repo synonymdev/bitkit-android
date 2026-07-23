@@ -338,7 +338,7 @@ class LightningService @Inject constructor(
         // and let the GC free it later on the finalizer thread, racing the next node.
         withContext(NonCancellable) {
             ServiceQueue.LDK.background {
-                runCatching { node.stop() }
+                runSuspendCatching { node.stop() }
                     .onFailure {
                         if (it !is NodeException.NotRunning) Logger.warn("Node stop error", it, context = TAG)
                     }
