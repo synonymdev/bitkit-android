@@ -229,6 +229,7 @@ fun BodyMSB(
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
     textAlign: TextAlign = TextAlign.Start,
+    letterSpacing: TextUnit = 0.4.sp,
 ) {
     BodyMSB(
         text = AnnotatedString(text),
@@ -237,6 +238,7 @@ fun BodyMSB(
         overflow = overflow,
         modifier = modifier,
         textAlign = textAlign,
+        letterSpacing = letterSpacing,
     )
 }
 
@@ -248,12 +250,14 @@ fun BodyMSB(
     maxLines: Int = Int.MAX_VALUE,
     overflow: TextOverflow = TextOverflow.Clip,
     textAlign: TextAlign = TextAlign.Start,
+    letterSpacing: TextUnit = 0.4.sp,
 ) {
     Text(
         text = text,
         style = AppTextStyles.BodyMSB.merge(
             color = color,
             textAlign = textAlign,
+            letterSpacing = letterSpacing,
         ),
         maxLines = maxLines,
         overflow = overflow,

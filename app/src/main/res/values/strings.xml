@@ -131,7 +131,7 @@
     <string name="contacts__edit_save_error">Failed to save contact</string>
     <string name="contacts__import_all">Import All</string>
     <string name="contacts__import_friends_count">%1$d friends</string>
-    <string name="contacts__import_overview_headline">Found\n&lt;accent&gt;profile &amp; contacts&lt;/accent&gt;</string>
+    <string name="contacts__import_overview_headline">Found\n&lt;accent&gt;contacts&lt;/accent&gt;</string>
     <string name="contacts__import_overview_subtitle">Bitkit found profile and contacts data connected to pubky &lt;accent&gt;%1$s&lt;/accent&gt;</string>
     <string name="contacts__import_select">Select</string>
     <string name="contacts__import_select_all">Select all</string>

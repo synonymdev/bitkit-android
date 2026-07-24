@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -113,6 +114,9 @@ private fun Content(
             titleText = stringResource(R.string.contacts__import_title),
             onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
+            modifier = Modifier
+                .height(48.dp)
+                .offset(y = (-2).dp),
         )
 
         Column(
@@ -120,27 +124,28 @@ private fun Content(
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-            VerticalSpacer(24.dp)
+            VerticalSpacer(10.dp)
 
             Display(
                 text = stringResource(R.string.contacts__import_overview_headline)
                     .withAccent(accentColor = Colors.PubkyGreen),
             )
 
-            VerticalSpacer(8.dp)
+            VerticalSpacer(4.dp)
 
             val truncatedKey = uiState.profile?.truncatedPublicKey.orEmpty()
             BodyM(
                 text = stringResource(R.string.contacts__import_overview_subtitle, truncatedKey)
                     .withAccentBoldBright(),
                 color = Colors.White64,
+                letterSpacing = 0.sp,
             )
 
             VerticalSpacer(32.dp)
 
             if (uiState.profile != null) {
                 ProfileRow(profile = uiState.profile)
-                VerticalSpacer(24.dp)
+                VerticalSpacer(31.dp)
             }
 
             if (uiState.contacts.isNotEmpty()) {
@@ -157,15 +162,17 @@ private fun Content(
                     text = stringResource(R.string.contacts__import_select),
                     onClick = onClickSelect,
                     modifier = Modifier.weight(1f),
+                    letterSpacing = 0.sp,
                 )
                 PrimaryButton(
                     text = stringResource(R.string.contacts__import_all),
                     onClick = onClickImportAll,
                     isLoading = uiState.isImporting,
                     modifier = Modifier.weight(1f),
+                    letterSpacing = 0.sp,
                 )
             }
-            VerticalSpacer(16.dp)
+            VerticalSpacer(10.dp)
         }
     }
 }
@@ -211,6 +218,7 @@ private fun ContactCountRow(contacts: ImmutableList<PubkyProfile>) {
     ) {
         BodyMSB(
             text = stringResource(R.string.contacts__import_friends_count, contacts.size),
+            letterSpacing = 0.sp,
         )
 
         AvatarStack(contacts = contacts)
