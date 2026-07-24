@@ -267,17 +267,7 @@ class EditProfileViewModel @Inject constructor(
                 isSaving = true,
             )
         }
-        val cleanupResult = privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
-        if (cleanupResult.isFailure) {
-            _uiState.update {
-                it.copy(
-                    isSaving = false,
-                    showDeleteFailureDialog = true,
-                )
-            }
-            return
-        }
-
+        privatePaykitRepo.removePublishedEndpointsForCleanup(TAG)
         val result = pubkyRepo.deleteProfileWithSessionRetry()
         if (result.isSuccess) {
             privatePaykitRepo.closeAndClear()
