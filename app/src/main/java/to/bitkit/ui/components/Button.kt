@@ -33,7 +33,9 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.HazeTint
@@ -102,6 +104,7 @@ fun PrimaryButton(
     color: Color? = null,
     enableGradient: Boolean = true,
     contentColor: Color = Colors.White,
+    letterSpacing: TextUnit = 0.4.sp,
 ) {
     val contentPadding = PaddingValues(horizontal = size.primaryHorizontalPadding.takeIf { text != null } ?: 0.dp)
     val buttonShape = MaterialTheme.shapes.extraLarge
@@ -154,6 +157,7 @@ fun PrimaryButton(
                 text?.let {
                     Text(
                         text = text,
+                        style = MaterialTheme.typography.labelLarge.copy(letterSpacing = letterSpacing),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -174,6 +178,7 @@ fun SecondaryButton(
     enabled: Boolean = true,
     fullWidth: Boolean = true,
     hazeState: HazeState? = null,
+    letterSpacing: TextUnit = 0.4.sp,
 ) {
     val contentPadding = PaddingValues(horizontal = size.secondaryHorizontalPadding.takeIf { text != null } ?: 0.dp)
     val border = size.secondaryBorder(enabled)
@@ -238,6 +243,7 @@ fun SecondaryButton(
                     text?.let {
                         Text(
                             text = text,
+                            style = MaterialTheme.typography.labelLarge.copy(letterSpacing = letterSpacing),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
