@@ -892,13 +892,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `main scanner accepts pubky auth when Paykit UI is enabled`() = test {
+    fun `global scanner sheet accepts pubky auth when Paykit UI is enabled`() = test {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
         val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
 
-        sut.onScanResult(authUrl)
+        sut.showScannerSheet()
+        advanceUntilIdle()
+        assertEquals(Sheet.QrScanner, sut.currentSheet.value)
+
+        sut.onScannerSheetResult(authUrl)
         advanceUntilIdle()
 
         assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)

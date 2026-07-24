@@ -197,7 +197,6 @@ import to.bitkit.ui.sheets.LnurlAuthSheet
 import to.bitkit.ui.sheets.PinSheet
 import to.bitkit.ui.sheets.QrScanningSheet
 import to.bitkit.ui.sheets.QuickPayIntroSheet
-import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.SendSheet
 import to.bitkit.ui.sheets.UpdateSheet
 import to.bitkit.ui.sheets.WidgetsSheet
@@ -599,7 +598,7 @@ fun ContentView(
                             isVisible = !hideTabBarForCalculator,
                             onSendClick = { appViewModel.showSheet(Sheet.Send()) },
                             onReceiveClick = { appViewModel.showSheet(Sheet.Receive()) },
-                            onScanClick = { appViewModel.showSheet(Sheet.Send(SendRoute.QrScanner)) },
+                            onScanClick = { appViewModel.showScannerSheet() },
                         )
                     }
                 }

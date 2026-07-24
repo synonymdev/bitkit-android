@@ -35,10 +35,10 @@ import javax.inject.Singleton
 import kotlin.time.ExperimentalTime
 
 sealed class WatchOnlyAccountError : AppError() {
-    data object AuthorizationAccountMissing : WatchOnlyAccountError()
-    data object InvalidAccountName : WatchOnlyAccountError()
-    data object InvalidExtendedPublicKey : WatchOnlyAccountError()
-    data object NodeUnavailable : WatchOnlyAccountError()
+    class AuthorizationAccountMissing : WatchOnlyAccountError()
+    class InvalidAccountName : WatchOnlyAccountError()
+    class InvalidExtendedPublicKey : WatchOnlyAccountError()
+    class NodeUnavailable : WatchOnlyAccountError()
 }
 
 class WatchOnlyAccountAuthorizationStartError(
@@ -108,7 +108,7 @@ class WatchOnlyAccountRepo @Inject constructor(
     suspend fun markActive(id: String) = withContext(NonCancellable) {
         lifecycleCoordinator.withLock {
             if (store.load().none { it.id == id }) {
-                throw WatchOnlyAccountError.AuthorizationAccountMissing
+                throw WatchOnlyAccountError.AuthorizationAccountMissing()
             }
             store.markActive(id)
         }
@@ -118,7 +118,7 @@ class WatchOnlyAccountRepo @Inject constructor(
         lifecycleCoordinator.withLock {
             val account = store.load().firstOrNull {
                 it.id == id && it.setupState != WatchOnlyAccountSetupState.Active
-            } ?: throw WatchOnlyAccountError.AuthorizationAccountMissing
+            } ?: throw WatchOnlyAccountError.AuthorizationAccountMissing()
             val preserveAuthorizingState = account.setupState == WatchOnlyAccountSetupState.Authorizing
             runSuspendCatching {
                 setAccountTracking(account, enabled = true)
@@ -225,7 +225,7 @@ class WatchOnlyAccountRepo @Inject constructor(
     }
 
     private suspend fun exportAccountXpub(accountIndex: Int): String = ServiceQueue.LDK.background {
-        val node = lightningService.node ?: throw WatchOnlyAccountError.NodeUnavailable
+        val node = lightningService.node ?: throw WatchOnlyAccountError.NodeUnavailable()
         node.exportOnchainWalletAccountXpub(AddressType.NATIVE_SEGWIT, accountIndex.toUInt())
     }
 
@@ -233,10 +233,10 @@ class WatchOnlyAccountRepo @Inject constructor(
         account: WatchOnlyAccountRecord,
         enabled: Boolean,
     ) = ServiceQueue.LDK.background {
-        val node = lightningService.node ?: throw WatchOnlyAccountError.NodeUnavailable
+        val node = lightningService.node ?: throw WatchOnlyAccountError.NodeUnavailable()
         val addressType = when (account.addressType) {
             WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE -> AddressType.NATIVE_SEGWIT
-            else -> throw WatchOnlyAccountError.InvalidExtendedPublicKey
+            else -> throw WatchOnlyAccountError.InvalidExtendedPublicKey()
         }
         val accountIndex = account.accountIndex.toUInt()
         val isTracked = node.listOnchainWalletAccounts().any {
@@ -281,7 +281,7 @@ class WatchOnlyAccountRepo @Inject constructor(
     private fun normalizeName(name: String): String {
         val normalized = name.trim()
         if (normalized.isEmpty() || normalized.length > MAX_NAME_LENGTH) {
-            throw WatchOnlyAccountError.InvalidAccountName
+            throw WatchOnlyAccountError.InvalidAccountName()
         }
         return normalized
     }
@@ -325,7 +325,7 @@ private fun Map<String, List<String>>.singleValue(name: String): String {
 }
 
 private fun decodeQueryComponent(value: String): String =
-    URLDecoder.decode(value, StandardCharsets.UTF_8)
+    URLDecoder.decode(value, StandardCharsets.UTF_8.name())
 
 object WatchOnlyAccountClaimCodec {
     const val VERSION: Byte = 1
@@ -342,7 +342,7 @@ object WatchOnlyAccountClaimCodec {
         } else {
             null
         }
-        if (rawXpub?.size != SERIALIZED_XPUB_LENGTH) throw WatchOnlyAccountError.InvalidExtendedPublicKey
+        if (rawXpub?.size != SERIALIZED_XPUB_LENGTH) throw WatchOnlyAccountError.InvalidExtendedPublicKey()
 
         return ByteBuffer.allocate(PAYLOAD_LENGTH)
             .put(VERSION)
