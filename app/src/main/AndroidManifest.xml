@@ -3,7 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <queries>
-        <package android:name="to.pubky.ring" />
+        <package android:name="app.pubkyring" />
         <intent>
             <action android:name="android.settings.APPLICATION_DETAILS_SETTINGS" />
         </intent>
@@ -12,6 +12,12 @@
             <data android:scheme="pubkyauth" />
         </intent>
     </queries>
+
+    <permission
+        android:name="${applicationId}.permission.READ_SHARED_PUBKY"
+        android:protectionLevel="signature" />
+
+    <uses-permission android:name="app.pubkyring.permission.READ_SHARED_PUBKY" />
 
     <uses-feature
         android:name="android.hardware.camera"
@@ -187,6 +193,13 @@
             android:authorities="${applicationId}.androidx-startup"
             android:exported="false"
             tools:node="remove" />
+
+        <provider
+            android:name=".data.sharing.SharedPubkyProvider"
+            android:authorities="${applicationId}.sharedpubky"
+            android:exported="true"
+            android:readPermission="${applicationId}.permission.READ_SHARED_PUBKY"
+            android:writePermission="${applicationId}.permission.READ_SHARED_PUBKY" />
 
         <!-- Set custom default icon.
              This is used when no icon is set for incoming notification messages.

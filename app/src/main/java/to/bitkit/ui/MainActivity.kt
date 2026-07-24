@@ -228,6 +228,11 @@ class MainActivity : FragmentActivity() {
         handleLaunchIntent(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        appViewModel.onAppResumed()
+    }
+
     private fun handleLaunchIntent(intent: Intent) {
         if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
             handleUsbAttachIntent(intent)

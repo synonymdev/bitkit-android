@@ -105,7 +105,7 @@ internal object PaykitReceiverPaths {
 }
 
 @Singleton
-@Suppress("TooManyFunctions")
+@Suppress("TooManyFunctions", "LargeClass")
 class PaykitSdkService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val keychain: Keychain,
@@ -214,7 +214,16 @@ class PaykitSdkService @Inject constructor(
         return result
     }
 
-    suspend fun signIn(secretKeyHex: String): PubkySessionBootstrapResult {
+    suspend fun signIn(secretKeyHex: String): PubkySessionBootstrapResult =
+        signIn(secretKeyHex = secretKeyHex, shouldStoreLocalSecret = true)
+
+    suspend fun signInExternal(secretKeyHex: String): String =
+        signIn(secretKeyHex = secretKeyHex, shouldStoreLocalSecret = false).publicKey
+
+    private suspend fun signIn(
+        secretKeyHex: String,
+        shouldStoreLocalSecret: Boolean,
+    ): PubkySessionBootstrapResult {
         isSetup.await()
         val previousPublicKey = operationMutex.withLock { currentSdkStatePublicKeyLocked() }
         val receiverNoiseSecretKey = sessionProvider.loadOrDeriveReceiverNoiseSecretKey()
@@ -227,7 +236,7 @@ class PaykitSdkService @Inject constructor(
             activateBootstrapResult(
                 result = result,
                 previousPublicKey = previousPublicKey,
-                shouldStoreLocalSecret = true,
+                shouldStoreLocalSecret = shouldStoreLocalSecret,
             )
         }
         notifyBackupStateChanged()
@@ -632,10 +641,34 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    suspend fun clearExternalSessionAccess() {
+        operationMutex.withLock {
+            val managedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+            disableSharedPubkyExport()
+            sessionProvider.clearLiveSessionAccess()
+            keychain.delete(Keychain.Key.PAYKIT_SESSION.name)
+            keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)
+            check(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name) == null) {
+                "Failed to clear external Pubky session"
+            }
+            check(keychain.load(Keychain.Key.PAYKIT_SDK_STATE.name) == null) {
+                "Failed to clear external Pubky SDK state"
+            }
+            check(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name) == managedSecretKeyHex) {
+                "Managed local Pubky secret changed during external session cleanup"
+            }
+            activeAuthRequest = null
+            resetRuntime()
+            notifyBackupStateChanged()
+        }
+    }
+
     private suspend fun clearSessionAccessLocked() {
+        disableSharedPubkyExport()
         sessionProvider.clearLiveSessionAccess()
         keychain.delete(Keychain.Key.PAYKIT_SESSION.name)
         keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+        keychain.delete(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name)
         activeAuthRequest = null
         resetRuntime()
     }
@@ -666,13 +699,30 @@ class PaykitSdkService @Inject constructor(
         access: PubkySessionAccess,
         shouldStoreLocalSecret: Boolean,
     ) {
+        val localSecretKeyHex = managedSecretForSessionPersistence(
+            shouldStoreLocalSecret = shouldStoreLocalSecret,
+            exportedLocalSecretKeyHex = access.exportLocalSecretKey()?.let(::secretKeyHex),
+            existingManagedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name),
+        )
+        disableSharedPubkyExport()
         keychain.upsertString(Keychain.Key.PAYKIT_SESSION.name, access.exportSessionSecret())
         sessionProvider.persistReceiverNoiseSecretKey(access.exportReceiverNoiseSecretKey())
-        val localSecret = access.exportLocalSecretKey()
-        if (shouldStoreLocalSecret && localSecret != null) {
-            keychain.upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, secretKeyHex(localSecret))
-        } else {
-            keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+        if (localSecretKeyHex != null) {
+            keychain.upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, localSecretKeyHex)
+            check(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name) == localSecretKeyHex) {
+                "Failed to persist managed local Pubky secret"
+            }
+            keychain.delete(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name)
+            check(keychain.loadString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) == null) {
+                "Failed to release managed local Pubky secret quarantine"
+            }
+        }
+    }
+
+    private suspend fun disableSharedPubkyExport() {
+        keychain.delete(Keychain.Key.PUBKY_SHARED_EXPORT_ENABLED.name)
+        check(keychain.loadString(Keychain.Key.PUBKY_SHARED_EXPORT_ENABLED.name) == null) {
+            "Failed to disable shared Pubky export"
         }
     }
 
@@ -682,7 +732,12 @@ class PaykitSdkService @Inject constructor(
         shouldStoreLocalSecret: Boolean,
     ) {
         persistSessionAccess(result.sessionAccess, shouldStoreLocalSecret)
-        sessionProvider.setLiveSessionAccess(result.sessionAccess)
+        sessionProvider.setLiveSessionAccess(
+            liveSessionAccess(
+                access = result.sessionAccess,
+                retainLocalSecret = shouldStoreLocalSecret,
+            ),
+        )
         if (!PubkyPublicKeyFormat.matches(previousPublicKey, result.publicKey)) {
             keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)
         }
@@ -838,6 +893,10 @@ private class PaykitSdkStateBlobStore(
 private class PaykitSdkSessionProvider(
     private val keychain: Keychain,
 ) : SdkPubkySessionProvider {
+    private companion object {
+        const val QUARANTINED = "1"
+    }
+
     private val lock = Any()
     private val receiverNoiseKeyStore = PaykitReceiverNoiseKeyStore(keychain)
     private var liveSessionAccess: PubkySessionAccess? = null
@@ -873,12 +932,20 @@ private class PaykitSdkSessionProvider(
     override fun clearSessionAccess() {
         clearLiveSessionAccess()
         keychain.accessBlocking {
+            delete(Keychain.Key.PUBKY_SHARED_EXPORT_ENABLED.name)
+            check(load(Keychain.Key.PUBKY_SHARED_EXPORT_ENABLED.name) == null) {
+                "Failed to disable shared Pubky export"
+            }
             delete(Keychain.Key.PAYKIT_SESSION.name)
             delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+            delete(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name)
         }
     }
 
     fun loadLocalSecretKey(): PubkyLocalSecretKey? {
+        if (keychain.loadString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) == QUARANTINED) {
+            return null
+        }
         val secretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
             ?.takeIf { it.isNotBlank() }
             ?: return null
@@ -891,6 +958,38 @@ private class PaykitSdkSessionProvider(
     fun persistReceiverNoiseSecretKey(key: ReceiverNoiseSecretKey) {
         receiverNoiseKeyStore.persist(key)
     }
+}
+
+internal fun managedSecretForSessionPersistence(
+    shouldStoreLocalSecret: Boolean,
+    exportedLocalSecretKeyHex: String?,
+    existingManagedSecretKeyHex: String?,
+): String? {
+    if (shouldStoreLocalSecret) {
+        val exportedSecret = requireNotNull(exportedLocalSecretKeyHex) {
+            "Owned Pubky session did not export its local secret"
+        }
+        check(existingManagedSecretKeyHex.isNullOrBlank() || existingManagedSecretKeyHex == exportedSecret) {
+            "Refusing to replace a different managed local Pubky secret"
+        }
+        return exportedSecret
+    }
+    check(existingManagedSecretKeyHex.isNullOrBlank()) {
+        "Refusing to activate an external Pubky session over a managed local secret"
+    }
+    return null
+}
+
+private fun liveSessionAccess(
+    access: PubkySessionAccess,
+    retainLocalSecret: Boolean,
+): PubkySessionAccess {
+    if (retainLocalSecret) return access
+    return PubkySessionAccess(
+        sessionSecret = access.exportSessionSecret(),
+        localSecretKey = null,
+        receiverNoiseSecretKey = access.exportReceiverNoiseSecretKey(),
+    )
 }
 
 internal object PaykitReceiverNoiseKeyDerivation {
