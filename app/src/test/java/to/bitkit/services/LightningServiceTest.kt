@@ -1,11 +1,16 @@
 package to.bitkit.services
 
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -100,6 +105,33 @@ class LightningServiceTest : BaseUnitTest() {
 
         job.cancelAndJoin()
 
+        verify(node).destroy()
+        assertNull(sut.node)
+    }
+
+    // Regression: cancelling while the listener is still winding down must not skip native teardown
+    @Test
+    fun `stop completes teardown when cancelled during listener cleanup`() = test {
+        val listenerEntered = CompletableDeferred<Unit>()
+        val listenerCleanup = CompletableDeferred<Unit>()
+        whenever(node.nextEventAsync()).doSuspendableAnswer {
+            listenerEntered.complete(Unit)
+            try {
+                awaitCancellation()
+            } finally {
+                withContext(NonCancellable) { listenerCleanup.await() }
+            }
+        }
+        sut.startEventListener()
+        listenerEntered.await()
+
+        val stopJob = launch { sut.stop() }
+        stopJob.cancel()
+        listenerCleanup.complete(Unit)
+        stopJob.join()
+        testScheduler.advanceUntilIdle()
+
+        verify(node).stop()
         verify(node).destroy()
         assertNull(sut.node)
     }

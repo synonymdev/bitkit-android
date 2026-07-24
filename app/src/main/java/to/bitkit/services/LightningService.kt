@@ -323,29 +323,28 @@ class LightningService @Inject constructor(
         Logger.info("Node started", context = TAG)
     }
 
-    suspend fun stop() {
+    // Teardown must not be abandoned midway: a cancelled caller would leave the rust node alive and
+    // let the GC free it later on the finalizer thread, racing the next node. This covers the whole
+    // body, including the listener join, so cancellation during listener cleanup cannot skip it.
+    suspend fun stop() = withContext(NonCancellable) {
         shouldListenForEvents = false
         listenerJob?.cancelAndJoin()
         listenerJob = null
 
-        val node = this.node ?: run {
+        val node = this@LightningService.node ?: run {
             Logger.debug("Node already stopped", context = TAG)
-            return
+            return@withContext
         }
 
         Logger.debug("Stopping node…", context = TAG)
-        // Teardown must not be abandoned midway: a cancelled caller would leave the rust node alive
-        // and let the GC free it later on the finalizer thread, racing the next node.
-        withContext(NonCancellable) {
-            ServiceQueue.LDK.background {
-                runSuspendCatching { node.stop() }
-                    .onFailure {
-                        if (it !is NodeException.NotRunning) Logger.warn("Node stop error", it, context = TAG)
-                    }
-                this@LightningService.node = null
-            }
-            releaseHandle(node)
+        ServiceQueue.LDK.background {
+            runSuspendCatching { node.stop() }
+                .onFailure {
+                    if (it !is NodeException.NotRunning) Logger.warn("Node stop error", it, context = TAG)
+                }
+            this@LightningService.node = null
         }
+        releaseHandle(node)
         Logger.info("Node stopped", context = TAG)
     }
 
