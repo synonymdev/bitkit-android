@@ -1,19 +1,19 @@
 package to.bitkit.ui.screens.profile
 
 import android.content.Context
-import android.content.pm.PackageManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.data.sharing.SharedPubkyContract
+import to.bitkit.data.sharing.SharedPubkyIdentity
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.repositories.PubkyRepo
@@ -21,124 +21,128 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PubkyChoiceViewModelTest : BaseUnitTest() {
+    companion object {
+        private const val WIRE_PUBKY = "3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    }
+
     private val context: Context = mock()
-    private val packageManager: PackageManager = mock()
     private val pubkyRepo: PubkyRepo = mock()
     private val pendingImportContacts = MutableStateFlow<List<PubkyProfile>>(emptyList())
-    private val isAuthenticated = MutableStateFlow(false)
-    private val authCancelEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-
-    private lateinit var sut: PubkyChoiceViewModel
 
     @Before
-    fun setUp() {
-        whenever(context.packageManager).thenReturn(packageManager)
-        whenever(context.getString(R.string.common__error)).thenReturn("Error")
-        whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization Failed")
+    fun setUp() = runBlocking {
+        whenever(context.getString(R.string.profile__choice_error)).thenReturn("Couldn't use this pubky")
         whenever(pubkyRepo.pendingImportContacts).thenReturn(pendingImportContacts)
-        whenever(pubkyRepo.isAuthenticated).thenReturn(isAuthenticated)
-        whenever(pubkyRepo.authCancelEvents).thenReturn(authCancelEvents)
+        whenever(pubkyRepo.discoverRingIdentities()).thenReturn(Result.success(emptyList()))
+        Unit
     }
 
-    private fun createSut() {
-        sut = PubkyChoiceViewModel(
-            context = context,
-            pubkyRepo = pubkyRepo,
+    @Test
+    fun `discovery resolves safe public profile data for Ring choices`() = test {
+        val identity = ringIdentity()
+        val profile = PubkyProfile.forDisplay(
+            publicKey = SharedPubkyContract.toBitkitPubky(WIRE_PUBKY),
+            name = "Satoshi",
+            imageUrl = "pubky://avatar",
         )
-    }
+        whenever(pubkyRepo.discoverRingIdentities()).thenReturn(Result.success(listOf(identity)))
+        whenever(pubkyRepo.fetchRemoteProfile(profile.publicKey)).thenReturn(Result.success(profile))
 
-    @Test
-    fun `session restoration redirects to profile when already authenticated`() = test {
-        isAuthenticated.value = true
-        createSut()
-
+        val sut = createSut()
         advanceUntilIdle()
 
-        assertTrue(sut.uiState.value.navigateToProfile)
+        assertFalse(sut.uiState.value.isDiscovering)
+        assertEquals(1, sut.uiState.value.identities.size)
+        assertEquals(WIRE_PUBKY, sut.uiState.value.identities.single().pubky)
+        assertEquals(profile, sut.uiState.value.identities.single().profile)
     }
 
     @Test
-    fun `clearProfileNavigation clears profile redirect`() = test {
-        createSut()
-        isAuthenticated.value = true
+    fun `selection adopts exact Ring identity then opens contact overview`() = test {
+        val identity = ringIdentity()
+        pendingImportContacts.value = listOf(PubkyProfile.placeholder("pubky$WIRE_PUBKY"))
+        whenever(pubkyRepo.discoverRingIdentities()).thenReturn(Result.success(listOf(identity)))
+        whenever(pubkyRepo.fetchRemoteProfile("pubky$WIRE_PUBKY"))
+            .thenReturn(Result.success(PubkyProfile.placeholder("pubky$WIRE_PUBKY")))
+        whenever(pubkyRepo.adoptRingIdentity(identity)).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.prepareImport()).thenReturn(Result.success(Unit))
+        val sut = createSut()
         advanceUntilIdle()
-
-        sut.clearProfileNavigation()
-
-        assertFalse(sut.uiState.value.navigateToProfile)
-    }
-
-    @Test
-    fun `waitForApproval prepareImport failure clears loading and emits no navigation`() = test {
-        createSut()
-        whenever(pubkyRepo.completeAuthentication()).thenReturn(Result.success(Unit))
-        whenever(pubkyRepo.prepareImport()).thenReturn(Result.failure(RuntimeException("Import failed")))
 
         val effects = mutableListOf<PubkyChoiceEffect>()
-        val toasts = mutableListOf<Toast>()
-        val effectsJob = launch { sut.effects.collect { effects.add(it) } }
-        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
-
-        sut.waitForApproval()
+        val job = launch { sut.effects.collect(effects::add) }
+        sut.selectRingIdentity(sut.uiState.value.identities.single())
         advanceUntilIdle()
 
-        assertFalse(sut.uiState.value.isLoadingAfterAuth)
-        assertFalse(sut.uiState.value.isWaitingForRing)
-        assertTrue(effects.isEmpty())
+        verify(pubkyRepo).adoptRingIdentity(identity)
+        verify(pubkyRepo).prepareImport()
+        assertEquals(
+            listOf<PubkyChoiceEffect>(PubkyChoiceEffect.NavigateToContactImportOverview),
+            effects,
+        )
+        assertNull(sut.uiState.value.selectedPubky)
+        job.cancel()
+    }
+
+    @Test
+    fun `selection with no contacts opens Pay Contacts`() = test {
+        val identity = ringIdentity()
+        whenever(pubkyRepo.discoverRingIdentities()).thenReturn(Result.success(listOf(identity)))
+        whenever(pubkyRepo.fetchRemoteProfile("pubky$WIRE_PUBKY"))
+            .thenReturn(Result.success(PubkyProfile.placeholder("pubky$WIRE_PUBKY")))
+        whenever(pubkyRepo.adoptRingIdentity(identity)).thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.prepareImport()).thenReturn(Result.success(Unit))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        val effects = mutableListOf<PubkyChoiceEffect>()
+        val job = launch { sut.effects.collect(effects::add) }
+        sut.selectRingIdentity(sut.uiState.value.identities.single())
+        advanceUntilIdle()
+
+        assertEquals(
+            listOf<PubkyChoiceEffect>(PubkyChoiceEffect.NavigateToPayContacts),
+            effects,
+        )
+        job.cancel()
+    }
+
+    @Test
+    fun `failed selection clears loading and reports error`() = test {
+        val identity = ringIdentity()
+        val error = IllegalStateException("Credential mismatch")
+        whenever(pubkyRepo.discoverRingIdentities()).thenReturn(Result.success(listOf(identity)))
+        whenever(pubkyRepo.fetchRemoteProfile("pubky$WIRE_PUBKY"))
+            .thenReturn(Result.success(PubkyProfile.placeholder("pubky$WIRE_PUBKY")))
+        whenever(pubkyRepo.adoptRingIdentity(identity)).thenReturn(Result.failure(error))
+        val sut = createSut()
+        advanceUntilIdle()
+
+        val toasts = mutableListOf<Toast>()
+        val job = launch { ToastEventBus.events.collect(toasts::add) }
+        sut.selectRingIdentity(sut.uiState.value.identities.single())
+        advanceUntilIdle()
+
+        assertNull(sut.uiState.value.selectedPubky)
         assertTrue(toasts.isNotEmpty())
-        assertEquals(Toast.ToastType.ERROR, toasts.last().type)
-        assertEquals("Error", toasts.last().title)
-        assertEquals("Import failed", toasts.last().description)
-
-        effectsJob.cancel()
-        toastJob.cancel()
+        assertEquals("Couldn't use this pubky", toasts.last().title)
+        assertEquals(error.message, toasts.last().description)
+        job.cancel()
     }
 
-    @Test
-    fun `startRingAuth shows dialog when Ring is not installed`() = test {
-        createSut()
-        whenever(packageManager.getLaunchIntentForPackage(PubkyChoiceViewModel.PUBKY_RING_PACKAGE))
-            .thenReturn(null)
+    private fun createSut() = PubkyChoiceViewModel(
+        context = context,
+        pubkyRepo = pubkyRepo,
+    )
 
-        val effects = mutableListOf<PubkyChoiceEffect>()
-        val toasts = mutableListOf<Toast>()
-        val effectsJob = launch { sut.effects.collect { effects.add(it) } }
-        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
-
-        sut.startRingAuth()
-        advanceUntilIdle()
-
-        assertTrue(sut.uiState.value.showRingNotInstalledDialog)
-        assertTrue(effects.isEmpty())
-        assertTrue(toasts.isEmpty())
-        verify(pubkyRepo, never()).startAuthentication()
-
-        effectsJob.cancel()
-        toastJob.cancel()
-    }
-
-    @Test
-    fun `onRingLaunchFailed shows dialog without toast`() = test {
-        createSut()
-        val effects = mutableListOf<PubkyChoiceEffect>()
-        val toasts = mutableListOf<Toast>()
-        val effectsJob = launch { sut.effects.collect { effects.add(it) } }
-        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
-
-        sut.onRingLaunchFailed()
-        advanceUntilIdle()
-
-        assertFalse(sut.uiState.value.isWaitingForRing)
-        assertTrue(sut.uiState.value.showRingNotInstalledDialog)
-        assertTrue(effects.isEmpty())
-        assertTrue(toasts.isEmpty())
-        verify(pubkyRepo).cancelAuthentication()
-
-        effectsJob.cancel()
-        toastJob.cancel()
-    }
+    private fun ringIdentity() = SharedPubkyIdentity(
+        protocolVersion = SharedPubkyContract.PROTOCOL_VERSION,
+        sourcePackage = SharedPubkyContract.RING_SOURCE,
+        pubky = WIRE_PUBKY,
+    )
 }

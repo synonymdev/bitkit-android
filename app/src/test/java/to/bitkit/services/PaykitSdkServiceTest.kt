@@ -255,7 +255,7 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `session teardown attempts both credentials with session first`() {
+    fun `session teardown attempts every credential with shared export disabled first`() {
         val attemptedKeys = mutableListOf<String>()
 
         assertFailsWith<AppError> {
@@ -266,9 +266,60 @@ class PaykitSdkServiceTest {
         }
 
         assertEquals(
-            listOf(Keychain.Key.PAYKIT_SESSION.name, Keychain.Key.PUBKY_SECRET_KEY.name),
+            listOf(
+                Keychain.Key.PUBKY_SHARED_EXPORT_ENABLED.name,
+                Keychain.Key.PAYKIT_SESSION.name,
+                Keychain.Key.PUBKY_SECRET_KEY.name,
+                Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name,
+            ),
             attemptedKeys,
         )
+    }
+
+    @Test
+    fun `owned session requires and persists its exported local secret`() {
+        val secretKeyHex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+
+        assertEquals(
+            secretKeyHex,
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = true,
+                exportedLocalSecretKeyHex = secretKeyHex,
+                existingManagedSecretKeyHex = null,
+            ),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = true,
+                exportedLocalSecretKeyHex = null,
+                existingManagedSecretKeyHex = null,
+            )
+        }
+        assertFailsWith<IllegalStateException> {
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = true,
+                exportedLocalSecretKeyHex = secretKeyHex,
+                existingManagedSecretKeyHex = "different-secret",
+            )
+        }
+    }
+
+    @Test
+    fun `external session refuses to replace a managed local secret`() {
+        assertNull(
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = false,
+                exportedLocalSecretKeyHex = null,
+                existingManagedSecretKeyHex = null,
+            ),
+        )
+        assertFailsWith<IllegalStateException> {
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = false,
+                exportedLocalSecretKeyHex = null,
+                existingManagedSecretKeyHex = "managed-secret",
+            )
+        }
     }
 
     private fun keyStore(

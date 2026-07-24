@@ -182,6 +182,7 @@ fun BodyM(
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
     overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
+    letterSpacing: TextUnit = 0.4.sp,
 ) {
     BodyM(
         text = AnnotatedString(text),
@@ -191,6 +192,7 @@ fun BodyM(
         maxLines = maxLines,
         minLines = minLines,
         overflow = overflow,
+        letterSpacing = letterSpacing,
     )
 }
 
@@ -203,12 +205,14 @@ fun BodyM(
     maxLines: Int = Int.MAX_VALUE,
     minLines: Int = 1,
     overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
+    letterSpacing: TextUnit = 0.4.sp,
 ) {
     Text(
         text = text,
         style = AppTextStyles.BodyM.merge(
             color = color,
             textAlign = textAlign,
+            letterSpacing = letterSpacing,
         ),
         maxLines = maxLines,
         minLines = minLines,

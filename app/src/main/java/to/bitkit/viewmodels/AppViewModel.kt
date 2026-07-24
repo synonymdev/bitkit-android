@@ -5581,6 +5581,15 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    fun onAppResumed() {
+        viewModelScope.launch(bgDispatcher) {
+            runSuspendCatching { pubkyRepo.validateExternalIdentitySource() }
+                .onFailure {
+                    Logger.error("Failed to clear unavailable shared Pubky identity", it, context = TAG)
+                }
+        }
+    }
+
     fun onLeftHome() = timedSheetManager.onHomeScreenExited()
 
     fun dismissTimedSheet() = timedSheetManager.dismissCurrentSheet()
