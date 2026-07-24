@@ -27,6 +27,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -194,7 +195,7 @@ class BoltzService @Inject constructor(
 
     private suspend fun credentials(): Pair<String, String?> {
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
-            ?: error("Mnemonic not found")
+            ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
             ?.takeIf { it.isNotEmpty() }
         return mnemonic to passphrase

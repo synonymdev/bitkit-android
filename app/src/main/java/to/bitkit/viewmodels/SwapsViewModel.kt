@@ -30,9 +30,6 @@ class SwapsViewModel @Inject constructor(
     private val _swaps = MutableStateFlow<ImmutableList<BoltzSwap>>(persistentListOf())
     val swaps = _swaps.asStateFlow()
 
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading = _isLoading.asStateFlow()
-
     private val _error = MutableStateFlow<String?>(null)
     val error = _error.asStateFlow()
 
@@ -42,7 +39,6 @@ class SwapsViewModel @Inject constructor(
 
     fun refresh() {
         viewModelScope.launch {
-            _isLoading.update { true }
             runSuspendCatching { boltzService.listSwaps() }
                 .onSuccess { list ->
                     _swaps.update { list.sortedByDescending { swap -> swap.createdAt }.toImmutableList() }
@@ -52,7 +48,6 @@ class SwapsViewModel @Inject constructor(
                     Logger.error("Failed to list swaps", e, context = TAG)
                     _error.update { e.message }
                 }
-            _isLoading.update { false }
         }
     }
 
