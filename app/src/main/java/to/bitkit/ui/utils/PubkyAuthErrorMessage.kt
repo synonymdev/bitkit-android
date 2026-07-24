@@ -14,10 +14,10 @@ fun Throwable.localizedPubkyAuthMessage(context: Context): String? {
             PubkyAuthRequestError.DuplicateBitkitClaim -> R.string.profile__auth_error_duplicate_claim
             is PubkyAuthRequestError.UnsupportedBitkitClaim -> R.string.profile__auth_error_unsupported_claim
             PubkyAuthRequestError.InvalidBitkitClaimCapabilities -> R.string.profile__auth_error_invalid_capabilities
-            WatchOnlyAccountError.AuthorizationAccountMissing -> R.string.watch_only_accounts__setup_not_finished
-            WatchOnlyAccountError.InvalidAccountName -> R.string.watch_only_accounts__error_invalid_name
-            WatchOnlyAccountError.InvalidExtendedPublicKey -> R.string.watch_only_accounts__error_invalid_xpub
-            WatchOnlyAccountError.NodeUnavailable -> R.string.watch_only_accounts__error_node_unavailable
+            is WatchOnlyAccountError.AuthorizationAccountMissing -> R.string.watch_only_accounts__setup_not_finished
+            is WatchOnlyAccountError.InvalidAccountName -> R.string.watch_only_accounts__error_invalid_name
+            is WatchOnlyAccountError.InvalidExtendedPublicKey -> R.string.watch_only_accounts__error_invalid_xpub
+            is WatchOnlyAccountError.NodeUnavailable -> R.string.watch_only_accounts__error_node_unavailable
             else -> null
         }
         if (messageResource != null) {
