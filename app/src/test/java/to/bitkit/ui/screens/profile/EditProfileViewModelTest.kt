@@ -159,20 +159,26 @@ class EditProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `deleteProfile should stop when private cleanup fails`() = test {
+    fun `deleteProfile should continue when private cleanup fails`() = test {
         val sut = createSut()
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
             .thenReturn(Result.failure(TestAppError("cleanup failed")))
         whenever(pubkyRepo.deleteProfileWithSessionRetry()).thenReturn(Result.success(Unit))
         advanceUntilIdle()
 
-        sut.deleteProfile()
-        advanceUntilIdle()
+        sut.effects.test {
+            sut.deleteProfile()
+            advanceUntilIdle()
 
-        assertTrue(sut.uiState.value.showDeleteFailureDialog)
+            assertEquals(EditProfileEffect.DeleteSuccess, awaitItem())
+        }
+        assertFalse(sut.uiState.value.showDeleteFailureDialog)
         assertFalse(sut.uiState.value.isSaving)
-        verify(pubkyRepo, never()).deleteProfileWithSessionRetry()
-        verify(privatePaykitRepo, never()).closeAndClear()
+        inOrder(privatePaykitRepo, pubkyRepo).apply {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
+            verify(pubkyRepo).deleteProfileWithSessionRetry()
+            verify(privatePaykitRepo).closeAndClear()
+        }
     }
 
     @Test
