@@ -388,6 +388,7 @@ dependencies {
     implementation(libs.vss.client)
     nativeDebugSymbols(libs.bitkit.core.nativeDebugSymbolsArtifact())
     nativeDebugSymbols(libs.ldk.node.android.nativeDebugSymbolsArtifact())
+    nativeDebugSymbols(libs.paykit.nativeDebugSymbolsArtifact())
     nativeDebugSymbols(libs.vss.client.nativeDebugSymbolsArtifact())
     // Firebase
     implementation(platform(libs.firebase.bom))
