@@ -231,6 +231,8 @@ private fun SendAmountNodeRunning(
         val availableAmount = when {
             isLnurlWithdraw -> uiState.lnurl.data.maxWithdrawableSat().toLong()
             uiState.payMethod == SendMethod.ONCHAIN -> balances.maxSendOnchainSats.toLong()
+            // A swap send is capped by what Boltz can deliver onchain, not by the raw LN balance.
+            uiState.payMethod == SendMethod.SWAP -> uiState.swapMaxSendSats.toLong()
             else -> {
                 val maxLightning = balances.maxSendLightningSats
                 val routingFee = uiState.estimatedRoutingFee
@@ -265,8 +267,7 @@ private fun SendAmountNodeRunning(
                 uiState.lnurl is LnurlParams.LnurlWithdraw -> R.string.wallet__lnurl_w_max
                 uiState.isUnified -> R.string.wallet__send_available
                 uiState.payMethod == SendMethod.ONCHAIN -> R.string.wallet__send_available_savings
-                uiState.payMethod == SendMethod.LIGHTNING -> R.string.wallet__send_available_spending
-                else -> R.string.wallet__send_available
+                else -> R.string.wallet__send_available_spending
             }
 
             Row(
@@ -350,11 +351,11 @@ private fun PaymentMethodButton(
     NumberPadActionButton(
         text = when (uiState.payMethod) {
             SendMethod.ONCHAIN -> stringResource(R.string.wallet__savings__title)
-            SendMethod.LIGHTNING -> stringResource(R.string.wallet__spending__title)
+            SendMethod.LIGHTNING, SendMethod.SWAP -> stringResource(R.string.wallet__spending__title)
         },
         color = when (uiState.payMethod) {
             SendMethod.ONCHAIN -> Colors.Brand
-            SendMethod.LIGHTNING -> Colors.Purple
+            SendMethod.LIGHTNING, SendMethod.SWAP -> Colors.Purple
         },
         icon = if (uiState.isUnified) R.drawable.ic_transfer else null,
         onClick = onClick,
