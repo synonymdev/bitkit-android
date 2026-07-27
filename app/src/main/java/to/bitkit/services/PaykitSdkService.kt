@@ -946,7 +946,6 @@ internal class PaykitReceiverNoiseKeyStore(
             )
         },
     )
-    private var validatedBytes: ByteArray? = null
 
     @Synchronized
     fun loadOrDerive(): ReceiverNoiseSecretKey =
@@ -969,8 +968,6 @@ internal class PaykitReceiverNoiseKeyStore(
     }
 
     private fun validatedKeyBytes(): ByteArray {
-        validatedBytes?.let { return it }
-
         val derivedBytes = deriveBytes()
         checkKeyLength(derivedBytes, "Derived Paykit receiver Noise key is invalid")
         loadBytes()?.let { storedBytes ->
@@ -980,7 +977,6 @@ internal class PaykitReceiverNoiseKeyStore(
             }
         } ?: upsertBytes(derivedBytes.copyOf())
 
-        validatedBytes = derivedBytes.copyOf()
         return derivedBytes
     }
 

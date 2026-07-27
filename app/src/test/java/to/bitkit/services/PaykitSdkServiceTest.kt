@@ -71,6 +71,24 @@ class PaykitSdkServiceTest {
         }
     }
 
+    @Test
+    fun `receiver noise key follows wallet replacement after keychain wipe`() {
+        var persistedBytes: ByteArray? = null
+        var derivedBytes = ByteArray(32) { 1 }
+        val store = keyStore(
+            loadBytes = { persistedBytes },
+            upsertBytes = { persistedBytes = it.copyOf() },
+            deriveBytes = { derivedBytes },
+        )
+        store.loadOrDeriveBytes()
+
+        persistedBytes = null
+        derivedBytes = ByteArray(32) { 2 }
+
+        assertContentEquals(derivedBytes, store.loadOrDeriveBytes())
+        assertContentEquals(derivedBytes, persistedBytes)
+    }
+
     private fun keyStore(
         loadBytes: () -> ByteArray?,
         upsertBytes: (ByteArray) -> Unit = {},
