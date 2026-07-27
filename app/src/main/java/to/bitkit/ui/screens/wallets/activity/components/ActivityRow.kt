@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.activity.components
 
+import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -28,14 +29,14 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
-import to.bitkit.ext.DatePattern
-import to.bitkit.ext.formatted
+import to.bitkit.ext.UiDateStyle
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.txType
+import to.bitkit.ext.uiDateText
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.PubkyProfile
@@ -138,7 +139,7 @@ fun ActivityRow(
             )
             val context = LocalContext.current
             val subtitleText = when (item) {
-                is Activity.Lightning -> item.v1.message.ifEmpty { formattedTime(timestamp) }
+                is Activity.Lightning -> item.v1.message.ifEmpty { context.activityTimeText(timestamp) }
                 is Activity.Onchain -> {
                     when {
                         !item.v1.doesExist -> stringResource(R.string.wallet__activity_removed)
@@ -161,7 +162,7 @@ fun ActivityRow(
                                 .replace("{duration}", duration)
                         }
 
-                        confirmed == true -> formattedTime(timestamp)
+                        confirmed == true -> context.activityTimeText(timestamp)
 
                         else -> {
                             val feeDescription = context.getFeeShortDescription(item.v1.feeRate, feeRates)
@@ -363,18 +364,16 @@ private fun AmountViewContent(
     }
 }
 
-private fun formattedTime(timestamp: ULong): String {
-    val instant = Instant.ofEpochSecond(timestamp.toLong())
-    val dateTime = instant.atZone(ZoneId.systemDefault())
+private fun Context.activityTimeText(timestamp: ULong): String {
+    val dateTime = Instant.ofEpochSecond(timestamp.toLong()).atZone(ZoneId.systemDefault())
     val now = LocalDate.now()
 
-    val isToday = dateTime.toLocalDate() == now
-    val isThisYear = dateTime.year == now.year
-    return when {
-        isToday -> instant.formatted(DatePattern.ACTIVITY_TIME)
-        isThisYear -> instant.formatted(DatePattern.ACTIVITY_ROW_DATE)
-        else -> instant.formatted(DatePattern.ACTIVITY_ROW_DATE_YEAR)
+    val style = when {
+        dateTime.toLocalDate() == now -> UiDateStyle.TIME
+        dateTime.year == now.year -> UiDateStyle.DATE_TIME
+        else -> UiDateStyle.DATE_TIME_YEAR
     }
+    return uiDateText(timestamp, style)
 }
 
 private class ActivityItemsPreviewProvider : PreviewParameterProvider<Activity> {

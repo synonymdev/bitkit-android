@@ -1,5 +1,6 @@
 package to.bitkit.ext
 
+import android.content.Context
 import android.icu.text.DateFormat
 import android.icu.text.DisplayContext
 import android.icu.text.NumberFormat
@@ -39,9 +40,13 @@ fun Clock.nowMs(): Long = now().toEpochMilliseconds()
 
 fun nowTimestamp(): Instant = Instant.now().truncatedTo(ChronoUnit.SECONDS)
 
-fun Instant.formatted(pattern: String = DatePattern.DATE_TIME): String {
-    val dateTime = LocalDateTime.ofInstant(this, ZoneId.systemDefault())
-    val formatter = DateTimeFormatter.ofPattern(pattern)
+fun Instant.formatted(
+    pattern: String = DatePattern.DATE_TIME,
+    locale: Locale = Locale.getDefault(),
+    zone: ZoneId = ZoneId.systemDefault(),
+): String {
+    val dateTime = LocalDateTime.ofInstant(this, zone)
+    val formatter = DateTimeFormatter.ofPattern(pattern, locale)
     return dateTime.format(formatter)
 }
 
@@ -213,13 +218,41 @@ fun utcDateFormatterOf(pattern: String) = SimpleDateFormat(pattern, Locale.US).a
     timeZone = java.util.TimeZone.getTimeZone("UTC")
 }
 
+fun Context.uiDateText(
+    timestamp: ULong,
+    style: UiDateStyle,
+    locale: Locale = Locale.getDefault(),
+    zone: ZoneId = ZoneId.systemDefault(),
+): String = Instant.ofEpochSecond(timestamp.toLong())
+    .formatted(style.pattern(is24HourTimeFormat), locale, zone)
+
+enum class UiDateStyle {
+    TIME,
+    DATE,
+    DATE_TIME,
+    DATE_TIME_YEAR,
+    ;
+
+    fun pattern(is24Hour: Boolean): String {
+        val time = if (is24Hour) TIME_24H else TIME_12H
+        return when (this) {
+            TIME -> time
+            DATE -> DAY
+            DATE_TIME -> "$DAY, $time"
+            DATE_TIME_YEAR -> "$DAY_WITH_YEAR, $time"
+        }
+    }
+
+    private companion object {
+        const val TIME_12H = "h:mm a"
+        const val TIME_24H = "HH:mm"
+        const val DAY = "MMMM d"
+        const val DAY_WITH_YEAR = "MMMM d yyyy"
+    }
+}
+
 object DatePattern {
     const val DATE_TIME = "dd/MM/yyyy, HH:mm"
-    const val INVOICE_EXPIRY = "MMM dd, h:mm a"
-    const val ACTIVITY_DATE = "MMMM d"
-    const val ACTIVITY_ROW_DATE = "MMMM d, HH:mm"
-    const val ACTIVITY_ROW_DATE_YEAR = "MMMM d yyyy, HH:mm"
-    const val ACTIVITY_TIME = "h:mm"
     const val CHANNEL_DETAILS = "MMM d, yyyy, HH:mm"
     const val LOG_FILE = "yyyy-MM-dd_HH-mm-ss"
     const val LOG_LINE = "yyyy-MM-dd HH:mm:ss.SSS"
