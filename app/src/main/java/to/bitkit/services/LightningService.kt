@@ -69,6 +69,8 @@ import to.bitkit.utils.jsonLogOf
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.Path
 import kotlin.time.Duration
@@ -76,6 +78,11 @@ import kotlin.time.Duration.Companion.seconds
 import org.lightningdevkit.ldknode.AddressType as LdkAddressType
 
 typealias NodeEventHandler = suspend (Event) -> Unit
+
+/** Tags the event-listener coroutine so a handler-triggered stop can skip joining its own job. */
+private class EventListenerContext : AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<EventListenerContext>
+}
 
 data class AddressDerivationInfo(
     val address: String,
@@ -304,7 +311,7 @@ class LightningService @Inject constructor(
         // start event listener after node started
         onEvent?.let { eventHandler ->
             shouldListenForEvents = true
-            listenerJob = launch {
+            listenerJob = launch(EventListenerContext()) {
                 runCatching {
                     Logger.debug("LDK event listener started", context = TAG)
                     if (timeout != null) {
@@ -328,7 +335,11 @@ class LightningService @Inject constructor(
     // body, including the listener join, so cancellation during listener cleanup cannot skip it.
     suspend fun stop() = withContext(NonCancellable) {
         shouldListenForEvents = false
-        listenerJob?.cancelAndJoin()
+        // A stop requested from inside an event handler runs on the listener job itself; joining it
+        // here would deadlock, so let the loop exit on shouldListenForEvents instead.
+        if (coroutineContext[EventListenerContext.Key] == null) {
+            listenerJob?.cancelAndJoin()
+        }
         listenerJob = null
 
         val node = this@LightningService.node ?: run {
@@ -1078,7 +1089,7 @@ class LightningService @Inject constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup()
         listenerJob?.cancelAndJoin()
         shouldListenForEvents = true
-        listenerJob = launch {
+        listenerJob = launch(EventListenerContext()) {
             runCatching {
                 Logger.debug("LDK event listener started", context = TAG)
                 listenForEvents(node, onEvent)
@@ -1091,7 +1102,10 @@ class LightningService @Inject constructor(
     }
 
     private suspend fun listenForEvents(node: Node, onEvent: NodeEventHandler? = null) = withContext(bgDispatcher) {
-        while (shouldListenForEvents) {
+        // Key the loop on node identity, not just the shared flag: a handler-triggered stop nulls
+        // and frees this node, and a racing start() could flip shouldListenForEvents back on. Without
+        // the identity check the loop would call nextEventAsync() on the freed node.
+        while (shouldListenForEvents && node === this@LightningService.node) {
             ensureActive()
 
             val event = runCatching { node.nextEventAsync() }.getOrElse {
