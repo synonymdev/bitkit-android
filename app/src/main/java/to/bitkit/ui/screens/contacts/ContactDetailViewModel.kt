@@ -17,6 +17,8 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import to.bitkit.R
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.PubkyProfile
@@ -47,6 +49,7 @@ class ContactDetailViewModel @Inject constructor(
     ) { "publicKey not found in SavedStateHandle" }
 
     private val redactedPublicKey = PubkyPublicKeyFormat.redacted(publicKey)
+    private val tagPersistenceMutex = Mutex()
 
     private val _uiState = MutableStateFlow(ContactDetailUiState())
     val uiState: StateFlow<ContactDetailUiState> = _uiState.asStateFlow()
@@ -156,30 +159,80 @@ class ContactDetailViewModel @Inject constructor(
         _uiState.update { it.copy(showAddTagSheet = false) }
     }
 
-    fun addTag(tag: String) {
-        val newTags = (_uiState.value.tags + tag).distinct().toImmutableList()
-        _uiState.update { it.copy(tags = newTags, showAddTagSheet = false) }
-        persistTags(newTags)
+    fun showDeleteConfirmation() {
+        _uiState.update { it.copy(showDeleteDialog = true) }
     }
 
-    fun removeTag(index: Int) {
-        val newTags = _uiState.value.tags.filterIndexed { i, _ -> i != index }.toImmutableList()
-        _uiState.update { it.copy(tags = newTags) }
-        persistTags(newTags)
+    fun dismissDeleteConfirmation() {
+        _uiState.update { it.copy(showDeleteDialog = false) }
     }
 
-    private fun persistTags(tags: List<String>) {
-        val profile = _uiState.value.profile ?: return
+    fun deleteContact() {
         viewModelScope.launch {
-            pubkyRepo.updateContact(
-                publicKey = publicKey,
-                name = profile.name,
-                bio = profile.bio,
-                imageUrl = profile.imageUrl,
-                links = profile.links.map { PubkyProfileLink(it.label, it.url) },
-                tags = tags,
-            ).onFailure {
-                Logger.error("Failed to update tags for contact '$redactedPublicKey'", it, context = TAG)
+            _uiState.update { it.copy(showDeleteDialog = false, isLoading = true) }
+            pubkyRepo.removeContact(publicKey)
+                .onSuccess {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.SUCCESS,
+                        title = context.getString(R.string.contacts__delete_success),
+                        testTag = "ContactDeletedToast",
+                    )
+                    _effects.emit(ContactDetailEffect.ContactDeleted)
+                }
+                .onFailure {
+                    Logger.error("Failed to delete contact '$redactedPublicKey'", it, context = TAG)
+                    _uiState.update { state -> state.copy(isLoading = false) }
+                }
+        }
+    }
+
+    fun addTag(tag: String) {
+        updateTags(
+            transform = { (it + tag).distinct().toImmutableList() },
+            onSuccess = { _uiState.update { it.copy(showAddTagSheet = false) } },
+        )
+    }
+
+    fun removeTag(tag: String) {
+        updateTags(transform = { tags -> tags.filterNot { it == tag }.toImmutableList() })
+    }
+
+    private fun updateTags(
+        transform: (ImmutableList<String>) -> ImmutableList<String>,
+        onSuccess: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            tagPersistenceMutex.withLock {
+                val state = _uiState.value
+                val profile = state.profile ?: return@withLock
+                val tags = transform(state.tags)
+                if (tags == state.tags) {
+                    onSuccess()
+                    return@withLock
+                }
+                pubkyRepo.updateContact(
+                    publicKey = publicKey,
+                    name = profile.name,
+                    bio = profile.bio,
+                    imageUrl = profile.imageUrl,
+                    links = profile.links.map { PubkyProfileLink(it.label, it.url) },
+                    tags = tags,
+                ).onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            profile = it.profile?.copy(tags = tags),
+                            tags = tags,
+                        )
+                    }
+                    onSuccess()
+                }.onFailure {
+                    Logger.error("Failed to update tags for contact '$redactedPublicKey'", it, context = TAG)
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.contacts__edit_save_error),
+                        description = it.message,
+                    )
+                }
             }
         }
     }
@@ -192,8 +245,10 @@ data class ContactDetailUiState(
     val isLoading: Boolean = false,
     val showPayButton: Boolean = false,
     val showAddTagSheet: Boolean = false,
+    val showDeleteDialog: Boolean = false,
 )
 
 sealed interface ContactDetailEffect {
     data class OpenPayment(val paymentRequest: String, val publicKey: String) : ContactDetailEffect
+    data object ContactDeleted : ContactDetailEffect
 }

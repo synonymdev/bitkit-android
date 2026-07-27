@@ -15,6 +15,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -29,17 +31,23 @@ fun TagButton(
     text: String,
     onClick: (() -> Unit)?,
     modifier: Modifier = Modifier,
+    accessibilityLabel: String? = null,
     isSelected: Boolean = false,
     displayIconClose: Boolean = false,
     icon: Painter = painterResource(R.drawable.ic_x),
 ) {
     val borderColor = if (isSelected) Colors.Brand else Colors.White16
     val textColor = if (isSelected) Colors.Brand else MaterialTheme.colorScheme.onSurface
+    val accessibilityModifier = accessibilityLabel?.let { label ->
+        Modifier.semantics(mergeDescendants = true) { contentDescription = label }
+    } ?: Modifier
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = modifier
+            .testTag("Tag-$text")
+            .then(accessibilityModifier)
             .wrapContentWidth()
             .border(width = 1.dp, color = borderColor, shape = AppShapes.small)
             .clickableAlpha(onClick = onClick)
@@ -50,7 +58,7 @@ fun TagButton(
             color = textColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.testTag("Tag-$text")
+            modifier = Modifier
         )
 
         if (displayIconClose) {
