@@ -594,7 +594,7 @@
     <string name="profile__create_nav_title">Create Profile</string>
     <string name="profile__create_restoring">Restoring your existing profile…</string>
     <string name="profile__create_success">Profile created successfully</string>
-    <string name="profile__delete_confirm_description">Are you sure you want to delete all of your profile information for your pubky?</string>
+    <string name="profile__delete_confirm_description">Deleting your profile removes it from Pubky. Contacts may still retain profile and payment information previously shared with them.</string>
     <string name="profile__delete_confirm_title">Delete Profile?</string>
     <string name="profile__delete_error_description">We couldn\'t delete your profile data. Retry, or disconnect this pubky from Bitkit.</string>
     <string name="profile__delete_error_title">Unable to Delete Profile</string>

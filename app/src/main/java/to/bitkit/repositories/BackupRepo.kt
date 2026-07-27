@@ -43,6 +43,7 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
 import to.bitkit.ext.formatPlural
 import to.bitkit.ext.nowMillis
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
@@ -424,7 +425,7 @@ class BackupRepo @Inject constructor(
         }
     }
 
-    suspend fun triggerBackup(category: BackupCategory) = withContext(ioDispatcher) {
+    suspend fun triggerBackup(category: BackupCategory): Result<Unit> = withContext(ioDispatcher) {
         Logger.debug("Backup starting for: '$category'", context = TAG)
 
         val backupRequired = currentTimeMillis()
@@ -434,7 +435,13 @@ class BackupRepo @Inject constructor(
             it.copy(running = true, required = backupRequired)
         }
 
-        vssBackupClient.putObject(key = category.name, data = getBackupDataBytes(category))
+        val data = runSuspendCatching { getBackupDataBytes(category) }
+            .getOrElse {
+                markBackupFailed(category, backupRequired, it)
+                return@withContext Result.failure(it)
+            }
+
+        vssBackupClient.putObject(key = category.name, data = data)
             .onSuccess {
                 runningBackups -= category
                 failedBackupRequired -= category
@@ -446,18 +453,21 @@ class BackupRepo @Inject constructor(
                 }
                 Logger.info("Backup succeeded for: '$category'", context = TAG)
             }
-            .onFailure { e ->
-                runningBackups -= category
-                cacheStore.updateBackupStatus(category) {
-                    if (it.required == backupRequired) {
-                        failedBackupRequired[category] = backupRequired
-                    } else {
-                        failedBackupRequired -= category
-                    }
-                    it.copy(running = false)
-                }
-                Logger.error("Backup failed for: '$category'", e, context = TAG)
+            .onFailure { markBackupFailed(category, backupRequired, it) }
+            .map {}
+    }
+
+    private suspend fun markBackupFailed(category: BackupCategory, backupRequired: Long, e: Throwable) {
+        runningBackups -= category
+        cacheStore.updateBackupStatus(category) {
+            if (it.required == backupRequired) {
+                failedBackupRequired[category] = backupRequired
+            } else {
+                failedBackupRequired -= category
             }
+            it.copy(running = false)
+        }
+        Logger.error("Backup failed for: '$category'", e, context = TAG)
     }
 
     private suspend fun getBackupDataBytes(category: BackupCategory): ByteArray = when (category) {
@@ -533,16 +543,8 @@ class BackupRepo @Inject constructor(
 
     private suspend fun getWalletBackupDataBytes(): ByteArray {
         val transfers = db.transferDao().getAll()
-        val privateReservations = privatePaykitAddressReservationRepo.get().backupSnapshot()
-            .onFailure {
-                Logger.warn("Failed to snapshot private Paykit reservations", it, context = TAG)
-            }
-            .getOrThrow()
-        val paykitSdkBackupState = privatePaykitRepo.get().backupSnapshot()
-            .onFailure {
-                Logger.warn("Failed to snapshot Paykit SDK state", it, context = TAG)
-            }
-            .getOrThrow()
+        val privateReservations = privatePaykitAddressReservationRepo.get().backupSnapshot().getOrThrow()
+        val paykitSdkBackupState = privatePaykitRepo.get().backupSnapshot().getOrThrow()
 
         val payload = WalletBackupV1(
             createdAt = currentTimeMillis(),

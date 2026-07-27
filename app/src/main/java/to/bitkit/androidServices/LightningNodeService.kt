@@ -15,6 +15,7 @@ import androidx.core.content.ContextCompat
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.App
 import to.bitkit.R
@@ -106,10 +107,17 @@ class LightningNodeService : Service() {
         if (event !is Event.PaymentReceived && event !is Event.OnchainTransactionReceived) return
         val command = NotifyPaymentReceived.Command.from(event, includeNotification = true) ?: return
 
-        notifyPaymentReceivedHandler(command).onSuccess {
-            Logger.debug("Payment notification result: $it", context = TAG)
-            if (it !is NotifyPaymentReceived.Result.ShowNotification) return
-            showPaymentNotification(it.sheet, it.notification)
+        notifyPaymentReceivedHandler(command).onSuccess { result ->
+            Logger.debug("Handled payment notification with result '$result'", context = TAG)
+            if (result !is NotifyPaymentReceived.Result.ShowNotification) return
+            withContext(uiDispatcher) {
+                notifyPaymentReceivedHandler.present(
+                    command = command,
+                    canPresent = { App.currentActivity?.value == null },
+                ) {
+                    showPaymentNotification(result.sheet, result.notification)
+                }
+            }
         }
     }
 
@@ -132,10 +140,6 @@ class LightningNodeService : Service() {
         sheet: NewTransactionSheetDetails,
         notification: NotificationDetails,
     ) {
-        if (App.currentActivity?.value != null) {
-            Logger.debug("Skipping payment notification: activity is active", context = TAG)
-            return
-        }
         Logger.debug("Showing payment notification: ${notification.title}", context = TAG)
         serviceScope.launch { cacheStore.setBackgroundReceive(sheet) }
         pushNotification(notification.title, notification.body)

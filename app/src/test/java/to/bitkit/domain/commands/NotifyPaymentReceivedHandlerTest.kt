@@ -25,6 +25,7 @@ import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.test.BaseUnitTest
 import java.math.BigDecimal
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -85,6 +86,12 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertEquals(NewTransactionSheetDirection.RECEIVED, paymentResult.sheet.direction)
         assertEquals("hash123", paymentResult.sheet.paymentHashOrTxId)
         assertEquals(1000L, paymentResult.sheet.sats)
+        verify(activityRepo, never()).markActivityAsSeen(any())
+
+        val claimed = sut.claimPresentation(command)
+
+        assertTrue(claimed)
+        sut.recordPresentation(command)
         verify(activityRepo).markActivityAsSeen("paymentId123")
     }
 
@@ -110,6 +117,13 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertEquals("hash123", paymentResult.sheet.paymentHashOrTxId)
         assertNotNull(paymentResult.notification)
         assertEquals("Payment Received", paymentResult.notification.title)
+        verify(activityRepo, never()).markActivityAsSeen(any())
+
+        val claimed = sut.claimPresentation(command)
+
+        assertTrue(claimed)
+        sut.recordPresentation(command)
+        verify(activityRepo).markActivityAsSeen("paymentId123")
     }
 
     @Test
@@ -133,6 +147,12 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertEquals(NewTransactionSheetDirection.RECEIVED, paymentResult.sheet.direction)
         assertEquals("txid456", paymentResult.sheet.paymentHashOrTxId)
         assertEquals(5000L, paymentResult.sheet.sats)
+        verify(activityRepo, never()).markOnchainActivityAsSeen(any())
+
+        val claimed = sut.claimPresentation(command)
+
+        assertTrue(claimed)
+        sut.recordPresentation(command)
         verify(activityRepo).markOnchainActivityAsSeen("txid456")
     }
 
@@ -168,6 +188,8 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         val command = NotifyPaymentReceived.Command.Onchain(event = event)
 
         sut(command)
+        sut.claimPresentation(command)
+        sut.recordPresentation(command)
 
         inOrder(activityRepo) {
             verify(activityRepo).handleOnchainTransactionReceived("txid789", details)
@@ -242,5 +264,64 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         val paymentResult = result.getOrThrow()
         assertTrue(paymentResult is NotifyPaymentReceived.Result.Skip)
+    }
+
+    @Test
+    fun `recordPresentation keeps the claim when marking as seen fails`() = test {
+        val event = mock<Event.PaymentReceived> {
+            on { amountMsat } doReturn 1000000uL
+            on { paymentHash } doReturn "hash123"
+            on { paymentId } doReturn "paymentId123"
+        }
+        whenever(activityRepo.markActivityAsSeen("paymentId123"))
+            .thenThrow(IllegalStateException("activity store unavailable"))
+        val command = NotifyPaymentReceived.Command.Lightning(event = event)
+
+        assertTrue(sut.claimPresentation(command))
+        sut.recordPresentation(command)
+        assertFalse(sut.claimPresentation(command))
+    }
+
+    @Test
+    fun `present retains the claim after marking as seen succeeds`() = test {
+        val event = mock<Event.PaymentReceived> {
+            on { paymentId } doReturn "paymentId123"
+        }
+        val command = NotifyPaymentReceived.Command.Lightning(event = event)
+        var presentationCount = 0
+
+        val presented = sut.present(command) { presentationCount += 1 }
+
+        assertTrue(presented)
+        assertEquals(1, presentationCount)
+        verify(activityRepo).markActivityAsSeen("paymentId123")
+        assertFalse(sut.claimPresentation(command))
+    }
+
+    @Test
+    fun `invoke returns Skip after the payment presentation is claimed`() = test {
+        val event = mock<Event.PaymentReceived> {
+            on { amountMsat } doReturn 1000000uL
+            on { paymentHash } doReturn "hash123"
+            on { paymentId } doReturn "paymentId123"
+        }
+        val command = NotifyPaymentReceived.Command.Lightning(event = event)
+        assertTrue(sut.claimPresentation(command))
+
+        val result = sut(command)
+
+        assertTrue(result.getOrThrow() is NotifyPaymentReceived.Result.Skip)
+        verify(activityRepo, never()).isActivitySeen(any())
+    }
+
+    @Test
+    fun `claimPresentation leaves the payment available when presentation is not allowed`() = test {
+        val event = mock<Event.PaymentReceived> {
+            on { paymentId } doReturn "paymentId123"
+        }
+        val command = NotifyPaymentReceived.Command.Lightning(event = event)
+
+        assertFalse(sut.claimPresentation(command) { false })
+        assertTrue(sut.claimPresentation(command))
     }
 }

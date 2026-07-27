@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.WordCount
 import to.bitkit.async.appScope
@@ -82,9 +83,13 @@ class WalletRepo @Inject constructor(
 
     init {
         repoScope.launch {
-            lightningRepo.nodeEvents.collect { event ->
+            lightningRepo.nodeEventUpdates.collect { update ->
                 if (!walletExists()) return@collect
-                refreshBip21ForEvent(event)
+                refreshBip21ForEvent(
+                    event = update.event,
+                    settledReceiveInvoice = update.settledReceiveInvoice,
+                    settledReceiveAddress = update.settledReceiveAddress,
+                )
             }
         }
         repoScope.launch {
@@ -308,7 +313,11 @@ class WalletRepo @Inject constructor(
         eventSyncJob = null
     }
 
-    suspend fun refreshBip21ForEvent(event: Event) = withContext(bgDispatcher) {
+    suspend fun refreshBip21ForEvent(
+        event: Event,
+        settledReceiveInvoice: SettledReceiveInvoice? = null,
+        settledReceiveAddress: SettledReceiveAddress? = null,
+    ) = withContext(bgDispatcher) {
         when (event) {
             is Event.ChannelReady -> {
                 // Only refresh bolt11 if we can now receive on lightning
@@ -333,12 +342,24 @@ class WalletRepo @Inject constructor(
                 }
             }
 
-            is Event.PaymentReceived, is Event.OnchainTransactionReceived -> {
-                // Check if onchain address was used, generate new one if needed
-                Logger.debug("refreshBip21ForEvent: $event", context = TAG)
-                refreshAddressIfNeeded()
+            is Event.PaymentReceived if settledReceiveInvoice != null -> {
+                val settledBolt11 = settledReceiveInvoice.bolt11
+                if (!invalidateSettledReceiveInvoice(settledBolt11)) return@withContext
+                Logger.debug("Refreshing BIP21 for event '$event'", context = TAG)
                 updateBip21Url()
+                refreshAddressIfNeeded()
             }
+
+            is Event.PaymentReceived -> Unit
+
+            is Event.OnchainTransactionReceived if settledReceiveAddress != null -> {
+                val settledAddress = settledReceiveAddress.address
+                if (!invalidateSettledReceiveAddress(settledAddress)) return@withContext
+                Logger.debug("Refreshing BIP21 for event '$event'", context = TAG)
+                refreshReusableReceiveAddress()
+            }
+
+            is Event.OnchainTransactionReceived -> Unit
 
             else -> Unit
         }
@@ -346,6 +367,22 @@ class WalletRepo @Inject constructor(
 
     private suspend fun refreshAddressIfNeeded() {
         refreshReusableReceiveAddress()
+    }
+
+    private fun invalidateSettledReceiveInvoice(settledBolt11: String): Boolean {
+        while (true) {
+            val state = _walletState.value
+            if (state.bolt11 != settledBolt11) return false
+            if (_walletState.compareAndSet(state, state.copy(bolt11 = "", bip21 = ""))) return true
+        }
+    }
+
+    private fun invalidateSettledReceiveAddress(settledAddress: String): Boolean {
+        while (true) {
+            val state = _walletState.value
+            if (state.onchainAddress != settledAddress) return false
+            if (_walletState.compareAndSet(state, state.copy(onchainAddress = "", bip21 = ""))) return true
+        }
     }
 
     suspend fun refreshReusableReceiveAddress(): Result<Unit> = withContext(bgDispatcher) {
@@ -553,7 +590,14 @@ class WalletRepo @Inject constructor(
     fun getBolt11(): String = _walletState.value.bolt11
 
     suspend fun setBolt11(bolt11: String) {
-        runCatching { cacheStore.saveBolt11(bolt11) }
+        val paymentHash = if (bolt11.isEmpty()) {
+            ""
+        } else {
+            runCatching { Bolt11Invoice.fromStr(bolt11).paymentHash() }
+                .onFailure { Logger.error("Failed to parse receive invoice", it, context = TAG) }
+                .getOrDefault("")
+        }
+        runSuspendCatching { cacheStore.saveBolt11(bolt11, paymentHash) }
         _walletState.update { it.copy(bolt11 = bolt11) }
     }
 
