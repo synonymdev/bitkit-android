@@ -11,6 +11,7 @@ import to.bitkit.utils.AppError
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
 
 class PaykitSdkServiceTest {
     @Test
@@ -92,6 +93,52 @@ class PaykitSdkServiceTest {
         )
 
         assertFailsWith<AppError> { store.loadOrDeriveBytes() }
+    }
+
+    @Test
+    fun `owned session requires and persists its exported local secret`() {
+        val secretKeyHex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+
+        assertEquals(
+            secretKeyHex,
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = true,
+                exportedLocalSecretKeyHex = secretKeyHex,
+                existingManagedSecretKeyHex = null,
+            ),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = true,
+                exportedLocalSecretKeyHex = null,
+                existingManagedSecretKeyHex = null,
+            )
+        }
+        assertFailsWith<IllegalStateException> {
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = true,
+                exportedLocalSecretKeyHex = secretKeyHex,
+                existingManagedSecretKeyHex = "different-secret",
+            )
+        }
+    }
+
+    @Test
+    fun `external session refuses to replace a managed local secret`() {
+        assertNull(
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = false,
+                exportedLocalSecretKeyHex = null,
+                existingManagedSecretKeyHex = null,
+            ),
+        )
+        assertFailsWith<IllegalStateException> {
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = false,
+                exportedLocalSecretKeyHex = null,
+                existingManagedSecretKeyHex = "managed-secret",
+            )
+        }
     }
 
     private fun keyStore(

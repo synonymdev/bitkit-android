@@ -339,6 +339,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onAppResumed validates an external Pubky identity source`() = test {
+        whenever(pubkyRepo.validateExternalIdentitySource()).thenReturn(true)
+
+        sut.onAppResumed()
+        advanceUntilIdle()
+
+        verify(pubkyRepo).validateExternalIdentitySource()
+    }
+
+    @Test
     fun `hardware received tx details navigate directly to hardware activity`() = test {
         val txId = "hardware-tx"
 

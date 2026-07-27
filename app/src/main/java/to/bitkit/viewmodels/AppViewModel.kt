@@ -93,6 +93,7 @@ import to.bitkit.ext.minSendableSat
 import to.bitkit.ext.minWithdrawableSat
 import to.bitkit.ext.rawId
 import to.bitkit.ext.removeSpaces
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.setClipboardText
 import to.bitkit.ext.toHex
 import to.bitkit.ext.toUserMessage
@@ -3335,6 +3336,15 @@ class AppViewModel @Inject constructor(
     fun onHomeResumed() {
         checkTimedSheets()
         hwWalletRepo.onAppForegrounded()
+    }
+
+    fun onAppResumed() {
+        viewModelScope.launch(bgDispatcher) {
+            runSuspendCatching { pubkyRepo.validateExternalIdentitySource() }
+                .onFailure {
+                    Logger.error("Failed to clear unavailable shared Pubky identity", it, context = TAG)
+                }
+        }
     }
 
     fun onLeftHome() = timedSheetManager.onHomeScreenExited()

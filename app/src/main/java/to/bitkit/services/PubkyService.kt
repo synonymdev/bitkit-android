@@ -41,6 +41,10 @@ class PubkyService @Inject constructor(
         paykitSdkService.forceSignOut()
     }
 
+    suspend fun clearExternalSessionAccess() = ServiceQueue.CORE.background {
+        paykitSdkService.clearExternalSessionAccess()
+    }
+
     suspend fun clearSessionAccess() = ServiceQueue.CORE.background {
         paykitSdkService.clearSessionAccess()
     }
@@ -83,6 +87,10 @@ class PubkyService @Inject constructor(
     suspend fun signIn(secretKeyHex: String): Unit = ServiceQueue.CORE.background {
         paykitSdkService.signIn(secretKeyHex)
         Unit
+    }
+
+    suspend fun signInExternal(secretKeyHex: String): String = ServiceQueue.CORE.background {
+        paykitSdkService.signInExternal(secretKeyHex)
     }
 
     // endregion

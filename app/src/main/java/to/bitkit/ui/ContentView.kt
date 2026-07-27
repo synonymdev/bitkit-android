@@ -1329,9 +1329,6 @@ private fun NavGraphBuilder.profile(
                 onNavigateToPayContacts = {
                     navController.navigateTo(Routes.PayContacts) { popUpTo(Routes.Home) }
                 },
-                onNavigateToProfile = {
-                    navController.navigateTo(Routes.Profile) { popUpTo(Routes.Home) }
-                },
                 onBackClick = { navController.popBackStack() },
             )
         }

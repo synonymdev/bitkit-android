@@ -234,6 +234,8 @@ class Keychain @Inject constructor(
         PAYKIT_SESSION,
         PAYKIT_RECEIVER_NOISE_SECRET_KEY,
         PAYKIT_SDK_STATE,
+        PUBKY_MANAGED_SECRET_QUARANTINED,
+        PUBKY_SHARED_EXPORT_ENABLED,
         PUBKY_SECRET_KEY,
     }
 }

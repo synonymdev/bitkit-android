@@ -7,6 +7,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.PubkyStoreSerializer
+import to.bitkit.data.sharing.ExternalPubkyIdentityRef
 import to.bitkit.models.PubkyProfileData
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -38,4 +39,5 @@ data class PubkyStoreData(
     val cachedName: String? = null,
     val cachedImageUri: String? = null,
     val contactProfileOverrides: Map<String, PubkyProfileData> = emptyMap(),
+    val externalIdentityRef: ExternalPubkyIdentityRef? = null,
 )
