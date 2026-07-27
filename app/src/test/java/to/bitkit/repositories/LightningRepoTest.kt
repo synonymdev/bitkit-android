@@ -927,6 +927,36 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
     }
 
+    // Regression: recovery must not block the caller. A wedged node's release can gate the rebuild
+    // for tens of seconds; the failure has to surface immediately while recovery runs in background.
+    @Test
+    fun `restartWithElectrumServer surfaces failure before background recovery completes`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        // The switch to the new server fails.
+        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenThrow(RuntimeException("start failed"))
+        // The background recovery (previous config) blocks until released.
+        val recoveryStarted = CompletableDeferred<Unit>()
+        val releaseRecovery = CompletableDeferred<Unit>()
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                recoveryStarted.complete(Unit)
+                releaseRecovery.await()
+            }
+
+        val result = sut.restartWithElectrumServer(badUrl)
+
+        assertTrue(result.isFailure) // surfaced without awaiting recovery
+        assertTrue(recoveryStarted.isCompleted) // recovery was launched in the background
+        assertFalse(releaseRecovery.isCompleted) // ... and is still draining
+
+        releaseRecovery.complete(Unit)
+        testScheduler.advanceUntilIdle()
+    }
+
     @Test
     fun `restartWithRgsServer should setup with new rgs server`() = test {
         startNodeForTesting()

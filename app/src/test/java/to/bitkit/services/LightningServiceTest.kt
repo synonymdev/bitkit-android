@@ -1,13 +1,20 @@
 package to.bitkit.services
 
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
+import org.junit.rules.TemporaryFolder
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
@@ -18,17 +25,26 @@ import org.mockito.kotlin.timeout
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.async.newSingleThreadDispatcher
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.env.Env
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.LoggerLdk
+import to.bitkit.utils.ServiceError
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 
 private const val VERIFY_TIMEOUT_MS = 2_000L
+private const val RELEASE_GATE_PROBE_MS = 200L
+private const val STOP_BOUND_MS = 5_000L
+private val SHORT_GATE_TIMEOUT = 200.milliseconds
 
 class LightningServiceTest : BaseUnitTest() {
     private val keychain = mock<Keychain>()
@@ -36,6 +52,9 @@ class LightningServiceTest : BaseUnitTest() {
     private val settingsStore = mock<SettingsStore>()
     private val loggerLdk = mock<LoggerLdk>()
     private val node = mock<Node>()
+
+    @get:Rule
+    val tempFolder = TemporaryFolder()
 
     private lateinit var sut: LightningService
 
@@ -248,6 +267,113 @@ class LightningServiceTest : BaseUnitTest() {
 
         verify(node, times(1)).nextEventAsync()
         verify(newNode, never()).nextEventAsync()
+    }
+
+    private class GateFixture(
+        scope: CoroutineScope,
+        val gated: LightningService,
+        val destroyGate: CountDownLatch,
+        val destroyed: AtomicBoolean,
+    ) : CoroutineScope by scope
+
+    // Runs [block] against a LightningService on real dispatchers whose node.destroy() blocks on
+    // destroyGate, so the release gate can be observed. Real dispatchers + a controllably delayed
+    // destroy() are exactly the setup the gate needs to be tested independently of virtual time.
+    private fun runGateTest(block: suspend GateFixture.() -> Unit) = runBlocking {
+        Env.initAppStoragePath(tempFolder.root.absolutePath)
+        val io = newSingleThreadDispatcher("test-gate-io")
+        val bg = newSingleThreadDispatcher("test-gate-bg")
+        val gated = LightningService(bg, io, keychain, vssStoreIdProvider, settingsStore, loggerLdk)
+        gated.node = node
+        val destroyGate = CountDownLatch(1)
+        val destroyed = AtomicBoolean(false)
+        whenever(node.destroy()).thenAnswer {
+            destroyGate.await()
+            destroyed.set(true)
+        }
+        try {
+            GateFixture(this, gated, destroyGate, destroyed).block()
+        } finally {
+            destroyGate.countDown() // release any wedged destroy so the io thread can exit
+            io.close()
+            bg.close()
+        }
+    }
+
+    // Regression: destructive storage work must wait for the previous node's release (free_node) so
+    // native lifetimes never overlap. Also pins (d): stop() returns within its bound despite the wedge.
+    @Test
+    fun `resetNetworkGraph waits for the previous node release to finish`() = runGateTest {
+        withTimeout(STOP_BOUND_MS) { gated.stop() } // stop returns within its bound though destroy() is wedged
+
+        val resetDone = CompletableDeferred<Unit>()
+        launch(Dispatchers.Default) {
+            gated.resetNetworkGraph(walletIndex = 0)
+            resetDone.complete(Unit)
+        }
+
+        delay(RELEASE_GATE_PROBE_MS)
+        assertFalse(resetDone.isCompleted) // gate holds while the release is still draining
+        assertFalse(destroyed.get())
+
+        destroyGate.countDown()
+        resetDone.await()
+        assertTrue(destroyed.get()) // release finished before resetNetworkGraph proceeded
+    }
+
+    // Regression (b): wipeStorage deletes storage and must wait for the release just like the rebuild.
+    @Test
+    fun `wipeStorage waits for the previous node release to finish`() = runGateTest {
+        withTimeout(STOP_BOUND_MS) { gated.stop() }
+
+        val wipeDone = CompletableDeferred<Unit>()
+        launch(Dispatchers.Default) {
+            gated.wipeStorage(walletIndex = 0)
+            wipeDone.complete(Unit)
+        }
+
+        delay(RELEASE_GATE_PROBE_MS)
+        assertFalse(wipeDone.isCompleted)
+        assertFalse(destroyed.get())
+
+        destroyGate.countDown()
+        wipeDone.await()
+        assertTrue(destroyed.get())
+    }
+
+    // Regression (a): the rebuild path (setup) must wait for the release before building a new node.
+    @Test
+    fun `setup waits for the previous node release before rebuilding`() = runGateTest {
+        withTimeout(STOP_BOUND_MS) { gated.stop() }
+
+        val setupDone = CompletableDeferred<Result<Unit>>()
+        launch(Dispatchers.Default) {
+            setupDone.complete(runCatching { gated.setup(walletIndex = 0) })
+        }
+
+        delay(RELEASE_GATE_PROBE_MS)
+        assertFalse(setupDone.isCompleted) // gate blocks the rebuild while the release drains
+
+        destroyGate.countDown()
+        setupDone.await() // proceeds once released (build then fails on the mocked deps, which is fine)
+    }
+
+    // Regression (c): with no pending release the gate must add no latency.
+    @Test
+    fun `wipeStorage proceeds immediately when no release is pending`() = runGateTest {
+        gated.node = null // no stop() has run, so releaseJob is null
+
+        withTimeout(RELEASE_GATE_PROBE_MS) { gated.wipeStorage(walletIndex = 0) } // completes without waiting
+    }
+
+    // Regression: a stuck free_node must not block rebuilds forever; the gate throws once bounded out.
+    @Test
+    fun `awaitNodeRelease throws when the release never finishes`() = runGateTest {
+        withTimeout(STOP_BOUND_MS) { gated.stop() } // release launched; destroy() stays wedged (never counted down)
+
+        val error = runCatching { gated.awaitNodeRelease(timeout = SHORT_GATE_TIMEOUT) }.exceptionOrNull()
+
+        assertTrue(error is ServiceError.NodeReleaseTimeout)
     }
 
     // Regression: a failing node stop must still release the handle instead of rethrowing and leaking it

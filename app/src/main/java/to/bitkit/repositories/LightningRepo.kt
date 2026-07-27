@@ -782,8 +782,10 @@ class LightningRepo @Inject constructor(
             shouldRetry = false,
             customServerUrl = newServerUrl,
         ).onFailure {
-            Logger.warn("Failed ldk-node config change, attempting recovery…", context = TAG)
-            restartWithPreviousConfig()
+            // Recover in the background: a wedged node's release can gate the rebuild for tens of
+            // seconds, and the caller must surface this failure now rather than block on recovery.
+            Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
+            scope.launch { restartWithPreviousConfig() }
         }.onSuccess {
             settingsStore.update { it.copy(electrumServer = newServerUrl) }
 
@@ -811,8 +813,10 @@ class LightningRepo @Inject constructor(
             shouldRetry = false,
             customRgsServerUrl = newRgsUrl,
         ).onFailure {
-            Logger.warn("Failed ldk-node config change, attempting recovery…", context = TAG)
-            restartWithPreviousConfig()
+            // Recover in the background: a wedged node's release can gate the rebuild for tens of
+            // seconds, and the caller must surface this failure now rather than block on recovery.
+            Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
+            scope.launch { restartWithPreviousConfig() }
         }.onSuccess {
             settingsStore.update { it.copy(rgsServerUrl = newRgsUrl) }
 
@@ -1792,6 +1796,9 @@ class LightningRepo @Inject constructor(
             check(lifecycleState == NodeLifecycleState.Stopped) {
                 "Node lifecycle changed to '$lifecycleState' during pathfinding scores reset"
             }
+            // Gate the destructive VSS deletes on the previous node's release, so the old node cannot
+            // re-persist scores over the delete while it is still draining.
+            lightningService.awaitNodeRelease()
             vssBackupClientLdk.setup(walletIndex).getOrThrow()
             vssBackupClientLdk.deleteObject(VSS_KEY_SCORER).getOrThrow()
             vssBackupClientLdk.deleteObject(VSS_KEY_EXTERNAL_SCORES_CACHE).getOrThrow()

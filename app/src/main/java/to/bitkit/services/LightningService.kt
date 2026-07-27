@@ -114,6 +114,12 @@ class LightningService @Inject constructor(
         /** How long a node stop waits for the rust handle to be released before moving on. */
         private val NODE_RELEASE_TIMEOUT = 1.seconds
 
+        /**
+         * Upper bound for the release gate. Longer than an observed wedged free_node (~40s) so a real
+         * drain still gates, but bounded so a stuck free_node cannot permanently block rebuilds.
+         */
+        private val NODE_RELEASE_GATE_TIMEOUT = 90.seconds
+
         private val DEFAULT_SCORING_FEE_PARAMETERS = ScoringFeeParameters(
             basePenaltyMsat = 1_024uL,
             basePenaltyAmountMultiplierMsat = 131_072uL,
@@ -138,6 +144,11 @@ class LightningService @Inject constructor(
 
     private var listenerJob: Job? = null
 
+    // Release of the previous node's rust handle (free_node). Rebuild and destructive storage work
+    // wait on this so a new node never touches storage the old one is still draining.
+    @Volatile
+    private var releaseJob: Job? = null
+
     suspend fun setup(
         walletIndex: Int,
         customServerUrl: String? = null,
@@ -145,6 +156,7 @@ class LightningService @Inject constructor(
         trustedPeers: List<PeerDetails>? = null,
         channelMigration: ChannelDataMigration? = null,
     ) {
+        awaitNodeRelease()
         Logger.debug("Building node…", context = TAG)
 
         val config = config(walletIndex, trustedPeers)
@@ -367,26 +379,48 @@ class LightningService @Inject constructor(
      * `free_node` only returns once the node's background tasks drain, which takes tens of seconds
      * when a failed start left them wedged, so the wait is bounded and the release is joined rather
      * than run inline: cancelling a blocking FFI call does nothing, but abandoning the join lets the
-     * caller continue while the release finishes on its own.
+     * caller continue while the release finishes on its own. [awaitNodeRelease] gates the next
+     * rebuild or destructive storage work on the same job so native lifetimes never overlap.
      */
     private suspend fun releaseHandle(node: Node) {
         val release = launch(ioDispatcher) {
             runSuspendCatching { node.destroy() }
                 .onFailure { Logger.warn("Node handle release error", it, context = TAG) }
         }
+        releaseJob = release
+        // Clear once done so a later gate check no-ops instead of joining a stale completed job.
+        release.invokeOnCompletion { if (releaseJob === release) releaseJob = null }
         withTimeoutOrNull(NODE_RELEASE_TIMEOUT) { release.join() }
             ?: Logger.warn("Node handle release still pending after $NODE_RELEASE_TIMEOUT", context = TAG)
     }
 
-    fun wipeStorage(walletIndex: Int) {
+    /**
+     * Blocks until the previous node's release ([releaseHandle] / `free_node`) has finished, so a
+     * rebuild or destructive storage operation never overlaps the old node's native lifetime. The
+     * wait is bounded: a stuck free_node throws rather than proceeding (which would overlap) or
+     * blocking forever (which would brick every future rebuild).
+     */
+    suspend fun awaitNodeRelease(timeout: Duration = NODE_RELEASE_GATE_TIMEOUT) {
+        val release = releaseJob ?: return
+        if (release.isActive) Logger.debug("Waiting for previous node release to finish…", context = TAG)
+        withTimeoutOrNull(timeout) { release.join() }
+            ?: run {
+                Logger.error("Previous node release did not finish within $timeout", context = TAG)
+                throw ServiceError.NodeReleaseTimeout()
+            }
+    }
+
+    suspend fun wipeStorage(walletIndex: Int) {
         if (node != null) throw ServiceError.NodeStillRunning()
+        awaitNodeRelease()
         Logger.warn("Wiping LDK storage…", context = TAG)
         Path(Env.ldkStoragePath(walletIndex)).toFile().deleteRecursively()
         Logger.info("LDK storage wiped", context = TAG)
     }
 
-    fun resetNetworkGraph(walletIndex: Int) {
+    suspend fun resetNetworkGraph(walletIndex: Int) {
         if (node != null) throw ServiceError.NodeStillRunning()
+        awaitNodeRelease()
         Logger.warn("Resetting network graph cache…", context = TAG)
         val ldkPath = Path(Env.ldkStoragePath(walletIndex)).toFile()
         val graphFile = ldkPath.resolve("network_graph_cache")
