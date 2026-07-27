@@ -5,6 +5,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -337,7 +338,7 @@ class LightningService @Inject constructor(
         shouldListenForEvents = false
         // A stop requested from inside an event handler runs on the listener job itself; joining it
         // here would deadlock, so let the loop exit on shouldListenForEvents instead.
-        if (coroutineContext[EventListenerContext.Key] == null) {
+        if (currentCoroutineContext()[EventListenerContext.Key] == null) {
             listenerJob?.cancelAndJoin()
         }
         listenerJob = null
@@ -1083,10 +1084,17 @@ class LightningService @Inject constructor(
     // endregion
 
     // region events
+    // Volatile: written by stop()/startEventListener() and read by the listener loop on another thread.
+    @Volatile
     private var shouldListenForEvents = true
 
-    suspend fun startEventListener(onEvent: NodeEventHandler? = null): Result<Unit> = runCatching {
+    suspend fun startEventListener(onEvent: NodeEventHandler? = null): Result<Unit> = runSuspendCatching {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
+        // A re-arm requested from inside an event handler runs on the listener job itself: joining it
+        // would deadlock and relaunching would double-poll the node. Skip re-arming and keep the
+        // running listener. This drops the passed onEvent, which is safe only because the callers
+        // (LightningRepo.start) always re-arm with the same dispatch handler the listener already runs.
+        if (currentCoroutineContext()[EventListenerContext.Key] != null) return@runSuspendCatching
         listenerJob?.cancelAndJoin()
         shouldListenForEvents = true
         listenerJob = launch(EventListenerContext()) {

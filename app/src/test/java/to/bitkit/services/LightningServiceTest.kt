@@ -140,6 +140,30 @@ class LightningServiceTest : BaseUnitTest() {
         assertNull(sut.node)
     }
 
+    // Regression: an external stop (not from inside a handler) must cancel AND join the listener, so
+    // the loop has fully exited before teardown — the counterpart to the handler-triggered skip.
+    @Test
+    fun `external stop cancels and joins the running listener`() = test {
+        val listening = CompletableDeferred<Unit>()
+        val listenerExited = CompletableDeferred<Unit>()
+        whenever(node.nextEventAsync()).doSuspendableAnswer {
+            listening.complete(Unit)
+            try {
+                awaitCancellation()
+            } finally {
+                listenerExited.complete(Unit)
+            }
+        }
+        sut.startEventListener()
+        listening.await() // listener is parked inside nextEventAsync
+
+        sut.stop()
+
+        // stop() returned, so cancelAndJoin completed: the listener has exited, not been left running.
+        assertTrue(listenerExited.isCompleted)
+        verify(node).destroy()
+    }
+
     // Regression: a stop requested from inside an event handler runs on the listener job, so joining
     // that job would deadlock; teardown must still complete
     @Test
@@ -168,6 +192,38 @@ class LightningServiceTest : BaseUnitTest() {
         verify(node, timeout(VERIFY_TIMEOUT_MS)).destroy()
         // The loop re-checks its guard after the handler returns instead of polling the freed node.
         verify(node, times(1)).nextEventAsync()
+    }
+
+    // Regression: startEventListener() also joins listenerJob, so a re-arm requested from inside a
+    // handler (e.g. LightningRepo.start on an already-running node) would self-cancel the listener
+    // it runs on — its CancellationException swallowed by runCatching — silently killing it. The
+    // listener must survive the re-arm and keep delivering events.
+    @Test
+    fun `startEventListener from within a handler keeps the listener running`() = test {
+        // Gate the first event so the outer startEventListener returns and assigns listenerJob before
+        // the handler re-arms; otherwise the eager test dispatcher leaves listenerJob null and hides it.
+        val firstEvent = CompletableDeferred<Event>()
+        val secondEvent = CompletableDeferred<Event>()
+        var polls = 0
+        whenever(node.nextEventAsync()).doSuspendableAnswer {
+            if (++polls == 1) firstEvent.await() else secondEvent.await()
+        }
+        var handlerCalls = 0
+        val handler: NodeEventHandler = {
+            when (++handlerCalls) {
+                1 -> sut.startEventListener { } // re-arm from inside the listener; must not kill it
+                2 -> sut.stop() // reached only if the listener survived; also terminates the loop
+            }
+        }
+
+        sut.startEventListener(handler)
+        firstEvent.complete(Event.PaymentSuccessful(null, "h1", null, null))
+        secondEvent.complete(Event.PaymentSuccessful(null, "h2", null, null))
+        testScheduler.advanceUntilIdle()
+
+        // Reached only if the second event was delivered, i.e. the re-arm did not kill the listener.
+        verify(node, timeout(VERIFY_TIMEOUT_MS)).stop()
+        verify(node, timeout(VERIFY_TIMEOUT_MS)).destroy()
     }
 
     // Regression: stop() nulls listenerJob while the old loop is still unwinding, so a racing start()
