@@ -3,9 +3,7 @@ package to.bitkit.ui.screens.transfer
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
@@ -30,8 +28,10 @@ import to.bitkit.R
 import to.bitkit.models.Toast
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -196,9 +196,9 @@ private fun Content(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(12.dp))
+            VerticalSpacer(12.dp)
             ProgressMessage(progressState = progressState)
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
             if (showAnimation) {
                 TransferAnimationView(
                     largeCircleRes = R.drawable.onchain_sync_large,
@@ -227,7 +227,7 @@ private fun Content(
                 }
             }
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             if (!inProgress) {
                 PrimaryButton(
@@ -236,7 +236,7 @@ private fun Content(
                     modifier = Modifier.testTag("TransferSuccess-button")
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }
@@ -257,7 +257,7 @@ private fun ProgressMessage(progressState: SavingsProgressState) {
             R.string.lightning__savings_interrupted__title to R.string.lightning__savings_interrupted__text
     }
     Display(text = stringResource(titleRes).withAccent())
-    Spacer(modifier = Modifier.height(8.dp))
+    VerticalSpacer(8.dp)
     BodyM(
         text = stringResource(textRes).withAccentBoldBright(),
         color = Colors.White64,

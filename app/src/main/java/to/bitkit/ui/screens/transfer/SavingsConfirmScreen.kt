@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -49,6 +48,7 @@ import to.bitkit.ui.components.MoneyDisplay
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.TertiaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.currencyViewModel
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -173,16 +173,16 @@ private fun SavingsConfirmContent(
                 .fillMaxSize()
 
         ) {
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
             Display(text = stringResource(R.string.lightning__transfer__confirm).withAccent())
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             Caption13Up(text = stringResource(R.string.lightning__savings_confirm__label), color = Colors.White64)
-            Spacer(modifier = Modifier.height(8.dp))
+            VerticalSpacer(8.dp)
             MoneyDisplay(sats = headlineAmount.toLong(), onClick = onAmountClick)
 
             if (quote != null) {
-                Spacer(modifier = Modifier.height(24.dp))
+                VerticalSpacer(24.dp)
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier.height(IntrinsicSize.Min),
@@ -212,7 +212,7 @@ private fun SavingsConfirmContent(
 
                 // Adjust how much to move to savings, bounded to a payable range.
                 if (maxSat > minSat) {
-                    Spacer(modifier = Modifier.height(28.dp))
+                    VerticalSpacer(28.dp)
                     AmountSlider(
                         value = quote.amountSat.toLong(),
                         min = minSat.toLong(),
@@ -223,7 +223,7 @@ private fun SavingsConfirmContent(
             }
 
             if (hasMultiple) {
-                Spacer(modifier = Modifier.height(24.dp))
+                VerticalSpacer(24.dp)
                 if (hasSelected) {
                     PrimaryButton(
                         text = stringResource(R.string.lightning__savings_confirm__transfer_all),
@@ -283,14 +283,14 @@ private fun SavingsConfirmContent(
                 }
             )
             if (quote != null) {
-                Spacer(modifier = Modifier.height(12.dp))
+                VerticalSpacer(12.dp)
                 // Fallback: drain a whole channel on-chain by closing it instead of swapping.
                 TertiaryButton(
                     text = stringResource(R.string.lightning__savings_confirm__close_instead),
                     onClick = onCloseConfirm,
                 )
             }
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }
