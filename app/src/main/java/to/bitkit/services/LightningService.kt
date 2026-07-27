@@ -275,6 +275,8 @@ class LightningService @Inject constructor(
                     feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
                 ),
                 connectionTimeoutSecs = Env.walletSyncTimeoutSecs,
+                additionalWalletFullScanBatchSize = 5u,
+                additionalWalletFullScanStopGap = 20u,
             ),
         )
     }

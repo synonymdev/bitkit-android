@@ -1,12 +1,11 @@
 package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Scanner
-import com.synonym.paykit.ContactPaymentResolutionPrivateState
 import com.synonym.paykit.LinkedPeerState
-import com.synonym.paykit.PaymentEndpointReservationInput
-import com.synonym.paykit.PaymentEndpointSource
+import com.synonym.paykit.PrivatePaymentEndpointReservationInput
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
+import com.synonym.paykit.PrivatePaymentResolutionState
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -33,6 +32,7 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.CoreService
+import to.bitkit.services.PaykitPaymentEndpointSource
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.services.PubkyService
@@ -457,7 +457,7 @@ class PrivatePaykitRepo @Inject constructor(
                     includePublicEndpoints = true,
                 )
                 val privateEndpoints = resolution.payableEndpoints
-                    .filter { it.source == PaymentEndpointSource.PRIVATE_PAYMENT_LIST }
+                    .filter { it.source == PaykitPaymentEndpointSource.PRIVATE_PAYMENT_LIST }
                     .mapNotNull { PublicPaykitRepo.parseEndpoint(it.identifier, it.payload) }
 
                 cacheResolvedPrivateEndpoints(publicKey, privateEndpoints)
@@ -469,7 +469,7 @@ class PrivatePaykitRepo @Inject constructor(
                     )
                 }
 
-                if (resolution.privateState == ContactPaymentResolutionPrivateState.RECOVERY_PENDING) {
+                if (resolution.privateState == PrivatePaymentResolutionState.RECOVERY_PENDING) {
                     schedulePendingPrivateMessageDrainRetries(
                         reason = "payment recovery",
                         retryKeys = listOf(PrivateMessageDrainRetryKey(publicKey, PaykitReceiverPaths.WALLET)),
@@ -477,7 +477,7 @@ class PrivatePaykitRepo @Inject constructor(
                 }
 
                 val publicEndpoints = resolution.payableEndpoints
-                    .filter { it.source == PaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT }
+                    .filter { it.source == PaykitPaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT }
                     .mapNotNull { PublicPaykitRepo.parseEndpoint(it.identifier, it.payload) }
                 val publicPayable = publicPaykitRepo.payableEndpoints(publicEndpoints)
                 if (publicPayable.isNotEmpty()) {
@@ -994,7 +994,7 @@ class PrivatePaykitRepo @Inject constructor(
         publicKey: String,
         receiverPath: String,
         endpoint: Endpoint,
-    ): PaymentEndpointReservationInput {
+    ): PrivatePaymentEndpointReservationInput {
         val contactState = state?.contacts?.get(publicKey)
         val attribution = if (endpoint.methodId == MethodId.Bolt11) {
             val paymentHash = localInvoice(publicKey, receiverPath)?.takeIf { it.bolt11 == endpoint.value }?.paymentHash
@@ -1015,7 +1015,7 @@ class PrivatePaykitRepo @Inject constructor(
             ?.takeIf { endpoint.methodId == MethodId.Bolt11 && it.bolt11 == endpoint.value }
             ?.let { Instant.ofEpochSecond(it.expiresAt).toString() }
 
-        return PaymentEndpointReservationInput(
+        return PrivatePaymentEndpointReservationInput(
             reservationId = privateReservationId(publicKey, receiverPath, endpoint),
             identifier = endpoint.methodId.rawValue,
             payload = endpoint.rawPayload,
@@ -1240,8 +1240,7 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun hasLocalSecretKeyForCurrentProfile(): Boolean = runSuspendCatching {
         pubkyService.currentPublicKey() ?: return@runSuspendCatching false
-        val status = paykitSdkService.identityStatus() ?: return@runSuspendCatching false
-        status.privateLinkCapable
+        paykitSdkService.hasLocalSecretKey()
     }.getOrDefault(false)
 
     private suspend fun isContactSharingCleanupPending(): Boolean =
