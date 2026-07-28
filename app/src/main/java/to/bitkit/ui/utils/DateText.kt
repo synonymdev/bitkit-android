@@ -1,4 +1,4 @@
-package to.bitkit.ui.shared.effects
+package to.bitkit.ui.utils
 
 import android.content.BroadcastReceiver
 import android.content.Context
@@ -29,8 +29,7 @@ fun uiDateText(
     .formatted(style.pattern(rememberIs24HourFormat()), locale, zone)
 
 @Composable
-fun rememberIs24HourFormat(): Boolean {
-    val context = LocalContext.current
+fun rememberIs24HourFormat(context: Context = LocalContext.current): Boolean {
     var is24Hour by remember(context) { mutableStateOf(context.is24HourTimeFormat) }
 
     DisposableEffect(context) {

@@ -52,11 +52,11 @@ import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.animations.BalanceAnimations
-import to.bitkit.ui.shared.effects.uiDateText
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
+import to.bitkit.ui.utils.uiDateText
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId

@@ -88,7 +88,6 @@ import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.animations.BalanceAnimations
-import to.bitkit.ui.shared.effects.uiDateText
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.sheets.BoostTransactionSheet
@@ -97,6 +96,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getScreenTitleRes
+import to.bitkit.ui.utils.uiDateText
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
 
