@@ -1,11 +1,14 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import com.synonym.bitkitcore.BoltzPairInfo
+import com.synonym.bitkitcore.BoltzSwapEvent
 import com.synonym.bitkitcore.BroadcastException
 import com.synonym.bitkitcore.ChannelLiquidityOptions
 import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtInfoOptions
+import com.synonym.bitkitcore.ReverseSwapResponse
 import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import kotlinx.collections.immutable.persistentListOf
@@ -15,6 +18,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -29,8 +33,10 @@ import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
+import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.OutPoint
+import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -66,12 +72,16 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.services.BoltzService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
@@ -91,9 +101,12 @@ class TransferViewModelTest : BaseUnitTest() {
     private val cacheStore = mock<CacheStore>()
     private val transferRepo = mock<TransferRepo>()
     private val clock = mock<Clock>()
+    private val boltzService = mock<BoltzService>()
 
     private val balanceState = MutableStateFlow(BalanceState())
     private val blocktankState = MutableStateFlow(BlocktankState())
+    private val boltzEvents = MutableSharedFlow<BoltzSwapEvent>(extraBufferCapacity = 8)
+    private val nodeEvents = MutableSharedFlow<Event>(extraBufferCapacity = 8)
     private val feeResponse = mock<IBtEstimateFeeResponse2>()
 
     @Before
@@ -108,6 +121,10 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus)))
         whenever(walletRepo.balanceState).thenReturn(balanceState)
         whenever(blocktankRepo.blocktankState).thenReturn(blocktankState)
+        whenever(boltzService.events).thenReturn(boltzEvents)
+        whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever { boltzService.isSwapEnabled() }.thenReturn(true)
         // Default: no mining-fee reserve so existing limit tests keep their balances.
         whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(0uL))
@@ -127,6 +144,7 @@ class TransferViewModelTest : BaseUnitTest() {
             cacheStore = cacheStore,
             transferRepo = transferRepo,
             clock = clock,
+            boltzService = boltzService,
         )
     }
 
@@ -753,6 +771,7 @@ class TransferViewModelTest : BaseUnitTest() {
                 cacheStore = cacheStore,
                 transferRepo = transferRepo,
                 clock = clock,
+                boltzService = boltzService,
             )
 
             viewModel.onTransferToSpendingHwConfirm(order, DEVICE_ID)
@@ -1196,6 +1215,277 @@ class TransferViewModelTest : BaseUnitTest() {
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
 
+    @Test
+    fun `loadSavingsSwapQuote defaults to max transferable within limits and spendable balance`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        val state = sut.savingsSwapState.value
+        val expectedMax = SPENDABLE_LN - SPENDABLE_LN / 100uL // 1% routing fee reserve
+        assertEquals(SWAP_MIN, state.minSat)
+        assertEquals(expectedMax, state.maxSat)
+        val quote = assertNotNull(state.quote)
+        assertEquals(expectedMax, quote.amountSat)
+        assertEquals(SWAP_MINER_FEE, quote.networkFeeSat)
+        val expectedSwapFee = (expectedMax.toLong() * SWAP_FEE_PERCENT / 100.0).roundToLong().toULong()
+        assertEquals(expectedSwapFee, quote.swapFeeSat)
+        assertEquals(expectedMax - expectedSwapFee - SWAP_MINER_FEE, quote.receiveSat)
+    }
+
+    @Test
+    fun `loadSavingsSwapQuote falls back to close when below the swap minimum`() = test {
+        whenever(context.getString(R.string.lightning__savings_confirm__amount_too_low)).thenReturn(TOO_LOW)
+        balanceState.value = BalanceState(maxSendLightningSats = SWAP_MIN - 1uL)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        val state = sut.savingsSwapState.value
+        assertNull(state.quote)
+        assertEquals(0uL, state.maxSat)
+
+        sut.onTransferToSavingsConfirm(emptyList())
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
+
+        sut.startSavingsSwap()
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Failure(TOO_LOW), sut.savingsSwapResult.value)
+    }
+
+    @Test
+    fun `loadSavingsSwapQuote falls back to close when the limits fetch fails`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenAnswer { throw AppError(BOLTZ_ERROR) }
+
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        assertNull(sut.savingsSwapState.value.quote)
+        assertFalse(sut.savingsSwapState.value.isLoading)
+
+        sut.onTransferToSavingsConfirm(emptyList())
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
+    }
+
+    @Test
+    fun `loadSavingsSwapQuote skips the network when swaps are unsupported`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.isSwapSupported).thenReturn(false)
+
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapUiState(), sut.savingsSwapState.value)
+        verify(boltzService, never()).reverseLimits(anyOrNull())
+
+        sut.onTransferToSavingsConfirm(emptyList())
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
+    }
+
+    @Test
+    fun `loadSavingsSwapQuote skips the network when swaps are disabled in dev settings`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.isSwapEnabled()).thenReturn(false)
+
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapUiState(), sut.savingsSwapState.value)
+        verify(boltzService, never()).reverseLimits(anyOrNull())
+
+        sut.onTransferToSavingsConfirm(emptyList())
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
+    }
+
+    @Test
+    fun `onTransferToSavingsConfirm swaps when a quote is ready and closes when the user opts out`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.onTransferToSavingsConfirm(emptyList())
+        assertEquals(SavingsTransferMode.SWAP, sut.savingsTransferMode.value)
+
+        sut.onTransferToSavingsConfirm(emptyList(), SavingsTransferMode.CLOSE)
+        assertEquals(SavingsTransferMode.CLOSE, sut.savingsTransferMode.value)
+    }
+
+    @Test
+    fun `onTransferToSavingsConfirm clears the outcome of an earlier swap`() = test {
+        stubSavingsSwapHappyPath()
+        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.failure(AppError(PAY_ERROR)))
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+        sut.startSavingsSwap()
+        advanceUntilIdle()
+        assertEquals(SavingsSwapResult.Failure(PAY_ERROR), sut.savingsSwapResult.value)
+
+        sut.onTransferToSavingsConfirm(emptyList())
+
+        assertNull(sut.savingsSwapResult.value)
+    }
+
+    @Test
+    fun `onSwapAmountChange clamps to the allowed range and reprices`() = test {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.onSwapAmountChange(SWAP_MIN - 10_000uL)
+
+        assertEquals(SWAP_MIN, sut.savingsSwapState.value.quote?.amountSat)
+    }
+
+    @Test
+    fun `startSavingsSwap succeeds when the claim event arrives`() = test {
+        stubSavingsSwapHappyPath()
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.startSavingsSwap()
+        runCurrent()
+        boltzEvents.emit(BoltzSwapEvent.Claimed(swapId = SWAP_ID, txid = TXID))
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
+    }
+
+    @Test
+    fun `startSavingsSwap fails when the swap reports an error event`() = test {
+        stubSavingsSwapHappyPath()
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.startSavingsSwap()
+        runCurrent()
+        boltzEvents.emit(BoltzSwapEvent.Error(swapId = SWAP_ID, message = BOLTZ_ERROR))
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Failure(BOLTZ_ERROR), sut.savingsSwapResult.value)
+    }
+
+    @Test
+    fun `startSavingsSwap returns pending when the claim does not arrive in time`() = test {
+        stubSavingsSwapHappyPath()
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.startSavingsSwap()
+        runCurrent()
+        advanceTimeBy(31.seconds)
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Pending, sut.savingsSwapResult.value)
+    }
+
+    @Test
+    fun `startSavingsSwap fails when the invoice payment fails`() = test {
+        stubSavingsSwapHappyPath()
+        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.failure(AppError(PAY_ERROR)))
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.startSavingsSwap()
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Failure(PAY_ERROR), sut.savingsSwapResult.value)
+    }
+
+    @Test
+    fun `startSavingsSwap ignores a second start while a swap is in flight`() = test {
+        stubSavingsSwapHappyPath()
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.startSavingsSwap()
+        runCurrent()
+        sut.startSavingsSwap()
+        runCurrent()
+        boltzEvents.emit(BoltzSwapEvent.Claimed(swapId = SWAP_ID, txid = TXID))
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
+        verify(boltzService).createReverseSwap(any(), any(), anyOrNull(), anyOrNull())
+        verify(lightningRepo).payInvoice(any(), anyOrNull())
+    }
+
+    @Test
+    fun `startSavingsSwap fails when the paid invoice reports a lightning routing failure`() = test {
+        stubSavingsSwapHappyPath()
+        whenever(context.getString(R.string.wallet__toast_payment_failed_route_not_found))
+            .thenReturn(ROUTE_NOT_FOUND_MSG)
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.startSavingsSwap()
+        runCurrent()
+        // payInvoice returns as soon as the HTLC is dispatched; the routing failure lands later.
+        nodeEvents.emit(
+            Event.PaymentFailed(
+                paymentId = PAYMENT_ID,
+                paymentHash = PAYMENT_ID,
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            ),
+        )
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Failure(ROUTE_NOT_FOUND_MSG), sut.savingsSwapResult.value)
+    }
+
+    @Test
+    fun `startSavingsSwap ignores a restart once an outcome is already delivered`() = test {
+        stubSavingsSwapHappyPath()
+        sut.loadSavingsSwapQuote(REQUESTED_SAT)
+        advanceUntilIdle()
+
+        sut.startSavingsSwap()
+        runCurrent()
+        boltzEvents.emit(BoltzSwapEvent.Claimed(swapId = SWAP_ID, txid = TXID))
+        advanceUntilIdle()
+        assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
+
+        // A configuration change re-fires startSavingsSwap; the delivered outcome must block a rerun.
+        sut.startSavingsSwap()
+        advanceUntilIdle()
+
+        assertEquals(SavingsSwapResult.Success(TXID), sut.savingsSwapResult.value)
+        verify(boltzService).createReverseSwap(any(), any(), anyOrNull(), anyOrNull())
+        verify(lightningRepo).payInvoice(any(), anyOrNull())
+    }
+
+    private suspend fun stubSavingsSwapHappyPath() {
+        balanceState.value = BalanceState(maxSendLightningSats = SPENDABLE_LN)
+        whenever(boltzService.reverseLimits(anyOrNull())).thenReturn(reverseLimits())
+        whenever(lightningRepo.newAddress()).thenReturn(Result.success(CLAIM_ADDRESS))
+        whenever(boltzService.createReverseSwap(any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(reverseSwapResponse())
+        whenever(lightningRepo.payInvoice(any(), anyOrNull())).thenReturn(Result.success(PAYMENT_ID))
+    }
+
+    private fun reverseLimits() = BoltzPairInfo(
+        hash = "hash",
+        rate = 1.0,
+        minimalSat = SWAP_MIN,
+        maximalSat = SWAP_MAX,
+        feePercentage = SWAP_FEE_PERCENT,
+        minerFeesSat = SWAP_MINER_FEE,
+    )
+
+    private fun reverseSwapResponse() = ReverseSwapResponse(
+        id = SWAP_ID,
+        invoice = "lnbc1invoice",
+        lockupAddress = "bcrt1qlockup",
+        onchainAmountSat = SWAP_MIN,
+        timeoutBlockHeight = 800uL,
+    )
+
     private fun signedFunding(
         funding: HwFundingTransaction,
         feeRate: ULong = FEE_RATE,
@@ -1291,5 +1581,18 @@ class TransferViewModelTest : BaseUnitTest() {
         const val FEE_RATE = 2uL
         const val FALLBACK_FEE_RATE = 3uL
         const val MINING_FEE = 1_250uL
+        const val SPENDABLE_LN = 150_000uL
+        const val REQUESTED_SAT = 200_000uL
+        const val SWAP_MIN = 25_000uL
+        const val SWAP_MAX = 1_000_000uL
+        const val SWAP_FEE_PERCENT = 0.5
+        const val SWAP_MINER_FEE = 300uL
+        const val SWAP_ID = "swap1"
+        const val CLAIM_ADDRESS = "bcrt1qclaim"
+        const val TOO_LOW = "Amount is too low"
+        const val PAY_ERROR = "no route found"
+        const val BOLTZ_ERROR = "boltz unavailable"
+        const val PAYMENT_ID = "paymentId"
+        const val ROUTE_NOT_FOUND_MSG = "No route to destination"
     }
 }

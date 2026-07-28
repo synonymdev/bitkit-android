@@ -155,6 +155,8 @@ import to.bitkit.ui.settings.LogDetailScreen
 import to.bitkit.ui.settings.LogsScreen
 import to.bitkit.ui.settings.OrderDetailScreen
 import to.bitkit.ui.settings.SettingsScreen
+import to.bitkit.ui.settings.SwapDetailScreen
+import to.bitkit.ui.settings.SwapsScreen
 import to.bitkit.ui.settings.advanced.AddressTypePreferenceScreen
 import to.bitkit.ui.settings.advanced.AddressViewerScreen
 import to.bitkit.ui.settings.advanced.CoinSelectPreferenceScreen
@@ -686,6 +688,8 @@ private fun RootNavHost(
         channelOrdersSettings(navController)
         orderDetailSettings(navController)
         cjitDetailSettings(navController)
+        swapsSettings(navController)
+        swapDetailSettings(navController)
         lightningConnections(navController)
         activityItem(activityListViewModel, navController, settingsViewModel)
         authCheck(navController)
@@ -1561,6 +1565,28 @@ private fun NavGraphBuilder.cjitDetailSettings(
     }
 }
 
+private fun NavGraphBuilder.swapsSettings(
+    navController: NavHostController,
+) {
+    composableWithDefaultTransitions<Routes.SwapsSettings> {
+        SwapsScreen(
+            onBackClick = { navController.popBackStack() },
+            onSwapItemClick = { navController.navigateToSwapDetail(it) },
+        )
+    }
+}
+
+private fun NavGraphBuilder.swapDetailSettings(
+    navController: NavHostController,
+) {
+    composableWithDefaultTransitions<Routes.SwapDetail> {
+        SwapDetailScreen(
+            swapItem = it.toRoute(),
+            onBackClick = { navController.popBackStack() },
+        )
+    }
+}
+
 private fun NavGraphBuilder.lightningConnections(
     navController: NavHostController,
 ) {
@@ -1821,6 +1847,7 @@ fun NavController.navigateToLocalCurrencySettings() = navigateTo(Routes.LocalCur
 fun NavController.navigateToBackupSettings() = navigateTo(Routes.BackupSettings)
 
 fun NavController.navigateToOrderDetail(id: String) = navigateTo(Routes.OrderDetail(id))
+fun NavController.navigateToSwapDetail(id: String) = navigateTo(Routes.SwapDetail(id))
 
 fun NavController.navigateToCjitDetail(id: String) = navigateTo(Routes.CjitDetail(id))
 
@@ -1962,6 +1989,12 @@ sealed interface Routes {
 
     @Serializable
     data object ChannelOrdersSettings : Routes
+
+    @Serializable
+    data object SwapsSettings : Routes
+
+    @Serializable
+    data class SwapDetail(val id: String) : Routes
 
     @Serializable
     data object Logs : Routes

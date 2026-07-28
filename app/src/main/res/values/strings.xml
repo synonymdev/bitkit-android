@@ -317,7 +317,13 @@
     <string name="lightning__savings_advanced__text">You can transfer part of your spending balance to savings, because you have multiple active Lightning Connections.</string>
     <string name="lightning__savings_advanced__title">Select funds\n&lt;accent&gt;to transfer&lt;/accent&gt;</string>
     <string name="lightning__savings_advanced__total">Total selected</string>
+    <string name="lightning__savings_confirm__amount">To savings</string>
+    <string name="lightning__savings_confirm__amount_too_low">Amount is too low to transfer to savings.</string>
+    <string name="lightning__savings_confirm__close_instead">Close channel instead</string>
     <string name="lightning__savings_confirm__label">Transfer to savings</string>
+    <string name="lightning__savings_confirm__network_fee">Network fee</string>
+    <string name="lightning__savings_confirm__receive">You\'ll receive</string>
+    <string name="lightning__savings_confirm__service_fee">Service fee</string>
     <string name="lightning__savings_confirm__transfer_all">Transfer all</string>
     <string name="lightning__savings_interrupted__nav_title">Transfer\n&lt;accent&gt;interrupted&lt;/accent&gt;</string>
     <string name="lightning__savings_interrupted__text">Funds were not transferred yet. Bitkit will try to initiate the transfer during the next &lt;accent&gt;30 minutes&lt;/accent&gt;. Please keep your app open.</string>
@@ -327,6 +333,8 @@
     <string name="lightning__savings_intro__title">Transfer\n&lt;accent&gt;to savings&lt;/accent&gt;</string>
     <string name="lightning__savings_progress__text">Please wait, your funds transfer is in progress. This should take &lt;accent&gt;±10 seconds.&lt;/accent&gt;</string>
     <string name="lightning__savings_progress__title">Funds\n&lt;accent&gt;in transfer&lt;/accent&gt;</string>
+    <string name="lightning__savings_settling__text">Your transfer has been initiated and is &lt;accent&gt;settling on-chain&lt;/accent&gt;. Your savings balance will update automatically once it completes.</string>
+    <string name="lightning__savings_settling__title">Transfer\n&lt;accent&gt;on the way&lt;/accent&gt;</string>
     <string name="lightning__scores_sync_time">Pathfinding Scores Sync Time</string>
     <string name="lightning__setting_up_button">Continue Using Bitkit</string>
     <string name="lightning__setting_up_step1">Processing Payment</string>

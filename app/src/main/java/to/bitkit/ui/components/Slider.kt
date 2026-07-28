@@ -15,10 +15,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.systemGestureExclusion
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -44,6 +46,9 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val KNOB_SIZE_DP = 32
+
+/** Horizontal inset so the knob stays clear of the screen edge and its system back-gesture zone. */
+private const val SLIDER_EDGE_INSET_DP = 16
 private const val TRACK_HEIGHT_DP = 8
 private const val STEP_MARKER_WIDTH_DP = 4
 private const val STEP_MARKER_HEIGHT_DP = 16
@@ -240,6 +245,122 @@ fun StepSlider(
     }
 }
 
+/**
+ * Continuous slider over a [min]..[max] range, styled to match [StepSlider] (same track and
+ * knob) but without discrete steps. Used to pick a transfer amount within its allowed limits.
+ */
+@Composable
+fun AmountSlider(
+    value: Long,
+    min: Long,
+    max: Long,
+    onValueChange: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val density = LocalDensity.current
+    val coroutineScope = rememberCoroutineScope()
+
+    var sliderWidth by remember { mutableIntStateOf(0) }
+    val knobPosition = remember { Animatable(0f) }
+    val span = (max - min).coerceAtLeast(1)
+
+    fun fractionFor(v: Long): Float = ((v - min).toFloat() / span).coerceIn(0f, 1f)
+
+    fun valueFor(positionPx: Float): Long {
+        if (sliderWidth == 0) return min
+        val fraction = (positionPx / sliderWidth).coerceIn(0f, 1f)
+        return (min + (fraction * span).roundToInt()).coerceIn(min, max)
+    }
+
+    // Keep the knob in sync with external value changes (and initial layout).
+    LaunchedEffect(value, sliderWidth) {
+        if (sliderWidth > 0) {
+            knobPosition.snapTo(fractionFor(value) * sliderWidth)
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .systemGestureExclusion()
+            .padding(horizontal = SLIDER_EDGE_INSET_DP.dp)
+            .height(KNOB_SIZE_DP.dp)
+            .onGloballyPositioned { sliderWidth = it.size.width }
+    ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(KNOB_SIZE_DP.dp)
+                .pointerInput(sliderWidth, min, max) {
+                    detectTapGestures { offset ->
+                        val v = valueFor(offset.x)
+                        coroutineScope.launch { knobPosition.snapTo(fractionFor(v) * sliderWidth) }
+                        onValueChange(v)
+                    }
+                }
+        ) {
+            val trackY = center.y
+            val trackHeight = density.run { TRACK_HEIGHT_DP.dp.toPx() }
+            val cornerRadius = density.run { 3.dp.toPx() }
+
+            // Inactive track
+            drawRoundRect(
+                color = Colors.Green32,
+                topLeft = Offset(0f, trackY - trackHeight / 2),
+                size = Size(size.width, trackHeight),
+                cornerRadius = CornerRadius(cornerRadius),
+            )
+            // Active track
+            val activeWidth = knobPosition.value
+            if (activeWidth > 0) {
+                drawRoundRect(
+                    color = Colors.Green,
+                    topLeft = Offset(0f, trackY - trackHeight / 2),
+                    size = Size(activeWidth, trackHeight),
+                    cornerRadius = CornerRadius(cornerRadius),
+                )
+            }
+        }
+
+        // Knob
+        Box(
+            modifier = Modifier
+                .offset {
+                    IntOffset(
+                        x = (knobPosition.value - with(density) { KNOB_SIZE_DP.dp.toPx() / 2 }).roundToInt(),
+                        y = 0,
+                    )
+                }
+                .size(KNOB_SIZE_DP.dp)
+                .pointerInput(sliderWidth, min, max) {
+                    detectDragGestures { _, dragAmount ->
+                        coroutineScope.launch {
+                            val newPosition = (knobPosition.value + dragAmount.x)
+                                .coerceIn(0f, sliderWidth.toFloat())
+                            knobPosition.snapTo(newPosition)
+                            onValueChange(valueFor(newPosition))
+                        }
+                    }
+                }
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(KNOB_SIZE_DP.dp)
+                    .clip(CircleShape)
+                    .background(Colors.Green)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(Colors.White)
+                        .align(Alignment.Center)
+                )
+            }
+        }
+    }
+}
+
 @Preview
 @Composable
 private fun Preview() {
@@ -249,6 +370,22 @@ private fun Preview() {
             StepSlider(
                 value = value,
                 steps = persistentListOf(1, 5, 10, 20, 50),
+                onValueChange = { value = it },
+            )
+        }
+    }
+}
+
+@Preview
+@Composable
+private fun AmountSliderPreview() {
+    AppThemeSurface {
+        var value by remember { mutableLongStateOf(72_000L) }
+        Column(modifier = Modifier.padding(32.dp)) {
+            AmountSlider(
+                value = value,
+                min = 50_000L,
+                max = 100_000L,
                 onValueChange = { value = it },
             )
         }
