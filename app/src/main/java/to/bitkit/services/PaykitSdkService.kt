@@ -160,10 +160,10 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun hasLocalSecretKey(): Boolean {
+    suspend fun hasPrivatePaymentAccess(): Boolean {
         isSetup.await()
         return operationMutex.withLock {
-            sessionProvider.loadLocalSecretKey() != null
+            sessionProvider.hasSessionAccess()
         }
     }
 
@@ -445,7 +445,7 @@ class PaykitSdkService @Inject constructor(
 
                 handle.publishPaykitReceiverMarker(
                     PaykitReceiverCapabilities(
-                        privatePayments = sessionProvider.loadLocalSecretKey() != null,
+                        privatePayments = sessionProvider.hasSessionAccess(),
                         paymentRequests = false,
                         receipts = false,
                         outgoingPayments = true,
@@ -555,7 +555,9 @@ class PaykitSdkService @Inject constructor(
                     maxAdvanceSteps = 8u,
                 ).resolution
                 val publicResolution = if (includePublicEndpoints) {
-                    handle.resolvePublicContactPayment(counterparty, receiverPath, amount = null)
+                    optionalPublicPaymentResolution {
+                        handle.resolvePublicContactPayment(counterparty, receiverPath, amount = null)
+                    }
                 } else {
                     null
                 }
@@ -827,7 +829,7 @@ private class PaykitSdkStateBlobStore(
     }
 }
 
-private class PaykitSdkSessionProvider(
+internal class PaykitSdkSessionProvider(
     private val keychain: Keychain,
 ) : SdkPubkySessionProvider {
     private val lock = Any()
@@ -862,6 +864,9 @@ private class PaykitSdkSessionProvider(
 
     override fun publicStorageAvailable(): Boolean = true
 
+    fun hasSessionAccess(): Boolean =
+        keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)?.isNotBlank() == true
+
     override fun clearSessionAccess() {
         clearLiveSessionAccess()
         keychain.accessBlocking {
@@ -884,6 +889,9 @@ private class PaykitSdkSessionProvider(
         receiverNoiseKeyStore.persist(key)
     }
 }
+
+internal suspend fun <T> optionalPublicPaymentResolution(block: suspend () -> T): T? =
+    runSuspendCatching { block() }.getOrNull()
 
 internal object PaykitReceiverNoiseKeyDerivation {
     private const val DOMAIN = "bitkit/paykit/receiver-noise-key"
@@ -971,14 +979,14 @@ internal class PaykitReceiverNoiseKeyStore(
     }
 
     private fun validatedKeyBytes(): ByteArray {
+        loadBytes()?.let {
+            checkKeyLength(it, "Stored Paykit receiver Noise key is invalid")
+            return it
+        }
+
         val derivedBytes = deriveBytes()
         checkKeyLength(derivedBytes, "Derived Paykit receiver Noise key is invalid")
-        loadBytes()?.let { storedBytes ->
-            checkKeyLength(storedBytes, "Stored Paykit receiver Noise key is invalid")
-            if (!storedBytes.contentEquals(derivedBytes)) {
-                throw AppError("Stored Paykit receiver Noise key does not match the wallet seed")
-            }
-        } ?: upsertBytes(derivedBytes.copyOf())
+        upsertBytes(derivedBytes.copyOf())
 
         return derivedBytes
     }

@@ -3,7 +3,10 @@ package to.bitkit.services
 import com.synonym.paykit.EncryptedLinkRecoveryMarkerPolicy
 import com.synonym.paykit.EndpointManagementScope
 import com.synonym.paykit.PublicContactSharingPolicy
+import kotlinx.coroutines.test.runTest
 import org.junit.Test
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.toHex
@@ -11,6 +14,8 @@ import to.bitkit.utils.AppError
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PaykitSdkServiceTest {
     @Test
@@ -60,6 +65,17 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `receiver noise key loads for external session without wallet seed`() {
+        val persistedBytes = ByteArray(32) { 7 }
+        val store = keyStore(
+            loadBytes = { persistedBytes },
+            deriveBytes = { throw AppError("wallet seed unavailable") },
+        )
+
+        assertContentEquals(persistedBytes, store.loadOrDeriveBytes())
+    }
+
+    @Test
     fun `receiver noise key cannot be replaced`() {
         val store = keyStore(
             loadBytes = { ByteArray(32) { 1 } },
@@ -87,6 +103,27 @@ class PaykitSdkServiceTest {
 
         assertContentEquals(derivedBytes, store.loadOrDeriveBytes())
         assertContentEquals(derivedBytes, persistedBytes)
+    }
+
+    @Test
+    fun `external session retains private payment access`() {
+        val keychain = mock<Keychain>()
+        val sessionSecret = "external-session"
+        val provider = PaykitSdkSessionProvider(keychain)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(sessionSecret)
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
+
+        assertTrue(provider.hasSessionAccess())
+        assertNull(provider.loadLocalSecretKey())
+    }
+
+    @Test
+    fun `public payment resolution failure remains optional`() = runTest {
+        val result = optionalPublicPaymentResolution<String> {
+            throw AppError("public lookup failed")
+        }
+
+        assertNull(result)
     }
 
     private fun keyStore(

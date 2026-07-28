@@ -114,7 +114,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(clock.now()).thenReturn(Instant.fromEpochSeconds(NOW_SECONDS))
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
-        whenever(paykitSdkService.hasLocalSecretKey()).thenReturn(true)
+        whenever(paykitSdkService.hasPrivatePaymentAccess()).thenReturn(true)
         whenever(walletRepo.walletExists()).thenReturn(true)
         whenever { walletRepo.refreshReusableReceiveAddressIfReserved() }.thenReturn(Result.success(Unit))
         whenever { addressReservationRepo.reconcileReservedIndexesWithLdk() }.thenReturn(Result.success(Unit))
@@ -702,7 +702,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `beginSavedContactPayment uses public SDK endpoint when private capability is unavailable`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        whenever(paykitSdkService.hasLocalSecretKey()).thenReturn(false)
+        whenever(paykitSdkService.hasPrivatePaymentAccess()).thenReturn(false)
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
         whenever {
             paykitSdkService.prepareAndResolveContactPayment(
@@ -857,6 +857,43 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val contactCache = cacheData.value.contacts.getValue(CONTACT_KEY)
         assertTrue(contactCache.remoteEndpoints.isEmpty())
         assertEquals(7uL, contactCache.consumedPaymentListVersionsByReceiverPath[WALLET_RECEIVER_PATH])
+    }
+
+    @Test
+    fun `private payment filtering keeps the unattempted list available`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever {
+            paykitSdkService.prepareAndResolveContactPayment(
+                CONTACT_KEY,
+                WALLET_RECEIVER_PATH,
+                includePublicEndpoints = true,
+                afterPrivatePaymentListVersion = null,
+            )
+        }.thenReturn(
+            resolution(
+                resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11),
+                resolvedEndpoint(MethodId.P2wpkh, PRIVATE_ADDRESS),
+                privatePaymentListVersion = 7uL,
+            ),
+        )
+        whenever(coreService.decode(PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
+        whenever { coreService.isAddressUsed(PRIVATE_ADDRESS) }.thenReturn(false)
+        PublicPaykitRepo.lightningRouteHintsValidator = { false }
+
+        assertEquals(
+            PublicPaykitPaymentResult.Opened(PRIVATE_ADDRESS),
+            sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow(),
+        )
+
+        val contactCache = cacheData.value.contacts.getValue(CONTACT_KEY)
+        assertEquals(
+            listOf(PublicPaykitRepo.serializePayload(PRIVATE_ADDRESS)),
+            contactCache.remoteEndpoints.map { it.endpointData },
+        )
+        assertTrue(contactCache.consumedPaymentListVersionsByReceiverPath.isEmpty())
+        assertEquals(7uL, contactCache.remotePaymentListVersionsByReceiverPath[WALLET_RECEIVER_PATH])
     }
 
     @Test

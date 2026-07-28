@@ -118,6 +118,8 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun reconcileReservedReceiveIndexes(): Result<Unit> =
         addressReservationRepo.reconcileReservedIndexesWithLdk()
 
+    suspend fun hasPrivatePaymentAccess(): Boolean = hasPrivatePaymentAccessForCurrentProfile()
+
     suspend fun prepareSavedContacts(
         publicKeys: Collection<String>,
         requireImmediatePublication: Boolean = false,
@@ -651,7 +653,7 @@ class PrivatePaykitRepo @Inject constructor(
     }
 
     private suspend fun prepareRelevantPrivateLinksIfAvailable(publicKeys: Collection<String>, reason: String) {
-        if (!hasLocalSecretKeyForCurrentProfile()) return
+        if (!hasPrivatePaymentAccessForCurrentProfile()) return
 
         val retryKeys = mutableListOf<PrivateMessageDrainRetryKey>()
         for (publicKey in publicKeys) {
@@ -1274,7 +1276,7 @@ class PrivatePaykitRepo @Inject constructor(
         }
 
         if (staleLightningHashes.isNotEmpty()) {
-            discardRemoteLightningEndpoints(publicKey, staleLightningHashes).onFailure {
+            pruneRemoteLightningEndpoints(publicKey, staleLightningHashes).onFailure {
                 if (it is CancellationException) throw it
                 Logger.warn(
                     "Failed to discard already-attempted private Paykit invoice for '${redacted(publicKey)}'",
@@ -1284,6 +1286,28 @@ class PrivatePaykitRepo @Inject constructor(
             }
         }
         return reusable
+    }
+
+    private suspend fun pruneRemoteLightningEndpoints(
+        publicKey: String,
+        paymentHashes: Set<String>,
+    ): Result<Unit> = withContext(serializedDispatcher) {
+        runSuspendCatching {
+            val normalizedKey = normalizedPublicKey(publicKey) ?: return@runSuspendCatching
+            val contactState = ensureState().contacts[normalizedKey] ?: return@runSuspendCatching
+            val filteredEntries = contactState.remoteEndpoints.filterNot {
+                shouldDiscardRemoteLightningEntry(it, paymentHashes)
+            }
+            if (filteredEntries.size == contactState.remoteEndpoints.size) return@runSuspendCatching
+
+            val previousState = contactState.copy()
+            contactState.remoteEndpoints = filteredEntries
+            runSuspendCatching {
+                persistState(markWalletBackup = true)
+            }.onFailure {
+                state?.contacts?.set(normalizedKey, previousState)
+            }.getOrThrow()
+        }
     }
 
     private suspend fun shouldDiscardRemoteLightningEntry(
@@ -1308,15 +1332,15 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun canPublishPrivateEndpoints(): Boolean {
         val settings = settingsStore.data.first()
         return settings.sharesPrivatePaykitEndpoints &&
-            hasLocalSecretKeyForCurrentProfile() &&
+            hasPrivatePaymentAccessForCurrentProfile() &&
             App.currentActivity?.value != null &&
             walletRepo.walletExists() &&
             lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
     }
 
-    private suspend fun hasLocalSecretKeyForCurrentProfile(): Boolean = runSuspendCatching {
+    private suspend fun hasPrivatePaymentAccessForCurrentProfile(): Boolean = runSuspendCatching {
         pubkyService.currentPublicKey() ?: return@runSuspendCatching false
-        paykitSdkService.hasLocalSecretKey()
+        paykitSdkService.hasPrivatePaymentAccess()
     }.getOrDefault(false)
 
     private suspend fun isContactSharingCleanupPending(): Boolean =
