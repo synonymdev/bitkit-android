@@ -1,6 +1,5 @@
 package to.bitkit.ui.screens.wallets.activity.components
 
-import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -36,7 +35,6 @@ import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.txType
-import to.bitkit.ext.uiDateText
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.PubkyProfile
@@ -54,6 +52,7 @@ import to.bitkit.ui.screens.wallets.activity.utils.previewActivityItems
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.animations.BalanceAnimations
+import to.bitkit.ui.shared.effects.uiDateText
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -139,7 +138,7 @@ fun ActivityRow(
             )
             val context = LocalContext.current
             val subtitleText = when (item) {
-                is Activity.Lightning -> item.v1.message.ifEmpty { context.activityTimeText(timestamp) }
+                is Activity.Lightning -> item.v1.message.ifEmpty { activityTimeText(timestamp) }
                 is Activity.Onchain -> {
                     when {
                         !item.v1.doesExist -> stringResource(R.string.wallet__activity_removed)
@@ -162,7 +161,7 @@ fun ActivityRow(
                                 .replace("{duration}", duration)
                         }
 
-                        confirmed == true -> context.activityTimeText(timestamp)
+                        confirmed == true -> activityTimeText(timestamp)
 
                         else -> {
                             val feeDescription = context.getFeeShortDescription(item.v1.feeRate, feeRates)
@@ -364,7 +363,8 @@ private fun AmountViewContent(
     }
 }
 
-private fun Context.activityTimeText(timestamp: ULong): String {
+@Composable
+private fun activityTimeText(timestamp: ULong): String {
     val dateTime = Instant.ofEpochSecond(timestamp.toLong()).atZone(ZoneId.systemDefault())
     val now = LocalDate.now()
 

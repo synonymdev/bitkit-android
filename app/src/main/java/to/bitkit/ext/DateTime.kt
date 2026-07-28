@@ -1,6 +1,5 @@
 package to.bitkit.ext
 
-import android.content.Context
 import android.icu.text.DateFormat
 import android.icu.text.DisplayContext
 import android.icu.text.NumberFormat
@@ -217,14 +216,6 @@ fun LocalDate.endOfDay(zone: TimeZone = TimeZone.currentSystemDefault()): Long =
 fun utcDateFormatterOf(pattern: String) = SimpleDateFormat(pattern, Locale.US).apply {
     timeZone = java.util.TimeZone.getTimeZone("UTC")
 }
-
-fun Context.uiDateText(
-    timestamp: ULong,
-    style: UiDateStyle,
-    locale: Locale = Locale.getDefault(),
-    zone: ZoneId = ZoneId.systemDefault(),
-): String = Instant.ofEpochSecond(timestamp.toLong())
-    .formatted(style.pattern(is24HourTimeFormat), locale, zone)
 
 enum class UiDateStyle {
     TIME,

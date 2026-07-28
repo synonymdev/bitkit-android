@@ -64,7 +64,6 @@ import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.totalValue
-import to.bitkit.ext.uiDateText
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -89,6 +88,7 @@ import to.bitkit.ui.screens.wallets.activity.components.ActivityIcon
 import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.UiConstants
 import to.bitkit.ui.shared.animations.BalanceAnimations
+import to.bitkit.ui.shared.effects.uiDateText
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.sheets.BoostTransactionSheet
@@ -433,7 +433,7 @@ private fun ActivityDetailContent(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    BodySSB(text = LocalContext.current.uiDateText(timestamp, UiDateStyle.DATE))
+                    BodySSB(text = uiDateText(timestamp, UiDateStyle.DATE))
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider()
@@ -454,7 +454,7 @@ private fun ActivityDetailContent(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    BodySSB(text = LocalContext.current.uiDateText(timestamp, UiDateStyle.TIME))
+                    BodySSB(text = uiDateText(timestamp, UiDateStyle.TIME))
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider()
