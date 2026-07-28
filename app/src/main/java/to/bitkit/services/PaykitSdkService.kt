@@ -79,6 +79,7 @@ import javax.inject.Singleton
 data class PaykitContactPaymentResolution(
     val privateState: PrivatePaymentResolutionState,
     val payableEndpoints: List<PaykitResolvedPaymentEndpoint>,
+    val privatePaymentListVersion: ULong? = null,
 )
 
 enum class PaykitPaymentEndpointSource {
@@ -541,6 +542,7 @@ class PaykitSdkService @Inject constructor(
         counterparty: String,
         receiverPath: String,
         includePublicEndpoints: Boolean,
+        afterPrivatePaymentListVersion: ULong? = null,
     ): PaykitContactPaymentResolution {
         isSetup.await()
         val (privateResolution, publicResolution) = operationMutex.withLock {
@@ -549,7 +551,7 @@ class PaykitSdkService @Inject constructor(
                     counterparty = counterparty,
                     counterpartyReceiverPath = receiverPath,
                     amount = null,
-                    afterPrivatePaymentListVersion = null,
+                    afterPrivatePaymentListVersion = afterPrivatePaymentListVersion,
                     maxAdvanceSteps = 8u,
                 ).resolution
                 val publicResolution = if (includePublicEndpoints) {
@@ -587,6 +589,7 @@ class PaykitSdkService @Inject constructor(
                     payload = it.target.payload.exportText(),
                 )
             } + publicResolution?.resolvedEndpoints().orEmpty(),
+            privatePaymentListVersion = privatePaymentListVersion,
         )
     }
 

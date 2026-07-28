@@ -68,6 +68,8 @@ data class PrivatePaykitCacheData(
 @Serializable
 data class PrivatePaykitContactCacheData(
     val remoteEndpoints: List<PrivatePaykitStoredPaymentEntryData> = emptyList(),
+    val remotePaymentListVersionsByReceiverPath: Map<String, ULong> = emptyMap(),
+    val consumedPaymentListVersionsByReceiverPath: Map<String, ULong> = emptyMap(),
     val localInvoicesByReceiverPath: Map<String, PrivatePaykitStoredInvoiceData> = emptyMap(),
     val receivedInvoicePaymentHashes: List<String> = emptyList(),
     val publishedPrivatePaymentReceiverPaths: Set<String> = emptySet(),
