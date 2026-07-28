@@ -149,14 +149,16 @@ class LightningService @Inject constructor(
     @Volatile
     private var releaseJob: Job? = null
 
+    @Suppress("LongParameterList")
     suspend fun setup(
         walletIndex: Int,
         customServerUrl: String? = null,
         customRgsServerUrl: String? = null,
         trustedPeers: List<PeerDetails>? = null,
         channelMigration: ChannelDataMigration? = null,
+        awaitRelease: Boolean = true,
     ) {
-        awaitNodeRelease()
+        if (awaitRelease) awaitNodeRelease()
         Logger.debug("Building node…", context = TAG)
 
         val config = config(walletIndex, trustedPeers)

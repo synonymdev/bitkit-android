@@ -130,6 +130,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
                     anyOrNull(),
                     anyOrNull(),
                     any(),
+                    any(),
                 )
             } doAnswer {
                 capturedHandler = it.getArgument(5) as? NodeEventHandler
@@ -769,6 +770,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             anyOrNull(),
             anyOrNull(),
             any(),
+            any(),
         )
     }
 
@@ -781,6 +783,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
             anyOrNull(),
             anyOrNull(),
             anyOrNull(),
+            any(),
             any(),
         )
     }

@@ -109,7 +109,8 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() = runBlocking {
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())).thenReturn(Unit)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
         whenever(coreService.isGeoBlocked()).thenReturn(false)
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
@@ -414,7 +415,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
-        inOrder.verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+        inOrder.verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any())
         inOrder.verify(lightningService).start(anyOrNull(), any())
     }
 
@@ -911,7 +912,8 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
-        inOrder.verify(lightningService).setup(any(), eq(customServerUrl), anyOrNull(), anyOrNull(), anyOrNull())
+        inOrder.verify(lightningService)
+            .setup(any(), eq(customServerUrl), anyOrNull(), anyOrNull(), anyOrNull(), eq(false))
         inOrder.verify(lightningService).start(anyOrNull(), any())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
@@ -936,12 +938,12 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.stop()).thenReturn(Unit)
         // The switch to the new server fails.
-        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull()))
+        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull(), any()))
             .thenThrow(RuntimeException("start failed"))
         // The background recovery (previous config) blocks until released.
         val recoveryStarted = CompletableDeferred<Unit>()
         val releaseRecovery = CompletableDeferred<Unit>()
-        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull()) }
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull(), any()) }
             .doSuspendableAnswer {
                 recoveryStarted.complete(Unit)
                 releaseRecovery.await()
@@ -969,7 +971,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
-        inOrder.verify(lightningService).setup(any(), isNull(), eq(customRgsUrl), anyOrNull(), anyOrNull())
+        inOrder.verify(lightningService).setup(any(), isNull(), eq(customRgsUrl), anyOrNull(), anyOrNull(), eq(true))
         inOrder.verify(lightningService).start(anyOrNull(), any())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
@@ -989,8 +991,9 @@ class LightningRepoTest : BaseUnitTest() {
         startNodeForTesting()
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.stop()).thenReturn(Unit)
-        whenever(lightningService.setup(any(), isNull(), eq("https://bad.rgs/snapshot"), anyOrNull(), anyOrNull()))
-            .thenThrow(RuntimeException("Failed to start node"))
+        whenever(
+            lightningService.setup(any(), isNull(), eq("https://bad.rgs/snapshot"), anyOrNull(), anyOrNull(), any()),
+        ).thenThrow(RuntimeException("Failed to start node"))
 
         val result = sut.restartWithRgsServer("https://bad.rgs/snapshot")
 
@@ -1200,6 +1203,7 @@ class LightningRepoTest : BaseUnitTest() {
                     peers.any { it.nodeId == "node2pubkey" && it.address == "node2.example.com:9735" }
             },
             anyOrNull(),
+            any(),
         )
     }
 
@@ -1216,7 +1220,7 @@ class LightningRepoTest : BaseUnitTest() {
         val result = sut.start()
 
         assertTrue(result.isSuccess)
-        verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), isNull(), anyOrNull())
+        verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), isNull(), anyOrNull(), any())
     }
 
     @Test

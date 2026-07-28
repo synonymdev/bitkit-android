@@ -317,6 +317,7 @@ class WalletViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 anyOrNull(),
                 any(),
+                any(),
             ),
         ).thenReturn(Result.success(Unit))
 
@@ -349,6 +350,7 @@ class WalletViewModelTest : BaseUnitTest() {
             anyOrNull(),
             anyOrNull(),
             any(),
+            any(),
         )
         verify(testWalletRepo).refreshBip21()
     }
@@ -378,6 +380,7 @@ class WalletViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 anyOrNull(),
                 anyOrNull(),
+                any(),
                 any(),
             ),
         ).doSuspendableAnswer {
@@ -437,6 +440,7 @@ class WalletViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 anyOrNull(),
                 anyOrNull(),
+                any(),
                 any(),
             ),
         ).thenReturn(Result.success(Unit))
