@@ -314,14 +314,15 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun discardRemoteLightningEndpoints(
         publicKey: String,
         paymentHashes: Set<String>,
+        paymentRequests: Set<String> = emptySet(),
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
-            if (paymentHashes.isEmpty()) return@runSuspendCatching
+            if (paymentHashes.isEmpty() && paymentRequests.isEmpty()) return@runSuspendCatching
             val normalizedKey = normalizedPublicKey(publicKey) ?: return@runSuspendCatching
             val contactState = ensureState().contacts[normalizedKey] ?: return@runSuspendCatching
             val normalizedHashes = paymentHashes.map { it.lowercase() }.toSet()
             val filteredEntries = contactState.remoteEndpoints.filterNot {
-                shouldDiscardRemoteLightningEntry(it, normalizedHashes)
+                shouldDiscardRemoteLightningEntry(it, normalizedHashes, paymentRequests)
             }
             if (filteredEntries.size == contactState.remoteEndpoints.size) return@runSuspendCatching
 
@@ -524,6 +525,8 @@ class PrivatePaykitRepo @Inject constructor(
                         PublicPaykitRepo.paymentRequest(publicPayable),
                     )
                 }
+
+                resolution.publicResolutionError?.let { throw it }
 
                 if (privateEndpoints.isEmpty() && publicEndpoints.isEmpty()) {
                     PublicPaykitPaymentResult.NoEndpoint
@@ -1296,7 +1299,7 @@ class PrivatePaykitRepo @Inject constructor(
             val normalizedKey = normalizedPublicKey(publicKey) ?: return@runSuspendCatching
             val contactState = ensureState().contacts[normalizedKey] ?: return@runSuspendCatching
             val filteredEntries = contactState.remoteEndpoints.filterNot {
-                shouldDiscardRemoteLightningEntry(it, paymentHashes)
+                shouldDiscardRemoteLightningEntry(it, paymentHashes, emptySet())
             }
             if (filteredEntries.size == contactState.remoteEndpoints.size) return@runSuspendCatching
 
@@ -1313,11 +1316,17 @@ class PrivatePaykitRepo @Inject constructor(
     private suspend fun shouldDiscardRemoteLightningEntry(
         entry: StoredPaymentEntry,
         paymentHashes: Set<String>,
+        paymentRequests: Set<String>,
     ): Boolean {
-        if (entry.methodId != MethodId.Bolt11.rawValue) return false
         val endpoint = PublicPaykitRepo.parseEndpoint(entry.methodId, entry.endpointData) ?: return false
-        val paymentHash = paymentHashForBolt11(endpoint.value)?.lowercase() ?: return false
-        return paymentHash in paymentHashes
+        return when (endpoint.methodId) {
+            MethodId.Bolt11 -> {
+                val paymentHash = paymentHashForBolt11(endpoint.value)?.lowercase() ?: return false
+                paymentHash in paymentHashes
+            }
+            MethodId.Lnurl -> endpoint.value in paymentRequests
+            else -> false
+        }
     }
 
     private fun shouldDiscardRemoteOnchainEntry(

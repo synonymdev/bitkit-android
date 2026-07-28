@@ -80,6 +80,7 @@ data class PaykitContactPaymentResolution(
     val privateState: PrivatePaymentResolutionState,
     val payableEndpoints: List<PaykitResolvedPaymentEndpoint>,
     val privatePaymentListVersion: ULong? = null,
+    val publicResolutionError: Throwable? = null,
 )
 
 enum class PaykitPaymentEndpointSource {
@@ -555,7 +556,7 @@ class PaykitSdkService @Inject constructor(
                     maxAdvanceSteps = 8u,
                 ).resolution
                 val publicResolution = if (includePublicEndpoints) {
-                    optionalPublicPaymentResolution {
+                    runSuspendCatching {
                         handle.resolvePublicContactPayment(counterparty, receiverPath, amount = null)
                     }
                 } else {
@@ -564,7 +565,10 @@ class PaykitSdkService @Inject constructor(
                 privateResolution to publicResolution
             }
         }
-        return privateResolution.toPaykitContactPaymentResolution(publicResolution)
+        return privateResolution.toPaykitContactPaymentResolution(
+            publicResolution = publicResolution?.getOrNull(),
+            publicResolutionError = publicResolution?.exceptionOrNull(),
+        )
     }
 
     suspend fun resolvePublicContactPayment(
@@ -580,6 +584,7 @@ class PaykitSdkService @Inject constructor(
 
     private fun PrivateContactPaymentResolution.toPaykitContactPaymentResolution(
         publicResolution: PublicContactPaymentResolution?,
+        publicResolutionError: Throwable?,
     ): PaykitContactPaymentResolution {
         return PaykitContactPaymentResolution(
             privateState = state,
@@ -592,6 +597,7 @@ class PaykitSdkService @Inject constructor(
                 )
             } + publicResolution?.resolvedEndpoints().orEmpty(),
             privatePaymentListVersion = privatePaymentListVersion,
+            publicResolutionError = publicResolutionError,
         )
     }
 
@@ -889,9 +895,6 @@ internal class PaykitSdkSessionProvider(
         receiverNoiseKeyStore.persist(key)
     }
 }
-
-internal suspend fun <T> optionalPublicPaymentResolution(block: suspend () -> T): T? =
-    runSuspendCatching { block() }.getOrNull()
 
 internal object PaykitReceiverNoiseKeyDerivation {
     private const val DOMAIN = "bitkit/paykit/receiver-noise-key"

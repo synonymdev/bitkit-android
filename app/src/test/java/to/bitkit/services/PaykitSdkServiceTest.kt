@@ -3,7 +3,6 @@ package to.bitkit.services
 import com.synonym.paykit.EncryptedLinkRecoveryMarkerPolicy
 import com.synonym.paykit.EndpointManagementScope
 import com.synonym.paykit.PublicContactSharingPolicy
-import kotlinx.coroutines.test.runTest
 import org.junit.Test
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
@@ -115,15 +114,6 @@ class PaykitSdkServiceTest {
 
         assertTrue(provider.hasSessionAccess())
         assertNull(provider.loadLocalSecretKey())
-    }
-
-    @Test
-    fun `public payment resolution failure remains optional`() = runTest {
-        val result = optionalPublicPaymentResolution<String> {
-            throw AppError("public lookup failed")
-        }
-
-        assertNull(result)
     }
 
     private fun keyStore(

@@ -10,6 +10,7 @@ import android.nfc.NfcAdapter
 import androidx.core.net.toUri
 import app.cash.turbine.test
 import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.persistentListOf
@@ -245,7 +246,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         whenever { privatePaykitRepo.contactPublicKeyForPrivateOnchainAddresses(any<Collection<String>>()) }
             .thenReturn(null)
-        whenever { privatePaykitRepo.discardRemoteLightningEndpoints(any(), any()) }
+        whenever { privatePaykitRepo.discardRemoteLightningEndpoints(any(), any(), any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.discardRemoteOnchainEndpoints(any(), any()) }
             .thenReturn(Result.success(Unit))
@@ -1533,6 +1534,47 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `private lnurl contact payment stops when list consumption fails`() = test {
+        val lnurl = lnurlPayData()
+        val bolt11 = "lnbcrt1privatecontact"
+        val contactKey = "pubkycontact"
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(
+            lightningRepo.fetchLnurlInvoice(
+                data = lnurl,
+                amountMsats = 1_000_000uL,
+                comment = null,
+            ),
+        ).thenReturn(Result.success(lightningInvoice(bolt11, amountSats = 1000u)))
+        whenever {
+            privatePaykitRepo.discardRemoteLightningEndpoints(
+                publicKey = contactKey,
+                paymentHashes = setOf("010203"),
+                paymentRequests = setOf(lnurl.uri),
+            )
+        }.thenReturn(Result.failure(AppError("backup failed")))
+        setActiveContactPaymentContext(contactKey, lnurl.uri)
+        setSendState(
+            SendUiState(
+                address = lnurl.uri,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                lnurl = LnurlParams.LnurlPay(lnurl),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(privatePaykitRepo).discardRemoteLightningEndpoints(
+            publicKey = contactKey,
+            paymentHashes = setOf("010203"),
+            paymentRequests = setOf(lnurl.uri),
+        )
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+    }
+
+    @Test
     fun `private lightning pending payment consumes decoded invoice`() = test {
         val bolt11 = "lnbcrt1pending"
         val paymentHash = "pending_hash"
@@ -1606,7 +1648,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(privatePaykitRepo, never()).discardRemoteLightningEndpoints(any(), any())
+        verify(privatePaykitRepo, never()).discardRemoteLightningEndpoints(any(), any(), any())
     }
 
     @Test
@@ -1822,6 +1864,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         payeeNodeId = null,
     )
 
+    private fun lnurlPayData() = LnurlPayData(
+        uri = "lnurl1private",
+        callback = "https://example.com/callback",
+        minSendable = 1_000uL,
+        maxSendable = 100_000_000uL,
+        metadataStr = "[[\"text/plain\",\"test\"]]",
+        commentAllowed = null,
+        allowsNostr = false,
+        nostrPubkey = null,
+    )
+
     private suspend fun enablePublicPaykitSharing() {
         whenever { publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any()) }.thenReturn(Result.success(Unit))
         walletState.value = WalletState(onchainAddress = "bc1qtest")
@@ -1885,10 +1938,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         contexts[paymentHash] = ContactPaymentContext(publicKey)
     }
 
-    private fun setActiveContactPaymentContext(publicKey: String) {
+    private fun setActiveContactPaymentContext(
+        publicKey: String,
+        paymentRequest: String? = null,
+    ) {
         val field = AppViewModel::class.java.getDeclaredField("activeContactPaymentContext")
         field.isAccessible = true
-        field.set(sut, ContactPaymentContext(publicKey))
+        field.set(sut, ContactPaymentContext(publicKey, paymentRequest))
     }
 
     private fun activeContactPaymentContext(): ContactPaymentContext? {
