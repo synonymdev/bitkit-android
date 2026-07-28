@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardColors
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -20,7 +18,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -46,15 +43,16 @@ import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.Routes
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodyS
-import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Caption
-import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Footnote
-import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.settings.DetailRow
+import to.bitkit.ui.components.settings.InfoCard
+import to.bitkit.ui.components.settings.InfoCell
 import to.bitkit.ui.components.settings.SectionHeader
+import to.bitkit.ui.components.settings.cardColors
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.AppShapes
@@ -316,27 +314,6 @@ private fun CJitDetailContent(
     }
 }
 
-private val cardColors: CardColors @Composable get() = CardDefaults.cardColors(containerColor = Colors.White10)
-
-@Composable
-private fun InfoCard(
-    header: String,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    Column(modifier = modifier) {
-        SectionHeader(header, padding = PaddingValues.Zero)
-        Card(
-            colors = cardColors,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                content()
-            }
-        }
-    }
-}
-
 @Composable
 private fun OrderCard(model: IBtOrder, onClick: (String) -> Unit) {
     Card(
@@ -459,42 +436,6 @@ private fun CJitCard(model: IcJitEntry, onClick: (String) -> Unit) {
                 Footnote(text = "Expires: ${model.expiresAt.take(10)}", color = Colors.White32)
             }
         }
-    }
-}
-
-@Composable
-private fun InfoCell(label: String, value: String, alignment: Alignment.Horizontal = Alignment.Start) {
-    Column(horizontalAlignment = alignment) {
-        Caption13Up(text = label, color = Colors.White64)
-        VerticalSpacer(4.dp)
-        BodySSB(text = value)
-    }
-}
-
-@Composable
-private fun DetailRow(label: String, value: String, isError: Boolean = false) {
-    Row(
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp)
-    ) {
-        Caption(
-            text = label,
-            color = Colors.White64,
-            overflow = TextOverflow.MiddleEllipsis,
-            maxLines = 1,
-        )
-        HorizontalSpacer(16.dp)
-        Caption(
-            text = value,
-            color = if (isError) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
-            textAlign = TextAlign.End,
-            overflow = TextOverflow.MiddleEllipsis,
-            maxLines = 1,
-            modifier = Modifier.clickableAlpha(onClick = copyToClipboard(value))
-        )
     }
 }
 

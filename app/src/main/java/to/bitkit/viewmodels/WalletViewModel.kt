@@ -6,9 +6,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.synonym.bitkitcore.BoltzSwapEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -27,6 +29,7 @@ import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.of
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -37,6 +40,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.onboarding.LOADING_MS
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -60,10 +64,23 @@ class WalletViewModel @Inject constructor(
     private val pubkyRepo: PubkyRepo,
     private val migrationService: MigrationService,
     private val connectivityRepo: ConnectivityRepo,
+    private val boltzService: BoltzService,
 ) : ViewModel() {
     companion object {
         private const val TAG = "WalletViewModel"
         private val TIMEOUT_RESTORE_WAIT = 30.seconds
+
+        /** Base backoff between swap updates stream attempts; scales linearly per attempt. */
+        private val SWAP_UPDATES_RETRY_DELAY = 5.seconds
+
+        /** Upper bound for the backoff between swap updates stream attempts. */
+        private val SWAP_UPDATES_RETRY_CAP = 60.seconds
+
+        /**
+         * Ceiling on swap updates stream start attempts per run (~14 min of backoff). Giving up is
+         * safe: the stream is retried on the next node start and when entering a swap flow.
+         */
+        private const val SWAP_UPDATES_MAX_ATTEMPTS = 20
     }
 
     val lightningState = lightningRepo.lightningState
@@ -309,6 +326,7 @@ class WalletViewModel @Inject constructor(
                 if (_restoreState.value.isIdle()) {
                     walletRepo.refreshBip21()
                 }
+                ensureSwapUpdatesRunning()
                 // checkForOrphanedChannelMonitorRecovery()
             }
             .onFailure {
@@ -317,6 +335,74 @@ class WalletViewModel @Inject constructor(
                     ToastEventBus.send(it)
                 }
             }
+    }
+
+    private var swapEventsCollected = false
+    private var swapUpdatesJob: Job? = null
+
+    @Volatile
+    private var swapUpdatesRunning = false
+
+    /**
+     * Ensure the swap updates stream is running so pending LN -> onchain swaps are tracked and
+     * auto-claimed. A live stream is left untouched: restarting it would abort bitkit-core's
+     * background tasks and could race an in-flight claim. New swaps are reconciled at creation
+     * inside bitkit-core, and the stream reconciles every pending swap periodically, so a
+     * running stream is always enough. Runs only where swaps are supported and enabled in dev
+     * settings, see [BoltzService.isSwapEnabled].
+     */
+    fun ensureSwapUpdatesRunning() {
+        if (!boltzService.isSwapSupported) return
+        if (swapUpdatesRunning || swapUpdatesJob?.isActive == true) return
+        swapUpdatesJob = viewModelScope.launch {
+            if (!boltzService.isSwapEnabled()) return@launch
+            collectSwapEventsOnce()
+            startSwapUpdates()
+        }
+    }
+
+    /**
+     * Open the swap updates stream so any pending LN -> onchain swaps resume and auto-claim.
+     * Uses the wallet's current fee rate for the claim tx. Retries up to a ceiling: without the
+     * stream a paid swap has nothing to broadcast its claim, so give up only after
+     * [SWAP_UPDATES_MAX_ATTEMPTS] and leave the next trigger to retry. Once started, bitkit-core
+     * keeps the WebSocket alive with its own reconnect loop.
+     */
+    private suspend fun startSwapUpdates() {
+        var attempt = 0
+        while (attempt < SWAP_UPDATES_MAX_ATTEMPTS) {
+            val started = runSuspendCatching {
+                val speed = settingsStore.data.first().defaultTransactionSpeed
+                val feeRate = lightningRepo.getFeeRateForSpeed(speed).getOrNull()?.toDouble()
+                boltzService.startUpdates(feeRateSatPerVb = feeRate, acceptZeroConf = true)
+            }.onFailure {
+                Logger.warn("Failed to start swap updates, attempt '${attempt + 1}'", it, context = TAG)
+            }.isSuccess
+
+            if (started) {
+                swapUpdatesRunning = true
+                return
+            }
+            attempt++
+            delay((SWAP_UPDATES_RETRY_DELAY * attempt).coerceAtMost(SWAP_UPDATES_RETRY_CAP))
+        }
+        Logger.warn("Gave up starting swap updates after '$attempt' attempts", context = TAG)
+    }
+
+    /** Refresh balances when a swap lands on-chain so savings reflect it without a manual sync. */
+    private fun collectSwapEventsOnce() {
+        if (swapEventsCollected) return
+        swapEventsCollected = true
+        // UNDISPATCHED so we subscribe before the updates stream starts: the events flow has
+        // no replay, so a swap claimed early would otherwise leave balances stale.
+        viewModelScope.launch(start = CoroutineStart.UNDISPATCHED) {
+            boltzService.events.collect { event ->
+                if (event is BoltzSwapEvent.Claimed) {
+                    Logger.info("Savings swap claimed: ${event.swapId}", context = TAG)
+                    walletRepo.syncBalances()
+                }
+            }
+        }
     }
 
     private suspend fun connectMigrationPeers() {
@@ -334,13 +420,21 @@ class WalletViewModel @Inject constructor(
     fun stop() {
         if (!walletExists) return
 
+        swapUpdatesJob?.cancel()
+        swapUpdatesRunning = false
         viewModelScope.launch(bgDispatcher) {
+            stopSwapUpdates()
             lightningRepo.stop()
                 .onFailure {
                     Logger.error("Node stop error", it)
                     ToastEventBus.send(it)
                 }
         }
+    }
+
+    private suspend fun stopSwapUpdates() {
+        runSuspendCatching { boltzService.stopUpdates() }
+            .onFailure { Logger.error("Failed to stop swap updates", it, context = TAG) }
     }
 
     fun refreshState() = viewModelScope.launch {
@@ -350,6 +444,15 @@ class WalletViewModel @Inject constructor(
                 if (it is CancellationException || it.isTxSyncTimeout()) return@onFailure
                 ToastEventBus.send(it)
             }
+    }
+
+    /**
+     * Refresh wallet balances and channel state from the running node without a chain sync, so a
+     * just-received payment is reflected immediately (e.g. when entering the transfer-to-savings flow).
+     */
+    fun refreshBalances() = viewModelScope.launch {
+        walletRepo.syncBalances()
+        lightningRepo.syncState()
     }
 
     fun onPullToRefresh() {

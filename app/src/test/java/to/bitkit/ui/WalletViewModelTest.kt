@@ -2,7 +2,9 @@ package to.bitkit.ui
 
 import android.content.Context
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
@@ -15,6 +17,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.of
 import to.bitkit.models.BalanceState
@@ -28,6 +31,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.repositories.WalletState
+import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.viewmodels.RestoreState
@@ -47,6 +51,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private val pubkyRepo = mock<PubkyRepo>()
     private val migrationService = mock<MigrationService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
+    private val boltzService = mock<BoltzService>()
 
     private val lightningState = MutableStateFlow(LightningState())
     private val walletState = MutableStateFlow(WalletState())
@@ -64,6 +69,9 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(migrationService.tryFetchMigrationPeersFromBackup()).thenReturn(emptyList())
         whenever { migrationService.getRNRemoteBackupTimestamp() }.thenReturn(null)
         whenever(connectivityRepo.isOnline).thenReturn(isOnline)
+        whenever(boltzService.events).thenReturn(MutableSharedFlow())
+        whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
+        whenever { lightningRepo.getFeeRateForSpeed(any(), anyOrNull()) }.thenReturn(Result.success(1uL))
 
         sut = WalletViewModel(
             context = context,
@@ -76,7 +84,40 @@ class WalletViewModelTest : BaseUnitTest() {
             pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
+            boltzService = boltzService,
         )
+    }
+
+    @Test
+    fun `ensureSwapUpdatesRunning should start updates when swaps are enabled`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(true)
+
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        verify(boltzService).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `ensureSwapUpdatesRunning should do nothing when swaps are unsupported`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(false)
+
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        verify(boltzService, never()).startUpdates(anyOrNull(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `ensureSwapUpdatesRunning should do nothing when swaps are disabled in dev settings`() = test {
+        whenever(boltzService.isSwapSupported).thenReturn(true)
+        whenever(boltzService.isSwapEnabled()).thenReturn(false)
+
+        sut.ensureSwapUpdatesRunning()
+        advanceUntilIdle()
+
+        verify(boltzService, never()).startUpdates(anyOrNull(), any(), anyOrNull())
     }
 
     @Test
@@ -287,6 +328,7 @@ class WalletViewModelTest : BaseUnitTest() {
             pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
+            boltzService = boltzService,
         )
 
         assertEquals(RestoreState.Initial, testSut.restoreState.value)
@@ -348,6 +390,7 @@ class WalletViewModelTest : BaseUnitTest() {
             pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
+            boltzService = boltzService,
         )
 
         // Trigger restore to put state in non-idle
