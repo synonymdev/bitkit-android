@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.TransactionDetails
 import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.WatcherEvent
@@ -101,6 +102,8 @@ class HwWalletRepo @Inject constructor(
     private val retryingWatcherStarts = mutableSetOf<String>()
     private val watcherSyncRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val _watcherData = MutableStateFlow<Map<String, HwWatcherData>>(emptyMap())
+    private val trackedWalletIds = mutableSetOf<String>()
+    private val lastPersistedHwSnapshots = mutableMapOf<String, PersistedHwSnapshot>()
     private val persistedActivityIds = mutableMapOf<String, Set<String>>()
     private val emittedReceivedTxIds = mutableSetOf<String>()
 
@@ -126,6 +129,8 @@ class HwWalletRepo @Inject constructor(
             activeWatcherElectrumUrls.clear()
             activeWatcherWalletIds.clear()
             retryingWatcherStarts.clear()
+            trackedWalletIds.clear()
+            lastPersistedHwSnapshots.clear()
             persistedActivityIds.clear()
             emittedReceivedTxIds.clear()
             _watcherData.update { emptyMap() }
@@ -320,7 +325,11 @@ class HwWalletRepo @Inject constructor(
                             throw AppError("Failed to stop hardware wallet watcher '$it'")
                         }
                     }
-                walletId?.let { activityRepo.deleteForWallet(it).getOrThrow() }
+                walletId?.let {
+                    activityRepo.deleteForWallet(it).getOrThrow()
+                    trackedWalletIds -= it
+                    lastPersistedHwSnapshots -= it
+                }
                 val failures = ids.mapNotNull { trezorRepo.forgetDevice(it).exceptionOrNull() }
                 val remaining = hwWalletStore.loadKnownDevices().map { it.id }.toSet()
                 failures.firstOrNull()?.let { throw it }
@@ -401,26 +410,47 @@ class HwWalletRepo @Inject constructor(
                 if (event !is WatcherEvent.TransactionsChanged) return@collect
                 watcherMutex.withLock {
                     val walletId = activeWatcherWalletIds[watcherId] ?: return@withLock
-                    val activities = event.activities.filter { it.walletId() == walletId }
-                    val transactionDetails = event.transactionDetails.filter { it.walletId == walletId }
+                    val activities = event.activities
+                        .filter { it.walletId() == walletId }
+                        .toImmutableList()
+                    val transactionDetails = event.transactionDetails
+                        .filter { it.walletId == walletId }
+                        .toImmutableList()
                     val watcher = HwWatcherData(
                         deviceId = watcherId.toDeviceId(),
                         walletId = walletId,
                         addressType = watcherId.toAddressTypeKey(),
                         balanceSats = event.balance.total,
-                        activities = activities.toImmutableList(),
+                        activities = activities,
                     )
                     _watcherData.update { it + (watcherId to watcher) }
                     val previousIds = persistedActivityIds.getOrPut(watcherId) {
                         activities.map { it.scopedId() }.toSet()
                     }
+                    val snapshot = HwSnapshot(
+                        activities = activities,
+                        transactionDetails = transactionDetails,
+                    )
+                    lastPersistedHwSnapshots[walletId]
+                        ?.takeIf { it.source == snapshot }
+                        ?.let {
+                            _watcherData.update { data ->
+                                data + (watcherId to watcher.copy(activities = it.activities))
+                            }
+                            return@withLock
+                        }
 
                     val persistedActivities = activityRepo.persistHwSnapshot(
                         walletId = walletId,
                         activities = activities,
                         transactionDetails = transactionDetails,
                     ).getOrElse { return@withLock }
-                    val persistedWatcher = watcher.copy(activities = persistedActivities.toImmutableList())
+                    val immutablePersistedActivities = persistedActivities.toImmutableList()
+                    lastPersistedHwSnapshots[walletId] = PersistedHwSnapshot(
+                        source = snapshot,
+                        activities = immutablePersistedActivities,
+                    )
+                    val persistedWatcher = watcher.copy(activities = immutablePersistedActivities)
                     val updatedWatcherData = _watcherData.value + (watcherId to persistedWatcher)
                     _watcherData.update { updatedWatcherData }
 
@@ -486,6 +516,9 @@ class HwWalletRepo @Inject constructor(
     ) = watcherMutex.withLock {
         val specs = knownDevices.toWatcherSpecs(watcherSettings.electrumUrl)
         val desiredIds = specs.map { it.watcherId }.toSet()
+        val desiredWalletIds = specs.map { it.walletId }.toSet()
+        val removedWalletIds = trackedWalletIds - desiredWalletIds
+        trackedWalletIds += desiredWalletIds
 
         specs.forEach { spec ->
             val isActive = spec.watcherId in activeWatchers
@@ -519,6 +552,15 @@ class HwWalletRepo @Inject constructor(
         // A failed stop stays active so the next sync retries it; dropping it here
         // would leave the orphaned watcher feeding _watcherData as a ghost balance.
         (activeWatchers - desiredIds).forEach { stopActiveWatcherLocked(it) }
+
+        removedWalletIds
+            .filterNot { it in activeWatcherWalletIds.values }
+            .forEach { walletId ->
+                activityRepo.deleteForWallet(walletId).onSuccess {
+                    trackedWalletIds -= walletId
+                    lastPersistedHwSnapshots -= walletId
+                }
+            }
     }
 
     private fun List<KnownDevice>.toWatcherSpecs(electrumUrl: String): List<WatcherSpec> = flatMap { device ->
@@ -664,5 +706,15 @@ private data class HwWatcherData(
     val walletId: String,
     val addressType: String,
     val balanceSats: ULong,
+    val activities: ImmutableList<Activity>,
+)
+
+private data class HwSnapshot(
+    val activities: ImmutableList<Activity>,
+    val transactionDetails: ImmutableList<TransactionDetails>,
+)
+
+private data class PersistedHwSnapshot(
+    val source: HwSnapshot,
     val activities: ImmutableList<Activity>,
 )

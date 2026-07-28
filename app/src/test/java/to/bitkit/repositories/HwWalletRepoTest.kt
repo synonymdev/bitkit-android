@@ -186,6 +186,36 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `unchanged watcher snapshot reuses the persisted activity`() = test {
+        val sourceActivity = watcherActivity(amount = 100uL)
+        val persistedActivity = Activity.Onchain(
+            sourceActivity.v1.copy(isTransfer = true),
+        )
+        val event = transactionsChanged(
+            total = 100uL,
+            activities = listOf(sourceActivity),
+        )
+        whenever {
+            activityRepo.persistHwSnapshot(
+                HARDWARE_WALLET_ID,
+                event.activities,
+                event.transactionDetails,
+            )
+        }.thenReturn(Result.success(listOf(persistedActivity)))
+        val sut = createRepo()
+
+        watcherEvents.emit("dev1|nativeSegwit" to event)
+        watcherEvents.emit("dev1|nativeSegwit" to event)
+
+        assertTrue((sut.activities.value.single() as Activity.Onchain).v1.isTransfer)
+        verify(activityRepo).persistHwSnapshot(
+            walletId = HARDWARE_WALLET_ID,
+            activities = event.activities,
+            transactionDetails = event.transactionDetails,
+        )
+    }
+
+    @Test
     fun `events from inactive address-type watchers are ignored`() = test {
         val sut = createRepo()
 
@@ -829,6 +859,20 @@ class HwWalletRepoTest : BaseUnitTest() {
         )
         runCurrent()
         assertEquals(0uL, sut.totalSats.value)
+    }
+
+    @Test
+    fun `store removal deletes the hardware wallet activity scope`() = test {
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        createRepo()
+        runCurrent()
+
+        storeData.value = HwWalletData(knownDevices = emptyList())
+        runCurrent()
+
+        verify(trezorRepo).stopWatcher("dev1|nativeSegwit")
+        verify(activityRepo).deleteForWallet(HARDWARE_WALLET_ID)
     }
 
     @Test
