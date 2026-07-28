@@ -41,7 +41,7 @@ compose-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview"
 constraintlayout-compose = { module = "androidx.constraintlayout:constraintlayout-compose", version = "1.1.1" }
 core-ktx = { module = "androidx.core:core-ktx", version = "1.17.0" }
 core-splashscreen = { group = "androidx.core", name = "core-splashscreen", version = "1.2.0" }
-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version = "1.2.0" }
+datastore-preferences = { module = "androidx.datastore:datastore-preferences", version = "1.2.1" }
 detekt-formatting = { module = "io.gitlab.arturbosch.detekt:detekt-formatting", version.ref = "detekt" }
 detekt-compose-rules = { module = "io.nlopez.compose.rules:detekt", version = "0.5.3" }
 firebase-bom = { module = "com.google.firebase:firebase-bom", version = "34.8.0" }
