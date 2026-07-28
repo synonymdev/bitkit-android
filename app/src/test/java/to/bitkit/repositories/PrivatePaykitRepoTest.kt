@@ -825,6 +825,41 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `private payment list remains available when consumption persistence fails`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever {
+            paykitSdkService.prepareAndResolveContactPayment(
+                CONTACT_KEY,
+                WALLET_RECEIVER_PATH,
+                includePublicEndpoints = true,
+                afterPrivatePaymentListVersion = null,
+            )
+        }.thenReturn(
+            resolution(
+                resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11),
+                privatePaymentListVersion = 7uL,
+            ),
+        )
+        whenever(coreService.decode(PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
+        assertTrue(sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow() is PublicPaykitPaymentResult.Opened)
+
+        whenever { cacheStore.update(any()) }.thenAnswer { throw AppError("write failed") }
+        assertTrue(sut.discardRemoteLightningEndpoints(CONTACT_KEY, setOf("090909")).isFailure)
+
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(PrivatePaykitCacheData) -> PrivatePaykitCacheData>(0)
+            cacheData.value = transform(cacheData.value)
+        }
+        sut.discardRemoteLightningEndpoints(CONTACT_KEY, setOf("090909")).getOrThrow()
+
+        val contactCache = cacheData.value.contacts.getValue(CONTACT_KEY)
+        assertTrue(contactCache.remoteEndpoints.isEmpty())
+        assertEquals(7uL, contactCache.consumedPaymentListVersionsByReceiverPath[WALLET_RECEIVER_PATH])
+    }
+
+    @Test
     fun `beginSavedContactPayment refreshes private endpoints before unified resolution`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
         sut.prepareSavedContacts(listOf(CONTACT_KEY))

@@ -323,8 +323,11 @@ class PrivatePaykitRepo @Inject constructor(
             }
             if (filteredEntries.size == contactState.remoteEndpoints.size) return@runSuspendCatching
 
-            contactState.consumeRemotePaymentList(PaykitReceiverPaths.WALLET)
-            persistState(markWalletBackup = true)
+            persistConsumedRemotePaymentList(
+                publicKey = normalizedKey,
+                contactState = contactState,
+                receiverPath = PaykitReceiverPaths.WALLET,
+            ).getOrThrow()
         }
     }
 
@@ -341,8 +344,11 @@ class PrivatePaykitRepo @Inject constructor(
             }
             if (filteredEntries.size == contactState.remoteEndpoints.size) return@runSuspendCatching
 
-            contactState.consumeRemotePaymentList(PaykitReceiverPaths.WALLET)
-            persistState(markWalletBackup = true)
+            persistConsumedRemotePaymentList(
+                publicKey = normalizedKey,
+                contactState = contactState,
+                receiverPath = PaykitReceiverPaths.WALLET,
+            ).getOrThrow()
         }
     }
 
@@ -1086,6 +1092,20 @@ class PrivatePaykitRepo @Inject constructor(
         if (version != null) {
             consumedPaymentListVersionsByReceiverPath =
                 consumedPaymentListVersionsByReceiverPath + (receiverPath to version)
+        }
+    }
+
+    private suspend fun persistConsumedRemotePaymentList(
+        publicKey: String,
+        contactState: ContactState,
+        receiverPath: String,
+    ): Result<Unit> {
+        val previousState = contactState.copy()
+        contactState.consumeRemotePaymentList(receiverPath)
+        return runSuspendCatching {
+            persistState(markWalletBackup = true)
+        }.onFailure {
+            state?.contacts?.set(publicKey, previousState)
         }
     }
 

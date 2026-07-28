@@ -1477,7 +1477,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `private lightning contact payment discards remote invoice after send`() = test {
+    fun `private lightning contact payment consumes remote list before send`() = test {
         val bolt11 = "lnbcrt1privatecontact"
         val paymentHash = "payment_hash"
         val contactKey = "pubkycontact"
@@ -1505,11 +1505,35 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(privatePaykitRepo).discardRemoteLightningEndpoints(contactKey, setOf(paymentHash))
+        verify(privatePaykitRepo).discardRemoteLightningEndpoints(contactKey, setOf("010203"))
     }
 
     @Test
-    fun `private lightning pending payment discards remote invoice`() = test {
+    fun `private lightning contact payment stops when list consumption fails`() = test {
+        val bolt11 = "lnbcrt1privatecontact"
+        val paymentHash = "010203"
+        val contactKey = "pubkycontact"
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever { privatePaykitRepo.discardRemoteLightningEndpoints(contactKey, setOf(paymentHash)) }
+            .thenReturn(Result.failure(AppError("backup failed")))
+        setActiveContactPaymentContext(contactKey)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = 1000u,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, amountSats = 1000u),
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
+    }
+
+    @Test
+    fun `private lightning pending payment consumes decoded invoice`() = test {
         val bolt11 = "lnbcrt1pending"
         val paymentHash = "pending_hash"
         val contactKey = "pubkycontact"
@@ -1529,7 +1553,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceUntilIdle()
 
-        verify(privatePaykitRepo).discardRemoteLightningEndpoints(contactKey, setOf(paymentHash))
+        verify(privatePaykitRepo).discardRemoteLightningEndpoints(contactKey, setOf("010203"))
     }
 
     @Test
