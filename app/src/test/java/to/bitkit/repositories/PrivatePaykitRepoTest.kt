@@ -788,6 +788,11 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(contactCache.remoteEndpoints.isEmpty())
         assertEquals(7uL, contactCache.consumedPaymentListVersionsByReceiverPath[WALLET_RECEIVER_PATH])
 
+        whenever(paykitSdkService.exportBackupState()).thenReturn("sdk-backup")
+        val backup = sut.backupSnapshot().getOrThrow()
+        sut.restoreBackup(backup).getOrThrow()
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+
         whenever {
             paykitSdkService.prepareAndResolveContactPayment(
                 CONTACT_KEY,
@@ -1126,7 +1131,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val snapshot = sut.backupSnapshot().getOrThrow()
         sut.restoreBackup(snapshot).getOrThrow()
 
-        assertEquals(backup, snapshot)
+        assertTrue(snapshot?.startsWith("bitkit-paykit-v1:") == true)
         verifyBlocking(paykitSdkService) { restoreBackupState(backup) }
     }
 

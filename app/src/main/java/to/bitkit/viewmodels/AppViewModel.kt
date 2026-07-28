@@ -2369,9 +2369,12 @@ class AppViewModel @Inject constructor(
                 val tags = _sendUiState.value.selectedTags
                 val contactPublicKey = activeContactPaymentPublicKey()
 
-                sendOnchain(address, amount, tags = tags)
+                discardContactOnchainEndpoint(contactPublicKey, address)
+                    .fold(
+                        onSuccess = { sendOnchain(address, amount, tags = tags) },
+                        onFailure = { Result.failure(it) },
+                    )
                     .onSuccess { txId ->
-                        discardContactOnchainEndpoint(contactPublicKey, address)
                         Logger.info("Onchain send result txid: $txId", context = TAG)
                         onSendSuccess(
                             NewTransactionSheetDetails(
@@ -3137,9 +3140,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun discardContactOnchainEndpoint(contactPublicKey: String?, address: String) {
-        if (contactPublicKey == null) return
-        privatePaykitRepo.discardRemoteOnchainEndpoints(contactPublicKey, setOf(address)).onFailure {
+    private suspend fun discardContactOnchainEndpoint(
+        contactPublicKey: String?,
+        address: String,
+    ): Result<Unit> {
+        if (contactPublicKey == null) return Result.success(Unit)
+        return privatePaykitRepo.discardRemoteOnchainEndpoints(contactPublicKey, setOf(address)).onFailure {
             Logger.warn(
                 "Failed to discard private Paykit address for '${PubkyPublicKeyFormat.redacted(contactPublicKey)}'",
                 it,

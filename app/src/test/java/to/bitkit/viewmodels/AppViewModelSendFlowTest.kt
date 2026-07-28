@@ -1417,6 +1417,38 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `private onchain contact payment stops when list consumption fails`() = test {
+        val address = "bcrt1qprivatecontact"
+        val contactKey = "pubkycontact"
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever { privatePaykitRepo.discardRemoteOnchainEndpoints(contactKey, setOf(address)) }
+            .thenReturn(Result.failure(AppError("backup failed")))
+        setActiveContactPaymentContext(contactKey)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = 1000u,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+            ),
+        )
+
+        confirmCurrentPayment()
+
+        verify(lightningRepo, never()).sendOnChain(
+            address = any(),
+            sats = any(),
+            speed = anyOrNull(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+        )
+    }
+
+    @Test
     fun `non-contact onchain payment does not discard private endpoint`() = test {
         val address = "bcrt1qpublicpayment"
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)

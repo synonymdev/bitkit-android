@@ -20,6 +20,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
@@ -28,6 +31,7 @@ import to.bitkit.async.appScope
 import to.bitkit.data.PrivatePaykitCacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
+import to.bitkit.di.json
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -66,6 +70,9 @@ class PrivatePaykitRepo @Inject constructor(
     companion object {
         private const val TAG = "PrivatePaykitRepo"
         private const val MAX_RECEIVED_INVOICE_HASHES_PER_CONTACT = 100
+
+        /** Identifies Bitkit's wrapper around the Paykit SDK backup state. */
+        private const val BACKUP_STATE_PREFIX = "bitkit-paykit-v1:"
         private val privateInvoiceExpiry = 24.hours
         private val invoiceRefreshBuffer = 30.minutes
 
@@ -414,7 +421,15 @@ class PrivatePaykitRepo @Inject constructor(
         withContext(serializedDispatcher) {
             runSuspendCatching {
                 pubkyService.currentPublicKey() ?: return@runSuspendCatching null
-                paykitSdkService.exportBackupState()
+                val backupState = PrivatePaykitBackupState(
+                    sdkState = paykitSdkService.exportBackupState(),
+                    consumedPaymentListVersionsByContact = ensureState().contacts.mapNotNull { (publicKey, contact) ->
+                        contact.consumedPaymentListVersionsByReceiverPath
+                            .takeIf { it.isNotEmpty() }
+                            ?.let { publicKey to it }
+                    }.toMap(),
+                )
+                BACKUP_STATE_PREFIX + json.encodeToString(backupState)
             }
         }
 
@@ -422,12 +437,22 @@ class PrivatePaykitRepo @Inject constructor(
         withContext(serializedDispatcher) {
             runSuspendCatching {
                 clearPendingMessageDrainRetries()
-                state = PrivatePaykitState()
                 knownSavedContactKeys.clear()
                 if (backup == null) {
+                    state = PrivatePaykitState()
                     paykitSdkService.clearState()
                 } else {
-                    paykitSdkService.restoreBackupState(backup)
+                    val backupState = backup.takeIf { it.startsWith(BACKUP_STATE_PREFIX) }
+                        ?.removePrefix(BACKUP_STATE_PREFIX)
+                        ?.let { json.decodeFromString<PrivatePaykitBackupState>(it) }
+                    state = PrivatePaykitState(
+                        contacts = backupState?.consumedPaymentListVersionsByContact.orEmpty()
+                            .mapValues { (_, versions) ->
+                                ContactState(consumedPaymentListVersionsByReceiverPath = versions)
+                            }
+                            .toMutableMap(),
+                    )
+                    paykitSdkService.restoreBackupState(backupState?.sdkState ?: backup)
                 }
                 persistState(preserveCleanupMarkers = false)
                 notifyBackupStateChanged()
@@ -1425,3 +1450,9 @@ class PrivatePaykitRepo @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 }
+
+@Serializable
+private data class PrivatePaykitBackupState(
+    val sdkState: String,
+    val consumedPaymentListVersionsByContact: Map<String, Map<String, ULong>> = emptyMap(),
+)
