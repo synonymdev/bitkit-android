@@ -45,12 +45,9 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.ExperimentalTime
-import kotlin.time.Instant
 
-@OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 @Suppress("LargeClass")
 class HwWalletRepoTest : BaseUnitTest() {
 
@@ -62,7 +59,6 @@ class HwWalletRepoTest : BaseUnitTest() {
     private val activityRepo = mock<ActivityRepo>()
     private val hwWalletStore = mock<HwWalletStore>()
     private val settingsStore = mock<SettingsStore>()
-    private val clock = mock<Clock>()
 
     private lateinit var storeData: MutableStateFlow<HwWalletData>
     private lateinit var settingsData: MutableStateFlow<SettingsData>
@@ -105,7 +101,6 @@ class HwWalletRepoTest : BaseUnitTest() {
             it.getArgument<List<Activity>>(1)
         }
         whenever { activityRepo.deleteForWallet(any()) }.thenReturn(Result.success(Unit))
-        whenever(clock.now()).thenReturn(Instant.fromEpochSeconds(1_700_000_000))
     }
 
     private fun createRepo() = HwWalletRepo(
@@ -113,7 +108,6 @@ class HwWalletRepoTest : BaseUnitTest() {
         activityRepo = activityRepo,
         hwWalletStore = hwWalletStore,
         settingsStore = settingsStore,
-        clock = clock,
         ioDispatcher = testDispatcher,
     )
 

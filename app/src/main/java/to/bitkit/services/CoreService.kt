@@ -241,6 +241,32 @@ class CoreService @Inject constructor(
 // region Activity
 private const val CHUNK_SIZE = 50
 
+internal data class HwSnapshotMerge(
+    val toDelete: List<Activity.Onchain>,
+    val toUpsert: List<Activity>,
+)
+
+internal fun mergeHwSnapshot(
+    existing: List<Activity.Onchain>,
+    incoming: List<Activity>,
+): HwSnapshotMerge {
+    val incomingIds = incoming.map { it.rawId() }.toSet()
+    val toDelete = existing.filter { !it.v1.isTransfer && it.v1.id !in incomingIds }
+    val existingByTxId = existing.associateBy { it.v1.txId }
+    val toUpsert = incoming.map { activity ->
+        val onchain = activity as? Activity.Onchain ?: return@map activity
+        val stored = existingByTxId[onchain.v1.txId]?.v1 ?: return@map activity
+        Activity.Onchain(
+            onchain.v1.copy(
+                isTransfer = onchain.v1.isTransfer || stored.isTransfer,
+                channelId = onchain.v1.channelId ?: stored.channelId,
+                transferTxId = onchain.v1.transferTxId ?: stored.transferTxId,
+            )
+        )
+    }
+    return HwSnapshotMerge(toDelete = toDelete, toUpsert = toUpsert)
+}
+
 @Suppress("LargeClass", "TooManyFunctions")
 class ActivityService(
     @Suppress("unused") private val coreService: CoreService, // used to ensure CoreService inits first
@@ -306,27 +332,13 @@ class ActivityService(
             limit = null,
             sortDirection = null,
         ).filterIsInstance<Activity.Onchain>()
-        val incomingIds = activities.map { it.rawId() }.toSet()
-        existingActivities
-            .filter { !it.v1.isTransfer && it.v1.id !in incomingIds }
-            .forEach {
-                deleteActivityById(walletId = walletId, activityId = it.v1.id)
-                deleteTransactionDetails(walletId = walletId, txId = it.v1.txId)
-            }
-
-        val existingByTxId = existingActivities.associateBy { it.v1.txId }
-        val mergedActivities = activities.map { activity ->
-            val onchain = activity as? Activity.Onchain ?: return@map activity
-            val existing = existingByTxId[onchain.v1.txId]?.v1 ?: return@map activity
-            Activity.Onchain(
-                onchain.v1.copy(
-                    isTransfer = onchain.v1.isTransfer || existing.isTransfer,
-                    channelId = onchain.v1.channelId ?: existing.channelId,
-                    transferTxId = onchain.v1.transferTxId ?: existing.transferTxId,
-                )
-            )
+        val merge = mergeHwSnapshot(existing = existingActivities, incoming = activities)
+        merge.toDelete.forEach {
+            deleteActivityById(walletId = walletId, activityId = it.v1.id)
+            deleteTransactionDetails(walletId = walletId, txId = it.v1.txId)
         }
-        if (mergedActivities.isNotEmpty()) upsertActivities(mergedActivities)
+
+        if (merge.toUpsert.isNotEmpty()) upsertActivities(merge.toUpsert)
         if (transactionDetails.isNotEmpty()) upsertTransactionDetails(transactionDetails)
 
         getActivities(

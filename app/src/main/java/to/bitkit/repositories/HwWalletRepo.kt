@@ -60,9 +60,7 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.ceil
-import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
-import kotlin.time.ExperimentalTime
 
 /**
  * Production hardware-wallet business layer. Tracks paired Trezor devices as
@@ -73,14 +71,12 @@ import kotlin.time.ExperimentalTime
  * and the underlying watcher transport.
  */
 @Suppress("TooManyFunctions")
-@OptIn(ExperimentalTime::class)
 @Singleton
 class HwWalletRepo @Inject constructor(
     private val trezorRepo: TrezorRepo,
     private val activityRepo: ActivityRepo,
     private val hwWalletStore: HwWalletStore,
     private val settingsStore: SettingsStore,
-    private val clock: Clock,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) {
     companion object {
