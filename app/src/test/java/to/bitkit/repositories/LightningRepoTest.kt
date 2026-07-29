@@ -58,12 +58,15 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.of
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.ElectrumServer
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.services.ActivityService
 import to.bitkit.services.BlocktankService
 import to.bitkit.services.CoreService
+import to.bitkit.services.ElectrumProbeError
+import to.bitkit.services.ElectrumProbeService
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlService
 import to.bitkit.services.LspNotificationsService
@@ -100,6 +103,7 @@ class LightningRepoTest : BaseUnitTest() {
     private val lnurlService = mock<LnurlService>()
     private val connectivityRepo = mock<ConnectivityRepo>()
     private val vssBackupClientLdk = mock<VssBackupClientLdk>()
+    private val electrumProbeService = mock<ElectrumProbeService>()
     private val urlValidator = UrlValidator { Result.success(Unit) }
     private val probePaymentA = "probe-payment-a"
     private val probePaymentB = "probe-payment-b"
@@ -109,9 +113,10 @@ class LightningRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() = runBlocking {
-        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenReturn(Unit)
         whenever(lightningService.start(anyOrNull(), any())).thenReturn(Unit)
+        whenever { electrumProbeService.probe(any(), any()) }.thenReturn(Result.success(Unit))
         whenever(coreService.isGeoBlocked()).thenReturn(false)
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
@@ -131,6 +136,7 @@ class LightningRepoTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk,
             urlValidator = urlValidator,
+            electrumProbeService = electrumProbeService,
         )
     }
 
@@ -415,7 +421,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
-        inOrder.verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        inOrder.verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
         inOrder.verify(lightningService).start(anyOrNull(), any())
     }
 
@@ -913,7 +919,7 @@ class LightningRepoTest : BaseUnitTest() {
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
         inOrder.verify(lightningService)
-            .setup(any(), eq(customServerUrl), anyOrNull(), anyOrNull(), anyOrNull(), eq(false))
+            .setup(any(), eq(customServerUrl), anyOrNull(), anyOrNull(), anyOrNull())
         inOrder.verify(lightningService).start(anyOrNull(), any())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
@@ -938,12 +944,12 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.stop()).thenReturn(Unit)
         // The switch to the new server fails.
-        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenThrow(RuntimeException("start failed"))
         // The background recovery (previous config) blocks until released.
         val recoveryStarted = CompletableDeferred<Unit>()
         val releaseRecovery = CompletableDeferred<Unit>()
-        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull(), any()) }
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull()) }
             .doSuspendableAnswer {
                 recoveryStarted.complete(Unit)
                 releaseRecovery.await()
@@ -959,6 +965,25 @@ class LightningRepoTest : BaseUnitTest() {
         testScheduler.advanceUntilIdle()
     }
 
+    // Regression: a server that cannot work is rejected by the probe before the node is touched.
+    // Tearing the node down for one is what leaves its electrum tasks wedged, so that a later
+    // free_node blocks for tens of seconds instead of milliseconds.
+    @Test
+    fun `restartWithElectrumServer rejects a bad server without stopping the node`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        val probeError = ElectrumProbeError.NotElectrum(ElectrumServer.parse(badUrl))
+        whenever { electrumProbeService.probe(any(), any()) }.thenReturn(Result.failure(probeError))
+
+        val result = sut.restartWithElectrumServer(badUrl)
+
+        assertEquals(probeError, result.exceptionOrNull())
+        verify(lightningService, never()).stop()
+        verify(lightningService, never())
+            .setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull())
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
     // Regression: a start carrying an explicit config must never be satisfied by an already-running
     // node, which was not built with it. Returning success here let the caller persist a server that
     // never started, e.g. when a detached recovery restarted the previous config mid-change.
@@ -972,7 +997,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertTrue(result.exceptionOrNull() is NodeConfigNotAppliedError)
         verify(lightningService, never())
-            .setup(any(), eq(newServerUrl), anyOrNull(), anyOrNull(), anyOrNull(), any())
+            .setup(any(), eq(newServerUrl), anyOrNull(), anyOrNull(), anyOrNull())
     }
 
     // Two-request barrier: a change issued while the background recovery of a previous failed
@@ -987,12 +1012,12 @@ class LightningRepoTest : BaseUnitTest() {
         val nextUrl = "ssl://next.example.com:50002"
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.stop()).thenReturn(Unit)
-        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull()))
             .thenThrow(RuntimeException("start failed"))
         // Hold the background recovery mid-flight so the second change is issued while it runs.
         val recoveryStarted = CompletableDeferred<Unit>()
         val releaseRecovery = CompletableDeferred<Unit>()
-        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull(), any()) }
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull()) }
             .doSuspendableAnswer {
                 recoveryStarted.complete(Unit)
                 releaseRecovery.await()
@@ -1010,7 +1035,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         // Success must mean the node was actually rebuilt with the requested server.
         assertTrue(result.isSuccess)
-        verify(lightningService).setup(any(), eq(nextUrl), anyOrNull(), anyOrNull(), anyOrNull(), any())
+        verify(lightningService).setup(any(), eq(nextUrl), anyOrNull(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -1025,7 +1050,7 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         val inOrder = inOrder(lightningService)
         inOrder.verify(lightningService).stop()
-        inOrder.verify(lightningService).setup(any(), isNull(), eq(customRgsUrl), anyOrNull(), anyOrNull(), eq(true))
+        inOrder.verify(lightningService).setup(any(), isNull(), eq(customRgsUrl), anyOrNull(), anyOrNull())
         inOrder.verify(lightningService).start(anyOrNull(), any())
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
@@ -1046,7 +1071,7 @@ class LightningRepoTest : BaseUnitTest() {
         whenever(lightningService.node).thenReturn(null)
         whenever(lightningService.stop()).thenReturn(Unit)
         whenever(
-            lightningService.setup(any(), isNull(), eq("https://bad.rgs/snapshot"), anyOrNull(), anyOrNull(), any()),
+            lightningService.setup(any(), isNull(), eq("https://bad.rgs/snapshot"), anyOrNull(), anyOrNull()),
         ).thenThrow(RuntimeException("Failed to start node"))
 
         val result = sut.restartWithRgsServer("https://bad.rgs/snapshot")
@@ -1071,6 +1096,7 @@ class LightningRepoTest : BaseUnitTest() {
             connectivityRepo = connectivityRepo,
             vssBackupClientLdk = vssBackupClientLdk,
             urlValidator = failingValidator,
+            electrumProbeService = electrumProbeService,
         )
         sutWithFailingValidator.setInitNodeLifecycleState()
         whenever(lightningService.node).thenReturn(mock())
@@ -1257,7 +1283,6 @@ class LightningRepoTest : BaseUnitTest() {
                     peers.any { it.nodeId == "node2pubkey" && it.address == "node2.example.com:9735" }
             },
             anyOrNull(),
-            any(),
         )
     }
 
@@ -1274,7 +1299,7 @@ class LightningRepoTest : BaseUnitTest() {
         val result = sut.start()
 
         assertTrue(result.isSuccess)
-        verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), isNull(), anyOrNull(), any())
+        verify(lightningService).setup(any(), anyOrNull(), anyOrNull(), isNull(), anyOrNull())
     }
 
     @Test

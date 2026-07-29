@@ -358,16 +358,6 @@ class LightningServiceTest : BaseUnitTest() {
         setupDone.await() // proceeds once released (build then fails on the mocked deps, which is fine)
     }
 
-    // Regression: the Electrum server-change rebuild opts out of the gate; setup(awaitRelease=false)
-    // must proceed without waiting even while a previous release is still wedged.
-    @Test
-    fun `setup does not wait for the release when awaitRelease is false`() = runGateTest {
-        withTimeout(STOP_BOUND_MS) { gated.stop() } // release launched; destroy() stays wedged
-
-        // If the gate were not skipped this would block on the wedged release and time out.
-        withTimeout(STOP_BOUND_MS) { runCatching { gated.setup(walletIndex = 0, awaitRelease = false) } }
-    }
-
     // Regression (c): with no pending release the gate must add no latency.
     @Test
     fun `wipeStorage proceeds immediately when no release is pending`() = runGateTest {

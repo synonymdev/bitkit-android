@@ -234,7 +234,7 @@ class WakeNodeWorkerTest : BaseUnitTest() {
     private fun stubStartFiring(event: Event) {
         whenever {
             lightningRepo.start(
-                any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any(), any(),
+                any(), anyOrNull(), any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), any(),
             )
         }.doSuspendableAnswer {
             val handler = it.getArgument<NodeEventHandler?>(5)

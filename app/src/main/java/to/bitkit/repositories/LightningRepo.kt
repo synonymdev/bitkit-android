@@ -72,6 +72,7 @@ import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.ElectrumServer
 import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.OpenChannelResult
@@ -85,6 +86,7 @@ import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toSettingsString
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
+import to.bitkit.services.ElectrumProbeService
 import to.bitkit.services.LightningService
 import to.bitkit.services.LnurlChannelResponse
 import to.bitkit.services.LnurlService
@@ -124,6 +126,7 @@ class LightningRepo @Inject constructor(
     private val connectivityRepo: ConnectivityRepo,
     private val vssBackupClientLdk: VssBackupClientLdk,
     private val urlValidator: UrlValidator,
+    private val electrumProbeService: ElectrumProbeService,
 ) {
     private val _lightningState = MutableStateFlow(LightningState())
     val lightningState = _lightningState.asStateFlow()
@@ -282,7 +285,6 @@ class LightningRepo @Inject constructor(
         customServerUrl: String? = null,
         customRgsServerUrl: String? = null,
         channelMigration: ChannelDataMigration? = null,
-        awaitRelease: Boolean = true,
     ) = withContext(bgDispatcher) {
         runCatching {
             val trustedPeers = fetchTrustedPeers()
@@ -292,7 +294,6 @@ class LightningRepo @Inject constructor(
                 customRgsServerUrl,
                 trustedPeers,
                 channelMigration,
-                awaitRelease,
             )
         }.onFailure {
             Logger.error("Node setup error", it, context = TAG)
@@ -319,7 +320,6 @@ class LightningRepo @Inject constructor(
         eventHandler: NodeEventHandler? = null,
         channelMigration: ChannelDataMigration? = null,
         shouldValidateGraph: Boolean = true,
-        awaitRelease: Boolean = true,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (_isRecoveryMode.value) {
             return@withContext Result.failure(RecoveryModeError())
@@ -350,7 +350,7 @@ class LightningRepo @Inject constructor(
                 // Setup if needed
                 if (lightningService.node == null) {
                     val setupResult =
-                        setup(walletIndex, customServerUrl, customRgsServerUrl, channelMigration, awaitRelease)
+                        setup(walletIndex, customServerUrl, customRgsServerUrl, channelMigration)
                     if (setupResult.isFailure) {
                         _lightningState.update {
                             it.copy(
@@ -802,6 +802,11 @@ class LightningRepo @Inject constructor(
     suspend fun restartWithElectrumServer(newServerUrl: String): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Changing ldk-node electrum server to: '$newServerUrl'", context = TAG)
 
+        validateElectrumServer(newServerUrl).onFailure {
+            Logger.warn("Rejected electrum server '$newServerUrl'", it, context = TAG)
+            return@withContext Result.failure(it)
+        }
+
         configChangeMutex.withLock {
             waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
             stop().onFailure {
@@ -814,11 +819,6 @@ class LightningRepo @Inject constructor(
             start(
                 shouldRetry = false,
                 customServerUrl = newServerUrl,
-                // Skip the release gate for the server-change rebuild: @settings_10 switches servers
-                // back to back, and gating would serialize each change behind the previous (possibly
-                // wedged, ~40s) node's drain. A rebuild-over-drain here is no worse than the pre-PR GC
-                // behaviour; the destructive storage deletes (wipe / graph-reset / scorer) keep the gate.
-                awaitRelease = false,
             ).onFailure {
                 // Recover in the background: a wedged node's release can gate the rebuild for tens of
                 // seconds, and the caller must surface this failure now rather than block on recovery.
@@ -869,6 +869,14 @@ class LightningRepo @Inject constructor(
         val initialTimestamp = 0
         val testUrl = "${url.trimEnd('/')}/$initialTimestamp"
         urlValidator.validate(testUrl)
+    }
+
+    private suspend fun validateElectrumServer(url: String): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching { ElectrumServer.parse(url) }
+            .fold(
+                onSuccess = { electrumProbeService.probe(it) },
+                onFailure = { Result.failure(it) },
+            )
     }
 
     suspend fun getBalanceForAddressType(addressType: AddressType): Result<ULong> = withContext(bgDispatcher) {
@@ -1063,12 +1071,7 @@ class LightningRepo @Inject constructor(
 
             Logger.debug("Starting node with previous config for recovery", context = TAG)
 
-            start(
-                // Recovery runs while holding the lifecycle mutex; gating the rebuild here would block
-                // the user's next server change behind the wedged node's drain. See restartWithElectrumServer.
-                shouldRetry = false,
-                awaitRelease = false,
-            ).onSuccess {
+            start(shouldRetry = false).onSuccess {
                 Logger.debug("Successfully started node with previous config", context = TAG)
             }.onFailure {
                 Logger.error("Failed starting node with previous config", it, context = TAG)
