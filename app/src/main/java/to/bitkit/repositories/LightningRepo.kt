@@ -148,6 +148,15 @@ class LightningRepo @Inject constructor(
     private val pendingStopJob = AtomicReference<Job?>(null)
     private val pendingStopLock = Any()
     private val lifecycleMutex = Mutex()
+
+    /**
+     * Serializes a whole server-change transaction (stop, start, persist) against the background
+     * recovery a failed change launches. [lifecycleMutex] is taken separately by `stop()` and
+     * `start()`, so without this a detached recovery can restart the previous config between a
+     * request's stop and start, leaving the request to report and persist a config that never
+     * started. Recovery is cheap to wait on: it skips the release gate, so it is a plain rebuild.
+     */
+    private val configChangeMutex = Mutex()
     private val isChangingAddressType = AtomicBoolean(false)
 
     init {
@@ -328,9 +337,11 @@ class LightningRepo @Inject constructor(
         val result = lifecycleMutex.withLock {
             initialLifecycleState = _lightningState.value.nodeLifecycleState
             if (initialLifecycleState.isRunningOrStarting()) {
-                Logger.info("LDK node start skipped, lifecycle state: $initialLifecycleState", context = TAG)
-                lightningService.startEventListener(::onEvent)
-                return@withLock Result.success(Unit)
+                return@withLock skipStartForRunningNode(
+                    lifecycleState = initialLifecycleState,
+                    customServerUrl = customServerUrl,
+                    customRgsServerUrl = customRgsServerUrl,
+                )
             }
 
             runCatching {
@@ -442,6 +453,23 @@ class LightningRepo @Inject constructor(
         }
 
         result
+    }
+
+    private suspend fun skipStartForRunningNode(
+        lifecycleState: NodeLifecycleState,
+        customServerUrl: String?,
+        customRgsServerUrl: String?,
+    ): Result<Unit> {
+        if (customServerUrl != null || customRgsServerUrl != null) {
+            // A node that is already up was not built with this config, so reporting success would
+            // let the caller persist a server that never started.
+            Logger.warn("Skipped LDK node start with custom config, state: $lifecycleState", context = TAG)
+            return Result.failure(NodeConfigNotAppliedError())
+        }
+
+        Logger.info("LDK node start skipped, lifecycle state: $lifecycleState", context = TAG)
+        lightningService.startEventListener(::onEvent)
+        return Result.success(Unit)
     }
 
     fun removeEventHandler(handler: NodeEventHandler) {
@@ -774,31 +802,33 @@ class LightningRepo @Inject constructor(
     suspend fun restartWithElectrumServer(newServerUrl: String): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Changing ldk-node electrum server to: '$newServerUrl'", context = TAG)
 
-        waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
-        stop().onFailure {
-            Logger.error("Failed to stop node during electrum server change", it, context = TAG)
-            return@withContext Result.failure(it)
-        }
+        configChangeMutex.withLock {
+            waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
+            stop().onFailure {
+                Logger.error("Failed to stop node during electrum server change", it, context = TAG)
+                return@withContext Result.failure(it)
+            }
 
-        Logger.debug("Starting node with new electrum server: '$newServerUrl'", context = TAG)
+            Logger.debug("Starting node with new electrum server: '$newServerUrl'", context = TAG)
 
-        start(
-            shouldRetry = false,
-            customServerUrl = newServerUrl,
-            // Skip the release gate for the server-change rebuild: @settings_10 switches servers
-            // back to back, and gating would serialize each change behind the previous (possibly
-            // wedged, ~40s) node's drain. A rebuild-over-drain here is no worse than the pre-PR GC
-            // behaviour; the destructive storage deletes (wipe / graph-reset / scorer) keep the gate.
-            awaitRelease = false,
-        ).onFailure {
-            // Recover in the background: a wedged node's release can gate the rebuild for tens of
-            // seconds, and the caller must surface this failure now rather than block on recovery.
-            Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
-            scope.launch { restartWithPreviousConfig() }
-        }.onSuccess {
-            settingsStore.update { it.copy(electrumServer = newServerUrl) }
+            start(
+                shouldRetry = false,
+                customServerUrl = newServerUrl,
+                // Skip the release gate for the server-change rebuild: @settings_10 switches servers
+                // back to back, and gating would serialize each change behind the previous (possibly
+                // wedged, ~40s) node's drain. A rebuild-over-drain here is no worse than the pre-PR GC
+                // behaviour; the destructive storage deletes (wipe / graph-reset / scorer) keep the gate.
+                awaitRelease = false,
+            ).onFailure {
+                // Recover in the background: a wedged node's release can gate the rebuild for tens of
+                // seconds, and the caller must surface this failure now rather than block on recovery.
+                Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
+                scope.launch { restartWithPreviousConfig() }
+            }.onSuccess {
+                settingsStore.update { it.copy(electrumServer = newServerUrl) }
 
-            Logger.info("Successfully changed electrum server", context = TAG)
+                Logger.info("Successfully changed electrum server", context = TAG)
+            }
         }
     }
 
@@ -810,26 +840,28 @@ class LightningRepo @Inject constructor(
             return@withContext Result.failure(it)
         }
 
-        waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
-        stop().onFailure {
-            Logger.error("Failed to stop node during RGS server change", it, context = TAG)
-            return@withContext Result.failure(it)
-        }
+        configChangeMutex.withLock {
+            waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
+            stop().onFailure {
+                Logger.error("Failed to stop node during RGS server change", it, context = TAG)
+                return@withContext Result.failure(it)
+            }
 
-        Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
+            Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
 
-        start(
-            shouldRetry = false,
-            customRgsServerUrl = newRgsUrl,
-        ).onFailure {
-            // Recover in the background: a wedged node's release can gate the rebuild for tens of
-            // seconds, and the caller must surface this failure now rather than block on recovery.
-            Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
-            scope.launch { restartWithPreviousConfig() }
-        }.onSuccess {
-            settingsStore.update { it.copy(rgsServerUrl = newRgsUrl) }
+            start(
+                shouldRetry = false,
+                customRgsServerUrl = newRgsUrl,
+            ).onFailure {
+                // Recover in the background: a wedged node's release can gate the rebuild for tens of
+                // seconds, and the caller must surface this failure now rather than block on recovery.
+                Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
+                scope.launch { restartWithPreviousConfig() }
+            }.onSuccess {
+                settingsStore.update { it.copy(rgsServerUrl = newRgsUrl) }
 
-            Logger.info("Successfully changed RGS server", context = TAG)
+                Logger.info("Successfully changed RGS server", context = TAG)
+            }
         }
     }
 
@@ -1019,24 +1051,28 @@ class LightningRepo @Inject constructor(
     }
 
     private suspend fun restartWithPreviousConfig(): Result<Unit> = withContext(bgDispatcher) {
-        Logger.debug("Stopping node for recovery attempt", context = TAG)
+        // Runs detached from the failed change, so it takes the same transaction lock: without it
+        // this recovery can restart the previous config between a later change's stop and start.
+        configChangeMutex.withLock {
+            Logger.debug("Stopping node for recovery attempt", context = TAG)
 
-        stop().onFailure { e ->
-            Logger.error("Failed to stop node during recovery", e, context = TAG)
-            return@withContext Result.failure(e)
-        }
+            stop().onFailure { e ->
+                Logger.error("Failed to stop node during recovery", e, context = TAG)
+                return@withContext Result.failure(e)
+            }
 
-        Logger.debug("Starting node with previous config for recovery", context = TAG)
+            Logger.debug("Starting node with previous config for recovery", context = TAG)
 
-        start(
-            // Recovery runs while holding the lifecycle mutex; gating the rebuild here would block
-            // the user's next server change behind the wedged node's drain. See restartWithElectrumServer.
-            shouldRetry = false,
-            awaitRelease = false,
-        ).onSuccess {
-            Logger.debug("Successfully started node with previous config", context = TAG)
-        }.onFailure {
-            Logger.error("Failed starting node with previous config", it, context = TAG)
+            start(
+                // Recovery runs while holding the lifecycle mutex; gating the rebuild here would block
+                // the user's next server change behind the wedged node's drain. See restartWithElectrumServer.
+                shouldRetry = false,
+                awaitRelease = false,
+            ).onSuccess {
+                Logger.debug("Successfully started node with previous config", context = TAG)
+            }.onFailure {
+                Logger.error("Failed starting node with previous config", it, context = TAG)
+            }
         }
     }
 
@@ -1864,6 +1900,7 @@ class LightningRepo @Inject constructor(
 class RecoveryModeError : AppError("App in recovery mode, skipping node start")
 class NodeSetupError : AppError("Unknown node setup error")
 class NodeStopTimeoutError : AppError("Timeout waiting for node to stop")
+class NodeConfigNotAppliedError : AppError("Node already running, requested config was not applied")
 class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node to run and execute: '$opName'")
 class GetPaymentsError : AppError("It wasn't possible get the payments")
 class SyncUnhealthyError : AppError("Wallet sync failed before send")

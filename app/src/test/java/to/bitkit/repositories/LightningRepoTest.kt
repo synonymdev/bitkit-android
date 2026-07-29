@@ -959,6 +959,60 @@ class LightningRepoTest : BaseUnitTest() {
         testScheduler.advanceUntilIdle()
     }
 
+    // Regression: a start carrying an explicit config must never be satisfied by an already-running
+    // node, which was not built with it. Returning success here let the caller persist a server that
+    // never started, e.g. when a detached recovery restarted the previous config mid-change.
+    @Test
+    fun `start with a custom server url fails when the node is already running`() = test {
+        startNodeForTesting()
+        val newServerUrl = "ssl://next.example.com:50002"
+
+        val result = sut.start(customServerUrl = newServerUrl)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull() is NodeConfigNotAppliedError)
+        verify(lightningService, never())
+            .setup(any(), eq(newServerUrl), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
+    // Two-request barrier: a change issued while the background recovery of a previous failed
+    // change is in flight waits for it, then genuinely rebuilds with the requested server rather
+    // than riding the node recovery just brought up. Pins the outcome, not the interleaving: under
+    // a single-threaded test dispatcher recovery holds the lifecycle mutex for its whole rebuild,
+    // so the window the transaction lock closes only opens on a truly concurrent dispatcher.
+    @Test
+    fun `restartWithElectrumServer serializes a second change behind an in-flight recovery`() = test {
+        startNodeForTesting()
+        val badUrl = "ssl://10.0.2.2:60001"
+        val nextUrl = "ssl://next.example.com:50002"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        whenever(lightningService.setup(any(), eq(badUrl), anyOrNull(), anyOrNull(), anyOrNull(), any()))
+            .thenThrow(RuntimeException("start failed"))
+        // Hold the background recovery mid-flight so the second change is issued while it runs.
+        val recoveryStarted = CompletableDeferred<Unit>()
+        val releaseRecovery = CompletableDeferred<Unit>()
+        whenever { lightningService.setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull(), any()) }
+            .doSuspendableAnswer {
+                recoveryStarted.complete(Unit)
+                releaseRecovery.await()
+            }
+
+        assertTrue(sut.restartWithElectrumServer(badUrl).isFailure)
+        recoveryStarted.await()
+
+        val secondChange = async { sut.restartWithElectrumServer(nextUrl) }
+        testScheduler.advanceUntilIdle()
+        assertFalse(secondChange.isCompleted) // serialized behind the in-flight recovery
+
+        releaseRecovery.complete(Unit)
+        val result = secondChange.await()
+
+        // Success must mean the node was actually rebuilt with the requested server.
+        assertTrue(result.isSuccess)
+        verify(lightningService).setup(any(), eq(nextUrl), anyOrNull(), anyOrNull(), anyOrNull(), any())
+    }
+
     @Test
     fun `restartWithRgsServer should setup with new rgs server`() = test {
         startNodeForTesting()
