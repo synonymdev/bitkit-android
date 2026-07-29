@@ -75,7 +75,7 @@ object Transitions {
 inline fun <reified T : Any> NavGraphBuilder.navigationWithDefaultTransitions(
     startDestination: Any,
     typeMap: Map<KType, @JvmSuppressWildcards NavType<*>> = emptyMap(),
-    deepLinks: List<NavDeepLink> = emptyList(),
+    deepLinks: List<NavDeepLink> = ScreenDeepLinks.linksFor(T::class),
     noinline enterTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?)? = defaultEnterTrans,
     noinline exitTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition?)? = defaultExitTrans,
     noinline popEnterTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?)? = defaultPopEnterTrans,
@@ -100,7 +100,7 @@ inline fun <reified T : Any> NavGraphBuilder.navigationWithDefaultTransitions(
 @Suppress("LongParameterList", "MaxLineLength")
 inline fun <reified T : Any> NavGraphBuilder.composableWithDefaultTransitions(
     typeMap: Map<KType, NavType<*>> = emptyMap(),
-    deepLinks: List<NavDeepLink> = emptyList(),
+    deepLinks: List<NavDeepLink> = ScreenDeepLinks.linksFor(T::class),
     noinline enterTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?)? = defaultEnterTrans,
     noinline exitTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition?)? = defaultExitTrans,
     noinline popEnterTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?)? = defaultPopEnterTrans,

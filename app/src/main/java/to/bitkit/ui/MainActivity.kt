@@ -53,6 +53,7 @@ import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.sheets.ForgotPinSheet
 import to.bitkit.ui.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.enableAppEdgeToEdge
 import to.bitkit.utils.Logger
@@ -233,6 +234,10 @@ class MainActivity : FragmentActivity() {
             handleUsbAttachIntent(intent)
             return
         }
+
+        // NavHost re-handles this intent when it sets its graph. Without CLEAR_TASK it restarts the
+        // whole task instead of navigating, costing an extra activity launch on every cold link.
+        intent.data?.let { if (ScreenDeepLinks.isScreenDeepLink(it)) intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK) }
 
         appViewModel.handleDeeplinkIntent(intent)
     }

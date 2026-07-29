@@ -1,0 +1,15 @@
+<journey name="screen deeplink">
+  <description>Precondition: onboarded dev wallet, dev mode on, at least one log file present.</description>
+  <actions>
+    <action>Run `adb shell am start -W -a android.intent.action.VIEW -d "bitkit://screen/settings" to.bitkit.dev`</action>
+    <action>Verify that the Settings screen is visible with the "General", "Security" and "Advanced" tabs</action>
+    <action>Press the device back button</action>
+    <action>Verify that the wallet overview is visible, not the launcher</action>
+    <action>Run `adb shell run-as to.bitkit.dev ls files/logs` and take the last filename</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/log-detail/&lt;filename&gt;" to.bitkit.dev`</action>
+    <action>Verify that the log detail screen is visible and its title matches that filename</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/recovery-mnemonic" to.bitkit.dev`</action>
+    <action>Verify that the screen does not change and the recovery phrase is never shown</action>
+    <action>Verify that logcat contains "Unhandled screen deeplink" for that URI</action>
+  </actions>
+</journey>

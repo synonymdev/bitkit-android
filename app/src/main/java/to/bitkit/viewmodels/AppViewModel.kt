@@ -155,6 +155,7 @@ import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
+import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import to.bitkit.utils.AppError
@@ -258,6 +259,9 @@ class AppViewModel @Inject constructor(
 
     private val _isAuthenticated = MutableStateFlow(false)
     val isAuthenticated = _isAuthenticated.asStateFlow()
+
+    private val _pendingScreenDeepLink = MutableStateFlow<Uri?>(null)
+    val pendingScreenDeepLink = _pendingScreenDeepLink.asStateFlow()
 
     private val _showForgotPinSheet = MutableStateFlow(false)
     val showForgotPinSheet = _showForgotPinSheet.asStateFlow()
@@ -3279,6 +3283,16 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
+        if (ScreenDeepLinks.isScreenDeepLink(uri)) {
+            if (!settingsStore.data.first().isDevModeEnabled) {
+                Logger.warn("Ignoring screen deeplink, dev mode is off", context = TAG)
+                return@launch
+            }
+
+            _pendingScreenDeepLink.value = uri
+            return@launch
+        }
+
         PubkyRingAuthCallback.parse(uri)?.let {
             if (!isPaykitEnabled.value) return@launch
             handlePubkyRingAuthCallback(it)
@@ -3294,6 +3308,10 @@ class AppViewModel @Inject constructor(
         if (!walletRepo.walletExists()) return@launch
 
         launchScan(source = ScanSource.DEEPLINK, data = value, startDelay = SCREEN_TRANSITION_DELAY)
+    }
+
+    fun consumeScreenDeepLink() {
+        _pendingScreenDeepLink.value = null
     }
 
     private fun Uri.isRecoveryModeDeeplink(): Boolean {

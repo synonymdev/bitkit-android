@@ -48,6 +48,7 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.appwidget.AppWidgetRefreshReason
@@ -300,6 +301,22 @@ fun ContentView(
     }
 
     LaunchedEffect(Unit) { walletViewModel.handleHideBalanceOnOpen() }
+
+    val pendingScreenDeepLink by appViewModel.pendingScreenDeepLink.collectAsStateWithLifecycle()
+
+    LaunchedEffect(pendingScreenDeepLink) {
+        val uri = pendingScreenDeepLink ?: return@LaunchedEffect
+
+        navController.currentBackStackEntryFlow.first()
+        appViewModel.consumeScreenDeepLink()
+
+        val request = Intent(Intent.ACTION_VIEW, uri)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        val handled = navController.handleDeepLink(request)
+        if (!handled) {
+            Logger.warn("Unhandled screen deeplink '$uri'", context = "ContentView")
+        }
+    }
 
     LaunchedEffect(appViewModel) {
         appViewModel.mainScreenEffect.collect {
