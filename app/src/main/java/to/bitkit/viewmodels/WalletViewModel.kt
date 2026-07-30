@@ -270,6 +270,10 @@ class WalletViewModel @Inject constructor(
     fun setInitNodeLifecycleState() = lightningRepo.setInitNodeLifecycleState()
 
     fun start(walletIndex: Int = 0) {
+        // Cancel before the guards: a start that short-circuits never reaches LightningRepo.start,
+        // so a stop deferred by an earlier background would fire while the app is foregrounded.
+        lightningRepo.cancelPendingStop()
+
         if (!walletExists || isStarting) return
 
         viewModelScope.launch(bgDispatcher) {
@@ -424,12 +428,8 @@ class WalletViewModel @Inject constructor(
         swapUpdatesRunning = false
         viewModelScope.launch(bgDispatcher) {
             stopSwapUpdates()
-            lightningRepo.stop()
-                .onFailure {
-                    Logger.error("Node stop error", it)
-                    ToastEventBus.send(it)
-                }
         }
+        lightningRepo.stopDebounced()
     }
 
     private suspend fun stopSwapUpdates() {
