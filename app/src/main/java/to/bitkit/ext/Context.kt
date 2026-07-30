@@ -16,6 +16,7 @@ import android.content.pm.PackageManager.PERMISSION_GRANTED
 import android.hardware.usb.UsbManager
 import android.os.PowerManager
 import android.provider.Settings
+import android.text.format.DateFormat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
@@ -54,6 +55,11 @@ val Context.powerManager: PowerManager
 
 val Context.usageStatsManager: UsageStatsManager
     get() = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
+
+// Settings
+
+val Context.is24HourTimeFormat: Boolean
+    get() = DateFormat.is24HourFormat(this)
 
 // Permissions
 

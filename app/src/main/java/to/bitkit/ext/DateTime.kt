@@ -29,6 +29,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
+import java.time.LocalDate as JavaLocalDate
 import kotlin.time.Instant as KInstant
 
 @OptIn(ExperimentalTime::class)
@@ -39,11 +40,17 @@ fun Clock.nowMs(): Long = now().toEpochMilliseconds()
 
 fun nowTimestamp(): Instant = Instant.now().truncatedTo(ChronoUnit.SECONDS)
 
-fun Instant.formatted(pattern: String = DatePattern.DATE_TIME): String {
-    val dateTime = LocalDateTime.ofInstant(this, ZoneId.systemDefault())
-    val formatter = DateTimeFormatter.ofPattern(pattern)
-    return dateTime.format(formatter)
-}
+fun dateTimeFormatterOf(
+    pattern: String,
+    locale: Locale = Locale.getDefault(),
+    zone: ZoneId = ZoneId.systemDefault(),
+): DateTimeFormatter = DateTimeFormatter.ofPattern(pattern, locale).withZone(zone)
+
+fun Instant.formatted(
+    pattern: String = DatePattern.DATE_TIME,
+    locale: Locale = Locale.getDefault(),
+    zone: ZoneId = ZoneId.systemDefault(),
+): String = dateTimeFormatterOf(pattern, locale, zone).format(this)
 
 fun ULong?.formatToString(pattern: String = DatePattern.DATE_TIME): String? {
     return this?.let { Instant.ofEpochSecond(toLong()).formatted(pattern) }
@@ -213,13 +220,46 @@ fun utcDateFormatterOf(pattern: String) = SimpleDateFormat(pattern, Locale.US).a
     timeZone = java.util.TimeZone.getTimeZone("UTC")
 }
 
+fun uiDateStyleFor(
+    timestamp: ULong,
+    today: JavaLocalDate = JavaLocalDate.now(),
+    zone: ZoneId = ZoneId.systemDefault(),
+): UiDateStyle {
+    val date = Instant.ofEpochSecond(timestamp.toLong()).atZone(zone).toLocalDate()
+    return when {
+        date == today -> UiDateStyle.TIME
+        date.year == today.year -> UiDateStyle.DATE_TIME
+        else -> UiDateStyle.DATE_TIME_YEAR
+    }
+}
+
+enum class UiDateStyle {
+    TIME,
+    DATE,
+    DATE_TIME,
+    DATE_TIME_YEAR,
+    ;
+
+    fun pattern(is24Hour: Boolean): String {
+        val time = if (is24Hour) TIME_24H else TIME_12H
+        return when (this) {
+            TIME -> time
+            DATE -> DAY
+            DATE_TIME -> "$DAY, $time"
+            DATE_TIME_YEAR -> "$DAY_WITH_YEAR, $time"
+        }
+    }
+
+    private companion object {
+        const val TIME_12H = "h:mm a"
+        const val TIME_24H = "HH:mm"
+        const val DAY = "MMMM d"
+        const val DAY_WITH_YEAR = "MMMM d yyyy"
+    }
+}
+
 object DatePattern {
     const val DATE_TIME = "dd/MM/yyyy, HH:mm"
-    const val INVOICE_EXPIRY = "MMM dd, h:mm a"
-    const val ACTIVITY_DATE = "MMMM d"
-    const val ACTIVITY_ROW_DATE = "MMMM d, HH:mm"
-    const val ACTIVITY_ROW_DATE_YEAR = "MMMM d yyyy, HH:mm"
-    const val ACTIVITY_TIME = "h:mm"
     const val CHANNEL_DETAILS = "MMM d, yyyy, HH:mm"
     const val LOG_FILE = "yyyy-MM-dd_HH-mm-ss"
     const val LOG_LINE = "yyyy-MM-dd HH:mm:ss.SSS"

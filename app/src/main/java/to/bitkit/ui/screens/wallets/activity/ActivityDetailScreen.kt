@@ -55,6 +55,7 @@ import kotlinx.collections.immutable.ImmutableMap
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import to.bitkit.R
+import to.bitkit.ext.UiDateStyle
 import to.bitkit.ext.contact
 import to.bitkit.ext.create
 import to.bitkit.ext.ellipsisMiddle
@@ -62,8 +63,6 @@ import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
-import to.bitkit.ext.toActivityItemDate
-import to.bitkit.ext.toActivityItemTime
 import to.bitkit.ext.totalValue
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PubkyProfile
@@ -97,6 +96,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.copyToClipboard
 import to.bitkit.ui.utils.getScreenTitleRes
+import to.bitkit.ui.utils.uiDateText
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import to.bitkit.viewmodels.ActivityListViewModel
 
@@ -433,7 +433,7 @@ private fun ActivityDetailContent(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    BodySSB(text = timestamp.toActivityItemDate())
+                    BodySSB(text = uiDateText(timestamp, UiDateStyle.DATE))
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider()
@@ -454,7 +454,7 @@ private fun ActivityDetailContent(
                         modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
-                    BodySSB(text = timestamp.toActivityItemTime())
+                    BodySSB(text = uiDateText(timestamp, UiDateStyle.TIME))
                 }
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider()

@@ -18,6 +18,7 @@ import to.bitkit.viewmodels.WalletViewModel
 // Locals
 val LocalBalances = compositionLocalOf { BalanceState() }
 val LocalCurrencies = compositionLocalOf { CurrencyState() }
+val LocalIs24HourFormat = compositionLocalOf { false }
 
 // Statics
 val LocalDrawerState = staticCompositionLocalOf<DrawerState?> { null }

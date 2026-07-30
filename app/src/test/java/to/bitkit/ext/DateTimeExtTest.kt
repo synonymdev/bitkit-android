@@ -3,6 +3,9 @@ package to.bitkit.ext
 import org.junit.Test
 import to.bitkit.env.Env
 import to.bitkit.test.BaseUnitTest
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
@@ -12,6 +15,12 @@ import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
 class DateTimeExtTest : BaseUnitTest() {
+    private companion object {
+        val UTC: ZoneId = ZoneId.of("UTC")
+        val AFTERNOON: Instant = Instant.parse("2026-03-07T15:23:00Z")
+        val MIDNIGHT: Instant = Instant.parse("2026-03-07T00:15:00Z")
+        val NOON: Instant = Instant.parse("2026-03-07T12:05:00Z")
+    }
 
     @Test
     fun `toRelativeTimeString returns now for very recent timestamps`() {
@@ -139,4 +148,118 @@ class DateTimeExtTest : BaseUnitTest() {
 
         assertEquals(resultWithDefaultParam, resultWithoutParam)
     }
+
+    @Test
+    fun `TIME uses 24-hour clock when the device is set to 24-hour format`() {
+        val result = AFTERNOON.formattedInUtc(UiDateStyle.TIME.pattern(is24Hour = true))
+
+        assertEquals("15:23", result)
+    }
+
+    @Test
+    fun `TIME uses 12-hour clock with meridiem when the device is set to 12-hour format`() {
+        val result = AFTERNOON.formattedInUtc(UiDateStyle.TIME.pattern(is24Hour = false))
+
+        assertEquals("3:23 PM", result)
+    }
+
+    @Test
+    fun `TIME formats midnight without ambiguity in both clock formats`() {
+        val in24Hour = MIDNIGHT.formattedInUtc(UiDateStyle.TIME.pattern(is24Hour = true))
+        val in12Hour = MIDNIGHT.formattedInUtc(UiDateStyle.TIME.pattern(is24Hour = false))
+
+        assertEquals("00:15", in24Hour)
+        assertEquals("12:15 AM", in12Hour)
+    }
+
+    @Test
+    fun `TIME formats noon without ambiguity in both clock formats`() {
+        val in24Hour = NOON.formattedInUtc(UiDateStyle.TIME.pattern(is24Hour = true))
+        val in12Hour = NOON.formattedInUtc(UiDateStyle.TIME.pattern(is24Hour = false))
+
+        assertEquals("12:05", in24Hour)
+        assertEquals("12:05 PM", in12Hour)
+    }
+
+    @Test
+    fun `DATE is unaffected by the clock format`() {
+        val in24Hour = AFTERNOON.formattedInUtc(UiDateStyle.DATE.pattern(is24Hour = true))
+        val in12Hour = AFTERNOON.formattedInUtc(UiDateStyle.DATE.pattern(is24Hour = false))
+
+        assertEquals("March 7", in24Hour)
+        assertEquals("March 7", in12Hour)
+    }
+
+    @Test
+    fun `DATE_TIME keeps the date and applies the selected clock format`() {
+        val in24Hour = AFTERNOON.formattedInUtc(UiDateStyle.DATE_TIME.pattern(is24Hour = true))
+        val in12Hour = AFTERNOON.formattedInUtc(UiDateStyle.DATE_TIME.pattern(is24Hour = false))
+
+        assertEquals("March 7, 15:23", in24Hour)
+        assertEquals("March 7, 3:23 PM", in12Hour)
+    }
+
+    @Test
+    fun `DATE_TIME_YEAR keeps the year and applies the selected clock format`() {
+        val in24Hour = AFTERNOON.formattedInUtc(UiDateStyle.DATE_TIME_YEAR.pattern(is24Hour = true))
+        val in12Hour = AFTERNOON.formattedInUtc(UiDateStyle.DATE_TIME_YEAR.pattern(is24Hour = false))
+
+        assertEquals("March 7 2026, 15:23", in24Hour)
+        assertEquals("March 7 2026, 3:23 PM", in12Hour)
+    }
+
+    @Test
+    fun `DATE_TIME localizes the month name`() {
+        val pattern = UiDateStyle.DATE_TIME.pattern(is24Hour = true)
+        val result = AFTERNOON.formatted(pattern, Locale.GERMANY, UTC)
+
+        assertEquals("März 7, 15:23", result)
+    }
+
+    @Test
+    fun `formatted respects the supplied time zone`() {
+        val bucharest = ZoneId.of("Europe/Bucharest")
+        val result = AFTERNOON.formatted(UiDateStyle.TIME.pattern(is24Hour = true), Locale.US, bucharest)
+
+        assertEquals("17:23", result)
+    }
+
+    @Test
+    fun `uiDateStyleFor returns TIME for a timestamp from today`() {
+        val today = LocalDate.of(2026, 3, 7)
+
+        val style = uiDateStyleFor(AFTERNOON.epochSecond.toULong(), today, UTC)
+
+        assertEquals(UiDateStyle.TIME, style)
+    }
+
+    @Test
+    fun `uiDateStyleFor returns DATE_TIME for an earlier day in the same year`() {
+        val today = LocalDate.of(2026, 12, 31)
+
+        val style = uiDateStyleFor(AFTERNOON.epochSecond.toULong(), today, UTC)
+
+        assertEquals(UiDateStyle.DATE_TIME, style)
+    }
+
+    @Test
+    fun `uiDateStyleFor returns DATE_TIME_YEAR for a timestamp from a previous year`() {
+        val today = LocalDate.of(2027, 1, 1)
+
+        val style = uiDateStyleFor(AFTERNOON.epochSecond.toULong(), today, UTC)
+
+        assertEquals(UiDateStyle.DATE_TIME_YEAR, style)
+    }
+
+    @Test
+    fun `uiDateStyleFor resolves the day in the supplied time zone`() {
+        val lateEvening = Instant.parse("2026-03-07T23:30:00Z")
+        val today = LocalDate.of(2026, 3, 7)
+        val bucharest = ZoneId.of("Europe/Bucharest")
+
+        assertEquals(UiDateStyle.TIME, uiDateStyleFor(lateEvening.epochSecond.toULong(), today, UTC))
+        assertEquals(UiDateStyle.DATE_TIME, uiDateStyleFor(lateEvening.epochSecond.toULong(), today, bucharest))
+    }
+
+    private fun Instant.formattedInUtc(pattern: String) = formatted(pattern, Locale.US, UTC)
 }
