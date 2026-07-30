@@ -25,6 +25,16 @@ class NativeReleaseConfigTest {
     }
 
     @Test
+    fun `release build resolves Paykit symbol archive`() {
+        val buildFile = repoRoot.resolve("app/build.gradle.kts").readText()
+
+        assertTrue(
+            buildFile.contains("nativeDebugSymbols(libs.paykit.nativeDebugSymbolsArtifact())"),
+            "Release builds must resolve the Paykit native debug symbols classifier.",
+        )
+    }
+
+    @Test
     fun `release recipe verifies native debug symbols archive`() {
         val justfile = repoRoot.resolve("Justfile").readText()
 
@@ -103,7 +113,7 @@ class NativeReleaseConfigTest {
         )
         assertTrue(
             symbolsScript.contains(
-                """required_libs="libbitkitcore.so libldk_node.so libvss_rust_client_ffi.so"""",
+                """required_libs="libbitkitcore.so libldk_node.so libpaykit.so libvss_rust_client_ffi.so"""",
             ),
             "Native debug symbols script must validate release-critical native libraries.",
         )

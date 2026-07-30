@@ -50,7 +50,7 @@ class PayContactsViewModelTest : BaseUnitTest() {
         whenever(context.getString(any<Int>())).thenReturn("")
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(pubkyRepo.contacts).thenReturn(contactsFlow)
-        whenever { pubkyRepo.hasSecretKey() }.thenReturn(true)
+        whenever { privatePaykitRepo.hasPrivatePaymentAccess() }.thenReturn(true)
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsFlow.value = transform(settingsFlow.value)
@@ -89,8 +89,8 @@ class PayContactsViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `continueToProfile enables only public sharing without local secret key`() = test {
-        whenever { pubkyRepo.hasSecretKey() }.thenReturn(false)
+    fun `continueToProfile enables only public sharing without private payment access`() = test {
+        whenever { privatePaykitRepo.hasPrivatePaymentAccess() }.thenReturn(false)
         val sut = createSut()
         advanceUntilIdle()
 
@@ -109,6 +109,20 @@ class PayContactsViewModelTest : BaseUnitTest() {
         verify(publicPaykitRepo, never()).syncLocalReceiverMarker(anyOrNull(), anyOrNull())
         verify(privatePaykitRepo, never()).setContactSharingCleanupPending(false)
         verify(privatePaykitRepo, never()).prepareSavedContacts(any<Collection<String>>(), any())
+    }
+
+    @Test
+    fun `continueToProfile enables private sharing for external session access`() = test {
+        whenever { pubkyRepo.hasSecretKey() }.thenReturn(false)
+        val sut = createSut()
+        advanceUntilIdle()
+
+        sut.setPaymentSharingEnabled(true)
+        sut.continueToProfile()
+        advanceUntilIdle()
+
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        verify(privatePaykitRepo).prepareSavedContacts(listOf(CONTACT_KEY), false)
     }
 
     @Test

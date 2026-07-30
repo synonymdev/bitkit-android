@@ -32,12 +32,16 @@ internal data class PrivatePaykitState(
 
 internal data class ContactState(
     var remoteEndpoints: List<StoredPaymentEntry> = emptyList(),
+    var remotePaymentListVersionsByReceiverPath: Map<String, ULong> = emptyMap(),
+    var consumedPaymentListVersionsByReceiverPath: Map<String, ULong> = emptyMap(),
     var localInvoicesByReceiverPath: Map<String, StoredInvoice> = emptyMap(),
     var receivedInvoicePaymentHashes: List<String> = emptyList(),
     var publishedPrivatePaymentReceiverPaths: Set<String> = emptySet(),
 ) {
     constructor(cache: PrivatePaykitContactCacheData) : this(
         remoteEndpoints = cache.remoteEndpoints.map { StoredPaymentEntry(it.methodId, it.endpointData) },
+        remotePaymentListVersionsByReceiverPath = cache.remotePaymentListVersionsByReceiverPath,
+        consumedPaymentListVersionsByReceiverPath = cache.consumedPaymentListVersionsByReceiverPath,
         localInvoicesByReceiverPath = cache.localInvoicesByReceiverPath.mapValues { (_, invoice) ->
             StoredInvoice(invoice.bolt11, invoice.paymentHash, invoice.expiresAt)
         },
@@ -48,11 +52,15 @@ internal data class ContactState(
     val hasCacheState: Boolean
         get() = publishedPrivatePaymentReceiverPaths.isNotEmpty() ||
             remoteEndpoints.isNotEmpty() ||
+            remotePaymentListVersionsByReceiverPath.isNotEmpty() ||
+            consumedPaymentListVersionsByReceiverPath.isNotEmpty() ||
             localInvoicesByReceiverPath.isNotEmpty() ||
             receivedInvoicePaymentHashes.isNotEmpty()
 
     fun cacheState() = PrivatePaykitContactCacheData(
         remoteEndpoints = remoteEndpoints.map { PrivatePaykitStoredPaymentEntryData(it.methodId, it.endpointData) },
+        remotePaymentListVersionsByReceiverPath = remotePaymentListVersionsByReceiverPath,
+        consumedPaymentListVersionsByReceiverPath = consumedPaymentListVersionsByReceiverPath,
         localInvoicesByReceiverPath = localInvoicesByReceiverPath.mapValues { (_, invoice) ->
             PrivatePaykitStoredInvoiceData(invoice.bolt11, invoice.paymentHash, invoice.expiresAt)
         },

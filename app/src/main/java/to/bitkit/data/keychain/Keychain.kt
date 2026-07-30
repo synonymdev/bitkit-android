@@ -232,6 +232,7 @@ class Keychain @Inject constructor(
         PIN,
         PIN_ATTEMPTS_REMAINING,
         PAYKIT_SESSION,
+        PAYKIT_RECEIVER_NOISE_SECRET_KEY,
         PAYKIT_SDK_STATE,
         PUBKY_SECRET_KEY,
     }

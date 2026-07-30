@@ -1676,7 +1676,7 @@ class AppViewModel @Inject constructor(
 
     fun openContactPayment(paymentRequest: String, publicKey: String) {
         synchronized(contactPaymentContextLock) {
-            activeContactPaymentContext = ContactPaymentContext(publicKey)
+            activeContactPaymentContext = ContactPaymentContext(publicKey, paymentRequest)
         }
         onScanResult(paymentRequest)
     }
@@ -1854,6 +1854,10 @@ class AppViewModel @Inject constructor(
 
     private fun activeContactPaymentPublicKey() = synchronized(contactPaymentContextLock) {
         activeContactPaymentContext?.publicKey
+    }
+
+    private fun activeContactPaymentRequest() = synchronized(contactPaymentContextLock) {
+        activeContactPaymentContext?.paymentRequest
     }
 
     private fun activeContactPaymentProfile(): PubkyProfile? {
@@ -2369,9 +2373,12 @@ class AppViewModel @Inject constructor(
                 val tags = _sendUiState.value.selectedTags
                 val contactPublicKey = activeContactPaymentPublicKey()
 
-                sendOnchain(address, amount, tags = tags)
+                discardContactOnchainEndpoint(contactPublicKey, address)
+                    .fold(
+                        onSuccess = { sendOnchain(address, amount, tags = tags) },
+                        onFailure = { Result.failure(it) },
+                    )
                     .onSuccess { txId ->
-                        discardContactOnchainEndpoint(contactPublicKey, address)
                         Logger.info("Onchain send result txid: $txId", context = TAG)
                         onSendSuccess(
                             NewTransactionSheetDetails(
@@ -2406,6 +2413,7 @@ class AppViewModel @Inject constructor(
                 val tags = _sendUiState.value.selectedTags
                 var createdMetadataPaymentId: String? = null
                 val contactPublicKey = activeContactPaymentPublicKey()
+                val contactPaymentRequest = activeContactPaymentRequest()
 
                 // Extract payment hash from invoice for pre-activity metadata
                 val paymentHash = decodedInvoice.paymentHash.toHex()
@@ -2423,37 +2431,37 @@ class AppViewModel @Inject constructor(
                     }
                 }
 
-                sendLightning(bolt11, paymentAmount).onSuccess { actualPaymentHash ->
-                    discardContactLightningEndpoint(contactPublicKey, actualPaymentHash)
-                    Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
-                    onSendSuccess(
-                        NewTransactionSheetDetails(
-                            type = NewTransactionSheetType.LIGHTNING,
-                            direction = NewTransactionSheetDirection.SENT,
-                            paymentHashOrTxId = actualPaymentHash,
-                            sats = displayAmountSats.toLong(), // TODO Add fee when available
-                        ),
+                discardContactLightningEndpoint(contactPublicKey, paymentHash, contactPaymentRequest)
+                    .fold(
+                        onSuccess = { sendLightning(bolt11, paymentAmount) },
+                        onFailure = { Result.failure(it) },
                     )
-                }.onFailure {
-                    if (it is PaymentPendingException) {
-                        discardContactLightningEndpoint(contactPublicKey, it.paymentHash)
-                        Logger.info("Lightning payment pending", context = TAG)
-                        pendingPaymentRepo.track(it.paymentHash)
-                        preserveContactPaymentContext(it.paymentHash)
-                        setSendEffect(SendEffect.NavigateToPending(it.paymentHash, displayAmountSats.toLong()))
-                        return@onFailure
+                    .onSuccess { actualPaymentHash ->
+                        Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
+                        onSendSuccess(
+                            NewTransactionSheetDetails(
+                                type = NewTransactionSheetType.LIGHTNING,
+                                direction = NewTransactionSheetDirection.SENT,
+                                paymentHashOrTxId = actualPaymentHash,
+                                sats = displayAmountSats.toLong(), // TODO Add fee when available
+                            ),
+                        )
+                    }.onFailure {
+                        if (it is PaymentPendingException) {
+                            Logger.info("Lightning payment pending", context = TAG)
+                            pendingPaymentRepo.track(it.paymentHash)
+                            preserveContactPaymentContext(it.paymentHash)
+                            setSendEffect(SendEffect.NavigateToPending(it.paymentHash, displayAmountSats.toLong()))
+                            return@onFailure
+                        }
+                        // Delete pre-activity metadata on failure
+                        if (createdMetadataPaymentId != null) {
+                            preActivityMetadataRepo.deletePreActivityMetadata(createdMetadataPaymentId)
+                        }
+                        Logger.error("Error sending lightning payment", it, context = TAG)
+                        toast(it)
+                        hideSheet()
                     }
-                    if (contactPublicKey != null) {
-                        discardContactLightningEndpoint(contactPublicKey, paymentHash)
-                    }
-                    // Delete pre-activity metadata on failure
-                    if (createdMetadataPaymentId != null) {
-                        preActivityMetadataRepo.deletePreActivityMetadata(createdMetadataPaymentId)
-                    }
-                    Logger.error("Error sending lightning payment", it, context = TAG)
-                    toast(it)
-                    hideSheet()
-                }
             }
         }
     }
@@ -3126,9 +3134,17 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun discardContactLightningEndpoint(contactPublicKey: String?, paymentHash: String) {
-        if (contactPublicKey == null) return
-        privatePaykitRepo.discardRemoteLightningEndpoints(contactPublicKey, setOf(paymentHash)).onFailure {
+    private suspend fun discardContactLightningEndpoint(
+        contactPublicKey: String?,
+        paymentHash: String,
+        paymentRequest: String?,
+    ): Result<Unit> {
+        if (contactPublicKey == null) return Result.success(Unit)
+        return privatePaykitRepo.discardRemoteLightningEndpoints(
+            publicKey = contactPublicKey,
+            paymentHashes = setOf(paymentHash),
+            paymentRequests = setOfNotNull(paymentRequest),
+        ).onFailure {
             Logger.warn(
                 "Failed to discard private Paykit invoice for '${PubkyPublicKeyFormat.redacted(contactPublicKey)}'",
                 it,
@@ -3137,9 +3153,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun discardContactOnchainEndpoint(contactPublicKey: String?, address: String) {
-        if (contactPublicKey == null) return
-        privatePaykitRepo.discardRemoteOnchainEndpoints(contactPublicKey, setOf(address)).onFailure {
+    private suspend fun discardContactOnchainEndpoint(
+        contactPublicKey: String?,
+        address: String,
+    ): Result<Unit> {
+        if (contactPublicKey == null) return Result.success(Unit)
+        return privatePaykitRepo.discardRemoteOnchainEndpoints(contactPublicKey, setOf(address)).onFailure {
             Logger.warn(
                 "Failed to discard private Paykit address for '${PubkyPublicKeyFormat.redacted(contactPublicKey)}'",
                 it,
@@ -3426,7 +3445,10 @@ sealed class SendFee(open val value: Long) {
 
 enum class SendMethod { ONCHAIN, LIGHTNING }
 
-data class ContactPaymentContext(val publicKey: String)
+data class ContactPaymentContext(
+    val publicKey: String,
+    val paymentRequest: String? = null,
+)
 
 private data class PaykitContactSyncState(
     val publicKey: String?,

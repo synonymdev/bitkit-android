@@ -43,10 +43,10 @@ class PayContactsViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             val settings = settingsStore.data.first()
-            val hasLocalSecretKey = pubkyRepo.hasSecretKey()
+            val hasPrivatePaymentAccess = privatePaykitRepo.hasPrivatePaymentAccess()
             _uiState.update {
                 it.copy(
-                    isPaymentSharingEnabled = resolvedSharingDefault(settings, hasLocalSecretKey),
+                    isPaymentSharingEnabled = resolvedSharingDefault(settings, hasPrivatePaymentAccess),
                 )
             }
         }
@@ -75,7 +75,10 @@ class PayContactsViewModel @Inject constructor(
                 }
                 .onFailure {
                     val settings = settingsStore.data.first()
-                    val persistedValue = resolvedSharingDefault(settings, pubkyRepo.hasSecretKey())
+                    val persistedValue = resolvedSharingDefault(
+                        settings,
+                        privatePaykitRepo.hasPrivatePaymentAccess(),
+                    )
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,
                         title = context.getString(R.string.common__error),
@@ -99,7 +102,7 @@ class PayContactsViewModel @Inject constructor(
                 return Result.failure(it)
             }
 
-        val canUsePrivateContactPayments = pubkyRepo.hasSecretKey()
+        val canUsePrivateContactPayments = privatePaykitRepo.hasPrivatePaymentAccess()
         if (canUsePrivateContactPayments) {
             privatePaykitRepo.setContactSharingCleanupPending(false)
                 .onFailure {
@@ -256,9 +259,9 @@ class PayContactsViewModel @Inject constructor(
         else -> context.getString(R.string.common__error_body)
     }
 
-    private fun resolvedSharingDefault(settings: SettingsData, hasLocalSecretKey: Boolean): Boolean =
+    private fun resolvedSharingDefault(settings: SettingsData, hasPrivatePaymentAccess: Boolean): Boolean =
         settings.sharesPublicPaykitEndpoints ||
-            (settings.sharesPrivatePaykitEndpoints && hasLocalSecretKey) ||
+            (settings.sharesPrivatePaykitEndpoints && hasPrivatePaymentAccess) ||
             !settings.hasConfirmedPublicPaykitEndpoints
 }
 

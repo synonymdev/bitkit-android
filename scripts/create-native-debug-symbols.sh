@@ -26,7 +26,7 @@ esac
 output="app/build/outputs/native-debug-symbols/$variant/native-debug-symbols-$build_number.zip"
 output_dir=$(dirname "$output")
 dependency_symbols_dir="app/build/intermediates/native-debug-symbol-artifacts"
-required_libs="libbitkitcore.so libldk_node.so libvss_rust_client_ffi.so"
+required_libs="libbitkitcore.so libldk_node.so libpaykit.so libvss_rust_client_ffi.so"
 archive_symbol_suffixes=".dbg .sym"
 
 tmp_dirs=""
