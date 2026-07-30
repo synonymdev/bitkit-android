@@ -27,8 +27,7 @@ fun uiDateText(
     locale: Locale = Locale.getDefault(),
     zone: ZoneId = ZoneId.systemDefault(),
 ): String {
-    val context = LocalContext.current
-    val is24Hour = LocalIs24HourFormat.current ?: context.is24HourTimeFormat
+    val is24Hour = LocalIs24HourFormat.current
 
     val formatter = remember(style, is24Hour, locale, zone) {
         dateTimeFormatterOf(style.pattern(is24Hour), locale, zone)
