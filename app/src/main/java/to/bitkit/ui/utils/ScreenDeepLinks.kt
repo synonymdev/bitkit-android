@@ -29,6 +29,10 @@ object ScreenDeepLinks {
         if (!isScreenRoute(route)) return null
         if (isDenied(route)) return null
 
+        return kebabId(route)
+    }
+
+    fun kebabId(route: KClass<*>): String? {
         val name = route.simpleName ?: return null
         return CAMEL_HUMP.split(name).joinToString("-") { it.lowercase() }
     }

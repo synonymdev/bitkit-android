@@ -210,6 +210,7 @@ import to.bitkit.ui.sheets.hardware.HardwareSheet
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions
+import to.bitkit.ui.utils.SheetDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
 import to.bitkit.ui.utils.rememberIs24HourFormat
@@ -309,6 +310,11 @@ fun ContentView(
 
         navController.currentBackStackEntryFlow.first()
         appViewModel.consumeScreenDeepLink()
+
+        SheetDeepLinks.sheetFor(uri)?.let {
+            appViewModel.showSheet(it)
+            return@LaunchedEffect
+        }
 
         val request = Intent(Intent.ACTION_VIEW, uri)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)

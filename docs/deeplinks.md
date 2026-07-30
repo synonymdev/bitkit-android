@@ -7,7 +7,7 @@ instead of tapped through. Intended for QA, agent journeys and bug repros.
 bitkit://screen/<screen-id>[/<required-arg>...][?<optional-arg>=<value>]
 ```
 
-Only available while dev mode is on (`Settings > Advanced > Dev Settings`), which is the default on
+Only available while dev mode is on (Settings ▸ Advanced ▸ Dev Settings), which is the default on
 debug builds.
 
 ### Screen ids
@@ -47,7 +47,7 @@ Back from a deep-linked screen returns to the wallet overview rather than leavin
 
 ### Excluded screens
 
-Deep links are an input any installed app or web page can send, so they navigate and prefill only —
+Deep links are an input any installed app or web page can send, so they navigate and prefill only:
 they never send, broadcast or change a setting without the usual confirmation.
 
 These screens are unreachable by URI and a link naming one is dropped with a warning:
@@ -64,5 +64,43 @@ These screens are unreachable by URI and a link naming one is dropped with a war
 Payment URIs (`bitcoin:`, `lightning:`, `lnurl*`) are unaffected and still go through the scanner
 decode path.
 
-Screens presented as bottom sheets (Send, Receive, Backup, Widgets) run their own nested graphs and
-are not reachable yet.
+### Bottom sheets
+
+Sheets are not part of the root graph. They are `Sheet` values rendered by `SheetHost`, each
+carrying the start route of its own nested graph. `SheetDeepLinks` maps a path to a `Sheet`, so the
+URI shape is the same:
+
+```
+bitkit://screen/<sheet-id>[/<route-id>]
+```
+
+The bare id opens the sheet at its first registered route (`bitkit://screen/send` is the recipient
+picker, `bitkit://screen/backup` the backup intro).
+
+| Sheet | Reachable routes |
+| - | - |
+| `send` | `recipient`, `address`, `contact-select`, `amount`, `qr-scanner`, `coin-selection`, `add-tag`, `coming-soon`, `support` |
+| `receive` | `qr`, `amount`, `edit-invoice`, `add-tag`, `geo-block` |
+| `backup` | `intro`, `warning`, `success`, `multiple-devices`, `metadata` |
+| `widgets` | `gallery` and every `*-preview` / `*-edit` route |
+| `hardware` | `intro`, `searching`, `paired` |
+| `activity-date-range-selector`, `activity-tag-selector`, `qr-scanner` | no nested graph, id only |
+
+Unlike screens, sheet routes are registered by hand in `SheetDeepLinks`. A route is left out when it
+cannot stand on its own:
+
+- **Children of a nested graph** cannot be a `NavHost` start destination. `SendRoute.FeeRate` and
+  `FeeCustom` live inside `navigationWithDefaultTransitions<SendRoute.FeeNav>`, so starting there
+  throws `IllegalStateException: Cannot find startDestination ... from NavGraph`. `send/fee-nav`
+  itself resolves but renders only the screen title, so it is out too.
+- **Routes that require state the flow built up.** `send/quick-pay` does
+  `requireNotNull(quickPayData)` (`SendSheet.kt:309`) and throws when entered cold. `send/confirm`
+  and the receive confirm/liquidity routes do not crash, but render an empty or zero-amount screen.
+  `send/confirm` offers a "Swipe To Pay" control over a payment that was never built.
+- **Routes carrying flow-internal arguments** (`send/pending`, `hardware/pair-code`) are out.
+- **Sensitive routes** follow the deny rules above: `backup/show-mnemonic`, `backup/show-passphrase`
+  and both confirm-mnemonic steps display or verify the recovery phrase, and the `pin`, `change-pin`
+  and `disable-pin` sheets are auth surfaces. `force-transfer` force-closes channels.
+
+An unregistered path is dropped with the same "Unhandled screen deeplink" warning as an unknown
+screen, and it never falls back to the sheet's default route.
