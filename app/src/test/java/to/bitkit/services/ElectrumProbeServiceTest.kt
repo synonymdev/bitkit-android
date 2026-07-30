@@ -2,6 +2,11 @@ package to.bitkit.services
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.After
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
@@ -155,6 +160,32 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
         assertEquals(true, error?.message?.contains("$port"))
     }
 
+    // The requests are serialized rather than hand-built, so pin the envelope actually put on the
+    // wire: a real electrum server has to accept it, and no fake-server assertion covers that.
+    @Test
+    fun `probe sends well formed json rpc requests`() = test {
+        val port = startFakeElectrum(genesisHash = REGTEST_GENESIS)
+
+        sut.probe(serverAt(port), network = Network.REGTEST)
+
+        val sent = synchronized(received) { received.toList() }
+        assertEquals(2, sent.size)
+
+        val version = Json.parseToJsonElement(sent[0]).jsonObject
+        assertEquals(0, version.getValue("id").jsonPrimitive.int)
+        assertEquals("2.0", version.getValue("jsonrpc").jsonPrimitive.content)
+        assertEquals("server.version", version.getValue("method").jsonPrimitive.content)
+        assertEquals(
+            listOf("bitkit", "1.4"),
+            version.getValue("params").jsonArray.map { it.jsonPrimitive.content },
+        )
+
+        val features = Json.parseToJsonElement(sent[1]).jsonObject
+        assertEquals(1, features.getValue("id").jsonPrimitive.int)
+        assertEquals("server.features", features.getValue("method").jsonPrimitive.content)
+        assertTrue(features.getValue("params").jsonArray.isEmpty())
+    }
+
     private fun serverAt(port: Int, protocol: ElectrumProtocol = ElectrumProtocol.TCP) = ElectrumServer(
         host = "127.0.0.1",
         tcp = port,
@@ -190,8 +221,12 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
         readAndRespond(reader, writer) { featuresReply }
     }
 
+    /** Requests the fake server received, in order, so the encoded envelope can be asserted. */
+    private val received = mutableListOf<String>()
+
     private fun readAndRespond(reader: BufferedReader, writer: java.io.Writer, response: () -> String) {
-        reader.readLine() ?: return
+        val request = reader.readLine() ?: return
+        synchronized(received) { received += request }
         writer.write(response() + "\n")
         writer.flush()
     }

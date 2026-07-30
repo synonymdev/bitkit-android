@@ -57,7 +57,13 @@ class ElectrumProbeService @Inject constructor(
         private const val FEATURES_REQUEST_ID = 1
     }
 
-    private val json = Json { ignoreUnknownKeys = true }
+    // Deliberately not the injected Json: that one sets prettyPrint, and electrum is line-delimited,
+    // so a multi-line request would be read as a truncated line. encodeDefaults keeps `jsonrpc` and
+    // an empty `params` on the wire, which servers expect.
+    private val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+    }
 
     suspend fun probe(
         server: ElectrumServer,
@@ -76,7 +82,7 @@ class ElectrumProbeService @Inject constructor(
                     // optional, otherwise a server erroring on both would probe clean.
                     request(reader, writer, VERSION_REQUEST_ID, "server.version", versionParams()).getOrThrow()
 
-                    val features = request(reader, writer, FEATURES_REQUEST_ID, "server.features", "[]")
+                    val features = request(reader, writer, FEATURES_REQUEST_ID, "server.features")
                     verifyNetwork(features.getOrNull(), server, network)
                 }.getOrElse {
                     throw it as? ElectrumProbeError ?: ElectrumProbeError.NotElectrum(server, it)
@@ -116,9 +122,9 @@ class ElectrumProbeService @Inject constructor(
         writer: Writer,
         id: Int,
         method: String,
-        params: String,
+        params: List<String> = emptyList(),
     ): Result<RpcResponse> = runCatching {
-        writer.write("""{"id":$id,"jsonrpc":"2.0","method":"$method","params":$params}""" + "\n")
+        writer.appendLine(json.encodeToString(RpcRequest(id = id, method = method, params = params)))
         writer.flush()
 
         val line = reader.readLine() ?: throw AppError("Closed connection before answering '$method'")
@@ -153,7 +159,7 @@ class ElectrumProbeService @Inject constructor(
         }
     }
 
-    private fun versionParams() = """["$CLIENT_NAME","$PROTOCOL_VERSION"]"""
+    private fun versionParams() = listOf(CLIENT_NAME, PROTOCOL_VERSION)
 
     private fun genesisHashOf(network: Network): String = when (network) {
         Network.BITCOIN -> "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
@@ -162,6 +168,15 @@ class ElectrumProbeService @Inject constructor(
         Network.REGTEST -> "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206"
     }
 }
+
+/** A JSON-RPC call, matching the envelope the probe expects back. */
+@Serializable
+private data class RpcRequest(
+    val id: Int,
+    val jsonrpc: String = "2.0",
+    val method: String,
+    val params: List<String> = emptyList(),
+)
 
 /** A JSON-RPC reply, kept only as far as the probe needs to trust it. */
 @Serializable
