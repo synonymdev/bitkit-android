@@ -235,8 +235,6 @@ class MainActivity : FragmentActivity() {
             return
         }
 
-        // NavHost re-handles this intent when it sets its graph. Without CLEAR_TASK it restarts the
-        // whole task instead of navigating, costing an extra activity launch on every cold link.
         intent.data?.let { if (ScreenDeepLinks.isScreenDeepLink(it)) intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK) }
 
         appViewModel.handleDeeplinkIntent(intent)
