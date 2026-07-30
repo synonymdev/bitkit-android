@@ -66,7 +66,9 @@ class HomeViewModelTest : BaseUnitTest() {
         whenever(pubkyRepo.displayName).thenReturn(MutableStateFlow(null))
         whenever(pubkyRepo.displayImageUri).thenReturn(MutableStateFlow(null))
         whenever(activityRepo.activitiesChanged).thenReturn(MutableStateFlow(0L))
-        whenever { activityRepo.getActivities(limit = 1u) }.thenReturn(Result.success(emptyList()))
+        whenever {
+            activityRepo.getActivities(walletId = null, limit = 1u)
+        }.thenReturn(Result.success(emptyList()))
         whenever(hwWalletRepo.wallets).thenReturn(hardwareWallets)
         whenever(suggestionsRepo.suggestionsFlow).thenReturn(suggestions)
     }

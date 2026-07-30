@@ -60,13 +60,14 @@ Remove step forgets the device.
 | Journey | Covers |
 | - | - |
 | `connect-home-tile.xml` | Dev-screen connect, home tile, indicator, balance, detail screen opens |
-| `activity-blue-icons.xml` | Hardware activity merge, blue icons, All Activity filters, current watch-only detail fallback |
+| `activity-blue-icons.xml` | Wallet-scoped hardware activity, blue icons, unified list, and tab filters |
+| `activity-detail-hw-tags.xml` | Persisted hardware tags and Explore inputs/outputs |
 | `usb-reconnect.xml` | Disconnect indicator, injected USB attach intent → silent auto-reconnect; physical-device chooser path noted separately |
 | `suggestion-intro-sheet.xml` | Forget device, Hardware suggestion card, full connect flow (Intro → Searching → Found → Paired → Finish) re-pairs |
 | `connect-flow.xml` | Settings Add button → connect flow with an edited Label Funds → paired device count + name |
 | `settings-hardware-wallets.xml` | Payments count row, Hardware Wallets screen list, rename sheet, Add button sheet/back dismiss, per-row delete confirm + re-pair |
 | `detail-overview.xml` | Detail screen overview, Transfer placeholder when funded, activity, Remove confirm + forget |
-| `transfer-to-spending.xml` | Happy-path transfer amount → sign → processing flow with a valid amount below the cap |
+| `transfer-to-spending.xml` | Happy-path transfer plus one scoped hardware Transfer activity |
 | `transfer-to-spending-max-lsp-cap.xml` | MAX when Trezor balance is higher than remaining LSP headroom; verifies MAX uses AVAILABLE and reaches sign without insufficient funds |
 | `transfer-to-spending-node-warmup.xml` | Transfer started during app/node warm-up; verifies loading recovers into the sign screen |
 
@@ -100,6 +101,10 @@ To exercise the received-money sheet (not covered by a journey because it needs 
 out-of-band transfer), fund the emulator wallet on regtest from `bitkit-docker`, e.g.
 send to an address generated via Dev Settings → Trezor → Get Address, then mine a block
 with `./bitcoin-cli`.
+
+The activity journeys use a mixed fixture with two confirmed hardware receives carrying
+distinct amounts and one hardware Transfer To Spending transaction. This proves
+ordering, tab filtering, tags, inputs/outputs, transfer metadata, and row uniqueness together.
 
 For transfer-to-spending QA, explicitly cover the LSP cap boundary: the hardware wallet
 balance can be much larger than the displayed AVAILABLE amount because MAX is capped by

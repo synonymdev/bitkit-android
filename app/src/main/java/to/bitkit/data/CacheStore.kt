@@ -10,11 +10,13 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.data.serializers.AppCacheSerializer
+import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.BalanceState
 import to.bitkit.models.FxRate
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.WalletScope
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -103,11 +105,15 @@ class CacheStore @Inject constructor(
         }
     }
 
-    suspend fun addActivityToDeletedList(activityId: String) {
+    suspend fun addActivityToDeletedList(
+        activityId: String,
+        walletId: String = WalletScope.default,
+    ) {
         if (activityId.isBlank()) return
-        if (activityId in store.data.first().deletedActivities) return
+        val scopedId = scopedActivityId(walletId, activityId)
+        if (scopedId in store.data.first().deletedActivities) return
         store.updateData {
-            it.copy(deletedActivities = it.deletedActivities + activityId)
+            it.copy(deletedActivities = it.deletedActivities + scopedId)
         }
     }
 
@@ -159,6 +165,10 @@ data class AppCacheData(
     val addressSearchLastUsedReceiveIndexes: Map<String, Int> = mapOf(),
     val addressSearchLastUsedChangeIndexes: Map<String, Int> = mapOf(),
 ) {
+    fun isActivityDeleted(activityId: String, walletId: String): Boolean =
+        scopedActivityId(walletId, activityId) in deletedActivities ||
+            walletId == WalletScope.default && activityId in deletedActivities
+
     fun resetBip21() = copy(bip21 = "", bolt11 = "", bolt11PaymentHash = "", onchainAddress = "")
 
     fun invalidateReceiveLightningInvoice() = copy(bip21 = "", bolt11 = "", bolt11PaymentHash = "")

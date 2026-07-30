@@ -29,9 +29,11 @@ import to.bitkit.data.entities.TransferEntity
 import to.bitkit.ext.create
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.TransferType
+import to.bitkit.models.WalletScope
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -186,6 +188,31 @@ class TransferRepoTest : BaseUnitTest() {
     // MARK: - markSettled
 
     @Test
+    fun `createPendingToSpendingActivity uses the funding wallet scope`() = test {
+        val order = previewBtOrder()
+
+        val result = sut.createPendingToSpendingActivity(
+            order = order,
+            txId = "hardware-funding-tx",
+            fee = 1_000uL,
+            feeRate = 2uL,
+            walletId = "hardware-wallet",
+        )
+
+        assertTrue(result.isSuccess)
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            txid = "hardware-funding-tx",
+            address = order.payment?.onchain?.address.orEmpty(),
+            amount = order.feeSat,
+            fee = 1_000uL,
+            feeRate = 2uL,
+            isTransfer = true,
+            channelId = order.channel?.shortChannelId,
+            walletId = "hardware-wallet",
+        )
+    }
+
+    @Test
     fun `markSettled successfully marks transfer as settled`() = test {
         val settledAt = setupClockNowMock()
         whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
@@ -291,7 +318,8 @@ class TransferRepoTest : BaseUnitTest() {
             fundingTxo = fundingTxo,
             isChannelReady = false,
         )
-        val activity = OnchainActivity.create(walletId = "wallet0",
+        val activity = OnchainActivity.create(
+            walletId = "hardware-wallet",
             id = fundingTxo.txid,
             txType = PaymentType.SENT,
             txId = fundingTxo.txid,
@@ -307,7 +335,12 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(lightningRepo.getChannels()).thenReturn(listOf(channelDetails))
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(mock()))
         whenever(blocktankRepo.getOrder(ID_ORDER, refresh = false)).thenReturn(Result.success(null))
-        whenever(activityService.getOnchainActivityByTxId(fundingTxo.txid)).thenReturn(activity)
+        whenever(activityService.getWalletIds())
+            .thenReturn(setOf(WalletScope.default, "hardware-wallet"))
+        whenever(activityService.getOnchainActivityByTxId(fundingTxo.txid, WalletScope.default))
+            .thenReturn(null)
+        whenever(activityService.getOnchainActivityByTxId(fundingTxo.txid, "hardware-wallet"))
+            .thenReturn(activity)
 
         val result = sut.syncTransferStates()
 
@@ -609,7 +642,8 @@ class TransferRepoTest : BaseUnitTest() {
             createdAt = 1000L,
         )
 
-        val sweepActivity = OnchainActivity.create(walletId = "wallet0",
+        val sweepActivity = OnchainActivity.create(
+            walletId = "wallet0",
             id = "sweep-activity-id",
             txType = PaymentType.RECEIVED,
             txId = "sweep-txid",
@@ -636,14 +670,15 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(activityService.hasOnchainActivityForChannel(ID_CHANNEL)).thenReturn(true)
         whenever(
             activityService.get(
-                anyOrNull(),
-                anyOrNull(),
-                anyOrNull(),
-                anyOrNull(),
-                anyOrNull(),
-                anyOrNull(),
-                anyOrNull(),
-                anyOrNull()
+                walletId = anyOrNull(),
+                filter = anyOrNull(),
+                txType = anyOrNull(),
+                tags = anyOrNull(),
+                search = anyOrNull(),
+                minDate = anyOrNull(),
+                maxDate = anyOrNull(),
+                limit = anyOrNull(),
+                sortDirection = anyOrNull(),
             )
         )
             .thenReturn(listOf(Activity.Onchain(sweepActivity)))
@@ -741,7 +776,8 @@ class TransferRepoTest : BaseUnitTest() {
             createdAt = 1000L,
         )
 
-        val sweepActivity = OnchainActivity.create(walletId = "wallet0",
+        val sweepActivity = OnchainActivity.create(
+            walletId = "wallet0",
             id = "sweep-activity-id",
             txType = PaymentType.RECEIVED,
             txId = sweepTxid,
@@ -773,7 +809,9 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
         whenever(activityService.hasOnchainActivityForChannel(ID_CHANNEL)).thenReturn(false)
         whenever(activityService.hasOnchainActivityForTxid(sweepTxid)).thenReturn(true)
-        whenever(activityService.getOnchainActivityByTxId(sweepTxid)).thenReturn(sweepActivity)
+        whenever(activityService.getWalletIds()).thenReturn(setOf(WalletScope.default))
+        whenever(activityService.getOnchainActivityByTxId(sweepTxid, WalletScope.default))
+            .thenReturn(sweepActivity)
         whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
 
         val result = sut.syncTransferStates()

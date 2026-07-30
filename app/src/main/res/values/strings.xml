@@ -1050,6 +1050,7 @@
     <string name="wallet__activity_contact">Contact</string>
     <string name="wallet__activity_date">Date</string>
     <string name="wallet__activity_detach">Detach</string>
+    <string name="wallet__activity_details_unavailable">Transaction details unavailable.</string>
     <string name="wallet__activity_error_load_failed">Failed to load activity</string>
     <string name="wallet__activity_error_not_found">Activity not found</string>
     <string name="wallet__activity_explore">Explore</string>

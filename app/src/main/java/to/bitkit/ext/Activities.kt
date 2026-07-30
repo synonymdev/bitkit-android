@@ -12,6 +12,17 @@ fun Activity.rawId(): String = when (this) {
     is Activity.Onchain -> v1.id
 }
 
+fun Activity.walletId(): String = when (this) {
+    is Activity.Lightning -> v1.walletId
+    is Activity.Onchain -> v1.walletId
+}
+
+fun scopedActivityId(walletId: String, activityId: String): String = "$walletId:$activityId"
+
+fun Activity.scopedId(): String = scopedActivityId(walletId(), rawId())
+
+fun Activity.isFromHardwareWallet(): Boolean = walletId() != WalletScope.default
+
 fun Activity.txType(): PaymentType = when (this) {
     is Activity.Lightning -> v1.txType
     is Activity.Onchain -> v1.txType

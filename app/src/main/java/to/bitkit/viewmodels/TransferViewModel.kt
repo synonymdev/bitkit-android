@@ -57,6 +57,7 @@ import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
+import to.bitkit.models.WalletScope
 import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwWalletRepo
@@ -469,6 +470,7 @@ class TransferViewModel @Inject constructor(
         feeRate: ULong = 0uL,
         txTotalSats: ULong? = null,
         preTransferOnchainSats: ULong? = null,
+        activityWalletId: String = WalletScope.default,
     ) {
         cacheStore.addPaidOrder(orderId = order.id, txId = txId)
         transferRepo.createTransfer(
@@ -485,6 +487,7 @@ class TransferViewModel @Inject constructor(
                 txId = txId,
                 fee = fee,
                 feeRate = feeRate,
+                walletId = activityWalletId,
             )
         }
         viewModelScope.launch { walletRepo.syncBalances() }
@@ -819,6 +822,10 @@ class TransferViewModel @Inject constructor(
                     ToastEventBus.send(type = Toast.ToastType.ERROR, title = context.getString(R.string.common__error))
                     return@launch
                 }
+                val walletId = hwWalletRepo.getWalletId(deviceId).getOrElse {
+                    handleHardwareTransferFailure(it, deviceId)
+                    return@launch
+                }
 
                 signAndBroadcastHardwareFunding(order, deviceId, address)
                     .onSuccess { result ->
@@ -829,6 +836,7 @@ class TransferViewModel @Inject constructor(
                                 createTransferActivity = true,
                                 fee = result.miningFeeSats,
                                 feeRate = result.feeRate,
+                                activityWalletId = walletId,
                             )
                         }.onSuccess {
                             pendingHwFundingBroadcast = null

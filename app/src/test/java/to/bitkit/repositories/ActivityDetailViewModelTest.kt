@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.TransactionDetails
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,11 +17,13 @@ import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.mockingDetails
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.create
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -40,6 +43,7 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     companion object Fixtures {
         const val ACTIVITY_ID = "test-activity-1"
         const val ORDER_ID = "test-order-id"
+        const val HARDWARE_WALLET_ID = "hardware-wallet"
     }
 
     @Before
@@ -67,7 +71,8 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
     @Test
     fun `loadActivity falls back to hardware wallet activity when missing from the database`() = test {
         val hwActivity = Activity.Onchain(
-            OnchainActivity.create(walletId = "wallet0",
+            OnchainActivity.create(
+                walletId = HARDWARE_WALLET_ID,
                 id = ACTIVITY_ID,
                 txType = PaymentType.RECEIVED,
                 txId = ACTIVITY_ID,
@@ -78,10 +83,12 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
                 confirmed = true,
             )
         )
-        whenever { activityRepo.getActivity(ACTIVITY_ID) }.thenReturn(Result.success(null))
+        whenever {
+            activityRepo.getActivity(ACTIVITY_ID, HARDWARE_WALLET_ID)
+        }.thenReturn(Result.success(null))
         whenever(hwWalletRepo.activities).thenReturn(MutableStateFlow(persistentListOf<Activity>(hwActivity)))
 
-        sut.loadActivity(ACTIVITY_ID)
+        sut.loadActivity(ACTIVITY_ID, HARDWARE_WALLET_ID)
 
         val state = sut.uiState.value
         val loadState = state.activityLoadState as ActivityDetailViewModel.ActivityLoadState.Success
@@ -91,14 +98,16 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
 
     @Test
     fun `hardware wallet activity updates while loaded`() = test {
-        val initialActivity = createTestActivity(ACTIVITY_ID, confirmed = false)
-        val updatedActivity = createTestActivity(ACTIVITY_ID, confirmed = true)
+        val initialActivity = createTestActivity(ACTIVITY_ID, confirmed = false, walletId = HARDWARE_WALLET_ID)
+        val updatedActivity = createTestActivity(ACTIVITY_ID, confirmed = true, walletId = HARDWARE_WALLET_ID)
         val hardwareActivities = MutableStateFlow(persistentListOf<Activity>(initialActivity))
 
-        whenever(activityRepo.getActivity(ACTIVITY_ID)).thenReturn(Result.success(null))
+        whenever {
+            activityRepo.getActivity(ACTIVITY_ID, HARDWARE_WALLET_ID)
+        }.thenReturn(Result.success(null))
         whenever(hwWalletRepo.activities).thenReturn(hardwareActivities)
 
-        sut.loadActivity(ACTIVITY_ID)
+        sut.loadActivity(ACTIVITY_ID, HARDWARE_WALLET_ID)
 
         val initialState = sut.uiState.value.activityLoadState
         assertTrue(initialState is ActivityDetailViewModel.ActivityLoadState.Success)
@@ -258,12 +267,76 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         assertTrue(state is ActivityDetailViewModel.ActivityLoadState.Error)
     }
 
+    @Test
+    fun `hardware tags and transaction details use the activity wallet scope`() = test {
+        val activity = createTestActivity(ACTIVITY_ID, walletId = HARDWARE_WALLET_ID)
+        val transactionDetails = mock<TransactionDetails>()
+        whenever {
+            activityRepo.getActivity(ACTIVITY_ID, HARDWARE_WALLET_ID)
+        }.thenReturn(Result.success(activity))
+        whenever {
+            activityRepo.getActivityTags(ACTIVITY_ID, HARDWARE_WALLET_ID)
+        }.thenReturn(Result.success(emptyList()))
+        whenever {
+            activityRepo.addTagsToActivity(ACTIVITY_ID, listOf("cold"), HARDWARE_WALLET_ID)
+        }.thenReturn(Result.success(Unit))
+        whenever {
+            activityRepo.getTransactionDetails(activity.v1.txId, HARDWARE_WALLET_ID)
+        }.thenReturn(Result.success(transactionDetails))
+
+        sut.loadActivity(ACTIVITY_ID, HARDWARE_WALLET_ID)
+        sut.addTag("cold")
+        sut.fetchTransactionDetails(activity.v1.txId)
+
+        verify(activityRepo).addTagsToActivity(ACTIVITY_ID, listOf("cold"), HARDWARE_WALLET_ID)
+        verify(activityRepo).getTransactionDetails(activity.v1.txId, HARDWARE_WALLET_ID)
+        assertEquals(transactionDetails, sut.txDetails.value)
+        assertFalse(sut.isTxDetailsLoading.value)
+        assertFalse(sut.isTxDetailsUnavailable.value)
+    }
+
+    @Test
+    fun `transaction details failure reaches unavailable state`() = test {
+        val activity = createTestActivity(ACTIVITY_ID, walletId = HARDWARE_WALLET_ID)
+        whenever {
+            activityRepo.getActivity(ACTIVITY_ID, HARDWARE_WALLET_ID)
+        }.thenReturn(Result.success(activity))
+        whenever {
+            activityRepo.getActivityTags(ACTIVITY_ID, HARDWARE_WALLET_ID)
+        }.thenReturn(Result.success(emptyList()))
+        whenever {
+            activityRepo.getTransactionDetails(activity.v1.txId, HARDWARE_WALLET_ID)
+        }.thenReturn(Result.failure(AppError("details unavailable")))
+
+        sut.loadActivity(ACTIVITY_ID, HARDWARE_WALLET_ID)
+        sut.fetchTransactionDetails(activity.v1.txId)
+
+        assertNull(sut.txDetails.value)
+        assertFalse(sut.isTxDetailsLoading.value)
+        assertTrue(sut.isTxDetailsUnavailable.value)
+    }
+
+    @Test
+    fun `transaction details request without activity reaches unavailable state`() = test {
+        sut.fetchTransactionDetails("missing")
+
+        assertNull(sut.txDetails.value)
+        assertFalse(sut.isTxDetailsLoading.value)
+        assertTrue(sut.isTxDetailsUnavailable.value)
+
+        sut.clearTransactionDetails()
+
+        assertFalse(sut.isTxDetailsUnavailable.value)
+    }
+
     private fun createTestActivity(
         id: String,
         confirmed: Boolean = false,
+        walletId: String = "wallet0",
     ): Activity.Onchain {
         return Activity.Onchain(
-            v1 = OnchainActivity.create(walletId = "wallet0",
+            v1 = OnchainActivity.create(
+                walletId = walletId,
                 id = id,
                 txType = PaymentType.RECEIVED,
                 txId = "tx-$id",

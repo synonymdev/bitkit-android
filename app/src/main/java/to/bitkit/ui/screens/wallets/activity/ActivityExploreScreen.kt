@@ -75,8 +75,8 @@ fun ActivityExploreScreen(
     val uiState by detailViewModel.uiState.collectAsStateWithLifecycle()
 
     // Load activity on composition
-    LaunchedEffect(route.id) {
-        detailViewModel.loadActivity(route.id)
+    LaunchedEffect(route.id, route.walletId) {
+        detailViewModel.loadActivity(route.id, route.walletId)
     }
 
     // Clear state on disposal
@@ -136,6 +136,8 @@ fun ActivityExploreScreen(
                 val context = LocalContext.current
 
                 val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
+                val isTxDetailsLoading by detailViewModel.isTxDetailsLoading.collectAsStateWithLifecycle()
+                val isTxDetailsUnavailable by detailViewModel.isTxDetailsUnavailable.collectAsStateWithLifecycle()
                 var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
 
                 LaunchedEffect(item) {
@@ -166,6 +168,8 @@ fun ActivityExploreScreen(
                     item = item,
                     isHardware = uiState.isHardwareActivity,
                     txDetails = txDetails,
+                    isTxDetailsLoading = isTxDetailsLoading,
+                    isTxDetailsUnavailable = isTxDetailsUnavailable,
                     boostTxDoesExist = boostTxDoesExist,
                     onCopy = { text ->
                         app.toast(
@@ -190,6 +194,8 @@ private fun ActivityExploreContent(
     item: Activity,
     isHardware: Boolean = false,
     txDetails: TransactionDetails? = null,
+    isTxDetailsLoading: Boolean = false,
+    isTxDetailsUnavailable: Boolean = false,
     boostTxDoesExist: Map<String, Boolean> = emptyMap(),
     onCopy: (String) -> Unit = {},
     onClickExplore: (String) -> Unit = {},
@@ -221,9 +227,10 @@ private fun ActivityExploreContent(
             is Activity.Onchain -> {
                 OnchainDetails(
                     onchain = item,
-                    isHardware = isHardware,
                     onCopy = onCopy,
                     txDetails = txDetails,
+                    isTxDetailsLoading = isTxDetailsLoading,
+                    isTxDetailsUnavailable = isTxDetailsUnavailable,
                     boostTxDoesExist = boostTxDoesExist,
                 )
                 Spacer(modifier = Modifier.weight(1f))
@@ -284,9 +291,10 @@ private fun LightningDetails(
 @Composable
 private fun ColumnScope.OnchainDetails(
     onchain: Activity.Onchain,
-    isHardware: Boolean,
     onCopy: (String) -> Unit,
     txDetails: TransactionDetails?,
+    isTxDetailsLoading: Boolean,
+    isTxDetailsUnavailable: Boolean,
     boostTxDoesExist: Map<String, Boolean> = emptyMap(),
 ) {
     val txId = onchain.v1.txId
@@ -327,7 +335,7 @@ private fun ColumnScope.OnchainDetails(
                 }
             },
         )
-    } else if (!isHardware && !onchain.v1.isTransfer) {
+    } else if (isTxDetailsLoading && !onchain.v1.isTransfer) {
         CircularProgressIndicator(
             strokeWidth = 2.dp,
             modifier = Modifier
@@ -335,6 +343,8 @@ private fun ColumnScope.OnchainDetails(
                 .size(16.dp)
                 .align(Alignment.CenterHorizontally)
         )
+    } else if (isTxDetailsUnavailable && !onchain.v1.isTransfer) {
+        BodySSB(text = stringResource(R.string.wallet__activity_details_unavailable))
     }
 
     // Display boosted transaction IDs from boostTxIds

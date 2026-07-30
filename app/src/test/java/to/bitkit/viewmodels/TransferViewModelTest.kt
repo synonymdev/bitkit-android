@@ -116,6 +116,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(feeResponse.serviceFeeSat).thenReturn(SERVICE_FEE)
         whenever(context.getString(any())).thenReturn("")
         whenever(settingsStore.data).thenReturn(MutableStateFlow(SettingsData()))
+        whenever { hwWalletRepo.getWalletId(DEVICE_ID) }.thenReturn(Result.success(HARDWARE_WALLET_ID))
         val nodeStatus = mock<NodeStatus>()
         whenever(nodeStatus.isRunning).thenReturn(true)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus)))
@@ -604,6 +605,7 @@ class TransferViewModelTest : BaseUnitTest() {
             eq(TXID),
             eq(MINING_FEE),
             eq(FEE_RATE),
+            eq(HARDWARE_WALLET_ID),
         )
         verify(hwWalletRepo).ensureConnected(DEVICE_ID)
     }
@@ -1152,7 +1154,13 @@ class TransferViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo, times(1)).signFunding(DEVICE_ID, funding)
         verify(hwWalletRepo, times(2)).broadcastFunding(signed)
         verify(cacheStore, times(2)).addPaidOrder(order.id, TXID)
-        verify(transferRepo).createPendingToSpendingActivity(order, TXID, MINING_FEE, FEE_RATE)
+        verify(transferRepo).createPendingToSpendingActivity(
+            order,
+            TXID,
+            MINING_FEE,
+            FEE_RATE,
+            HARDWARE_WALLET_ID,
+        )
     }
 
     @Test
@@ -1574,6 +1582,7 @@ class TransferViewModelTest : BaseUnitTest() {
         const val CONNECTION_ISSUE_DESCRIPTION = "Please check your connection."
         const val CONNECT_TITLE = "Connect Device"
         const val CONNECT_DESCRIPTION = "Check the hardware device and try again."
+        const val HARDWARE_WALLET_ID = "hardware-wallet"
         const val RECONNECT_TITLE = "Reconnect Hardware Device"
         const val RECONNECT_DESCRIPTION = "Please reconnect your hardware device."
         const val XPUB = "zpub-test"
