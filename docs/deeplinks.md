@@ -81,9 +81,9 @@ picker, `bitkit://screen/backup` the backup intro).
 | - | - |
 | `send` | `recipient`, `address`, `contact-select`, `amount`, `qr-scanner`, `coin-selection`, `add-tag`, `coming-soon`, `support` |
 | `receive` | `qr`, `amount`, `edit-invoice`, `add-tag`, `geo-block` |
-| `backup` | `intro`, `warning`, `success`, `multiple-devices`, `metadata` |
+| `backup` | `intro`, `multiple-devices`, `metadata` |
 | `widgets` | `gallery` and every `*-preview` / `*-edit` route |
-| `hardware` | `intro`, `searching`, `paired` |
+| `hardware` | `intro` |
 | `activity-date-range-selector`, `activity-tag-selector`, `qr-scanner` | no nested graph, id only |
 
 Unlike screens, sheet routes are registered by hand in `SheetDeepLinks`. A route is left out when it
@@ -97,6 +97,12 @@ cannot stand on its own:
   `requireNotNull(quickPayData)` (`SendSheet.kt:309`) and throws when entered cold. `send/confirm`
   and the receive confirm/liquidity routes do not crash, but render an empty or zero-amount screen.
   `send/confirm` offers a "Swipe To Pay" control over a payment that was never built.
+  `hardware/searching` waits forever, because discovery is started by the intro's continue action
+  rather than by the screen. `hardware/paired` claims a paired device over default state.
+- **Routes whose continue action commits the flow.** `backup/success` reports a backup that never
+  ran, and its OK button persists `backupVerified = true`
+  (`BackupNavSheetViewModel.onSuccessContinue`), which would mark a wallet backed up without the
+  recovery phrase ever being shown. `backup/warning` is one tap upstream of the same write.
 - **Routes carrying flow-internal arguments** (`send/pending`, `hardware/pair-code`) are out.
 - **Sensitive routes** follow the deny rules above: `backup/show-mnemonic`, `backup/show-passphrase`
   and both confirm-mnemonic steps display or verify the recovery phrase, and the `pin`, `change-pin`

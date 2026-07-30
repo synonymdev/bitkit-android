@@ -27,8 +27,6 @@ object SheetDeepLinks {
         Sheet.Receive(ReceiveRoute.GeoBlock),
 
         Sheet.Backup(BackupRoute.Intro),
-        Sheet.Backup(BackupRoute.Warning),
-        Sheet.Backup(BackupRoute.Success),
         Sheet.Backup(BackupRoute.MultipleDevices),
         Sheet.Backup(BackupRoute.Metadata),
 
@@ -46,8 +44,6 @@ object SheetDeepLinks {
         Sheet.Widgets(WidgetsRoute.SuggestionsPreview),
 
         Sheet.Hardware(HardwareRoute.Intro),
-        Sheet.Hardware(HardwareRoute.Searching),
-        Sheet.Hardware(HardwareRoute.Paired),
 
         Sheet.ActivityDateRangeSelector,
         Sheet.ActivityTagSelector,

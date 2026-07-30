@@ -31,6 +31,8 @@ class SheetDeepLinksTest : BaseUnitTest() {
             "change-pin",
             "disable-pin",
             "force-transfer",
+            "backup/success",
+            "backup/warning",
         )
 
         val UNSUPPORTED_START_PATHS: List<String> = listOf(
@@ -43,6 +45,8 @@ class SheetDeepLinksTest : BaseUnitTest() {
             "receive/confirm-increase-inbound",
             "receive/liquidity",
             "receive/liquidity-additional",
+            "hardware/searching",
+            "hardware/paired",
         )
     }
 
