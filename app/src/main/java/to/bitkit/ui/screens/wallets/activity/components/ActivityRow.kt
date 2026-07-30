@@ -28,13 +28,13 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import to.bitkit.R
-import to.bitkit.ext.UiDateStyle
 import to.bitkit.ext.isSent
 import to.bitkit.ext.isTransfer
 import to.bitkit.ext.rawId
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.txType
+import to.bitkit.ext.uiDateStyleFor
 import to.bitkit.models.FeeRate.Companion.getFeeShortDescription
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.PubkyProfile
@@ -57,9 +57,6 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.Shapes
 import to.bitkit.ui.utils.uiDateText
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -364,17 +361,7 @@ private fun AmountViewContent(
 }
 
 @Composable
-private fun activityTimeText(timestamp: ULong): String {
-    val dateTime = Instant.ofEpochSecond(timestamp.toLong()).atZone(ZoneId.systemDefault())
-    val now = LocalDate.now()
-
-    val style = when {
-        dateTime.toLocalDate() == now -> UiDateStyle.TIME
-        dateTime.year == now.year -> UiDateStyle.DATE_TIME
-        else -> UiDateStyle.DATE_TIME_YEAR
-    }
-    return uiDateText(timestamp, style)
-}
+private fun activityTimeText(timestamp: ULong): String = uiDateText(timestamp, uiDateStyleFor(timestamp))
 
 private class ActivityItemsPreviewProvider : PreviewParameterProvider<Activity> {
     override val values: Sequence<Activity> get() = previewActivityItems.asSequence()

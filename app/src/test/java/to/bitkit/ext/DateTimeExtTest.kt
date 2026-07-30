@@ -4,6 +4,7 @@ import org.junit.Test
 import to.bitkit.env.Env
 import to.bitkit.test.BaseUnitTest
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -221,6 +222,43 @@ class DateTimeExtTest : BaseUnitTest() {
         val result = AFTERNOON.formatted(UiDateStyle.TIME.pattern(is24Hour = true), Locale.US, bucharest)
 
         assertEquals("17:23", result)
+    }
+
+    @Test
+    fun `uiDateStyleFor returns TIME for a timestamp from today`() {
+        val today = LocalDate.of(2026, 3, 7)
+
+        val style = uiDateStyleFor(AFTERNOON.epochSecond.toULong(), today, UTC)
+
+        assertEquals(UiDateStyle.TIME, style)
+    }
+
+    @Test
+    fun `uiDateStyleFor returns DATE_TIME for an earlier day in the same year`() {
+        val today = LocalDate.of(2026, 12, 31)
+
+        val style = uiDateStyleFor(AFTERNOON.epochSecond.toULong(), today, UTC)
+
+        assertEquals(UiDateStyle.DATE_TIME, style)
+    }
+
+    @Test
+    fun `uiDateStyleFor returns DATE_TIME_YEAR for a timestamp from a previous year`() {
+        val today = LocalDate.of(2027, 1, 1)
+
+        val style = uiDateStyleFor(AFTERNOON.epochSecond.toULong(), today, UTC)
+
+        assertEquals(UiDateStyle.DATE_TIME_YEAR, style)
+    }
+
+    @Test
+    fun `uiDateStyleFor resolves the day in the supplied time zone`() {
+        val lateEvening = Instant.parse("2026-03-07T23:30:00Z")
+        val today = LocalDate.of(2026, 3, 7)
+        val bucharest = ZoneId.of("Europe/Bucharest")
+
+        assertEquals(UiDateStyle.TIME, uiDateStyleFor(lateEvening.epochSecond.toULong(), today, UTC))
+        assertEquals(UiDateStyle.DATE_TIME, uiDateStyleFor(lateEvening.epochSecond.toULong(), today, bucharest))
     }
 
     private fun Instant.formattedInUtc(pattern: String) = formatted(pattern, Locale.US, UTC)

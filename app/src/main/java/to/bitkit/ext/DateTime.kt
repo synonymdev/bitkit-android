@@ -29,6 +29,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
+import java.time.LocalDate as JavaLocalDate
 import kotlin.time.Instant as KInstant
 
 @OptIn(ExperimentalTime::class)
@@ -217,6 +218,19 @@ fun LocalDate.endOfDay(zone: TimeZone = TimeZone.currentSystemDefault()): Long =
 
 fun utcDateFormatterOf(pattern: String) = SimpleDateFormat(pattern, Locale.US).apply {
     timeZone = java.util.TimeZone.getTimeZone("UTC")
+}
+
+fun uiDateStyleFor(
+    timestamp: ULong,
+    today: JavaLocalDate = JavaLocalDate.now(),
+    zone: ZoneId = ZoneId.systemDefault(),
+): UiDateStyle {
+    val date = Instant.ofEpochSecond(timestamp.toLong()).atZone(zone).toLocalDate()
+    return when {
+        date == today -> UiDateStyle.TIME
+        date.year == today.year -> UiDateStyle.DATE_TIME
+        else -> UiDateStyle.DATE_TIME_YEAR
+    }
 }
 
 enum class UiDateStyle {
