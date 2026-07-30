@@ -3,7 +3,9 @@ package to.bitkit.services
 import com.synonym.bitkitcore.AddressType
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -12,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import org.lightningdevkit.ldknode.Address
 import org.lightningdevkit.ldknode.AddressTypeBalance
@@ -48,8 +51,10 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
+import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Defaults
 import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
@@ -65,12 +70,20 @@ import to.bitkit.utils.jsonLogOf
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.io.path.Path
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import org.lightningdevkit.ldknode.AddressType as LdkAddressType
 
 typealias NodeEventHandler = suspend (Event) -> Unit
+
+/** Tags the event-listener coroutine so a handler-triggered stop can skip joining its own job. */
+private class EventListenerContext : AbstractCoroutineContextElement(Key) {
+    companion object Key : CoroutineContext.Key<EventListenerContext>
+}
 
 data class AddressDerivationInfo(
     val address: String,
@@ -81,6 +94,7 @@ data class AddressDerivationInfo(
 @Singleton
 class LightningService @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val settingsStore: SettingsStore,
@@ -96,6 +110,15 @@ class LightningService @Inject constructor(
         private const val SCORING_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT = 10_000uL
         private const val SCORING_HISTORICAL_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT = 20_000uL
         private const val SCORING_CONSIDERED_IMPOSSIBLE_PENALTY_MSAT = 1_000_000_000_000uL
+
+        /** How long a node stop waits for the rust handle to be released before moving on. */
+        private val NODE_RELEASE_TIMEOUT = 1.seconds
+
+        /**
+         * Upper bound for the release gate. Longer than an observed wedged free_node (~40s) so a real
+         * drain still gates, but bounded so a stuck free_node cannot permanently block rebuilds.
+         */
+        private val NODE_RELEASE_GATE_TIMEOUT = 90.seconds
 
         private val DEFAULT_SCORING_FEE_PARAMETERS = ScoringFeeParameters(
             basePenaltyMsat = 1_024uL,
@@ -121,6 +144,11 @@ class LightningService @Inject constructor(
 
     private var listenerJob: Job? = null
 
+    // Release of the previous node's rust handle (free_node). Rebuild and destructive storage work
+    // wait on this so a new node never touches storage the old one is still draining.
+    @Volatile
+    private var releaseJob: Job? = null
+
     suspend fun setup(
         walletIndex: Int,
         customServerUrl: String? = null,
@@ -128,6 +156,7 @@ class LightningService @Inject constructor(
         trustedPeers: List<PeerDetails>? = null,
         channelMigration: ChannelDataMigration? = null,
     ) {
+        awaitNodeRelease()
         Logger.debug("Building node…", context = TAG)
 
         val config = config(walletIndex, trustedPeers)
@@ -297,7 +326,7 @@ class LightningService @Inject constructor(
         // start event listener after node started
         onEvent?.let { eventHandler ->
             shouldListenForEvents = true
-            listenerJob = launch {
+            listenerJob = launch(EventListenerContext()) {
                 runCatching {
                     Logger.debug("LDK event listener started", context = TAG)
                     if (timeout != null) {
@@ -316,34 +345,84 @@ class LightningService @Inject constructor(
         Logger.info("Node started", context = TAG)
     }
 
-    suspend fun stop() {
+    // Teardown must not be abandoned midway: a cancelled caller would leave the rust node alive and
+    // let the GC free it later on the finalizer thread, racing the next node. This covers the whole
+    // body, including the listener join, so cancellation during listener cleanup cannot skip it.
+    suspend fun stop() = withContext(NonCancellable) {
         shouldListenForEvents = false
-        listenerJob?.cancelAndJoin()
+        // A stop requested from inside an event handler runs on the listener job itself; joining it
+        // here would deadlock, so let the loop exit on shouldListenForEvents instead.
+        if (currentCoroutineContext()[EventListenerContext.Key] == null) {
+            listenerJob?.cancelAndJoin()
+        }
         listenerJob = null
 
-        val node = this.node ?: run {
+        val node = this@LightningService.node ?: run {
             Logger.debug("Node already stopped", context = TAG)
-            return
+            return@withContext
         }
 
         Logger.debug("Stopping node…", context = TAG)
         ServiceQueue.LDK.background {
-            runCatching { node.stop() }
-                .onFailure { if (it !is NodeException.NotRunning) throw it }
+            runSuspendCatching { node.stop() }
+                .onFailure {
+                    if (it !is NodeException.NotRunning) Logger.warn("Node stop error", it, context = TAG)
+                }
             this@LightningService.node = null
         }
+        releaseHandle(node)
         Logger.info("Node stopped", context = TAG)
     }
 
-    fun wipeStorage(walletIndex: Int) {
+    /**
+     * Releases the rust handle instead of leaving it to the GC finalizer, keeping it off the
+     * single-threaded LDK queue and off the lifecycle critical path.
+     *
+     * `free_node` only returns once the node's background tasks drain, which takes tens of seconds
+     * when a failed start left them wedged, so the wait is bounded and the release is joined rather
+     * than run inline: cancelling a blocking FFI call does nothing, but abandoning the join lets the
+     * caller continue while the release finishes on its own. [awaitNodeRelease] gates the next
+     * rebuild or destructive storage work on the same job so native lifetimes never overlap.
+     */
+    private suspend fun releaseHandle(node: Node) {
+        val release = launch(ioDispatcher) {
+            runSuspendCatching { node.destroy() }
+                .onFailure { Logger.warn("Node handle release error", it, context = TAG) }
+        }
+        releaseJob = release
+        // Clear once done so a later gate check no-ops instead of joining a stale completed job.
+        release.invokeOnCompletion { if (releaseJob === release) releaseJob = null }
+        withTimeoutOrNull(NODE_RELEASE_TIMEOUT) { release.join() }
+            ?: Logger.warn("Node handle release still pending after $NODE_RELEASE_TIMEOUT", context = TAG)
+    }
+
+    /**
+     * Blocks until the previous node's release ([releaseHandle] / `free_node`) has finished, so a
+     * rebuild or destructive storage operation never overlaps the old node's native lifetime. The
+     * wait is bounded: a stuck free_node throws rather than proceeding (which would overlap) or
+     * blocking forever (which would brick every future rebuild).
+     */
+    suspend fun awaitNodeRelease(timeout: Duration = NODE_RELEASE_GATE_TIMEOUT) {
+        val release = releaseJob ?: return
+        if (release.isActive) Logger.debug("Waiting for previous node release to finish…", context = TAG)
+        withTimeoutOrNull(timeout) { release.join() }
+            ?: run {
+                Logger.error("Previous node release did not finish within $timeout", context = TAG)
+                throw ServiceError.NodeReleaseTimeout()
+            }
+    }
+
+    suspend fun wipeStorage(walletIndex: Int) {
         if (node != null) throw ServiceError.NodeStillRunning()
+        awaitNodeRelease()
         Logger.warn("Wiping LDK storage…", context = TAG)
         Path(Env.ldkStoragePath(walletIndex)).toFile().deleteRecursively()
         Logger.info("LDK storage wiped", context = TAG)
     }
 
-    fun resetNetworkGraph(walletIndex: Int) {
+    suspend fun resetNetworkGraph(walletIndex: Int) {
         if (node != null) throw ServiceError.NodeStillRunning()
+        awaitNodeRelease()
         Logger.warn("Resetting network graph cache…", context = TAG)
         val ldkPath = Path(Env.ldkStoragePath(walletIndex)).toFile()
         val graphFile = ldkPath.resolve("network_graph_cache")
@@ -1041,13 +1120,20 @@ class LightningService @Inject constructor(
     // endregion
 
     // region events
+    // Volatile: written by stop()/startEventListener() and read by the listener loop on another thread.
+    @Volatile
     private var shouldListenForEvents = true
 
-    suspend fun startEventListener(onEvent: NodeEventHandler? = null): Result<Unit> = runCatching {
+    suspend fun startEventListener(onEvent: NodeEventHandler? = null): Result<Unit> = runSuspendCatching {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
+        // A re-arm requested from inside an event handler runs on the listener job itself: joining it
+        // would deadlock and relaunching would double-poll the node. Skip re-arming and keep the
+        // running listener. This drops the passed onEvent, which is safe only because the callers
+        // (LightningRepo.start) always re-arm with the same dispatch handler the listener already runs.
+        if (currentCoroutineContext()[EventListenerContext.Key] != null) return@runSuspendCatching
         listenerJob?.cancelAndJoin()
         shouldListenForEvents = true
-        listenerJob = launch {
+        listenerJob = launch(EventListenerContext()) {
             runCatching {
                 Logger.debug("LDK event listener started", context = TAG)
                 listenForEvents(node, onEvent)
@@ -1060,7 +1146,10 @@ class LightningService @Inject constructor(
     }
 
     private suspend fun listenForEvents(node: Node, onEvent: NodeEventHandler? = null) = withContext(bgDispatcher) {
-        while (shouldListenForEvents) {
+        // Key the loop on node identity, not just the shared flag: a handler-triggered stop nulls
+        // and frees this node, and a racing start() could flip shouldListenForEvents back on. Without
+        // the identity check the loop would call nextEventAsync() on the freed node.
+        while (shouldListenForEvents && node === this@LightningService.node) {
             ensureActive()
 
             val event = runCatching { node.nextEventAsync() }.getOrElse {
