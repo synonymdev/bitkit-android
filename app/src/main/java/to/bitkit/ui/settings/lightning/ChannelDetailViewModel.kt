@@ -144,6 +144,7 @@ class ChannelDetailViewModel @Inject constructor(
 
     private fun fetchActivityTimestamp(channelId: String) = viewModelScope.launch {
         val activities = activityRepo.getActivities(
+            walletId = null,
             filter = ActivityFilter.ONCHAIN,
             txType = PaymentType.SENT,
         ).getOrNull().orEmpty()

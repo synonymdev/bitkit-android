@@ -212,6 +212,42 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pending timestamp changes reuse snapshot until confirmation`() = test {
+        val pendingActivity = watcherActivity(
+            amount = 100uL,
+            blockHeight = null,
+            timestamp = 1_700_000_000uL,
+            confirmations = 0u,
+        )
+        val pending = transactionsChanged(
+            total = 100uL,
+            activities = listOf(pendingActivity),
+        )
+        val refreshedPending = pending.copy(
+            activities = listOf(
+                Activity.Onchain(pendingActivity.v1.copy(timestamp = 1_700_000_001uL))
+            ),
+        )
+        val confirmed = refreshedPending.copy(
+            activities = listOf(
+                Activity.Onchain(pendingActivity.v1.copy(timestamp = 1_700_000_001uL, confirmed = true))
+            ),
+        )
+        val sut = createRepo()
+
+        watcherEvents.emit("dev1|nativeSegwit" to pending)
+        watcherEvents.emit("dev1|nativeSegwit" to refreshedPending)
+        watcherEvents.emit("dev1|nativeSegwit" to confirmed)
+
+        assertTrue((sut.activities.value.single() as Activity.Onchain).v1.confirmed)
+        verify(activityRepo, times(2)).persistHwSnapshot(
+            eq(HARDWARE_WALLET_ID),
+            any<List<Activity>>(),
+            any<List<TransactionDetails>>(),
+        )
+    }
+
+    @Test
     fun `events from inactive address-type watchers are ignored`() = test {
         val sut = createRepo()
 

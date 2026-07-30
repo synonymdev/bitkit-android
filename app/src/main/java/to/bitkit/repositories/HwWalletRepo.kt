@@ -428,8 +428,9 @@ class HwWalletRepo @Inject constructor(
                         activities = activities,
                         transactionDetails = transactionDetails,
                     )
+                    val snapshotCacheKey = snapshot.toCacheKey()
                     lastPersistedHwSnapshots[walletId]
-                        ?.takeIf { it.source == snapshot }
+                        ?.takeIf { it.source == snapshotCacheKey }
                         ?.let {
                             _watcherData.update { data ->
                                 data + (watcherId to watcher.copy(activities = it.activities))
@@ -444,7 +445,7 @@ class HwWalletRepo @Inject constructor(
                     ).getOrElse { return@withLock emptyList() }
                     val immutablePersistedActivities = persistedActivities.toImmutableList()
                     lastPersistedHwSnapshots[walletId] = PersistedHwSnapshot(
-                        source = snapshot,
+                        source = snapshotCacheKey,
                         activities = immutablePersistedActivities,
                     )
                     val persistedWatcher = watcher.copy(activities = immutablePersistedActivities)
@@ -714,6 +715,15 @@ private data class HwWatcherData(
 private data class HwSnapshot(
     val activities: ImmutableList<Activity>,
     val transactionDetails: ImmutableList<TransactionDetails>,
+)
+
+private fun HwSnapshot.toCacheKey() = copy(
+    activities = activities.map {
+        when (it) {
+            is Activity.Onchain if !it.v1.confirmed -> Activity.Onchain(it.v1.copy(timestamp = 0uL))
+            else -> it
+        }
+    }.toImmutableList(),
 )
 
 private data class PersistedHwSnapshot(
