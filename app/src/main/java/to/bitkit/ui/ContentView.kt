@@ -208,6 +208,7 @@ import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
+import to.bitkit.ui.utils.rememberIs24HourFormat
 import to.bitkit.ui.utils.rememberRequestNotificationPermission
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityListViewModel
@@ -399,6 +400,7 @@ fun ContentView(
         LocalSettingsViewModel provides settingsViewModel,
         LocalBackupsViewModel provides backupsViewModel,
         LocalDrawerState provides drawerState,
+        LocalIs24HourFormat provides rememberIs24HourFormat(),
         LocalBalances provides balance,
         LocalCurrencies provides currencies,
     ) {

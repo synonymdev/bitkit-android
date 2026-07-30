@@ -39,15 +39,17 @@ fun Clock.nowMs(): Long = now().toEpochMilliseconds()
 
 fun nowTimestamp(): Instant = Instant.now().truncatedTo(ChronoUnit.SECONDS)
 
+fun dateTimeFormatterOf(
+    pattern: String,
+    locale: Locale = Locale.getDefault(),
+    zone: ZoneId = ZoneId.systemDefault(),
+): DateTimeFormatter = DateTimeFormatter.ofPattern(pattern, locale).withZone(zone)
+
 fun Instant.formatted(
     pattern: String = DatePattern.DATE_TIME,
     locale: Locale = Locale.getDefault(),
     zone: ZoneId = ZoneId.systemDefault(),
-): String {
-    val dateTime = LocalDateTime.ofInstant(this, zone)
-    val formatter = DateTimeFormatter.ofPattern(pattern, locale)
-    return dateTime.format(formatter)
-}
+): String = dateTimeFormatterOf(pattern, locale, zone).format(this)
 
 fun ULong?.formatToString(pattern: String = DatePattern.DATE_TIME): String? {
     return this?.let { Instant.ofEpochSecond(toLong()).formatted(pattern) }

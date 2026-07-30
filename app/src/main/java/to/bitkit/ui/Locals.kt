@@ -21,6 +21,7 @@ val LocalCurrencies = compositionLocalOf { CurrencyState() }
 
 // Statics
 val LocalDrawerState = staticCompositionLocalOf<DrawerState?> { null }
+val LocalIs24HourFormat = staticCompositionLocalOf<Boolean?> { null }
 val LocalAppViewModel = staticCompositionLocalOf<AppViewModel?> { null }
 val LocalWalletViewModel = staticCompositionLocalOf<WalletViewModel?> { null }
 val LocalBlocktankViewModel = staticCompositionLocalOf<BlocktankViewModel?> { null }

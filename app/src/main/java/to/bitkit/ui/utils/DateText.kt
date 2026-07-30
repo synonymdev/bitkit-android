@@ -13,8 +13,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import to.bitkit.ext.UiDateStyle
-import to.bitkit.ext.formatted
+import to.bitkit.ext.dateTimeFormatterOf
 import to.bitkit.ext.is24HourTimeFormat
+import to.bitkit.ui.LocalIs24HourFormat
 import java.time.Instant
 import java.time.ZoneId
 import java.util.Locale
@@ -25,8 +26,16 @@ fun uiDateText(
     style: UiDateStyle,
     locale: Locale = Locale.getDefault(),
     zone: ZoneId = ZoneId.systemDefault(),
-): String = Instant.ofEpochSecond(timestamp.toLong())
-    .formatted(style.pattern(rememberIs24HourFormat()), locale, zone)
+): String {
+    val context = LocalContext.current
+    val is24Hour = LocalIs24HourFormat.current ?: context.is24HourTimeFormat
+
+    val formatter = remember(style, is24Hour, locale, zone) {
+        dateTimeFormatterOf(style.pattern(is24Hour), locale, zone)
+    }
+
+    return remember(formatter, timestamp) { formatter.format(Instant.ofEpochSecond(timestamp.toLong())) }
+}
 
 @Composable
 fun rememberIs24HourFormat(context: Context = LocalContext.current): Boolean {
