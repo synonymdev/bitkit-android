@@ -11,6 +11,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import to.bitkit.ext.scopedActivityId
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -79,5 +80,15 @@ class CacheStoreTest : BaseUnitTest() {
 
         assertFalse(invalidated)
         assertEquals(replacement, sut.data.first())
+    }
+
+    @Test
+    fun `addActivityToDeletedList persists a wallet scoped id`() = test {
+        sut.addActivityToDeletedList("shared-id", "hardware-wallet")
+
+        assertEquals(
+            listOf(scopedActivityId("hardware-wallet", "shared-id")),
+            sut.data.first().deletedActivities,
+        )
     }
 }

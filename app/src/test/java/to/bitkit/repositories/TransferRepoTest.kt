@@ -2,13 +2,11 @@ package to.bitkit.repositories
 
 import app.cash.turbine.test
 import com.synonym.bitkitcore.Activity
-import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.FundingTx
 import com.synonym.bitkitcore.IBtChannel
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
-import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
@@ -31,6 +29,7 @@ import to.bitkit.data.entities.TransferEntity
 import to.bitkit.ext.create
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.models.TransferType
+import to.bitkit.models.WalletScope
 import to.bitkit.services.ActivityService
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
@@ -320,7 +319,7 @@ class TransferRepoTest : BaseUnitTest() {
             isChannelReady = false,
         )
         val activity = OnchainActivity.create(
-            walletId = "wallet0",
+            walletId = "hardware-wallet",
             id = fundingTxo.txid,
             txType = PaymentType.SENT,
             txId = fundingTxo.txid,
@@ -336,15 +335,12 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(lightningRepo.getChannels()).thenReturn(listOf(channelDetails))
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(mock()))
         whenever(blocktankRepo.getOrder(ID_ORDER, refresh = false)).thenReturn(Result.success(null))
-        whenever(
-            activityService.get(
-                walletId = null,
-                filter = ActivityFilter.ONCHAIN,
-                search = fundingTxo.txid,
-                limit = 10u,
-                sortDirection = SortDirection.DESC,
-            )
-        ).thenReturn(listOf(Activity.Onchain(activity)))
+        whenever(activityService.getWalletIds())
+            .thenReturn(setOf(WalletScope.default, "hardware-wallet"))
+        whenever(activityService.getOnchainActivityByTxId(fundingTxo.txid, WalletScope.default))
+            .thenReturn(null)
+        whenever(activityService.getOnchainActivityByTxId(fundingTxo.txid, "hardware-wallet"))
+            .thenReturn(activity)
 
         val result = sut.syncTransferStates()
 
@@ -813,15 +809,9 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
         whenever(activityService.hasOnchainActivityForChannel(ID_CHANNEL)).thenReturn(false)
         whenever(activityService.hasOnchainActivityForTxid(sweepTxid)).thenReturn(true)
-        whenever(
-            activityService.get(
-                walletId = null,
-                filter = ActivityFilter.ONCHAIN,
-                search = sweepTxid,
-                limit = 10u,
-                sortDirection = SortDirection.DESC,
-            )
-        ).thenReturn(listOf(Activity.Onchain(sweepActivity)))
+        whenever(activityService.getWalletIds()).thenReturn(setOf(WalletScope.default))
+        whenever(activityService.getOnchainActivityByTxId(sweepTxid, WalletScope.default))
+            .thenReturn(sweepActivity)
         whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
 
         val result = sut.syncTransferStates()

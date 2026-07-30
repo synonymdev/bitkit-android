@@ -23,6 +23,7 @@ import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.create
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.ActivityDetailViewModel
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -291,6 +292,41 @@ class ActivityDetailViewModelTest : BaseUnitTest() {
         verify(activityRepo).getTransactionDetails(activity.v1.txId, HARDWARE_WALLET_ID)
         assertEquals(transactionDetails, sut.txDetails.value)
         assertFalse(sut.isTxDetailsLoading.value)
+        assertFalse(sut.isTxDetailsUnavailable.value)
+    }
+
+    @Test
+    fun `transaction details failure reaches unavailable state`() = test {
+        val activity = createTestActivity(ACTIVITY_ID, walletId = HARDWARE_WALLET_ID)
+        whenever {
+            activityRepo.getActivity(ACTIVITY_ID, HARDWARE_WALLET_ID)
+        }.thenReturn(Result.success(activity))
+        whenever {
+            activityRepo.getActivityTags(ACTIVITY_ID, HARDWARE_WALLET_ID)
+        }.thenReturn(Result.success(emptyList()))
+        whenever {
+            activityRepo.getTransactionDetails(activity.v1.txId, HARDWARE_WALLET_ID)
+        }.thenReturn(Result.failure(AppError("details unavailable")))
+
+        sut.loadActivity(ACTIVITY_ID, HARDWARE_WALLET_ID)
+        sut.fetchTransactionDetails(activity.v1.txId)
+
+        assertNull(sut.txDetails.value)
+        assertFalse(sut.isTxDetailsLoading.value)
+        assertTrue(sut.isTxDetailsUnavailable.value)
+    }
+
+    @Test
+    fun `transaction details request without activity reaches unavailable state`() = test {
+        sut.fetchTransactionDetails("missing")
+
+        assertNull(sut.txDetails.value)
+        assertFalse(sut.isTxDetailsLoading.value)
+        assertTrue(sut.isTxDetailsUnavailable.value)
+
+        sut.clearTransactionDetails()
+
+        assertFalse(sut.isTxDetailsUnavailable.value)
     }
 
     private fun createTestActivity(

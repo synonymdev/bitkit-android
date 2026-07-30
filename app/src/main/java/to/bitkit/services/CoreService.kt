@@ -316,6 +316,12 @@ class ActivityService(
         upsertActivities(activities)
     }
 
+    /**
+     * Replaces the complete persisted on-chain snapshot for [walletId].
+     *
+     * Callers must merge every watcher for the wallet before invoking this method. The current
+     * hardware-wallet integration has one supported watcher address type per wallet.
+     */
     suspend fun replaceHwSnapshot(
         walletId: String,
         activities: List<Activity>,
@@ -354,10 +360,23 @@ class ActivityService(
         )
     }
 
+    suspend fun getWalletIds(): Set<String> = ServiceQueue.CORE.background {
+        getActivities(
+            walletId = null,
+            filter = null,
+            txType = null,
+            tags = null,
+            search = null,
+            minDate = null,
+            maxDate = null,
+            limit = null,
+            sortDirection = null,
+        ).map { it.walletId() }.toSet()
+    }
+
     private fun mapToCoreTransactionDetails(
         txid: String,
         details: TransactionDetails,
-        walletId: String = defaultWalletId,
     ): BitkitCoreTransactionDetails {
         val inputs = details.inputs.map { input ->
             BitkitCoreTxInput(
@@ -378,7 +397,7 @@ class ActivityService(
             )
         }
         return BitkitCoreTransactionDetails(
-            walletId = walletId,
+            walletId = defaultWalletId,
             txId = txid,
             amountSats = details.amountSats,
             inputs = inputs,
@@ -1066,7 +1085,7 @@ class ActivityService(
             )
         }
 
-        if (onChain.id in cacheStore.data.first().deletedActivities && !forceUpdate) {
+        if (cacheStore.data.first().isActivityDeleted(onChain.id, onChain.walletId) && !forceUpdate) {
             Logger.verbose("Activity ${onChain.id} was already deleted, skipping", context = TAG)
             return
         }

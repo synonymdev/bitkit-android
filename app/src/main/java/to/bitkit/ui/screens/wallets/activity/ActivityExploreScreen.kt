@@ -137,6 +137,7 @@ fun ActivityExploreScreen(
 
                 val txDetails by detailViewModel.txDetails.collectAsStateWithLifecycle()
                 val isTxDetailsLoading by detailViewModel.isTxDetailsLoading.collectAsStateWithLifecycle()
+                val isTxDetailsUnavailable by detailViewModel.isTxDetailsUnavailable.collectAsStateWithLifecycle()
                 var boostTxDoesExist by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
 
                 LaunchedEffect(item) {
@@ -168,6 +169,7 @@ fun ActivityExploreScreen(
                     isHardware = uiState.isHardwareActivity,
                     txDetails = txDetails,
                     isTxDetailsLoading = isTxDetailsLoading,
+                    isTxDetailsUnavailable = isTxDetailsUnavailable,
                     boostTxDoesExist = boostTxDoesExist,
                     onCopy = { text ->
                         app.toast(
@@ -193,6 +195,7 @@ private fun ActivityExploreContent(
     isHardware: Boolean = false,
     txDetails: TransactionDetails? = null,
     isTxDetailsLoading: Boolean = false,
+    isTxDetailsUnavailable: Boolean = false,
     boostTxDoesExist: Map<String, Boolean> = emptyMap(),
     onCopy: (String) -> Unit = {},
     onClickExplore: (String) -> Unit = {},
@@ -227,6 +230,7 @@ private fun ActivityExploreContent(
                     onCopy = onCopy,
                     txDetails = txDetails,
                     isTxDetailsLoading = isTxDetailsLoading,
+                    isTxDetailsUnavailable = isTxDetailsUnavailable,
                     boostTxDoesExist = boostTxDoesExist,
                 )
                 Spacer(modifier = Modifier.weight(1f))
@@ -290,6 +294,7 @@ private fun ColumnScope.OnchainDetails(
     onCopy: (String) -> Unit,
     txDetails: TransactionDetails?,
     isTxDetailsLoading: Boolean,
+    isTxDetailsUnavailable: Boolean,
     boostTxDoesExist: Map<String, Boolean> = emptyMap(),
 ) {
     val txId = onchain.v1.txId
@@ -338,6 +343,8 @@ private fun ColumnScope.OnchainDetails(
                 .size(16.dp)
                 .align(Alignment.CenterHorizontally)
         )
+    } else if (isTxDetailsUnavailable && !onchain.v1.isTransfer) {
+        BodySSB(text = stringResource(R.string.wallet__activity_details_unavailable))
     }
 
     // Display boosted transaction IDs from boostTxIds

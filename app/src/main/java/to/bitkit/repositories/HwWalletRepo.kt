@@ -50,6 +50,7 @@ import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
+import to.bitkit.models.WalletScope
 import to.bitkit.models.safe
 import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType
@@ -404,8 +405,8 @@ class HwWalletRepo @Inject constructor(
         scope.launch {
             trezorRepo.watcherEvents.collect { (watcherId, event) ->
                 if (event !is WatcherEvent.TransactionsChanged) return@collect
-                watcherMutex.withLock {
-                    val walletId = activeWatcherWalletIds[watcherId] ?: return@withLock
+                val receivedTxs = watcherMutex.withLock {
+                    val walletId = activeWatcherWalletIds[watcherId] ?: return@withLock emptyList()
                     val activities = event.activities
                         .filter { it.walletId() == walletId }
                         .toImmutableList()
@@ -433,14 +434,14 @@ class HwWalletRepo @Inject constructor(
                             _watcherData.update { data ->
                                 data + (watcherId to watcher.copy(activities = it.activities))
                             }
-                            return@withLock
+                            return@withLock emptyList()
                         }
 
                     val persistedActivities = activityRepo.persistHwSnapshot(
                         walletId = walletId,
                         activities = activities,
                         transactionDetails = transactionDetails,
-                    ).getOrElse { return@withLock }
+                    ).getOrElse { return@withLock emptyList() }
                     val immutablePersistedActivities = persistedActivities.toImmutableList()
                     lastPersistedHwSnapshots[walletId] = PersistedHwSnapshot(
                         source = snapshot,
@@ -451,8 +452,9 @@ class HwWalletRepo @Inject constructor(
                     _watcherData.update { updatedWatcherData }
 
                     persistedActivityIds[watcherId] = persistedActivities.map { it.scopedId() }.toSet()
-                    emitReceivedTxs(previousIds, persistedActivities, updatedWatcherData)
+                    buildReceivedTxs(previousIds, persistedActivities, updatedWatcherData)
                 }
+                receivedTxs.forEach { _receivedTxs.emit(it) }
             }
         }
     }
@@ -461,25 +463,23 @@ class HwWalletRepo @Inject constructor(
      * The first event after a watcher starts delivers the full transaction history;
      * treat it as the baseline so only transactions arriving while watching are emitted.
      */
-    private suspend fun emitReceivedTxs(
+    private fun buildReceivedTxs(
         previousActivityIds: Set<String>,
         activities: List<Activity>,
         watcherData: Map<String, HwWatcherData>,
-    ) {
+    ): List<HwWalletReceivedTx> {
         val mergedActivities = watcherData.values.toList().toMergedActivities()
-        activities.filterIsInstance<Activity.Onchain>()
+        return activities.filterIsInstance<Activity.Onchain>()
             .filter { it.v1.txType == PaymentType.RECEIVED }
-            .forEach { onchain ->
+            .mapNotNull { onchain ->
                 val scopedId = onchain.scopedId()
-                if (scopedId in previousActivityIds || !emittedReceivedTxIds.add(scopedId)) return@forEach
+                if (scopedId in previousActivityIds || !emittedReceivedTxIds.add(scopedId)) return@mapNotNull null
                 val sats = mergedActivities.findOnchain(onchain.v1.txId, onchain.v1.walletId)?.v1?.value
                     ?: onchain.v1.value
-                _receivedTxs.emit(
-                    HwWalletReceivedTx(
-                        txid = onchain.v1.txId,
-                        sats = sats,
-                        walletId = onchain.v1.walletId,
-                    )
+                HwWalletReceivedTx(
+                    txid = onchain.v1.txId,
+                    sats = sats,
+                    walletId = onchain.v1.walletId,
                 )
             }
     }
@@ -509,54 +509,60 @@ class HwWalletRepo @Inject constructor(
     private suspend fun reconcileWatchers(
         knownDevices: List<KnownDevice>,
         watcherSettings: WatcherSettings,
-    ) = watcherMutex.withLock {
-        val specs = knownDevices.toWatcherSpecs(watcherSettings.electrumUrl)
-        val desiredIds = specs.map { it.watcherId }.toSet()
-        val desiredWalletIds = specs.map { it.walletId }.toSet()
-        val removedWalletIds = trackedWalletIds - desiredWalletIds
-        trackedWalletIds += desiredWalletIds
+    ) {
+        val persistedWalletIds = activityRepo.getWalletIds().getOrDefault(emptySet())
+            .filterNot { it == WalletScope.default }
+            .toSet()
+        watcherMutex.withLock {
+            val specs = knownDevices.toWatcherSpecs(watcherSettings.electrumUrl)
+            val desiredIds = specs.map { it.watcherId }.toSet()
+            val knownWalletIds = knownDevices.mapNotNull { it.resolvedWalletId() }.toSet()
+            trackedWalletIds += persistedWalletIds
+            val removedWalletIds = trackedWalletIds - knownWalletIds
+            trackedWalletIds += knownWalletIds
 
-        specs.forEach { spec ->
-            val isActive = spec.watcherId in activeWatchers
-            if (
-                isActive &&
-                activeWatcherElectrumUrls[spec.watcherId] == spec.electrumUrl &&
-                activeWatcherWalletIds[spec.watcherId] == spec.walletId
-            ) {
-                return@forEach
-            }
-            if (isActive && !stopActiveWatcherLocked(spec.watcherId)) return@forEach
+            specs.forEach { spec ->
+                val isActive = spec.watcherId in activeWatchers
+                if (
+                    isActive &&
+                    activeWatcherElectrumUrls[spec.watcherId] == spec.electrumUrl &&
+                    activeWatcherWalletIds[spec.watcherId] == spec.walletId
+                ) {
+                    return@forEach
+                }
+                if (isActive && !stopActiveWatcherLocked(spec.watcherId)) return@forEach
 
-            trezorRepo.startWatcher(
-                watcherId = spec.watcherId,
-                extendedKey = spec.xpub,
-                network = Env.network.toCoreNetwork(),
-                accountType = spec.addressType.toAddressType()?.toAccountType(),
-                electrumUrl = spec.electrumUrl,
-                walletId = spec.walletId,
-            ).onSuccess {
-                activeWatchers += spec.watcherId
-                activeWatcherElectrumUrls[spec.watcherId] = spec.electrumUrl
-                activeWatcherWalletIds[spec.watcherId] = spec.walletId
-                retryingWatcherStarts -= spec.watcherId
-            }.onFailure {
-                Logger.warn("Retrying watcher '${spec.watcherId}' after start failure", it, context = TAG)
-                scheduleWatcherStartRetry(spec.watcherId)
-            }
-        }
-
-        // A failed stop stays active so the next sync retries it; dropping it here
-        // would leave the orphaned watcher feeding _watcherData as a ghost balance.
-        (activeWatchers - desiredIds).forEach { stopActiveWatcherLocked(it) }
-
-        removedWalletIds
-            .filterNot { it in activeWatcherWalletIds.values }
-            .forEach { walletId ->
-                activityRepo.deleteForWallet(walletId).onSuccess {
-                    trackedWalletIds -= walletId
-                    lastPersistedHwSnapshots -= walletId
+                trezorRepo.startWatcher(
+                    watcherId = spec.watcherId,
+                    extendedKey = spec.xpub,
+                    network = Env.network.toCoreNetwork(),
+                    accountType = spec.addressType.toAddressType()?.toAccountType(),
+                    electrumUrl = spec.electrumUrl,
+                    walletId = spec.walletId,
+                ).onSuccess {
+                    activeWatchers += spec.watcherId
+                    activeWatcherElectrumUrls[spec.watcherId] = spec.electrumUrl
+                    activeWatcherWalletIds[spec.watcherId] = spec.walletId
+                    retryingWatcherStarts -= spec.watcherId
+                }.onFailure {
+                    Logger.warn("Retrying watcher '${spec.watcherId}' after start failure", it, context = TAG)
+                    scheduleWatcherStartRetry(spec.watcherId)
                 }
             }
+
+            // A failed stop stays active so the next sync retries it; dropping it here
+            // would leave the orphaned watcher feeding _watcherData as a ghost balance.
+            (activeWatchers - desiredIds).forEach { stopActiveWatcherLocked(it) }
+
+            removedWalletIds
+                .filterNot { it in activeWatcherWalletIds.values }
+                .forEach { walletId ->
+                    activityRepo.deleteForWallet(walletId).onSuccess {
+                        trackedWalletIds -= walletId
+                        lastPersistedHwSnapshots -= walletId
+                    }
+                }
+        }
     }
 
     private fun List<KnownDevice>.toWatcherSpecs(electrumUrl: String): List<WatcherSpec> = flatMap { device ->

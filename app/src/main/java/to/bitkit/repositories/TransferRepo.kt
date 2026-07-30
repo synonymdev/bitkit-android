@@ -18,7 +18,6 @@ import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.channelId
-import to.bitkit.ext.isFromHardwareWallet
 import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.TransferType
@@ -265,21 +264,18 @@ class TransferRepo @Inject constructor(
     }
 
     private suspend fun markActivityAsTransfer(txid: String, channelId: String) {
-        val activity = coreService.activity.get(
-            walletId = null,
-            filter = ActivityFilter.ONCHAIN,
-            search = txid,
-            limit = 10u,
-            sortDirection = SortDirection.DESC,
-        ).filterIsInstance<Activity.Onchain>()
-            .filter { it.v1.txId == txid }
+        val walletIds = listOf(WalletScope.default) +
+            (coreService.activity.getWalletIds() - WalletScope.default)
+        val activity = walletIds.mapNotNull {
+            coreService.activity.getOnchainActivityByTxId(txid, it)
+        }
             .let { matches ->
-                matches.firstOrNull { it.v1.isTransfer }
+                matches.firstOrNull { it.isTransfer }
                     ?: matches.firstOrNull {
-                        it.isFromHardwareWallet() && it.v1.txType == PaymentType.SENT
+                        it.walletId != WalletScope.default && it.txType == PaymentType.SENT
                     }
                     ?: matches.firstOrNull()
-            }?.v1 ?: return
+            } ?: return
         if (activity.isTransfer && activity.channelId == channelId) return
         val updated = activity.copy(isTransfer = true, channelId = channelId)
         coreService.activity.update(activity.id, Activity.Onchain(updated))

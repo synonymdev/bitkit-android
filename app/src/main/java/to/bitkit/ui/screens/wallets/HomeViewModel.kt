@@ -124,7 +124,7 @@ class HomeViewModel @Inject constructor(
 
         @OptIn(ExperimentalCoroutinesApi::class)
         val hasActivityFlow = activityRepo.activitiesChanged.mapLatest {
-            activityRepo.getActivities(limit = 1u).getOrNull()?.isNotEmpty() == true
+            activityRepo.getActivities(walletId = null, limit = 1u).getOrNull()?.isNotEmpty() == true
         }
 
         viewModelScope.launch {

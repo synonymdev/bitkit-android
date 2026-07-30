@@ -54,6 +54,9 @@ class ActivityDetailViewModel @Inject constructor(
     private val _isTxDetailsLoading = MutableStateFlow(false)
     val isTxDetailsLoading = _isTxDetailsLoading.asStateFlow()
 
+    private val _isTxDetailsUnavailable = MutableStateFlow(false)
+    val isTxDetailsUnavailable = _isTxDetailsUnavailable.asStateFlow()
+
     private val _tags = MutableStateFlow<ImmutableList<String>>(persistentListOf())
     val tags = _tags.asStateFlow()
 
@@ -61,13 +64,18 @@ class ActivityDetailViewModel @Inject constructor(
     val boostSheetVisible = _boostSheetVisible.asStateFlow()
 
     private var activity: Activity? = null
+    private var requestedWalletId: String? = null
     private var observeJob: Job? = null
+    private val currentWalletId: String
+        get() = activity?.walletId() ?: requestedWalletId ?: WalletScope.default
 
     private val _uiState = MutableStateFlow(ActivityDetailUiState())
     val uiState: StateFlow<ActivityDetailUiState> = _uiState.asStateFlow()
 
     fun loadActivity(activityId: String, walletId: String? = null) {
-        val resolvedWalletId = walletId ?: WalletScope.default
+        requestedWalletId = walletId
+        activity = null
+        val resolvedWalletId = currentWalletId
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(activityLoadState = ActivityLoadState.Loading) }
 
@@ -99,6 +107,7 @@ class ActivityDetailViewModel @Inject constructor(
         observeJob = null
         _uiState.update { it.copy(activityLoadState = ActivityLoadState.Initial, isHardwareActivity = false) }
         activity = null
+        requestedWalletId = null
         _tags.update { persistentListOf() }
         clearTransactionDetails()
     }
@@ -220,16 +229,25 @@ class ActivityDetailViewModel @Inject constructor(
     }
 
     fun fetchTransactionDetails(txid: String) {
-        val walletId = activity?.walletId() ?: return
+        if (activity == null) {
+            _txDetails.update { null }
+            _isTxDetailsLoading.update { false }
+            _isTxDetailsUnavailable.update { true }
+            return
+        }
+        val walletId = currentWalletId
         viewModelScope.launch(bgDispatcher) {
             _isTxDetailsLoading.update { true }
+            _isTxDetailsUnavailable.update { false }
             activityRepo.getTransactionDetails(txid, walletId)
                 .onSuccess { transactionDetails ->
                     _txDetails.update { transactionDetails }
+                    _isTxDetailsUnavailable.update { transactionDetails == null }
                 }
                 .onFailure { e ->
                     Logger.error("fetchTransactionDetails error", e, context = TAG)
                     _txDetails.update { null }
+                    _isTxDetailsUnavailable.update { true }
                 }
             _isTxDetailsLoading.update { false }
         }
@@ -238,6 +256,7 @@ class ActivityDetailViewModel @Inject constructor(
     fun clearTransactionDetails() {
         _txDetails.update { null }
         _isTxDetailsLoading.update { false }
+        _isTxDetailsUnavailable.update { false }
     }
 
     fun onClickBoost() {
@@ -249,10 +268,10 @@ class ActivityDetailViewModel @Inject constructor(
     }
 
     suspend fun getBoostTxDoesExist(boostTxIds: List<String>): ImmutableMap<String, Boolean> =
-        activityRepo.getBoostTxDoesExist(boostTxIds, activity?.walletId() ?: WalletScope.default).toImmutableMap()
+        activityRepo.getBoostTxDoesExist(boostTxIds, currentWalletId).toImmutableMap()
 
     suspend fun isCpfpChildTransaction(txId: String): Boolean {
-        return activityRepo.isCpfpChildTransaction(txId, activity?.walletId() ?: WalletScope.default)
+        return activityRepo.isCpfpChildTransaction(txId, currentWalletId)
     }
 
     suspend fun findOrderForTransfer(

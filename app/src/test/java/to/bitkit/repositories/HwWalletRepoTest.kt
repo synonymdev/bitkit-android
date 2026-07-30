@@ -39,6 +39,7 @@ import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
+import to.bitkit.models.WalletScope
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toTrezorCoinType
 import to.bitkit.test.BaseUnitTest
@@ -100,6 +101,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         }.thenAnswer {
             it.getArgument<List<Activity>>(1)
         }
+        whenever { activityRepo.getWalletIds() }.thenReturn(Result.success(emptySet()))
         whenever { activityRepo.deleteForWallet(any()) }.thenReturn(Result.success(Unit))
     }
 
@@ -867,6 +869,21 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         verify(trezorRepo).stopWatcher("dev1|nativeSegwit")
         verify(activityRepo).deleteForWallet(HARDWARE_WALLET_ID)
+    }
+
+    @Test
+    fun `startup deletes persisted activity scopes without a known device`() = test {
+        whenever { activityRepo.getWalletIds() }.thenReturn(
+            Result.success(setOf(WalletScope.default, HARDWARE_WALLET_ID, "orphan-wallet"))
+        )
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+
+        createRepo()
+        runCurrent()
+
+        verify(activityRepo).deleteForWallet("orphan-wallet")
+        verify(activityRepo, never()).deleteForWallet(WalletScope.default)
+        verify(activityRepo, never()).deleteForWallet(HARDWARE_WALLET_ID)
     }
 
     @Test

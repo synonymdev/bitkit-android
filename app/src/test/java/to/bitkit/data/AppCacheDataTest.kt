@@ -2,9 +2,13 @@ package to.bitkit.data
 
 import org.junit.Test
 import to.bitkit.data.serializers.AppCacheSerializer
+import to.bitkit.ext.scopedActivityId
 import to.bitkit.models.BalanceState
+import to.bitkit.models.WalletScope
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class AppCacheDataTest : BaseUnitTest() {
     companion object {
@@ -46,5 +50,23 @@ class AppCacheDataTest : BaseUnitTest() {
         assertEquals(cache.onchainAddress, invalidated.onchainAddress)
         assertEquals(cache.balance, invalidated.balance)
         assertEquals(cache.paidOrders, invalidated.paidOrders)
+    }
+
+    @Test
+    fun `legacy deleted activity id applies only to the default wallet`() = test {
+        val cache = AppCacheData(deletedActivities = listOf("shared-id"))
+
+        assertTrue(cache.isActivityDeleted("shared-id", WalletScope.default))
+        assertFalse(cache.isActivityDeleted("shared-id", "hardware-wallet"))
+    }
+
+    @Test
+    fun `scoped deleted activity id applies only to its wallet`() = test {
+        val cache = AppCacheData(
+            deletedActivities = listOf(scopedActivityId("hardware-wallet", "shared-id"))
+        )
+
+        assertTrue(cache.isActivityDeleted("shared-id", "hardware-wallet"))
+        assertFalse(cache.isActivityDeleted("shared-id", WalletScope.default))
     }
 }

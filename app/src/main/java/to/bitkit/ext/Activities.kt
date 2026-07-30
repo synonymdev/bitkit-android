@@ -17,7 +17,9 @@ fun Activity.walletId(): String = when (this) {
     is Activity.Onchain -> v1.walletId
 }
 
-fun Activity.scopedId(): String = "${walletId()}:${rawId()}"
+fun scopedActivityId(walletId: String, activityId: String): String = "$walletId:$activityId"
+
+fun Activity.scopedId(): String = scopedActivityId(walletId(), rawId())
 
 fun Activity.isFromHardwareWallet(): Boolean = walletId() != WalletScope.default
 

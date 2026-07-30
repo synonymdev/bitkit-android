@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.ActivityTags
 import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
@@ -59,6 +60,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
     private val testActivityV1 = mock<LightningActivity> {
         on { id } doReturn "activity1"
+        on { walletId } doReturn "wallet0"
     }
 
     private val testActivity = mock<Activity.Lightning> {
@@ -490,20 +492,20 @@ class ActivityRepoTest : BaseUnitTest() {
         // Verify delete is NOT called
         verify(coreService.activity, never()).delete(any(), any())
         // Verify addActivityToDeletedList is NOT called
-        verify(cacheStore, never()).addActivityToDeletedList(any())
+        verify(cacheStore, never()).addActivityToDeletedList(any(), any())
     }
 
     @Test
     fun `deleteActivity deletes successfully`() = test {
         val activityId = "activity123"
         wheneverBlocking { coreService.activity.delete(activityId, WalletScope.default) }.thenReturn(true)
-        wheneverBlocking { cacheStore.addActivityToDeletedList(activityId) }.thenReturn(Unit)
+        whenever { cacheStore.addActivityToDeletedList(activityId, WalletScope.default) }.thenReturn(Unit)
 
         val result = sut.deleteActivity(activityId)
 
         assertTrue(result.isSuccess)
         verify(coreService.activity).delete(activityId, WalletScope.default)
-        verify(cacheStore).addActivityToDeletedList(activityId)
+        verify(cacheStore).addActivityToDeletedList(activityId, WalletScope.default)
     }
 
     @Test
@@ -514,7 +516,7 @@ class ActivityRepoTest : BaseUnitTest() {
         val result = sut.deleteActivity(activityId)
 
         assertTrue(result.isFailure)
-        verify(cacheStore, never()).addActivityToDeletedList(any())
+        verify(cacheStore, never()).addActivityToDeletedList(any(), any())
     }
 
     @Test
@@ -538,6 +540,20 @@ class ActivityRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         verify(coreService.activity, never()).insert(any())
+    }
+
+    @Test
+    fun `insertActivity allows hardware activity matching a deleted default id`() = test {
+        val hardwareActivity = createOnchainActivity(id = "activity1").let {
+            Activity.Onchain(it.v1.copy(walletId = "hardware-wallet"))
+        }
+        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData(deletedActivities = listOf("activity1"))))
+        whenever { coreService.activity.insert(hardwareActivity) }.thenReturn(Unit)
+
+        val result = sut.insertActivity(hardwareActivity)
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity).insert(hardwareActivity)
     }
 
     @Test
@@ -702,6 +718,18 @@ class ActivityRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(allTags, result.getOrThrow())
+    }
+
+    @Test
+    fun `getAllActivitiesTags returns only default wallet tags`() = test {
+        val defaultTags = ActivityTags(WalletScope.default, "default-activity", listOf("daily"))
+        val hardwareTags = ActivityTags("hardware-wallet", "hardware-activity", listOf("cold"))
+        whenever { coreService.activity.getAllActivitiesTags() }
+            .thenReturn(listOf(defaultTags, hardwareTags))
+
+        val result = sut.getAllActivitiesTags()
+
+        assertEquals(listOf(defaultTags), result.getOrThrow())
     }
 
     @Test

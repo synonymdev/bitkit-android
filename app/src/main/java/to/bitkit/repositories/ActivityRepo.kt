@@ -43,6 +43,7 @@ import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.walletId
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.WalletScope
@@ -545,7 +546,7 @@ class ActivityRepo @Inject constructor(
         forceUpdate: Boolean = false,
     ): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
-            if (id in cacheStore.data.first().deletedActivities && !forceUpdate) {
+            if (cacheStore.data.first().isActivityDeleted(id, activity.walletId()) && !forceUpdate) {
                 Logger.debug("Activity $id was deleted", context = TAG)
                 return@withContext Result.failure(
                     Exception(
@@ -645,7 +646,7 @@ class ActivityRepo @Inject constructor(
         runSuspendCatching {
             val deleted = coreService.activity.delete(id, walletId)
             check(deleted) { "Activity not deleted" }
-            cacheStore.addActivityToDeletedList(id)
+            cacheStore.addActivityToDeletedList(id, walletId)
             notifyActivitiesChanged()
         }.onFailure {
             Logger.error("deleteActivity error for ID: $id", it, context = TAG)
@@ -654,7 +655,7 @@ class ActivityRepo @Inject constructor(
 
     suspend fun insertActivity(activity: Activity): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
-            if (activity.rawId() in cacheStore.data.first().deletedActivities) {
+            if (cacheStore.data.first().isActivityDeleted(activity.rawId(), activity.walletId())) {
                 Logger.debug("Activity ${activity.rawId()} was deleted, skipping", context = TAG)
                 return@withContext Result.failure(Exception("Activity ${activity.rawId()} was deleted"))
             }
@@ -668,7 +669,7 @@ class ActivityRepo @Inject constructor(
     suspend fun upsertActivity(activity: Activity): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
             val id = activity.rawId()
-            if (id in cacheStore.data.first().deletedActivities) {
+            if (cacheStore.data.first().isActivityDeleted(id, activity.walletId())) {
                 Logger.debug("Activity $id was deleted, skipping", context = TAG)
                 return@withContext Result.failure(AppError("Activity $id was deleted"))
             }
@@ -826,8 +827,17 @@ class ActivityRepo @Inject constructor(
     suspend fun getAllActivitiesTags(): Result<List<ActivityTags>> = withContext(bgDispatcher) {
         runCatching {
             coreService.activity.getAllActivitiesTags()
+                .filter { it.walletId == WalletScope.default }
         }.onFailure {
             Logger.error("getAllActivityTags error", it, context = TAG)
+        }
+    }
+
+    suspend fun getWalletIds(): Result<Set<String>> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            coreService.activity.getWalletIds()
+        }.onFailure {
+            Logger.error("Failed to get activity wallet IDs", it, context = TAG)
         }
     }
 
