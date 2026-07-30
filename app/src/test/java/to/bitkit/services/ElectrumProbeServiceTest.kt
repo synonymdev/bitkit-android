@@ -89,6 +89,20 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
         assertIs<ElectrumProbeError.NotElectrum>(result.exceptionOrNull())
     }
 
+    // The rejection reason has to survive as the cause, otherwise the log says only "no electrum
+    // response" and a wrong protocol version looks the same as a dropped connection.
+    @Test
+    fun `probe keeps why the version reply was rejected as the cause`() = test {
+        val port = startFakeElectrum(versionReply = """{"id":0,"error":{"code":1,"message":"unsupported"}}""")
+
+        val error = sut.probe(serverAt(port), network = Network.REGTEST).exceptionOrNull()
+
+        assertIs<ElectrumProbeError.NotElectrum>(error)
+        val cause = error.cause?.message.orEmpty()
+        assertTrue("server.version" in cause, "cause should name the request, was '$cause'")
+        assertTrue("error" in cause, "cause should report the rejection reason, was '$cause'")
+    }
+
     // Regression: a features reply that fails validation must not be read as "no genesis hash" on a
     // server whose version negotiation never succeeded — that combination used to probe clean.
     @Test

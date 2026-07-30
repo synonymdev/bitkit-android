@@ -49,6 +49,12 @@ class ElectrumProbeService @Inject constructor(
 
         private const val CLIENT_NAME = "bitkit"
         private const val PROTOCOL_VERSION = "1.4"
+
+        /** JSON-RPC id of the `server.version` request, echoed back by a well-behaved server. */
+        private const val VERSION_REQUEST_ID = 0
+
+        /** JSON-RPC id of the `server.features` request. */
+        private const val FEATURES_REQUEST_ID = 1
     }
 
     private val json = Json { ignoreUnknownKeys = true }
@@ -66,11 +72,12 @@ class ElectrumProbeService @Inject constructor(
                 // A host that accepts the connection but does not speak electrum drops or resets it
                 // mid-exchange, so report that as a probe verdict rather than a raw socket error.
                 runCatching {
-                    request(reader, writer, id = 0, method = "server.version", params = versionParams())
-                        ?: throw ElectrumProbeError.NotElectrum(server)
+                    // Version negotiation has to succeed before server.features may be treated as
+                    // optional, otherwise a server erroring on both would probe clean.
+                    request(reader, writer, VERSION_REQUEST_ID, "server.version", versionParams()).getOrThrow()
 
-                    val features = request(reader, writer, id = 1, method = "server.features", params = "[]")
-                    verifyNetwork(features, server, network)
+                    val features = request(reader, writer, FEATURES_REQUEST_ID, "server.features", "[]")
+                    verifyNetwork(features.getOrNull(), server, network)
                 }.getOrElse {
                     throw it as? ElectrumProbeError ?: ElectrumProbeError.NotElectrum(server, it)
                 }
@@ -110,13 +117,25 @@ class ElectrumProbeService @Inject constructor(
         id: Int,
         method: String,
         params: String,
-    ): RpcResponse? {
+    ): Result<RpcResponse> = runCatching {
         writer.write("""{"id":$id,"jsonrpc":"2.0","method":"$method","params":$params}""" + "\n")
         writer.flush()
 
-        val line = reader.readLine() ?: return null
-        return runCatching { json.decodeFromString<RpcResponse>(line) }.getOrNull()
-            ?.takeIf { it.id == id && it.error.isNullOrJsonNull() && !it.result.isNullOrJsonNull() }
+        val line = reader.readLine() ?: throw AppError("Closed connection before answering '$method'")
+        val response = json.decodeFromString<RpcResponse>(line)
+
+        when {
+            response.id != id ->
+                throw AppError("Answered '$method' with id '${response.id}', expected '$id'")
+
+            !response.error.isNullOrJsonNull() ->
+                throw AppError("Answered '$method' with error '${response.error}'")
+
+            response.result.isNullOrJsonNull() ->
+                throw AppError("Answered '$method' without a result")
+
+            else -> response
+        }
     }
 
     private fun verifyNetwork(features: RpcResponse?, server: ElectrumServer, network: Network) {
