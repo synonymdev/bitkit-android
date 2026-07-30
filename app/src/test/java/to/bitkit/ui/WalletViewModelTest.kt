@@ -1,6 +1,7 @@
 package to.bitkit.ui
 
 import android.content.Context
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.runBlocking
@@ -10,8 +11,10 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.PeerDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
@@ -306,6 +309,65 @@ class WalletViewModelTest : BaseUnitTest() {
             any(),
         )
         verify(testWalletRepo).refreshBip21()
+    }
+
+    // Regression: a start that short-circuits on the isStarting guard never reaches
+    // LightningRepo.start, so it must cancel a deferred stop itself or the node stops while foregrounded
+    @Test
+    fun `foreground start cancels deferred stop while startup is active`() = test {
+        val testWalletRepo: WalletRepo = mock()
+        val testLightningRepo: LightningRepo = mock()
+        val testWalletState = MutableStateFlow(WalletState(walletExists = true))
+
+        whenever(testWalletRepo.walletState).thenReturn(testWalletState)
+        whenever(testWalletRepo.balanceState).thenReturn(balanceState)
+        whenever(testWalletRepo.walletExists()).thenReturn(true)
+        whenever(testLightningRepo.lightningState).thenReturn(lightningState)
+        whenever(testLightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
+
+        val startEntered = CompletableDeferred<Unit>()
+        val finishStart = CompletableDeferred<Unit>()
+        whenever(
+            testLightningRepo.start(
+                any(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+            ),
+        ).doSuspendableAnswer {
+            startEntered.complete(Unit)
+            finishStart.await()
+            Result.success(Unit)
+        }
+
+        val testSut = WalletViewModel(
+            context = context,
+            bgDispatcher = testDispatcher,
+            walletRepo = testWalletRepo,
+            lightningRepo = testLightningRepo,
+            settingsStore = settingsStore,
+            backupRepo = backupRepo,
+            blocktankRepo = blocktankRepo,
+            pubkyRepo = pubkyRepo,
+            migrationService = migrationService,
+            connectivityRepo = connectivityRepo,
+            boltzService = boltzService,
+        )
+
+        testSut.start()
+        startEntered.await()
+        testSut.stop()
+        testSut.start()
+
+        verify(testLightningRepo).stopDebounced()
+        verify(testLightningRepo, times(2)).cancelPendingStop()
+
+        finishStart.complete(Unit)
+        advanceUntilIdle()
     }
 
     @Test
