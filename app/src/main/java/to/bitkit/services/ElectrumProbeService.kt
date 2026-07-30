@@ -2,10 +2,12 @@ package to.bitkit.services
 
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.di.IoDispatcher
@@ -108,18 +110,20 @@ class ElectrumProbeService @Inject constructor(
         id: Int,
         method: String,
         params: String,
-    ): JsonObject? {
+    ): RpcResponse? {
         writer.write("""{"id":$id,"jsonrpc":"2.0","method":"$method","params":$params}""" + "\n")
         writer.flush()
 
         val line = reader.readLine() ?: return null
-        return runCatching { json.parseToJsonElement(line).jsonObject }.getOrNull()
+        return runCatching { json.decodeFromString<RpcResponse>(line) }.getOrNull()
+            ?.takeIf { it.id == id && it.error.isNullOrJsonNull() && !it.result.isNullOrJsonNull() }
     }
 
-    private fun verifyNetwork(features: JsonObject?, server: ElectrumServer, network: Network) {
-        val genesis = features?.get("result")?.jsonObject?.get("genesis_hash")?.jsonPrimitive?.contentOrNull
+    private fun verifyNetwork(features: RpcResponse?, server: ElectrumServer, network: Network) {
+        val genesis = (features?.result as? JsonObject)?.get("genesis_hash")?.jsonPrimitive?.contentOrNull
         if (genesis == null) {
-            // server.features is optional, so a server that omits it stays usable.
+            // server.features is optional, so a server that answered version negotiation but cannot
+            // report a genesis hash stays usable; only the network check is skipped.
             Logger.warn("Skipped network check, server '$server' reported no genesis hash", context = TAG)
             return
         }
@@ -139,6 +143,16 @@ class ElectrumProbeService @Inject constructor(
         Network.REGTEST -> "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206"
     }
 }
+
+/** A JSON-RPC reply, kept only as far as the probe needs to trust it. */
+@Serializable
+private data class RpcResponse(
+    val id: Int? = null,
+    val result: JsonElement? = null,
+    val error: JsonElement? = null,
+)
+
+private fun JsonElement?.isNullOrJsonNull() = this == null || this is JsonNull
 
 sealed class ElectrumProbeError(message: String, cause: Throwable? = null) : AppError(message, cause) {
     class Unreachable(server: ElectrumServer, cause: Throwable) :

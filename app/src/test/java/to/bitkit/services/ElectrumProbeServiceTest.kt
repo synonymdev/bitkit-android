@@ -59,6 +59,50 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
         assertTrue(result.isSuccess) // server.features is optional, so this must not reject
     }
 
+    // Regression: the version reply must be validated as a JSON-RPC envelope, not merely parsed.
+    // A server that errors on version negotiation is one the real LDK client rejects at startup,
+    // and letting it through here recreates the failed-start wedge the probe exists to prevent.
+    @Test
+    fun `probe rejects a server that errors on version negotiation`() = test {
+        val port = startFakeElectrum(versionReply = """{"id":0,"error":{"code":1,"message":"unsupported"}}""")
+
+        val result = sut.probe(serverAt(port), network = Network.REGTEST)
+
+        assertIs<ElectrumProbeError.NotElectrum>(result.exceptionOrNull())
+    }
+
+    @Test
+    fun `probe rejects a version reply with no result`() = test {
+        val port = startFakeElectrum(versionReply = """{"id":0,"jsonrpc":"2.0"}""")
+
+        val result = sut.probe(serverAt(port), network = Network.REGTEST)
+
+        assertIs<ElectrumProbeError.NotElectrum>(result.exceptionOrNull())
+    }
+
+    @Test
+    fun `probe rejects a version reply answering a different id`() = test {
+        val port = startFakeElectrum(versionReply = """{"id":99,"result":["fake-electrs","1.4"]}""")
+
+        val result = sut.probe(serverAt(port), network = Network.REGTEST)
+
+        assertIs<ElectrumProbeError.NotElectrum>(result.exceptionOrNull())
+    }
+
+    // Regression: a features reply that fails validation must not be read as "no genesis hash" on a
+    // server whose version negotiation never succeeded — that combination used to probe clean.
+    @Test
+    fun `probe rejects a server that errors on both version and features`() = test {
+        val port = startFakeElectrum(
+            versionReply = """{"id":0,"error":{"code":1,"message":"unsupported"}}""",
+            featuresReply = """{"id":1,"error":{"code":-32601,"message":"unknown method"}}""",
+        )
+
+        val result = sut.probe(serverAt(port), network = Network.REGTEST)
+
+        assertIs<ElectrumProbeError.NotElectrum>(result.exceptionOrNull())
+    }
+
     @Test
     fun `probe rejects a host that never answers the electrum handshake`() = test {
         val port = startSilentServer()
@@ -104,29 +148,32 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
         protocol = protocol,
     )
 
-    /** Answers server.version, then server.features with [genesisHash] when it is not null. */
-    private fun startFakeElectrum(genesisHash: String?): Int {
+    /**
+     * Answers server.version then server.features. Defaults are a well-formed pair; either reply can
+     * be overridden to exercise a malformed envelope.
+     */
+    private fun startFakeElectrum(
+        genesisHash: String? = null,
+        versionReply: String = """{"id":0,"jsonrpc":"2.0","result":["fake-electrs","1.4"]}""",
+        featuresReply: String = genesisHash
+            ?.let { """{"id":1,"jsonrpc":"2.0","result":{"genesis_hash":"$it"}}""" }
+            ?: """{"id":1,"error":{"code":-32601,"message":"unknown method"}}""",
+    ): Int {
         val socket = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).also { server = it }
         thread(isDaemon = true) {
             runCatching {
-                socket.accept().use { client -> serveElectrum(client, genesisHash) }
+                socket.accept().use { client -> serveElectrum(client, versionReply, featuresReply) }
             }
         }
         return socket.localPort
     }
 
-    private fun serveElectrum(client: Socket, genesisHash: String?) {
+    private fun serveElectrum(client: Socket, versionReply: String, featuresReply: String) {
         val reader = client.getInputStream().bufferedReader()
         val writer = client.getOutputStream().bufferedWriter()
 
-        readAndRespond(reader, writer) { """{"id":0,"result":["fake-electrs","1.4"]}""" }
-        readAndRespond(reader, writer) {
-            if (genesisHash != null) {
-                """{"id":1,"result":{"genesis_hash":"$genesisHash"}}"""
-            } else {
-                """{"id":1,"error":{"code":-32601,"message":"unknown method"}}"""
-            }
-        }
+        readAndRespond(reader, writer) { versionReply }
+        readAndRespond(reader, writer) { featuresReply }
     }
 
     private fun readAndRespond(reader: BufferedReader, writer: java.io.Writer, response: () -> String) {
