@@ -332,7 +332,6 @@ android {
 }
 
 composeCompiler {
-    featureFlags = setOf()
     reportsDestination = layout.buildDirectory.dir("compose_compiler")
 }
 
