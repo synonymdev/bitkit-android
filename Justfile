@@ -51,7 +51,7 @@ run mode="" logs="":
     set -eu
 
     app_id="to.bitkit.dev"
-    app_dir="app/build/outputs/apk/dev/debug"
+    app_dir="app/build/outputs/bitkit/devDebug"
     mode="{{ mode }}"
     logs="{{ logs }}"
     attach_logs=false

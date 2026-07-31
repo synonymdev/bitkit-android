@@ -79,14 +79,14 @@ jobs:
 
       - name: Rename APK
         run: |
-          apk=$(find app/build/outputs/apk/dev/debug -name 'bitkit-dev-debug-*-universal.apk')
-          mv "$apk" app/build/outputs/apk/dev/debug/bitkit_e2e.apk
+          apk=$(find app/build/outputs/bitkit/devDebug -name 'bitkit-dev-debug-*-universal.apk')
+          mv "$apk" app/build/outputs/bitkit/devDebug/bitkit_e2e.apk
 
       - name: Upload APK (local)
         uses: actions/upload-artifact@v7
         with:
           name: bitkit-e2e-apk_${{ github.run_number }}
-          path: app/build/outputs/apk/dev/debug/bitkit_e2e.apk
+          path: app/build/outputs/bitkit/devDebug/bitkit_e2e.apk
 
   build-staging:
     needs: detect-changes
@@ -132,14 +132,14 @@ jobs:
 
       - name: Rename APK
         run: |
-          apk=$(find app/build/outputs/apk/dev/debug -name 'bitkit-dev-debug-*-universal.apk')
-          mv "$apk" app/build/outputs/apk/dev/debug/bitkit_e2e.apk
+          apk=$(find app/build/outputs/bitkit/devDebug -name 'bitkit-dev-debug-*-universal.apk')
+          mv "$apk" app/build/outputs/bitkit/devDebug/bitkit_e2e.apk
 
       - name: Upload APK (regtest)
         uses: actions/upload-artifact@v7
         with:
           name: bitkit-e2e-apk-regtest_${{ github.run_number }}
-          path: app/build/outputs/apk/dev/debug/bitkit_e2e.apk
+          path: app/build/outputs/bitkit/devDebug/bitkit_e2e.apk
 
   e2e-branch:
     needs: detect-changes

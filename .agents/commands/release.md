@@ -208,8 +208,8 @@ Print the path to the release notes file so the user can share it for review.
 just release
 ```
 
-Expected APK path: `app/build/outputs/apk/mainnet/release/bitkit-mainnet-release-{newVersionCode}-universal.apk`
-Expected AAB path: `app/build/outputs/bundle/mainnetRelease/bitkit-mainnet-release-{newVersionCode}.aab`
+Expected APK path: `app/build/outputs/bitkit/mainnetRelease/bitkit-mainnet-release-{newVersionCode}-universal.apk`
+Expected AAB path: `app/build/outputs/bitkit/mainnetRelease/bitkit-mainnet-release-{newVersionCode}.aab`
 Expected native debug symbols path: `app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols-{newVersionCode}.zip`
 
 Verify all three files exist. The native debug symbols file must be from the same `just release` build as the APK/AAB. Keep the build-numbered filename, e.g. `native-debug-symbols-{newVersionCode}.zip`, so it matches the APK/AAB build number. `just release` resolves upstream native debug symbol artifacts from the Rust dependency packages, merges them into the final archive, and refuses placeholder symbols from stripped packaged `.so` files.
@@ -218,7 +218,7 @@ Verify all three files exist. The native debug symbols file must be from the sam
 
 ```bash
 gh release upload v{newVersionName} \
-  app/build/outputs/apk/mainnet/release/bitkit-mainnet-release-{newVersionCode}-universal.apk \
+  app/build/outputs/bitkit/mainnetRelease/bitkit-mainnet-release-{newVersionCode}-universal.apk \
   app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols-{newVersionCode}.zip
 ```
 
