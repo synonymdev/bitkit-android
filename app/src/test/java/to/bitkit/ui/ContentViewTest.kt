@@ -1,10 +1,19 @@
 package to.bitkit.ui
 
+import android.net.Uri
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import to.bitkit.ui.components.Sheet
 import to.bitkit.viewmodels.TransferEffect
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
+@Config(sdk = [34])
+@RunWith(RobolectricTestRunner::class)
 class ContentViewTest {
     @Test
     fun `spending start route uses intro until seen`() {
@@ -25,5 +34,32 @@ class ContentViewTest {
         assertEquals(Routes.SettingUp, transferEffectDestination(TransferEffect.OnSpendingFundingPaid))
         assertEquals(Routes.SpendingHwSigned, transferEffectDestination(TransferEffect.OnHwTxSigned))
         assertNull(transferEffectDestination(TransferEffect.OnOrderCreated))
+    }
+
+    @Test
+    fun `a root screen link dismisses an open sheet`() {
+        val uri = Uri.parse("bitkit://screen/settings")
+
+        val result = shouldDismissSheetForScreenLink(uri, Sheet.Receive())
+
+        assertTrue(result)
+    }
+
+    @Test
+    fun `a sheet link replaces the open sheet instead of dismissing it`() {
+        val uri = Uri.parse("bitkit://screen/send/amount")
+
+        val result = shouldDismissSheetForScreenLink(uri, Sheet.Receive())
+
+        assertFalse(result)
+    }
+
+    @Test
+    fun `a root screen link with no sheet open dismisses nothing`() {
+        val uri = Uri.parse("bitkit://screen/settings")
+
+        val result = shouldDismissSheetForScreenLink(uri, null)
+
+        assertFalse(result)
     }
 }

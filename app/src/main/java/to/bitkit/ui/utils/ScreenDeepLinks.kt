@@ -1,5 +1,6 @@
 package to.bitkit.ui.utils
 
+import android.content.Intent
 import android.net.Uri
 import androidx.navigation.NavDeepLink
 import androidx.navigation.navDeepLink
@@ -24,6 +25,12 @@ object ScreenDeepLinks {
         Routes.LnurlChannel::class,
         Routes.RecoveryMnemonic::class,
         Routes.RecoveryMode::class,
+        Routes.SavingsProgress::class,
+        Routes.SettingUp::class,
+        Routes.SpendingAdvanced::class,
+        Routes.SpendingConfirm::class,
+        Routes.SpendingHwSign::class,
+        Routes.SpendingHwSigned::class,
     )
 
     fun isDenied(route: KClass<*>): Boolean = route in DENIED
@@ -49,6 +56,14 @@ object ScreenDeepLinks {
 
     fun isScreenDeepLink(uri: Uri): Boolean =
         uri.scheme?.lowercase() == SCHEME && uri.host?.lowercase() == HOST
+
+    fun detachScreenUri(intent: Intent): Boolean {
+        val uri = intent.data ?: return false
+        if (!isScreenDeepLink(uri)) return false
+
+        intent.data = null
+        return true
+    }
 
     private fun isScreenRoute(route: KClass<*>): Boolean = Routes::class.java.isAssignableFrom(route.java)
 }

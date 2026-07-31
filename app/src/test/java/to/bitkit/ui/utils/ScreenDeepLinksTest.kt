@@ -29,6 +29,12 @@ class ScreenDeepLinksTest : BaseUnitTest() {
             Routes.LnurlChannel::class,
             Routes.RecoveryMnemonic::class,
             Routes.RecoveryMode::class,
+            Routes.SavingsProgress::class,
+            Routes.SettingUp::class,
+            Routes.SpendingAdvanced::class,
+            Routes.SpendingConfirm::class,
+            Routes.SpendingHwSign::class,
+            Routes.SpendingHwSigned::class,
         )
     }
 

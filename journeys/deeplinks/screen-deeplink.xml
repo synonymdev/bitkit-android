@@ -11,5 +11,14 @@
     <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/recovery-mnemonic" to.bitkit.dev`</action>
     <action>Verify that the screen does not change and the recovery phrase is never shown</action>
     <action>Verify that logcat contains "Unhandled screen deeplink" for that URI</action>
+    <action>Run `adb shell am force-stop to.bitkit.dev`</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/settings" to.bitkit.dev`</action>
+    <action>Verify that the Settings screen is visible, so a cold start reaches it through the gated replay</action>
+    <action>Open Settings ▸ Support and tap the version row five times to turn dev mode off</action>
+    <action>Run `adb shell am force-stop to.bitkit.dev`</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/settings" to.bitkit.dev`</action>
+    <action>Verify that the wallet overview is visible and Settings is not, on a cold start with dev mode off</action>
+    <action>Verify that logcat contains "Ignoring screen deeplink, dev mode is off"</action>
+    <action>Open Settings ▸ Support and tap the version row five times to turn dev mode back on</action>
   </actions>
 </journey>

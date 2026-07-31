@@ -4,6 +4,7 @@ package to.bitkit.ui
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -315,6 +316,10 @@ fun ContentView(
         SheetDeepLinks.sheetFor(uri)?.let {
             appViewModel.showSheet(it)
             return@LaunchedEffect
+        }
+
+        if (shouldDismissSheetForScreenLink(uri, appViewModel.currentSheet.value)) {
+            appViewModel.hideSheet()
         }
 
         val request = Intent(Intent.ACTION_VIEW, uri)
@@ -1894,6 +1899,9 @@ fun NavController.navigateToTransferSpendingStart(
     hasSeenSpendingIntro: Boolean,
     deviceId: String,
 ) = navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro, deviceId))
+
+internal fun shouldDismissSheetForScreenLink(uri: Uri, currentSheet: Sheet?): Boolean =
+    currentSheet != null && SheetDeepLinks.sheetFor(uri) == null
 
 internal fun transferEffectDestination(effect: TransferEffect): Routes? = when (effect) {
     TransferEffect.OnHwTxSigned -> Routes.SpendingHwSigned

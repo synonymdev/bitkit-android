@@ -69,6 +69,12 @@ These screens are unreachable by URI and a link naming one is dropped with a war
 | `LegacyRnRecovery` | migration recovery |
 | `LnurlChannel` | carries an LNURL callback, scanner-driven only |
 | `CriticalUpdate` | blocking screen |
+| `ExternalAmount`, `ExternalConfirm`, `ExternalSuccess` | a fresh `ExternalNav` scope has no peer, so confirm crashes on `requireNotNull` and success reports an open that never happened |
+| `SavingsProgress`, `SettingUp`, `SpendingAdvanced`, `SpendingConfirm`, `SpendingHwSign`, `SpendingHwSigned` | read transfer state built by earlier steps; a fresh link renders empty or returns home, and `SavingsProgress` can act on default or retained channel state |
+
+Reaching the late transfer screens directly needs a per-flow setup contract that prepares the
+expected state, does the server-side preparation, passes stable identifiers as route parameters and
+reloads validated data before navigating. That is tracked separately.
 
 Payment URIs (`bitcoin:`, `lightning:`, `lnurl*`) are unaffected and still go through the scanner
 decode path.

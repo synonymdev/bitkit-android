@@ -235,12 +235,9 @@ class MainActivity : FragmentActivity() {
             return
         }
 
-        val isScreenLink = intent.data?.let { ScreenDeepLinks.isScreenDeepLink(it) } == true
-
         appViewModel.handleDeeplinkIntent(intent)
 
-        if (isScreenLink) {
-            intent.data = null
+        if (ScreenDeepLinks.detachScreenUri(intent)) {
             setIntent(intent)
         }
     }
