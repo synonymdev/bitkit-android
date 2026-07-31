@@ -10,6 +10,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.ExperimentalTime
 
@@ -259,6 +260,62 @@ class DateTimeExtTest : BaseUnitTest() {
 
         assertEquals(UiDateStyle.TIME, uiDateStyleFor(lateEvening.epochSecond.toULong(), today, UTC))
         assertEquals(UiDateStyle.DATE_TIME, uiDateStyleFor(lateEvening.epochSecond.toULong(), today, bucharest))
+    }
+
+    @Test
+    fun `toEpochSecondsOrNull parses an ISO-8601 instant`() {
+        val result = "2026-03-07T15:23:00Z".toEpochSecondsOrNull()
+
+        assertEquals(AFTERNOON.epochSecond.toULong(), result)
+    }
+
+    @Test
+    fun `toEpochSecondsOrNull parses the millisecond form Blocktank returns`() {
+        val result = "2026-03-07T15:23:00.000Z".toEpochSecondsOrNull()
+
+        assertEquals(AFTERNOON.epochSecond.toULong(), result)
+    }
+
+    @Test
+    fun `toEpochSecondsOrNull returns null for an unparseable string`() {
+        val result = "not a date".toEpochSecondsOrNull()
+
+        assertNull(result)
+    }
+
+    @Test
+    fun `toEpochSecondsOrNull returns null for an empty string`() {
+        val result = "".toEpochSecondsOrNull()
+
+        assertNull(result)
+    }
+
+    @Test
+    fun `DATE_TIME_YEAR_SHORT abbreviates the month and applies the selected clock format`() {
+        val in24Hour = AFTERNOON.formattedInUtc(UiDateStyle.DATE_TIME_YEAR_SHORT.pattern(is24Hour = true))
+        val in12Hour = AFTERNOON.formattedInUtc(UiDateStyle.DATE_TIME_YEAR_SHORT.pattern(is24Hour = false))
+
+        assertEquals("Mar 7, 2026, 15:23", in24Hour)
+        assertEquals("Mar 7, 2026, 3:23 PM", in12Hour)
+    }
+
+    @Test
+    fun `DATE_TIME_YEAR_SHORT localizes the month name`() {
+        val pattern = UiDateStyle.DATE_TIME_YEAR_SHORT.pattern(is24Hour = true)
+        val result = AFTERNOON.formatted(pattern, Locale.GERMANY, UTC)
+
+        assertEquals("März 7, 2026, 15:23", result)
+    }
+
+    @Test
+    fun `toEpochSecondsOrNull round-trips through the channel details format`() {
+        val timestamp = "2026-03-07T15:23:00.000Z".toEpochSecondsOrNull()
+
+        assertNotNull(timestamp)
+        val result = Instant.ofEpochSecond(timestamp.toLong())
+            .formatted(UiDateStyle.DATE_TIME_YEAR_SHORT.pattern(is24Hour = true), Locale.US, UTC)
+
+        assertEquals("Mar 7, 2026, 15:23", result)
     }
 
     private fun Instant.formattedInUtc(pattern: String) = formatted(pattern, Locale.US, UTC)
