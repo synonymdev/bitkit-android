@@ -235,9 +235,14 @@ class MainActivity : FragmentActivity() {
             return
         }
 
-        intent.data?.let { if (ScreenDeepLinks.isScreenDeepLink(it)) intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK) }
+        val isScreenLink = intent.data?.let { ScreenDeepLinks.isScreenDeepLink(it) } == true
 
         appViewModel.handleDeeplinkIntent(intent)
+
+        if (isScreenLink) {
+            intent.data = null
+            setIntent(intent)
+        }
     }
 
     /**

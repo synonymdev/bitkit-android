@@ -210,6 +210,7 @@ import to.bitkit.ui.sheets.hardware.HardwareSheet
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions
+import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.SheetDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
@@ -987,7 +988,7 @@ private fun NavGraphBuilder.home(
     onConsumeHomeWidgetsPageRequest: () -> Unit,
     onCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
-    composable<Routes.Home> {
+    composable<Routes.Home>(deepLinks = ScreenDeepLinks.linksFor(Routes.Home::class)) {
         val isRefreshing by walletViewModel.isRefreshing.collectAsStateWithLifecycle()
         val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
         val hazeState = rememberHazeState()

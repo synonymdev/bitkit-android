@@ -22,6 +22,9 @@ class ScreenDeepLinksTest : BaseUnitTest() {
         val SENSITIVE_ROUTES: List<KClass<out Routes>> = listOf(
             Routes.AuthCheck::class,
             Routes.CriticalUpdate::class,
+            Routes.ExternalAmount::class,
+            Routes.ExternalConfirm::class,
+            Routes.ExternalSuccess::class,
             Routes.LegacyRnRecovery::class,
             Routes.LnurlChannel::class,
             Routes.RecoveryMnemonic::class,

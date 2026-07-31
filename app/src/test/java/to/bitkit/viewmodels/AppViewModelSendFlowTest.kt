@@ -104,6 +104,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -498,6 +499,44 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals("recovery-mode", sheet.setup.otp)
         verify(lightningRepo, never()).setRecoveryMode(true)
         verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `screen namespace recovery-mode never enables recovery mode`() = test {
+        settingsData.value = SettingsData(isDevModeEnabled = true)
+
+        sut.handleDeeplinkIntent(screenIntent("recovery-mode"))
+        advanceUntilIdle()
+
+        verify(lightningRepo, never()).setRecoveryMode(true)
+    }
+
+    @Test
+    fun `legacy recovery-mode deeplink still enables recovery mode`() = test {
+        sut.handleDeeplinkIntent(legacyRecoveryModeIntent())
+        advanceUntilIdle()
+
+        verify(lightningRepo).setRecoveryMode(true)
+    }
+
+    @Test
+    fun `screen deeplink is dropped when dev mode is off`() = test {
+        settingsData.value = SettingsData(isDevModeEnabled = false)
+
+        sut.handleDeeplinkIntent(screenIntent("settings"))
+        advanceUntilIdle()
+
+        assertNull(sut.pendingScreenDeepLink.value)
+    }
+
+    @Test
+    fun `screen deeplink is held for replay when dev mode is on`() = test {
+        settingsData.value = SettingsData(isDevModeEnabled = true)
+
+        sut.handleDeeplinkIntent(screenIntent("settings"))
+        advanceUntilIdle()
+
+        assertNotNull(sut.pendingScreenDeepLink.value)
     }
 
     @Test
@@ -1898,6 +1937,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         hostDisplayName = "btcpay.example.com",
         logDescription = "https://btcpay.example.com/plugins/store/samrock/protocol",
     )
+
+    private fun screenIntent(vararg segments: String): Intent {
+        val uri = mock<Uri> {
+            on { toString() }.thenReturn("bitkit://screen/${segments.joinToString("/")}")
+            on { scheme }.thenReturn("bitkit")
+            on { host }.thenReturn("screen")
+            on { pathSegments }.thenReturn(segments.toList())
+        }
+        return mock {
+            on { action }.thenReturn(Intent.ACTION_VIEW)
+            on { data }.thenReturn(uri)
+        }
+    }
+
+    private fun legacyRecoveryModeIntent(): Intent {
+        val uri = mock<Uri> {
+            on { toString() }.thenReturn("bitkit://recovery-mode")
+            on { scheme }.thenReturn("bitkit")
+            on { host }.thenReturn("recovery-mode")
+            on { pathSegments }.thenReturn(emptyList())
+        }
+        return mock {
+            on { action }.thenReturn(Intent.ACTION_VIEW)
+            on { data }.thenReturn(uri)
+        }
+    }
 
     private fun samRockIntent(url: String): Intent {
         val uri = mock<Uri> {

@@ -36,8 +36,17 @@ adb shell am start -W -a android.intent.action.VIEW \
   -d "bitkit://screen/settings" to.bitkit.dev
 ```
 
-Escape `&` as `\&` when passing more than one query parameter. `-W` reports whether the intent
-resolved, so a mistyped id fails loudly instead of silently opening the wallet overview.
+Escape `&` as `\&` when passing more than one query parameter.
+
+`-W` only reports that an activity resolved, which it always does: the manifest accepts every
+`bitkit:` URI by scheme, so `bitkit://screen/typo` still starts `MainActivity` and is rejected later
+in the app. To tell a good id from a bad one, assert on the destination, or watch for the rejection:
+
+```sh
+adb logcat -c
+adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/typo" to.bitkit.dev
+adb logcat -d | grep "Unhandled screen deeplink"
+```
 
 The app must already be past onboarding. A link that arrives earlier is held and replayed once the
 wallet is loaded. A link that arrives while the PIN screen is up navigates behind it, so the PIN is

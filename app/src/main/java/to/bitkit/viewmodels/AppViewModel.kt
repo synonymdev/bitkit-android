@@ -3271,6 +3271,16 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
+        if (ScreenDeepLinks.isScreenDeepLink(uri)) {
+            if (!settingsStore.data.first().isDevModeEnabled) {
+                Logger.warn("Ignoring screen deeplink, dev mode is off", context = TAG)
+                return@launch
+            }
+
+            _pendingScreenDeepLink.value = uri
+            return@launch
+        }
+
         if (uri.isRecoveryModeDeeplink()) {
             lightningRepo.setRecoveryMode(enabled = true)
             delay(SCREEN_TRANSITION_DELAY)
@@ -3280,16 +3290,6 @@ class AppViewModel @Inject constructor(
                     clearStack = true,
                 )
             )
-            return@launch
-        }
-
-        if (ScreenDeepLinks.isScreenDeepLink(uri)) {
-            if (!settingsStore.data.first().isDevModeEnabled) {
-                Logger.warn("Ignoring screen deeplink, dev mode is off", context = TAG)
-                return@launch
-            }
-
-            _pendingScreenDeepLink.value = uri
             return@launch
         }
 
