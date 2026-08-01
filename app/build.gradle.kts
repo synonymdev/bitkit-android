@@ -446,6 +446,9 @@ abstract class CollectBitkitBundle : DefaultTask() {
     @TaskAction
     fun collect() {
         val target = outputFile.get().asFile
+        target.parentFile
+            .listFiles { file -> file.extension == "aab" }
+            ?.forEach { Files.delete(it.toPath()) }
         target.parentFile.mkdirs()
 
         Files.copy(
@@ -555,7 +558,9 @@ dependencies {
     ksp(libs.hilt.android.compiler)
     ksp(libs.hilt.compiler)
     androidTestImplementation(libs.hilt.android.testing) // instrumented tests
+    kspAndroidTest(libs.hilt.android.compiler)
     testImplementation(libs.hilt.android.testing) // robolectric tests
+    kspTest(libs.hilt.android.compiler)
     // WorkManager
     implementation(libs.hilt.work)
     implementation(libs.work.runtime.ktx)
