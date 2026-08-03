@@ -25,10 +25,10 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.ext.of
 import to.bitkit.models.BalanceState
 import to.bitkit.repositories.BackupRepo
+import to.bitkit.repositories.BarkRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
-import to.bitkit.repositories.BarkRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PubkyRepo
@@ -69,6 +69,9 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(context.getString(any())).thenReturn("")
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
+        // These tests exercise the ldk-node startup path; bark stays disabled.
+        whenever { barkRepo.isEnabledNow() }.thenReturn(false)
+        whenever { barkRepo.startIfEnabled(any()) }.thenReturn(Result.success(Unit))
         whenever(migrationService.isMigrationChecked()).thenReturn(true)
         whenever(migrationService.isChannelRecoveryChecked()).thenReturn(true)
         whenever(migrationService.tryFetchMigrationPeersFromBackup()).thenReturn(emptyList())

@@ -7,7 +7,6 @@ import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
-import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.SpendingBackend
 import to.bitkit.models.BalanceState
 import to.bitkit.repositories.BarkRepo
@@ -37,7 +36,7 @@ class CanSwitchSpendingBackendUseCaseTest : BaseUnitTest() {
         whenever(barkRepo.barkState).thenReturn(barkState)
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(lightningRepo.getChannels()).thenReturn(emptyList())
-        wheneverBlocking { barkRepo.hasPendingExits() }.thenReturn(Result.success(false))
+        whenever { barkRepo.hasPendingExits() }.thenReturn(Result.success(false))
 
         sut = CanSwitchSpendingBackendUseCase(
             walletRepo = walletRepo,
@@ -104,7 +103,7 @@ class CanSwitchSpendingBackendUseCaseTest : BaseUnitTest() {
 
     @Test
     fun `blocks switching back to ldk while an exit is in progress`() = test {
-        wheneverBlocking { barkRepo.hasPendingExits() }.thenReturn(Result.success(true))
+        whenever { barkRepo.hasPendingExits() }.thenReturn(Result.success(true))
 
         assertEquals(SpendingBackendSwitchState.Blocked.PendingExit, sut(SpendingBackend.LDK))
     }

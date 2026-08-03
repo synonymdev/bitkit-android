@@ -71,6 +71,19 @@ class BarkRepo @Inject constructor(
         return start(walletIndex)
     }
 
+    /**
+     * Brings the wallet up to date after a period offline: claim anything received while away,
+     * then refresh VTXOs that are approaching expiry.
+     */
+    suspend fun onForeground(): Result<Unit> = executeWhenRunning("onForeground") {
+        runSuspendCatching {
+            barkService.sync()
+            barkService.syncPendingBoards()
+            barkService.tryClaimAllLightningReceives()
+            barkService.maintenanceDelegated()
+        }
+    }.also { syncState() }
+
     suspend fun start(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
         if (!Env.isArkSupported) {
             return@withContext Result.failure(BarkError.NotSupported(Env.network.name))

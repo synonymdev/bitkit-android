@@ -133,7 +133,7 @@ class ActivityRepoTest : BaseUnitTest() {
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         // These tests cover the ldk-node backend; bark has its own movement-sync path.
-        wheneverBlocking { barkRepo.isEnabledNow() }.thenReturn(false)
+        whenever { barkRepo.isEnabledNow() }.thenReturn(false)
 
         sut = ActivityRepo(
             bgDispatcher = testDispatcher,
