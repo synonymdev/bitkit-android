@@ -14,6 +14,7 @@ import to.bitkit.models.ElectrumServer
 import to.bitkit.models.addressTypeInfo
 import to.bitkit.models.toAddressType
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.WatchOnlyAccountRepo
 import javax.inject.Inject
 
 private const val NODE_ID_PREFIX_LENGTH = 5
@@ -23,6 +24,7 @@ private const val ELECTRUM_HOST_PREFIX_LENGTH = 5
 class AdvancedSettingsViewModel @Inject constructor(
     private val settingsStore: SettingsStore,
     private val lightningRepo: LightningRepo,
+    watchOnlyAccountRepo: WatchOnlyAccountRepo,
 ) : ViewModel() {
 
     val selectedAddressTypeName = settingsStore.data
@@ -31,6 +33,9 @@ class AdvancedSettingsViewModel @Inject constructor(
 
     val openChannelCount = lightningRepo.lightningState
         .map { it.channels.filterOpen().size }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val watchOnlyAccountCount = watchOnlyAccountRepo.currentWalletAccountCount
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     val truncatedNodeId = lightningRepo.lightningState

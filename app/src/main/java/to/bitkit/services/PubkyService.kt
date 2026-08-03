@@ -3,6 +3,7 @@ package to.bitkit.services
 import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PaykitProfile
+import com.synonym.paykit.PubkyAuthCompanionClaim
 import to.bitkit.async.ServiceQueue
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.AppError
@@ -115,6 +116,20 @@ class PubkyService @Inject constructor(
         secretKeyHex: String,
     ) = ServiceQueue.CORE.background {
         paykitSdkService.approveAuth(authUrl, expectedCapabilities, secretKeyHex)
+    }
+
+    suspend fun approveAuthWithCompanionClaim(
+        authUrl: String,
+        expectedCapabilities: String,
+        secretKeyHex: String,
+        claim: PubkyAuthCompanionClaim,
+    ) = ServiceQueue.CORE.background {
+        paykitSdkService.approveAuthWithCompanionClaim(
+            authUrl = authUrl,
+            expectedCapabilities = expectedCapabilities,
+            secretKeyHex = secretKeyHex,
+            claim = claim,
+        )
     }
 
     // endregion

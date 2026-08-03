@@ -20,7 +20,7 @@ object SheetDeepLinks {
     private val STANDALONE: List<Sheet> = listOf(
         Sheet.ActivityDateRangeSelector,
         Sheet.ActivityTagSelector,
-        Sheet.QrScanner,
+        Sheet.QrScanner(),
     )
 
     fun sheetFor(uri: Uri): Sheet? {

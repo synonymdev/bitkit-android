@@ -47,7 +47,6 @@ import to.bitkit.ui.navigateToDefaultUnitSettings
 import to.bitkit.ui.navigateToDevSettings
 import to.bitkit.ui.navigateToLanguageSettings
 import to.bitkit.ui.navigateToLocalCurrencySettings
-import to.bitkit.ui.navigateToPaymentPreferenceSettings
 import to.bitkit.ui.navigateToPinManagement
 import to.bitkit.ui.navigateToQuickPaySettings
 import to.bitkit.ui.navigateToTagsSettings
@@ -96,6 +95,8 @@ fun SettingsScreen(
     val notificationsGranted by settings.notificationsGranted.collectAsStateWithLifecycle()
     val isPubkyAuthenticated by settings.isPubkyAuthenticated.collectAsStateWithLifecycle()
     val isPaykitEnabled by settings.isPaykitEnabled.collectAsStateWithLifecycle()
+    val contactPaymentsEnabled by settings.contactPaymentsEnabled.collectAsStateWithLifecycle()
+    val isUpdatingContactPayments by settings.isUpdatingContactPayments.collectAsStateWithLifecycle()
     val hardwareWallets by hwWalletViewModel.wallets.collectAsStateWithLifecycle()
     val languageUiState by languageViewModel.uiState.collectAsStateWithLifecycle()
 
@@ -115,6 +116,7 @@ fun SettingsScreen(
     val truncatedNodeId by advancedViewModel.truncatedNodeId.collectAsStateWithLifecycle()
     val electrumHost by advancedViewModel.electrumHost.collectAsStateWithLifecycle()
     val coinSelectAuto by advancedViewModel.coinSelectAuto.collectAsStateWithLifecycle()
+    val watchOnlyAccountCount by advancedViewModel.watchOnlyAccountCount.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { languageViewModel.fetchLanguageInfo() }
 
@@ -133,6 +135,8 @@ fun SettingsScreen(
             notificationsGranted = notificationsGranted,
             isPubkyAuthenticated = isPubkyAuthenticated,
             isPaykitEnabled = isPaykitEnabled,
+            contactPaymentsEnabled = contactPaymentsEnabled,
+            isUpdatingContactPayments = isUpdatingContactPayments,
             hardwareWalletCount = hardwareWallets.size,
         ),
         securityState = SecurityTabState(
@@ -147,11 +151,13 @@ fun SettingsScreen(
         ),
         advancedState = AdvancedTabState(
             isDevModeEnabled = isDevModeEnabled,
+            isPaykitEnabled = isPaykitEnabled,
             selectedAddressTypeName = selectedAddressTypeName,
             coinSelectAuto = coinSelectAuto,
             openChannelCount = openChannelCount,
             truncatedNodeId = truncatedNodeId,
             electrumHost = electrumHost,
+            watchOnlyAccountCount = watchOnlyAccountCount,
         ),
         onEvent = { event ->
             when (event) {
@@ -161,7 +167,9 @@ fun SettingsScreen(
                 SettingsEvent.WidgetsClick -> navController.navigateToWidgetsSettings()
                 SettingsEvent.TagsClick -> navController.navigateToTagsSettings()
                 SettingsEvent.TransactionSpeedClick -> navController.navigateToTransactionSpeedSettings()
-                SettingsEvent.PaymentPreferenceClick -> navController.navigateToPaymentPreferenceSettings()
+                SettingsEvent.ContactPaymentsClick -> {
+                    settings.setContactPaymentsEnabled(!contactPaymentsEnabled)
+                }
                 SettingsEvent.QuickPayClick -> navController.navigateToQuickPaySettings(quickPayIntroSeen)
                 SettingsEvent.BgPaymentsClick -> {
                     if (bgPaymentsIntroSeen || notificationsGranted) {
@@ -195,6 +203,7 @@ fun SettingsScreen(
                 SettingsEvent.AddressTypeClick -> navController.navigateTo(Routes.AddressTypePreference)
                 SettingsEvent.CoinSelectionClick -> navController.navigateTo(Routes.CoinSelectPreference)
                 SettingsEvent.AddressViewerClick -> navController.navigateTo(Routes.AddressViewer)
+                SettingsEvent.WatchOnlyAccountsClick -> navController.navigateTo(Routes.WatchOnlyAccounts)
                 SettingsEvent.LightningConnectionsClick -> navController.navigateTo(Routes.LightningConnections)
                 SettingsEvent.LightningNodeClick -> navController.navigateTo(Routes.NodeInfo)
                 SettingsEvent.ElectrumServerClick -> navController.navigateTo(Routes.ElectrumConfig)
@@ -327,6 +336,17 @@ private fun GeneralTabContent(
             padding = PaddingValues(top = 16.dp),
         )
 
+        if (state.isPaykitEnabled && state.isPubkyAuthenticated) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.settings__general__enable_contact_payments),
+                isChecked = state.contactPaymentsEnabled,
+                icon = { SettingsIcon(R.drawable.ic_coins) },
+                onClick = { onEvent(SettingsEvent.ContactPaymentsClick) },
+                enabled = !state.isUpdatingContactPayments,
+                switchTestTag = "ContactPaymentsSwitch",
+                modifier = Modifier.testTag("ContactPaymentsSettings")
+            )
+        }
         SettingsButtonRow(
             title = stringResource(R.string.settings__general__speed),
             icon = {
@@ -342,14 +362,6 @@ private fun GeneralTabContent(
             onClick = { onEvent(SettingsEvent.TransactionSpeedClick) },
             modifier = Modifier.testTag("TransactionSpeedSettings")
         )
-        if (state.isPaykitEnabled && state.isPubkyAuthenticated) {
-            SettingsButtonRow(
-                title = stringResource(R.string.settings__payment_pref_title),
-                icon = { SettingsIcon(R.drawable.ic_coins) },
-                onClick = { onEvent(SettingsEvent.PaymentPreferenceClick) },
-                modifier = Modifier.testTag("PaymentPreferenceSettings")
-            )
-        }
         SettingsButtonRow(
             title = stringResource(R.string.settings__quickpay__nav_title),
             icon = { SettingsIcon(R.drawable.ic_caret_double_right) },
@@ -557,6 +569,15 @@ private fun AdvancedTabContent(
             onClick = { onEvent(SettingsEvent.AddressViewerClick) },
             modifier = Modifier.testTag("AddressViewer")
         )
+        if (state.isPaykitEnabled) {
+            SettingsButtonRow(
+                title = stringResource(R.string.watch_only_accounts__title),
+                icon = { SettingsIcon(R.drawable.ic_lock_key) },
+                value = SettingsButtonValue.StringValue(state.watchOnlyAccountCount.toString()),
+                onClick = { onEvent(SettingsEvent.WatchOnlyAccountsClick) },
+                modifier = Modifier.testTag("WatchOnlyAccounts")
+            )
+        }
 
         SectionHeader(
             title = stringResource(R.string.settings__adv__section_networks),
@@ -660,7 +681,7 @@ sealed interface SettingsEvent {
     data object WidgetsClick : SettingsEvent
     data object TagsClick : SettingsEvent
     data object TransactionSpeedClick : SettingsEvent
-    data object PaymentPreferenceClick : SettingsEvent
+    data object ContactPaymentsClick : SettingsEvent
     data object QuickPayClick : SettingsEvent
     data object BgPaymentsClick : SettingsEvent
     data object HardwareWalletsClick : SettingsEvent
@@ -682,6 +703,7 @@ sealed interface SettingsEvent {
     data object AddressTypeClick : SettingsEvent
     data object CoinSelectionClick : SettingsEvent
     data object AddressViewerClick : SettingsEvent
+    data object WatchOnlyAccountsClick : SettingsEvent
     data object LightningConnectionsClick : SettingsEvent
     data object LightningNodeClick : SettingsEvent
     data object ElectrumServerClick : SettingsEvent
@@ -706,6 +728,8 @@ data class GeneralTabState(
     val notificationsGranted: Boolean = false,
     val isPubkyAuthenticated: Boolean = false,
     val isPaykitEnabled: Boolean = false,
+    val contactPaymentsEnabled: Boolean = false,
+    val isUpdatingContactPayments: Boolean = false,
     val hardwareWalletCount: Int = 0,
 )
 
@@ -724,9 +748,11 @@ data class SecurityTabState(
 @Immutable
 data class AdvancedTabState(
     val isDevModeEnabled: Boolean = false,
+    val isPaykitEnabled: Boolean = false,
     val selectedAddressTypeName: String = "",
     val coinSelectAuto: Boolean = true,
     val openChannelCount: Int = 0,
     val truncatedNodeId: String = "",
     val electrumHost: String = "",
+    val watchOnlyAccountCount: Int = 0,
 )
