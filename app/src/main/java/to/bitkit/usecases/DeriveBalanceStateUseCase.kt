@@ -20,6 +20,7 @@ import to.bitkit.models.TransferType
 import to.bitkit.models.safe
 import to.bitkit.models.toBalance
 import to.bitkit.repositories.BarkRepo
+import to.bitkit.repositories.BarkTransferRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
@@ -28,11 +29,13 @@ import to.bitkit.utils.jsonLogOf
 import javax.inject.Inject
 import javax.inject.Singleton
 
+@Suppress("LongParameterList")
 @Singleton
 class DeriveBalanceStateUseCase @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningRepo: LightningRepo,
     private val barkRepo: BarkRepo,
+    private val barkTransferRepo: BarkTransferRepo,
     private val transferRepo: TransferRepo,
     private val settingsStore: SettingsStore,
     private val hwWalletRepo: HwWalletRepo,
@@ -82,7 +85,9 @@ class DeriveBalanceStateUseCase @Inject constructor(
                     toSavingsAmount.safe() - coopCloseSavingsSats.safe()
                 },
                 balanceInTransferToSpending = if (isBarkBackend) {
-                    barkState.pendingIncomingSats
+                    // Sats already sent to bark's onchain wallet are in neither balance until the
+                    // board completes, so surface them as in-transfer rather than losing them.
+                    barkState.pendingIncomingSats.safe() + barkTransferRepo.pendingBoardSats().safe()
                 } else {
                     toSpendingAmount
                 },

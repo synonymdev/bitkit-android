@@ -12,6 +12,7 @@ import androidx.work.WorkerParameters
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import to.bitkit.repositories.BarkRepo
+import to.bitkit.repositories.BarkTransferRepo
 import to.bitkit.utils.Logger
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.toJavaDuration
@@ -29,6 +30,7 @@ class BarkMaintenanceWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted workerParams: WorkerParameters,
     private val barkRepo: BarkRepo,
+    private val barkTransferRepo: BarkTransferRepo,
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -64,6 +66,7 @@ class BarkMaintenanceWorker @AssistedInject constructor(
             .mapCatching {
                 barkRepo.runMaintenance().getOrThrow()
                 barkRepo.claimPendingReceives().getOrThrow()
+                barkTransferRepo.resumePendingBoard().getOrThrow()
                 barkRepo.sync().getOrThrow()
             }
             .fold(

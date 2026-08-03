@@ -10,8 +10,8 @@ import kotlinx.coroutines.withContext
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
-import to.bitkit.services.CoreService
 import to.bitkit.models.WalletScope
+import to.bitkit.services.CoreService
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton

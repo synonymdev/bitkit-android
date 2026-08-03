@@ -21,9 +21,10 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.models.TransferType
-import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.BarkRepo
 import to.bitkit.repositories.BarkState
+import to.bitkit.repositories.BarkTransferRepo
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.TransferRepo
@@ -35,6 +36,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
 
     private val lightningRepo: LightningRepo = mock()
     private val barkRepo: BarkRepo = mock()
+    private val barkTransferRepo: BarkTransferRepo = mock()
     private val transferRepo: TransferRepo = mock()
     private val settingsStore: SettingsStore = mock()
     private val hwWalletRepo: HwWalletRepo = mock()
@@ -47,6 +49,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             whenever(settingsStore.data).thenReturn(flowOf(SettingsData()))
             whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
             whenever(barkRepo.barkState).thenReturn(MutableStateFlow(BarkState()))
+            whenever { barkTransferRepo.pendingBoardSats() }.thenReturn(0uL)
             whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
             whenever(hwWalletRepo.wallets).thenReturn(MutableStateFlow(persistentListOf()))
             wheneverBlocking { lightningRepo.listSpendableOutputs() }.thenReturn(Result.success(emptyList()))
@@ -63,6 +66,7 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             lightningRepo = lightningRepo,
             barkRepo = barkRepo,
+            barkTransferRepo = barkTransferRepo,
             transferRepo = transferRepo,
             settingsStore = settingsStore,
             hwWalletRepo = hwWalletRepo,

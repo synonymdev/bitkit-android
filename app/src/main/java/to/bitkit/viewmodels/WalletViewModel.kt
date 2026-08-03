@@ -34,6 +34,7 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BarkRepo
+import to.bitkit.repositories.BarkTransferRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
@@ -62,6 +63,7 @@ class WalletViewModel @Inject constructor(
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
     private val barkRepo: BarkRepo,
+    private val barkTransferRepo: BarkTransferRepo,
     private val settingsStore: SettingsStore,
     private val backupRepo: BackupRepo,
     private val blocktankRepo: BlocktankRepo,
@@ -335,6 +337,8 @@ class WalletViewModel @Inject constructor(
                         // VTXOs expire, so background maintenance is not optional.
                         BarkMaintenanceWorker.schedule(WorkManager.getInstance(context))
                         barkRepo.onForeground()
+                        // A board interrupted by the app dying resumes here.
+                        barkTransferRepo.resumePendingBoard()
                     }
                 }
                 walletRepo.syncBalances()

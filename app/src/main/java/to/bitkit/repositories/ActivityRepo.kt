@@ -41,10 +41,9 @@ import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
-import to.bitkit.ext.toActivity
-import uniffi.bark.Movement
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
+import to.bitkit.ext.toActivity
 import to.bitkit.ext.walletId
 import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -52,6 +51,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import uniffi.bark.Movement
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock

@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
+import to.bitkit.data.dto.PendingBarkBoard
 import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.data.serializers.AppCacheSerializer
 import to.bitkit.ext.scopedActivityId
@@ -164,6 +165,7 @@ data class AppCacheData(
     val backgroundReceive: NewTransactionSheetDetails? = null,
     val addressSearchLastUsedReceiveIndexes: Map<String, Int> = mapOf(),
     val addressSearchLastUsedChangeIndexes: Map<String, Int> = mapOf(),
+    val pendingBarkBoard: PendingBarkBoard? = null,
 ) {
     fun isActivityDeleted(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in deletedActivities ||
