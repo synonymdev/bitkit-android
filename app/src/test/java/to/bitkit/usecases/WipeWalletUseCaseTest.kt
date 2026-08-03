@@ -23,6 +23,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
@@ -38,6 +39,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     private val db = mock<AppDb>()
     private val settingsStore = mock<SettingsStore>()
     private val cacheStore = mock<CacheStore>()
+    private val watchOnlyAccountRepo = mock<WatchOnlyAccountRepo>()
     private val widgetsStore = mock<WidgetsStore>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val activityRepo = mock<ActivityRepo>()
@@ -72,6 +74,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             db = db,
             settingsStore = settingsStore,
             cacheStore = cacheStore,
+            watchOnlyAccountRepo = watchOnlyAccountRepo,
             widgetsStore = widgetsStore,
             blocktankRepo = blocktankRepo,
             activityRepo = activityRepo,
@@ -100,6 +103,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             db,
             settingsStore,
             cacheStore,
+            watchOnlyAccountRepo,
             widgetsStore,
             blocktankRepo,
             activityRepo,
@@ -121,6 +125,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(db).clearAllTables()
         inOrder.verify(settingsStore).reset()
         inOrder.verify(cacheStore).reset()
+        inOrder.verify(watchOnlyAccountRepo).clear()
         inOrder.verify(widgetsStore).reset()
         inOrder.verify(blocktankRepo).resetState()
         inOrder.verify(activityRepo).resetState()

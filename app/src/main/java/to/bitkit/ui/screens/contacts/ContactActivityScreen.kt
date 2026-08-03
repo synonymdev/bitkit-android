@@ -58,7 +58,7 @@ private fun Content(
 ) {
     ScreenColumn {
         AppTopBar(
-            titleText = uiState.profile?.name ?: stringResource(R.string.wallet__activity),
+            titleText = stringResource(R.string.wallet__activity),
             onBackClick = onBackClick,
             actions = { DrawerNavIcon() },
         )

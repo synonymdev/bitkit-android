@@ -28,6 +28,7 @@ import org.lightningdevkit.ldknode.AddressTypeBalance
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PeerDetails
@@ -345,6 +346,44 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(event, update.event)
         assertNull(update.settledReceiveAddress)
         verify(cacheStore, never()).invalidateReceiveOnchainAddress(any())
+    }
+
+    @Test
+    fun `start reconciles watch-only accounts when the underlying node is already running`() = test {
+        sut.setInitNodeLifecycleState()
+        val node = mock<Node>()
+        val status = mock<NodeStatus>()
+        whenever(lightningService.node).thenReturn(node)
+        whenever(lightningService.status).thenReturn(status)
+        whenever(status.isRunning).thenReturn(true)
+        whenever { lightningService.startEventListener(any()) }.thenReturn(Result.success(Unit))
+
+        val result = sut.start(shouldRetry = false)
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService) { reconcileWatchOnlyAccounts() }
+        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start remains running when watch-only reconciliation fails for an already running node`() = test {
+        sut.setInitNodeLifecycleState()
+        val node = mock<Node>()
+        val status = mock<NodeStatus>()
+        whenever(lightningService.node).thenReturn(node)
+        whenever(lightningService.status).thenReturn(status)
+        whenever(status.isRunning).thenReturn(true)
+        whenever { lightningService.reconcileWatchOnlyAccounts() }
+            .thenThrow(IllegalStateException("reconciliation failed"))
+        whenever { lightningService.startEventListener(any()) }.thenReturn(Result.success(Unit))
+
+        val result = sut.start(shouldRetry = false)
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService) { reconcileWatchOnlyAccounts() }
+        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
     }
 
     @Test
