@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.SpendingBackend
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.hasPaykitState
 import to.bitkit.data.hasPublicPaykitPublicationState
@@ -391,6 +392,10 @@ class SettingsViewModel @Inject constructor(
     }
 
     val enableSendAmountWarning = settingsStore.data.map { it.enableSendAmountWarning }
+        .asStateFlow(initialValue = false)
+
+    /** Whether Ark (bark) currently provides the spending balance instead of ldk-node. */
+    val isArkEnabled = settingsStore.data.map { it.spendingBackend == SpendingBackend.BARK }
         .asStateFlow(initialValue = false)
 
     fun setEnableSendAmountWarning(value: Boolean) {
