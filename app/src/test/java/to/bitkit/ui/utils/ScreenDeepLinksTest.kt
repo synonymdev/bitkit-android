@@ -7,7 +7,6 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
-import to.bitkit.ui.sheets.SendRoute
 import kotlin.reflect.KClass
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -82,26 +81,21 @@ class ScreenDeepLinksTest : BaseUnitTest() {
     }
 
     @Test
-    fun `sensitive routes are denied`() {
-        SENSITIVE_ROUTES.forEach { route ->
-            assertTrue(ScreenDeepLinks.isDenied(route), "expected ${route.simpleName} to be denied")
-            assertNull(ScreenDeepLinks.screenId(route))
-            assertTrue(ScreenDeepLinks.linksFor(route).isEmpty())
-        }
+    fun `every route declares whether it may be entered directly`() {
+        val markers = setOf(Routes.DeepLinkable::class, Routes.InternalOnly::class)
+
+        val undeclared = Routes::class.sealedSubclasses.filterNot { it in markers }
+
+        assertTrue(undeclared.isEmpty(), "routes missing a DeepLinkable or InternalOnly decision: $undeclared")
     }
 
     @Test
-    fun `every route is either denied or reachable by a unique screen id`() {
+    fun `every deep-linkable route has a unique screen id and one link`() {
         val ids = mutableMapOf<String, String>()
 
-        Routes::class.sealedSubclasses.forEach { route ->
+        Routes.DeepLinkable::class.sealedSubclasses.forEach { route ->
             val name = route.simpleName.orEmpty()
             val id = ScreenDeepLinks.screenId(route)
-
-            if (ScreenDeepLinks.isDenied(route)) {
-                assertNull(id, "denied route $name must not expose a screen id")
-                return@forEach
-            }
 
             assertNotNull(id, "route $name has no screen id")
             val clash = ids.put(id, name)
@@ -111,20 +105,12 @@ class ScreenDeepLinksTest : BaseUnitTest() {
     }
 
     @Test
-    fun `denied set contains only routes that still exist`() {
-        val declared = Routes::class.sealedSubclasses.toSet()
-        val denied = SENSITIVE_ROUTES.filter { it in declared }
+    fun `internal routes are not deep-linkable`() {
+        val internal = Routes.InternalOnly::class.sealedSubclasses
+        val leaked = internal.filter { Routes.DeepLinkable::class.java.isAssignableFrom(it.java) }
 
-        assertEquals(SENSITIVE_ROUTES.size, denied.size)
-    }
-
-    @Test
-    fun `sheet routes are not exposed as screen deeplinks`() {
-        val id = ScreenDeepLinks.screenId(SendRoute.Amount::class)
-        val links = ScreenDeepLinks.linksFor(SendRoute.Amount::class)
-
-        assertNull(id)
-        assertTrue(links.isEmpty())
+        assertTrue(internal.isNotEmpty())
+        assertTrue(leaked.isEmpty(), "internal routes exposed as deep-linkable: $leaked")
     }
 
     @Test
