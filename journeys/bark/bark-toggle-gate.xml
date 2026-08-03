@@ -1,0 +1,13 @@
+<journey name="Bark toggle is gated by spending balance">
+  <description>Precondition: onboarded signet wallet with a non-zero spending balance, Ark disabled.</description>
+  <actions>
+    <action>Verify that the wallet home screen shows a non-zero Spending balance</action>
+    <action>Open Settings</action>
+    <action>Tap the "Advanced" tab</action>
+    <action>Verify that a "Use Ark (experimental)" row with a switch is visible</action>
+    <action>Tap the "Use Ark (experimental)" switch</action>
+    <action>Verify that a dialog titled "Can&apos;t Switch Yet" is shown, that it says the spending balance must be moved to savings first, and that it offers a "Transfer To Savings" action</action>
+    <action>Tap "Transfer To Savings"</action>
+    <action>Verify that the app is on a transfer to savings screen</action>
+  </actions>
+</journey>

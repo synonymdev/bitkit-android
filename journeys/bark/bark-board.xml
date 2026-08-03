@@ -1,0 +1,11 @@
+<journey name="Board savings onto Ark">
+  <description>Precondition: onboarded signet wallet with Ark enabled and a funded savings balance.</description>
+  <actions>
+    <action>Verify that the wallet home screen shows a non-zero Savings balance</action>
+    <action>Tap the Spending balance</action>
+    <action>Tap the transfer from savings action</action>
+    <action>Enter an amount above the Ark minimum board amount</action>
+    <action>Confirm the transfer</action>
+    <action>Verify that the home screen shows the transferred amount as pending or in transfer</action>
+  </actions>
+</journey>

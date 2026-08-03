@@ -1,0 +1,11 @@
+<journey name="Send a Lightning payment over Ark">
+  <description>Precondition: onboarded signet wallet with Ark enabled and a funded spending balance, plus a signet BOLT11 invoice to paste.</description>
+  <actions>
+    <action>Verify that the wallet home screen shows a non-zero Spending balance</action>
+    <action>Tap the "Send" button</action>
+    <action>Paste a signet BOLT11 invoice</action>
+    <action>Confirm the payment</action>
+    <action>Verify that a payment success screen is shown</action>
+    <action>Close the send flow and verify that the activity list shows a sent payment</action>
+  </actions>
+</journey>
