@@ -27,6 +27,21 @@ sealed class ServiceError(message: String) : AppError(message) {
 
 class HttpError(message: String, val code: Int = 500, cause: Throwable? = null) : AppError(message, cause)
 
+// region ark
+sealed class BarkError(message: String, cause: Throwable? = null) : AppError(message, cause) {
+    class NotSupported(network: String) : BarkError("Ark is not available on $network")
+    class NotStarted : BarkError("Ark wallet is not started")
+
+    /**
+     * bark derives from a bare BIP39 mnemonic and exposes no passphrase parameter, so a
+     * passphrase-protected wallet would silently board a different key tree.
+     */
+    class PassphraseUnsupported : BarkError("Ark does not support a BIP39 passphrase")
+
+    class Rust(cause: Throwable) : BarkError(cause.message ?: "Unknown Ark error", cause)
+}
+// endregion
+
 // region ldk
 class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.") {
     constructor(inner: BuildException) : this(LdkException.Build(inner))
