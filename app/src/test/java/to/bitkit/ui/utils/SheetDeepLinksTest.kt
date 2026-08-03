@@ -11,6 +11,8 @@ import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.WidgetsRoute
+import to.bitkit.ui.sheets.hardware.HardwareRoute
+import kotlin.reflect.KClass
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -123,10 +125,23 @@ class SheetDeepLinksTest : BaseUnitTest() {
     }
 
     @Test
-    fun `every registered path is a kebab-case id`() {
-        val malformed = SheetDeepLinks.paths.filterNot { it.matches(KEBAB_PATH) }
+    fun `every route marked as a start is registered in its family lookup`() {
+        val unreachable = mutableListOf<String>()
 
-        assertTrue(malformed.isEmpty(), "malformed sheet paths: $malformed")
+        fun check(starts: List<KClass<*>>, lookup: (String) -> Any?) {
+            starts.forEach { route ->
+                val id = ScreenDeepLinks.kebabId(route) ?: return@forEach
+                if (lookup(id) == null) unreachable += id
+            }
+        }
+
+        check(SendRoute.DeepLinkStart::class.sealedSubclasses) { SendRoute.fromDeepLink(it) }
+        check(ReceiveRoute.DeepLinkStart::class.sealedSubclasses) { ReceiveRoute.fromDeepLink(it) }
+        check(BackupRoute.DeepLinkStart::class.sealedSubclasses) { BackupRoute.fromDeepLink(it) }
+        check(WidgetsRoute.DeepLinkStart::class.sealedSubclasses) { WidgetsRoute.fromDeepLink(it) }
+        check(HardwareRoute.DeepLinkStart::class.sealedSubclasses) { HardwareRoute.fromDeepLink(it) }
+
+        assertTrue(unreachable.isEmpty(), "declared starts missing from their family lookup: $unreachable")
     }
 
     @Test

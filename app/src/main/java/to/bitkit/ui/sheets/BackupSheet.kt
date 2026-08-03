@@ -30,6 +30,7 @@ import to.bitkit.ui.settings.backups.ShowPassphraseScreen
 import to.bitkit.ui.settings.backups.SuccessScreen
 import to.bitkit.ui.settings.backups.WarningScreen
 import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 
 @Composable
@@ -155,30 +156,45 @@ fun BackupSheet(
 }
 
 sealed interface BackupRoute {
-    @Serializable
-    data object Intro : BackupRoute
+    sealed interface DeepLinkStart : BackupRoute
+
+    sealed interface InternalOnly : BackupRoute
 
     @Serializable
-    data object ShowMnemonic : BackupRoute
+    data object Intro : DeepLinkStart
 
     @Serializable
-    data object ShowPassphrase : BackupRoute
+    data object ShowMnemonic : InternalOnly
 
     @Serializable
-    data object ConfirmMnemonic : BackupRoute
+    data object ShowPassphrase : InternalOnly
 
     @Serializable
-    data object ConfirmPassphrase : BackupRoute
+    data object ConfirmMnemonic : InternalOnly
 
     @Serializable
-    data object Warning : BackupRoute
+    data object ConfirmPassphrase : InternalOnly
 
     @Serializable
-    data object Success : BackupRoute
+    data object Warning : InternalOnly
 
     @Serializable
-    data object MultipleDevices : BackupRoute
+    data object Success : InternalOnly
 
     @Serializable
-    data object Metadata : BackupRoute
+    data object MultipleDevices : DeepLinkStart
+
+    @Serializable
+    data object Metadata : DeepLinkStart
+
+    companion object {
+        private val DEEP_LINK_STARTS: List<DeepLinkStart> = listOf(
+            Intro,
+            MultipleDevices,
+            Metadata,
+        )
+
+        fun fromDeepLink(path: String): DeepLinkStart? =
+            ScreenDeepLinks.matchStart(path, Intro, DEEP_LINK_STARTS)
+    }
 }

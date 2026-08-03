@@ -29,6 +29,11 @@ object ScreenDeepLinks {
         return listOf(navDeepLink(route = route, basePath = basePath) {})
     }
 
+    fun <T : Any> matchStart(path: String, default: T, starts: List<T>): T? = when {
+        path.isEmpty() -> default
+        else -> starts.firstOrNull { kebabId(it::class).equals(path, ignoreCase = true) }
+    }
+
     fun isScreenDeepLink(uri: Uri): Boolean =
         uri.scheme?.lowercase() == SCHEME && uri.host?.lowercase() == HOST
 
