@@ -8,6 +8,7 @@ import org.lightningdevkit.ldknode.BalanceSource
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.LightningBalance
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.SpendingBackend
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Defaults
@@ -18,6 +19,7 @@ import to.bitkit.models.BalanceState
 import to.bitkit.models.TransferType
 import to.bitkit.models.safe
 import to.bitkit.models.toBalance
+import to.bitkit.repositories.BarkRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
@@ -30,6 +32,7 @@ import javax.inject.Singleton
 class DeriveBalanceStateUseCase @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val lightningRepo: LightningRepo,
+    private val barkRepo: BarkRepo,
     private val transferRepo: TransferRepo,
     private val settingsStore: SettingsStore,
     private val hwWalletRepo: HwWalletRepo,
@@ -58,14 +61,31 @@ class DeriveBalanceStateUseCase @Inject constructor(
             val afterClosingChannels = afterPendingChannels.safe() - toSavingsAmount.safe()
             val totalLightningSats = afterClosingChannels.safe() - lingeringCoopCloseSats.safe()
 
+            // In bark mode the spending balance comes from Ark VTXOs instead of channels; savings
+            // stays on the ldk-node onchain wallet, so only the lightning half is swapped out.
+            val isBarkBackend = settingsStore.data.first().spendingBackend == SpendingBackend.BARK
+            val barkState = barkRepo.barkState.value
+
             val balanceState = BalanceState(
                 totalOnchainSats = totalOnchainSats,
-                channelFundableBalance = channelFundableBalance,
-                totalLightningSats = totalLightningSats,
-                maxSendLightningSats = lightningRepo.getChannels().totalNextOutboundHtlcLimitSats(),
+                channelFundableBalance = if (isBarkBackend) 0uL else channelFundableBalance,
+                totalLightningSats = if (isBarkBackend) barkState.spendableSats else totalLightningSats,
+                maxSendLightningSats = if (isBarkBackend) {
+                    barkState.spendableSats
+                } else {
+                    lightningRepo.getChannels().totalNextOutboundHtlcLimitSats()
+                },
                 maxSendOnchainSats = getMaxSendAmount(balanceDetails),
-                balanceInTransferToSavings = toSavingsAmount.safe() - coopCloseSavingsSats.safe(),
-                balanceInTransferToSpending = toSpendingAmount,
+                balanceInTransferToSavings = if (isBarkBackend) {
+                    barkState.pendingExitSats
+                } else {
+                    toSavingsAmount.safe() - coopCloseSavingsSats.safe()
+                },
+                balanceInTransferToSpending = if (isBarkBackend) {
+                    barkState.pendingIncomingSats
+                } else {
+                    toSpendingAmount
+                },
                 hardwareWallets = hwWalletRepo.wallets.value.map { it.toBalance() },
             )
 

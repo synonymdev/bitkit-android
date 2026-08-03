@@ -32,6 +32,7 @@ import to.bitkit.ext.of
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
+import to.bitkit.repositories.BarkRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
@@ -58,6 +59,7 @@ class WalletViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
+    private val barkRepo: BarkRepo,
     private val settingsStore: SettingsStore,
     private val backupRepo: BackupRepo,
     private val blocktankRepo: BlocktankRepo,
@@ -326,6 +328,7 @@ class WalletViewModel @Inject constructor(
                 walletRepo.setWalletExistsState()
                 connectMigrationPeers()
                 migrationService.cleanupInvalidMigrationTransfers()
+                barkRepo.startIfEnabled(walletIndex)
                 walletRepo.syncBalances()
                 if (_restoreState.value.isIdle()) {
                     walletRepo.refreshBip21()

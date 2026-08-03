@@ -28,6 +28,7 @@ import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
+import to.bitkit.repositories.BarkRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PubkyRepo
@@ -48,6 +49,7 @@ class WalletViewModelTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val walletRepo = mock<WalletRepo>()
     private val lightningRepo = mock<LightningRepo>()
+    private val barkRepo = mock<BarkRepo>()
     private val settingsStore = mock<SettingsStore>()
     private val backupRepo = mock<BackupRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
@@ -81,6 +83,7 @@ class WalletViewModelTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             walletRepo = walletRepo,
             lightningRepo = lightningRepo,
+            barkRepo = barkRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
@@ -325,6 +328,7 @@ class WalletViewModelTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             walletRepo = testWalletRepo,
             lightningRepo = testLightningRepo,
+            barkRepo = barkRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
@@ -391,6 +395,7 @@ class WalletViewModelTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             walletRepo = testWalletRepo,
             lightningRepo = testLightningRepo,
+            barkRepo = barkRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
@@ -446,6 +451,7 @@ class WalletViewModelTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             walletRepo = testWalletRepo,
             lightningRepo = testLightningRepo,
+            barkRepo = barkRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,

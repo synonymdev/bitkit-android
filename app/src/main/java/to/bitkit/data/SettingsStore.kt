@@ -157,7 +157,11 @@ data class SettingsData(
     val selectedAddressType: String = DEFAULT_ADDRESS_TYPE_STRING,
     val addressTypesToMonitor: List<String> = listOf(DEFAULT_ADDRESS_TYPE_STRING),
     val pendingRestoreAddressTypePrune: Boolean = false,
+    val spendingBackend: SpendingBackend = SpendingBackend.LDK,
 )
+
+/** Which backend provides the spending balance. Savings stays on ldk-node either way. */
+enum class SpendingBackend { LDK, BARK }
 
 fun SettingsData.resetPin() = this.copy(
     isPinEnabled = false,

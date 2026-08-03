@@ -33,6 +33,7 @@ import to.bitkit.domain.commands.NotifyPendingPaymentResolvedHandler
 import to.bitkit.ext.activityManager
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NotificationDetails
+import to.bitkit.repositories.BarkRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.NodeEventHandler
@@ -57,6 +58,9 @@ class LightningNodeService : Service() {
 
     @Inject
     lateinit var lightningRepo: LightningRepo
+
+    @Inject
+    lateinit var barkRepo: BarkRepo
 
     @Inject
     lateinit var walletRepo: WalletRepo
@@ -98,6 +102,7 @@ class LightningNodeService : Service() {
             ).onSuccess {
                 walletRepo.setWalletExistsState()
                 walletRepo.refreshBip21()
+                barkRepo.startIfEnabled()
                 walletRepo.syncBalances()
             }
         }

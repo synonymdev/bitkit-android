@@ -6,15 +6,19 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import to.bitkit.data.SettingsStore
+import to.bitkit.data.SpendingBackend
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
@@ -40,6 +44,7 @@ import kotlin.time.Duration.Companion.minutes
 class BarkRepo @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val barkService: BarkService,
+    private val settingsStore: SettingsStore,
 ) {
     companion object {
         private const val TAG = "BarkRepo"
@@ -50,7 +55,21 @@ class BarkRepo @Inject constructor(
     private val _barkState = MutableStateFlow(BarkState())
     val barkState: StateFlow<BarkState> = _barkState.asStateFlow()
 
+    val isEnabled: Flow<Boolean> = settingsStore.data.map { it.spendingBackend == SpendingBackend.BARK }
+
+    suspend fun isEnabledNow(): Boolean =
+        Env.isArkSupported && settingsStore.data.first().spendingBackend == SpendingBackend.BARK
+
     // region lifecycle
+
+    /**
+     * Single startup entry point for the callers that already start ldk-node. ldk-node keeps
+     * running in bark mode because it still owns the on-chain savings wallet.
+     */
+    suspend fun startIfEnabled(walletIndex: Int = 0): Result<Unit> {
+        if (!isEnabledNow()) return Result.success(Unit)
+        return start(walletIndex)
+    }
 
     suspend fun start(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
         if (!Env.isArkSupported) {
