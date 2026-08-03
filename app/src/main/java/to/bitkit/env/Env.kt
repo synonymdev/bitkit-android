@@ -69,7 +69,7 @@ internal object Env {
                     if (isLocalE2eBackend) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
                 }
                 Network.TESTNET -> ElectrumServers.TESTNET
-                else -> TODO("${network.name} network not implemented")
+                Network.SIGNET -> ElectrumServers.SIGNET
             }
         }
 
@@ -88,6 +88,28 @@ internal object Env {
             else -> null
         }
 
+    /**
+     * Second's Ark server, used by the bark spending backend. Only mainnet and signet are hosted;
+     * there is no public regtest or testnet Ark server.
+     */
+    val arkServerUrl
+        get() = when (network) {
+            Network.BITCOIN -> "https://ark.second.tech"
+            Network.SIGNET -> "https://ark.signet.2nd.dev"
+            else -> null
+        }
+
+    /** Esplora chain source for bark. Must stay on the same chain as [electrumServerUrl]. */
+    val arkEsploraUrl
+        get() = when (network) {
+            Network.BITCOIN -> "https://mempool.second.tech/api"
+            Network.SIGNET -> "https://esplora.signet.2nd.dev"
+            else -> null
+        }
+
+    /** Whether the bark spending backend can be offered on this build's network. */
+    val isArkSupported get() = arkServerUrl != null
+
     val vssStoreIdPrefix get() = "bitkit_v1_${network.name.lowercase()}"
 
     val vssServerUrl
@@ -105,7 +127,7 @@ internal object Env {
     val blockExplorerUrl
         get() = when (network) {
             Network.BITCOIN -> "https://mempool.space"
-            Network.SIGNET -> "https://mutinynet.com"
+            Network.SIGNET -> "https://mempool.space/signet"
             Network.TESTNET -> "https://mempool.space/testnet"
             Network.REGTEST -> "https://mempool.bitkit.stag0.blocktank.to/"
         }
@@ -187,8 +209,8 @@ internal object Env {
         val isE2eLocal = isE2eTest && e2eBackend == "local"
         return when (network) {
             BitkitCoreNetwork.BITCOIN -> ElectrumServers.MAINNET.ESPLORA
-            BitkitCoreNetwork.TESTNET, BitkitCoreNetwork.TESTNET4, BitkitCoreNetwork.SIGNET ->
-                ElectrumServers.TESTNET
+            BitkitCoreNetwork.SIGNET -> ElectrumServers.SIGNET
+            BitkitCoreNetwork.TESTNET, BitkitCoreNetwork.TESTNET4 -> ElectrumServers.TESTNET
             BitkitCoreNetwork.REGTEST ->
                 if (isE2eLocal) ElectrumServers.REGTEST.LOCAL else ElectrumServers.REGTEST.STAG
         }
@@ -217,6 +239,8 @@ internal object Env {
     fun bitkitCoreStoragePath(walletIndex: Int): String {
         return storagePathOf(walletIndex, network.name.lowercase(), "core")
     }
+
+    fun arkStoragePath(walletIndex: Int) = storagePathOf(walletIndex, network.name.lowercase(), "ark")
 
     /**
      * Generates the storage path for a specified wallet index, network, and directory.
@@ -289,4 +313,10 @@ private object ElectrumServers {
     }
 
     const val TESTNET = "ssl://electrum.blockstream.info:60002"
+
+    /**
+     * Public signet Electrum. Must stay on the same chain as [Env.arkEsploraUrl]: Second's Ark
+     * signet is the standard public signet, not a custom one such as mutinynet.
+     */
+    const val SIGNET = "ssl://mempool.space:60602"
 }

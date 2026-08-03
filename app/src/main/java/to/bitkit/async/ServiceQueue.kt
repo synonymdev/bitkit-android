@@ -13,7 +13,7 @@ import java.util.concurrent.ThreadFactory
 import kotlin.coroutines.CoroutineContext
 
 enum class ServiceQueue {
-    LDK, CORE, FOREX, LOG, MIGRATION;
+    LDK, ARK, CORE, FOREX, LOG, MIGRATION;
 
     private val scope by lazy { CoroutineScope(newSingleThreadDispatcher(name) + SupervisorJob()) }
 
