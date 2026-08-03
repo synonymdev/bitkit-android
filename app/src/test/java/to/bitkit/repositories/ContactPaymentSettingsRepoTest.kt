@@ -93,6 +93,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
         verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY), true)
+        verify(pubkyRepo, never()).hasSecretKey()
     }
 
     @Test
