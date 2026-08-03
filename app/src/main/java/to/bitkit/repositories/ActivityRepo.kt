@@ -41,6 +41,8 @@ import to.bitkit.ext.isReplacedSentTransaction
 import to.bitkit.ext.matchesPaymentId
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
+import to.bitkit.ext.toActivity
+import uniffi.bark.Movement
 import to.bitkit.ext.rawId
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.walletId
@@ -66,6 +68,7 @@ class ActivityRepo @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val coreService: CoreService,
     private val lightningRepo: LightningRepo,
+    private val barkRepo: BarkRepo,
     private val blocktankRepo: BlocktankRepo,
     private val cacheStore: CacheStore,
     private val transferRepo: TransferRepo,
@@ -99,9 +102,20 @@ class ActivityRepo @Inject constructor(
 
             isSyncingLdkNodePayments.update { true }
 
-            lightningRepo.getPayments().mapCatching { payments ->
-                Logger.debug("Got payments with success, syncing activities", context = TAG)
-                syncLdkNodePayments(payments).getOrThrow()
+            // Onchain activity is unchanged in either mode; only the offchain source differs.
+            val offchainSync = if (barkRepo.isEnabledNow()) {
+                barkRepo.history().mapCatching { movements ->
+                    Logger.debug("Got Ark movements with success, syncing activities", context = TAG)
+                    syncBarkMovements(movements).getOrThrow()
+                }
+            } else {
+                lightningRepo.getPayments().mapCatching { payments ->
+                    Logger.debug("Got payments with success, syncing activities", context = TAG)
+                    syncLdkNodePayments(payments).getOrThrow()
+                }
+            }
+
+            offchainSync.mapCatching {
                 boostPendingActivities()
                 transferRepo.syncTransferStates().getOrThrow()
             }.onSuccess {
@@ -131,6 +145,21 @@ class ActivityRepo @Inject constructor(
             notifyActivitiesChanged()
         }.onFailure {
             Logger.error("Error syncing LDK payments:", it, context = TAG)
+        }
+    }
+
+    /**
+     * Syncs bark [Movement]s to `bitkit-core` [Activity] items. bitkit-core only knows how to map
+     * ldk-node payments, so Ark movements are mapped here and inserted through the normal path.
+     */
+    suspend fun syncBarkMovements(movements: List<Movement>): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            movements.forEach { movement ->
+                insertActivity(movement.toActivity())
+            }
+            notifyActivitiesChanged()
+        }.onFailure {
+            Logger.error("Error syncing Ark movements:", it, context = TAG)
         }
     }
 

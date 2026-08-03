@@ -47,6 +47,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
     private val coreService = mock<CoreService>()
     private val lightningRepo = mock<LightningRepo>()
+    private val barkRepo = mock<BarkRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
     private val transferRepo = mock<TransferRepo>()
     private val cacheStore = mock<CacheStore>()
@@ -131,12 +132,15 @@ class ActivityRepoTest : BaseUnitTest() {
         whenever(clock.now()).thenReturn(Clock.System.now())
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
+        // These tests cover the ldk-node backend; bark has its own movement-sync path.
+        wheneverBlocking { barkRepo.isEnabledNow() }.thenReturn(false)
 
         sut = ActivityRepo(
             bgDispatcher = testDispatcher,
             ioDispatcher = testDispatcher,
             coreService = coreService,
             lightningRepo = lightningRepo,
+            barkRepo = barkRepo,
             blocktankRepo = blocktankRepo,
             cacheStore = cacheStore,
             transferRepo = transferRepo,
