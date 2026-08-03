@@ -9,6 +9,9 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
@@ -51,6 +54,7 @@ import to.bitkit.ui.navigateToPinManagement
 import to.bitkit.ui.navigateToQuickPaySettings
 import to.bitkit.ui.navigateToTagsSettings
 import to.bitkit.ui.navigateToTransactionSpeedSettings
+import to.bitkit.ui.navigateToTransferSavingsStart
 import to.bitkit.ui.navigateToWidgetsSettings
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -63,6 +67,7 @@ import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
+import to.bitkit.usecases.SpendingBackendSwitchState
 import to.bitkit.viewmodels.LanguageViewModel
 
 private enum class SettingsTab(@StringRes private val titleRes: Int) : TabItem {
@@ -117,6 +122,9 @@ fun SettingsScreen(
     val electrumHost by advancedViewModel.electrumHost.collectAsStateWithLifecycle()
     val coinSelectAuto by advancedViewModel.coinSelectAuto.collectAsStateWithLifecycle()
     val watchOnlyAccountCount by advancedViewModel.watchOnlyAccountCount.collectAsStateWithLifecycle()
+    val isArkEnabled by advancedViewModel.isArkEnabled.collectAsStateWithLifecycle()
+    val spendingBackendDialog by advancedViewModel.spendingBackendDialog.collectAsStateWithLifecycle()
+    val hasSeenSavingsIntro by settings.hasSeenSavingsIntro.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) { languageViewModel.fetchLanguageInfo() }
 
@@ -158,6 +166,8 @@ fun SettingsScreen(
             truncatedNodeId = truncatedNodeId,
             electrumHost = electrumHost,
             watchOnlyAccountCount = watchOnlyAccountCount,
+            isArkSupported = advancedViewModel.isArkSupported,
+            isArkEnabled = isArkEnabled,
         ),
         onEvent = { event ->
             when (event) {
@@ -204,6 +214,7 @@ fun SettingsScreen(
                 SettingsEvent.CoinSelectionClick -> navController.navigateTo(Routes.CoinSelectPreference)
                 SettingsEvent.AddressViewerClick -> navController.navigateTo(Routes.AddressViewer)
                 SettingsEvent.WatchOnlyAccountsClick -> navController.navigateTo(Routes.WatchOnlyAccounts)
+                SettingsEvent.ArkBackendClick -> advancedViewModel.onArkToggleClick()
                 SettingsEvent.LightningConnectionsClick -> navController.navigateTo(Routes.LightningConnections)
                 SettingsEvent.LightningNodeClick -> navController.navigateTo(Routes.NodeInfo)
                 SettingsEvent.ElectrumServerClick -> navController.navigateTo(Routes.ElectrumConfig)
@@ -212,6 +223,90 @@ fun SettingsScreen(
             }
         },
     )
+
+    SpendingBackendDialogs(
+        dialog = spendingBackendDialog,
+        onDismiss = { advancedViewModel.dismissSpendingBackendDialog() },
+        onConfirm = { advancedViewModel.confirmSpendingBackendSwitch() },
+        onTransferToSavings = {
+            advancedViewModel.dismissSpendingBackendDialog()
+            navController.navigateToTransferSavingsStart(hasSeenSavingsIntro)
+        },
+    )
+}
+
+/**
+ * Blocked and confirm dialogs for the spending backend switch. The blocked variant offers a route
+ * into the existing transfer flow so the user can clear the balance that is holding the switch up.
+ */
+@Composable
+private fun SpendingBackendDialogs(
+    dialog: SpendingBackendDialog?,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+    onTransferToSavings: () -> Unit,
+) {
+    when (dialog) {
+        null -> Unit
+
+        is SpendingBackendDialog.Blocked -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(R.string.settings__adv__ark_blocked_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        when (dialog.reason) {
+                            is SpendingBackendSwitchState.Blocked.SpendingBalance ->
+                                R.string.settings__adv__ark_blocked_spending
+                            SpendingBackendSwitchState.Blocked.OpenChannels ->
+                                R.string.settings__adv__ark_blocked_channels
+                            SpendingBackendSwitchState.Blocked.PendingTransfer ->
+                                R.string.settings__adv__ark_blocked_transfer
+                            SpendingBackendSwitchState.Blocked.PendingExit ->
+                                R.string.settings__adv__ark_blocked_exit
+                        }
+                    )
+                )
+            },
+            confirmButton = {
+                // Only a spending balance is something the user can act on from here.
+                if (dialog.reason is SpendingBackendSwitchState.Blocked.SpendingBalance) {
+                    TextButton(
+                        onClick = onTransferToSavings,
+                        modifier = Modifier.testTag("SpendingBackendTransferToSavings")
+                    ) {
+                        Text(stringResource(R.string.wallet__transfer_to_savings))
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.common__dialog_cancel))
+                }
+            },
+            modifier = Modifier.testTag("SpendingBackendBlockedDialog")
+        )
+
+        is SpendingBackendDialog.Confirm -> AlertDialog(
+            onDismissRequest = onDismiss,
+            title = { Text(stringResource(R.string.settings__adv__ark_warning_title)) },
+            text = { Text(stringResource(R.string.settings__adv__ark_warning_text)) },
+            confirmButton = {
+                TextButton(
+                    onClick = onConfirm,
+                    modifier = Modifier.testTag("SpendingBackendConfirm")
+                ) {
+                    Text(stringResource(R.string.settings__adv__ark_warning_confirm))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.common__dialog_cancel))
+                }
+            },
+            modifier = Modifier.testTag("SpendingBackendConfirmDialog")
+        )
+    }
 }
 
 @Composable
@@ -584,28 +679,41 @@ private fun AdvancedTabContent(
             padding = PaddingValues(top = 16.dp)
         )
 
-        SettingsButtonRow(
-            title = stringResource(R.string.settings__adv__lightning_connections),
-            icon = { SettingsIcon(R.drawable.ic_lightning) },
-            value = if (state.openChannelCount > 0) {
-                SettingsButtonValue.StringValue(state.openChannelCount.toString())
-            } else {
-                SettingsButtonValue.None
-            },
-            onClick = { onEvent(SettingsEvent.LightningConnectionsClick) },
-            modifier = Modifier.testTag("Channels")
-        )
-        SettingsButtonRow(
-            title = stringResource(R.string.settings__adv__lightning_node),
-            icon = { SettingsIcon(R.drawable.ic_git_branch) },
-            value = if (state.truncatedNodeId.isNotEmpty()) {
-                SettingsButtonValue.StringValue("${state.truncatedNodeId}...")
-            } else {
-                SettingsButtonValue.None
-            },
-            onClick = { onEvent(SettingsEvent.LightningNodeClick) },
-            modifier = Modifier.testTag("LightningNodeInfo")
-        )
+        if (state.isArkSupported) {
+            SettingsSwitchRow(
+                title = stringResource(R.string.settings__adv__ark_toggle),
+                icon = { SettingsIcon(R.drawable.ic_lightning) },
+                isChecked = state.isArkEnabled,
+                onClick = { onEvent(SettingsEvent.ArkBackendClick) },
+                switchTestTag = "SpendingBackendToggleSwitch",
+                modifier = Modifier.testTag("SpendingBackendToggle")
+            )
+        }
+        // Channels and the node identity are meaningless while Ark provides spending.
+        if (!state.isArkEnabled) {
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__adv__lightning_connections),
+                icon = { SettingsIcon(R.drawable.ic_lightning) },
+                value = if (state.openChannelCount > 0) {
+                    SettingsButtonValue.StringValue(state.openChannelCount.toString())
+                } else {
+                    SettingsButtonValue.None
+                },
+                onClick = { onEvent(SettingsEvent.LightningConnectionsClick) },
+                modifier = Modifier.testTag("Channels")
+            )
+            SettingsButtonRow(
+                title = stringResource(R.string.settings__adv__lightning_node),
+                icon = { SettingsIcon(R.drawable.ic_git_branch) },
+                value = if (state.truncatedNodeId.isNotEmpty()) {
+                    SettingsButtonValue.StringValue("${state.truncatedNodeId}...")
+                } else {
+                    SettingsButtonValue.None
+                },
+                onClick = { onEvent(SettingsEvent.LightningNodeClick) },
+                modifier = Modifier.testTag("LightningNodeInfo")
+            )
+        }
         SettingsButtonRow(
             title = stringResource(R.string.settings__adv__electrum_server),
             icon = { SettingsIcon(R.drawable.ic_hard_drives) },
@@ -704,6 +812,7 @@ sealed interface SettingsEvent {
     data object CoinSelectionClick : SettingsEvent
     data object AddressViewerClick : SettingsEvent
     data object WatchOnlyAccountsClick : SettingsEvent
+    data object ArkBackendClick : SettingsEvent
     data object LightningConnectionsClick : SettingsEvent
     data object LightningNodeClick : SettingsEvent
     data object ElectrumServerClick : SettingsEvent
@@ -755,4 +864,6 @@ data class AdvancedTabState(
     val truncatedNodeId: String = "",
     val electrumHost: String = "",
     val watchOnlyAccountCount: Int = 0,
+    val isArkSupported: Boolean = false,
+    val isArkEnabled: Boolean = false,
 )
