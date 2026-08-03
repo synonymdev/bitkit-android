@@ -76,6 +76,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.utils.AppError
+import to.bitkit.utils.Logger
 import java.security.MessageDigest
 import java.util.UUID
 import javax.crypto.Mac
@@ -97,14 +98,7 @@ data class PaykitPrivateContactPaymentResolution(
 
 data class PaykitPublicContactPaymentResolution(
     val payableEndpoints: List<PaykitResolvedPaymentEndpoint>,
-    val privatePaymentListVersion: ULong? = null,
-    val publicResolutionError: Throwable? = null,
 )
-
-enum class PaykitPaymentEndpointSource {
-    PRIVATE_PAYMENT_LIST,
-    PUBLIC_PAYMENT_ENDPOINT,
-}
 
 data class PaykitResolvedPaymentEndpoint(
     val identifier: String,
@@ -157,7 +151,9 @@ class PaykitSdkService @Inject constructor(
             try {
                 PaykitAndroid.initializeOrThrow(context)
                 operationMutex.withLock {
-                    handle().initialize()
+                    val handle = handle()
+                    handle.initialize()
+                    publishReceiverMarkerIfLiveSessionAvailable(handle)
                 }
                 isSetup.complete(Unit)
             } catch (t: Throwable) {
@@ -475,14 +471,7 @@ class PaykitSdkService @Inject constructor(
                     return@withStateRevisionTracking
                 }
 
-                handle.publishPaykitReceiverMarker(
-                    PaykitReceiverCapabilities(
-                        privatePayments = sessionProvider.hasSessionAccess(),
-                        paymentRequests = false,
-                        receipts = false,
-                        outgoingPayments = true,
-                    ),
-                )
+                handle.publishPaykitReceiverMarker(receiverCapabilities())
             }
         }
     }
@@ -597,7 +586,7 @@ class PaykitSdkService @Inject constructor(
         amount: PaymentAmountContext? = null,
     ): PaykitPreparedPrivateContactPayment {
         isSetup.await()
-        val (privateResolution, publicResolution) = operationMutex.withLock {
+        val prepared = operationMutex.withLock {
             withStateRevisionTracking { handle ->
                 handle.prepareAndResolvePrivateContactPayment(
                     counterparty = counterparty,
@@ -605,15 +594,7 @@ class PaykitSdkService @Inject constructor(
                     amount = amount,
                     afterPrivatePaymentListVersion = afterPrivatePaymentListVersion,
                     maxAdvanceSteps = 8u,
-                ).resolution
-                val publicResolution = if (includePublicEndpoints) {
-                    runSuspendCatching {
-                        handle.resolvePublicContactPayment(counterparty, receiverPath, amount = null)
-                    }
-                } else {
-                    null
-                }
-                privateResolution to publicResolution
+                )
             }
         }
         return PaykitPreparedPrivateContactPayment(
@@ -653,24 +634,7 @@ class PaykitSdkService @Inject constructor(
                     identifier = it.identifier,
                     payload = it.target.payload.exportText(),
                 )
-            } + publicResolution?.resolvedEndpoints().orEmpty(),
-            privatePaymentListVersion = privatePaymentListVersion,
-            publicResolutionError = publicResolutionError,
-        )
-    }
-
-    private fun PublicContactPaymentResolution.toPaykitContactPaymentResolution() =
-        PaykitContactPaymentResolution(
-            privateState = PrivatePaymentResolutionState.NO_PRIVATE_ENDPOINT,
-            payableEndpoints = resolvedEndpoints(),
-        )
-
-    private fun PublicContactPaymentResolution.resolvedEndpoints() = payableEndpoints.map {
-        PaykitResolvedPaymentEndpoint(
-            counterparty = it.counterparty,
-            source = PaykitPaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT,
-            identifier = it.identifier,
-            payload = it.target.payload.exportText(),
+            },
         )
 
     suspend fun exportBackupState(): String {
@@ -776,7 +740,7 @@ class PaykitSdkService @Inject constructor(
 
     private suspend fun publishReceiverMarkerIfLiveSessionAvailable(handle: PaykitSdk) {
         runSuspendCatching {
-            val capabilities = receiverCapabilities(handle)
+            val capabilities = receiverCapabilities()
             if (capabilities.privatePayments) {
                 handle.publishPaykitReceiverMarker(capabilities)
             }
@@ -785,11 +749,11 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    private suspend fun receiverCapabilities(handle: PaykitSdk): PaykitReceiverCapabilities {
-        val status = handle.identityStatus()
+    private fun receiverCapabilities(): PaykitReceiverCapabilities {
+        val hasPrivatePaymentAccess = sessionProvider.hasSessionAccess()
         return PaykitReceiverCapabilities(
-            privatePayments = status?.liveSessionAvailable == true,
-            paymentRequests = status?.liveSessionAvailable == true,
+            privatePayments = hasPrivatePaymentAccess,
+            paymentRequests = hasPrivatePaymentAccess,
             receipts = false,
             outgoingPayments = true,
         )
@@ -847,6 +811,8 @@ class PaykitSdkService @Inject constructor(
         this?.capabilities?.let { it.privatePayments && it.outgoingPayments } == true
 
     companion object {
+        private const val TAG = "PaykitSdkService"
+
         fun localSecretKey(secretKeyHex: String): PubkyLocalSecretKey =
             PubkyLocalSecretKey(secretKeyHex.fromHex())
 

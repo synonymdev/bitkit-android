@@ -72,9 +72,6 @@ class PrivatePaykitRepo @Inject constructor(
     companion object {
         private const val TAG = "PrivatePaykitRepo"
         private const val MAX_RECEIVED_INVOICE_HASHES_PER_CONTACT = 100
-
-        /** Identifies Bitkit's wrapper around the Paykit SDK backup state. */
-        private const val BACKUP_STATE_PREFIX = "bitkit-paykit-v1:"
         private val privateInvoiceExpiry = 24.hours
         private val invoiceRefreshBuffer = 30.minutes
 
@@ -340,23 +337,19 @@ class PrivatePaykitRepo @Inject constructor(
     suspend fun discardRemoteLightningEndpoints(
         publicKey: String,
         paymentHashes: Set<String>,
-        paymentRequests: Set<String> = emptySet(),
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
-            if (paymentHashes.isEmpty() && paymentRequests.isEmpty()) return@runSuspendCatching
+            if (paymentHashes.isEmpty()) return@runSuspendCatching
             val normalizedKey = normalizedPublicKey(publicKey) ?: return@runSuspendCatching
             val contactState = ensureState().contacts[normalizedKey] ?: return@runSuspendCatching
             val normalizedHashes = paymentHashes.map { it.lowercase() }.toSet()
             val filteredEntries = contactState.remoteEndpoints.filterNot {
-                shouldDiscardRemoteLightningEntry(it, normalizedHashes, paymentRequests)
+                shouldDiscardRemoteLightningEntry(it, normalizedHashes)
             }
             if (filteredEntries.size == contactState.remoteEndpoints.size) return@runSuspendCatching
 
-            persistConsumedRemotePaymentList(
-                publicKey = normalizedKey,
-                contactState = contactState,
-                receiverPath = PaykitReceiverPaths.WALLET,
-            ).getOrThrow()
+            contactState.remoteEndpoints = filteredEntries
+            persistState(markWalletBackup = true)
         }
     }
 
@@ -453,9 +446,9 @@ class PrivatePaykitRepo @Inject constructor(
         withContext(serializedDispatcher) {
             runSuspendCatching {
                 clearPendingMessageDrainRetries()
+                state = PrivatePaykitState()
                 knownSavedContactKeys.clear()
                 if (backup == null) {
-                    state = PrivatePaykitState()
                     paykitSdkService.clearState()
                 } else {
                     val decoded = json.decodeFromString<PrivatePaykitBackup>(backup)
@@ -1170,50 +1163,11 @@ class PrivatePaykitRepo @Inject constructor(
         return "$publicKey:$receiverPath:${endpoint.methodId.rawValue}:$payloadHashPrefix"
     }
 
-    private suspend fun cacheResolvedPrivateEndpoints(
-        publicKey: String,
-        receiverPath: String,
-        privatePaymentListVersion: ULong?,
-        endpoints: List<Endpoint>,
-    ) {
+    private suspend fun cacheResolvedPrivateEndpoints(publicKey: String, endpoints: List<Endpoint>) {
         val contactState = ensureState().contacts.getOrPut(publicKey) { ContactState() }
         contactState.remoteEndpoints = endpoints.map { StoredPaymentEntry(it.methodId.rawValue, it.rawPayload) }
-        contactState.remotePaymentListVersionsByReceiverPath = if (privatePaymentListVersion == null) {
-            contactState.remotePaymentListVersionsByReceiverPath - receiverPath
-        } else {
-            contactState.remotePaymentListVersionsByReceiverPath + (receiverPath to privatePaymentListVersion)
-        }
         persistState(markWalletBackup = true)
     }
-
-    private fun ContactState.consumeRemotePaymentList(receiverPath: String) {
-        val version = remotePaymentListVersionsByReceiverPath[receiverPath]
-        remoteEndpoints = emptyList()
-        remotePaymentListVersionsByReceiverPath = remotePaymentListVersionsByReceiverPath - receiverPath
-        if (version != null) {
-            consumedPaymentListVersionsByReceiverPath =
-                consumedPaymentListVersionsByReceiverPath + (receiverPath to version)
-        }
-    }
-
-    private suspend fun persistConsumedRemotePaymentList(
-        publicKey: String,
-        contactState: ContactState,
-        receiverPath: String,
-    ): Result<Unit> {
-        val previousState = contactState.copy()
-        contactState.consumeRemotePaymentList(receiverPath)
-        return runSuspendCatching {
-            persistState(markWalletBackup = true)
-        }.onFailure {
-            state?.contacts?.set(publicKey, previousState)
-        }
-    }
-
-    private suspend fun consumedPaymentListVersion(publicKey: String) = ensureState()
-        .contacts[publicKey]
-        ?.consumedPaymentListVersionsByReceiverPath
-        ?.get(PaykitReceiverPaths.WALLET)
 
     private suspend fun removePublishedEndpoints(): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
@@ -1375,7 +1329,7 @@ class PrivatePaykitRepo @Inject constructor(
         }
 
         if (staleLightningHashes.isNotEmpty()) {
-            pruneRemoteLightningEndpoints(publicKey, staleLightningHashes).onFailure {
+            discardRemoteLightningEndpoints(publicKey, staleLightningHashes).onFailure {
                 if (it is CancellationException) throw it
                 Logger.warn(
                     "Failed to discard already-attempted private Paykit invoice for '${redacted(publicKey)}'",
@@ -1387,42 +1341,14 @@ class PrivatePaykitRepo @Inject constructor(
         return reusable
     }
 
-    private suspend fun pruneRemoteLightningEndpoints(
-        publicKey: String,
-        paymentHashes: Set<String>,
-    ): Result<Unit> = withContext(serializedDispatcher) {
-        runSuspendCatching {
-            val normalizedKey = normalizedPublicKey(publicKey) ?: return@runSuspendCatching
-            val contactState = ensureState().contacts[normalizedKey] ?: return@runSuspendCatching
-            val filteredEntries = contactState.remoteEndpoints.filterNot {
-                shouldDiscardRemoteLightningEntry(it, paymentHashes, emptySet())
-            }
-            if (filteredEntries.size == contactState.remoteEndpoints.size) return@runSuspendCatching
-
-            val previousState = contactState.copy()
-            contactState.remoteEndpoints = filteredEntries
-            runSuspendCatching {
-                persistState(markWalletBackup = true)
-            }.onFailure {
-                state?.contacts?.set(normalizedKey, previousState)
-            }.getOrThrow()
-        }
-    }
-
     private suspend fun shouldDiscardRemoteLightningEntry(
         entry: StoredPaymentEntry,
         paymentHashes: Set<String>,
-        paymentRequests: Set<String>,
     ): Boolean {
+        if (entry.methodId != MethodId.Bolt11.rawValue) return false
         val endpoint = PublicPaykitRepo.parseEndpoint(entry.methodId, entry.endpointData) ?: return false
-        return when (endpoint.methodId) {
-            MethodId.Bolt11 -> {
-                val paymentHash = paymentHashForBolt11(endpoint.value)?.lowercase() ?: return false
-                paymentHash in paymentHashes
-            }
-            MethodId.Lnurl -> endpoint.value in paymentRequests
-            else -> false
-        }
+        val paymentHash = paymentHashForBolt11(endpoint.value)?.lowercase() ?: return false
+        return paymentHash in paymentHashes
     }
 
     private suspend fun canPublishPrivateEndpoints(): Boolean {
@@ -1434,10 +1360,9 @@ class PrivatePaykitRepo @Inject constructor(
             lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
     }
 
-    private suspend fun hasLiveSessionForCurrentProfile(): Boolean {
+    private suspend fun hasPrivatePaymentAccessForCurrentProfile(): Boolean {
         pubkyService.currentPublicKey() ?: return false
-        val status = paykitSdkService.identityStatus() ?: return false
-        return status.liveSessionAvailable
+        return paykitSdkService.hasPrivatePaymentAccess()
     }
 
     private suspend fun isContactSharingCleanupPending(): Boolean =
@@ -1591,9 +1516,3 @@ class PrivatePaykitRepo @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 }
-
-@Serializable
-private data class PrivatePaykitBackupState(
-    val sdkState: String,
-    val consumedPaymentListVersionsByContact: Map<String, Map<String, ULong>> = emptyMap(),
-)

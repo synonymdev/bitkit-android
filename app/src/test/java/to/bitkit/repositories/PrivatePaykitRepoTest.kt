@@ -726,12 +726,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `beginSavedContactPayment uses cached private resolution without live SDK session`() = test {
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        whenever(paykitSdkService.identityStatus()).thenReturn(
-            IdentityStatus(
-                publicKey = OWN_KEY,
-                liveSessionAvailable = false,
-            ),
-        )
+        whenever(paykitSdkService.hasPrivatePaymentAccess()).thenReturn(false)
         whenever {
             paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
         }.thenReturn(resolution(resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11), version = 7uL))
@@ -951,12 +946,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `beginPaymentRequest uses cached private resolution without live SDK session`() = test {
         val request = paymentRequest()
-        whenever(paykitSdkService.identityStatus()).thenReturn(
-            IdentityStatus(
-                publicKey = OWN_KEY,
-                liveSessionAvailable = false,
-            ),
-        )
+        whenever(paykitSdkService.hasPrivatePaymentAccess()).thenReturn(false)
         whenever {
             paykitSdkService.prepareAndResolvePrivateContactPayment(
                 eq(CONTACT_KEY),

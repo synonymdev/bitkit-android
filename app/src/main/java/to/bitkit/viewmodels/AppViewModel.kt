@@ -2617,13 +2617,7 @@ class AppViewModel @Inject constructor(
             SendMethod.ONCHAIN -> {
                 val address = _sendUiState.value.address
                 val tags = _sendUiState.value.selectedTags
-                val contactPublicKey = activeContactPaymentPublicKey()
-
-                discardContactOnchainEndpoint(contactPublicKey, address)
-                    .fold(
-                        onSuccess = { sendOnchain(address, amount, tags = tags) },
-                        onFailure = { Result.failure(it) },
-                    )
+                sendOnchain(address, amount, tags = tags)
                     .onSuccess { txId ->
                         Logger.info("Onchain send result txid: $txId", context = TAG)
                         onSendSuccess(
@@ -2658,8 +2652,6 @@ class AppViewModel @Inject constructor(
 
                 val tags = _sendUiState.value.selectedTags
                 var createdMetadataPaymentId: String? = null
-                val contactPublicKey = activeContactPaymentPublicKey()
-                val contactPaymentRequest = activeContactPaymentRequest()
 
                 // Extract payment hash from invoice for pre-activity metadata
                 val paymentHash = decodedInvoice.paymentHash.toHex()

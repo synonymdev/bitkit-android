@@ -10,7 +10,6 @@ import android.nfc.NfcAdapter
 import androidx.core.net.toUri
 import app.cash.turbine.test
 import com.synonym.bitkitcore.LightningInvoice
-import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.persistentListOf
@@ -262,7 +261,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         whenever { privatePaykitRepo.contactPublicKeyForPrivateOnchainAddresses(any<Collection<String>>()) }
             .thenReturn(null)
-        whenever { privatePaykitRepo.discardRemoteLightningEndpoints(any(), any(), any()) }
+        whenever { privatePaykitRepo.discardRemoteLightningEndpoints(any(), any()) }
             .thenReturn(Result.success(Unit))
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
             .thenReturn(Result.failure(Exception("not mocked")))
@@ -2028,38 +2027,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `private onchain contact payment stops when list consumption fails`() = test {
-        val address = "bcrt1qprivatecontact"
-        val contactKey = "pubkycontact"
-        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
-        whenever { privatePaykitRepo.discardRemoteOnchainEndpoints(contactKey, setOf(address)) }
-            .thenReturn(Result.failure(AppError("backup failed")))
-        setActiveContactPaymentContext(contactKey)
-        setSendState(
-            SendUiState(
-                address = address,
-                amount = 1000u,
-                payMethod = SendMethod.ONCHAIN,
-                speed = TransactionSpeed.Medium,
-            ),
-        )
-
-        confirmCurrentPayment()
-
-        verify(lightningRepo, never()).sendOnChain(
-            address = any(),
-            sats = any(),
-            speed = anyOrNull(),
-            utxosToSpend = anyOrNull(),
-            feeRates = anyOrNull(),
-            isTransfer = any(),
-            channelId = anyOrNull(),
-            isMaxAmount = any(),
-            tags = any(),
-        )
-    }
-
-    @Test
     fun `non-contact onchain payment does not discard private endpoint`() = test {
         val address = "bcrt1qpublicpayment"
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
@@ -2200,7 +2167,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(privatePaykitRepo, never()).discardRemoteLightningEndpoints(any(), any(), any())
+        verify(privatePaykitRepo, never()).discardRemoteLightningEndpoints(any(), any())
     }
 
     @Test
@@ -2414,17 +2381,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         description = "",
         networkType = NetworkType.REGTEST,
         payeeNodeId = null,
-    )
-
-    private fun lnurlPayData() = LnurlPayData(
-        uri = "lnurl1private",
-        callback = "https://example.com/callback",
-        minSendable = 1_000uL,
-        maxSendable = 100_000_000uL,
-        metadataStr = "[[\"text/plain\",\"test\"]]",
-        commentAllowed = null,
-        allowsNostr = false,
-        nostrPubkey = null,
     )
 
     private suspend fun enablePublicPaykitSharing() {
