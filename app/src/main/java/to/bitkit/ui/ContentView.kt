@@ -318,13 +318,13 @@ fun ContentView(
             return@LaunchedEffect
         }
 
-        if (shouldDismissSheetForScreenLink(uri, appViewModel.currentSheet.value)) {
-            appViewModel.hideSheet()
-        }
-
         val request = Intent(Intent.ACTION_VIEW, uri)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         val handled = navController.handleDeepLink(request)
+
+        if (shouldDismissSheetForScreenLink(handled, appViewModel.currentSheet.value)) {
+            appViewModel.hideSheet()
+        }
         if (!handled) {
             Logger.warn("Unhandled screen deeplink '$uri'", context = "ContentView")
         }
@@ -1900,8 +1900,8 @@ fun NavController.navigateToTransferSpendingStart(
     deviceId: String,
 ) = navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro, deviceId))
 
-internal fun shouldDismissSheetForScreenLink(uri: Uri, currentSheet: Sheet?): Boolean =
-    currentSheet != null && SheetDeepLinks.sheetFor(uri) == null
+internal fun shouldDismissSheetForScreenLink(handled: Boolean, currentSheet: Sheet?): Boolean =
+    handled && currentSheet != null
 
 internal fun transferEffectDestination(effect: TransferEffect): Routes? = when (effect) {
     TransferEffect.OnHwTxSigned -> Routes.SpendingHwSigned

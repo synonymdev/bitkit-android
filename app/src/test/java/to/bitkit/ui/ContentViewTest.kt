@@ -1,6 +1,5 @@
 package to.bitkit.ui
 
-import android.net.Uri
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -37,28 +36,22 @@ class ContentViewTest {
     }
 
     @Test
-    fun `a root screen link dismisses an open sheet`() {
-        val uri = Uri.parse("bitkit://screen/settings")
-
-        val result = shouldDismissSheetForScreenLink(uri, Sheet.Receive())
+    fun `a handled root screen link dismisses the open sheet`() {
+        val result = shouldDismissSheetForScreenLink(handled = true, currentSheet = Sheet.Receive())
 
         assertTrue(result)
     }
 
     @Test
-    fun `a sheet link replaces the open sheet instead of dismissing it`() {
-        val uri = Uri.parse("bitkit://screen/send/amount")
-
-        val result = shouldDismissSheetForScreenLink(uri, Sheet.Receive())
+    fun `a rejected screen link leaves the open sheet alone`() {
+        val result = shouldDismissSheetForScreenLink(handled = false, currentSheet = Sheet.Receive())
 
         assertFalse(result)
     }
 
     @Test
-    fun `a root screen link with no sheet open dismisses nothing`() {
-        val uri = Uri.parse("bitkit://screen/settings")
-
-        val result = shouldDismissSheetForScreenLink(uri, null)
+    fun `a handled root screen link with no sheet open dismisses nothing`() {
+        val result = shouldDismissSheetForScreenLink(handled = true, currentSheet = null)
 
         assertFalse(result)
     }
