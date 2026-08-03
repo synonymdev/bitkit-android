@@ -80,8 +80,6 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         val request = sut.pendingRequests.value.single()
         assertEquals(100_000uL, request.amountSats)
-        assertEquals("invoice-123", request.paymentReference)
-        assertEquals("""{"order":"123"}""", request.metadata)
         assertEquals(listOf(MethodId.Bolt11.rawValue), request.acceptedPaymentEndpointIdentifiers)
     }
 
@@ -111,10 +109,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             counterpartyReceiverPath = PaykitReceiverPaths.SERVER,
             amountValue = "0.000025",
             amountSats = 2_500uL,
-            paymentReference = "reference",
             expiresAt = null,
             acceptedPaymentEndpointIdentifiers = listOf(MethodId.Bolt11.rawValue),
-            metadata = "",
         )
 
         assertTrue(request.acceptsLightningInvoiceAmountMsats(null))

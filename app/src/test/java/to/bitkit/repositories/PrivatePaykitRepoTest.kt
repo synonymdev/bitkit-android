@@ -1091,10 +1091,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         counterpartyReceiverPath = SERVER_RECEIVER_PATH,
         amountValue = "0.000025",
         amountSats = 2_500uL,
-        paymentReference = "reference",
         expiresAt = Instant.fromEpochSeconds(NOW_SECONDS + 60),
         acceptedPaymentEndpointIdentifiers = acceptedEndpointIdentifiers,
-        metadata = "",
     )
 
     private fun privateListDeliveryReport(

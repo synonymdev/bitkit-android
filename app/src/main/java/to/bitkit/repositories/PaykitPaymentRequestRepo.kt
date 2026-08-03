@@ -8,9 +8,7 @@ import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
 import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +18,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import to.bitkit.async.appScope
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -47,10 +46,8 @@ data class PaykitPaymentRequest(
     val counterpartyReceiverPath: String,
     val amountValue: String,
     val amountSats: ULong,
-    val paymentReference: String,
     val expiresAt: Instant?,
     val acceptedPaymentEndpointIdentifiers: List<String>,
-    val metadata: String,
 ) {
     val id: PaykitPaymentRequestId
         get() = PaykitPaymentRequestId(paymentRequestId, counterparty, counterpartyReceiverPath)
@@ -83,7 +80,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     private val operationMutex = Mutex()
     private val stateGeneration = AtomicLong()
-    private val repoScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val repoScope = appScope(ioDispatcher, TAG)
     private var expirationJob: Job? = null
     private val _pendingRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     val pendingRequests: StateFlow<List<PaykitPaymentRequest>> = _pendingRequests.asStateFlow()
@@ -236,10 +233,8 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(now: Instant): PaykitPay
         counterpartyReceiverPath = counterpartyReceiverPath,
         amountValue = requestTerms.amount.value,
         amountSats = amountSats,
-        paymentReference = requestTerms.paymentReference.exportText(),
         expiresAt = expiresAt,
         acceptedPaymentEndpointIdentifiers = endpoints,
-        metadata = requestTerms.metadata.exportText(),
     )
 }
 

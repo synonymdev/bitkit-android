@@ -292,6 +292,8 @@ class AppViewModel @Inject constructor(
     private var isPresentingPaymentRequest = false
     private var isSubmittingPaymentRequest = false
     private var paykitPaymentRequestPollingJob: Job? = null
+    private val paymentRequestPresentationRetryAttempts = mutableMapOf<PaykitPaymentRequestId, Int>()
+    private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val timedSheetManager = timedSheetManagerProvider(viewModelScope).apply {
         registerSheet(appUpdateSheet)
         registerSheet(backupSheet)
@@ -610,18 +612,30 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refreshIncomingPaykitPaymentRequests() {
-        if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
-        paykitPaymentRequestRepo.refresh().onSuccess { presentNextIncomingPaykitPaymentRequest() }
+    private suspend fun refreshIncomingPaykitPaymentRequests(): Boolean {
+        if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return false
+        val previousRequests = paykitPaymentRequestRepo.pendingRequests.value
+        return paykitPaymentRequestRepo.refresh().fold(
+            onSuccess = {
+                presentNextIncomingPaykitPaymentRequest()
+                paykitPaymentRequestRepo.pendingRequests.value != previousRequests
+            },
+            onFailure = { false },
+        )
     }
 
     fun startPaykitPaymentRequestPolling() {
         if (paykitPaymentRequestPollingJob?.isActive == true) return
 
         paykitPaymentRequestPollingJob = viewModelScope.launch {
+            var refreshIntervalIndex = 0
             while (true) {
-                delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL)
-                refreshIncomingPaykitPaymentRequests()
+                delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS[refreshIntervalIndex])
+                refreshIntervalIndex = if (refreshIncomingPaykitPaymentRequests()) {
+                    0
+                } else {
+                    (refreshIntervalIndex + 1).coerceAtMost(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS.lastIndex)
+                }
             }
         }
     }
@@ -629,6 +643,9 @@ class AppViewModel @Inject constructor(
     fun stopPaykitPaymentRequestPolling() {
         paykitPaymentRequestPollingJob?.cancel()
         paykitPaymentRequestPollingJob = null
+        paymentRequestPresentationRetryJobs.values.forEach { it.cancel() }
+        paymentRequestPresentationRetryJobs.clear()
+        paymentRequestPresentationRetryAttempts.clear()
     }
 
     private fun observeIncomingPaykitPaymentRequests() {
@@ -653,29 +670,65 @@ class AppViewModel @Inject constructor(
 
     private suspend fun presentNextIncomingPaykitPaymentRequest() {
         val requests = paykitPaymentRequestRepo.pendingRequests.value
-        presentedPaymentRequestIds.retainAll(requests.mapTo(mutableSetOf()) { it.id })
+        retainPaymentRequestPresentationState(requests)
         if (currentSheet.value != null || isPresentingPaymentRequest || hasActiveContactPaymentContext()) return
         isPresentingPaymentRequest = true
         try {
-            for (request in requests.filter { it.id !in presentedPaymentRequestIds }) {
-                val result = privatePaykitRepo.beginPaymentRequest(request).getOrNull()
-                if (currentSheet.value != null || hasActiveContactPaymentContext()) return
-                if (result !is PublicPaykitPaymentResult.Opened || !paykitPaymentRequestRepo.isPending(request)) {
-                    continue
-                }
-
-                presentedPaymentRequestIds += request.id
-                openContactPayment(
-                    paymentRequest = result.paymentRequest,
-                    publicKey = request.counterparty,
-                    privatePaymentContext = result.privatePaymentContext,
-                    incomingPaymentRequest = request,
-                )
-                return
+            for (request in requests.filter {
+                it.id !in presentedPaymentRequestIds && paymentRequestPresentationRetryJobs[it.id]?.isActive != true
+            }) {
+                if (openIncomingPaymentRequestIfAvailable(request)) return
             }
         } finally {
             isPresentingPaymentRequest = false
         }
+    }
+
+    private suspend fun openIncomingPaymentRequestIfAvailable(request: PaykitPaymentRequest): Boolean {
+        val result = privatePaykitRepo.beginPaymentRequest(request).getOrNull()
+        if (currentSheet.value != null || hasActiveContactPaymentContext()) return true
+        if (result !is PublicPaykitPaymentResult.Opened || !paykitPaymentRequestRepo.isPending(request)) {
+            if (paykitPaymentRequestRepo.isPending(request)) deferPaymentRequestPresentation(request)
+            return false
+        }
+
+        clearPaymentRequestPresentationRetry(request.id)
+        presentedPaymentRequestIds += request.id
+        openContactPayment(
+            paymentRequest = result.paymentRequest,
+            publicKey = request.counterparty,
+            privatePaymentContext = result.privatePaymentContext,
+            incomingPaymentRequest = request,
+        )
+        return true
+    }
+
+    private fun deferPaymentRequestPresentation(request: PaykitPaymentRequest) {
+        val attempt = paymentRequestPresentationRetryAttempts[request.id] ?: 0
+        val retryDelay = PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS[
+            attempt.coerceAtMost(PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.lastIndex)
+        ]
+        paymentRequestPresentationRetryAttempts[request.id] = attempt + 1
+        paymentRequestPresentationRetryJobs.remove(request.id)?.cancel()
+        paymentRequestPresentationRetryJobs[request.id] = viewModelScope.launch {
+            delay(retryDelay)
+            paymentRequestPresentationRetryJobs.remove(request.id)
+            presentNextIncomingPaykitPaymentRequest()
+        }
+    }
+
+    private fun retainPaymentRequestPresentationState(requests: List<PaykitPaymentRequest>) {
+        val requestIds = requests.mapTo(mutableSetOf()) { it.id }
+        presentedPaymentRequestIds.retainAll(requestIds)
+        paymentRequestPresentationRetryAttempts.keys.retainAll(requestIds)
+        paymentRequestPresentationRetryJobs.keys.filter { it !in requestIds }.forEach {
+            paymentRequestPresentationRetryJobs.remove(it)?.cancel()
+        }
+    }
+
+    private fun clearPaymentRequestPresentationRetry(requestId: PaykitPaymentRequestId) {
+        paymentRequestPresentationRetryAttempts.remove(requestId)
+        paymentRequestPresentationRetryJobs.remove(requestId)?.cancel()
     }
 
     private suspend fun refreshPrivateOnlyPaykitReceiverMarker(reason: String) {
@@ -2654,7 +2707,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun hasMismatchedIncomingPaymentRequest(contactPaymentContext: ContactPaymentContext?): Boolean {
+    private suspend fun hasMismatchedIncomingPaymentRequest(contactPaymentContext: ContactPaymentContext?): Boolean {
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest ?: return false
         if (!incomingPaymentRequest.acceptsPaymentAmount(_sendUiState.value.amount)) return true
         if (_sendUiState.value.payMethod != SendMethod.LIGHTNING) return false
@@ -2663,11 +2716,12 @@ class AppViewModel @Inject constructor(
         return !incomingPaymentRequest.acceptsLightningInvoice(lightningInvoice)
     }
 
-    private fun PaykitPaymentRequest.acceptsLightningInvoice(invoice: LightningInvoice): Boolean {
-        val amountMsats = runCatching { Bolt11Invoice.fromStr(invoice.bolt11).amountMilliSatoshis() }
-            .getOrElse { return false }
-        return acceptsLightningInvoiceAmountMsats(amountMsats)
-    }
+    private suspend fun PaykitPaymentRequest.acceptsLightningInvoice(invoice: LightningInvoice): Boolean =
+        withContext(bgDispatcher) {
+            val amountMsats = runCatching { Bolt11Invoice.fromStr(invoice.bolt11).amountMilliSatoshis() }
+                .getOrElse { return@withContext false }
+            acceptsLightningInvoiceAmountMsats(amountMsats)
+        }
 
     private suspend fun validateAndAcceptIncomingPaymentRequest(
         contactPaymentContext: ContactPaymentContext?,
@@ -3636,7 +3690,13 @@ class AppViewModel @Inject constructor(
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
         private const val PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS = 5_000L
-        private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVAL = 30.seconds
+        private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS = listOf(30.seconds, 60.seconds, 120.seconds)
+        private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS = listOf(
+            30.seconds,
+            60.seconds,
+            120.seconds,
+            300.seconds,
+        )
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
         private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
         private const val BITKIT_SCHEME = "bitkit"

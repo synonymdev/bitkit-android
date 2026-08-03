@@ -360,27 +360,6 @@ class PrivatePaykitRepo @Inject constructor(
         }
     }
 
-    suspend fun discardRemoteOnchainEndpoints(
-        publicKey: String,
-        addresses: Set<String>,
-    ): Result<Unit> = withContext(serializedDispatcher) {
-        runSuspendCatching {
-            if (addresses.isEmpty()) return@runSuspendCatching
-            val normalizedKey = normalizedPublicKey(publicKey) ?: return@runSuspendCatching
-            val contactState = ensureState().contacts[normalizedKey] ?: return@runSuspendCatching
-            val filteredEntries = contactState.remoteEndpoints.filterNot {
-                shouldDiscardRemoteOnchainEntry(it, addresses)
-            }
-            if (filteredEntries.size == contactState.remoteEndpoints.size) return@runSuspendCatching
-
-            persistConsumedRemotePaymentList(
-                publicKey = normalizedKey,
-                contactState = contactState,
-                receiverPath = PaykitReceiverPaths.WALLET,
-            ).getOrThrow()
-        }
-    }
-
     suspend fun handleReceivedPayment(paymentHash: String): Result<Unit> =
         refreshReceivedPrivateInvoices(setOf(paymentHash), reason = "invoice rotation")
 
@@ -508,12 +487,7 @@ class PrivatePaykitRepo @Inject constructor(
                     consumedVersion = consumedVersion,
                     amount = amount,
                     allowPublicResolution = paymentRequest == null,
-                )
-                    ?: if (paymentRequest == null) {
-                        return@runSuspendCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
-                    } else {
-                        throw PrivatePaykitError.PrivateUnavailable
-                    }
+                ) ?: return@runSuspendCatching publicPaykitRepo.beginPayment(publicKey).getOrThrow()
                 val resolution = prepared.resolution
                 val linkState = currentLinkState(publicKey, receiverPath, prepared.linkState)
                 if (paymentRequest == null && canUsePublicPayment(linkState, resolution.status, resolution.state)) {
@@ -601,6 +575,7 @@ class PrivatePaykitRepo @Inject constructor(
         val privatePayable = privatePayableEndpoints(acceptedEndpoints, publicKey)
         val paymentListVersion = resolution.privatePaymentListVersion
         if (privatePayable.isNotEmpty() && paymentListVersion != null) {
+            Logger.info("Opened private Paykit payment for '${redacted(publicKey)}'", context = TAG)
             return PublicPaykitPaymentResult.Opened(
                 paymentRequest = PublicPaykitRepo.paymentRequest(privatePayable),
                 privatePaymentContext = PrivatePaykitPaymentContext(receiverPath, paymentListVersion),
@@ -1448,15 +1423,6 @@ class PrivatePaykitRepo @Inject constructor(
             MethodId.Lnurl -> endpoint.value in paymentRequests
             else -> false
         }
-    }
-
-    private fun shouldDiscardRemoteOnchainEntry(
-        entry: StoredPaymentEntry,
-        addresses: Set<String>,
-    ): Boolean {
-        val endpoint = PublicPaykitRepo.parseEndpoint(entry.methodId, entry.endpointData) ?: return false
-        if (!endpoint.methodId.isOnchain) return false
-        return endpoint.value in addresses
     }
 
     private suspend fun canPublishPrivateEndpoints(): Boolean {

@@ -264,8 +264,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(null)
         whenever { privatePaykitRepo.discardRemoteLightningEndpoints(any(), any(), any()) }
             .thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.discardRemoteOnchainEndpoints(any(), any()) }
-            .thenReturn(Result.success(Unit))
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull()))
             .thenReturn(Result.failure(Exception("not mocked")))
         whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
@@ -367,17 +365,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
 
         verify(paykitPaymentRequestRepo).refresh()
+        clearInvocations(paykitPaymentRequestRepo)
+
+        advanceTimeBy(59.seconds.inWholeMilliseconds)
+        runCurrent()
+        verify(paykitPaymentRequestRepo, never()).refresh()
+
+        advanceTimeBy(1.seconds.inWholeMilliseconds)
+        runCurrent()
+        verify(paykitPaymentRequestRepo).refresh()
 
         sut.stopPaykitPaymentRequestPolling()
         clearInvocations(paykitPaymentRequestRepo)
-        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        advanceTimeBy(120.seconds.inWholeMilliseconds)
         runCurrent()
 
         verify(paykitPaymentRequestRepo, never()).refresh()
     }
 
     @Test
-    fun `payment request waiting for a newer private list is retried on refresh`() = test {
+    fun `payment request waiting for a newer private list is retried after backoff`() = test {
         val request = paymentRequest()
         val bolt11 = "lnbcrt1updatedpaymentrequest"
         val privateContext = PrivatePaykitPaymentContext("bitkit/server", 8uL)
@@ -403,8 +410,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceTimeBy(30.seconds.inWholeMilliseconds)
         runCurrent()
         assertNull(sut.currentSheet.value)
+        verify(privatePaykitRepo).beginPaymentRequest(request)
 
-        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        advanceTimeBy(29.seconds.inWholeMilliseconds)
+        runCurrent()
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+
+        advanceTimeBy(1.seconds.inWholeMilliseconds)
         runCurrent()
         sut.stopPaykitPaymentRequestPolling()
 
@@ -2071,8 +2083,6 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
 
         confirmCurrentPayment()
-
-        verify(privatePaykitRepo, never()).discardRemoteOnchainEndpoints(any(), any())
     }
 
     @Test
@@ -2547,10 +2557,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         counterpartyReceiverPath = "bitkit/server",
         amountValue = "0.000025",
         amountSats = 2_500uL,
-        paymentReference = "reference",
         expiresAt = null,
         acceptedPaymentEndpointIdentifiers = listOf("lightning_bolt11"),
-        metadata = "",
     )
 }
 
