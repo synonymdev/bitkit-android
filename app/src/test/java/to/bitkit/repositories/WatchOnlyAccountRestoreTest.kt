@@ -80,6 +80,7 @@ class WatchOnlyAccountRestoreTest : BaseUnitTest() {
         coordinator: WatchOnlyAccountLifecycleCoordinator,
     ) = LightningService(
         bgDispatcher = testDispatcher,
+        ioDispatcher = testDispatcher,
         keychain = mock<Keychain>(),
         vssStoreIdProvider = mock<VssStoreIdProvider>(),
         settingsStore = mock<SettingsStore>(),
