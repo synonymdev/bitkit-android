@@ -904,7 +904,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.showScannerSheet()
         advanceUntilIdle()
-        assertEquals(Sheet.QrScanner, sut.currentSheet.value)
+        assertEquals(Sheet.QrScanner(), sut.currentSheet.value)
 
         sut.onScannerSheetResult(authUrl)
         advanceUntilIdle()

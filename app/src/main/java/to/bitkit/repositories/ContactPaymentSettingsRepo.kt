@@ -30,7 +30,7 @@ class ContactPaymentSettingsRepo @Inject constructor(
 
     private suspend fun enable(contacts: List<String>): Result<Unit> {
         val previous = settingsStore.data.first()
-        val canUsePrivateContactPayments = pubkyRepo.hasSecretKey()
+        val canUsePrivateContactPayments = privatePaykitRepo.hasPrivatePaymentAccess()
         return runSuspendCatching {
             settingsStore.update {
                 it.copy(

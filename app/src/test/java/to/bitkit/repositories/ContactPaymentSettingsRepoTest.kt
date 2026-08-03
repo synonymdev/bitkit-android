@@ -37,7 +37,7 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         settingsFlow.value = SettingsData()
         whenever(settingsStore.data).thenReturn(settingsFlow)
         whenever(pubkyRepo.contacts).thenReturn(MutableStateFlow(listOf(createContact())))
-        whenever { pubkyRepo.hasSecretKey() }.thenReturn(true)
+        whenever { privatePaykitRepo.hasPrivatePaymentAccess() }.thenReturn(true)
         whenever { settingsStore.update(any()) }.thenAnswer {
             val transform = it.getArgument<(SettingsData) -> SettingsData>(0)
             settingsFlow.value = transform(settingsFlow.value)
@@ -72,8 +72,8 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `enabling without local key enables only public payments`() = test {
-        whenever { pubkyRepo.hasSecretKey() }.thenReturn(false)
+    fun `enabling without private payment access enables only public payments`() = test {
+        whenever { privatePaykitRepo.hasPrivatePaymentAccess() }.thenReturn(false)
 
         val result = createSut().setEnabled(true)
 
@@ -81,6 +81,18 @@ class ContactPaymentSettingsRepoTest : BaseUnitTest() {
         assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
         verify(privatePaykitRepo, never()).enableSharingAndPrepareSavedContacts(any<Collection<String>>(), any())
+    }
+
+    @Test
+    fun `enabling with external session access enables private payments`() = test {
+        whenever { pubkyRepo.hasSecretKey() }.thenReturn(false)
+        whenever { privatePaykitRepo.hasPrivatePaymentAccess() }.thenReturn(true)
+
+        val result = createSut().setEnabled(true)
+
+        assertTrue(result.isSuccess)
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        verify(privatePaykitRepo).enableSharingAndPrepareSavedContacts(listOf(CONTACT_KEY), true)
     }
 
     @Test
