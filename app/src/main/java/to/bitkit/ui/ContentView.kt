@@ -919,7 +919,7 @@ private fun RootNavHost(
             navigationWithDefaultTransitions<Routes.ExternalNav>(
                 startDestination = ExternalConnection(),
             ) {
-                composableWithDefaultTransitions<ExternalConnection> {
+                deepLinkableComposable<ExternalConnection> {
                     val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
                     val route = it.toRoute<ExternalConnection>()
                     val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
