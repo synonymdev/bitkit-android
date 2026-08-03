@@ -89,8 +89,12 @@ URI shape is the same:
 bitkit://screen/<sheet-id>[/<route-id>]
 ```
 
-The bare id opens the sheet at its first registered route (`bitkit://screen/send` is the recipient
-picker, `bitkit://screen/backup` the backup intro).
+The sheet id is the `Sheet` class name in kebab-case and the route id is the nested route's class
+name, so the same rule holds as for screens. The bare id opens the sheet at its first registered
+route (`bitkit://screen/send` is the recipient picker, `bitkit://screen/backup` the backup intro).
+
+Each sealed route family owns which of its states may start a flow, through a `DeepLinkStart` marker
+and its own `fromDeepLink`. `SheetDeepLinks` only picks the family and wraps the result.
 
 | Sheet | Reachable routes |
 | - | - |

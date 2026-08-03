@@ -7,14 +7,20 @@ import to.bitkit.ui.sheets.BackupRoute
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.WidgetsRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
+import kotlin.reflect.KClass
 
 object SheetDeepLinks {
-    private val FAMILIES: Map<String, (String) -> Sheet?> = mapOf(
-        "send" to { path -> SendRoute.fromDeepLink(path)?.let { Sheet.Send(it) } },
-        "receive" to { path -> ReceiveRoute.fromDeepLink(path)?.let { Sheet.Receive(it) } },
-        "backup" to { path -> BackupRoute.fromDeepLink(path)?.let { Sheet.Backup(it) } },
-        "widgets" to { path -> WidgetsRoute.fromDeepLink(path)?.let { Sheet.Widgets(it) } },
-        "hardware" to { path -> HardwareRoute.fromDeepLink(path)?.let { Sheet.Hardware(it) } },
+    private class Family(
+        val type: KClass<out Sheet>,
+        val fromDeepLink: (String) -> Sheet?,
+    )
+
+    private val FAMILIES: List<Family> = listOf(
+        Family(Sheet.Send::class) { path -> SendRoute.fromDeepLink(path)?.let { Sheet.Send(it) } },
+        Family(Sheet.Receive::class) { path -> ReceiveRoute.fromDeepLink(path)?.let { Sheet.Receive(it) } },
+        Family(Sheet.Backup::class) { path -> BackupRoute.fromDeepLink(path)?.let { Sheet.Backup(it) } },
+        Family(Sheet.Widgets::class) { path -> WidgetsRoute.fromDeepLink(path)?.let { Sheet.Widgets(it) } },
+        Family(Sheet.Hardware::class) { path -> HardwareRoute.fromDeepLink(path)?.let { Sheet.Hardware(it) } },
     )
 
     private val STANDALONE: List<Sheet> = listOf(
@@ -22,6 +28,13 @@ object SheetDeepLinks {
         Sheet.ActivityTagSelector,
         Sheet.QrScanner(),
     )
+
+    val sheetIds: Set<String>
+        get() {
+            val families = FAMILIES.mapNotNull { ScreenDeepLinks.kebabId(it.type) }
+            val standalone = STANDALONE.mapNotNull { ScreenDeepLinks.kebabId(it::class) }
+            return (families + standalone).toSet()
+        }
 
     fun sheetFor(uri: Uri): Sheet? {
         if (!ScreenDeepLinks.isScreenDeepLink(uri)) return null
@@ -32,7 +45,9 @@ object SheetDeepLinks {
         val id = segments.first().lowercase()
         val child = segments.getOrElse(1) { "" }
 
-        FAMILIES[id]?.let { return it(child) }
+        FAMILIES.firstOrNull { ScreenDeepLinks.kebabId(it.type) == id }
+            ?.let { return it.fromDeepLink(child) }
+
         if (child.isNotEmpty()) return null
 
         return STANDALONE.firstOrNull { ScreenDeepLinks.kebabId(it::class) == id }

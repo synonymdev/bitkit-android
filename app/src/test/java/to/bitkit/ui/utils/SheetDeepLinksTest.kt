@@ -125,6 +125,22 @@ class SheetDeepLinksTest : BaseUnitTest() {
     }
 
     @Test
+    fun `sheet ids are derived from the Sheet class names`() {
+        val expected = setOf(
+            "send",
+            "receive",
+            "backup",
+            "widgets",
+            "hardware",
+            "activity-date-range-selector",
+            "activity-tag-selector",
+            "qr-scanner",
+        )
+
+        assertEquals(expected, SheetDeepLinks.sheetIds)
+    }
+
+    @Test
     fun `every route marked as a start is registered in its family lookup`() {
         val unreachable = mutableListOf<String>()
 
