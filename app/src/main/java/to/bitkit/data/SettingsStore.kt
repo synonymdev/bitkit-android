@@ -47,7 +47,7 @@ class SettingsStore @Inject constructor(
 
     suspend fun restoreFromBackup(payload: SettingsBackupV1) =
         runCatching {
-            val data = payload.settings.resetPin()
+            val data = payload.settings.resetPin().withDefaultPaykitPaymentMethods()
             store.updateData { data }
 
             val monitored = data.addressTypesToMonitor
@@ -163,6 +163,14 @@ fun SettingsData.resetPin() = this.copy(
     isPinEnabled = false,
     isPinForPaymentsEnabled = false,
     isBiometricEnabled = false,
+)
+
+fun SettingsData.areContactPaymentsEnabled(): Boolean =
+    sharesPublicPaykitEndpoints || sharesPrivatePaykitEndpoints
+
+fun SettingsData.withDefaultPaykitPaymentMethods() = copy(
+    publicPaykitLightningEnabled = true,
+    publicPaykitOnchainEnabled = true,
 )
 
 fun SettingsData.hasPublicPaykitPublicationState(): Boolean =

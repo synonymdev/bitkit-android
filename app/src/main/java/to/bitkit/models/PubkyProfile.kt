@@ -67,7 +67,7 @@ data class PubkyProfile(
     }
 
     val truncatedPublicKey: String
-        get() = publicKey.ellipsisMiddle(TRUNCATED_PK_LENGTH)
+        get() = PubkyPublicKeyFormat.display(publicKey)
 
     fun withNameFallback(fallbackName: String?): PubkyProfile {
         return if (name.isBlank() && !fallbackName.isNullOrBlank()) copy(name = fallbackName) else this

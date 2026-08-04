@@ -1,36 +1,48 @@
 package to.bitkit.viewmodels
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.R
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.hasPaykitState
 import to.bitkit.data.hasPublicPaykitPublicationState
 import to.bitkit.data.paykitDisabled
 import to.bitkit.flags.PaykitFeatureFlags
+import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.repositories.ContactPaymentSettingsRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.PublicPaykitError
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.WidgetsRepo
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
-@Suppress("TooManyFunctions")
+@Suppress("LongParameterList", "TooManyFunctions")
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val settingsStore: SettingsStore,
     private val pubkyRepo: PubkyRepo,
+    private val contactPaymentSettingsRepo: ContactPaymentSettingsRepo,
     private val publicPaykitRepo: PublicPaykitRepo,
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val widgetsStore: WidgetsStore,
@@ -197,10 +209,41 @@ class SettingsViewModel @Inject constructor(
     val isPaykitStateLoaded = settingsStore.isPaykitEnabled.map { true }
         .asStateFlow(initialValue = false)
 
+    val contactPaymentsEnabled = contactPaymentSettingsRepo.isEnabled
+        .asStateFlow(initialValue = false)
+
+    private val _isUpdatingContactPayments = MutableStateFlow(false)
+    val isUpdatingContactPayments = _isUpdatingContactPayments.asStateFlow()
+
+    fun setContactPaymentsEnabled(value: Boolean) {
+        if (_isUpdatingContactPayments.value) return
+
+        viewModelScope.launch {
+            _isUpdatingContactPayments.update { true }
+            contactPaymentSettingsRepo.setEnabled(value)
+                .onFailure {
+                    ToastEventBus.send(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.common__error),
+                        description = contactPaymentSyncErrorMessage(it),
+                    )
+                }
+            _isUpdatingContactPayments.update { false }
+        }
+    }
+
     fun setIsPaykitEnabled(value: Boolean) {
         viewModelScope.launch {
             updatePaykitEnabled(value)
         }
+    }
+
+    private fun contactPaymentSyncErrorMessage(error: Throwable): String = when (error) {
+        PublicPaykitError.InvalidPayload -> context.getString(R.string.profile__pay_contacts_error_invalid_payload)
+        PublicPaykitError.NoSupportedEndpoint -> context.getString(R.string.profile__pay_contacts_error_no_endpoint)
+        PublicPaykitError.SessionNotActive -> context.getString(R.string.profile__pay_contacts_error_session)
+        PublicPaykitError.WalletNotReady -> context.getString(R.string.profile__pay_contacts_error_wallet)
+        else -> context.getString(R.string.common__error_body)
     }
 
     private suspend fun updatePaykitEnabled(value: Boolean) {

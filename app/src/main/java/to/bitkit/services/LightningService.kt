@@ -37,6 +37,7 @@ import org.lightningdevkit.ldknode.KeychainKind
 import org.lightningdevkit.ldknode.Node
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
+import org.lightningdevkit.ldknode.OnchainWalletAccountConfig
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.PeerDetails
@@ -48,6 +49,7 @@ import org.lightningdevkit.ldknode.defaultConfig
 import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.async.ServiceQueue
 import to.bitkit.data.SettingsStore
+import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
@@ -58,6 +60,10 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.uByteList
 import to.bitkit.ext.uri
 import to.bitkit.models.OpenChannelResult
+import to.bitkit.models.WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX
+import to.bitkit.models.WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE
+import to.bitkit.models.WatchOnlyAccountRecord
+import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAddressType
 import to.bitkit.utils.AppError
@@ -85,12 +91,37 @@ private class EventListenerContext : AbstractCoroutineContextElement(Key) {
     companion object Key : CoroutineContext.Key<EventListenerContext>
 }
 
+internal fun enabledOnchainWalletAccountConfigs(
+    records: List<WatchOnlyAccountRecord>,
+    walletIndex: Int,
+): List<OnchainWalletAccountConfig> = records
+    .filter { it.walletIndex == walletIndex }
+    .filter {
+        it.setupState == WatchOnlyAccountSetupState.Active ||
+            it.setupState == WatchOnlyAccountSetupState.Authorizing
+    }
+    .filter { it.isTrackingEnabled }
+    .map { record ->
+        val addressType = when (record.addressType) {
+            WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE -> LdkAddressType.NATIVE_SEGWIT
+            else -> throw IllegalArgumentException("Unsupported watch-only account address type")
+        }
+        OnchainWalletAccountConfig(
+            addressType = addressType,
+            accountIndex = record.accountIndex.toUInt(),
+            xpub = record.xpub,
+        )
+    }
+
+private fun accountKey(addressType: LdkAddressType, accountIndex: UInt): String =
+    "${addressType.name}:$accountIndex"
+
 data class AddressDerivationInfo(
     val address: String,
     val index: Int,
 )
 
-@Suppress("LargeClass", "TooManyFunctions")
+@Suppress("LargeClass", "LongParameterList", "TooManyFunctions")
 @Singleton
 class LightningService @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
@@ -98,7 +129,9 @@ class LightningService @Inject constructor(
     private val keychain: Keychain,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val settingsStore: SettingsStore,
+    private val watchOnlyAccountStore: WatchOnlyAccountStore,
     private val loggerLdk: LoggerLdk,
+    private val watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
 ) : BaseCoroutineScope(bgDispatcher, TAG) {
 
     companion object {
@@ -137,6 +170,10 @@ class LightningService @Inject constructor(
     @Volatile
     var node: Node? = null
 
+    @Volatile
+    var currentWalletIndex: Int = 0
+        private set
+
     private val _syncStatusChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     val syncStatusChanged: SharedFlow<Unit> = _syncStatusChanged.asSharedFlow()
 
@@ -160,18 +197,20 @@ class LightningService @Inject constructor(
         Logger.debug("Building node…", context = TAG)
 
         val config = config(walletIndex, trustedPeers)
-        node = build(
+        val builtNode = build(
             walletIndex,
             customServerUrl,
             customRgsServerUrl,
             config,
             channelMigration,
         )
+        currentWalletIndex = walletIndex
+        node = builtNode
 
         Logger.info("LDK node setup", context = TAG)
     }
 
-    private fun config(
+    private suspend fun config(
         walletIndex: Int,
         trustedPeers: List<PeerDetails>?,
     ): Config {
@@ -193,6 +232,7 @@ class LightningService @Inject constructor(
             ),
             probingLiquidityLimitMultiplier = 1uL,
             includeUntrustedPendingInSpendable = true,
+            onchainWalletAccounts = enabledOnchainWalletAccountConfigs(watchOnlyAccountStore.load(), walletIndex),
         )
     }
 
@@ -304,8 +344,8 @@ class LightningService @Inject constructor(
                     feeRateCacheUpdateIntervalSecs = Env.walletSyncIntervalSecs,
                 ),
                 connectionTimeoutSecs = Env.walletSyncTimeoutSecs,
-                additionalWalletFullScanBatchSize = 5u,
-                additionalWalletFullScanStopGap = 20u,
+                additionalWalletFullScanBatchSize = 100u,
+                additionalWalletFullScanStopGap = 1000u,
             ),
         )
     }
@@ -322,6 +362,8 @@ class LightningService @Inject constructor(
                 throw LdkError(e)
             }
         }
+
+        reconcileWatchOnlyAccountsBestEffort()
 
         // start event listener after node started
         onEvent?.let { eventHandler ->
@@ -343,6 +385,66 @@ class LightningService @Inject constructor(
         }
 
         Logger.info("Node started", context = TAG)
+    }
+
+    private suspend fun reconcileWatchOnlyAccountsBestEffort() {
+        runSuspendCatching {
+            reconcileWatchOnlyAccounts()
+        }.onFailure { error ->
+            Logger.error("Failed to reconcile Paykit Server accounts during startup", error, context = TAG)
+        }
+    }
+
+    suspend fun reconcileWatchOnlyAccounts(syncAfterReconcile: Boolean = true) {
+        watchOnlyAccountLifecycleCoordinator.withLock {
+            val node = node ?: return@withLock
+            val reconciliationState = watchOnlyAccountStore.loadReconciliationState()
+            val walletRecords = reconciliationState.accounts.filter { it.walletIndex == currentWalletIndex }
+            val accountsPendingRemoval = reconciliationState.accountsPendingRemoval.filter {
+                it.walletIndex == currentWalletIndex
+            }
+            val desiredConfigs = enabledOnchainWalletAccountConfigs(walletRecords, currentWalletIndex)
+
+            ServiceQueue.LDK.background {
+                val trackedAccounts = node.listOnchainWalletAccounts()
+                val managedKeys = (walletRecords + accountsPendingRemoval).mapNotNull { record ->
+                    when (record.addressType) {
+                        WATCH_ONLY_ACCOUNT_NATIVE_SEGWIT_ADDRESS_TYPE ->
+                            accountKey(LdkAddressType.NATIVE_SEGWIT, record.accountIndex.toUInt())
+                        else -> null
+                    }
+                }.toSet()
+                val desiredKeys = desiredConfigs.map { accountKey(it.addressType, it.accountIndex) }.toSet()
+
+                trackedAccounts.forEach { trackedAccount ->
+                    val key = accountKey(trackedAccount.addressType, trackedAccount.accountIndex)
+                    if (key in managedKeys && key !in desiredKeys) {
+                        node.removeOnchainWalletAccount(trackedAccount.addressType, trackedAccount.accountIndex)
+                    }
+                }
+
+                desiredConfigs.forEach { config ->
+                    val isTracked = trackedAccounts.any {
+                        it.addressType == config.addressType && it.accountIndex == config.accountIndex
+                    }
+                    if (!isTracked) {
+                        node.addOnchainWalletAccount(config.addressType, config.accountIndex, config.xpub)
+                    }
+                    node.onchainPayment().revealReceiveAddressesToAccount(
+                        config.addressType,
+                        config.accountIndex,
+                        WATCH_ONLY_ACCOUNT_HIGHEST_PRE_REVEALED_ADDRESS_INDEX.toUInt(),
+                    )
+                }
+
+                if (syncAfterReconcile && desiredConfigs.isNotEmpty() && node.status().isRunning) {
+                    node.syncWallets()
+                }
+            }
+            if (accountsPendingRemoval.isNotEmpty()) {
+                watchOnlyAccountStore.completeReconciliation(currentWalletIndex)
+            }
+        }
     }
 
     // Teardown must not be abandoned midway: a cancelled caller would leave the rust node alive and
@@ -496,6 +598,8 @@ class LightningService @Inject constructor(
 
     suspend fun sync() {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
+
+        reconcileWatchOnlyAccounts(syncAfterReconcile = false)
 
         Logger.verbose("Syncing LDK…", context = TAG)
         ServiceQueue.LDK.background {
