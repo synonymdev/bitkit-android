@@ -710,7 +710,10 @@ class AppViewModel @Inject constructor(
     private fun deferPaymentRequestPresentation(request: PaykitPaymentRequest) {
         val attempt = paymentRequestPresentationRetryAttempts[request.id] ?: 0
         paymentRequestPresentationRetryAttempts[request.id] = attempt + 1
-        val retryDelay = PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.getOrNull(attempt) ?: return
+        val retryDelay = PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.getOrNull(attempt) ?: run {
+            Logger.warn("Giving up payment request presentation after '${attempt + 1}' attempts", context = TAG)
+            return
+        }
         paymentRequestPresentationRetryJobs.remove(request.id)?.cancel()
         paymentRequestPresentationRetryJobs[request.id] = viewModelScope.launch {
             delay(retryDelay)
