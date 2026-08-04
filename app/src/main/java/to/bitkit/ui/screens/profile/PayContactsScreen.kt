@@ -2,15 +2,11 @@ package to.bitkit.ui.screens.profile
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -21,7 +17,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
@@ -49,7 +44,6 @@ fun PayContactsScreen(
 
     Content(
         uiState = uiState,
-        onPaymentSharingChange = { viewModel.setPaymentSharingEnabled(it) },
         onContinue = { viewModel.continueToProfile() },
         onBackClick = onBackClick,
     )
@@ -58,7 +52,6 @@ fun PayContactsScreen(
 @Composable
 private fun Content(
     uiState: PayContactsUiState,
-    onPaymentSharingChange: (Boolean) -> Unit,
     onContinue: () -> Unit,
     onBackClick: () -> Unit,
 ) {
@@ -90,33 +83,6 @@ private fun Content(
                 text = stringResource(R.string.profile__pay_contacts_description),
                 color = Colors.White64,
             )
-            VerticalSpacer(24.dp)
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                BodyM(
-                    text = stringResource(R.string.profile__pay_contacts_toggle),
-                    color = Colors.White,
-                    modifier = Modifier.weight(1f)
-                )
-                HorizontalSpacer(16.dp)
-                Switch(
-                    checked = uiState.isPaymentSharingEnabled,
-                    onCheckedChange = if (uiState.isLoading) null else onPaymentSharingChange,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = Colors.White,
-                        checkedTrackColor = Colors.PubkyGreen,
-                        checkedBorderColor = Colors.PubkyGreen,
-                        uncheckedThumbColor = Colors.White,
-                        uncheckedTrackColor = Colors.Gray4,
-                        uncheckedBorderColor = Colors.Gray4,
-                    ),
-                    modifier = Modifier.testTag("PayContactsToggle")
-                )
-            }
-
             VerticalSpacer(32.dp)
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
@@ -135,7 +101,6 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             uiState = PayContactsUiState(),
-            onPaymentSharingChange = {},
             onContinue = {},
             onBackClick = {},
         )

@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -31,6 +32,7 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
 import to.bitkit.ui.components.ActionButton
+import to.bitkit.ui.components.AddTagSheet
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.CenteredProfileHeader
@@ -79,6 +81,10 @@ fun ProfileScreen(
         onDismissSignOutDialog = { viewModel.dismissSignOutDialog() },
         onConfirmSignOut = { viewModel.signOut() },
         onClickRetry = { viewModel.loadProfile() },
+        onClickAddTag = { viewModel.showAddTagSheet() },
+        onRemoveTag = { viewModel.removeTag(it) },
+        onDismissAddTagSheet = { viewModel.dismissAddTagSheet() },
+        onSaveTag = { viewModel.addTag(it) },
     )
 }
 
@@ -93,6 +99,10 @@ private fun Content(
     onDismissSignOutDialog: () -> Unit,
     onConfirmSignOut: () -> Unit,
     onClickRetry: () -> Unit,
+    onClickAddTag: () -> Unit,
+    onRemoveTag: (String) -> Unit,
+    onDismissAddTagSheet: () -> Unit,
+    onSaveTag: (String) -> Unit,
 ) {
     val currentProfile = uiState.profile
 
@@ -110,6 +120,8 @@ private fun Content(
                 onClickEdit = onClickEdit,
                 onClickCopy = onClickCopy,
                 onClickShare = onClickShare,
+                onClickAddTag = onClickAddTag,
+                onRemoveTag = onRemoveTag,
             )
             else -> EmptyState(onClickRetry = onClickRetry, onClickSignOut = onClickSignOut)
         }
@@ -124,6 +136,13 @@ private fun Content(
             onDismiss = onDismissSignOutDialog,
         )
     }
+
+    if (uiState.showAddTagSheet) {
+        AddTagSheet(
+            onDismiss = onDismissAddTagSheet,
+            onSave = onSaveTag,
+        )
+    }
 }
 
 @Composable
@@ -132,13 +151,15 @@ private fun ProfileBody(
     onClickEdit: () -> Unit,
     onClickCopy: () -> Unit,
     onClickShare: () -> Unit,
+    onClickAddTag: () -> Unit,
+    onRemoveTag: (String) -> Unit,
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 32.dp)
+            .padding(horizontal = 16.dp)
     ) {
         VerticalSpacer(24.dp)
 
@@ -161,7 +182,7 @@ private fun ProfileBody(
         ) {
             QrCodeImage(
                 content = profile.publicKey,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.size(279.dp),
                 testTag = "ProfileQRCode",
             )
             if (profile.imageUrl != null) {
@@ -210,26 +231,36 @@ private fun ProfileBody(
             }
         }
 
-        if (profile.tags.isNotEmpty()) {
-            VerticalSpacer(16.dp)
-            Text13Up(
-                text = stringResource(R.string.profile__edit_tags),
-                color = Colors.White64,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("ProfileViewTagsHeader")
-            )
-            VerticalSpacer(8.dp)
-            @OptIn(ExperimentalLayoutApi::class)
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                profile.tags.forEach { tag ->
-                    TagButton(text = tag, onClick = null)
-                }
+        VerticalSpacer(16.dp)
+        Text13Up(
+            text = stringResource(R.string.profile__edit_tags),
+            color = Colors.White64,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("ProfileViewTagsHeader")
+        )
+        VerticalSpacer(8.dp)
+        @OptIn(ExperimentalLayoutApi::class)
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            profile.tags.forEach { tag ->
+                TagButton(
+                    text = tag,
+                    onClick = { onRemoveTag(tag) },
+                    accessibilityLabel = stringResource(R.string.common__remove_tag, tag),
+                    displayIconClose = true,
+                )
             }
+            TagButton(
+                text = stringResource(R.string.profile__add_tag),
+                onClick = onClickAddTag,
+                icon = painterResource(R.drawable.ic_tag),
+                displayIconClose = true,
+                modifier = Modifier.testTag("ProfileAddTag")
+            )
         }
 
         VerticalSpacer(16.dp)
@@ -299,6 +330,10 @@ private fun Preview() {
             onDismissSignOutDialog = {},
             onConfirmSignOut = {},
             onClickRetry = {},
+            onClickAddTag = {},
+            onRemoveTag = {},
+            onDismissAddTagSheet = {},
+            onSaveTag = {},
         )
     }
 }

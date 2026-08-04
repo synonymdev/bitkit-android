@@ -15,6 +15,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
+import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.utils.Logger
@@ -31,6 +32,7 @@ class WipeWalletUseCase @Inject constructor(
     private val db: AppDb,
     private val settingsStore: SettingsStore,
     private val cacheStore: CacheStore,
+    private val watchOnlyAccountRepo: WatchOnlyAccountRepo,
     private val widgetsStore: WidgetsStore,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
@@ -66,6 +68,7 @@ class WipeWalletUseCase @Inject constructor(
 
                 settingsStore.reset()
                 cacheStore.reset()
+                watchOnlyAccountRepo.clear()
                 widgetsStore.reset()
 
                 blocktankRepo.resetState()

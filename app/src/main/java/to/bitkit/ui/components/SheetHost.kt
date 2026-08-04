@@ -41,7 +41,7 @@ import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.Colors
 
-enum class SheetSize { LARGE, MEDIUM, SMALL, CALENDAR; }
+enum class SheetSize { LARGE, MEDIUM, COMPACT, SMALL, CALENDAR; }
 
 val DefaultSheetContainerColor = Color(0xFF141414) // Equivalent to White08 on a Black background
 
@@ -71,7 +71,7 @@ sealed interface Sheet {
         val isConnecting: Boolean = false,
         val errorText: String? = null,
     ) : Sheet
-    data object QrScanner : Sheet
+    data class QrScanner(val isPubkyScan: Boolean = false) : Sheet
     data class PubkyAuth(val authUrl: String) : Sheet
 
     data class TimedSheet(val type: TimedSheetType) : Sheet

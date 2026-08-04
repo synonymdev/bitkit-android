@@ -5,7 +5,7 @@ import android.graphics.BitmapFactory
 import coil3.ImageLoader
 import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.PaykitProfile
-import com.synonym.paykit.PubkyAuthDetails
+import com.synonym.paykit.PubkyAuthCompanionClaim
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
@@ -40,6 +40,8 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HomegateResponse
+import to.bitkit.models.PubkyAuthClaim
+import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileData
 import to.bitkit.models.PubkyProfileLink
@@ -897,9 +899,14 @@ class PubkyRepo @Inject constructor(
         managedSecretKeyFor(publicKey) != null
     }.getOrDefault(false)
 
-    suspend fun parseAuthUrl(authUrl: String): Result<PubkyAuthDetails> = runSuspendCatching {
+    suspend fun parseAuthUrl(authUrl: String): Result<PubkyAuthRequest> = runSuspendCatching {
         withContext(ioDispatcher) {
-            pubkyService.parseAuthUrl(authUrl)
+            val details = pubkyService.parseAuthUrl(authUrl)
+            PubkyAuthRequest.parse(
+                rawUrl = authUrl,
+                relay = details.relayUrl.orEmpty(),
+                capabilities = details.capabilities.orEmpty(),
+            ).getOrThrow()
         }
     }
 
@@ -909,6 +916,27 @@ class PubkyRepo @Inject constructor(
                 "No secret key available — use Ring to manage authorizations"
             }
             pubkyService.approveAuth(authUrl, expectedCapabilities, secretKeyHex)
+        }
+    }
+
+    suspend fun approveAuthWithCompanionClaim(
+        authUrl: String,
+        unsignedPayload: ByteArray,
+    ): Result<Unit> = runSuspendCatching {
+        withContext(ioDispatcher) {
+            val secretKeyHex = requireNotNull(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)) {
+                "No secret key available — use Ring to manage authorizations"
+            }
+            pubkyService.approveAuthWithCompanionClaim(
+                authUrl = authUrl,
+                expectedCapabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
+                secretKeyHex = secretKeyHex,
+                claim = PubkyAuthCompanionClaim(
+                    queryParameter = PubkyAuthClaim.QUERY_PARAMETER,
+                    claimType = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
+                    unsignedPayload = unsignedPayload,
+                ),
+            )
         }
     }
 

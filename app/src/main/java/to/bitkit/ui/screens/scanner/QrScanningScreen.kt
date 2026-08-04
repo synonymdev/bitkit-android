@@ -15,8 +15,10 @@ import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -66,6 +68,7 @@ import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
@@ -85,6 +88,7 @@ private const val TAG = "QrScanningScreen"
 fun QrScanningScreen(
     onScanSuccess: (String) -> Unit,
     onBack: (() -> Unit)? = null,
+    isPubkyScan: Boolean = false,
 ) {
     val app = appViewModel ?: return
 
@@ -197,6 +201,7 @@ fun QrScanningScreen(
             },
             grantedContent = {
                 Content(
+                    isPubkyScan = isPubkyScan,
                     previewView = previewView,
                     onClickFlashlight = {
                         isFlashlightOn = !isFlashlightOn
@@ -236,6 +241,7 @@ private fun handlePaste(
 
 @Composable
 private fun Content(
+    isPubkyScan: Boolean,
     previewView: PreviewView,
     onClickFlashlight: () -> Unit,
     onClickGallery: () -> Unit,
@@ -292,6 +298,31 @@ private fun Content(
                     tint = Colors.White
                 )
             }
+
+            if (isPubkyScan) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(16.dp)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(Colors.Black50)
+                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_broadcast),
+                        contentDescription = null,
+                        tint = Colors.White64,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text13Up(
+                        text = stringResource(R.string.contacts__scanner_status),
+                        color = Colors.White64,
+                    )
+                }
+            }
         }
         VerticalSpacer(16.dp)
         PrimaryButton(
@@ -301,7 +332,9 @@ private fun Content(
                     contentDescription = stringResource(R.string.other__qr_paste),
                 )
             },
-            text = stringResource(R.string.other__qr_paste),
+            text = stringResource(
+                if (isPubkyScan) R.string.contacts__scanner_paste else R.string.other__qr_paste
+            ),
             onClick = onPasteFromClipboard,
         )
 
