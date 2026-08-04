@@ -16,7 +16,9 @@ import com.synonym.paykit.PrivatePaymentResolutionState
 import com.synonym.paykit.PrivatePaymentResolutionStatus
 import com.synonym.paykit.PublicationStatus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -33,6 +35,7 @@ import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -44,6 +47,7 @@ import to.bitkit.App
 import to.bitkit.CurrentActivity
 import to.bitkit.data.PrivatePaykitCacheData
 import to.bitkit.data.PrivatePaykitCacheStore
+import to.bitkit.data.PrivatePaykitContactCacheData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.NodeLifecycleState
@@ -389,6 +393,26 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `prepareSavedContacts reads linked peers once for multiple contacts`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+        )
+        whenever { paykitSdkService.privateReceiverPathSelection(any(), any()) }.thenReturn(
+            privateReceiverPathSelection(
+                publishableReceiverPaths = emptyList(),
+                linkableReceiverPaths = emptyList(),
+            ),
+        )
+
+        val result = sut.prepareSavedContacts(listOf(CONTACT_KEY, OTHER_CONTACT_KEY))
+
+        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        verifyBlocking(paykitSdkService, times(1)) { linkedPeers() }
+    }
+
+    @Test
     fun `private message drain keeps retrying while link is still pending`() = test {
         settingsData.value = SettingsData(
             sharesPrivatePaykitEndpoints = true,
@@ -613,6 +637,54 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertTrue(result.isFailure)
         assertTrue(cacheData.value.cleanupPending)
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
+        assertEquals(
+            setOf(WALLET_RECEIVER_PATH),
+            cacheData.value.contacts.getValue(CONTACT_KEY).publishedPrivatePaymentReceiverPaths,
+        )
+    }
+
+    @Test
+    fun `cleanup retries linked receiver inspection once for the batch`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to cachedPublishedContact(WALLET_RECEIVER_PATH),
+                OTHER_CONTACT_KEY to cachedPublishedContact(SERVER_RECEIVER_PATH),
+            ),
+        )
+        sut = createSut()
+        var linkedPeerReads = 0
+        whenever { paykitSdkService.linkedPeers() }.thenAnswer {
+            linkedPeerReads += 1
+            if (linkedPeerReads <= 2) error("link inspection failed")
+            emptyList<LinkedPeerRecord>()
+        }
+
+        val result = sut.removePublishedEndpointsForCleanup("test")
+
+        assertTrue(result.isFailure)
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(OTHER_CONTACT_KEY, SERVER_RECEIVER_PATH) }
+        assertTrue(CONTACT_KEY in cacheData.value.contacts)
+        assertTrue(OTHER_CONTACT_KEY in cacheData.value.contacts)
+        assertTrue(cacheData.value.cleanupPending)
+        assertEquals(3, linkedPeerReads)
+    }
+
+    @Test
+    fun `invalid deleted contact key is dropped from cleanup state`() = test {
+        val invalidPublicKey = "not-a-pubky"
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(invalidPublicKey to cachedPublishedContact(WALLET_RECEIVER_PATH)),
+            deletedContactCleanupPendingPublicKeys = setOf(invalidPublicKey),
+        )
+        sut = createSut()
+
+        val result = sut.retryPendingEndpointRemoval(emptyList())
+
+        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        assertTrue(cacheData.value.contacts.isEmpty())
+        assertTrue(cacheData.value.deletedContactCleanupPendingPublicKeys.isEmpty())
         verifyBlocking(paykitSdkService, never()) { clearPrivatePaymentList(any(), any()) }
     }
 
@@ -633,6 +705,142 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
         verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
         verifyBlocking(paykitSdkService, never()) { clearPrivatePaymentList(CONTACT_KEY, SERVER_RECEIVER_PATH) }
+    }
+
+    @Test
+    fun `cleanup drains all contacts in one batch`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to cachedPublishedContact(WALLET_RECEIVER_PATH),
+                OTHER_CONTACT_KEY to cachedPublishedContact(SERVER_RECEIVER_PATH),
+            ),
+        )
+        sut = createSut()
+        whenever { paykitSdkService.linkedPeers() }.thenReturn(
+            listOf(
+                linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED),
+                linkedPeer(OTHER_CONTACT_KEY, LinkedPeerState.LINKED, SERVER_RECEIVER_PATH),
+            ),
+        )
+
+        val result = sut.removePublishedEndpointsForCleanup("test")
+
+        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(OTHER_CONTACT_KEY, SERVER_RECEIVER_PATH) }
+        verifyBlocking(paykitSdkService, times(2)) { linkedPeers() }
+        verifyBlocking(paykitSdkService, times(1)) { pendingOutboundPrivateCounterparties() }
+        verifyBlocking(paykitSdkService, times(2)) { processPendingPrivateMessages() }
+        verifyBlocking(paykitSdkService, times(2)) { receivePrivateMessagesFromLinkedPeers() }
+        assertTrue(cacheData.value.contacts.isEmpty())
+    }
+
+    @Test
+    fun `deleted contact retry cleans all pending contacts in one batch`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to cachedPublishedContact(WALLET_RECEIVER_PATH),
+                OTHER_CONTACT_KEY to cachedPublishedContact(SERVER_RECEIVER_PATH),
+            ),
+            deletedContactCleanupPendingPublicKeys = setOf(CONTACT_KEY, OTHER_CONTACT_KEY),
+        )
+        sut = createSut()
+
+        val result = sut.retryPendingEndpointRemoval(emptyList())
+
+        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(OTHER_CONTACT_KEY, SERVER_RECEIVER_PATH) }
+        verifyBlocking(paykitSdkService, times(2)) { linkedPeers() }
+        assertTrue(cacheData.value.contacts.isEmpty())
+        assertTrue(cacheData.value.deletedContactCleanupPendingPublicKeys.isEmpty())
+    }
+
+    @Test
+    fun `cleanup retains the batch when drain inspection fails`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to cachedPublishedContact(WALLET_RECEIVER_PATH),
+                OTHER_CONTACT_KEY to cachedPublishedContact(SERVER_RECEIVER_PATH),
+            ),
+        )
+        sut = createSut()
+        whenever { paykitSdkService.linkedPeers() }
+            .thenReturn(emptyList())
+            .thenThrow(IllegalStateException("drain inspection failed"))
+
+        val result = sut.removePublishedEndpointsForCleanup("test")
+
+        assertTrue(result.isFailure)
+        assertTrue(CONTACT_KEY in cacheData.value.contacts)
+        assertTrue(OTHER_CONTACT_KEY in cacheData.value.contacts)
+        assertTrue(cacheData.value.cleanupPending)
+    }
+
+    @Test
+    fun `cleanup retains endpoint cache updated during remote removal`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(CONTACT_KEY to cachedPublishedContact(WALLET_RECEIVER_PATH)),
+        )
+        sut = createSut()
+        val cleanupStarted = CompletableDeferred<Unit>()
+        val resumeCleanup = CompletableDeferred<Unit>()
+        whenever { paykitSdkService.clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
+            .doSuspendableAnswer {
+                cleanupStarted.complete(Unit)
+                resumeCleanup.await()
+                privateListDeliveryReport(clearedCounterparties = listOf(CONTACT_KEY))
+            }
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(
+                eq(CONTACT_KEY),
+                eq(SERVER_RECEIVER_PATH),
+                eq(null),
+                any(),
+            )
+        }.thenReturn(resolution(resolvedEndpoint(MethodId.P2wpkh, PRIVATE_ADDRESS), version = 7uL))
+        whenever(coreService.isAddressUsed(PRIVATE_ADDRESS)).thenReturn(false)
+
+        val cleanup = async { sut.removePublishedEndpointsForCleanup("test") }
+        cleanupStarted.await()
+        sut.beginPaymentRequest(
+            paymentRequest(acceptedEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue)),
+        ).getOrThrow()
+        resumeCleanup.complete(Unit)
+
+        assertTrue(cleanup.await().isFailure)
+        assertTrue(cacheData.value.contacts.getValue(CONTACT_KEY).remoteEndpoints.isNotEmpty())
+        assertTrue(cacheData.value.cleanupPending)
+    }
+
+    @Test
+    fun `cleanup isolates a failed contact while clearing successful contacts`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to cachedPublishedContact(WALLET_RECEIVER_PATH),
+                OTHER_CONTACT_KEY to cachedPublishedContact(SERVER_RECEIVER_PATH),
+            ),
+        )
+        sut = createSut()
+        whenever { paykitSdkService.clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }.thenReturn(
+            privateListDeliveryReport(
+                failedToQueue = listOf(
+                    PrivatePaymentListSyncChange(
+                        counterparty = CONTACT_KEY,
+                        counterpartyReceiverPath = WALLET_RECEIVER_PATH,
+                        outboundMessageId = null,
+                        error = "failed",
+                    ),
+                ),
+            ),
+        )
+
+        val result = sut.removePublishedEndpointsForCleanup("test")
+
+        assertTrue(result.isFailure)
+        assertTrue(CONTACT_KEY in cacheData.value.contacts)
+        assertTrue(OTHER_CONTACT_KEY !in cacheData.value.contacts)
+        assertTrue(cacheData.value.cleanupPending)
     }
 
     @Test
@@ -1115,6 +1323,10 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         },
         failedToQueue = failedToQueue,
         failedToDeliver = emptyList(),
+    )
+
+    private fun cachedPublishedContact(receiverPath: String) = PrivatePaykitContactCacheData(
+        publishedPrivatePaymentReceiverPaths = setOf(receiverPath),
     )
 
     private fun privateReceiverPathSelection(
