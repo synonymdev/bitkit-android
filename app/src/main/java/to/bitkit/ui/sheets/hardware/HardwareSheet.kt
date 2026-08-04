@@ -37,6 +37,7 @@ import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
 
@@ -243,21 +244,34 @@ private fun ConnectEffectHandler(
 }
 
 sealed interface HardwareRoute {
-    @Serializable
-    data object Intro : HardwareRoute
+    sealed interface DeepLinkStart : HardwareRoute
+
+    sealed interface InternalOnly : HardwareRoute
 
     @Serializable
-    data object Searching : HardwareRoute
+    data object Intro : DeepLinkStart
+
+    @Serializable
+    data object Searching : InternalOnly
 
     @Serializable
     data class Found(
         val deviceId: String? = null,
         val deviceModel: String = "",
-    ) : HardwareRoute
+    ) : InternalOnly
 
     @Serializable
-    data object Paired : HardwareRoute
+    data object Paired : InternalOnly
 
     @Serializable
-    data class PairCode(val requestId: Long) : HardwareRoute
+    data class PairCode(val requestId: Long) : InternalOnly
+
+    companion object {
+        private val DEEP_LINK_STARTS: List<DeepLinkStart> = listOf(
+            Intro,
+        )
+
+        fun fromDeepLink(path: String): DeepLinkStart? =
+            ScreenDeepLinks.matchStart(path, Intro, DEEP_LINK_STARTS)
+    }
 }

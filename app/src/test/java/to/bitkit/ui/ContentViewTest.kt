@@ -1,10 +1,18 @@
 package to.bitkit.ui
 
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import to.bitkit.ui.components.Sheet
 import to.bitkit.viewmodels.TransferEffect
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
+@Config(sdk = [34])
+@RunWith(RobolectricTestRunner::class)
 class ContentViewTest {
     @Test
     fun `spending start route uses intro until seen`() {
@@ -25,5 +33,26 @@ class ContentViewTest {
         assertEquals(Routes.SettingUp, transferEffectDestination(TransferEffect.OnSpendingFundingPaid))
         assertEquals(Routes.SpendingHwSigned, transferEffectDestination(TransferEffect.OnHwTxSigned))
         assertNull(transferEffectDestination(TransferEffect.OnOrderCreated))
+    }
+
+    @Test
+    fun `a handled root screen link dismisses the open sheet`() {
+        val result = shouldDismissSheetForScreenLink(handled = true, currentSheet = Sheet.Receive())
+
+        assertTrue(result)
+    }
+
+    @Test
+    fun `a rejected screen link leaves the open sheet alone`() {
+        val result = shouldDismissSheetForScreenLink(handled = false, currentSheet = Sheet.Receive())
+
+        assertFalse(result)
+    }
+
+    @Test
+    fun `a handled root screen link with no sheet open dismisses nothing`() {
+        val result = shouldDismissSheetForScreenLink(handled = true, currentSheet = null)
+
+        assertFalse(result)
     }
 }

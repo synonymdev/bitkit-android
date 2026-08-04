@@ -55,6 +55,7 @@ import to.bitkit.ui.screens.widgets.weather.WeatherPreviewScreen
 import to.bitkit.ui.screens.widgets.weather.WeatherViewModel
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
 
@@ -404,41 +405,65 @@ private enum class WidgetFlowKey {
 }
 
 sealed interface WidgetsRoute {
-    @Serializable
-    data object Gallery : WidgetsRoute
+    sealed interface DeepLinkStart : WidgetsRoute
+
+    sealed interface InternalOnly : WidgetsRoute
 
     @Serializable
-    data object PricePreview : WidgetsRoute
+    data object Gallery : DeepLinkStart
 
     @Serializable
-    data object PriceEdit : WidgetsRoute
+    data object PricePreview : DeepLinkStart
 
     @Serializable
-    data object WeatherPreview : WidgetsRoute
+    data object PriceEdit : DeepLinkStart
 
     @Serializable
-    data object WeatherEdit : WidgetsRoute
+    data object WeatherPreview : DeepLinkStart
 
     @Serializable
-    data object BlocksPreview : WidgetsRoute
+    data object WeatherEdit : DeepLinkStart
 
     @Serializable
-    data object BlocksEdit : WidgetsRoute
+    data object BlocksPreview : DeepLinkStart
 
     @Serializable
-    data object HeadlinesPreview : WidgetsRoute
+    data object BlocksEdit : DeepLinkStart
 
     @Serializable
-    data object HeadlinesEdit : WidgetsRoute
+    data object HeadlinesPreview : DeepLinkStart
 
     @Serializable
-    data object FactsPreview : WidgetsRoute
+    data object HeadlinesEdit : DeepLinkStart
 
     @Serializable
-    data object CalculatorPreview : WidgetsRoute
+    data object FactsPreview : DeepLinkStart
 
     @Serializable
-    data object SuggestionsPreview : WidgetsRoute
+    data object CalculatorPreview : DeepLinkStart
+
+    @Serializable
+    data object SuggestionsPreview : DeepLinkStart
+
+    companion object {
+        private val DEEP_LINK_STARTS: List<DeepLinkStart> = listOf(
+            Gallery,
+            PricePreview,
+            PriceEdit,
+            WeatherPreview,
+            WeatherEdit,
+            BlocksPreview,
+            BlocksEdit,
+            HeadlinesPreview,
+            HeadlinesEdit,
+            FactsPreview,
+            CalculatorPreview,
+            SuggestionsPreview,
+        )
+
+        fun fromDeepLink(path: String): DeepLinkStart? =
+            ScreenDeepLinks.matchStart(path, Gallery, DEEP_LINK_STARTS)
+    }
 }
 
 @Preview(showSystemUi = true)

@@ -54,6 +54,7 @@ import to.bitkit.ui.screens.wallets.withdraw.WithdrawErrorScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
@@ -401,63 +402,84 @@ fun SendSheet(
 }
 
 sealed interface SendRoute {
-    @Serializable
-    data object Recipient : SendRoute
+    sealed interface DeepLinkStart : SendRoute
+
+    sealed interface InternalOnly : SendRoute
 
     @Serializable
-    data object Address : SendRoute
+    data object Recipient : DeepLinkStart
 
     @Serializable
-    data object ContactSelect : SendRoute
+    data object Address : DeepLinkStart
 
     @Serializable
-    data object Amount : SendRoute
+    data object ContactSelect : DeepLinkStart
 
     @Serializable
-    data object QrScanner : SendRoute
+    data object Amount : DeepLinkStart
 
     @Serializable
-    data object WithdrawConfirm : SendRoute
+    data object QrScanner : DeepLinkStart
 
     @Serializable
-    data object WithdrawError : SendRoute
+    data object WithdrawConfirm : InternalOnly
 
     @Serializable
-    data object Support : SendRoute
+    data object WithdrawError : InternalOnly
 
     @Serializable
-    data object AddTag : SendRoute
+    data object Support : DeepLinkStart
 
     @Serializable
-    data object PinCheck : SendRoute
+    data object AddTag : DeepLinkStart
 
     @Serializable
-    data object CoinSelection : SendRoute
+    data object PinCheck : InternalOnly
 
     @Serializable
-    data object QuickPay : SendRoute
+    data object CoinSelection : DeepLinkStart
 
     @Serializable
-    data object FeeNav : SendRoute
+    data object QuickPay : InternalOnly
 
     @Serializable
-    data object FeeRate : SendRoute
+    data object FeeNav : InternalOnly
 
     @Serializable
-    data object FeeCustom : SendRoute
+    data object FeeRate : InternalOnly
 
     @Serializable
-    data object Confirm : SendRoute
+    data object FeeCustom : InternalOnly
 
     @Serializable
-    data object Success : SendRoute
+    data object Confirm : InternalOnly
 
     @Serializable
-    data object ComingSoon : SendRoute
+    data object Success : InternalOnly
 
     @Serializable
-    data class Pending(val paymentHash: String, val amount: Long) : SendRoute
+    data object ComingSoon : DeepLinkStart
 
     @Serializable
-    data class Error(val message: String? = null) : SendRoute
+    data class Pending(val paymentHash: String, val amount: Long) : InternalOnly
+
+    @Serializable
+    data class Error(val message: String? = null) : InternalOnly
+
+    companion object {
+        private val DEEP_LINK_STARTS: List<DeepLinkStart> = listOf(
+            Recipient,
+            Address,
+            ContactSelect,
+            Amount,
+            QrScanner,
+            CoinSelection,
+            AddTag,
+            ComingSoon,
+            Support,
+        )
+
+        fun fromDeepLink(path: String): DeepLinkStart? =
+            ScreenDeepLinks.matchStart(path, Recipient, DEEP_LINK_STARTS)
+    }
 }

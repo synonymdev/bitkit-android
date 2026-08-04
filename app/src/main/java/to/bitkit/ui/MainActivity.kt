@@ -53,6 +53,7 @@ import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.sheets.ForgotPinSheet
 import to.bitkit.ui.sheets.NewTransactionSheet
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.enableAppEdgeToEdge
 import to.bitkit.utils.Logger
@@ -235,6 +236,10 @@ class MainActivity : FragmentActivity() {
         }
 
         appViewModel.handleDeeplinkIntent(intent)
+
+        if (ScreenDeepLinks.detachScreenUri(intent)) {
+            setIntent(intent)
+        }
     }
 
     /**
