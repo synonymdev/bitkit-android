@@ -3,6 +3,7 @@ package to.bitkit.data.serializers
 import androidx.datastore.core.Serializer
 import kotlinx.serialization.SerializationException
 import to.bitkit.data.SettingsData
+import to.bitkit.data.withDefaultPaykitPaymentMethods
 import to.bitkit.di.json
 import to.bitkit.utils.Logger
 import java.io.InputStream
@@ -13,7 +14,8 @@ object SettingsSerializer : Serializer<SettingsData> {
 
     override suspend fun readFrom(input: InputStream): SettingsData {
         return try {
-            json.decodeFromString(input.readBytes().decodeToString())
+            json.decodeFromString<SettingsData>(input.readBytes().decodeToString())
+                .withDefaultPaykitPaymentMethods()
         } catch (e: SerializationException) {
             Logger.error("Failed to deserialize: $e")
             defaultValue

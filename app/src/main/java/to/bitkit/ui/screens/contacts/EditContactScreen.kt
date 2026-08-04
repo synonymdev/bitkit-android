@@ -1,15 +1,20 @@
 package to.bitkit.ui.screens.contacts
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -19,10 +24,10 @@ import to.bitkit.R
 import to.bitkit.ui.components.AddLinkSheet
 import to.bitkit.ui.components.AddTagSheet
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.CenteredProfileHeader
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.ProfileEditForm
 import to.bitkit.ui.components.ProfileEditLink
+import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
@@ -119,12 +124,7 @@ private fun Content(
                 onCancel = onBackClick,
                 isSaveEnabled = uiState.name.isNotBlank() && !uiState.isSaving,
                 avatarContent = {
-                    CenteredProfileHeader(
-                        publicKey = uiState.publicKey,
-                        name = "",
-                        bio = "",
-                        imageUrl = uiState.imageUrl,
-                    )
+                    ContactEditAvatar(imageUrl = uiState.imageUrl)
                 },
                 publicKeyLabel = stringResource(R.string.contacts__pubky),
                 bioPlaceholder = stringResource(R.string.contacts__edit_bio_placeholder),
@@ -156,6 +156,29 @@ private fun Content(
         AddTagSheet(
             onDismiss = onDismissAddTagSheet,
             onSave = onSaveTag,
+        )
+    }
+}
+
+@Composable
+private fun ContactEditAvatar(imageUrl: String?) {
+    if (imageUrl != null) {
+        PubkyImage(uri = imageUrl, size = 96.dp)
+        return
+    }
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .size(96.dp)
+            .clip(CircleShape)
+            .background(Colors.Gray5)
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_user_square),
+            contentDescription = null,
+            tint = Colors.White32,
+            modifier = Modifier.size(48.dp)
         )
     }
 }

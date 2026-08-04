@@ -363,8 +363,12 @@ class LightningRepo @Inject constructor(
                     }
                 }
 
-                if (getStatus()?.isRunning == true) {
+                if (lightningService.status?.isRunning == true) {
                     Logger.info("LDK node already running", context = TAG)
+                    runSuspendCatching { lightningService.reconcileWatchOnlyAccounts() }
+                        .onFailure {
+                            Logger.warn("Failed to reconcile Paykit Server accounts during startup", it, context = TAG)
+                        }
                     _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
                     lightningService.startEventListener(::onEvent).onFailure {
                         Logger.warn("Failed to start event listener", it, context = TAG)

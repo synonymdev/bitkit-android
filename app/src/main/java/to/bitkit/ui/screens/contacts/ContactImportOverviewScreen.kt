@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.contacts
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,15 +13,22 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -32,6 +40,7 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.Headline
 import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyImage
@@ -43,6 +52,19 @@ import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.ui.utils.withAccentBoldBright
+
+/** Figma's opaque muted fill for avatar fallbacks. */
+private val AvatarMutedColor = Color(0xFF303034)
+
+/** Figma's base background fill for the overflow avatar. */
+private val AvatarOverflowBackgroundColor = Color(0xFF05050A)
+
+/** Figma's muted foreground stroke for the overflow avatar. */
+private val AvatarOverflowBorderColor = Color(0xFF89898F)
+
+/** Figma's shadow color for avatar separation. */
+private val AvatarShadowColor = Color(0x4005050A)
 
 @Composable
 fun ContactImportOverviewScreen(
@@ -96,7 +118,7 @@ private fun Content(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 32.dp)
+                .padding(horizontal = 16.dp)
         ) {
             VerticalSpacer(24.dp)
 
@@ -109,7 +131,8 @@ private fun Content(
 
             val truncatedKey = uiState.profile?.truncatedPublicKey.orEmpty()
             BodyM(
-                text = stringResource(R.string.contacts__import_overview_subtitle, truncatedKey),
+                text = stringResource(R.string.contacts__import_overview_subtitle, truncatedKey)
+                    .withAccentBoldBright(),
                 color = Colors.White64,
             )
 
@@ -153,8 +176,8 @@ private fun ProfileRow(profile: PubkyProfile) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Display(
-            text = profile.name,
+        Headline(
+            text = AnnotatedString(profile.name),
             modifier = Modifier.weight(1f),
         )
 
@@ -196,26 +219,35 @@ private fun ContactCountRow(contacts: ImmutableList<PubkyProfile>) {
 
 @Composable
 private fun AvatarStack(contacts: ImmutableList<PubkyProfile>) {
-    val visibleCount = minOf(contacts.size, 4)
+    val visibleCount = minOf(contacts.size, 5)
     val overflow = contacts.size - visibleCount
+    val itemCount = visibleCount + if (overflow > 0) 1 else 0
+    val stackWidth = 32 + ((itemCount - 1).coerceAtLeast(0) * 24)
 
-    Box {
+    Box(
+        modifier = Modifier.size(
+            width = stackWidth.dp,
+            height = 32.dp,
+        )
+    ) {
         contacts.take(visibleCount).forEachIndexed { index, contact ->
             Box(modifier = Modifier.offset(x = (index * 24).dp)) {
                 if (contact.imageUrl != null) {
-                    PubkyImage(uri = contact.imageUrl, size = 36.dp)
+                    PubkyImage(
+                        uri = contact.imageUrl,
+                        size = 32.dp,
+                        modifier = Modifier.avatarShadow()
+                    )
                 } else {
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(32.dp)
+                            .avatarShadow()
                             .clip(CircleShape)
-                            .background(Colors.White10)
+                            .background(AvatarMutedColor)
                     ) {
-                        BodySSB(
-                            text = contact.name.firstOrNull()?.uppercase().orEmpty(),
-                            color = Colors.White,
-                        )
+                        AvatarLabel(text = contact.name.firstOrNull()?.uppercase().orEmpty())
                     }
                 }
             }
@@ -226,14 +258,36 @@ private fun AvatarStack(contacts: ImmutableList<PubkyProfile>) {
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
                     .offset(x = (visibleCount * 24).dp)
-                    .size(36.dp)
+                    .size(32.dp)
+                    .avatarShadow()
                     .clip(CircleShape)
-                    .background(Colors.Gray4)
+                    .background(AvatarOverflowBackgroundColor)
+                    .border(1.dp, AvatarOverflowBorderColor, CircleShape)
             ) {
-                BodySSB(text = "+$overflow", color = Colors.White)
+                AvatarLabel(text = "+$overflow")
             }
         }
     }
+}
+
+private fun Modifier.avatarShadow() = shadow(
+    elevation = 2.dp,
+    shape = CircleShape,
+    ambientColor = AvatarShadowColor,
+    spotColor = AvatarShadowColor,
+)
+
+@Composable
+private fun AvatarLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium.copy(
+            color = Colors.White,
+            fontWeight = FontWeight.Medium,
+            lineHeight = 20.sp,
+            letterSpacing = 0.sp,
+        ),
+    )
 }
 
 @Preview(showSystemUi = true)
