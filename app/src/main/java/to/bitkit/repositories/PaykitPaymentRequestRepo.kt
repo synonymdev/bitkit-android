@@ -22,6 +22,7 @@ import to.bitkit.async.appScope
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.models.satsToMsat
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -55,7 +56,7 @@ data class PaykitPaymentRequest(
     fun isExpired(now: Instant): Boolean = expiresAt?.let { it <= now } == true
 
     fun acceptsLightningInvoiceAmountMsats(amountMsats: ULong?): Boolean =
-        amountMsats == null || amountSats <= ULong.MAX_VALUE / 1000uL && amountMsats == amountSats * 1000uL
+        amountMsats == null || amountMsats == satsToMsat(amountSats)
 
     fun acceptsLightningInvoiceAmountSats(amountSats: ULong): Boolean =
         amountSats == 0uL || acceptsPaymentAmount(amountSats)

@@ -674,21 +674,25 @@ class AppViewModel @Inject constructor(
         if (currentSheet.value != null || isPresentingPaymentRequest || hasActiveContactPaymentContext()) return
         isPresentingPaymentRequest = true
         try {
-            for (request in requests.filter {
-                it.id !in presentedPaymentRequestIds && paymentRequestPresentationRetryJobs[it.id]?.isActive != true
+            for (request in requests.filter { request ->
+                val retryAttempts = paymentRequestPresentationRetryAttempts[request.id] ?: 0
+                request.id !in presentedPaymentRequestIds &&
+                    retryAttempts <= PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.size &&
+                    paymentRequestPresentationRetryJobs[request.id]?.isActive != true
             }) {
-                if (openIncomingPaymentRequestIfAvailable(request)) return
+                if (presentIncomingPaymentRequestOrStop(request)) return
             }
         } finally {
             isPresentingPaymentRequest = false
         }
     }
 
-    private suspend fun openIncomingPaymentRequestIfAvailable(request: PaykitPaymentRequest): Boolean {
+    private suspend fun presentIncomingPaymentRequestOrStop(request: PaykitPaymentRequest): Boolean {
         val result = privatePaykitRepo.beginPaymentRequest(request).getOrNull()
         if (currentSheet.value != null || hasActiveContactPaymentContext()) return true
-        if (result !is PublicPaykitPaymentResult.Opened || !paykitPaymentRequestRepo.isPending(request)) {
-            if (paykitPaymentRequestRepo.isPending(request)) deferPaymentRequestPresentation(request)
+        val isPending = paykitPaymentRequestRepo.isPending(request)
+        if (result !is PublicPaykitPaymentResult.Opened || !isPending) {
+            if (isPending) deferPaymentRequestPresentation(request)
             return false
         }
 
@@ -705,10 +709,8 @@ class AppViewModel @Inject constructor(
 
     private fun deferPaymentRequestPresentation(request: PaykitPaymentRequest) {
         val attempt = paymentRequestPresentationRetryAttempts[request.id] ?: 0
-        val retryDelay = PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS[
-            attempt.coerceAtMost(PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.lastIndex)
-        ]
         paymentRequestPresentationRetryAttempts[request.id] = attempt + 1
+        val retryDelay = PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.getOrNull(attempt) ?: return
         paymentRequestPresentationRetryJobs.remove(request.id)?.cancel()
         paymentRequestPresentationRetryJobs[request.id] = viewModelScope.launch {
             delay(retryDelay)
@@ -2582,11 +2584,15 @@ class AppViewModel @Inject constructor(
     private suspend fun proceedWithPayment(contactPaymentContext: ContactPaymentContext?) {
         delay(SCREEN_TRANSITION_DELAY) // wait for screen transitions when applicable
 
-        if (!validateAndAcceptIncomingPaymentRequest(contactPaymentContext)) return
+        if (!validateIncomingPaymentRequest(contactPaymentContext)) return
 
         consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
-            toast(it)
-            hideSheet()
+            handlePaymentPreparationFailure(contactPaymentContext, it)
+            return
+        }
+
+        acceptIncomingPaymentRequestIfNeeded(contactPaymentContext).onFailure {
+            handlePaymentPreparationFailure(contactPaymentContext, it)
             return
         }
 
@@ -2715,26 +2721,23 @@ class AppViewModel @Inject constructor(
             acceptsLightningInvoiceAmountMsats(amountMsats)
         }
 
-    private suspend fun validateAndAcceptIncomingPaymentRequest(
+    private suspend fun validateIncomingPaymentRequest(
         contactPaymentContext: ContactPaymentContext?,
     ): Boolean {
+        val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
         if (
-            (_sendUiState.value.isPaymentRequest && contactPaymentContext?.incomingPaymentRequest == null) ||
+            (_sendUiState.value.isPaymentRequest && incomingPaymentRequest == null) ||
             hasMismatchedIncomingPaymentRequest(contactPaymentContext)
         ) {
             rejectMismatchedPaymentRequest()
             return false
         }
-
-        val error = acceptIncomingPaymentRequestIfNeeded(contactPaymentContext).exceptionOrNull() ?: return true
-        toast(error)
-        if (
-            error is PaykitPaymentRequestError.RequestExpired ||
-            error is PaykitPaymentRequestError.RequestUnavailable
-        ) {
+        if (incomingPaymentRequest != null && !paykitPaymentRequestRepo.isPending(incomingPaymentRequest)) {
+            toast(PaykitPaymentRequestError.RequestUnavailable)
             hideSheet()
+            return false
         }
-        return false
+        return true
     }
 
     private fun rejectMismatchedPaymentRequest() {
@@ -3449,6 +3452,16 @@ class AppViewModel @Inject constructor(
     private suspend fun acceptIncomingPaymentRequestIfNeeded(context: ContactPaymentContext?): Result<Unit> {
         val request = context?.incomingPaymentRequest ?: return Result.success(Unit)
         return paykitPaymentRequestRepo.accept(request)
+    }
+
+    private fun handlePaymentPreparationFailure(context: ContactPaymentContext?, error: Throwable) {
+        toast(error)
+        val request = context?.incomingPaymentRequest
+        if (request != null && paykitPaymentRequestRepo.isPending(request)) {
+            presentedPaymentRequestIds.remove(request.id)
+            deferPaymentRequestPresentation(request)
+        }
+        hideSheet()
     }
 
     fun handleDeeplinkIntent(intent: Intent) {

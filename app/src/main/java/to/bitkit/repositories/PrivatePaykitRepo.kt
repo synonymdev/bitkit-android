@@ -1360,10 +1360,10 @@ class PrivatePaykitRepo @Inject constructor(
             lightningRepo.lightningState.value.nodeLifecycleState.isRunning()
     }
 
-    private suspend fun hasPrivatePaymentAccessForCurrentProfile(): Boolean {
-        pubkyService.currentPublicKey() ?: return false
-        return paykitSdkService.hasPrivatePaymentAccess()
-    }
+    private suspend fun hasPrivatePaymentAccessForCurrentProfile(): Boolean = runSuspendCatching {
+        pubkyService.currentPublicKey() ?: return@runSuspendCatching false
+        paykitSdkService.hasPrivatePaymentAccess()
+    }.getOrDefault(false)
 
     private suspend fun isContactSharingCleanupPending(): Boolean =
         cacheStore.data.first().cleanupPending

@@ -29,7 +29,6 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.clearInvocations
@@ -59,6 +58,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -180,6 +180,13 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             setOf(WALLET_RECEIVER_PATH),
             cacheData.value.contacts.getValue(CONTACT_KEY).publishedPrivatePaymentReceiverPaths,
         )
+    }
+
+    @Test
+    fun `hasPrivatePaymentAccess returns false when the SDK check fails`() = test {
+        whenever(paykitSdkService.hasPrivatePaymentAccess()).thenThrow(IllegalStateException("Paykit unavailable"))
+
+        assertFalse(sut.hasPrivatePaymentAccess())
     }
 
     @Test

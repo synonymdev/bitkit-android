@@ -35,6 +35,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.check
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -76,7 +77,6 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.PaykitPaymentRequest
-import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentRepo
@@ -115,6 +115,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
@@ -421,6 +422,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(privatePaykitRepo, times(2)).beginPaymentRequest(request)
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `unresolvable payment request retries are bounded`() = test {
+        val request = paymentRequest()
+        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(Unit))
+        whenever { privatePaykitRepo.beginPaymentRequest(request) }
+            .thenReturn(Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList))
+        pendingPaykitPaymentRequests.value = listOf(request)
+        isPaykitEnabled.value = true
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+
+        sut.startPaykitPaymentRequestPolling()
+        advanceTimeBy(20.minutes.inWholeMilliseconds)
+        runCurrent()
+        sut.stopPaykitPaymentRequestPolling()
+
+        verify(privatePaykitRepo, times(5)).beginPaymentRequest(request)
     }
 
     @Test
@@ -1879,7 +1899,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `incoming payment request is accepted before its private list is consumed`() = test {
+    fun `incoming payment request consumes its private list before it is accepted`() = test {
         val address = "bcrt1qpaymentrequest"
         val request = paymentRequest()
         val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
@@ -1910,8 +1930,45 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         confirmCurrentPayment()
 
-        verify(paykitPaymentRequestRepo).accept(request)
-        verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
+        inOrder(privatePaykitRepo, paykitPaymentRequestRepo).apply {
+            verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
+            verify(paykitPaymentRequestRepo).accept(request)
+        }
+    }
+
+    @Test
+    fun `incoming payment request is not accepted when private list consumption fails`() = test {
+        val address = "bcrt1qpaymentrequest"
+        val request = paymentRequest()
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever { privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext) }
+            .thenReturn(Result.failure(IllegalStateException("Payment list already consumed")))
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = request.amountSats,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+            ),
+        )
+
+        confirmCurrentPayment()
+
+        verify(paykitPaymentRequestRepo, never()).accept(any())
+        verify(lightningRepo, never()).sendOnChain(
+            address = any(),
+            sats = any(),
+            speed = anyOrNull(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+        )
     }
 
     @Test
@@ -1997,8 +2054,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val address = "bcrt1qexpiredrequest"
         val request = paymentRequest()
         val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
-        whenever { paykitPaymentRequestRepo.accept(request) }
-            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestExpired))
+        whenever(paykitPaymentRequestRepo.isPending(request)).thenReturn(false)
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
             SendUiState(
@@ -2012,6 +2068,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         confirmCurrentPayment()
 
+        verify(paykitPaymentRequestRepo, never()).accept(any())
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
