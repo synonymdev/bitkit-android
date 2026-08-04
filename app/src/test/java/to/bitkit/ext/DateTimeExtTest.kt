@@ -20,6 +20,9 @@ class DateTimeExtTest : BaseUnitTest() {
         val AFTERNOON: Instant = Instant.parse("2026-03-07T15:23:00Z")
         val MIDNIGHT: Instant = Instant.parse("2026-03-07T00:15:00Z")
         val NOON: Instant = Instant.parse("2026-03-07T12:05:00Z")
+
+        // Midday so the calendar day, and with it the month name, holds in every time zone
+        val MIDDAY_IN_JULY: Long = Instant.parse("2026-07-27T12:00:00Z").toEpochMilli()
     }
 
     @Test
@@ -259,6 +262,41 @@ class DateTimeExtTest : BaseUnitTest() {
 
         assertEquals(UiDateStyle.TIME, uiDateStyleFor(lateEvening.epochSecond.toULong(), today, UTC))
         assertEquals(UiDateStyle.DATE_TIME, uiDateStyleFor(lateEvening.epochSecond.toULong(), today, bucharest))
+    }
+
+    @Test
+    fun `toLocalizedTimestamp uses the supplied locale`() {
+        val inGerman = MIDDAY_IN_JULY.toLocalizedTimestamp(Locale.GERMANY)
+        val inUs = MIDDAY_IN_JULY.toLocalizedTimestamp(Locale.US)
+
+        assertTrue(inGerman.contains("Juli"), "expected a German month name, got '$inGerman'")
+        assertTrue(inUs.contains("July"), "expected an English month name, got '$inUs'")
+    }
+
+    @Test
+    fun `toLocalizedTimestamp follows the default locale when none is supplied`() {
+        val original = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.GERMANY)
+            val result = MIDDAY_IN_JULY.toLocalizedTimestamp()
+
+            assertTrue(result.contains("Juli"), "expected a German month name, got '$result'")
+        } finally {
+            Locale.setDefault(original)
+        }
+    }
+
+    @Test
+    fun `toLocalizedTimestamp orders the date the way the locale does`() {
+        val original = Locale.getDefault()
+        try {
+            Locale.setDefault(Locale.GERMANY)
+            val result = MIDDAY_IN_JULY.toLocalizedTimestamp()
+
+            assertTrue(result.indexOf("27") < result.indexOf("Juli"), "expected day before month, got '$result'")
+        } finally {
+            Locale.setDefault(original)
+        }
     }
 
     private fun Instant.formattedInUtc(pattern: String) = formatted(pattern, Locale.US, UTC)
