@@ -2,6 +2,7 @@ package to.bitkit.services
 
 import com.synonym.paykit.EncryptedLinkRecoveryMarkerPolicy
 import com.synonym.paykit.EndpointManagementScope
+import com.synonym.paykit.PubkyClientEnvironment
 import com.synonym.paykit.PublicContactSharingPolicy
 import org.junit.Test
 import org.mockito.kotlin.mock
@@ -22,6 +23,22 @@ class PaykitSdkServiceTest {
         assertEquals(EndpointManagementScope.MANAGED_ONLY, BitkitPaykitSdkConfig.endpointManagementScope)
         assertEquals(PublicContactSharingPolicy.LOCAL_ONLY, BitkitPaykitSdkConfig.publicContactSharing)
         assertEquals(EncryptedLinkRecoveryMarkerPolicy.ENABLED, BitkitPaykitSdkConfig.encryptedLinkRecoveryMarkers)
+    }
+
+    @Test
+    fun `production uses default Pubky client`() {
+        val config = paykitPubkyClientConfig(isLocalE2eBackend = false)
+
+        assertEquals(PubkyClientEnvironment.PRODUCTION, config.environment)
+        assertNull(config.testnetHost)
+    }
+
+    @Test
+    fun `local E2E uses emulator host for Pubky testnet`() {
+        val config = paykitPubkyClientConfig(isLocalE2eBackend = true)
+
+        assertEquals(PubkyClientEnvironment.LOCAL_TESTNET, config.environment)
+        assertEquals("10.0.2.2", config.testnetHost)
     }
 
     @Test
