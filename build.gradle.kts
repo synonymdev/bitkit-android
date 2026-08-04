@@ -5,7 +5,6 @@ plugins {
     alias(libs.plugins.compose.stability.analyzer) apply false
     alias(libs.plugins.google.services) apply false
     alias(libs.plugins.hilt.android) apply false // https://github.com/google/dagger/releases/
-    alias(libs.plugins.kotlin.android) apply false
     alias(libs.plugins.kotlin.serialization) apply false
     alias(libs.plugins.ksp) apply false // https://github.com/google/ksp/releases
     alias(libs.plugins.room) apply false
