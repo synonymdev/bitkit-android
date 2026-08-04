@@ -76,7 +76,7 @@ val bcp47Locales = listOf(
 )
 val e2eEnv = envFlag("E2E", default = false)
 val e2eBackendEnv = providers.environmentVariable("E2E_BACKEND").orElse("local")
-val e2eHomegateUrlEnv = providers.environmentVariable("E2E_HOMEGATE_URL").orElse("http://127.0.0.1:6288")
+val e2eHomegateUrlEnv = providers.environmentVariable("E2E_HOMEGATE_URL").orElse("http://10.0.2.2:6288")
 val geoEnv = envFlag("GEO", default = true)
 val paykitUiDisabledEnv = envFlag("PAYKIT_UI_DISABLED", default = false)
 val trezorBridgeEnv = localProp("TREZOR_BRIDGE").map { it.toBoolean().toString() }.orElse("false")

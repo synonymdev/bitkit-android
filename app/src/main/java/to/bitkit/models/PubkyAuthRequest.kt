@@ -15,7 +15,13 @@ enum class PubkyAuthClaim(val wireValue: String) {
         const val QUERY_PARAMETER = "x-bitkit-claim"
 
         /** Capabilities required by the watch-only Paykit Server setup flow. */
-        const val WATCH_ONLY_ACCOUNT_CAPABILITIES = "/pub/paykit/v0/bitkit/server/:rw"
+        const val WATCH_ONLY_ACCOUNT_CAPABILITIES =
+            "/pub/paykit/v0/bitkit/server/:rw,/pub/paykit/v0/private/bitkit/server/:rw"
+
+        private val watchOnlyAccountCapabilitySet = WATCH_ONLY_ACCOUNT_CAPABILITIES.split(",").toSet()
+
+        fun matchesWatchOnlyAccountCapabilities(capabilities: String) =
+            capabilities.split(",").toSet() == watchOnlyAccountCapabilitySet
 
         fun fromWireValue(value: String) = entries.firstOrNull { it.wireValue == value }
     }
@@ -95,7 +101,7 @@ data class PubkyAuthRequest(
             capabilities: String,
         ): Result<PubkyAuthClaim?> = when {
             claimValues.size > 1 -> Result.failure(PubkyAuthRequestError.DuplicateBitkitClaim)
-            claimValues.isEmpty() && capabilities == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES ->
+            claimValues.isEmpty() && PubkyAuthClaim.matchesWatchOnlyAccountCapabilities(capabilities) ->
                 Result.failure(PubkyAuthRequestError.MissingBitkitClaim)
             claimValues.isEmpty() -> Result.success(null)
             else -> validateBitkitClaimValue(claimValues.first(), capabilities)
@@ -108,7 +114,7 @@ data class PubkyAuthRequest(
             val claim = PubkyAuthClaim.fromWireValue(claimValue)
                 ?: return Result.failure(PubkyAuthRequestError.UnsupportedBitkitClaim(claimValue))
 
-            return if (capabilities == PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES) {
+            return if (PubkyAuthClaim.matchesWatchOnlyAccountCapabilities(capabilities)) {
                 Result.success(claim)
             } else {
                 Result.failure(PubkyAuthRequestError.InvalidBitkitClaimCapabilities)
