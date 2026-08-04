@@ -2,6 +2,7 @@ package to.bitkit.services
 
 import com.synonym.paykit.EncryptedLinkRecoveryMarkerPolicy
 import com.synonym.paykit.EndpointManagementScope
+import com.synonym.paykit.PubkyClientConfig
 import com.synonym.paykit.PubkyClientEnvironment
 import com.synonym.paykit.PublicContactSharingPolicy
 import org.junit.Test
@@ -18,6 +19,12 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PaykitSdkServiceTest {
+    private val basePubkyClientConfig = PubkyClientConfig(
+        requestTimeoutSecs = 30uL,
+        environment = PubkyClientEnvironment.PRODUCTION,
+        testnetHost = null,
+    )
+
     @Test
     fun `config scopes public endpoint sync to Bitkit managed endpoints`() {
         assertEquals(EndpointManagementScope.MANAGED_ONLY, BitkitPaykitSdkConfig.endpointManagementScope)
@@ -26,19 +33,25 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `production uses default Pubky client`() {
-        val config = paykitPubkyClientConfig(isLocalE2eBackend = false)
+    fun `production preserves Pubky client config`() {
+        val config = paykitPubkyClientConfig(
+            isLocalE2eBackend = false,
+            baseConfig = basePubkyClientConfig,
+        )
 
-        assertEquals(PubkyClientEnvironment.PRODUCTION, config.environment)
-        assertNull(config.testnetHost)
+        assertEquals(basePubkyClientConfig, config)
     }
 
     @Test
     fun `local E2E uses emulator host for Pubky testnet`() {
-        val config = paykitPubkyClientConfig(isLocalE2eBackend = true)
+        val config = paykitPubkyClientConfig(
+            isLocalE2eBackend = true,
+            baseConfig = basePubkyClientConfig,
+        )
 
         assertEquals(PubkyClientEnvironment.LOCAL_TESTNET, config.environment)
         assertEquals("10.0.2.2", config.testnetHost)
+        assertEquals(basePubkyClientConfig.requestTimeoutSecs, config.requestTimeoutSecs)
     }
 
     @Test
