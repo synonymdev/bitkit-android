@@ -211,6 +211,7 @@ private fun Content(
 
             SendContactTopBar(
                 titleText = when {
+                    uiState.isPaymentRequest -> stringResource(R.string.wallet__payment_request)
                     isLnurlPay -> stringResource(R.string.wallet__lnurl_p_title)
                     else -> stringResource(R.string.wallet__send_review)
                 },

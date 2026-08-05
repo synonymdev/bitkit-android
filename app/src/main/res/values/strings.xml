@@ -997,6 +997,7 @@
     <string name="slashtags__error_pay_empty_msg">The contact you\'re trying to send to hasn\'t enabled payments.</string>
     <string name="slashtags__error_pay_not_opened_msg">No compatible payment endpoint is available.</string>
     <string name="slashtags__error_pay_title">Unable To Pay Contact</string>
+    <string name="slashtags__error_pay_waiting_msg">Waiting for the contact to update their payment details. Please try again shortly.</string>
     <string name="slashtags__onboarding_profile1_header">Own your\n&lt;accent&gt;profile&lt;/accent&gt;</string>
     <string name="slashtags__onboarding_profile1_text">Set up your public profile and links, so your Bitkit contacts can reach you or pay you anytime, anywhere.</string>
     <string name="slashtags__profile">Profile</string>
@@ -1148,6 +1149,8 @@
     <string name="wallet__minimum">MINIMUM</string>
     <string name="wallet__note">Note</string>
     <string name="wallet__payment_received">Received Bitcoin</string>
+    <string name="wallet__payment_request">Payment Request</string>
+    <string name="wallet__payment_request_mismatch">The payment details did not match the request. Payment cancelled.</string>
     <string name="wallet__peer_disconnected">Peer disconnected.</string>
     <string name="wallet__receive">Receive</string>
     <string name="wallet__receive__cjit">Receive Lightning funds</string>

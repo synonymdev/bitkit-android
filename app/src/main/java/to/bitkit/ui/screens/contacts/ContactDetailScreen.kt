@@ -30,6 +30,7 @@ import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyProfileLink
+import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.AddTagSheet
 import to.bitkit.ui.components.BodyM
@@ -52,7 +53,7 @@ import to.bitkit.ui.theme.Colors
 fun ContactDetailScreen(
     viewModel: ContactDetailViewModel,
     onBackClick: () -> Unit,
-    onPayContact: (String, String) -> Unit,
+    onPayContact: (String, String, PrivatePaykitPaymentContext?) -> Unit,
     onActivityClick: (String) -> Unit,
     showDeleteAction: Boolean = false,
     onContactDeleted: () -> Unit = {},
@@ -64,7 +65,8 @@ fun ContactDetailScreen(
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                is ContactDetailEffect.OpenPayment -> onPayContact(it.paymentRequest, it.publicKey)
+                is ContactDetailEffect.OpenPayment ->
+                    onPayContact(it.paymentRequest, it.publicKey, it.privatePaymentContext)
                 ContactDetailEffect.ContactDeleted -> onContactDeleted()
             }
         }

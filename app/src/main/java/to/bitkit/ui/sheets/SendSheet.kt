@@ -156,8 +156,8 @@ fun SendSheet(
                             appViewModel.clearActiveContactPaymentContext()
                             navController.popBackStack()
                         },
-                        onOpenPayment = { paymentRequest, publicKey ->
-                            appViewModel.openContactPayment(paymentRequest, publicKey)
+                        onOpenPayment = { paymentRequest, publicKey, privatePaymentContext ->
+                            appViewModel.openContactPayment(paymentRequest, publicKey, privatePaymentContext)
                         },
                     )
                 }
