@@ -91,8 +91,10 @@ class TransferRepo @Inject constructor(
         }
     }
 
-    // TODO maybe replace with delete, or call delete once activity item was augmented with the transfer's data.
-    //  Likely no clear reason to keep persisting transfers afterwards.
+    // Settled transfers must be kept: [getChannelIdsByFundingTxId] recovers the transfer flag for a
+    // hardware wallet's funding tx after the device is removed and re-paired, and removal deletes the
+    // activities but not these records. Deleting on settle, or wiring up TransferDao.deleteOldSettled,
+    // regresses synonymdev/bitkit-android#1130.
     suspend fun markSettled(id: String): Result<Unit> = withContext(bgDispatcher) {
         runCatching {
             val settledAt = clock.now().epochSeconds
@@ -135,6 +137,29 @@ class TransferRepo @Inject constructor(
             transferDao.getByFundingTxId(fundingTxId)?.lspOrderId
         }.onFailure {
             Logger.warn("Failed to find transfer by funding txid '$fundingTxId'", it, context = TAG)
+        }
+    }
+
+    /**
+     * Maps funding tx id to channel id for every transfer Bitkit recorded itself.
+     *
+     * Removing a hardware wallet deletes its activities but never these records, so they are what
+     * lets a re-paired wallet's rediscovered funding tx read as a transfer again instead of a plain
+     * send. Settled transfers are included on purpose: [syncTransferStates] only re-marks transfers
+     * that are still active, and a settled one is exactly the case that regresses.
+     */
+    suspend fun getChannelIdsByFundingTxId(): Result<Map<String, String>> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            transferDao.getAll()
+                .mapNotNull { transfer ->
+                    val fundingTxId = transfer.fundingTxId ?: return@mapNotNull null
+                    val channelId = transfer.channelId ?: return@mapNotNull null
+                    fundingTxId to channelId
+                }
+                .distinctBy { it.first }
+                .toMap()
+        }.onFailure {
+            Logger.warn("Failed to load channel ids by funding txid", it, context = TAG)
         }
     }
 
