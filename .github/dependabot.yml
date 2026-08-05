@@ -1,4 +1,5 @@
 version: 2
+
 updates:
   - package-ecosystem: npm
     directory: /tools/fcm-tester
@@ -7,3 +8,59 @@ updates:
     open-pull-requests-limit: 5
     commit-message:
       prefix: chore
+    groups:
+      fcm-tester:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # Every action here is pinned to a floating major tag, so a minor/patch-only group would never
+  # fire. The major group keeps those bumps in one PR instead of one per action.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ci
+    groups:
+      github-actions-minor:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+      github-actions-major:
+        patterns:
+          - "*"
+        update-types:
+          - major
+
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: chore
+    ignore:
+      # Synonym-owned FFI packages resolve from credentialed GitHub Packages registries and are
+      # bumped in lockstep with native code, so an unattended bump breaks the build.
+      - dependency-name: "com.synonym:*"
+      # Kotlin, AGP, KSP, the Compose compiler and the stability analyzer form a compatibility
+      # matrix that has to move as one deliberate change; see #1121 and #1127.
+      - dependency-name: "org.jetbrains.kotlin:*"
+      - dependency-name: "org.jetbrains.kotlin.plugin.*"
+      - dependency-name: "com.android.*"
+      - dependency-name: "com.google.devtools.ksp*"
+      - dependency-name: "com.github.skydoves.compose.stability.analyzer*"
+      - dependency-name: "androidx.compose:compose-bom"
+    groups:
+      gradle:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
