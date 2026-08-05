@@ -41,13 +41,14 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `local E2E uses emulator host for Pubky testnet`() {
+    fun `local E2E uses configured host for Pubky testnet`() {
         val config = paykitPubkyClientConfig(
             isLocalE2eBackend = true,
+            localTestnetHost = "192.0.2.1",
             baseConfig = basePubkyClientConfig,
         )
 
-        assertEquals("10.0.2.2", config.localTestnetHost)
+        assertEquals("192.0.2.1", config.localTestnetHost)
         assertEquals(basePubkyClientConfig.requestTimeoutSecs, config.requestTimeoutSecs)
     }
 

@@ -131,6 +131,7 @@ class PaykitSdkService @Inject constructor(
     private val stateStore = PaykitSdkStateBlobStore(keychain)
     private val sessionProvider = PaykitSdkSessionProvider(keychain)
     private val paymentAdapter = PaykitSdkPaymentAdapter()
+    private val pubkyClientConfig by lazy { paykitPubkyClientConfig() }
     private val handleMutex = Mutex()
     private val operationMutex = Mutex()
     private val setupMutex = Mutex()
@@ -793,11 +794,11 @@ class PaykitSdkService @Inject constructor(
             sessionProvider = sessionProvider,
             paymentAdapter = paymentAdapter,
             config = paykitSdkConfig(),
-            pubkyClient = paykitPubkyClientConfig(),
+            pubkyClient = pubkyClientConfig,
         ).also { sdk = it }
     }
 
-    private fun bootstrap() = PubkySessionBootstrap.withPubkyClientConfig(paykitPubkyClientConfig())
+    private fun bootstrap() = PubkySessionBootstrap.withPubkyClientConfig(pubkyClientConfig)
 
     private fun resetRuntime() {
         sdk = null
@@ -852,11 +853,12 @@ internal fun paykitSdkConfig() = defaultConfig(PaykitReceiverPaths.WALLET).copy(
 
 internal fun paykitPubkyClientConfig(
     isLocalE2eBackend: Boolean = Env.isLocalE2eBackend,
+    localTestnetHost: String = Env.e2eLocalHost,
     baseConfig: PubkyClientConfig = defaultPubkyClientConfig(),
 ) =
     if (isLocalE2eBackend) {
         baseConfig.copy(
-            localTestnetHost = "10.0.2.2",
+            localTestnetHost = localTestnetHost,
         )
     } else {
         baseConfig

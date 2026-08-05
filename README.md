@@ -219,6 +219,9 @@ Pass `E2E=true` and build any flavor. By default, E2E uses a local Electrum over
 just e2e
 ```
 
+Local E2E builds use `10.0.2.2` for Electrum, Homegate, and Pubky when running in an emulator. Set `E2E_LOCAL_HOST` to the development
+machine's LAN address when running on a physical device.
+
 #### Use Network Electrum (Staging/Mainnet)
 
 Set `E2E_BACKEND=network` to use the network Electrum based on the build flavor:

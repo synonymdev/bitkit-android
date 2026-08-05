@@ -14,14 +14,23 @@ enum class PubkyAuthClaim(val wireValue: String) {
         /** Query parameter used for Bitkit-specific Pubky auth claims. */
         const val QUERY_PARAMETER = "x-bitkit-claim"
 
-        /** Capabilities required by the watch-only Paykit Server setup flow. */
+        /** Both public and private Paykit Server capabilities required by the watch-only setup flow. */
         const val WATCH_ONLY_ACCOUNT_CAPABILITIES =
             "/pub/paykit/v0/bitkit/server/:rw,/pub/paykit/v0/private/bitkit/server/:rw"
 
         private val watchOnlyAccountCapabilitySet = WATCH_ONLY_ACCOUNT_CAPABILITIES.split(",").toSet()
 
+        /**
+         * Matches exactly the required public and private capabilities regardless of ordering or surrounding spaces.
+         */
         fun matchesWatchOnlyAccountCapabilities(capabilities: String) =
-            capabilities.split(",").toSet() == watchOnlyAccountCapabilitySet
+            capabilitySet(capabilities) == watchOnlyAccountCapabilitySet
+
+        private fun capabilitySet(capabilities: String): Set<String>? {
+            val entries = capabilities.split(",").map { it.trim() }
+            if (entries.any { it.isEmpty() }) return null
+            return entries.toSet()
+        }
 
         fun fromWireValue(value: String) = entries.firstOrNull { it.wireValue == value }
     }

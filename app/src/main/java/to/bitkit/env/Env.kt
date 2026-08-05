@@ -22,6 +22,7 @@ internal object Env {
     const val isGeoblockingEnabled = BuildConfig.GEO
     val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
     val isLocalE2eBackend = isE2eTest && e2eBackend == "local"
+    const val e2eLocalHost = BuildConfig.E2E_LOCAL_HOST
     const val e2eHomegateUrl = BuildConfig.E2E_HOMEGATE_URL
     val network = Network.valueOf(BuildConfig.NETWORK)
     val locales = BuildConfig.LOCALES.split(",")
@@ -285,7 +286,7 @@ private object ElectrumServers {
 
     object REGTEST {
         const val STAG = "ssl://electrs.bitkit.stag0.blocktank.to:9999"
-        const val LOCAL = "tcp://127.0.0.1:60001"
+        val LOCAL get() = "tcp://${Env.e2eLocalHost}:60001"
     }
 
     const val TESTNET = "ssl://electrum.blockstream.info:60002"
