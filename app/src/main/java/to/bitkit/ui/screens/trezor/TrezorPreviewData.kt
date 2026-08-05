@@ -316,7 +316,8 @@ internal object TrezorPreviewData {
 
     val sampleWatcherActivities = listOf(
         Activity.Onchain(
-            OnchainActivity.create(walletId = "wallet0",
+            OnchainActivity.create(
+                walletId = "wallet0",
                 id = SAMPLE_TXID,
                 txType = PaymentType.RECEIVED,
                 txId = SAMPLE_TXID,
@@ -328,7 +329,8 @@ internal object TrezorPreviewData {
             ),
         ),
         Activity.Onchain(
-            OnchainActivity.create(walletId = "wallet0",
+            OnchainActivity.create(
+                walletId = "wallet0",
                 id = "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3",
                 txType = PaymentType.SENT,
                 txId = "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3",

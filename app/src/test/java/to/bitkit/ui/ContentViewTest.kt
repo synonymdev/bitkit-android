@@ -21,6 +21,12 @@ class ContentViewTest {
     }
 
     @Test
+    fun `savings start route uses intro until seen`() {
+        assertEquals(Routes.SavingsIntro, transferSavingsStartRoute(hasSeenSavingsIntro = false))
+        assertEquals(Routes.SavingsAvailability, transferSavingsStartRoute(hasSeenSavingsIntro = true))
+    }
+
+    @Test
     fun `hardware spending start route keeps device id after intro`() {
         val deviceId = "trezor-1"
 

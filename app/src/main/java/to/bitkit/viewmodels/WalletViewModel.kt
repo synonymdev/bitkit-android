@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.WorkManager
 import com.synonym.bitkitcore.BoltzSwapEvent
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -32,6 +33,8 @@ import to.bitkit.ext.of
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.Toast
 import to.bitkit.repositories.BackupRepo
+import to.bitkit.repositories.BarkRepo
+import to.bitkit.repositories.BarkTransferRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
@@ -46,6 +49,7 @@ import to.bitkit.ui.onboarding.LOADING_MS
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
 import to.bitkit.utils.isTxSyncTimeout
+import to.bitkit.workers.BarkMaintenanceWorker
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration.Companion.milliseconds
@@ -58,6 +62,8 @@ class WalletViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val walletRepo: WalletRepo,
     private val lightningRepo: LightningRepo,
+    private val barkRepo: BarkRepo,
+    private val barkTransferRepo: BarkTransferRepo,
     private val settingsStore: SettingsStore,
     private val backupRepo: BackupRepo,
     private val blocktankRepo: BlocktankRepo,
@@ -326,6 +332,15 @@ class WalletViewModel @Inject constructor(
                 walletRepo.setWalletExistsState()
                 connectMigrationPeers()
                 migrationService.cleanupInvalidMigrationTransfers()
+                barkRepo.startIfEnabled(walletIndex).onSuccess {
+                    if (barkRepo.isEnabledNow()) {
+                        // VTXOs expire, so background maintenance is not optional.
+                        BarkMaintenanceWorker.schedule(WorkManager.getInstance(context))
+                        barkRepo.onForeground()
+                        // A board interrupted by the app dying resumes here.
+                        barkTransferRepo.resumePendingBoard()
+                    }
+                }
                 walletRepo.syncBalances()
                 if (_restoreState.value.isIdle()) {
                     walletRepo.refreshBip21()

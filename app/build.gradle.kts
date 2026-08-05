@@ -217,6 +217,19 @@ android {
             manifestPlaceholders["app_icon"] = "@mipmap/ic_launcher_testnet"
             manifestPlaceholders["app_icon_round"] = "@mipmap/ic_launcher_testnet_round"
         }
+        // Signet is the only test network with a Second-hosted Ark server, so this
+        // flavor exists to exercise the bark spending backend. It deliberately
+        // reuses the testnet applicationId (and therefore icons) so the checked-in
+        // google-services.json resolves without a signet Firebase client; the
+        // trade-off is that signet and tnet cannot be installed side by side.
+        create("signet") {
+            dimension = "network"
+            applicationIdSuffix = ".tnet"
+            buildConfigField("String", "NETWORK", "\"SIGNET\"")
+            resValue("string", "app_name", "Bitkit Signet")
+            manifestPlaceholders["app_icon"] = "@mipmap/ic_launcher_testnet"
+            manifestPlaceholders["app_icon_round"] = "@mipmap/ic_launcher_testnet_round"
+        }
     }
 
     signingConfigs {
@@ -513,6 +526,8 @@ dependencies {
     implementation(libs.bitkit.core)
     implementation(libs.paykit)
     implementation(libs.vss.client)
+    // bark declares jna 5.15.0; keep the single app-wide jna aar declared above
+    implementation(libs.bark) { exclude(group = "net.java.dev.jna", module = "jna") }
     nativeDebugSymbols(libs.bitkit.core.nativeDebugSymbolsArtifact())
     nativeDebugSymbols(libs.ldk.node.android.nativeDebugSymbolsArtifact())
     nativeDebugSymbols(libs.paykit.nativeDebugSymbolsArtifact())

@@ -1,0 +1,11 @@
+<journey name="Receive a Lightning payment over Ark">
+  <description>Precondition: onboarded signet wallet with Ark enabled. Pay the invoice from https://signet.2nd.dev/ when prompted.</description>
+  <actions>
+    <action>Verify that the wallet home screen is shown</action>
+    <action>Tap the "Receive" button</action>
+    <action>Verify that a QR code and a Lightning invoice starting with "lntbs" are shown</action>
+    <action>Pay the displayed invoice from the signet faucet, then close the receive screen</action>
+    <action>Verify that the Spending balance on the home screen is greater than 0</action>
+    <action>Verify that the activity list shows a received payment for the amount that was paid</action>
+  </actions>
+</journey>

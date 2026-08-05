@@ -1051,19 +1051,17 @@ private fun NavGraphBuilder.home(
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
         val lightningActivities by activityListViewModel.lightningActivities.collectAsStateWithLifecycle()
+        val isArkEnabled by settingsViewModel.isArkEnabled.collectAsStateWithLifecycle()
 
         SpendingWalletScreen(
             channels = lightningState.channels,
+            isArkEnabled = isArkEnabled,
             lightningActivities = lightningActivities ?: persistentListOf(),
             onAllActivityButtonClick = { navController.navigateToAllActivity(activityListViewModel::clearFilters) },
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onEmptyActivityRowClick = { appViewModel.showSheet(Sheet.Receive()) },
             onTransferToSavingsClick = {
-                if (!hasSeenSavingsIntro) {
-                    navController.navigateToTransferSavingsIntro()
-                } else {
-                    navController.navigateToTransferSavingsAvailability()
-                }
+                navController.navigateToTransferSavingsStart(hasSeenSavingsIntro)
             },
             onTransferFromSavingsClick = {
                 navController.navigateToTransferSpendingStart(hasSeenSpendingIntro)
@@ -1898,6 +1896,9 @@ fun NavController.navigateToTransferSavingsIntro() = navigateTo(Routes.SavingsIn
 
 fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.SavingsAvailability)
 
+fun NavController.navigateToTransferSavingsStart(hasSeenSavingsIntro: Boolean) =
+    navigateTo(transferSavingsStartRoute(hasSeenSavingsIntro))
+
 fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean) =
     navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro))
 
@@ -1913,6 +1914,11 @@ internal fun transferEffectDestination(effect: TransferEffect): Routes? = when (
     TransferEffect.OnHwTxSigned -> Routes.SpendingHwSigned
     TransferEffect.OnSpendingFundingPaid -> Routes.SettingUp
     else -> null
+}
+
+internal fun transferSavingsStartRoute(hasSeenSavingsIntro: Boolean): Routes = when {
+    hasSeenSavingsIntro -> Routes.SavingsAvailability
+    else -> Routes.SavingsIntro
 }
 
 internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean): Routes = when {

@@ -802,6 +802,15 @@
     <string name="settings__adv__cs_method">Coin Selection Method</string>
     <string name="settings__adv__cs_min">Largest First</string>
     <string name="settings__adv__cs_min_description">Sort by and use largest UTXO first. Potentially lower fee, but reveals your largest UTXOs.</string>
+    <string name="settings__adv__ark_blocked_channels">Close your Lightning connections before switching payment backend.</string>
+    <string name="settings__adv__ark_blocked_exit">An Ark emergency exit is still in progress. Wait for it to finish before switching payment backend.</string>
+    <string name="settings__adv__ark_blocked_spending">Move your spending balance to savings before switching payment backend.</string>
+    <string name="settings__adv__ark_blocked_title">Can\'t Switch Yet</string>
+    <string name="settings__adv__ark_blocked_transfer">A transfer is still in progress. Wait for it to finish before switching payment backend.</string>
+    <string name="settings__adv__ark_toggle">Use Ark (experimental)</string>
+    <string name="settings__adv__ark_warning_confirm">I Understand, Switch</string>
+    <string name="settings__adv__ark_warning_text">Ark funds are not backed up. Your recovery phrase alone will not restore them, and losing this device means losing them. Use small amounts only.</string>
+    <string name="settings__adv__ark_warning_title">Experimental Feature</string>
     <string name="settings__adv__electrum_auto">Auto</string>
     <string name="settings__adv__electrum_server">Electrum Server</string>
     <string name="settings__adv__lightning_connections">Lightning Connections</string>

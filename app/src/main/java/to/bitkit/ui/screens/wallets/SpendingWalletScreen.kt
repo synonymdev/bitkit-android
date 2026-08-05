@@ -68,6 +68,7 @@ fun SpendingWalletScreen(
     onTransferToSavingsClick: () -> Unit,
     onTransferFromSavingsClick: () -> Unit,
     onBackClick: () -> Unit,
+    isArkEnabled: Boolean = false,
     balances: BalanceState = LocalBalances.current,
 ) {
     val showEmptyState by remember(balances.totalLightningSats, lightningActivities.size) {
@@ -75,10 +76,10 @@ fun SpendingWalletScreen(
         val hasActivity = lightningActivities.isNotEmpty()
         mutableStateOf(hasLnFunds && !hasActivity)
     }
-    val canTransfer by remember(balances.totalLightningSats, channels.size) {
-        val hasLnBalance = balances.totalLightningSats > 0uL
-        val hasChannels = channels.isNotEmpty()
-        mutableStateOf(hasLnBalance && hasChannels)
+    val canTransfer by remember(balances.totalLightningSats, channels.size, isArkEnabled) {
+        val hasSpendingBalance = balances.totalLightningSats > 0uL
+        // Ark has no channels: a spendable VTXO balance is all an offboard needs.
+        mutableStateOf(hasSpendingBalance && (isArkEnabled || channels.isNotEmpty()))
     }
     val canTransferFromSavings by remember(showEmptyState, balances.totalOnchainSats) {
         mutableStateOf(showEmptyState && balances.totalOnchainSats > 0uL)

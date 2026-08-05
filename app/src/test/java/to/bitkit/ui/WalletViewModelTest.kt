@@ -25,6 +25,8 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.ext.of
 import to.bitkit.models.BalanceState
 import to.bitkit.repositories.BackupRepo
+import to.bitkit.repositories.BarkRepo
+import to.bitkit.repositories.BarkTransferRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.ConnectivityRepo
 import to.bitkit.repositories.ConnectivityState
@@ -48,6 +50,8 @@ class WalletViewModelTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val walletRepo = mock<WalletRepo>()
     private val lightningRepo = mock<LightningRepo>()
+    private val barkRepo = mock<BarkRepo>()
+    private val barkTransferRepo = mock<BarkTransferRepo>()
     private val settingsStore = mock<SettingsStore>()
     private val backupRepo = mock<BackupRepo>()
     private val blocktankRepo = mock<BlocktankRepo>()
@@ -67,6 +71,9 @@ class WalletViewModelTest : BaseUnitTest() {
         whenever(context.getString(any())).thenReturn("")
         whenever(walletRepo.walletState).thenReturn(walletState)
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
+        // These tests exercise the ldk-node startup path; bark stays disabled.
+        whenever { barkRepo.isEnabledNow() }.thenReturn(false)
+        whenever { barkRepo.startIfEnabled(any()) }.thenReturn(Result.success(Unit))
         whenever(migrationService.isMigrationChecked()).thenReturn(true)
         whenever(migrationService.isChannelRecoveryChecked()).thenReturn(true)
         whenever(migrationService.tryFetchMigrationPeersFromBackup()).thenReturn(emptyList())
@@ -81,6 +88,8 @@ class WalletViewModelTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             walletRepo = walletRepo,
             lightningRepo = lightningRepo,
+            barkRepo = barkRepo,
+            barkTransferRepo = barkTransferRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
@@ -325,6 +334,8 @@ class WalletViewModelTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             walletRepo = testWalletRepo,
             lightningRepo = testLightningRepo,
+            barkRepo = barkRepo,
+            barkTransferRepo = barkTransferRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
@@ -391,6 +402,8 @@ class WalletViewModelTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             walletRepo = testWalletRepo,
             lightningRepo = testLightningRepo,
+            barkRepo = barkRepo,
+            barkTransferRepo = barkTransferRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,
@@ -446,6 +459,8 @@ class WalletViewModelTest : BaseUnitTest() {
             bgDispatcher = testDispatcher,
             walletRepo = testWalletRepo,
             lightningRepo = testLightningRepo,
+            barkRepo = barkRepo,
+            barkTransferRepo = barkTransferRepo,
             settingsStore = settingsStore,
             backupRepo = backupRepo,
             blocktankRepo = blocktankRepo,

@@ -1,0 +1,13 @@
+<journey name="Lightning backend is unchanged with Ark off">
+  <description>Precondition: onboarded dev (regtest) wallet. Guards that the Ark POC left the shipping ldk-node path untouched; the Ark toggle is hidden on regtest because no Ark server exists there.</description>
+  <actions>
+    <action>Verify that the wallet home screen shows Savings and Spending balances</action>
+    <action>Open Settings</action>
+    <action>Tap the "Advanced" tab</action>
+    <action>Verify that a "Lightning Connections" row is visible</action>
+    <action>Verify that a "Lightning Node" row is visible</action>
+    <action>Verify that no "Use Ark (experimental)" row is visible</action>
+    <action>Tap the "Lightning Connections" row</action>
+    <action>Verify that a Lightning connections screen is shown</action>
+  </actions>
+</journey>

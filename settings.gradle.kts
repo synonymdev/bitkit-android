@@ -71,6 +71,8 @@ dependencyResolutionManagement {
                 password = pass
             }
         }
+        // Second's bark (Ark) bindings; public registry, no credentials required
+        maven { url = uri("https://gitlab.com/api/v4/projects/78057981/packages/maven") }
     }
 }
 rootProject.name = "bitkit-android"

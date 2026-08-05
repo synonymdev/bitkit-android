@@ -1,0 +1,16 @@
+<journey name="Enabling Ark warns and hides Lightning-only settings">
+  <description>Precondition: onboarded signet wallet with zero spending balance and no open channels, Ark disabled.</description>
+  <actions>
+    <action>Verify that the wallet home screen shows a Spending balance of 0</action>
+    <action>Open Settings</action>
+    <action>Tap the "Advanced" tab</action>
+    <action>Verify that a "Lightning Connections" row is visible</action>
+    <action>Verify that a "Lightning Node" row is visible</action>
+    <action>Tap the "Use Ark (experimental)" switch</action>
+    <action>Verify that a dialog titled "Experimental Feature" is shown and that it warns Ark funds are not backed up by the recovery phrase</action>
+    <action>Tap "I Understand, Switch"</action>
+    <action>Verify that the "Use Ark (experimental)" switch is on</action>
+    <action>Verify that the "Lightning Connections" row is not visible</action>
+    <action>Verify that the "Lightning Node" row is not visible</action>
+  </actions>
+</journey>
