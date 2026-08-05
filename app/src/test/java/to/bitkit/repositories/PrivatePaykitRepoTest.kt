@@ -8,13 +8,17 @@ import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.CounterpartyReceiver
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.PaymentAmountContext
 import com.synonym.paykit.PrivatePaymentListDeliveryReport
 import com.synonym.paykit.PrivatePaymentListReservationUpdateInput
 import com.synonym.paykit.PrivatePaymentListSyncChange
 import com.synonym.paykit.PrivatePaymentResolutionState
+import com.synonym.paykit.PrivatePaymentResolutionStatus
 import com.synonym.paykit.PublicationStatus
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -27,14 +31,15 @@ import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.kotlin.any
-import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
@@ -42,12 +47,13 @@ import to.bitkit.App
 import to.bitkit.CurrentActivity
 import to.bitkit.data.PrivatePaykitCacheData
 import to.bitkit.data.PrivatePaykitCacheStore
+import to.bitkit.data.PrivatePaykitContactCacheData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.services.CoreService
-import to.bitkit.services.PaykitContactPaymentResolution
-import to.bitkit.services.PaykitPaymentEndpointSource
+import to.bitkit.services.PaykitPreparedPrivateContactPayment
+import to.bitkit.services.PaykitPrivateContactPaymentResolution
 import to.bitkit.services.PaykitPrivateReceiverPathSelection
 import to.bitkit.services.PaykitResolvedPaymentEndpoint
 import to.bitkit.services.PaykitSdkService
@@ -56,12 +62,14 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
+@Suppress("LargeClass")
 class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     companion object {
         private const val CONTACT_KEY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
@@ -176,6 +184,13 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             setOf(WALLET_RECEIVER_PATH),
             cacheData.value.contacts.getValue(CONTACT_KEY).publishedPrivatePaymentReceiverPaths,
         )
+    }
+
+    @Test
+    fun `hasPrivatePaymentAccess returns false when the SDK check fails`() = test {
+        whenever(paykitSdkService.hasPrivatePaymentAccess()).thenThrow(IllegalStateException("Paykit unavailable"))
+
+        assertFalse(sut.hasPrivatePaymentAccess())
     }
 
     @Test
@@ -375,6 +390,26 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             setOf(WALLET_RECEIVER_PATH),
             cacheData.value.contacts.getValue(CONTACT_KEY).publishedPrivatePaymentReceiverPaths,
         )
+    }
+
+    @Test
+    fun `prepareSavedContacts reads linked peers once for multiple contacts`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitLightningEnabled = false,
+            publicPaykitOnchainEnabled = true,
+        )
+        whenever { paykitSdkService.privateReceiverPathSelection(any(), any()) }.thenReturn(
+            privateReceiverPathSelection(
+                publishableReceiverPaths = emptyList(),
+                linkableReceiverPaths = emptyList(),
+            ),
+        )
+
+        val result = sut.prepareSavedContacts(listOf(CONTACT_KEY, OTHER_CONTACT_KEY))
+
+        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        verifyBlocking(paykitSdkService, times(1)) { linkedPeers() }
     }
 
     @Test
@@ -602,6 +637,54 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertTrue(result.isFailure)
         assertTrue(cacheData.value.cleanupPending)
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
+        assertEquals(
+            setOf(WALLET_RECEIVER_PATH),
+            cacheData.value.contacts.getValue(CONTACT_KEY).publishedPrivatePaymentReceiverPaths,
+        )
+    }
+
+    @Test
+    fun `cleanup retries linked receiver inspection once for the batch`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to cachedPublishedContact(WALLET_RECEIVER_PATH),
+                OTHER_CONTACT_KEY to cachedPublishedContact(SERVER_RECEIVER_PATH),
+            ),
+        )
+        sut = createSut()
+        var linkedPeerReads = 0
+        whenever { paykitSdkService.linkedPeers() }.thenAnswer {
+            linkedPeerReads += 1
+            if (linkedPeerReads <= 2) error("link inspection failed")
+            emptyList<LinkedPeerRecord>()
+        }
+
+        val result = sut.removePublishedEndpointsForCleanup("test")
+
+        assertTrue(result.isFailure)
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(OTHER_CONTACT_KEY, SERVER_RECEIVER_PATH) }
+        assertTrue(CONTACT_KEY in cacheData.value.contacts)
+        assertTrue(OTHER_CONTACT_KEY in cacheData.value.contacts)
+        assertTrue(cacheData.value.cleanupPending)
+        assertEquals(3, linkedPeerReads)
+    }
+
+    @Test
+    fun `invalid deleted contact key is dropped from cleanup state`() = test {
+        val invalidPublicKey = "not-a-pubky"
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(invalidPublicKey to cachedPublishedContact(WALLET_RECEIVER_PATH)),
+            deletedContactCleanupPendingPublicKeys = setOf(invalidPublicKey),
+        )
+        sut = createSut()
+
+        val result = sut.retryPendingEndpointRemoval(emptyList())
+
+        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        assertTrue(cacheData.value.contacts.isEmpty())
+        assertTrue(cacheData.value.deletedContactCleanupPendingPublicKeys.isEmpty())
         verifyBlocking(paykitSdkService, never()) { clearPrivatePaymentList(any(), any()) }
     }
 
@@ -622,6 +705,142 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
         verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
         verifyBlocking(paykitSdkService, never()) { clearPrivatePaymentList(CONTACT_KEY, SERVER_RECEIVER_PATH) }
+    }
+
+    @Test
+    fun `cleanup drains all contacts in one batch`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to cachedPublishedContact(WALLET_RECEIVER_PATH),
+                OTHER_CONTACT_KEY to cachedPublishedContact(SERVER_RECEIVER_PATH),
+            ),
+        )
+        sut = createSut()
+        whenever { paykitSdkService.linkedPeers() }.thenReturn(
+            listOf(
+                linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED),
+                linkedPeer(OTHER_CONTACT_KEY, LinkedPeerState.LINKED, SERVER_RECEIVER_PATH),
+            ),
+        )
+
+        val result = sut.removePublishedEndpointsForCleanup("test")
+
+        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(OTHER_CONTACT_KEY, SERVER_RECEIVER_PATH) }
+        verifyBlocking(paykitSdkService, times(2)) { linkedPeers() }
+        verifyBlocking(paykitSdkService, times(1)) { pendingOutboundPrivateCounterparties() }
+        verifyBlocking(paykitSdkService, times(2)) { processPendingPrivateMessages() }
+        verifyBlocking(paykitSdkService, times(2)) { receivePrivateMessagesFromLinkedPeers() }
+        assertTrue(cacheData.value.contacts.isEmpty())
+    }
+
+    @Test
+    fun `deleted contact retry cleans all pending contacts in one batch`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to cachedPublishedContact(WALLET_RECEIVER_PATH),
+                OTHER_CONTACT_KEY to cachedPublishedContact(SERVER_RECEIVER_PATH),
+            ),
+            deletedContactCleanupPendingPublicKeys = setOf(CONTACT_KEY, OTHER_CONTACT_KEY),
+        )
+        sut = createSut()
+
+        val result = sut.retryPendingEndpointRemoval(emptyList())
+
+        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
+        verifyBlocking(paykitSdkService) { clearPrivatePaymentList(OTHER_CONTACT_KEY, SERVER_RECEIVER_PATH) }
+        verifyBlocking(paykitSdkService, times(2)) { linkedPeers() }
+        assertTrue(cacheData.value.contacts.isEmpty())
+        assertTrue(cacheData.value.deletedContactCleanupPendingPublicKeys.isEmpty())
+    }
+
+    @Test
+    fun `cleanup retains the batch when drain inspection fails`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to cachedPublishedContact(WALLET_RECEIVER_PATH),
+                OTHER_CONTACT_KEY to cachedPublishedContact(SERVER_RECEIVER_PATH),
+            ),
+        )
+        sut = createSut()
+        whenever { paykitSdkService.linkedPeers() }
+            .thenReturn(emptyList())
+            .thenThrow(IllegalStateException("drain inspection failed"))
+
+        val result = sut.removePublishedEndpointsForCleanup("test")
+
+        assertTrue(result.isFailure)
+        assertTrue(CONTACT_KEY in cacheData.value.contacts)
+        assertTrue(OTHER_CONTACT_KEY in cacheData.value.contacts)
+        assertTrue(cacheData.value.cleanupPending)
+    }
+
+    @Test
+    fun `cleanup retains endpoint cache updated during remote removal`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(CONTACT_KEY to cachedPublishedContact(WALLET_RECEIVER_PATH)),
+        )
+        sut = createSut()
+        val cleanupStarted = CompletableDeferred<Unit>()
+        val resumeCleanup = CompletableDeferred<Unit>()
+        whenever { paykitSdkService.clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }
+            .doSuspendableAnswer {
+                cleanupStarted.complete(Unit)
+                resumeCleanup.await()
+                privateListDeliveryReport(clearedCounterparties = listOf(CONTACT_KEY))
+            }
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(
+                eq(CONTACT_KEY),
+                eq(SERVER_RECEIVER_PATH),
+                eq(null),
+                any(),
+            )
+        }.thenReturn(resolution(resolvedEndpoint(MethodId.P2wpkh, PRIVATE_ADDRESS), version = 7uL))
+        whenever(coreService.isAddressUsed(PRIVATE_ADDRESS)).thenReturn(false)
+
+        val cleanup = async { sut.removePublishedEndpointsForCleanup("test") }
+        cleanupStarted.await()
+        sut.beginPaymentRequest(
+            paymentRequest(acceptedEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue)),
+        ).getOrThrow()
+        resumeCleanup.complete(Unit)
+
+        assertTrue(cleanup.await().isFailure)
+        assertTrue(cacheData.value.contacts.getValue(CONTACT_KEY).remoteEndpoints.isNotEmpty())
+        assertTrue(cacheData.value.cleanupPending)
+    }
+
+    @Test
+    fun `cleanup isolates a failed contact while clearing successful contacts`() = test {
+        cacheData.value = PrivatePaykitCacheData(
+            contacts = mapOf(
+                CONTACT_KEY to cachedPublishedContact(WALLET_RECEIVER_PATH),
+                OTHER_CONTACT_KEY to cachedPublishedContact(SERVER_RECEIVER_PATH),
+            ),
+        )
+        sut = createSut()
+        whenever { paykitSdkService.clearPrivatePaymentList(CONTACT_KEY, WALLET_RECEIVER_PATH) }.thenReturn(
+            privateListDeliveryReport(
+                failedToQueue = listOf(
+                    PrivatePaymentListSyncChange(
+                        counterparty = CONTACT_KEY,
+                        counterpartyReceiverPath = WALLET_RECEIVER_PATH,
+                        outboundMessageId = null,
+                        error = "failed",
+                    ),
+                ),
+            ),
+        )
+
+        val result = sut.removePublishedEndpointsForCleanup("test")
+
+        assertTrue(result.isFailure)
+        assertTrue(CONTACT_KEY in cacheData.value.contacts)
+        assertTrue(OTHER_CONTACT_KEY !in cacheData.value.contacts)
+        assertTrue(cacheData.value.cleanupPending)
     }
 
     @Test
@@ -700,473 +919,80 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `beginSavedContactPayment uses public SDK endpoint when private capability is unavailable`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+    fun `beginSavedContactPayment uses public resolution while Noise link is not established`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
+        }.thenReturn(
+            resolution(
+                status = PrivatePaymentResolutionStatus.NO_ENDPOINT,
+                state = PrivatePaymentResolutionState.NO_PRIVATE_ENDPOINT,
+                linkState = LinkedPeerState.LINKING,
+                version = null,
+            ),
+        )
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.Opened("bitcoin:bcrt1qpublic"), result)
+        verifyBlocking(publicPaykitRepo) { beginPayment(CONTACT_KEY) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment uses cached private resolution without live SDK session`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
         whenever(paykitSdkService.hasPrivatePaymentAccess()).thenReturn(false)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
         whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-            )
-        }.thenReturn(
-            resolution(
-                resolvedEndpoint(
-                    methodId = MethodId.P2wpkh,
-                    value = "bcrt1qpublic",
-                    source = PaykitPaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT,
-                ),
-            ),
-        )
-
-        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
-
-        assertEquals(PublicPaykitPaymentResult.Opened("bcrt1qpublic"), result)
-        verifyBlocking(paykitSdkService) {
-            prepareAndResolveContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, includePublicEndpoints = true)
-        }
-        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
-    }
-
-    @Test
-    fun `beginSavedContactPayment opens SDK resolved private endpoint`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-            )
-        }.thenReturn(
-            resolution(
-                resolvedEndpoint(
-                    methodId = MethodId.Bolt11,
-                    value = PRIVATE_BOLT11,
-                ),
-            ),
-        )
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
+        }.thenReturn(resolution(resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11), version = 7uL))
         whenever(coreService.decode(PRIVATE_BOLT11))
             .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
 
         val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
 
-        assertEquals(PublicPaykitPaymentResult.Opened(PRIVATE_BOLT11), result)
-        verifyBlocking(paykitSdkService) {
-            prepareAndResolveContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, includePublicEndpoints = true)
-        }
+        assertEquals(
+            PublicPaykitPaymentResult.Opened(
+                paymentRequest = PRIVATE_BOLT11,
+                privatePaymentContext = PrivatePaykitPaymentContext(WALLET_RECEIVER_PATH, 7uL),
+            ),
+            result,
+        )
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
 
     @Test
-    fun `private payment consumes the complete payment list version`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+    fun `beginSavedContactPayment opens private endpoint with its list version`() = test {
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
         whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-                afterPrivatePaymentListVersion = null,
-            )
-        }.thenReturn(
-            resolution(
-                resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11),
-                resolvedEndpoint(MethodId.P2wpkh, PRIVATE_ADDRESS),
-                privatePaymentListVersion = 7uL,
-            ),
-        )
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
+        }.thenReturn(resolution(resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11), version = 7uL))
         whenever(coreService.decode(PRIVATE_BOLT11))
             .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
-        whenever { coreService.isAddressUsed(PRIVATE_ADDRESS) }.thenReturn(false)
 
-        assertTrue(sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow() is PublicPaykitPaymentResult.Opened)
-        sut.discardRemoteLightningEndpoints(CONTACT_KEY, setOf("090909")).getOrThrow()
-
-        val contactCache = cacheData.value.contacts.getValue(CONTACT_KEY)
-        assertTrue(contactCache.remoteEndpoints.isEmpty())
-        assertEquals(7uL, contactCache.consumedPaymentListVersionsByReceiverPath[WALLET_RECEIVER_PATH])
-
-        whenever(paykitSdkService.exportBackupState()).thenReturn("sdk-backup")
-        val backup = sut.backupSnapshot().getOrThrow()
-        sut.restoreBackup(backup).getOrThrow()
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-
-        whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-                afterPrivatePaymentListVersion = 7uL,
-            )
-        }.thenReturn(
-            resolution(
-                resolvedEndpoint(
-                    methodId = MethodId.P2wpkh,
-                    value = "bcrt1qpublic",
-                    source = PaykitPaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT,
-                ),
-            ),
-        )
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
 
         assertEquals(
-            PublicPaykitPaymentResult.Opened("bcrt1qpublic"),
-            sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow(),
-        )
-        verifyBlocking(paykitSdkService) {
-            prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-                afterPrivatePaymentListVersion = 7uL,
-            )
-        }
-    }
-
-    @Test
-    fun `private lnurl payment consumes the complete payment list version`() = test {
-        val lnurl = "lnurl1private"
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-                afterPrivatePaymentListVersion = null,
-            )
-        }.thenReturn(
-            resolution(
-                resolvedEndpoint(MethodId.Lnurl, lnurl),
-                privatePaymentListVersion = 7uL,
+            PublicPaykitPaymentResult.Opened(
+                paymentRequest = PRIVATE_BOLT11,
+                privatePaymentContext = PrivatePaykitPaymentContext(WALLET_RECEIVER_PATH, 7uL),
             ),
+            result,
         )
-
-        assertEquals(
-            PublicPaykitPaymentResult.Opened(lnurl),
-            sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow(),
-        )
-        sut.discardRemoteLightningEndpoints(
-            publicKey = CONTACT_KEY,
-            paymentHashes = emptySet(),
-            paymentRequests = setOf(lnurl),
-        ).getOrThrow()
-
-        val contactCache = cacheData.value.contacts.getValue(CONTACT_KEY)
-        assertTrue(contactCache.remoteEndpoints.isEmpty())
-        assertEquals(7uL, contactCache.consumedPaymentListVersionsByReceiverPath[WALLET_RECEIVER_PATH])
-    }
-
-    @Test
-    fun `private payment list remains available when consumption persistence fails`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-                afterPrivatePaymentListVersion = null,
-            )
-        }.thenReturn(
-            resolution(
-                resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11),
-                privatePaymentListVersion = 7uL,
-            ),
-        )
-        whenever(coreService.decode(PRIVATE_BOLT11))
-            .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
-        assertTrue(sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow() is PublicPaykitPaymentResult.Opened)
-
-        whenever { cacheStore.update(any()) }.thenAnswer { throw AppError("write failed") }
-        assertTrue(sut.discardRemoteLightningEndpoints(CONTACT_KEY, setOf("090909")).isFailure)
-
-        whenever { cacheStore.update(any()) }.thenAnswer {
-            val transform = it.getArgument<(PrivatePaykitCacheData) -> PrivatePaykitCacheData>(0)
-            cacheData.value = transform(cacheData.value)
-        }
-        sut.discardRemoteLightningEndpoints(CONTACT_KEY, setOf("090909")).getOrThrow()
-
-        val contactCache = cacheData.value.contacts.getValue(CONTACT_KEY)
-        assertTrue(contactCache.remoteEndpoints.isEmpty())
-        assertEquals(7uL, contactCache.consumedPaymentListVersionsByReceiverPath[WALLET_RECEIVER_PATH])
-    }
-
-    @Test
-    fun `private payment filtering keeps the unattempted list available`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-                afterPrivatePaymentListVersion = null,
-            )
-        }.thenReturn(
-            resolution(
-                resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11),
-                resolvedEndpoint(MethodId.P2wpkh, PRIVATE_ADDRESS),
-                privatePaymentListVersion = 7uL,
-            ),
-        )
-        whenever(coreService.decode(PRIVATE_BOLT11))
-            .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
-        whenever { coreService.isAddressUsed(PRIVATE_ADDRESS) }.thenReturn(false)
-        PublicPaykitRepo.lightningRouteHintsValidator = { false }
-
-        assertEquals(
-            PublicPaykitPaymentResult.Opened(PRIVATE_ADDRESS),
-            sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow(),
-        )
-
-        val contactCache = cacheData.value.contacts.getValue(CONTACT_KEY)
-        assertEquals(
-            listOf(PublicPaykitRepo.serializePayload(PRIVATE_ADDRESS)),
-            contactCache.remoteEndpoints.map { it.endpointData },
-        )
-        assertTrue(contactCache.consumedPaymentListVersionsByReceiverPath.isEmpty())
-        assertEquals(7uL, contactCache.remotePaymentListVersionsByReceiverPath[WALLET_RECEIVER_PATH])
-    }
-
-    @Test
-    fun `beginSavedContactPayment refreshes private endpoints before unified resolution`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        clearInvocations(paykitSdkService)
-        whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-            )
-        }.thenReturn(
-            resolution(
-                resolvedEndpoint(
-                    methodId = MethodId.P2wpkh,
-                    value = "bcrt1qpublic",
-                    source = PaykitPaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT,
-                ),
-            ),
-        )
-
-        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
-
-        assertEquals(PublicPaykitPaymentResult.Opened("bcrt1qpublic"), result)
-        val captor = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()
-        verifyBlocking(paykitSdkService) { syncPrivatePaymentListsWithReservations(captor.capture(), eq(false)) }
-        assertEquals(CONTACT_KEY, captor.firstValue.single().counterparty)
-        verifyBlocking(paykitSdkService) {
-            prepareAndResolveContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, includePublicEndpoints = true)
-        }
-    }
-
-    @Test
-    fun `beginSavedContactPayment does not fall back to public when unified resolution is cancelled`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-            )
-        }.thenThrow(CancellationException("cancelled"))
-
-        assertFailsWith<CancellationException> {
-            sut.beginSavedContactPayment(CONTACT_KEY)
-        }
-
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
 
     @Test
-    fun `beginSavedContactPayment does not fall back to public when private refresh is cancelled`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        clearInvocations(paykitSdkService, publicPaykitRepo)
-        whenever { paykitSdkService.syncPrivatePaymentListsWithReservations(any(), any()) }
-            .thenThrow(CancellationException("cancelled"))
-
-        assertFailsWith<CancellationException> {
-            sut.beginSavedContactPayment(CONTACT_KEY)
-        }
-
-        verifyBlocking(paykitSdkService, never()) {
-            prepareAndResolveContactPayment(any(), any(), any(), anyOrNull())
-        }
-        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
-    }
-
-    @Test
-    fun `beginSavedContactPayment does not fall back to public when endpoint build is cancelled`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        clearInvocations(paykitSdkService, publicPaykitRepo)
-        whenever { walletRepo.refreshReusableReceiveAddressIfReserved() }
-            .thenThrow(CancellationException("cancelled"))
-
-        assertFailsWith<CancellationException> {
-            sut.beginSavedContactPayment(CONTACT_KEY)
-        }
-
-        verifyBlocking(paykitSdkService, never()) {
-            prepareAndResolveContactPayment(any(), any(), any(), anyOrNull())
-        }
-        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
-    }
-
-    @Test
-    fun `beginSavedContactPayment does not fall back to public when publish gate is cancelled`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        clearInvocations(paykitSdkService, publicPaykitRepo)
-        whenever(pubkyService.currentPublicKey()).thenThrow(CancellationException("cancelled"))
-
-        assertFailsWith<CancellationException> {
-            sut.beginSavedContactPayment(CONTACT_KEY)
-        }
-
-        verifyBlocking(paykitSdkService, never()) {
-            prepareAndResolveContactPayment(any(), any(), any(), anyOrNull())
-        }
-        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
-    }
-
-    @Test
-    fun `beginSavedContactPayment falls back to public when unified resolution fails`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+    fun `beginSavedContactPayment never falls back while linked recovery is pending`() = test {
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
         whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-            )
-        }.thenThrow(IllegalStateException("private unavailable"))
-        whenever(publicPaykitRepo.beginPayment(CONTACT_KEY)).thenReturn(
-            Result.success(PublicPaykitPaymentResult.Opened("public-fallback")),
-        )
-
-        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
-
-        assertEquals(PublicPaykitPaymentResult.Opened("public-fallback"), result)
-        verifyBlocking(publicPaykitRepo) { beginPayment(CONTACT_KEY) }
-    }
-
-    @Test
-    fun `beginSavedContactPayment falls back when public resolution fails without a private endpoint`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-            )
-        }.thenReturn(
-            resolution(publicResolutionError = AppError("public lookup failed")),
-        )
-        whenever(publicPaykitRepo.beginPayment(CONTACT_KEY)).thenReturn(
-            Result.success(PublicPaykitPaymentResult.Opened("public-fallback")),
-        )
-
-        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
-
-        assertEquals(PublicPaykitPaymentResult.Opened("public-fallback"), result)
-        verifyBlocking(publicPaykitRepo) { beginPayment(CONTACT_KEY) }
-    }
-
-    @Test
-    fun `beginSavedContactPayment uses a private endpoint when public resolution fails`() = test {
-        val lnurl = "lnurl1private"
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-            )
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
         }.thenReturn(
             resolution(
-                resolvedEndpoint(MethodId.Lnurl, lnurl),
-                publicResolutionError = AppError("public lookup failed"),
+                status = PrivatePaymentResolutionStatus.NO_ENDPOINT,
+                state = PrivatePaymentResolutionState.RECOVERY_PENDING,
+                linkState = LinkedPeerState.RECOVERY_REQUIRED,
+                version = null,
             ),
-        )
-
-        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
-
-        assertEquals(PublicPaykitPaymentResult.Opened(lnurl), result)
-        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
-    }
-
-    @Test
-    fun `beginSavedContactPayment uses public endpoint from unified resolution when private has no endpoints`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-            )
-        }.thenReturn(
-            resolution(
-                resolvedEndpoint(
-                    methodId = MethodId.P2wpkh,
-                    value = "bcrt1qpublic",
-                    source = PaykitPaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT,
-                ),
-            ),
-        )
-
-        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
-
-        assertEquals(PublicPaykitPaymentResult.Opened("bcrt1qpublic"), result)
-        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
-    }
-
-    @Test
-    fun `beginSavedContactPayment uses public endpoint while private recovery is pending`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-            )
-        }.thenReturn(
-            resolution(
-                resolvedEndpoint(
-                    methodId = MethodId.P2wpkh,
-                    value = "bcrt1qpublic",
-                    source = PaykitPaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT,
-                ),
-                privateState = PrivatePaymentResolutionState.RECOVERY_PENDING,
-            ),
-        )
-
-        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
-
-        assertEquals(PublicPaykitPaymentResult.Opened("bcrt1qpublic"), result)
-        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
-    }
-
-    @Test
-    fun `beginSavedContactPayment returns no endpoint when recovery pending has no public endpoint`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
-        whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-            )
-        }.thenReturn(
-            resolution(privateState = PrivatePaymentResolutionState.RECOVERY_PENDING),
         )
 
         val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
@@ -1176,103 +1002,220 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `beginSavedContactPayment falls back to public when private endpoints are not locally payable`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+    fun `beginSavedContactPayment retries a newer private list without public fallback`() = test {
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
         whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-            )
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
         }.thenReturn(
             resolution(
-                resolvedEndpoint(
-                    methodId = MethodId.Bolt11,
-                    value = PRIVATE_BOLT11,
-                ),
-                resolvedEndpoint(
-                    methodId = MethodId.P2wpkh,
-                    value = "bcrt1qpublic",
-                    source = PaykitPaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT,
-                ),
+                status = PrivatePaymentResolutionStatus.WAITING_FOR_UPDATED_PAYMENT_LIST,
+                state = PrivatePaymentResolutionState.NO_PRIVATE_ENDPOINT,
+                linkState = LinkedPeerState.LINKED,
+                version = null,
             ),
+            resolution(resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11), version = 7uL),
         )
-        whenever { publicPaykitRepo.payableEndpoints(any()) }.thenAnswer {
-            val endpoints = it.getArgument<List<Endpoint>>(0)
-            val hasLightningEndpoint = endpoints.any { endpoint -> endpoint.methodId == MethodId.Bolt11 }
-            endpoints.takeUnless { hasLightningEndpoint }.orEmpty()
-        }
+        whenever(coreService.decode(PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
 
         val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
 
-        assertEquals(PublicPaykitPaymentResult.Opened("bcrt1qpublic"), result)
+        assertEquals(
+            PublicPaykitPaymentResult.Opened(
+                paymentRequest = PRIVATE_BOLT11,
+                privatePaymentContext = PrivatePaykitPaymentContext(WALLET_RECEIVER_PATH, 7uL),
+            ),
+            result,
+        )
+        verifyBlocking(paykitSdkService, times(2)) {
+            prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
+        }
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
 
     @Test
-    fun `beginSavedContactPayment does not fall back to public when private payable check is cancelled`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+    fun `beginSavedContactPayment only falls back after failure when Noise link is absent`() = test {
         sut.prepareSavedContacts(listOf(CONTACT_KEY))
         whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
-            )
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
+        }.thenThrow(IllegalStateException("private unavailable"))
+
+        val result = sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        assertEquals(PublicPaykitPaymentResult.Opened("bitcoin:bcrt1qpublic"), result)
+        verifyBlocking(publicPaykitRepo) { beginPayment(CONTACT_KEY) }
+    }
+
+    @Test
+    fun `beginSavedContactPayment propagates failure when Noise link exists`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
+        }.thenThrow(IllegalStateException("private unavailable"))
+        whenever(paykitSdkService.linkedPeers())
+            .thenReturn(listOf(linkedPeer(CONTACT_KEY, LinkedPeerState.LINKED)))
+
+        assertFailsWith<IllegalStateException> {
+            sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+        }
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `consumePrivatePaymentList persists version clears list and rejects reuse`() = test {
+        val context = PrivatePaykitPaymentContext(WALLET_RECEIVER_PATH, 7uL)
+
+        sut.consumePrivatePaymentList(CONTACT_KEY, context).getOrThrow()
+
+        assertEquals(
+            7uL,
+            cacheData.value.contacts.getValue(CONTACT_KEY)
+                .consumedPrivatePaymentListVersionsByReceiverPath[WALLET_RECEIVER_PATH],
+        )
+        assertFailsWith<PrivatePaykitError.PaymentListAlreadyConsumed> {
+            sut.consumePrivatePaymentList(CONTACT_KEY, context).getOrThrow()
+        }
+    }
+
+    @Test
+    fun `beginSavedContactPayment passes consumed list version to private resolver`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        sut.consumePrivatePaymentList(
+            CONTACT_KEY,
+            PrivatePaykitPaymentContext(WALLET_RECEIVER_PATH, 7uL),
+        ).getOrThrow()
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, 7uL)
         }.thenReturn(
             resolution(
-                resolvedEndpoint(
-                    methodId = MethodId.P2wpkh,
-                    value = PRIVATE_ADDRESS,
-                ),
-                resolvedEndpoint(
-                    methodId = MethodId.P2wpkh,
-                    value = "bcrt1qpublic",
-                    source = PaykitPaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT,
-                ),
+                status = PrivatePaymentResolutionStatus.WAITING_FOR_UPDATED_PAYMENT_LIST,
+                state = PrivatePaymentResolutionState.NO_PRIVATE_ENDPOINT,
+                linkState = LinkedPeerState.LINKED,
+                version = null,
             ),
         )
-        whenever { coreService.isAddressUsed(PRIVATE_ADDRESS) }
-            .thenThrow(CancellationException("cancelled"))
+
+        sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
+
+        verifyBlocking(paykitSdkService, times(4)) {
+            prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, 7uL)
+        }
+    }
+
+    @Test
+    fun `beginSavedContactPayment does not fall back when private resolution is cancelled`() = test {
+        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, null)
+        }.thenThrow(CancellationException("cancelled"))
 
         assertFailsWith<CancellationException> {
             sut.beginSavedContactPayment(CONTACT_KEY)
         }
-
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
 
     @Test
-    fun `beginSavedContactPayment does not fall back to public when private invoice decode is cancelled`() = test {
-        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = true)
-        sut.prepareSavedContacts(listOf(CONTACT_KEY))
+    fun `beginPaymentRequest resolves only accepted private endpoints with the requested amount`() = test {
+        val request = paymentRequest(acceptedEndpointIdentifiers = listOf(MethodId.Bolt11.rawValue))
         whenever {
-            paykitSdkService.prepareAndResolveContactPayment(
-                CONTACT_KEY,
-                WALLET_RECEIVER_PATH,
-                includePublicEndpoints = true,
+            paykitSdkService.prepareAndResolvePrivateContactPayment(
+                eq(CONTACT_KEY),
+                eq(SERVER_RECEIVER_PATH),
+                eq(null),
+                any(),
             )
         }.thenReturn(
             resolution(
-                resolvedEndpoint(
-                    methodId = MethodId.Bolt11,
-                    value = PRIVATE_BOLT11,
-                ),
-                resolvedEndpoint(
-                    methodId = MethodId.P2wpkh,
-                    value = "bcrt1qpublic",
-                    source = PaykitPaymentEndpointSource.PUBLIC_PAYMENT_ENDPOINT,
-                ),
+                resolvedEndpoint(MethodId.P2wpkh, PRIVATE_ADDRESS),
+                resolvedEndpoint(MethodId.Bolt11, PRIVATE_BOLT11),
+                version = 7uL,
             ),
         )
         whenever(coreService.decode(PRIVATE_BOLT11))
-            .thenThrow(CancellationException("cancelled"))
+            .thenReturn(Scanner.Lightning(lightningInvoice(PRIVATE_BOLT11, byteArrayOf(9, 9, 9))))
 
-        assertFailsWith<CancellationException> {
-            sut.beginSavedContactPayment(CONTACT_KEY)
+        val result = sut.beginPaymentRequest(request).getOrThrow()
+
+        assertEquals(
+            PublicPaykitPaymentResult.Opened(
+                paymentRequest = PRIVATE_BOLT11,
+                privatePaymentContext = PrivatePaykitPaymentContext(SERVER_RECEIVER_PATH, 7uL),
+            ),
+            result,
+        )
+        val amountCaptor = argumentCaptor<PaymentAmountContext>()
+        verifyBlocking(paykitSdkService) {
+            prepareAndResolvePrivateContactPayment(
+                eq(CONTACT_KEY),
+                eq(SERVER_RECEIVER_PATH),
+                eq(null),
+                amountCaptor.capture(),
+            )
         }
+        assertEquals("0.000025", amountCaptor.firstValue.value)
+        assertEquals("btc", amountCaptor.firstValue.asset)
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
 
+    @Test
+    fun `beginPaymentRequest uses cached private resolution without live SDK session`() = test {
+        val request = paymentRequest()
+        whenever(paykitSdkService.hasPrivatePaymentAccess()).thenReturn(false)
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(
+                eq(CONTACT_KEY),
+                eq(SERVER_RECEIVER_PATH),
+                eq(null),
+                any(),
+            )
+        }.thenReturn(
+            resolution(
+                resolvedEndpoint(MethodId.Bolt11, SERVER_PRIVATE_BOLT11),
+                version = 7uL,
+            ),
+        )
+        whenever(coreService.decode(SERVER_PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(SERVER_PRIVATE_BOLT11, byteArrayOf(8, 8, 8))))
+
+        val result = sut.beginPaymentRequest(request).getOrThrow()
+
+        assertEquals(
+            PublicPaykitPaymentResult.Opened(
+                paymentRequest = SERVER_PRIVATE_BOLT11,
+                privatePaymentContext = PrivatePaykitPaymentContext(SERVER_RECEIVER_PATH, 7uL),
+            ),
+            result,
+        )
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+    }
+
+    @Test
+    fun `beginPaymentRequest rechecks expiration after private resolution`() = test {
+        val request = paymentRequest()
+        whenever(clock.now()).thenReturn(
+            Instant.fromEpochSeconds(NOW_SECONDS),
+            Instant.fromEpochSeconds(NOW_SECONDS + 61),
+        )
+        whenever {
+            paykitSdkService.prepareAndResolvePrivateContactPayment(
+                eq(CONTACT_KEY),
+                eq(SERVER_RECEIVER_PATH),
+                eq(null),
+                any(),
+            )
+        }.thenReturn(
+            resolution(
+                resolvedEndpoint(MethodId.Bolt11, SERVER_PRIVATE_BOLT11),
+                version = 7uL,
+            ),
+        )
+        whenever(coreService.decode(SERVER_PRIVATE_BOLT11))
+            .thenReturn(Scanner.Lightning(lightningInvoice(SERVER_PRIVATE_BOLT11, byteArrayOf(8, 8, 8))))
+
+        assertFailsWith<PaykitPaymentRequestError.RequestExpired> {
+            sut.beginPaymentRequest(request).getOrThrow()
+        }
         verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
     }
 
@@ -1280,11 +1223,20 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     fun `backupSnapshot and restoreBackup use SDK backup state`() = test {
         val backup = "sdk-backup"
         whenever(paykitSdkService.exportBackupState()).thenReturn(backup)
+        sut.consumePrivatePaymentList(
+            CONTACT_KEY,
+            PrivatePaykitPaymentContext(WALLET_RECEIVER_PATH, 7uL),
+        ).getOrThrow()
 
         val snapshot = sut.backupSnapshot().getOrThrow()
         sut.restoreBackup(snapshot).getOrThrow()
 
-        assertTrue(snapshot?.startsWith("bitkit-paykit-v1:") == true)
+        assertTrue(snapshot?.contains(backup) == true)
+        assertEquals(
+            7uL,
+            cacheData.value.contacts.getValue(CONTACT_KEY)
+                .consumedPrivatePaymentListVersionsByReceiverPath[WALLET_RECEIVER_PATH],
+        )
         verifyBlocking(paykitSdkService) { restoreBackupState(backup) }
     }
 
@@ -1304,28 +1256,49 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     private fun resolution(
         vararg endpoints: PaykitResolvedPaymentEndpoint,
-        privateState: PrivatePaymentResolutionState = PrivatePaymentResolutionState.AVAILABLE,
-        privatePaymentListVersion: ULong? = null,
-        publicResolutionError: Throwable? = null,
-    ) = PaykitContactPaymentResolution(
-        privateState = privateState,
-        payableEndpoints = endpoints.toList(),
-        privatePaymentListVersion = privatePaymentListVersion,
-        publicResolutionError = publicResolutionError,
+        status: PrivatePaymentResolutionStatus = if (endpoints.isEmpty()) {
+            PrivatePaymentResolutionStatus.NO_ENDPOINT
+        } else {
+            PrivatePaymentResolutionStatus.PAYABLE
+        },
+        state: PrivatePaymentResolutionState = if (endpoints.isEmpty()) {
+            PrivatePaymentResolutionState.NO_PRIVATE_ENDPOINT
+        } else {
+            PrivatePaymentResolutionState.AVAILABLE
+        },
+        version: ULong? = 1uL,
+        linkState: LinkedPeerState? = LinkedPeerState.LINKED,
+    ) = PaykitPreparedPrivateContactPayment(
+        resolution = PaykitPrivateContactPaymentResolution(
+            status = status,
+            state = state,
+            privatePaymentListVersion = version,
+            payableEndpoints = endpoints.toList(),
+        ),
+        linkState = linkState,
     )
 
     private fun resolvedEndpoint(
         methodId: MethodId,
         value: String,
-        source: PaykitPaymentEndpointSource = PaykitPaymentEndpointSource.PRIVATE_PAYMENT_LIST,
     ): PaykitResolvedPaymentEndpoint {
         return PaykitResolvedPaymentEndpoint(
-            counterparty = CONTACT_KEY,
-            source = source,
             identifier = methodId.rawValue,
             payload = PublicPaykitRepo.serializePayload(value),
         )
     }
+
+    private fun paymentRequest(
+        acceptedEndpointIdentifiers: List<String> = listOf(MethodId.Bolt11.rawValue),
+    ) = PaykitPaymentRequest(
+        paymentRequestId = "request-id",
+        counterparty = CONTACT_KEY,
+        counterpartyReceiverPath = SERVER_RECEIVER_PATH,
+        amountValue = "0.000025",
+        amountSats = 2_500uL,
+        expiresAt = Instant.fromEpochSeconds(NOW_SECONDS + 60),
+        acceptedPaymentEndpointIdentifiers = acceptedEndpointIdentifiers,
+    )
 
     private fun privateListDeliveryReport(
         queuedCounterparties: List<String> = emptyList(),
@@ -1350,6 +1323,10 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         },
         failedToQueue = failedToQueue,
         failedToDeliver = emptyList(),
+    )
+
+    private fun cachedPublishedContact(receiverPath: String) = PrivatePaykitContactCacheData(
+        publishedPrivatePaymentReceiverPaths = setOf(receiverPath),
     )
 
     private fun privateReceiverPathSelection(

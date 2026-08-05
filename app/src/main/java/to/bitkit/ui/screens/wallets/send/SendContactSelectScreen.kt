@@ -26,6 +26,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.models.PubkyProfile
+import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
@@ -41,14 +42,15 @@ import to.bitkit.ui.theme.Colors
 fun SendContactSelectScreen(
     viewModel: SendContactSelectViewModel,
     onBack: () -> Unit,
-    onOpenPayment: (String, String) -> Unit,
+    onOpenPayment: (String, String, PrivatePaykitPaymentContext?) -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
             when (it) {
-                is SendContactSelectEffect.OpenPayment -> onOpenPayment(it.paymentRequest, it.publicKey)
+                is SendContactSelectEffect.OpenPayment ->
+                    onOpenPayment(it.paymentRequest, it.publicKey, it.privatePaymentContext)
             }
         }
     }
