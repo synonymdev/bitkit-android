@@ -225,10 +225,12 @@ class ActivityRepo @Inject constructor(
         transactionDetails: List<BitkitCoreTransactionDetails>,
     ): Result<List<Activity>> = withContext(bgDispatcher) {
         runSuspendCatching {
+            val transferChannelIds = transferRepo.getChannelIdsByFundingTxId().getOrDefault(emptyMap())
             val persistedActivities = coreService.activity.replaceHwSnapshot(
                 walletId = walletId,
                 activities = activities,
                 transactionDetails = transactionDetails,
+                transferChannelIdsByFundingTxId = transferChannelIds,
             )
             notifyActivitiesChanged()
             persistedActivities

@@ -246,26 +246,48 @@ internal data class HwSnapshotMerge(
     val toUpsert: List<Activity>,
 )
 
+/**
+ * Builds the delete/upsert plan for a hardware wallet's on-chain snapshot.
+ *
+ * @param transferChannelIdsByFundingTxId funding tx id to channel id for transfers Bitkit recorded
+ * itself. Re-pairing a wallet that was removed leaves nothing to carry forward, because removal
+ * deleted its activities, and [to.bitkit.repositories.TransferRepo.syncTransferStates] only re-marks
+ * transfers that are still unsettled, so a completed transfer would come back from the watcher as a
+ * plain send. The funding tx id is still recorded against the Bitkit-side transfer, which removal
+ * does not touch. Has no default so a caller cannot drop the recovery silently.
+ */
 internal fun mergeHwSnapshot(
     existing: List<Activity.Onchain>,
     incoming: List<Activity>,
+    transferChannelIdsByFundingTxId: Map<String, String>,
 ): HwSnapshotMerge {
     val incomingIds = incoming.map { it.rawId() }.toSet()
     val toDelete = existing.filter { !it.v1.isTransfer && it.v1.id !in incomingIds }
     val existingByTxId = existing.associateBy { it.v1.txId }
     val toUpsert = incoming.map { activity ->
         val onchain = activity as? Activity.Onchain ?: return@map activity
-        val stored = existingByTxId[onchain.v1.txId]?.v1 ?: return@map activity
-        Activity.Onchain(
-            onchain.v1.copy(
-                isTransfer = onchain.v1.isTransfer || stored.isTransfer,
-                channelId = onchain.v1.channelId ?: stored.channelId,
-                transferTxId = onchain.v1.transferTxId ?: stored.transferTxId,
-            )
-        )
+        val merged = onchain.v1
+            .mergedWith(existingByTxId[onchain.v1.txId]?.v1)
+            .withRecoveredTransfer(transferChannelIdsByFundingTxId[onchain.v1.txId])
+        Activity.Onchain(merged)
     }
     return HwSnapshotMerge(toDelete = toDelete, toUpsert = toUpsert)
 }
+
+private fun OnchainActivity.mergedWith(stored: OnchainActivity?): OnchainActivity = when (stored) {
+    null -> this
+    else -> copy(
+        isTransfer = isTransfer || stored.isTransfer,
+        channelId = channelId ?: stored.channelId,
+        transferTxId = transferTxId ?: stored.transferTxId,
+    )
+}
+
+private fun OnchainActivity.withRecoveredTransfer(recoveredChannelId: String?): OnchainActivity =
+    when {
+        isTransfer || recoveredChannelId == null -> this
+        else -> copy(isTransfer = true, channelId = channelId ?: recoveredChannelId)
+    }
 
 @Suppress("LargeClass", "TooManyFunctions")
 class ActivityService(
@@ -321,11 +343,16 @@ class ActivityService(
      *
      * Callers must merge every watcher for the wallet before invoking this method. The current
      * hardware-wallet integration has one supported watcher address type per wallet.
+     *
+     * [transferChannelIdsByFundingTxId] carries the Bitkit-side transfer records used to recover
+     * transfer metadata for transactions that have no stored activity left, e.g. after re-pairing a
+     * removed device. Pass an empty map when none are known.
      */
     suspend fun replaceHwSnapshot(
         walletId: String,
         activities: List<Activity>,
         transactionDetails: List<BitkitCoreTransactionDetails>,
+        transferChannelIdsByFundingTxId: Map<String, String>,
     ): List<Activity> = ServiceQueue.CORE.background {
         val existingActivities = getActivities(
             walletId = walletId,
@@ -338,7 +365,11 @@ class ActivityService(
             limit = null,
             sortDirection = null,
         ).filterIsInstance<Activity.Onchain>()
-        val merge = mergeHwSnapshot(existing = existingActivities, incoming = activities)
+        val merge = mergeHwSnapshot(
+            existing = existingActivities,
+            incoming = activities,
+            transferChannelIdsByFundingTxId = transferChannelIdsByFundingTxId,
+        )
         merge.toDelete.forEach {
             deleteActivityById(walletId = walletId, activityId = it.v1.id)
             deleteTransactionDetails(walletId = walletId, txId = it.v1.txId)

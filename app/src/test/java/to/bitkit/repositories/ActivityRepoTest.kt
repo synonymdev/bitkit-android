@@ -33,6 +33,7 @@ import to.bitkit.ext.mock
 import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
@@ -131,6 +132,7 @@ class ActivityRepoTest : BaseUnitTest() {
         whenever(clock.now()).thenReturn(Clock.System.now())
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
+        whenever { transferRepo.getChannelIdsByFundingTxId() }.thenReturn(Result.success(emptyMap()))
 
         sut = ActivityRepo(
             bgDispatcher = testDispatcher,
@@ -296,13 +298,59 @@ class ActivityRepoTest : BaseUnitTest() {
                 walletId = walletId,
                 activities = listOf(activity),
                 transactionDetails = emptyList(),
+                transferChannelIdsByFundingTxId = emptyMap(),
             )
         ).thenReturn(listOf(activity))
 
         val result = sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
 
         assertEquals(listOf(activity), result.getOrThrow())
-        verify(coreService.activity).replaceHwSnapshot(walletId, listOf(activity), emptyList())
+        verify(coreService.activity).replaceHwSnapshot(walletId, listOf(activity), emptyList(), emptyMap())
+    }
+
+    @Test
+    fun `persistHwSnapshot forwards known transfer channel ids to the merge`() = test {
+        val walletId = "hardware-wallet"
+        val activity = createOnchainActivity().copy(
+            v1 = baseOnchainActivity.copy(walletId = walletId)
+        )
+        val channelIds = mapOf("base_tx_id" to "channel-1")
+        whenever(transferRepo.getChannelIdsByFundingTxId()).thenReturn(Result.success(channelIds))
+        whenever(
+            coreService.activity.replaceHwSnapshot(
+                walletId = walletId,
+                activities = listOf(activity),
+                transactionDetails = emptyList(),
+                transferChannelIdsByFundingTxId = channelIds,
+            )
+        ).thenReturn(listOf(activity))
+
+        val result = sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
+
+        assertEquals(listOf(activity), result.getOrThrow())
+        verify(coreService.activity).replaceHwSnapshot(walletId, listOf(activity), emptyList(), channelIds)
+    }
+
+    @Test
+    fun `persistHwSnapshot still persists when transfer lookup fails`() = test {
+        val walletId = "hardware-wallet"
+        val activity = createOnchainActivity().copy(
+            v1 = baseOnchainActivity.copy(walletId = walletId)
+        )
+        whenever(transferRepo.getChannelIdsByFundingTxId()).thenReturn(Result.failure(AppError("db down")))
+        whenever(
+            coreService.activity.replaceHwSnapshot(
+                walletId = walletId,
+                activities = listOf(activity),
+                transactionDetails = emptyList(),
+                transferChannelIdsByFundingTxId = emptyMap(),
+            )
+        ).thenReturn(listOf(activity))
+
+        val result = sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
+
+        assertEquals(listOf(activity), result.getOrThrow())
+        verify(coreService.activity).replaceHwSnapshot(walletId, listOf(activity), emptyList(), emptyMap())
     }
 
     @Test

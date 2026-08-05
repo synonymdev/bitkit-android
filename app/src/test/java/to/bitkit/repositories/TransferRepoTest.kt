@@ -235,6 +235,93 @@ class TransferRepoTest : BaseUnitTest() {
         assertEquals(exception, result.exceptionOrNull())
     }
 
+    @Test
+    fun `markSettled keeps the transfer record for hardware re-pair recovery`() = test {
+        setupClockNowMock()
+        whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
+
+        val result = sut.markSettled(ID_TRANSFER)
+
+        assertTrue(result.isSuccess)
+        verify(transferDao).markSettled(eq(ID_TRANSFER), any())
+        verify(transferDao, never()).deleteOldSettled(any())
+    }
+
+    // MARK: - getChannelIdsByFundingTxId
+
+    @Test
+    fun `getChannelIdsByFundingTxId includes settled transfers`() = test {
+        whenever(transferDao.getAll()).thenReturn(
+            listOf(
+                transferEntity(
+                    id = ID_TRANSFER,
+                    fundingTxId = "funding-tx",
+                    channelId = ID_CHANNEL,
+                    isSettled = true,
+                )
+            )
+        )
+
+        val result = sut.getChannelIdsByFundingTxId()
+
+        assertEquals(mapOf("funding-tx" to ID_CHANNEL), result.getOrThrow())
+    }
+
+    @Test
+    fun `getChannelIdsByFundingTxId skips transfers without funding tx id or channel id`() = test {
+        whenever(transferDao.getAll()).thenReturn(
+            listOf(
+                transferEntity(id = "no-funding-tx", fundingTxId = null, channelId = ID_CHANNEL),
+                transferEntity(id = "no-channel", fundingTxId = "funding-tx", channelId = null),
+                transferEntity(id = ID_TRANSFER, fundingTxId = "kept-tx", channelId = ID_CHANNEL),
+            )
+        )
+
+        val result = sut.getChannelIdsByFundingTxId()
+
+        assertEquals(mapOf("kept-tx" to ID_CHANNEL), result.getOrThrow())
+    }
+
+    @Test
+    fun `getChannelIdsByFundingTxId keeps the first entry for duplicated funding tx ids`() = test {
+        whenever(transferDao.getAll()).thenReturn(
+            listOf(
+                transferEntity(id = "first", fundingTxId = "funding-tx", channelId = "channel-1"),
+                transferEntity(id = "second", fundingTxId = "funding-tx", channelId = "channel-2"),
+            )
+        )
+
+        val result = sut.getChannelIdsByFundingTxId()
+
+        assertEquals(mapOf("funding-tx" to "channel-1"), result.getOrThrow())
+    }
+
+    @Test
+    fun `getChannelIdsByFundingTxId returns failure when dao throws`() = test {
+        val exception = AppError("Database error")
+        whenever(transferDao.getAll()).thenAnswer { throw exception }
+
+        val result = sut.getChannelIdsByFundingTxId()
+
+        assertTrue(result.isFailure)
+        assertEquals(exception, result.exceptionOrNull())
+    }
+
+    private fun transferEntity(
+        id: String,
+        fundingTxId: String?,
+        channelId: String?,
+        isSettled: Boolean = false,
+    ) = TransferEntity(
+        id = id,
+        type = TransferType.TO_SPENDING,
+        amountSats = 50000L,
+        channelId = channelId,
+        fundingTxId = fundingTxId,
+        isSettled = isSettled,
+        createdAt = 1000L,
+    )
+
     // MARK: - syncTransferStates
 
     @Test
