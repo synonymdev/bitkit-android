@@ -7,8 +7,8 @@
  * a badge is added to messages that are sent to iOS devices.
  */
 import { request as _request } from "https";
-import { google } from "googleapis";
-import key from "./service-account.json" assert { type: "json" };
+import { JWT } from "google-auth-library";
+import key from "./service-account.json" with { type: "json" };
 
 const PROJECT_ID = "snbkandroid";
 const HOST = "fcm.googleapis.com";
@@ -18,13 +18,11 @@ const SCOPES = [MESSAGING_SCOPE];
 
 function getAccessToken() {
   return new Promise(function (resolve, reject) {
-    const jwtClient = new google.auth.JWT(
-      key.client_email,
-      null,
-      key.private_key,
-      SCOPES,
-      null
-    );
+    const jwtClient = new JWT({
+      email: key.client_email,
+      key: key.private_key,
+      scopes: SCOPES,
+    });
     jwtClient.authorize(function (err, tokens) {
       if (err) {
         reject(err);
