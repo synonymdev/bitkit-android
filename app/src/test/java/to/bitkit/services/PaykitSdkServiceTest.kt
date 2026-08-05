@@ -3,7 +3,6 @@ package to.bitkit.services
 import com.synonym.paykit.EncryptedLinkRecoveryMarkerPolicy
 import com.synonym.paykit.EndpointManagementScope
 import com.synonym.paykit.PubkyClientConfig
-import com.synonym.paykit.PubkyClientEnvironment
 import com.synonym.paykit.PublicContactSharingPolicy
 import org.junit.Test
 import org.mockito.kotlin.mock
@@ -21,8 +20,7 @@ import kotlin.test.assertTrue
 class PaykitSdkServiceTest {
     private val basePubkyClientConfig = PubkyClientConfig(
         requestTimeoutSecs = 30uL,
-        environment = PubkyClientEnvironment.PRODUCTION,
-        testnetHost = null,
+        localTestnetHost = null,
     )
 
     @Test
@@ -49,8 +47,7 @@ class PaykitSdkServiceTest {
             baseConfig = basePubkyClientConfig,
         )
 
-        assertEquals(PubkyClientEnvironment.LOCAL_TESTNET, config.environment)
-        assertEquals("10.0.2.2", config.testnetHost)
+        assertEquals("10.0.2.2", config.localTestnetHost)
         assertEquals(basePubkyClientConfig.requestTimeoutSecs, config.requestTimeoutSecs)
     }
 

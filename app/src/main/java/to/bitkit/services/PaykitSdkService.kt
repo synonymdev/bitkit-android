@@ -37,7 +37,6 @@ import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkyAuthRequest
 import com.synonym.paykit.PubkyClientConfig
-import com.synonym.paykit.PubkyClientEnvironment
 import com.synonym.paykit.PubkyLocalSecretKey
 import com.synonym.paykit.PubkyProfile
 import com.synonym.paykit.PubkySessionAccess
@@ -857,8 +856,7 @@ internal fun paykitPubkyClientConfig(
 ) =
     if (isLocalE2eBackend) {
         baseConfig.copy(
-            environment = PubkyClientEnvironment.LOCAL_TESTNET,
-            testnetHost = "10.0.2.2",
+            localTestnetHost = "10.0.2.2",
         )
     } else {
         baseConfig
