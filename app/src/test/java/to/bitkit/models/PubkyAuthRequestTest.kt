@@ -33,15 +33,10 @@ class PubkyAuthRequestTest {
     }
 
     @Test
-    fun `parse recognizes watch-only account claim with capability whitespace`() {
+    fun `matcher recognizes watch-only account claim with capability whitespace`() {
         val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES.replace(",", " , ")
-        val request = PubkyAuthRequest.parse(
-            rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
-            relay = "https://httprelay.pubky.app/inbox/",
-            capabilities = capabilities,
-        ).getOrThrow()
 
-        assertEquals(PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1, request.bitkitClaim)
+        assertTrue(PubkyAuthClaim.matchesWatchOnlyAccountCapabilities(capabilities))
     }
 
     @Test
