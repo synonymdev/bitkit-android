@@ -5,7 +5,7 @@ This document records the client contract implemented by Bitkit iOS and Android 
 ## Request
 
 - The Pubky Auth URL includes `x-bitkit-claim=watch-only-account-v1`.
-- The exact capability is `/pub/paykit/v0/bitkit/server/:rw`.
+- The exact capabilities are `/pub/paykit/v0/bitkit/server/:rw` and `/pub/paykit/v0/private/bitkit/server/:rw`.
 - Missing, unknown, mismatched, or duplicate companion-claim parameters are rejected.
 - Every distinct auth request creates a fresh native-SegWit account, beginning at BIP84 account index `1`. Account indexes increase monotonically and are never reused. Retrying the same logical auth request reuses its incomplete account even if query parameters are reordered.
 - Bitkit automatically names the account from the requesting service. The user can rename it later. The local name is not disclosed in the claim.
