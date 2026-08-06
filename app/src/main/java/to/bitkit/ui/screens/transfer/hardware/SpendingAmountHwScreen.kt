@@ -61,7 +61,7 @@ import to.bitkit.viewmodels.previewAmountInputViewModel
 @Suppress("ViewModelForwarding")
 @Composable
 fun SpendingAmountHwScreen(
-    deviceId: String,
+    walletId: String,
     viewModel: TransferViewModel,
     isOffline: Boolean,
     onBackClick: () -> Unit = {},
@@ -76,8 +76,8 @@ fun SpendingAmountHwScreen(
     val currentMaxAllowedToSend by rememberUpdatedState(uiState.maxAllowedToSend)
     val currentCurrencies by rememberUpdatedState(currencies)
 
-    LaunchedEffect(deviceId, isOffline) {
-        viewModel.updateHwLimits(deviceId)
+    LaunchedEffect(walletId, isOffline) {
+        viewModel.updateHwLimits(walletId)
     }
 
     LaunchedEffect(Unit) {

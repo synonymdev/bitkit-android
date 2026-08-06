@@ -268,8 +268,9 @@ class HwConnectViewModelTest : BaseUnitTest() {
         val connectedFeatures = features(model = "Safe 3")
         whenever(hwWalletRepo.connect("dev1")).thenReturn(Result.success(connectedFeatures))
         sut.onConnectClick()
+        wallets.value = persistentListOf(hwWallet("dev1", name = "Trezor Safe 3", balance = 0uL))
         sut.onLabelChange("My Cold Wallet")
-        whenever(hwWalletRepo.setDeviceLabel("dev1", "My Cold Wallet")).thenReturn(Result.success(Unit))
+        whenever(hwWalletRepo.setDeviceLabel("wallet-dev1", "My Cold Wallet")).thenReturn(Result.success(Unit))
 
         sut.effects.test {
             sut.onFinishClick()
@@ -277,7 +278,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
             cancelAndIgnoreRemainingEvents()
         }
 
-        verify(hwWalletRepo).setDeviceLabel("dev1", "My Cold Wallet")
+        verify(hwWalletRepo).setDeviceLabel("wallet-dev1", "My Cold Wallet")
     }
 
     private suspend fun givenDeviceFound() {
@@ -308,15 +309,20 @@ class HwConnectViewModelTest : BaseUnitTest() {
         return features
     }
 
-    private fun hwWallet(id: String, name: String, balance: ULong) = HwWallet(
-        id = id,
+    private fun hwWallet(
+        deviceId: String,
+        name: String,
+        balance: ULong,
+        walletId: String = "wallet-$deviceId",
+    ) = HwWallet(
+        id = walletId,
         name = name,
         model = null,
         transportType = TransportType.BLUETOOTH,
         isConnected = true,
         balanceSats = balance,
         activities = persistentListOf(),
-        deviceIds = persistentSetOf(id),
+        deviceIds = persistentSetOf(deviceId),
     )
 
     private companion object {

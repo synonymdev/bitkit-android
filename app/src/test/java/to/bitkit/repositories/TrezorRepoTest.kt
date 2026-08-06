@@ -761,8 +761,10 @@ class TrezorRepoTest : BaseUnitTest() {
 
     @Test
     fun `connect preserves stored xpubs when account xpub refresh is partial`() = test {
+        // Re-reading an account of the same wallet yields the same key; a different one would
+        // be another identity on the device, not a refresh of this one.
         val previousXpubs = mapOf(
-            "nativeSegwit" to "old-native-xpub",
+            "nativeSegwit" to "native-xpub",
             "taproot" to "old-taproot-xpub",
         )
         val nativeSegwitPath = "m/84'/1'/0'"
@@ -780,7 +782,7 @@ class TrezorRepoTest : BaseUnitTest() {
         ).thenAnswer {
             val path = it.getArgument<String>(0)
             if (path == nativeSegwitPath) {
-                mockPublicKeyResponse(xpub = "new-native-xpub", path = nativeSegwitPath)
+                mockPublicKeyResponse(xpub = "native-xpub", path = nativeSegwitPath)
             } else {
                 throw AppError("xpub failed")
             }
@@ -795,7 +797,7 @@ class TrezorRepoTest : BaseUnitTest() {
         verify(hwWalletStore).saveKnownDevices(captor.capture())
         assertEquals(
             mapOf(
-                "nativeSegwit" to "new-native-xpub",
+                "nativeSegwit" to "native-xpub",
                 "taproot" to "old-taproot-xpub",
             ),
             captor.firstValue.single().xpubs,

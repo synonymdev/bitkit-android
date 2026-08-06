@@ -41,7 +41,7 @@ import to.bitkit.viewmodels.TransferViewModel
 
 @Composable
 fun SpendingHwSignScreen(
-    deviceId: String,
+    walletId: String,
     viewModel: TransferViewModel,
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
@@ -55,9 +55,9 @@ fun SpendingHwSignScreen(
         return
     }
 
-    LaunchedEffect(deviceId, order.id) {
-        viewModel.warmUpHardwareConnection(deviceId)
-        viewModel.updateHwFundingFeeEstimate(order, deviceId)
+    LaunchedEffect(walletId, order.id) {
+        viewModel.warmUpHardwareConnection(walletId)
+        viewModel.updateHwFundingFeeEstimate(order, walletId)
     }
 
     DisposableEffect(viewModel) {
@@ -74,7 +74,7 @@ fun SpendingHwSignScreen(
         onLearnMoreClick = onLearnMoreClick,
         onAdvancedClick = onAdvancedClick,
         onUseDefaultLspBalanceClick = viewModel::onUseDefaultLspBalanceClick,
-        onOpenConnect = { viewModel.onTransferToSpendingHwConfirm(order, deviceId) },
+        onOpenConnect = { viewModel.onTransferToSpendingHwConfirm(order, walletId) },
     )
 }
 

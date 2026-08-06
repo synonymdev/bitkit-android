@@ -804,10 +804,10 @@ private fun RootNavHost(
                 )
             }
             deepLinkableComposable<Routes.SpendingIntroHw> { entry ->
-                val deviceId = entry.toRoute<Routes.SpendingIntroHw>().deviceId
+                val walletId = entry.toRoute<Routes.SpendingIntroHw>().walletId
                 SpendingIntroScreen(
                     onContinueClick = {
-                        navController.navigateTo(Routes.SpendingAmountHw(deviceId))
+                        navController.navigateTo(Routes.SpendingAmountHw(walletId))
                         settingsViewModel.setHasSeenSpendingIntro(true)
                     },
                     onBackClick = { navController.popBackStack() },
@@ -831,20 +831,20 @@ private fun RootNavHost(
                 )
             }
             deepLinkableComposable<Routes.SpendingAmountHw> { entry ->
-                val deviceId = entry.toRoute<Routes.SpendingAmountHw>().deviceId
+                val walletId = entry.toRoute<Routes.SpendingAmountHw>().walletId
                 val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingAmountHwScreen(
-                    deviceId = deviceId,
+                    walletId = walletId,
                     viewModel = transferViewModel,
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.navigateTo(Routes.SpendingHwSign(deviceId)) },
+                    onOrderCreated = { navController.navigateTo(Routes.SpendingHwSign(walletId)) },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingHwSign> { entry ->
-                val deviceId = entry.toRoute<Routes.SpendingHwSign>().deviceId
+                val walletId = entry.toRoute<Routes.SpendingHwSign>().walletId
                 SpendingHwSignScreen(
-                    deviceId = deviceId,
+                    walletId = walletId,
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
@@ -1075,10 +1075,10 @@ private fun NavGraphBuilder.home(
         )
     }
     deepLinkableComposable<Routes.HardwareWallet> {
-        val deviceId = it.toRoute<Routes.HardwareWallet>().deviceId
+        val walletId = it.toRoute<Routes.HardwareWallet>().walletId
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         HardwareWalletScreen(
-            deviceId = deviceId,
+            walletId = walletId,
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onTransferToSpendingClick = { selectedDeviceId ->
                 navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, selectedDeviceId)
@@ -1906,8 +1906,8 @@ fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean)
 
 fun NavController.navigateToTransferSpendingStart(
     hasSeenSpendingIntro: Boolean,
-    deviceId: String,
-) = navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro, deviceId))
+    walletId: String,
+) = navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro, walletId))
 
 internal fun shouldDismissSheetForScreenLink(handled: Boolean, currentSheet: Sheet?): Boolean =
     handled && currentSheet != null
@@ -1925,10 +1925,10 @@ internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean): Routes =
 
 internal fun transferSpendingStartRoute(
     hasSeenSpendingIntro: Boolean,
-    deviceId: String,
+    walletId: String,
 ): Routes = when {
-    hasSeenSpendingIntro -> Routes.SpendingAmountHw(deviceId)
-    else -> Routes.SpendingIntroHw(deviceId)
+    hasSeenSpendingIntro -> Routes.SpendingAmountHw(walletId)
+    else -> Routes.SpendingIntroHw(walletId)
 }
 
 fun NavController.navigateToTransferIntro() = navigateTo(Routes.TransferIntro)
@@ -1978,7 +1978,7 @@ sealed interface Routes {
     data object Spending : Routes.DeepLinkable
 
     @Serializable
-    data class HardwareWallet(val deviceId: String) : Routes.DeepLinkable
+    data class HardwareWallet(val walletId: String) : Routes.DeepLinkable
 
     @Serializable
     data object Settings : Routes.DeepLinkable
@@ -2106,16 +2106,16 @@ sealed interface Routes {
     data object SpendingIntro : Routes.DeepLinkable
 
     @Serializable
-    data class SpendingIntroHw(val deviceId: String) : Routes.DeepLinkable
+    data class SpendingIntroHw(val walletId: String) : Routes.DeepLinkable
 
     @Serializable
     data object SpendingAmount : Routes.DeepLinkable
 
     @Serializable
-    data class SpendingAmountHw(val deviceId: String) : Routes.DeepLinkable
+    data class SpendingAmountHw(val walletId: String) : Routes.DeepLinkable
 
     @Serializable
-    data class SpendingHwSign(val deviceId: String) : Routes.InternalOnly
+    data class SpendingHwSign(val walletId: String) : Routes.InternalOnly
 
     @Serializable
     data object SpendingHwSigned : Routes.InternalOnly

@@ -114,7 +114,28 @@ class HwWalletRepo @Inject constructor(
 
     fun onAppForegrounded() = trezorRepo.onAppForegrounded()
 
-    fun warmUpKnownDevice(deviceId: String) = trezorRepo.warmUpKnownDevice(deviceId)
+    fun warmUpKnownDevice(walletId: String) {
+        scope.launch {
+            transportDeviceIdOrNull(walletId)?.let { trezorRepo.warmUpKnownDevice(it) }
+        }
+    }
+
+    /**
+     * Entries tracking one wallet identity. A physical device holds the standard wallet plus one
+     * entry per passphrase wallet, and each of those is stored once per transport it paired over.
+     */
+    private suspend fun devicesForWallet(walletId: String): List<KnownDevice> =
+        hwWalletStore.loadKnownDevices().filter { it.resolvedWalletId() == walletId }
+
+    /** Transport-level id to reach [walletId] with: the connected entry, else the most recent one. */
+    private suspend fun transportDeviceIdOrNull(walletId: String): String? {
+        val devices = devicesForWallet(walletId)
+        val connectedId = trezorRepo.state.value.connectedDeviceId()
+        return devices.find { it.id == connectedId }?.id ?: devices.maxByOrNull { it.lastConnectedAt }?.id
+    }
+
+    private suspend fun transportDeviceId(walletId: String): String =
+        requireNotNull(transportDeviceIdOrNull(walletId)) { "Unknown hardware wallet '$walletId'" }
 
     suspend fun resetState() = withContext(ioDispatcher) {
         watcherMutex.withLock {
@@ -163,33 +184,42 @@ class HwWalletRepo @Inject constructor(
         return trezorRepo.connect(deviceId)
     }
 
-    /** Reconnects a known paired device so its session is live for on-device signing. */
+    /** Reconnects a known paired wallet so its session is live for on-device signing. */
     suspend fun reconnect(
-        deviceId: String,
+        walletId: String,
         forceSession: Boolean = false,
-    ): Result<TrezorFeatures> = trezorRepo.connectKnownDevice(deviceId, forceSession = forceSession)
+    ): Result<TrezorFeatures> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            trezorRepo.connectKnownDevice(transportDeviceId(walletId), forceSession = forceSession).getOrThrow()
+        }
+    }
 
-    suspend fun ensureConnected(deviceId: String): Result<TrezorFeatures> = trezorRepo.ensureConnected(deviceId)
+    suspend fun ensureConnected(walletId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            trezorRepo.ensureConnected(transportDeviceId(walletId)).getOrThrow()
+        }
+    }
 
-    suspend fun isKnownBluetoothDevice(deviceId: String): Boolean = trezorRepo.isKnownBluetoothDevice(deviceId)
+    suspend fun isKnownBluetoothDevice(walletId: String): Boolean = withContext(ioDispatcher) {
+        val deviceId = transportDeviceIdOrNull(walletId) ?: return@withContext false
+        trezorRepo.isKnownBluetoothDevice(deviceId)
+    }
 
     suspend fun getFundingAccount(
-        deviceId: String,
+        walletId: String,
         addressType: HwFundingAddressType = HwFundingAddressType.DEFAULT,
     ): Result<HwFundingAccount> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val devices = hwWalletStore.loadKnownDevices()
-            val target = requireNotNull(devices.find { it.id == deviceId }) { "Unknown hardware wallet '$deviceId'" }
-            val groupIds = devices.filter { it.walletKey == target.walletKey }.map { it.id }.toSet()
+            val devices = devicesForWallet(walletId)
+            val target = requireNotNull(devices.firstOrNull { it.xpubs.containsKey(addressType.settingsKey) }) {
+                "Hardware wallet '$walletId' has no '${addressType.settingsKey}' account"
+            }
             val xpub = requireNotNull(target.xpubs[addressType.settingsKey]) {
-                "Hardware wallet '$deviceId' has no '${addressType.settingsKey}' account"
+                "Hardware wallet '$walletId' has no '${addressType.settingsKey}' account"
             }
             val balanceSats = _watcherData.value
                 .values
-                .filter {
-                    it.addressType == addressType.settingsKey &&
-                        it.deviceId in groupIds
-                }
+                .filter { it.addressType == addressType.settingsKey && it.walletId == walletId }
                 .fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
             HwFundingAccount.Trezor(
                 xpub = xpub,
@@ -199,25 +229,15 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    suspend fun getWalletId(deviceId: String): Result<String> = withContext(ioDispatcher) {
-        runSuspendCatching {
-            val devices = hwWalletStore.loadKnownDevices()
-            val target = requireNotNull(devices.find { it.id == deviceId }) {
-                "Unknown hardware wallet '$deviceId'"
-            }
-            requireNotNull(target.resolvedWalletId()) { "Hardware wallet '$deviceId' has no wallet id" }
-        }
-    }
-
     /** Composes the exact on-chain funding payment before prompting for the Trezor signature. */
     suspend fun composeFundingTransaction(
-        deviceId: String,
+        walletId: String,
         address: String,
         sats: ULong,
         satsPerVByte: ULong,
     ): Result<HwFundingTransaction> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val account = getFundingAccount(deviceId).getOrThrow()
+            val account = getFundingAccount(walletId).getOrThrow()
             val network = Env.network.toCoreNetwork()
             val composed = trezorRepo.composeTransaction(
                 extendedKey = account.xpub,
@@ -244,7 +264,7 @@ class HwWalletRepo @Inject constructor(
 
     /** Signs a composed funding payment on the Trezor. */
     suspend fun signFunding(
-        deviceId: String,
+        walletId: String,
         funding: HwFundingTransaction,
     ): Result<HwFundingSignedTx> = withContext(ioDispatcher) {
         runSuspendCatching {
@@ -253,7 +273,7 @@ class HwWalletRepo @Inject constructor(
                 network = Env.network.toTrezorCoinType(),
             ).getOrElse {
                 if (!it.isTrezorUserCancellation()) {
-                    trezorRepo.disconnectStaleSession(deviceId)
+                    transportDeviceIdOrNull(walletId)?.let { deviceId -> trezorRepo.disconnectStaleSession(deviceId) }
                 }
                 throw it
             }
@@ -281,16 +301,23 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    suspend fun disconnectStaleSession(deviceId: String): Result<Unit> = trezorRepo.disconnectStaleSession(deviceId)
+    suspend fun disconnectStaleSession(walletId: String): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val deviceId = transportDeviceIdOrNull(walletId) ?: return@runSuspendCatching
+            trezorRepo.disconnectStaleSession(deviceId).getOrThrow()
+        }
+    }
 
     /**
-     * Persists the Bitkit-side funds label for a paired device. Applied to every entry sharing the
+     * Persists the Bitkit-side funds label for a paired wallet. Applied to every entry sharing the
      * same wallet identity so the same device paired over both transports renames consistently.
      */
-    suspend fun setDeviceLabel(deviceId: String, label: String): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
+    suspend fun setDeviceLabel(walletId: String, label: String): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
             val devices = hwWalletStore.loadKnownDevices()
-            val target = requireNotNull(devices.find { it.id == deviceId }) { "Unknown hardware wallet '$deviceId'" }
+            val target = requireNotNull(devices.find { it.resolvedWalletId() == walletId }) {
+                "Unknown hardware wallet '$walletId'"
+            }
             val customLabel = label.trim().take(DEVICE_LABEL_MAX_LENGTH).ifEmpty { null }
             val updated = devices.map {
                 if (it.walletKey == target.walletKey) it.copy(customLabel = customLabel) else it
@@ -300,37 +327,35 @@ class HwWalletRepo @Inject constructor(
     }
 
     /**
-     * Removes a paired hardware wallet: stops its watchers and forgets every device entry
-     * that tracks the same wallet. The same physical device paired over both bluetooth and
-     * usb is stored once per transport but shares an xpub-derived identity, so forgetting a
-     * single id would leave the tile reappearing through the other transport.
+     * Removes a paired hardware wallet: stops its watchers and forgets every device entry that
+     * tracks the same wallet identity. The same physical device paired over both bluetooth and usb
+     * is stored once per transport but shares an xpub-derived identity, so forgetting a single id
+     * would leave the tile reappearing through the other transport. Other identities on the same
+     * device — the standard wallet, or another passphrase wallet — are left paired.
      */
-    suspend fun removeDevice(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun removeDevice(walletId: String): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             watcherMutex.withLock {
                 val knownDevices = hwWalletStore.loadKnownDevices()
-                val target = knownDevices.find { it.id == deviceId }
-                val walletId = target?.resolvedWalletId()
-                val ids = when (target) {
-                    null -> setOf(deviceId)
-                    else -> knownDevices.filter { it.walletKey == target.walletKey }.map { it.id }.toSet()
-                }
+                val targets = knownDevices.filter { it.resolvedWalletId() == walletId }
                 activeWatchers.toList()
-                    .filter { it.toDeviceId() in ids }
+                    .filter { it.toWalletId() == walletId }
                     .forEach {
                         if (!stopActiveWatcherLocked(it)) {
                             throw AppError("Failed to stop hardware wallet watcher '$it'")
                         }
                     }
-                walletId?.let {
-                    activityRepo.deleteForWallet(it).getOrThrow()
-                    trackedWalletIds -= it
-                    lastPersistedHwSnapshots -= it
+                activityRepo.deleteForWallet(walletId).getOrThrow()
+                trackedWalletIds -= walletId
+                lastPersistedHwSnapshots -= walletId
+                val failures = targets.mapNotNull {
+                    trezorRepo.forgetDevice(it.id, walletKey = it.walletKey).exceptionOrNull()
                 }
-                val failures = ids.mapNotNull { trezorRepo.forgetDevice(it).exceptionOrNull() }
-                val remaining = hwWalletStore.loadKnownDevices().map { it.id }.toSet()
+                val remaining = hwWalletStore.loadKnownDevices()
                 failures.firstOrNull()?.let { throw it }
-                check(ids.none { it in remaining }) { "Hardware wallet '$deviceId' still present after removal" }
+                check(remaining.none { it.resolvedWalletId() == walletId }) {
+                    "Hardware wallet '$walletId' still present after removal"
+                }
             }
         }.onFailure {
             watcherSyncRequests.tryEmit(Unit)
@@ -344,30 +369,37 @@ class HwWalletRepo @Inject constructor(
     ) { data, trezorState, watcherData ->
         // The same physical device paired over both bluetooth and usb is stored as two
         // entries with different transport-level ids; its xpubs are the cross-transport
-        // identity, so group by them to show one wallet and count its balance once.
+        // identity, so group by them to show one wallet and count its balance once. A
+        // passphrase wallet derives different xpubs, so it groups into its own wallet.
         data.knownDevices
             .filter { it.xpubs.isNotEmpty() }
             .groupBy { it.walletKey }
-            .map { (_, devices) ->
+            .mapNotNull { (_, devices) ->
+                val walletId = devices.firstNotNullOfOrNull { it.resolvedWalletId() } ?: return@mapNotNull null
                 val connectedDevice = devices.find { it.id == trezorState.connectedDeviceId() }
                 val device = connectedDevice ?: devices.maxBy { it.lastConnectedAt }
                 val ids = devices.map { it.id }.toSet()
-                val deviceWatchers = watcherData.values.filter { it.deviceId in ids }
-                val fundingBalanceSats = deviceWatchers
+                val walletWatchers = watcherData.values.filter { it.walletId == walletId }
+                val fundingBalanceSats = walletWatchers
                     .filter { it.addressType == HwFundingAddressType.DEFAULT.settingsKey }
                     .fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
                 HwWallet(
-                    id = device.id,
+                    id = walletId,
                     name = device.displayName,
                     model = device.model,
                     transportType = device.transportType,
-                    isConnected = connectedDevice != null,
-                    balanceSats = deviceWatchers.fold(0uL) { acc, watcher -> acc + watcher.balanceSats },
-                    activities = deviceWatchers
+                    // A device holding several passphrase wallets only has a session for one of
+                    // them, and only that identity can sign; mark the others disconnected. Sessions
+                    // opened before an identity was resolved report no wallet and stay inclusive.
+                    isConnected = connectedDevice != null &&
+                        trezorState.connectedWalletId().let { it == null || it == walletId },
+                    balanceSats = walletWatchers.fold(0uL) { acc, watcher -> acc + watcher.balanceSats },
+                    activities = walletWatchers
                         .toMergedActivities()
                         .toImmutableList(),
                     fundingBalanceSats = fundingBalanceSats,
                     deviceIds = ids.toImmutableSet(),
+                    passphraseProtected = devices.any { it.passphraseProtected },
                 )
             }
             .toImmutableList()
@@ -385,12 +417,12 @@ class HwWalletRepo @Inject constructor(
         hwWalletStore.data,
         _watcherData,
     ) { data, watcherData ->
-        val knownDeviceIds = data.knownDevices
+        val knownWalletIds = data.knownDevices
             .filter { it.xpubs.isNotEmpty() }
-            .map { it.id }
+            .mapNotNull { it.resolvedWalletId() }
             .toSet()
         watcherData.values
-            .filter { it.deviceId in knownDeviceIds }
+            .filter { it.walletId in knownWalletIds }
             .toMergedActivities()
             .toImmutableList()
     }
@@ -414,7 +446,6 @@ class HwWalletRepo @Inject constructor(
                         .filter { it.walletId == walletId }
                         .toImmutableList()
                     val watcher = HwWatcherData(
-                        deviceId = watcherId.toDeviceId(),
                         walletId = walletId,
                         addressType = watcherId.toAddressTypeKey(),
                         balanceSats = event.balance.total,
@@ -572,14 +603,13 @@ class HwWalletRepo @Inject constructor(
             .filterKeys { it in SUPPORTED_WATCHER_ADDRESS_TYPES }
             .map { (addressType, xpub) ->
                 WatcherSpec(
-                    deviceId = device.id,
                     addressType = addressType,
                     xpub = xpub,
                     electrumUrl = electrumUrl,
                     walletId = walletId,
                 )
             }
-    }.distinctBy { it.addressType to it.xpub }
+    }.distinctBy { it.watcherId }
 
     private suspend fun stopActiveWatcherLocked(watcherId: String): Boolean =
         trezorRepo.stopWatcher(watcherId).onSuccess {
@@ -662,16 +692,17 @@ class HwWalletRepo @Inject constructor(
         .firstOrNull { it.v1.txId == txid && it.v1.walletId == walletId }
 
     private data class WatcherSpec(
-        val deviceId: String,
         val addressType: String,
         val xpub: String,
         val electrumUrl: String,
         val walletId: String,
     ) {
-        val watcherId: String get() = "$deviceId$WATCHER_ID_SEPARATOR$addressType"
+        // Keyed by wallet, not by device: a device holding several passphrase wallets would
+        // otherwise collide on one watcher id per address type.
+        val watcherId: String get() = "$walletId$WATCHER_ID_SEPARATOR$addressType"
     }
 
-    private fun String.toDeviceId(): String = substringBefore(WATCHER_ID_SEPARATOR)
+    private fun String.toWalletId(): String = substringBefore(WATCHER_ID_SEPARATOR)
 
     private fun String.toAddressTypeKey(): String = substringAfter(WATCHER_ID_SEPARATOR)
 }
@@ -705,7 +736,6 @@ private val KnownDevice.displayName: String
     get() = resolveHwWalletName(label = label, model = model, customLabel = customLabel)
 
 private data class HwWatcherData(
-    val deviceId: String,
     val walletId: String,
     val addressType: String,
     val balanceSats: ULong,

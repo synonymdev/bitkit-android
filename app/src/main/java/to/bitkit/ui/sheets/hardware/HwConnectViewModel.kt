@@ -156,13 +156,13 @@ class HwConnectViewModel @Inject constructor(
     fun onLabelChange(value: String) = _uiState.update { it.copy(labelInput = value.take(DEVICE_LABEL_MAX_LENGTH)) }
 
     fun onFinishClick() {
-        val deviceId = _uiState.value.pairedDeviceId
-        if (deviceId == null) {
+        val walletId = _uiState.value.pairedWalletId
+        if (walletId == null) {
             setEffect(HwConnectEffect.Dismiss)
             return
         }
         viewModelScope.launch {
-            hwWalletRepo.setDeviceLabel(deviceId, _uiState.value.labelInput)
+            hwWalletRepo.setDeviceLabel(walletId, _uiState.value.labelInput)
             setEffect(HwConnectEffect.Finish)
         }
     }
@@ -240,9 +240,10 @@ class HwConnectViewModel @Inject constructor(
         viewModelScope.launch {
             hwWalletRepo.wallets.collect { wallets ->
                 val deviceId = _uiState.value.pairedDeviceId ?: return@collect
-                val wallet = wallets.firstOrNull { deviceId == it.id || deviceId in it.deviceIds } ?: return@collect
+                val wallet = wallets.firstOrNull { deviceId in it.deviceIds } ?: return@collect
                 _uiState.update {
                     it.copy(
+                        pairedWalletId = wallet.id,
                         deviceName = wallet.name,
                         balanceSats = wallet.balanceSats,
                         labelInput = if (labelInitialized) it.labelInput else wallet.name,
@@ -262,6 +263,8 @@ data class HwConnectUiState(
     val isConnecting: Boolean = false,
     val foundDeviceId: String? = null,
     val pairedDeviceId: String? = null,
+    /** Identity paired on [pairedDeviceId]; resolved once its watch-only wallet is known. */
+    val pairedWalletId: String? = null,
     val deviceName: String = "",
     val deviceModel: String = "",
     val balanceSats: ULong = 0uL,

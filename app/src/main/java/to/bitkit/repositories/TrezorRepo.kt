@@ -352,12 +352,14 @@ class TrezorRepo @Inject constructor(
                             isBootloader = false,
                         )
                     }
-                if (deviceInfo != null) {
-                    addOrUpdateKnownDevice(deviceInfo, features)
-                }
+                val known = deviceInfo?.let { addOrUpdateKnownDevice(it, features) }
                 _state.update {
                     it.copy(
-                        connected = ConnectedTrezorDevice(id = deviceId, features = features),
+                        connected = ConnectedTrezorDevice(
+                            id = deviceId,
+                            features = features,
+                            walletId = known?.walletId?.takeIf { id -> id.isNotBlank() },
+                        ),
                         nearbyDevices = it.nearbyDevices.filter { d -> d.id != deviceId }.toImmutableList(),
                     )
                 }
@@ -701,8 +703,16 @@ class TrezorRepo @Inject constructor(
                 Logger.debug("Calling THP reconnect for '${device.id}'", context = TAG)
                 val features = connectWithThpRetry(device.id, trezorUiHandler.currentSelection())
                 Logger.debug("Connected known device '${device.id}'", context = TAG)
-                addOrUpdateKnownDevice(device, features)
-                _state.update { it.copy(connected = ConnectedTrezorDevice(id = device.id, features = features)) }
+                val known = addOrUpdateKnownDevice(device, features)
+                _state.update {
+                    it.copy(
+                        connected = ConnectedTrezorDevice(
+                            id = device.id,
+                            features = features,
+                            walletId = known.walletId.takeIf { id -> id.isNotBlank() },
+                        )
+                    )
+                }
                 Logger.info("Reconnected known device '${device.id}'", context = TAG)
                 features
             }.onFailure { e ->
@@ -735,8 +745,14 @@ class TrezorRepo @Inject constructor(
         features: TrezorFeatures,
     ): Result<TrezorFeatures> {
         if (features.pinProtection != true || features.unlocked != false) return Result.success(features)
-        return runSuspendCatching { trezorService.refreshFeatures() }.onSuccess {
-            _state.update { state -> state.copy(connected = ConnectedTrezorDevice(id = deviceId, features = it)) }
+        return runSuspendCatching { trezorService.refreshFeatures() }.onSuccess { refreshed ->
+            _state.update { state ->
+                val connected = state.connected
+                    ?.takeIf { it.id == deviceId }
+                    ?.copy(features = refreshed)
+                    ?: ConnectedTrezorDevice(id = deviceId, features = refreshed)
+                state.copy(connected = connected)
+            }
         }
     }
 
@@ -846,7 +862,13 @@ class TrezorRepo @Inject constructor(
         throw AppError("Device not found nearby — is it powered on?")
     }
 
-    suspend fun forgetDevice(deviceId: String): Result<Unit> = withContext(ioDispatcher) {
+    /**
+     * Forgets a paired entry. [walletKey] scopes the removal to a single passphrase identity;
+     * without it every wallet watched on that physical device is forgotten. Transport and session
+     * credentials are only cleared once no identity of the device remains, so removing one hidden
+     * wallet does not unpair the device for the others.
+     */
+    suspend fun forgetDevice(deviceId: String, walletKey: String? = null): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             TrezorDebugLog.log("FORGET", "forgetDevice called for: $deviceId")
             val disconnectResult = if (_state.value.connectedDeviceId() == deviceId) {
@@ -862,11 +884,19 @@ class TrezorRepo @Inject constructor(
             } else {
                 Result.success(Unit)
             }
-            TrezorDebugLog.log("FORGET", "Clearing credentials...")
-            trezorTransport.clearDeviceCredential(deviceId)
-            val clearCredentialsResult = runCatching { trezorService.clearCredentials(deviceId) }
-            val knownDevices = (_state.value.knownDevices + loadKnownDevices()).distinctBy { it.id }
-            val updated = knownDevices.filter { it.id != deviceId }
+            val knownDevices = (_state.value.knownDevices + loadKnownDevices())
+                .distinctBy { it.id to it.walletKey }
+            val updated = knownDevices.filterNot {
+                it.id == deviceId && (walletKey == null || it.walletKey == walletKey)
+            }
+            val clearCredentialsResult = if (updated.none { it.id == deviceId }) {
+                TrezorDebugLog.log("FORGET", "Clearing credentials...")
+                trezorTransport.clearDeviceCredential(deviceId)
+                runCatching { trezorService.clearCredentials(deviceId) }
+            } else {
+                TrezorDebugLog.log("FORGET", "Keeping credentials, another wallet still uses $deviceId")
+                Result.success(Unit)
+            }
             saveKnownDevices(updated)
             _state.update { it.copy(knownDevices = updated.toImmutableList()) }
             clearCredentialsResult.getOrThrow()
@@ -1037,12 +1067,21 @@ class TrezorRepo @Inject constructor(
             needsPairingCode.value
     }
 
-    private suspend fun addOrUpdateKnownDevice(deviceInfo: TrezorDeviceInfo, features: TrezorFeatures) {
+    private suspend fun addOrUpdateKnownDevice(deviceInfo: TrezorDeviceInfo, features: TrezorFeatures): KnownDevice {
         val stored = hwWalletStore.loadKnownDevices()
-        val storedIds = stored.map { it.id }.toSet()
-        val knownDevices = stored + _state.value.knownDevices.filter { it.id !in storedIds }
-        val previous = knownDevices.find { it.id == deviceInfo.id }
+        val storedEntries = stored.map { it.id to it.walletKey }.toSet()
+        val knownDevices = stored + _state.value.knownDevices.filter { (it.id to it.walletKey) !in storedEntries }
         val fetchResult = fetchAccountXpubs()
+        val isPassphraseSession = trezorUiHandler.currentSelection() != WalletSelection.Standard
+        // A passphrase wallet is a separate identity on the same physical device, so the transport
+        // id alone no longer identifies an entry: matching by it would overwrite another identity
+        // or blend two identities' xpubs into one record. Shared key material is the identity, so
+        // match on it; only an entry stored before any xpub was captured has no identity to
+        // conflict with and can be adopted by this connect.
+        val candidates = knownDevices.filter { it.id == deviceInfo.id }
+        val previous = candidates.firstOrNull {
+            it.xpubs.values.intersect(fetchResult.xpubs.values.toSet()).isNotEmpty()
+        } ?: candidates.singleOrNull()?.takeIf { it.xpubs.isEmpty() }
         val xpubs = previous?.xpubs.orEmpty() + fetchResult.xpubs
         val retryableGaps = fetchResult.transientFailures.filterKeys { addressType ->
             xpubs[addressType.toSettingsString()] == null
@@ -1066,11 +1105,21 @@ class TrezorRepo @Inject constructor(
             lastConnectedAt = clock.nowMs(),
             xpubs = xpubs,
             customLabel = previous?.customLabel,
-            walletId = knownDevices.findHardwareWalletId(deviceInfo.id, xpubs),
+            walletId = previous?.walletId?.takeIf { it.isNotBlank() }
+                ?: knownDevices.findHardwareWalletId(xpubs, fallback = deviceInfo.id),
+            // The selection bound to the session is what derived these xpubs.
+            passphraseProtected = previous?.passphraseProtected == true || isPassphraseSession,
         )
-        val updated = knownDevices.filter { it.id != known.id } + known
+        // Replace the entry this connect refreshed, plus any entry already holding the resulting
+        // identity: reading a previously rejected address type changes the walletKey, and matching
+        // on the new key alone would leave the stale entry behind as a duplicate wallet.
+        val updated = knownDevices.filterNot {
+            (it.id == known.id && it.walletKey == known.walletKey) ||
+                (previous != null && it.id == previous.id && it.walletKey == previous.walletKey)
+        } + known
         saveKnownDevices(updated)
         _state.update { it.copy(knownDevices = updated.toImmutableList()) }
+        return known
     }
 
     /**
@@ -1159,7 +1208,13 @@ class TrezorRepo @Inject constructor(
             allowBleFallback = true,
         )
         val features = connectWithThpRetry(device.id, trezorUiHandler.currentSelection())
-        _state.update { it.copy(connected = ConnectedTrezorDevice(id = deviceId, features = features)) }
+        _state.update { state ->
+            val connected = state.connected
+                ?.takeIf { it.id == deviceId }
+                ?.copy(features = features)
+                ?: ConnectedTrezorDevice(id = deviceId, features = features)
+            state.copy(connected = connected)
+        }
     }
 
     private suspend fun awaitSetup(walletIndex: Int = 0) {
@@ -1338,12 +1393,16 @@ data class TrezorState(
     fun connectedDevice(): TrezorFeatures? = connected?.features
 
     fun connectedDeviceId(): String? = connected?.id
+
+    fun connectedWalletId(): String? = connected?.walletId
 }
 
 @Stable
 data class ConnectedTrezorDevice(
     val id: String,
     val features: TrezorFeatures,
+    /** Identity the live session was opened for; a device can hold several passphrase wallets. */
+    val walletId: String? = null,
 )
 
 private fun KnownDevice.matches(deviceId: String) = id == deviceId || path == deviceId
@@ -1361,10 +1420,9 @@ private fun deriveHardwareWalletId(xpubs: Map<String, String>): String? =
         runCatching { HwWalletId.derive(xpubs) }.getOrNull()
     }
 
-private fun List<KnownDevice>.findHardwareWalletId(deviceId: String, xpubs: Map<String, String>): String {
-    val walletKey = walletKey(xpubs, deviceId)
-    return firstOrNull { it.id == deviceId }?.walletId?.takeIf { it.isNotBlank() }
-        ?: firstOrNull { it.walletKey == walletKey }?.walletId?.takeIf { it.isNotBlank() }
+private fun List<KnownDevice>.findHardwareWalletId(xpubs: Map<String, String>, fallback: String): String {
+    val walletKey = walletKey(xpubs, fallback)
+    return firstOrNull { it.walletKey == walletKey }?.walletId?.takeIf { it.isNotBlank() }
         ?: deriveHardwareWalletId(xpubs).orEmpty()
 }
 
