@@ -54,6 +54,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     private companion object {
         const val HARDWARE_WALLET_ID = "hardware-wallet"
+        const val HIDDEN_WALLET_ID = "hidden-wallet"
     }
 
     private val trezorRepo = mock<TrezorRepo>()
@@ -76,6 +77,13 @@ class HwWalletRepoTest : BaseUnitTest() {
         lastConnectedAt = 0L,
         xpubs = mapOf("nativeSegwit" to "zpubNS"),
         walletId = HARDWARE_WALLET_ID,
+    )
+
+    /** A passphrase wallet of the same physical device: same transport id, own keys and identity. */
+    private val hiddenWallet = device.copy(
+        xpubs = mapOf("nativeSegwit" to "zpubHidden"),
+        walletId = HIDDEN_WALLET_ID,
+        passphraseProtected = true,
     )
 
     @Before
@@ -866,6 +874,88 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `lists a passphrase wallet as its own tile on the same device`() = test {
+        storeData.value = HwWalletData(knownDevices = listOf(device, hiddenWallet))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+
+        val sut = createRepo()
+
+        val wallets = sut.wallets.value
+        assertEquals(listOf(HARDWARE_WALLET_ID, HIDDEN_WALLET_ID), wallets.map { it.id })
+        assertEquals(listOf(false, true), wallets.map { it.passphraseProtected })
+        assertEquals(listOf(setOf("dev1"), setOf("dev1")), wallets.map { it.deviceIds })
+        verifyStartWatcher("$HARDWARE_WALLET_ID|nativeSegwit")
+        verifyStartWatcher("$HIDDEN_WALLET_ID|nativeSegwit")
+    }
+
+    @Test
+    fun `counts the balance of each identity on the device separately`() = test {
+        storeData.value = HwWalletData(knownDevices = listOf(device, hiddenWallet))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        watcherEvents.emit(
+            "$HARDWARE_WALLET_ID|nativeSegwit" to transactionsChanged(total = 100uL),
+        )
+        watcherEvents.emit(
+            "$HIDDEN_WALLET_ID|nativeSegwit" to transactionsChanged(total = 40uL),
+        )
+
+        assertEquals(listOf(100uL, 40uL), sut.wallets.value.map { it.balanceSats })
+        assertEquals(140uL, sut.totalSats.value)
+    }
+
+    @Test
+    fun `marks only the identity holding the session as connected`() = test {
+        storeData.value = HwWalletData(knownDevices = listOf(device, hiddenWallet))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HIDDEN_WALLET_ID),
+        )
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+
+        val sut = createRepo()
+
+        assertEquals(listOf(false, true), sut.wallets.value.map { it.isConnected })
+    }
+
+    @Test
+    fun `removeDevice forgets only the requested identity of the device`() = test {
+        storeData.value = HwWalletData(knownDevices = listOf(device, hiddenWallet))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet), listOf(device))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+        runCurrent()
+
+        val result = sut.removeDevice(HIDDEN_WALLET_ID)
+
+        assertTrue(result.isSuccess)
+        verify(trezorRepo).forgetDevice("dev1", "zpubHidden")
+        verify(trezorRepo).stopWatcher("$HIDDEN_WALLET_ID|nativeSegwit")
+        verify(trezorRepo, never()).stopWatcher("$HARDWARE_WALLET_ID|nativeSegwit")
+        verify(activityRepo).deleteForWallet(HIDDEN_WALLET_ID)
+        verify(activityRepo, never()).deleteForWallet(HARDWARE_WALLET_ID)
+    }
+
+    @Test
+    fun `funding account resolves the requested identity on a shared device`() = test {
+        storeData.value = HwWalletData(knownDevices = listOf(device, hiddenWallet))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        val sut = createRepo()
+        runCurrent()
+
+        watcherEvents.emit(
+            "$HIDDEN_WALLET_ID|nativeSegwit" to transactionsChanged(total = 40uL),
+        )
+
+        val account = sut.getFundingAccount(HIDDEN_WALLET_ID).getOrThrow()
+        assertEquals("zpubHidden", account.xpub)
+        assertEquals(40uL, account.balanceSats)
+    }
+
+    @Test
     fun `keeps a stale watcher until stopping it succeeds`() = test {
         storeData.value = HwWalletData(
             knownDevices = listOf(
@@ -1315,7 +1405,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     private fun transactionsChanged(
         total: ULong,
-        activities: List<Activity>,
+        activities: List<Activity> = emptyList(),
     ) = WatcherEvent.TransactionsChanged(
         balance = walletBalance(total),
         activities = activities,
