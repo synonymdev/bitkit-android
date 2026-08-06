@@ -192,15 +192,21 @@ class HwConnectViewModel @Inject constructor(
     }
 
     private fun onPassphraseWalletAdded(walletId: String) {
-        // The new identity has its own name and balance, so let the wallet observer prefill again.
-        labelInitialized = false
+        // Prefill from the new identity right away: the wallet list may have settled while it was
+        // being persisted, and waiting for another emission would leave the label field empty.
+        val wallet = hwWalletRepo.wallets.value.firstOrNull { it.id == walletId }
+        val name = wallet?.name ?: _uiState.value.deviceName
+        // Fall back to the device name until the new wallet shows up, and let that emission
+        // refine the prefill; once it is resolved the field is the user's to edit.
+        labelInitialized = wallet != null
         _uiState.update {
             it.copy(
                 isSubmittingPassphrase = false,
                 passphraseInput = "",
                 pairedWalletId = walletId,
-                balanceSats = 0uL,
-                labelInput = "",
+                deviceName = name,
+                balanceSats = wallet?.balanceSats ?: 0uL,
+                labelInput = name,
             )
         }
         setEffect(HwConnectEffect.NavigateToPassphrasePaired)

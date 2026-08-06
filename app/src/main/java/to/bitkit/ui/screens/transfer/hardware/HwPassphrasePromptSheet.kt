@@ -34,6 +34,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
@@ -109,6 +111,7 @@ private fun Content(
 ) {
     BlockScreenshots()
 
+    val hazeState = rememberHazeState()
     var passphrase by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
 
@@ -161,33 +164,35 @@ private fun Content(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .requiredSize(maxWidth * HW_ILLUSTRATION_SIZE_RATIO)
+                    .hazeSource(hazeState)
             )
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp)
-        ) {
-            SecondaryButton(
-                text = stringResource(R.string.common__cancel),
-                onClick = onCancel,
-                enabled = !isVerifying,
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
-                    .weight(1f)
-                    .testTag("HwTransferPassphraseCancel")
-            )
-            PrimaryButton(
-                text = stringResource(R.string.common__continue),
-                onClick = { onSubmit(passphrase) },
-                enabled = passphrase.isNotEmpty(),
-                isLoading = isVerifying,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("HwTransferPassphraseContinue")
-            )
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp, vertical = 16.dp)
+            ) {
+                SecondaryButton(
+                    text = stringResource(R.string.common__cancel),
+                    onClick = onCancel,
+                    enabled = !isVerifying,
+                    hazeState = hazeState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("HwTransferPassphraseCancel")
+                )
+                PrimaryButton(
+                    text = stringResource(R.string.common__continue),
+                    onClick = { onSubmit(passphrase) },
+                    enabled = passphrase.isNotEmpty(),
+                    isLoading = isVerifying,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("HwTransferPassphraseContinue")
+                )
+            }
         }
-        VerticalSpacer(16.dp)
     }
 }
 

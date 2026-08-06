@@ -22,6 +22,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
@@ -71,6 +73,8 @@ private fun Content(
 ) {
     BlockScreenshots()
 
+    val hazeState = rememberHazeState()
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -115,33 +119,35 @@ private fun Content(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .requiredSize(maxWidth * HW_ILLUSTRATION_SIZE_RATIO)
+                    .hazeSource(hazeState)
             )
-        }
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp)
-        ) {
-            SecondaryButton(
-                text = stringResource(R.string.common__back),
-                onClick = onBack,
-                enabled = !uiState.isSubmittingPassphrase,
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
-                    .weight(1f)
-                    .testTag("HardwareWalletPassphraseBack")
-            )
-            PrimaryButton(
-                text = stringResource(R.string.common__continue),
-                onClick = onContinue,
-                enabled = uiState.passphraseInput.isNotEmpty(),
-                isLoading = uiState.isSubmittingPassphrase,
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("HardwareWalletPassphraseContinue")
-            )
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 32.dp, vertical = 16.dp)
+            ) {
+                SecondaryButton(
+                    text = stringResource(R.string.common__back),
+                    onClick = onBack,
+                    enabled = !uiState.isSubmittingPassphrase,
+                    hazeState = hazeState,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("HardwareWalletPassphraseBack")
+                )
+                PrimaryButton(
+                    text = stringResource(R.string.common__continue),
+                    onClick = onContinue,
+                    enabled = uiState.passphraseInput.isNotEmpty(),
+                    isLoading = uiState.isSubmittingPassphrase,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("HardwareWalletPassphraseContinue")
+                )
+            }
         }
-        VerticalSpacer(16.dp)
     }
 }
 
