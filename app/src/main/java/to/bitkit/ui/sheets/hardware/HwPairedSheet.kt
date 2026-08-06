@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.requiredWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -134,7 +134,7 @@ internal fun HwPairedContent(
                 contentDescription = null,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .width(maxWidth * HW_ILLUSTRATION_SIZE_RATIO)
+                    .requiredWidth(maxWidth * HW_ILLUSTRATION_SIZE_RATIO)
                     .aspectRatio(COINS_ASPECT_RATIO)
                     .hazeSource(hazeState)
             )
@@ -144,10 +144,9 @@ internal fun HwPairedContent(
                 onFinish = onFinish,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(horizontal = 32.dp)
+                    .padding(horizontal = 32.dp, vertical = 16.dp)
             )
         }
-        VerticalSpacer(16.dp)
     }
 }
 
