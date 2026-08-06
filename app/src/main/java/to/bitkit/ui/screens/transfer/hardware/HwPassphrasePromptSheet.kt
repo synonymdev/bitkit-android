@@ -40,6 +40,7 @@ import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.effects.BlockScreenshots
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -100,6 +101,8 @@ private fun Content(
     onSubmit: (String) -> Unit = {},
     onCancel: () -> Unit = {},
 ) {
+    BlockScreenshots()
+
     var passphrase by remember { mutableStateOf("") }
     val focusRequester = remember { FocusRequester() }
 

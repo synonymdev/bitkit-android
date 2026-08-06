@@ -32,6 +32,7 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.effects.BlockScreenshots
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
@@ -68,6 +69,8 @@ private fun Content(
     onBack: () -> Unit = {},
     onContinue: () -> Unit = {},
 ) {
+    BlockScreenshots()
+
     Column(
         modifier = modifier
             .fillMaxSize()
