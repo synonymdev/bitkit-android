@@ -635,7 +635,7 @@ class AppViewModel @Inject constructor(
 
     private fun observeInitialPaykitLinkBursts() {
         viewModelScope.launch {
-            PrivatePaykitRepo.initialLinkBurstStarted.collect { startInitialPaykitPaymentRequestPolling() }
+            privatePaykitRepo.initialLinkBurstStarted.collect { startInitialPaykitPaymentRequestPolling() }
         }
     }
 
@@ -734,8 +734,12 @@ class AppViewModel @Inject constructor(
         val result = privatePaykitRepo.beginPaymentRequest(request).getOrNull()
         if (isPaymentRequestPresentationBlocked()) return true
         val isPending = paykitPaymentRequestRepo.isPending(request)
-        if (result !is PublicPaykitPaymentResult.Opened || !isPending) {
-            if (isPending) deferPaymentRequestPresentation(request)
+        if (!isPending) {
+            presentedPaymentRequestIds += request.id
+            return false
+        }
+        if (result !is PublicPaykitPaymentResult.Opened) {
+            deferPaymentRequestPresentation(request)
             return false
         }
 

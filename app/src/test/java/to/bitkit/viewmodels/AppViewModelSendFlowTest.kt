@@ -37,6 +37,7 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.check
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doSuspendableAnswer
@@ -196,6 +197,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @After
     fun tearDown() {
+        sut.stopPaykitPaymentRequestPolling()
         App.currentActivity = null
     }
 
@@ -238,6 +240,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pubkyRepo.contactsLoadVersion).thenReturn(pubkyContactsLoadVersion)
         whenever(paykitPaymentRequestRepo.pendingRequests).thenReturn(pendingPaykitPaymentRequests)
         whenever(paykitPaymentRequestRepo.isPending(any())).thenReturn(true)
+        whenever(privatePaykitRepo.initialLinkBurstStarted).thenReturn(MutableSharedFlow())
         whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.pruneUnsavedContactState(any<Collection<String>>()) }
@@ -370,28 +373,32 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyPublicKey.value = testPublicKey
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
         runCurrent()
+        clearInvocations(paykitPaymentRequestRepo)
 
         sut.startPaykitPaymentRequestPolling()
-        runCurrent()
+        try {
+            runCurrent()
 
-        verify(paykitPaymentRequestRepo).refresh()
-        clearInvocations(paykitPaymentRequestRepo)
+            verify(paykitPaymentRequestRepo).refresh()
+            clearInvocations(paykitPaymentRequestRepo)
 
-        advanceTimeBy(30.seconds.inWholeMilliseconds)
-        runCurrent()
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
 
-        verify(paykitPaymentRequestRepo).refresh()
-        clearInvocations(paykitPaymentRequestRepo)
+            verify(paykitPaymentRequestRepo, atLeast(2)).refresh()
+            clearInvocations(paykitPaymentRequestRepo)
 
-        advanceTimeBy(59.seconds.inWholeMilliseconds)
-        runCurrent()
-        verify(paykitPaymentRequestRepo, never()).refresh()
+            advanceTimeBy(59.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(paykitPaymentRequestRepo, never()).refresh()
 
-        advanceTimeBy(1.seconds.inWholeMilliseconds)
-        runCurrent()
-        verify(paykitPaymentRequestRepo).refresh()
+            advanceTimeBy(1.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(paykitPaymentRequestRepo).refresh()
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
 
-        sut.stopPaykitPaymentRequestPolling()
         clearInvocations(paykitPaymentRequestRepo)
         advanceTimeBy(120.seconds.inWholeMilliseconds)
         runCurrent()

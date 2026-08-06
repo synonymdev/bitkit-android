@@ -90,8 +90,6 @@ class PrivatePaykitRepo @Inject constructor(
         )
         private val initialLinkBurstRetryDelays = List(14) { 2.seconds }
         private val privatePaymentResolutionRetryDelays = privateMessageDrainRetryDelays.take(3)
-        private val _initialLinkBurstStarted = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-        val initialLinkBurstStarted: SharedFlow<Unit> = _initialLinkBurstStarted.asSharedFlow()
 
         fun isDuplicatePaymentError(error: Throwable): Boolean =
             PrivatePaykitErrorClassifier.isDuplicatePaymentError(error)
@@ -106,6 +104,8 @@ class PrivatePaykitRepo @Inject constructor(
     private val pendingMessageDrainRetryKeys = mutableSetOf<PrivateMessageDrainRetryKey>()
     private var pendingMessageDrainRetryJob: Job? = null
     private var pendingMessageDrainRetryGeneration = 0
+    private val _initialLinkBurstStarted = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+    val initialLinkBurstStarted: SharedFlow<Unit> = _initialLinkBurstStarted.asSharedFlow()
     private val initialLinkBurstLock = Any()
     private val initialLinkBurstPublicKeys = mutableSetOf<String>()
     private var initialLinkBurstJob: Job? = null
