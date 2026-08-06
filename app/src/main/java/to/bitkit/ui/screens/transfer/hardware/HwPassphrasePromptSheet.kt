@@ -1,6 +1,8 @@
 package to.bitkit.ui.screens.transfer.hardware
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -8,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -18,12 +21,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
@@ -33,7 +39,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.HW_ILLUSTRATION_SIZE_RATIO
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SheetSize
@@ -89,7 +95,7 @@ fun HwPassphrasePromptSheet(
                 onSubmit(it)
             },
             onCancel = { closeSheet() },
-            modifier = Modifier.sheetHeight(SheetSize.MEDIUM, isModal = true)
+            modifier = Modifier.sheetHeight(SheetSize.LARGE, isModal = true)
         )
     }
 }
@@ -142,31 +148,46 @@ private fun Content(
                     .focusRequester(focusRequester)
                     .testTag("HwTransferPassphraseInput")
             )
-            FillHeight()
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                SecondaryButton(
-                    text = stringResource(R.string.common__cancel),
-                    onClick = onCancel,
-                    enabled = !isVerifying,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("HwTransferPassphraseCancel")
-                )
-                PrimaryButton(
-                    text = stringResource(R.string.common__continue),
-                    onClick = { onSubmit(passphrase) },
-                    enabled = passphrase.isNotEmpty(),
-                    isLoading = isVerifying,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("HwTransferPassphraseContinue")
-                )
-            }
-            VerticalSpacer(16.dp)
         }
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+                .clipToBounds()
+        ) {
+            Image(
+                painter = painterResource(R.drawable.shield),
+                contentDescription = null,
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .size(maxWidth * HW_ILLUSTRATION_SIZE_RATIO)
+            )
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp)
+        ) {
+            SecondaryButton(
+                text = stringResource(R.string.common__cancel),
+                onClick = onCancel,
+                enabled = !isVerifying,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("HwTransferPassphraseCancel")
+            )
+            PrimaryButton(
+                text = stringResource(R.string.common__continue),
+                onClick = { onSubmit(passphrase) },
+                enabled = passphrase.isNotEmpty(),
+                isLoading = isVerifying,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("HwTransferPassphraseContinue")
+            )
+        }
+        VerticalSpacer(16.dp)
     }
 }
 
