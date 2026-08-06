@@ -30,7 +30,9 @@
       Type "bitkit-hidden" into the passphrase field (testTag "HardwareWalletPassphraseInput"), then tap "Continue" (testTag "HardwareWalletPassphraseContinue")
     </action>
     <action>
-      Confirm the passphrase prompt on the Bridge emulator if the device asks for it
+      Confirm on the emulated device for every account the passphrase session reads: the device
+      prompts once per address type and the call blocks until it is acknowledged. Either tap the
+      emulator UI or run: ../bitkit-docker/scripts/trezor-emulator send-json '{"type":"emulator-press-yes","id":1}'
     </action>
     <action>
       Verify the sheet advances to the passphrase paired step (testTag "HardwareWalletPassphrasePairedScreen") headed "Passphrase funds found", showing a balance and an editable "Label Funds" field prefilled with the device name

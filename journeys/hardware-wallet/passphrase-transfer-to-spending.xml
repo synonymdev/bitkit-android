@@ -48,7 +48,9 @@
       Type a wrong passphrase "not-the-one" into the input (testTag "HwTransferPassphraseInput") and tap "Continue" (testTag "HwTransferPassphraseContinue")
     </action>
     <action>
-      Confirm the passphrase prompt on the Bridge emulator if the device asks for it
+      Confirm on the emulated device for every account the passphrase session reads: the device
+      prompts once per address type and the call blocks until it is acknowledged. Either tap the
+      emulator UI or run: ../bitkit-docker/scripts/trezor-emulator send-json '{"type":"emulator-press-yes","id":1}'
     </action>
     <action>
       Verify an error toast says the passphrase opens a different wallet, that no signing prompt was shown on the emulator, and that no new transfer appears in the activity list
