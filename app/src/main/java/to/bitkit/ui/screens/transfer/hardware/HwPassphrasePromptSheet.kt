@@ -10,7 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -160,7 +160,7 @@ private fun Content(
                 contentDescription = null,
                 modifier = Modifier
                     .align(Alignment.Center)
-                    .size(maxWidth * HW_ILLUSTRATION_SIZE_RATIO)
+                    .requiredSize(maxWidth * HW_ILLUSTRATION_SIZE_RATIO)
             )
         }
         Row(
