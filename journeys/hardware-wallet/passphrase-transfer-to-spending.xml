@@ -1,0 +1,72 @@
+<journey name="Hardware Wallet Passphrase Transfer To Spending">
+  <description>
+    Drives Transfer To Spending from a passphrase (hidden) wallet. While the Trezor session that
+    holds the passphrase is still open the transfer signs straight away; after the session is
+    dropped Bitkit asks for the passphrase again, and a wrong one is refused instead of signing
+    from whichever wallet the device happens to have open. Requires the emulator started with
+    passphrase protection enabled, the hidden wallet from passphrase-pairing.xml paired, and its
+    native-segwit account holding spendable regtest funds.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Tap the hidden wallet tile ("Hidden Trezor") and verify its detail screen opens (testTag "HardwareWalletScreen")
+    </action>
+    <action>
+      Tap "Transfer To Spending" (testTag "HardwareTransferToSpending"), and if the first-run intro is shown tap "Get Started"
+    </action>
+    <action>
+      Tap the "25%" quick button (testTag "HardwareTransferAmountQuarter"), then "Continue" (testTag "HardwareTransferAmountContinue") and wait for the Blocktank order
+    </action>
+    <action>
+      Verify the sign screen opens (testTag "HardwareTransferSign") titled "SIGN WITH YOUR DEVICE"
+    </action>
+    <action>
+      Tap "Open Trezor Connect" (testTag "HardwareTransferOpenTrezorConnect") and verify no passphrase sheet appears, because the session opened at pairing still holds the hidden wallet
+    </action>
+    <action>
+      Approve the Recipient, Amount, Locktime, and Summary prompts on the Bridge emulator in order, and verify the transaction signed screen appears (testTag "HardwareTransferSigned")
+    </action>
+    <action>
+      Wait for the Processing Payment screen, tap "Continue Using Bitkit", and verify the app returns to the wallet home screen
+    </action>
+    <action>
+      adb: adb shell am force-stop to.bitkit.dev
+    </action>
+    <action>
+      adb: adb shell monkey -p to.bitkit.dev -c android.intent.category.LAUNCHER 1
+    </action>
+    <action>
+      Once the app is back on the home screen, open the hidden wallet tile and start Transfer To Spending again, setting an amount with the "25%" quick button and continuing to the sign screen
+    </action>
+    <action>
+      Tap "Open Trezor Connect" (testTag "HardwareTransferOpenTrezorConnect") and verify the passphrase sheet opens (testTag "HwTransferPassphraseSheet"), because the session that held the passphrase is gone
+    </action>
+    <action>
+      Type a wrong passphrase "not-the-one" into the input (testTag "HwTransferPassphraseInput") and tap "Continue" (testTag "HwTransferPassphraseContinue")
+    </action>
+    <action>
+      Confirm the passphrase prompt on the Bridge emulator if the device asks for it
+    </action>
+    <action>
+      Verify an error toast says the passphrase opens a different wallet, that no signing prompt was shown on the emulator, and that no new transfer appears in the activity list
+    </action>
+    <action>
+      Navigate to the wallet home screen and verify the hardware tile count is unchanged: the wallet the wrong passphrase opened must not be added
+    </action>
+    <action>
+      Reopen the sign screen, tap "Open Trezor Connect", type the correct passphrase "bitkit-hidden" and tap "Continue"
+    </action>
+    <action>
+      Approve the Recipient, Amount, Locktime, and Summary prompts on the Bridge emulator, and verify the transaction signed screen appears (testTag "HardwareTransferSigned")
+    </action>
+    <action>
+      adb: adb shell "run-as to.bitkit.dev sh -c 'grep -rl -e bitkit-hidden -e not-the-one files/logs/ files/datastore/ || echo NO_PASSPHRASE_LEAK'"
+    </action>
+    <action>
+      Verify the previous command printed NO_PASSPHRASE_LEAK: neither the correct nor the rejected passphrase may be written to the logs or the datastore
+    </action>
+  </actions>
+</journey>
