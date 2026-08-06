@@ -25,7 +25,7 @@ jobs:
     outputs:
       code: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.code == 'true' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dorny/paths-filter@v4
         if: github.event_name == 'pull_request'
         id: filter
@@ -45,7 +45,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -54,7 +54,7 @@ jobs:
           distribution: "temurin"
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Decode google-services.json
         run: |
@@ -95,7 +95,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -104,7 +104,7 @@ jobs:
           distribution: "temurin"
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Decode google-services.json
         run: |
@@ -175,7 +175,7 @@ jobs:
         run: echo $E2E_BRANCH
 
       - name: Clone E2E tests
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: synonymdev/bitkit-e2e-tests
           path: bitkit-e2e-tests
@@ -188,7 +188,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: AVD cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: avd-cache
         with:
           path: |
@@ -210,7 +210,7 @@ jobs:
           script: echo "Generated AVD snapshot for caching."
 
       - name: Download APK
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: bitkit-e2e-apk_${{ github.run_number }}
           path: bitkit-e2e-tests/aut
@@ -219,12 +219,12 @@ jobs:
         run: ls -l bitkit-e2e-tests/aut
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
       - name: Cache npm cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.npm
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
@@ -333,7 +333,7 @@ jobs:
         run: echo $E2E_BRANCH
 
       - name: Clone E2E tests
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: synonymdev/bitkit-e2e-tests
           path: bitkit-e2e-tests
@@ -346,7 +346,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: AVD cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         id: avd-cache
         with:
           path: |
@@ -368,7 +368,7 @@ jobs:
           script: echo "Generated AVD snapshot for caching."
 
       - name: Download APK (regtest)
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: bitkit-e2e-apk-regtest_${{ github.run_number }}
           path: bitkit-e2e-tests/aut
@@ -377,12 +377,12 @@ jobs:
         run: ls -l bitkit-e2e-tests/aut
 
       - name: Setup Node.js
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@v7
         with:
           node-version: 22
 
       - name: Cache npm cache
-        uses: actions/cache@v5
+        uses: actions/cache@v6
         with:
           path: ~/.npm
           key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
