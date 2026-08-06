@@ -1,6 +1,7 @@
 package to.bitkit.ui.sheets.hardware
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,8 +19,12 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
@@ -27,6 +32,7 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.HW_ILLUSTRATION_SIZE_RATIO
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
@@ -45,30 +51,46 @@ fun HwPairedSheet(
     uiState: HwConnectUiState,
     modifier: Modifier = Modifier,
     onLabelChange: (String) -> Unit = {},
+    onPassphrase: () -> Unit = {},
     onFinish: () -> Unit = {},
 ) {
-    Content(
+    HwPairedContent(
         uiState = uiState,
+        header = stringResource(R.string.hardware__paired_header).withAccent(accentColor = Colors.Blue),
+        text = stringResource(R.string.hardware__paired_text),
+        screenTag = "HardwareWalletPairedScreen",
         onLabelChange = onLabelChange,
+        onPassphrase = onPassphrase,
         onFinish = onFinish,
         modifier = modifier
     )
 }
 
+/**
+ * Paired step shared by the standard wallet and the passphrase wallet found afterwards: both
+ * confirm the watched balance and its Bitkit-side label, and both can add another passphrase
+ * wallet from the same device before finishing.
+ */
 @Composable
-private fun Content(
+internal fun HwPairedContent(
     uiState: HwConnectUiState,
+    header: AnnotatedString,
+    text: String,
+    screenTag: String,
     modifier: Modifier = Modifier,
     onLabelChange: (String) -> Unit = {},
+    onPassphrase: () -> Unit = {},
     onFinish: () -> Unit = {},
 ) {
+    val hazeState = rememberHazeState()
+
     Column(
         modifier = modifier
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
             .imePadding()
-            .testTag("HardwareWalletPairedScreen")
+            .testTag(screenTag)
     ) {
         SheetTopBar(titleText = stringResource(R.string.hardware__paired_title))
         Column(
@@ -76,9 +98,9 @@ private fun Content(
                 .fillMaxWidth()
                 .padding(horizontal = 32.dp)
         ) {
-            Display(stringResource(R.string.hardware__paired_header).withAccent(accentColor = Colors.Blue))
+            Display(header)
             VerticalSpacer(8.dp)
-            BodyM(stringResource(R.string.hardware__paired_text), color = Colors.White64)
+            BodyM(text, color = Colors.White64)
             VerticalSpacer(32.dp)
             Row(modifier = Modifier.fillMaxWidth()) {
                 WalletBalanceView(
@@ -99,6 +121,8 @@ private fun Content(
                     .testTag("HardwareWalletLabelInput")
             )
         }
+        // The buttons sit over the coins, so the illustration is the haze source and must stay a
+        // sibling of the blurred button: haze cannot blur an ancestor.
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
@@ -112,16 +136,47 @@ private fun Content(
                     .align(Alignment.BottomCenter)
                     .width(maxWidth * HW_ILLUSTRATION_SIZE_RATIO)
                     .aspectRatio(COINS_ASPECT_RATIO)
+                    .hazeSource(hazeState)
+            )
+            HwPairedButtons(
+                hazeState = hazeState,
+                onPassphrase = onPassphrase,
+                onFinish = onFinish,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(horizontal = 32.dp)
             )
         }
+        VerticalSpacer(16.dp)
+    }
+}
+
+@Composable
+private fun HwPairedButtons(
+    hazeState: HazeState,
+    modifier: Modifier = Modifier,
+    onPassphrase: () -> Unit = {},
+    onFinish: () -> Unit = {},
+) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        SecondaryButton(
+            text = stringResource(R.string.hardware__passphrase_button),
+            onClick = onPassphrase,
+            hazeState = hazeState,
+            modifier = Modifier
+                .weight(1f)
+                .testTag("HardwareWalletPairedPassphrase")
+        )
         PrimaryButton(
             text = stringResource(R.string.hardware__paired_finish),
             onClick = onFinish,
             modifier = Modifier
-                .padding(horizontal = 32.dp)
+                .weight(1f)
                 .testTag("HardwareWalletPairedFinish")
         )
-        VerticalSpacer(16.dp)
     }
 }
 
@@ -130,12 +185,25 @@ private fun Content(
 private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            HwPairedSheet(
                 uiState = HwConnectUiState(
                     deviceName = "Trezor Safe 3",
                     balanceSats = 10_562_411uL,
                     labelInput = "Trezor Safe 3",
                 ),
+                modifier = Modifier.sheetHeight()
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewEmpty() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            HwPairedSheet(
+                uiState = HwConnectUiState(deviceName = "Trezor Safe 3"),
                 modifier = Modifier.sheetHeight()
             )
         }

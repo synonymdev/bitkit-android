@@ -56,6 +56,7 @@ import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toTrezorCoinType
+import to.bitkit.services.TrezorWalletMode
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -183,6 +184,27 @@ class HwWalletRepo @Inject constructor(
         trezorRepo.resetWalletSelection()
         return trezorRepo.connect(deviceId)
     }
+
+    /**
+     * Opens the passphrase (hidden) wallet of an already paired device and watches it as its own
+     * identity, returning its wallet id. The passphrase is bound to a fresh Trezor session and is
+     * never persisted; re-entering it is what makes the wallet reachable again.
+     *
+     * Re-entering a passphrase that is already watched updates that entry rather than adding a
+     * second one, and reports [HwPassphraseAlreadyAddedError] so the UI can say so.
+     */
+    suspend fun connectWithPassphrase(deviceId: String, passphrase: String): Result<String> =
+        withContext(ioDispatcher) {
+            runSuspendCatching {
+                val watchedWalletIds = hwWalletStore.loadKnownDevices().mapNotNull { it.resolvedWalletId() }.toSet()
+                trezorRepo.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, passphrase).getOrThrow()
+                val walletId = requireNotNull(trezorRepo.state.value.connectedWalletId()) {
+                    "Could not read the accounts of the passphrase wallet from device '$deviceId'"
+                }
+                if (walletId in watchedWalletIds) throw HwPassphraseAlreadyAddedError()
+                walletId
+            }
+        }
 
     /** Reconnects a known paired wallet so its session is live for on-device signing. */
     suspend fun reconnect(
@@ -734,6 +756,9 @@ fun resolveHwWalletName(label: String?, model: String?, customLabel: String? = n
 
 private val KnownDevice.displayName: String
     get() = resolveHwWalletName(label = label, model = model, customLabel = customLabel)
+
+/** The entered passphrase resolves to a wallet Bitkit already watches. */
+class HwPassphraseAlreadyAddedError : AppError("Passphrase wallet already added")
 
 private data class HwWatcherData(
     val walletId: String,

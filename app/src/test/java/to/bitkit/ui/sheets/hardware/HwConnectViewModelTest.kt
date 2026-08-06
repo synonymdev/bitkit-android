@@ -11,6 +11,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
@@ -21,9 +22,11 @@ import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.models.HwWallet
 import to.bitkit.models.TransportType
+import to.bitkit.repositories.HwPassphraseAlreadyAddedError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.TrezorState
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -48,6 +51,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.hardware__connect_error)).thenReturn(CONNECT_ERROR)
         whenever(context.getString(R.string.hardware__search_error)).thenReturn(SEARCH_ERROR)
         whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
+        whenever(context.getString(R.string.common__error)).thenReturn(ERROR_TITLE)
         sut = HwConnectViewModel(
             hwWalletRepo = hwWalletRepo,
             context = context,
@@ -281,6 +285,84 @@ class HwConnectViewModelTest : BaseUnitTest() {
         verify(hwWalletRepo).setDeviceLabel("wallet-dev1", "My Cold Wallet")
     }
 
+    @Test
+    fun `onPassphraseSubmit watches the hidden wallet and advances to its paired step`() = test {
+        givenPairedDevice()
+        whenever(hwWalletRepo.connectWithPassphrase("dev1", "secret"))
+            .thenReturn(Result.success("hidden-wallet"))
+        sut.onPassphraseClick()
+        sut.onPassphraseChange("secret")
+
+        sut.effects.test {
+            sut.onPassphraseSubmit()
+            assertEquals(HwConnectEffect.NavigateToPassphrasePaired, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        assertEquals("hidden-wallet", sut.uiState.value.pairedWalletId)
+        assertEquals("", sut.uiState.value.passphraseInput)
+        assertFalse(sut.uiState.value.isSubmittingPassphrase)
+    }
+
+    @Test
+    fun `paired step follows the identity being paired on a device holding several wallets`() = test {
+        givenPairedDevice()
+        whenever(hwWalletRepo.connectWithPassphrase("dev1", "secret"))
+            .thenReturn(Result.success("hidden-wallet"))
+        sut.onPassphraseClick()
+        sut.onPassphraseChange("secret")
+        sut.onPassphraseSubmit()
+        runCurrent()
+
+        wallets.value = persistentListOf(
+            hwWallet("dev1", name = "Trezor Safe 3", balance = 10uL),
+            hwWallet("dev1", name = "Hidden Safe 3", balance = 40uL, walletId = "hidden-wallet"),
+        )
+
+        assertEquals("Hidden Safe 3", sut.uiState.value.deviceName)
+        assertEquals(40uL, sut.uiState.value.balanceSats)
+        assertEquals("Hidden Safe 3", sut.uiState.value.labelInput)
+    }
+
+    @Test
+    fun `onPassphraseSubmit keeps the passphrase out of state when the wallet is already watched`() = test {
+        givenPairedDevice()
+        whenever(context.getString(R.string.hardware__passphrase_duplicate)).thenReturn(DUPLICATE_ERROR)
+        whenever(hwWalletRepo.connectWithPassphrase("dev1", "secret"))
+            .thenReturn(Result.failure(HwPassphraseAlreadyAddedError()))
+        sut.onPassphraseClick()
+        sut.onPassphraseChange("secret")
+
+        ToastEventBus.events.test {
+            sut.onPassphraseSubmit()
+            runCurrent()
+            assertEquals(DUPLICATE_ERROR, awaitItem().description)
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        assertEquals("", sut.uiState.value.passphraseInput)
+        assertEquals(null, sut.uiState.value.pairedWalletId)
+    }
+
+    @Test
+    fun `resetState drops the entered passphrase`() = test {
+        givenPairedDevice()
+        sut.onPassphraseClick()
+        sut.onPassphraseChange("secret")
+
+        sut.resetState()
+
+        assertEquals("", sut.uiState.value.passphraseInput)
+    }
+
+    private suspend fun TestScope.givenPairedDevice() {
+        givenDeviceFound()
+        val connectedFeatures = features(model = "Safe 3")
+        whenever(hwWalletRepo.connect("dev1")).thenReturn(Result.success(connectedFeatures))
+        sut.onConnectClick()
+        runCurrent()
+    }
+
     private suspend fun givenDeviceFound() {
         deviceState.value = TrezorState(nearbyDevices = persistentListOf(deviceInfo("dev1", model = "Safe 3")))
         whenever(hwWalletRepo.scan(includeBluetooth = true)).thenReturn(Result.success(emptyList()))
@@ -327,6 +409,8 @@ class HwConnectViewModelTest : BaseUnitTest() {
 
     private companion object {
         const val CONNECT_ERROR = "Could not connect"
+        const val DUPLICATE_ERROR = "Already watching this passphrase wallet"
+        const val ERROR_TITLE = "Error"
         const val SEARCH_ERROR = "Could not search"
         const val DEVICE_BUSY_MESSAGE = "Your Trezor is busy. Unlock it on the device, then try again."
     }

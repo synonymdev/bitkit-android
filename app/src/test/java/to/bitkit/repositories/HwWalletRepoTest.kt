@@ -42,6 +42,7 @@ import to.bitkit.models.TransportType
 import to.bitkit.models.WalletScope
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toTrezorCoinType
+import to.bitkit.services.TrezorWalletMode
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
@@ -936,6 +937,37 @@ class HwWalletRepoTest : BaseUnitTest() {
         verify(trezorRepo, never()).stopWatcher("$HARDWARE_WALLET_ID|nativeSegwit")
         verify(activityRepo).deleteForWallet(HIDDEN_WALLET_ID)
         verify(activityRepo, never()).deleteForWallet(HARDWARE_WALLET_ID)
+    }
+
+    @Test
+    fun `connectWithPassphrase opens the hidden wallet and returns its identity`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        whenever { trezorRepo.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, "secret") }
+            .thenReturn(Result.success(mock()))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HIDDEN_WALLET_ID),
+        )
+        val sut = createRepo()
+
+        val result = sut.connectWithPassphrase(deviceId = "dev1", passphrase = "secret")
+
+        assertEquals(HIDDEN_WALLET_ID, result.getOrThrow())
+        verify(trezorRepo).setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, "secret")
+    }
+
+    @Test
+    fun `connectWithPassphrase reports a passphrase wallet that is already watched`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
+        whenever { trezorRepo.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, "secret") }
+            .thenReturn(Result.success(mock()))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HIDDEN_WALLET_ID),
+        )
+        val sut = createRepo()
+
+        val result = sut.connectWithPassphrase(deviceId = "dev1", passphrase = "secret")
+
+        assertTrue(result.exceptionOrNull() is HwPassphraseAlreadyAddedError)
     }
 
     @Test

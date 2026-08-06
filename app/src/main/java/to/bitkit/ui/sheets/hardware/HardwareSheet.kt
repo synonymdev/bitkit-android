@@ -179,6 +179,26 @@ fun HardwareSheet(
                 HwPairedSheet(
                     uiState = uiState,
                     onLabelChange = viewModel::onLabelChange,
+                    onPassphrase = viewModel::onPassphraseClick,
+                    onFinish = viewModel::onFinishClick,
+                )
+            }
+            composableWithDefaultTransitions<HardwareRoute.Passphrase> {
+                HwPassphraseSheet(
+                    uiState = uiState,
+                    onPassphraseChange = viewModel::onPassphraseChange,
+                    onBack = {
+                        viewModel.onPassphraseBack()
+                        navController.popBackStack()
+                    },
+                    onContinue = viewModel::onPassphraseSubmit,
+                )
+            }
+            composableWithDefaultTransitions<HardwareRoute.PassphrasePaired> {
+                HwPassphrasePairedSheet(
+                    uiState = uiState,
+                    onLabelChange = viewModel::onLabelChange,
+                    onPassphrase = viewModel::onPassphraseClick,
                     onFinish = viewModel::onFinishClick,
                 )
             }
@@ -233,6 +253,9 @@ private fun ConnectEffectHandler(
                     HardwareRoute.PairCode(requestId = effect.requestId),
                 )
                 HwConnectEffect.NavigateToPaired -> navController.navigateTo(HardwareRoute.Paired)
+                HwConnectEffect.NavigateToPassphrase -> navController.navigateTo(HardwareRoute.Passphrase)
+                HwConnectEffect.NavigateToPassphrasePaired ->
+                    navController.navigateTo(HardwareRoute.PassphrasePaired)
                 HwConnectEffect.Dismiss -> appViewModel.hideSheet()
                 HwConnectEffect.Finish -> {
                     appViewModel.hideSheet()
@@ -262,6 +285,12 @@ sealed interface HardwareRoute {
 
     @Serializable
     data object Paired : InternalOnly
+
+    @Serializable
+    data object Passphrase : InternalOnly
+
+    @Serializable
+    data object PassphrasePaired : InternalOnly
 
     @Serializable
     data class PairCode(val requestId: Long) : InternalOnly

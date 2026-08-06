@@ -18,9 +18,12 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.isTrezorDeviceBusy
+import to.bitkit.models.Toast
+import to.bitkit.repositories.HwPassphraseAlreadyAddedError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
 import to.bitkit.repositories.resolveHwWalletName
+import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.TrezorErrorPresenter
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
@@ -31,7 +34,11 @@ import kotlin.time.Duration.Companion.seconds
  * [HwConnectEffect]s that the sheet collects to navigate its inner [HardwareRoute] graph. The
  * one-time pairing code, when the device requests it during connect, is surfaced inline by
  * navigating to [HardwareRoute.PairCode].
+ *
+ * From the paired step the user can add the passphrase (hidden) wallets of the same device, each
+ * becoming its own watched identity with its own label and balance.
  */
+@Suppress("TooManyFunctions")
 @HiltViewModel
 class HwConnectViewModel @Inject constructor(
     private val hwWalletRepo: HwWalletRepo,
@@ -155,6 +162,64 @@ class HwConnectViewModel @Inject constructor(
 
     fun onLabelChange(value: String) = _uiState.update { it.copy(labelInput = value.take(DEVICE_LABEL_MAX_LENGTH)) }
 
+    fun onPassphraseClick() {
+        _uiState.update { it.copy(passphraseInput = "", errorMessage = null) }
+        setEffect(HwConnectEffect.NavigateToPassphrase)
+    }
+
+    fun onPassphraseChange(value: String) = _uiState.update { it.copy(passphraseInput = value) }
+
+    /** Leaves the passphrase step without keeping what was typed. */
+    fun onPassphraseBack() = _uiState.update { it.copy(passphraseInput = "") }
+
+    /**
+     * Opens the hidden wallet the entered passphrase unlocks and watches it as its own identity.
+     * The passphrase is dropped from state as soon as the device answers: it lives in the Trezor
+     * session, never in Bitkit.
+     */
+    fun onPassphraseSubmit() {
+        val state = _uiState.value
+        val deviceId = state.pairedDeviceId ?: return
+        if (state.passphraseInput.isEmpty() || connectJob?.isActive == true) return
+
+        connectJob = viewModelScope.launch {
+            _uiState.update { it.copy(isSubmittingPassphrase = true, errorMessage = null) }
+            hwWalletRepo.connectWithPassphrase(deviceId = deviceId, passphrase = state.passphraseInput)
+                .onSuccess { onPassphraseWalletAdded(it) }
+                .onFailure { onPassphraseFailed(it) }
+            connectJob = null
+        }
+    }
+
+    private fun onPassphraseWalletAdded(walletId: String) {
+        // The new identity has its own name and balance, so let the wallet observer prefill again.
+        labelInitialized = false
+        _uiState.update {
+            it.copy(
+                isSubmittingPassphrase = false,
+                passphraseInput = "",
+                pairedWalletId = walletId,
+                balanceSats = 0uL,
+                labelInput = "",
+            )
+        }
+        setEffect(HwConnectEffect.NavigateToPassphrasePaired)
+    }
+
+    private suspend fun onPassphraseFailed(error: Throwable) {
+        _uiState.update { it.copy(isSubmittingPassphrase = false, passphraseInput = "") }
+        val description = when (error) {
+            is HwPassphraseAlreadyAddedError -> context.getString(R.string.hardware__passphrase_duplicate)
+            else if error.isTrezorDeviceBusy() -> TrezorErrorPresenter.userMessage(context, error)
+            else -> context.getString(R.string.hardware__passphrase_error)
+        }
+        ToastEventBus.send(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.common__error),
+            description = description,
+        )
+    }
+
     fun onFinishClick() {
         val walletId = _uiState.value.pairedWalletId
         if (walletId == null) {
@@ -239,8 +304,12 @@ class HwConnectViewModel @Inject constructor(
     private fun observeConnectedWallet() {
         viewModelScope.launch {
             hwWalletRepo.wallets.collect { wallets ->
-                val deviceId = _uiState.value.pairedDeviceId ?: return@collect
-                val wallet = wallets.firstOrNull { deviceId in it.deviceIds } ?: return@collect
+                val state = _uiState.value
+                val deviceId = state.pairedDeviceId ?: return@collect
+                // A device can hold several passphrase wallets, so prefer the identity being paired.
+                val wallet = state.pairedWalletId?.let { id -> wallets.firstOrNull { it.id == id } }
+                    ?: wallets.firstOrNull { deviceId in it.deviceIds }
+                    ?: return@collect
                 _uiState.update {
                     it.copy(
                         pairedWalletId = wallet.id,
@@ -265,6 +334,9 @@ data class HwConnectUiState(
     val pairedDeviceId: String? = null,
     /** Identity paired on [pairedDeviceId]; resolved once its watch-only wallet is known. */
     val pairedWalletId: String? = null,
+    /** Held only until the device answers; the passphrase is never persisted or logged. */
+    val passphraseInput: String = "",
+    val isSubmittingPassphrase: Boolean = false,
     val deviceName: String = "",
     val deviceModel: String = "",
     val balanceSats: ULong = 0uL,
@@ -277,6 +349,8 @@ sealed interface HwConnectEffect {
     data class NavigateToFound(val deviceId: String, val deviceModel: String) : HwConnectEffect
     data class NavigateToPairCode(val requestId: Long) : HwConnectEffect
     data object NavigateToPaired : HwConnectEffect
+    data object NavigateToPassphrase : HwConnectEffect
+    data object NavigateToPassphrasePaired : HwConnectEffect
     data object Dismiss : HwConnectEffect
     data object Finish : HwConnectEffect
 }

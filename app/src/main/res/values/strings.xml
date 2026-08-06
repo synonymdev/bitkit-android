@@ -192,6 +192,14 @@
     <string name="hardware__paired_title">Device Connected</string>
     <string name="hardware__pairing_text">Enter the 6-digit code shown on your hardware device.</string>
     <string name="hardware__pairing_title">Pair Device</string>
+    <string name="hardware__passphrase_button">Passphrase</string>
+    <string name="hardware__passphrase_duplicate">You are already watching this passphrase wallet.</string>
+    <string name="hardware__passphrase_error">Could not open the passphrase wallet. Make sure your hardware device is unlocked and try again.</string>
+    <string name="hardware__passphrase_header">Enter &lt;accent&gt;passphrase&lt;/accent&gt;</string>
+    <string name="hardware__passphrase_paired_header">Passphrase &lt;accent&gt;funds found&lt;/accent&gt;</string>
+    <string name="hardware__passphrase_paired_text">Bitkit found funds behind a passphrase, and added these to your wallet balance.</string>
+    <string name="hardware__passphrase_text">If you have funds protected by a passphrase, enter it below to add these funds to your wallet balance as well.</string>
+    <string name="hardware__passphrase_title">Passphrase</string>
     <string name="hardware__remove_button">Remove %1$s</string>
     <string name="hardware__remove_dialog_text">Don\'t worry, your funds are safe and your coins won\'t be deleted. Bitkit will simply stop displaying the amounts in the wallet.</string>
     <string name="hardware__remove_dialog_title">Remove %1$s</string>
