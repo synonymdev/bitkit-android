@@ -196,6 +196,8 @@
     <string name="hardware__passphrase_duplicate">You are already watching this passphrase wallet.</string>
     <string name="hardware__passphrase_error">Could not open the passphrase wallet. Make sure your hardware device is unlocked and try again.</string>
     <string name="hardware__passphrase_header">Enter &lt;accent&gt;passphrase&lt;/accent&gt;</string>
+    <string name="hardware__passphrase_mismatch">That passphrase opens a different wallet. Enter the one you paired this wallet with.</string>
+    <string name="hardware__passphrase_sign_text">Enter the passphrase of this wallet so your hardware device can sign the transfer.</string>
     <string name="hardware__passphrase_paired_header">Passphrase &lt;accent&gt;funds found&lt;/accent&gt;</string>
     <string name="hardware__passphrase_paired_text">Bitkit found funds behind a passphrase, and added these to your wallet balance.</string>
     <string name="hardware__passphrase_text">If you have funds protected by a passphrase, enter it below to add these funds to your wallet balance as well.</string>

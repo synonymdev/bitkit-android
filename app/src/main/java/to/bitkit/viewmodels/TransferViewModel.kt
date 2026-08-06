@@ -60,6 +60,7 @@ import to.bitkit.models.TransferType
 import to.bitkit.models.WalletScope
 import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
@@ -815,6 +816,13 @@ class TransferViewModel @Inject constructor(
 
         activeHwTransferWalletId = walletId
         hwTransferSignJob = viewModelScope.launch {
+            // A hidden wallet whose session is gone can only be reopened with its passphrase, and
+            // the device would otherwise sign from whichever wallet the current session holds.
+            if (hwWalletRepo.needsPassphrase(walletId)) {
+                _spendingUiState.update { it.copy(isHwPassphraseRequired = true) }
+                hwTransferSignJob = null
+                return@launch
+            }
             _spendingUiState.update { it.copy(isSigning = true) }
             try {
                 val address = order.payment?.onchain?.address.orEmpty()
@@ -849,6 +857,45 @@ class TransferViewModel @Inject constructor(
                 hwTransferSignJob = null
             }
         }
+    }
+
+    /**
+     * Reopens the hidden wallet with the entered passphrase and, once its accounts prove it is the
+     * wallet the transfer is for, continues into signing. The passphrase is passed straight through
+     * to the device session; it is never kept in UI state.
+     */
+    fun onHwPassphraseSubmit(order: IBtOrder, walletId: String, passphrase: String) {
+        if (passphrase.isEmpty() || hwTransferSignJob?.isActive == true) return
+
+        hwTransferSignJob = viewModelScope.launch {
+            _spendingUiState.update { it.copy(isVerifyingHwPassphrase = true) }
+            val result = hwWalletRepo.reconnectWithPassphrase(walletId = walletId, passphrase = passphrase)
+            _spendingUiState.update { it.copy(isVerifyingHwPassphrase = false) }
+            hwTransferSignJob = null
+            result
+                .onSuccess {
+                    _spendingUiState.update { it.copy(isHwPassphraseRequired = false) }
+                    onTransferToSpendingHwConfirm(order, walletId)
+                }
+                .onFailure { handleHardwarePassphraseFailure(it, walletId) }
+        }
+    }
+
+    fun onHwPassphraseDismiss() {
+        _spendingUiState.update { it.copy(isHwPassphraseRequired = false) }
+    }
+
+    private suspend fun handleHardwarePassphraseFailure(e: Throwable, walletId: String) {
+        if (e is HwPassphraseMismatchError) {
+            Logger.warn("Rejected wrong passphrase for hardware wallet '$walletId'", context = TAG)
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.common__error),
+                description = context.getString(R.string.hardware__passphrase_mismatch),
+            )
+            return
+        }
+        handleHardwareTransferFailure(e, walletId)
     }
 
     private suspend fun signAndBroadcastHardwareFunding(
@@ -1578,6 +1625,9 @@ data class TransferToSpendingUiState(
     val isLoading: Boolean = false,
     val isSigning: Boolean = false,
     val hasPendingHwBroadcast: Boolean = false,
+    /** The hidden wallet needs its passphrase before the device can sign for it. */
+    val isHwPassphraseRequired: Boolean = false,
+    val isVerifyingHwPassphrase: Boolean = false,
     val hwMiningFeeSats: ULong = 0uL,
     /** Real on-chain mining fee for soft-wallet confirm (iOS transactionFee). */
     val miningFeeSats: ULong = 0uL,

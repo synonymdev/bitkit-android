@@ -222,6 +222,43 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
+    /**
+     * Whether reaching [walletId] needs the passphrase again. The device only holds one hidden
+     * wallet open at a time and forgets the passphrase with the session, so a passphrase wallet
+     * that is not the live session cannot be reconnected — or signed with — without it.
+     */
+    suspend fun needsPassphrase(walletId: String): Boolean = withContext(ioDispatcher) {
+        val devices = devicesForWallet(walletId)
+        devices.any { it.passphraseProtected } && trezorRepo.state.value.connectedWalletId() != walletId
+    }
+
+    /**
+     * Reopens a watched passphrase wallet for signing. A wrong passphrase is not rejected by the
+     * device — it silently derives a different wallet — so the reopened session is only accepted
+     * when its accounts resolve back to [walletId]; anything else is torn down again and reported
+     * as [HwPassphraseMismatchError] rather than signing from the wrong wallet.
+     */
+    suspend fun reconnectWithPassphrase(walletId: String, passphrase: String): Result<Unit> =
+        withContext(ioDispatcher) {
+            runSuspendCatching {
+                val deviceId = transportDeviceId(walletId)
+                val watchedBefore = hwWalletStore.loadKnownDevices().mapNotNull { it.resolvedWalletId() }.toSet()
+                trezorRepo.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, passphrase).getOrThrow()
+                val opened = trezorRepo.state.value.connectedWalletId()
+                if (opened == walletId) return@runSuspendCatching
+
+                Logger.warn("Rejected hardware session for '$walletId': opened wallet '$opened'", context = TAG)
+                // Reading the accounts of the wrong wallet already stored it; a mistyped passphrase
+                // must not leave a stray watch-only wallet behind.
+                if (opened != null && opened !in watchedBefore) {
+                    removeDevice(opened)
+                        .onFailure { Logger.warn("Failed to drop unwatched wallet '$opened'", it, context = TAG) }
+                }
+                trezorRepo.disconnectStaleSession(deviceId)
+                throw HwPassphraseMismatchError()
+            }
+        }
+
     suspend fun isKnownBluetoothDevice(walletId: String): Boolean = withContext(ioDispatcher) {
         val deviceId = transportDeviceIdOrNull(walletId) ?: return@withContext false
         trezorRepo.isKnownBluetoothDevice(deviceId)
@@ -759,6 +796,9 @@ private val KnownDevice.displayName: String
 
 /** The entered passphrase resolves to a wallet Bitkit already watches. */
 class HwPassphraseAlreadyAddedError : AppError("Passphrase wallet already added")
+
+/** The entered passphrase opened a different wallet than the one being signed from. */
+class HwPassphraseMismatchError : AppError("Passphrase opened a different wallet")
 
 private data class HwWatcherData(
     val walletId: String,

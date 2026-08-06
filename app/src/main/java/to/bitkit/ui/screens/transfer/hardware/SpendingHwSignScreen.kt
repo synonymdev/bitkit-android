@@ -76,6 +76,14 @@ fun SpendingHwSignScreen(
         onUseDefaultLspBalanceClick = viewModel::onUseDefaultLspBalanceClick,
         onOpenConnect = { viewModel.onTransferToSpendingHwConfirm(order, walletId) },
     )
+
+    if (state.isHwPassphraseRequired) {
+        HwPassphrasePromptSheet(
+            isVerifying = state.isVerifyingHwPassphrase,
+            onSubmit = { viewModel.onHwPassphraseSubmit(order, walletId, it) },
+            onDismiss = viewModel::onHwPassphraseDismiss,
+        )
+    }
 }
 
 @Composable

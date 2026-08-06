@@ -67,6 +67,7 @@ import to.bitkit.models.TransportType
 import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
+import to.bitkit.repositories.HwPassphraseMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
@@ -116,6 +117,7 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(feeResponse.serviceFeeSat).thenReturn(SERVICE_FEE)
         whenever(context.getString(any())).thenReturn("")
         whenever(settingsStore.data).thenReturn(MutableStateFlow(SettingsData()))
+        whenever { hwWalletRepo.needsPassphrase(any()) }.thenReturn(false)
         val nodeStatus = mock<NodeStatus>()
         whenever(nodeStatus.isRunning).thenReturn(true)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(nodeStatus = nodeStatus)))
@@ -607,6 +609,85 @@ class TransferViewModelTest : BaseUnitTest() {
             eq(HARDWARE_WALLET_ID),
         )
         verify(hwWalletRepo).ensureConnected(HARDWARE_WALLET_ID)
+    }
+
+    @Test
+    fun `onTransferToSpendingHwConfirm asks for the passphrase when the hidden wallet session is gone`() = test {
+        val order = previewBtOrder()
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(HARDWARE_WALLET_ID, connected = false))))
+        whenever { hwWalletRepo.needsPassphrase(HARDWARE_WALLET_ID) }.thenReturn(true)
+
+        sut.onTransferToSpendingHwConfirm(order, HARDWARE_WALLET_ID)
+        advanceUntilIdle()
+
+        assertTrue(sut.spendingUiState.value.isHwPassphraseRequired)
+        assertFalse(sut.spendingUiState.value.isSigning)
+        verify(hwWalletRepo, never()).ensureConnected(any())
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+    }
+
+    @Test
+    fun `onHwPassphraseSubmit signs once the reopened wallet matches`() = test {
+        val order = previewBtOrder()
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FEE_RATE,
+        )
+        val signed = signedFunding(funding)
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(HARDWARE_WALLET_ID, connected = true))))
+        whenever { hwWalletRepo.needsPassphrase(HARDWARE_WALLET_ID) }.thenReturn(true, false)
+        whenever { hwWalletRepo.reconnectWithPassphrase(HARDWARE_WALLET_ID, "secret") }
+            .thenReturn(Result.success(Unit))
+        whenever(hwWalletRepo.ensureConnected(HARDWARE_WALLET_ID))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+        whenever(hwWalletRepo.signFunding(any(), any())).thenReturn(Result.success(signed))
+        whenever(hwWalletRepo.broadcastFunding(signed)).thenReturn(
+            Result.success(
+                HwFundingBroadcastResult(
+                    txId = TXID,
+                    miningFeeSats = MINING_FEE,
+                    feeRate = FEE_RATE,
+                    totalSpent = order.feeSat + MINING_FEE,
+                )
+            )
+        )
+        sut.onTransferToSpendingHwConfirm(order, HARDWARE_WALLET_ID)
+        advanceUntilIdle()
+
+        sut.onHwPassphraseSubmit(order, HARDWARE_WALLET_ID, "secret")
+        advanceUntilIdle()
+
+        assertFalse(sut.spendingUiState.value.isHwPassphraseRequired)
+        verify(hwWalletRepo).reconnectWithPassphrase(HARDWARE_WALLET_ID, "secret")
+        verify(hwWalletRepo).signFunding(eq(HARDWARE_WALLET_ID), eq(funding))
+    }
+
+    @Test
+    fun `onHwPassphraseSubmit does not sign when the passphrase opens another wallet`() = test {
+        val order = previewBtOrder()
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(HARDWARE_WALLET_ID, connected = false))))
+        whenever { hwWalletRepo.needsPassphrase(HARDWARE_WALLET_ID) }.thenReturn(true)
+        whenever { hwWalletRepo.reconnectWithPassphrase(HARDWARE_WALLET_ID, "wrong") }
+            .thenReturn(Result.failure(HwPassphraseMismatchError()))
+        whenever(context.getString(R.string.hardware__passphrase_mismatch)).thenReturn(PASSPHRASE_MISMATCH)
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.onHwPassphraseSubmit(order, HARDWARE_WALLET_ID, "wrong")
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(PASSPHRASE_MISMATCH, toasts.single().description)
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+        verify(hwWalletRepo, never()).broadcastFunding(any())
     }
 
     @Test
@@ -1581,6 +1662,7 @@ class TransferViewModelTest : BaseUnitTest() {
         const val CONNECT_TITLE = "Connect Device"
         const val CONNECT_DESCRIPTION = "Check the hardware device and try again."
         const val HARDWARE_WALLET_ID = "hardware-wallet"
+        const val PASSPHRASE_MISMATCH = "That passphrase opens a different wallet."
         const val RECONNECT_TITLE = "Reconnect Hardware Device"
         const val RECONNECT_DESCRIPTION = "Please reconnect your hardware device."
         const val XPUB = "zpub-test"

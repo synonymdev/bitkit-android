@@ -46,6 +46,7 @@ import to.bitkit.services.TrezorWalletMode
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -968,6 +969,71 @@ class HwWalletRepoTest : BaseUnitTest() {
         val result = sut.connectWithPassphrase(deviceId = "dev1", passphrase = "secret")
 
         assertTrue(result.exceptionOrNull() is HwPassphraseAlreadyAddedError)
+    }
+
+    @Test
+    fun `needsPassphrase only while the hidden wallet is not the live session`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
+        val sut = createRepo()
+
+        assertTrue(sut.needsPassphrase(HIDDEN_WALLET_ID))
+        assertFalse(sut.needsPassphrase(HARDWARE_WALLET_ID))
+
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HIDDEN_WALLET_ID),
+        )
+
+        assertFalse(sut.needsPassphrase(HIDDEN_WALLET_ID))
+    }
+
+    @Test
+    fun `reconnectWithPassphrase accepts a session that reopens the same wallet`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
+        whenever { trezorRepo.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, "secret") }
+            .thenAnswer {
+                trezorState.value = TrezorState(
+                    connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HIDDEN_WALLET_ID),
+                )
+                Result.success(mock<TrezorFeatures>())
+            }
+        val sut = createRepo()
+
+        val result = sut.reconnectWithPassphrase(HIDDEN_WALLET_ID, "secret")
+
+        assertTrue(result.isSuccess)
+        verify(trezorRepo, never()).disconnectStaleSession(any())
+    }
+
+    @Test
+    fun `reconnectWithPassphrase drops the wallet a wrong passphrase opened and refuses to sign`() = test {
+        val strayWallet = device.copy(
+            xpubs = mapOf("nativeSegwit" to "zpubStray"),
+            walletId = "stray-wallet",
+            passphraseProtected = true,
+        )
+        var stored = listOf(device, hiddenWallet)
+        whenever { hwWalletStore.loadKnownDevices() }.thenAnswer { stored }
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenAnswer {
+            stored = stored.filterNot { it.walletId == "stray-wallet" }
+            Result.success(Unit)
+        }
+        // A wrong passphrase derives another wallet, which reading its accounts already stored.
+        whenever { trezorRepo.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, "wrong") }
+            .thenAnswer {
+                stored = stored + strayWallet
+                trezorState.value = TrezorState(
+                    connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = "stray-wallet"),
+                )
+                Result.success(mock<TrezorFeatures>())
+            }
+        val sut = createRepo()
+
+        val result = sut.reconnectWithPassphrase(HIDDEN_WALLET_ID, "wrong")
+
+        assertTrue(result.exceptionOrNull() is HwPassphraseMismatchError)
+        verify(trezorRepo).forgetDevice("dev1", "zpubStray")
+        verify(trezorRepo).disconnectStaleSession("dev1")
     }
 
     @Test
