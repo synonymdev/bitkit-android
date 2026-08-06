@@ -56,6 +56,7 @@ class RefreshContactPaykitReceiversUseCaseTest : BaseUnitTest() {
         inOrder(pubkyRepo, privatePaykitRepo).apply {
             verify(pubkyRepo).refreshContactReceiverPaths(contactKeys.last())
             verify(privatePaykitRepo).refreshSavedContactEndpoints(contactKeys.last(), contactKeys)
+            verify(privatePaykitRepo).startInitialLinkBurst(contactKeys, "contact receiver refresh")
         }
     }
 
@@ -68,5 +69,6 @@ class RefreshContactPaykitReceiversUseCaseTest : BaseUnitTest() {
 
         assertEquals(error, result.exceptionOrNull())
         verify(privatePaykitRepo, never()).refreshSavedContactEndpoints(contactKeys.last(), contactKeys)
+        verify(privatePaykitRepo, never()).startInitialLinkBurst(contactKeys, "contact receiver refresh")
     }
 }

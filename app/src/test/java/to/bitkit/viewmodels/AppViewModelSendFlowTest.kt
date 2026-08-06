@@ -365,13 +365,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `payment requests refresh periodically only while polling is active`() = test {
+    fun `payment requests refresh immediately and periodically only while polling is active`() = test {
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
         runCurrent()
 
         sut.startPaykitPaymentRequestPolling()
+        runCurrent()
+
+        verify(paykitPaymentRequestRepo).refresh()
+        clearInvocations(paykitPaymentRequestRepo)
+
         advanceTimeBy(30.seconds.inWholeMilliseconds)
         runCurrent()
 

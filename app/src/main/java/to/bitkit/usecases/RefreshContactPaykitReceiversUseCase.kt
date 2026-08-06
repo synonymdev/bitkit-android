@@ -24,6 +24,7 @@ class RefreshContactPaykitReceiversUseCase @Inject constructor(
             pubkyRepo.refreshContactReceiverPaths(publicKey).getOrThrow()
             val savedPublicKeys = (pubkyRepo.contacts.value.map { it.publicKey } + publicKey).distinct()
             privatePaykitRepo.refreshSavedContactEndpoints(publicKey, savedPublicKeys).getOrThrow()
+            privatePaykitRepo.startInitialLinkBurst(savedPublicKeys, "contact receiver refresh")
         }.onFailure {
             Logger.warn(
                 "Failed to refresh Paykit receivers for '${PubkyPublicKeyFormat.redacted(publicKey)}'",

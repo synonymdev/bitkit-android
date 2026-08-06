@@ -304,6 +304,7 @@ class AppViewModel @Inject constructor(
     private var isPresentingPaymentRequest = false
     private var isSubmittingPaymentRequest = false
     private var paykitPaymentRequestPollingJob: Job? = null
+    private var initialPaykitPaymentRequestPollingJob: Job? = null
     private val paymentRequestPresentationRetryAttempts = mutableMapOf<PaykitPaymentRequestId, Int>()
     private val paymentRequestPresentationRetryJobs = mutableMapOf<PaykitPaymentRequestId, Job>()
     private val timedSheetManager = timedSheetManagerProvider(viewModelScope).apply {
@@ -433,6 +434,7 @@ class AppViewModel @Inject constructor(
         observePublicPaykitInvoiceExpiry()
         observePrivatePaykitContacts()
         observePaykitPaymentRequestConnectivity()
+        observeInitialPaykitLinkBursts()
         observeIncomingPaykitPaymentRequests()
         observeSendEvents()
         viewModelScope.launch {
@@ -596,6 +598,7 @@ class AppViewModel @Inject constructor(
                         .onFailure {
                             Logger.warn("Failed to prune private Paykit contact state", it, context = TAG)
                         }
+                    privatePaykitRepo.startInitialLinkBurst(state.contactKeys, "contact sync")
                     refreshIncomingPaykitPaymentRequests()
                     lastPrivatePaykitContactKeys = state.contactKeys
                 }
@@ -617,6 +620,7 @@ class AppViewModel @Inject constructor(
                 Logger.warn("Failed to reconcile private Paykit receive indexes for '$reason'", it, context = TAG)
             }
         privatePaykitRepo.refreshKnownSavedContactEndpoints(reason, forceRefreshLightning = forceRefreshLightning)
+        privatePaykitRepo.startInitialLinkBurst(contactKeys, reason)
         refreshIncomingPaykitPaymentRequests()
     }
 
@@ -625,7 +629,13 @@ class AppViewModel @Inject constructor(
             isOnline
                 .drop(1)
                 .filter { it == ConnectivityState.CONNECTED }
-                .collect { refreshIncomingPaykitPaymentRequests() }
+                .collect { refreshPrivatePaykitEndpointsIfEnabled("network restored") }
+        }
+    }
+
+    private fun observeInitialPaykitLinkBursts() {
+        viewModelScope.launch {
+            PrivatePaykitRepo.initialLinkBurstStarted.collect { startInitialPaykitPaymentRequestPolling() }
         }
     }
 
@@ -648,6 +658,7 @@ class AppViewModel @Inject constructor(
             var refreshIntervalIndex = 0
             while (true) {
                 delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS[refreshIntervalIndex])
+                privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
                 refreshIntervalIndex = if (refreshIncomingPaykitPaymentRequests()) {
                     0
                 } else {
@@ -655,14 +666,29 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+        startInitialPaykitPaymentRequestPolling()
     }
 
     fun stopPaykitPaymentRequestPolling() {
         paykitPaymentRequestPollingJob?.cancel()
         paykitPaymentRequestPollingJob = null
+        initialPaykitPaymentRequestPollingJob?.cancel()
+        initialPaykitPaymentRequestPollingJob = null
         paymentRequestPresentationRetryJobs.values.forEach { it.cancel() }
         paymentRequestPresentationRetryJobs.clear()
         paymentRequestPresentationRetryAttempts.clear()
+    }
+
+    private fun startInitialPaykitPaymentRequestPolling() {
+        if (paykitPaymentRequestPollingJob?.isActive != true) return
+        initialPaykitPaymentRequestPollingJob?.cancel()
+        initialPaykitPaymentRequestPollingJob = viewModelScope.launch {
+            refreshIncomingPaykitPaymentRequests()
+            INITIAL_PAYKIT_SYNC_RETRY_DELAYS.forEach {
+                delay(it)
+                refreshIncomingPaykitPaymentRequests()
+            }
+        }
     }
 
     private fun observeIncomingPaykitPaymentRequests() {
@@ -3862,6 +3888,7 @@ class AppViewModel @Inject constructor(
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
         private const val PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS = 5_000L
         private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS = listOf(30.seconds, 60.seconds, 120.seconds)
+        private val INITIAL_PAYKIT_SYNC_RETRY_DELAYS = List(14) { 2.seconds }
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS = listOf(
             30.seconds,
             60.seconds,
