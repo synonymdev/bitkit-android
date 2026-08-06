@@ -286,6 +286,43 @@ class HwConnectViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `offers an already paired device when discovery finds nothing new`() = test {
+        // Discovery skips known devices, so a paired Trezor only reaches the paired step — where
+        // its passphrase wallets are added — through this fallback.
+        val paired = deviceInfo("dev1", model = "Safe 3")
+        deviceState.value = TrezorState(nearbyDevices = persistentListOf())
+        whenever(hwWalletRepo.scan(includeBluetooth = true)).thenReturn(Result.success(listOf(paired)))
+        whenever { hwWalletRepo.hasKnownDevice("dev1") }.thenReturn(true)
+
+        sut.effects.test {
+            sut.onIntroContinue()
+            assertEquals(HwConnectEffect.NavigateToSearching, awaitItem())
+            assertEquals(HwConnectEffect.NavigateToFound("dev1", "Trezor Safe 3"), awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        assertEquals("dev1", sut.uiState.value.foundDeviceId)
+    }
+
+    @Test
+    fun `keeps searching when the only device found is neither new nor paired`() = test {
+        deviceState.value = TrezorState(nearbyDevices = persistentListOf())
+        whenever(hwWalletRepo.scan(includeBluetooth = true))
+            .thenReturn(Result.success(listOf(deviceInfo("other", model = "Safe 3"))))
+        whenever { hwWalletRepo.hasKnownDevice("other") }.thenReturn(false)
+
+        sut.effects.test {
+            sut.onIntroContinue()
+            assertEquals(HwConnectEffect.NavigateToSearching, awaitItem())
+            expectNoEvents()
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        assertTrue(sut.uiState.value.isSearching)
+        sut.resetState()
+    }
+
+    @Test
     fun `onPassphraseSubmit watches the hidden wallet and advances to its paired step`() = test {
         givenPairedDevice()
         whenever(hwWalletRepo.connectWithPassphrase("dev1", "secret"))

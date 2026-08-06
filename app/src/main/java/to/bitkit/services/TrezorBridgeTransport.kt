@@ -110,6 +110,9 @@ class TrezorBridgeTransport(
 
         return runCatching {
             post("/release/${encode(session)}")
+            // The released session must not be offered as the previous one on the next acquire:
+            // the bridge holds none afterwards and rejects a stale id with 'wrong previous session'.
+            enumeratedSessions.remove(path)
             Logger.info("Closed Trezor Bridge device '$path'", context = TAG)
             TrezorTransportWriteResult(success = true, error = "", errorCode = null)
         }.getOrElse {

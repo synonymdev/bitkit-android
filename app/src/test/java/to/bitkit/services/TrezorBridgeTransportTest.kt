@@ -91,6 +91,21 @@ class TrezorBridgeTransportTest {
     }
 
     @Test
+    fun `reopening after a release acquires without the stale session`() {
+        // Switching to a passphrase wallet closes and reopens the session; offering the released
+        // session id as the previous one makes the bridge answer 'wrong previous session'.
+        val sut = createSut()
+        val device = sut.enumerateDevices().single()
+        assertTrue(sut.openDevice(device.path).success)
+        assertTrue(sut.closeDevice(device.path).success)
+
+        val reopenResult = sut.openDevice(device.path)
+
+        assertTrue(reopenResult.success, "requests=${server.requests}")
+        assertEquals(2, server.requests.count { it == "POST /acquire/emulator%3A21324/null" })
+    }
+
+    @Test
     fun `call fails when bridge device was not opened`() {
         val sut = createSut()
 

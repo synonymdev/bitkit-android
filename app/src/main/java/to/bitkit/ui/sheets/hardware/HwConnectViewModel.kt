@@ -265,7 +265,10 @@ class HwConnectViewModel @Inject constructor(
                     continue
                 }
                 _uiState.update { it.copy(errorMessage = null) }
+                // Unpaired devices come first; a device that is already paired is only offered so
+                // its passphrase wallets can be added, since discovery skips known devices.
                 val device = hwWalletRepo.deviceState.value.nearbyDevices.firstOrNull()
+                    ?: scanResult.getOrNull().orEmpty().firstOrNull { hwWalletRepo.hasKnownDevice(it.id) }
                 if (device != null) {
                     val deviceModel = resolveHwWalletName(label = null, model = device.model)
                     _uiState.update {
