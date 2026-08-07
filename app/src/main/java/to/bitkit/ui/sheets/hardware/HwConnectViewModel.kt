@@ -315,17 +315,23 @@ class HwConnectViewModel @Inject constructor(
     }
 
     private fun onConnected(deviceId: String, features: TrezorFeatures) {
-        val name = resolveHwWalletName(label = features.label, model = features.model)
+        // The device may hold several identities, so take the one this session opened rather than
+        // any wallet sharing its transport id, and show the name it was already saved under.
+        val walletId = hwWalletRepo.deviceState.value.connectedWalletId()
+        val wallet = walletId?.let { id -> hwWalletRepo.wallets.value.firstOrNull { it.id == id } }
+        val name = wallet?.name ?: resolveHwWalletName(label = features.label, model = features.model)
+        labelInitialized = wallet != null
         _uiState.update {
             it.copy(
                 isConnecting = false,
                 pairedDeviceId = deviceId,
+                pairedWalletId = walletId,
                 deviceName = name,
-                labelInput = if (labelInitialized) it.labelInput else name,
+                balanceSats = wallet?.balanceSats ?: it.balanceSats,
+                labelInput = name,
                 errorMessage = null,
             )
         }
-        labelInitialized = true
         setEffect(HwConnectEffect.NavigateToPaired)
     }
 
@@ -342,8 +348,10 @@ class HwConnectViewModel @Inject constructor(
             hwWalletRepo.wallets.collect { wallets ->
                 val state = _uiState.value
                 val deviceId = state.pairedDeviceId ?: return@collect
-                // A device can hold several passphrase wallets, so prefer the identity being paired.
+                // A device can hold several passphrase wallets, so prefer the identity being
+                // paired, then the one holding the session; sharing a transport id proves nothing.
                 val wallet = state.pairedWalletId?.let { id -> wallets.firstOrNull { it.id == id } }
+                    ?: wallets.firstOrNull { deviceId in it.deviceIds && it.isConnected }
                     ?: wallets.firstOrNull { deviceId in it.deviceIds }
                     ?: return@collect
                 _uiState.update {

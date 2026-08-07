@@ -22,6 +22,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.models.HwWallet
 import to.bitkit.models.TransportType
+import to.bitkit.repositories.ConnectedTrezorDevice
 import to.bitkit.repositories.HwPassphraseAlreadyAddedError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.TrezorState
@@ -359,6 +360,31 @@ class HwConnectViewModelTest : BaseUnitTest() {
         assertEquals("Hidden Safe 3", sut.uiState.value.deviceName)
         assertEquals(40uL, sut.uiState.value.balanceSats)
         assertEquals("Hidden Safe 3", sut.uiState.value.labelInput)
+    }
+
+    @Test
+    fun `reconnecting a device with several wallets shows the session identity and its saved name`() = test {
+        // Both identities share the transport id, so only the live session says which one was
+        // opened, and the paired step must show the name that identity was saved under.
+        val hidden = hwWallet("dev1", name = "Pass A", balance = 10_000uL, walletId = "hidden-wallet")
+        val standard = hwWallet("dev1", name = "No Pass", balance = 27uL, walletId = "standard-wallet")
+        wallets.value = persistentListOf(hidden, standard)
+        deviceState.value = TrezorState(
+            nearbyDevices = persistentListOf(deviceInfo("dev1", model = "Safe 3")),
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = "standard-wallet"),
+        )
+        val connectedFeatures = features(model = "Safe 3")
+        whenever(hwWalletRepo.scan(includeBluetooth = true)).thenReturn(Result.success(emptyList()))
+        whenever(hwWalletRepo.connect("dev1")).thenReturn(Result.success(connectedFeatures))
+        sut.onIntroContinue()
+        runCurrent()
+
+        sut.onConnectClick()
+        runCurrent()
+
+        assertEquals("standard-wallet", sut.uiState.value.pairedWalletId)
+        assertEquals("No Pass", sut.uiState.value.deviceName)
+        assertEquals("No Pass", sut.uiState.value.labelInput)
     }
 
     @Test
