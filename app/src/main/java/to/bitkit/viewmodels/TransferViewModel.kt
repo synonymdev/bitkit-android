@@ -875,6 +875,9 @@ class TransferViewModel @Inject constructor(
             hwTransferSignJob = null
             result
                 .onSuccess {
+                    // The prompt can be swiped away while the device is still reopening the wallet,
+                    // and the confirm below starts a new job that a late cancel would not reach.
+                    if (!_spendingUiState.value.isHwPassphraseRequired) return@launch
                     _spendingUiState.update { it.copy(isHwPassphraseRequired = false) }
                     onTransferToSpendingHwConfirm(order, walletId)
                 }
@@ -882,8 +885,11 @@ class TransferViewModel @Inject constructor(
         }
     }
 
+    /** Backing out of the prompt also drops the reopen it started, so no signature is requested. */
     fun onHwPassphraseDismiss() {
-        _spendingUiState.update { it.copy(isHwPassphraseRequired = false) }
+        hwTransferSignJob?.cancel()
+        hwTransferSignJob = null
+        _spendingUiState.update { it.copy(isHwPassphraseRequired = false, isVerifyingHwPassphrase = false) }
     }
 
     private suspend fun handleHardwarePassphraseFailure(e: Throwable, walletId: String) {

@@ -686,6 +686,28 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `dismissing the passphrase prompt stops the reopen from starting a signature`() = test {
+        // The sheet can be swiped away while the device is still reopening the wallet; the transfer
+        // the user backed out of must not go on to ask the device for a signature.
+        val order = previewBtOrder()
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(HARDWARE_WALLET_ID, connected = false))))
+        whenever { hwWalletRepo.reconnectWithPassphrase(HARDWARE_WALLET_ID, "secret") }
+            .thenReturn(Result.success(Unit))
+        whenever(hwWalletRepo.ensureConnected(HARDWARE_WALLET_ID))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
+
+        sut.onHwPassphraseSubmit(order, HARDWARE_WALLET_ID, "secret")
+        sut.onHwPassphraseDismiss()
+        advanceUntilIdle()
+
+        assertFalse(sut.spendingUiState.value.isHwPassphraseRequired)
+        assertFalse(sut.spendingUiState.value.isVerifyingHwPassphrase)
+        verify(hwWalletRepo, never()).ensureConnected(any())
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+    }
+
+    @Test
     fun `onHwPassphraseSubmit does not sign when the passphrase opens another wallet`() = test {
         val order = previewBtOrder()
         whenever(hwWalletRepo.wallets)
