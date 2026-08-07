@@ -25,4 +25,9 @@ data class KnownDevice(
      * passphrase itself is never persisted.
      */
     val passphraseProtected: Boolean = false,
+    /**
+     * The Trezor's own device id, which it regenerates when wiped. Entries of the same transport
+     * that report a different one belong to a seed the device can no longer sign for.
+     */
+    val trezorDeviceId: String? = null,
 )

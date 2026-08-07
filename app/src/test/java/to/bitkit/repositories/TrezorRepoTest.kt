@@ -147,9 +147,11 @@ class TrezorRepoTest : BaseUnitTest() {
         model: String? = DEVICE_MODEL,
         pinProtection: Boolean? = null,
         unlocked: Boolean? = null,
+        deviceId: String? = null,
     ): TrezorFeatures = mock {
         on { this.label }.thenReturn(label)
         on { this.model }.thenReturn(model)
+        on { this.deviceId }.thenReturn(deviceId)
         on { this.pinProtection }.thenReturn(pinProtection)
         on { this.unlocked }.thenReturn(unlocked)
     }
@@ -194,6 +196,7 @@ class TrezorRepoTest : BaseUnitTest() {
         customLabel: String? = null,
         walletId: String = "wallet-id",
         passphraseProtected: Boolean = false,
+        trezorDeviceId: String? = null,
     ) = KnownDevice(
         id = id,
         name = name,
@@ -206,6 +209,7 @@ class TrezorRepoTest : BaseUnitTest() {
         customLabel = customLabel,
         walletId = walletId,
         passphraseProtected = passphraseProtected,
+        trezorDeviceId = trezorDeviceId,
     )
 
     // region initialize
@@ -790,6 +794,55 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals("Savings", standard.customLabel)
         assertNull(hidden.customLabel)
         assertTrue(hidden.xpubs.values.none { it in standard.xpubs.values })
+    }
+
+    @Test
+    fun `connect supersedes entries of a seed the device no longer carries`() = test {
+        // A wiped and restored device reports a new device id and different keys, so nothing would
+        // ever match those entries again; they would linger as wallets that can never sign.
+        val stale = mockKnownDevice(
+            xpubs = mapOf("nativeSegwit" to "old-seed-xpub"),
+            trezorDeviceId = "old-device-id",
+        )
+        val features = mockFeatures(deviceId = "new-device-id")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(stale))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        val saved = captor.firstValue.single()
+        assertEquals("new-device-id", saved.trezorDeviceId)
+        assertTrue(saved.xpubs.values.none { it == "old-seed-xpub" })
+    }
+
+    @Test
+    fun `connect keeps another identity of the same device id`() = test {
+        // Same device, same seed, different passphrase: both entries must survive.
+        val standard = mockKnownDevice(
+            xpubs = mapOf("nativeSegwit" to "standard-native-xpub"),
+            trezorDeviceId = "same-device-id",
+        )
+        val features = mockFeatures(deviceId = "same-device-id")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(standard))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Hidden("secret"))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertEquals(2, captor.firstValue.size)
+        assertEquals(standard, captor.firstValue.first())
     }
 
     @Test

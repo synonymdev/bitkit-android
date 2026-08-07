@@ -1146,14 +1146,9 @@ class TrezorRepo @Inject constructor(
                 ?: knownDevices.findHardwareWalletId(xpubs, fallback = deviceInfo.id),
             // The selection bound to the session is what derived these xpubs.
             passphraseProtected = previous?.passphraseProtected == true || isPassphraseSession,
+            trezorDeviceId = features.deviceId ?: previous?.trezorDeviceId,
         )
-        // Replace the entry this connect refreshed, plus any entry already holding the resulting
-        // identity: reading a previously rejected address type changes the walletKey, and matching
-        // on the new key alone would leave the stale entry behind as a duplicate wallet.
-        val updated = knownDevices.filterNot {
-            (it.id == known.id && it.walletKey == known.walletKey) ||
-                (previous != null && it.id == previous.id && it.walletKey == previous.walletKey)
-        } + known
+        val updated = knownDevices.filterNot { it.isReplacedBy(known, refreshed = previous) } + known
         saveKnownDevices(updated)
         _state.update { it.copy(knownDevices = updated.toImmutableList()) }
         return known
@@ -1443,6 +1438,20 @@ data class ConnectedTrezorDevice(
 )
 
 private fun KnownDevice.matches(deviceId: String) = id == deviceId || path == deviceId
+
+/**
+ * Whether a stored entry gives way to the one just read. That covers the identity it holds and the
+ * entry this connect refreshed, since reading a previously rejected address type changes the
+ * walletKey and matching on the new key alone would leave the old entry behind as a duplicate.
+ * Wallets of a seed the device no longer carries go too: nothing would ever supersede them by key
+ * material. An unknown device id proves nothing, so those entries are left alone.
+ */
+private fun KnownDevice.isReplacedBy(known: KnownDevice, refreshed: KnownDevice?): Boolean {
+    if (id != known.id) return false
+    if (walletKey == known.walletKey) return true
+    if (refreshed != null && walletKey == refreshed.walletKey) return true
+    return known.trezorDeviceId != null && trezorDeviceId != null && trezorDeviceId != known.trezorDeviceId
+}
 
 private val KnownDevice.walletKey: String
     get() = walletKey(xpubs, id)
