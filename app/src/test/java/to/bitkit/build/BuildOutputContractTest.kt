@@ -79,6 +79,7 @@ class BuildOutputContractTest {
         val fields = listOf(
             "E2E",
             "E2E_BACKEND",
+            "E2E_LOCAL_HOST",
             "E2E_HOMEGATE_URL",
             "TREZOR_BRIDGE",
             "TREZOR_BRIDGE_URL",

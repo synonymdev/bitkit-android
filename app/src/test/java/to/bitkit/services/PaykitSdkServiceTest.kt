@@ -2,6 +2,7 @@ package to.bitkit.services
 
 import com.synonym.paykit.EncryptedLinkRecoveryMarkerPolicy
 import com.synonym.paykit.EndpointManagementScope
+import com.synonym.paykit.PubkyClientConfig
 import com.synonym.paykit.PublicContactSharingPolicy
 import org.junit.Test
 import org.mockito.kotlin.mock
@@ -17,11 +18,38 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PaykitSdkServiceTest {
+    private val basePubkyClientConfig = PubkyClientConfig(
+        requestTimeoutSecs = 30uL,
+        localTestnetHost = null,
+    )
+
     @Test
     fun `config scopes public endpoint sync to Bitkit managed endpoints`() {
         assertEquals(EndpointManagementScope.MANAGED_ONLY, BitkitPaykitSdkConfig.endpointManagementScope)
         assertEquals(PublicContactSharingPolicy.LOCAL_ONLY, BitkitPaykitSdkConfig.publicContactSharing)
         assertEquals(EncryptedLinkRecoveryMarkerPolicy.ENABLED, BitkitPaykitSdkConfig.encryptedLinkRecoveryMarkers)
+    }
+
+    @Test
+    fun `production preserves Pubky client config`() {
+        val config = paykitPubkyClientConfig(
+            isLocalE2eBackend = false,
+            baseConfig = basePubkyClientConfig,
+        )
+
+        assertEquals(basePubkyClientConfig, config)
+    }
+
+    @Test
+    fun `local E2E uses configured host for Pubky testnet`() {
+        val config = paykitPubkyClientConfig(
+            isLocalE2eBackend = true,
+            localTestnetHost = "192.0.2.1",
+            baseConfig = basePubkyClientConfig,
+        )
+
+        assertEquals("192.0.2.1", config.localTestnetHost)
+        assertEquals(basePubkyClientConfig.requestTimeoutSecs, config.requestTimeoutSecs)
     }
 
     @Test

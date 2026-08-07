@@ -36,6 +36,7 @@ import com.synonym.paykit.PrivateReceivingDetailReservationResponseKind
 import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkyAuthRequest
+import com.synonym.paykit.PubkyClientConfig
 import com.synonym.paykit.PubkyLocalSecretKey
 import com.synonym.paykit.PubkyProfile
 import com.synonym.paykit.PubkySessionAccess
@@ -53,6 +54,7 @@ import com.synonym.paykit.SdkStateBlobSnapshot
 import com.synonym.paykit.SdkStateBlobStore
 import com.synonym.paykit.decodeSdkStateBlobSnapshot
 import com.synonym.paykit.defaultConfig
+import com.synonym.paykit.defaultPubkyClientConfig
 import com.synonym.paykit.encodeSdkStateBlobSnapshot
 import com.synonym.paykit.parsePubkyAuthUrl
 import com.synonym.paykit.pubkyPublicKeyFromSecret
@@ -129,6 +131,7 @@ class PaykitSdkService @Inject constructor(
     private val stateStore = PaykitSdkStateBlobStore(keychain)
     private val sessionProvider = PaykitSdkSessionProvider(keychain)
     private val paymentAdapter = PaykitSdkPaymentAdapter()
+    private val pubkyClientConfig by lazy { paykitPubkyClientConfig() }
     private val handleMutex = Mutex()
     private val operationMutex = Mutex()
     private val setupMutex = Mutex()
@@ -186,7 +189,7 @@ class PaykitSdkService @Inject constructor(
     ): PubkySessionBootstrapResult {
         isSetup.await()
         val previousPublicKey = operationMutex.withLock { currentSdkStatePublicKeyLocked() }
-        val result = PubkySessionBootstrap().importSession(
+        val result = bootstrap().importSession(
             sessionSecret = secret,
             localSecretKey = if (includeLocalSecret) sessionProvider.loadLocalSecretKey() else null,
             receiverNoiseSecretKey = sessionProvider.loadOrDeriveReceiverNoiseSecretKey(),
@@ -210,7 +213,7 @@ class PaykitSdkService @Inject constructor(
     ): PubkySessionBootstrapResult {
         isSetup.await()
         val previousPublicKey = operationMutex.withLock { currentSdkStatePublicKeyLocked() }
-        val result = PubkySessionBootstrap().signUp(
+        val result = bootstrap().signUp(
             localSecretKey = localSecretKey(secretKeyHex),
             receiverNoiseSecretKey = sessionProvider.loadOrDeriveReceiverNoiseSecretKey(),
             homeserverPublicKey = homeserverPublicKey,
@@ -231,7 +234,7 @@ class PaykitSdkService @Inject constructor(
     suspend fun signIn(secretKeyHex: String): PubkySessionBootstrapResult {
         isSetup.await()
         val previousPublicKey = operationMutex.withLock { currentSdkStatePublicKeyLocked() }
-        val result = PubkySessionBootstrap().signIn(
+        val result = bootstrap().signIn(
             localSecretKey = localSecretKey(secretKeyHex),
             receiverNoiseSecretKey = sessionProvider.loadOrDeriveReceiverNoiseSecretKey(),
             requiredCapabilities = requiredCapabilities(),
@@ -250,7 +253,7 @@ class PaykitSdkService @Inject constructor(
     suspend fun startAuth(): String {
         isSetup.await()
         return operationMutex.withLock {
-            val request = PubkySessionBootstrap().startSignInAuth(requiredCapabilities())
+            val request = bootstrap().startSignInAuth(requiredCapabilities())
             activeAuthRequest = request
             request.authorizationUrl()
         }
@@ -292,7 +295,7 @@ class PaykitSdkService @Inject constructor(
 
     suspend fun approveAuth(authUrl: String, expectedCapabilities: String, secretKeyHex: String) {
         isSetup.await()
-        PubkySessionBootstrap().approveAuth(
+        bootstrap().approveAuth(
             authUrl = authUrl,
             expectedCapabilities = expectedCapabilities,
             localSecretKey = localSecretKey(secretKeyHex),
@@ -306,7 +309,7 @@ class PaykitSdkService @Inject constructor(
         claim: PubkyAuthCompanionClaim,
     ) {
         isSetup.await()
-        PubkySessionBootstrap().approveAuthWithCompanionClaim(
+        bootstrap().approveAuthWithCompanionClaim(
             authUrl = authUrl,
             expectedCapabilities = expectedCapabilities,
             localSecretKey = localSecretKey(secretKeyHex),
@@ -786,13 +789,16 @@ class PaykitSdkService @Inject constructor(
 
     private suspend fun handle(): PaykitSdk = handleMutex.withLock {
         sdk?.let { return@withLock it }
-        PaykitSdk.withPaymentAdapter(
+        PaykitSdk.withPaymentAdapterAndPubkyClientConfig(
             stateStore = stateStore,
             sessionProvider = sessionProvider,
             paymentAdapter = paymentAdapter,
             config = paykitSdkConfig(),
+            pubkyClient = pubkyClientConfig,
         ).also { sdk = it }
     }
+
+    private fun bootstrap() = PubkySessionBootstrap.withPubkyClientConfig(pubkyClientConfig)
 
     private fun resetRuntime() {
         sdk = null
@@ -844,6 +850,19 @@ internal fun paykitSdkConfig() = defaultConfig(PaykitReceiverPaths.WALLET).copy(
     encryptedLinkRecoveryMarkers = BitkitPaykitSdkConfig.encryptedLinkRecoveryMarkers,
     publicContactSharing = BitkitPaykitSdkConfig.publicContactSharing,
 )
+
+internal fun paykitPubkyClientConfig(
+    isLocalE2eBackend: Boolean = Env.isLocalE2eBackend,
+    localTestnetHost: String = Env.e2eLocalHost,
+    baseConfig: PubkyClientConfig = defaultPubkyClientConfig(),
+) =
+    if (isLocalE2eBackend) {
+        baseConfig.copy(
+            localTestnetHost = localTestnetHost,
+        )
+    } else {
+        baseConfig
+    }
 
 private class PaykitSdkStateBlobStore(
     private val keychain: Keychain,
