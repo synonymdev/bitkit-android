@@ -1889,6 +1889,70 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `forgetDevice keeps the live session of an identity it is not forgetting`() = test {
+        // The device holds one identity open at a time; forgetting a different wallet must not
+        // close the session the user is still transacting with.
+        val keptKey = "kept-native-xpub"
+        val kept = mockKnownDevice(
+            xpubs = ALL_ADDRESS_TYPE_KEYS.associateWith { keptKey },
+            walletId = "kept-wallet",
+        )
+        val forgottenXpubs = mapOf("nativeSegwit" to "forgotten-native-xpub")
+        val forgotten = mockKnownDevice(
+            xpubs = forgottenXpubs,
+            walletId = "forgotten-wallet",
+            passphraseProtected = true,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(forgotten, kept))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(
+            trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
+        ).thenAnswer { mockPublicKeyResponse(xpub = keptKey, path = it.getArgument(0)) }
+        sut = createSut()
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        assertEquals("kept-wallet", sut.state.value.connectedWalletId())
+
+        val result = sut.forgetDevice(DEVICE_ID, walletKey = walletKeyOf(forgottenXpubs))
+
+        assertTrue(result.isSuccess)
+        assertEquals("kept-wallet", sut.state.value.connectedWalletId())
+        verify(trezorService, never()).disconnect()
+        verify(trezorTransport, never()).clearDeviceCredential(any())
+    }
+
+    @Test
+    fun `forgetDevice closes the session when it belongs to the identity being forgotten`() = test {
+        val forgottenKey = "forgotten-native-xpub"
+        val forgottenXpubs = ALL_ADDRESS_TYPE_KEYS.associateWith { forgottenKey }
+        val forgotten = mockKnownDevice(
+            xpubs = forgottenXpubs,
+            walletId = "forgotten-wallet",
+            passphraseProtected = true,
+        )
+        val kept = mockKnownDevice(xpubs = mapOf("nativeSegwit" to "kept-native-xpub"), walletId = "kept-wallet")
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(forgotten, kept))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(
+            trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
+        ).thenAnswer { mockPublicKeyResponse(xpub = forgottenKey, path = it.getArgument(0)) }
+        sut = createSut()
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        assertEquals("forgotten-wallet", sut.state.value.connectedWalletId())
+
+        val result = sut.forgetDevice(DEVICE_ID, walletKey = walletKeyOf(forgottenXpubs))
+
+        assertTrue(result.isSuccess)
+        assertNull(sut.state.value.connectedDevice())
+        verify(trezorService).disconnect()
+    }
+
+    @Test
     fun `forgetDevice keeps the stored label of the identity left behind`() = test {
         // Labels are written straight to the store, so the cached device list can be out of date;
         // rewriting from it would drop the name the user gave the wallet that stays paired.
@@ -1925,6 +1989,8 @@ class TrezorRepoTest : BaseUnitTest() {
         verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
         verify(trezorService).clearCredentials(DEVICE_ID)
     }
+
+    private val ALL_ADDRESS_TYPE_KEYS = listOf("legacy", "nestedSegwit", "nativeSegwit", "taproot")
 
     private fun walletKeyOf(xpubs: Map<String, String>) = xpubs.values.sorted().joinToString()
 

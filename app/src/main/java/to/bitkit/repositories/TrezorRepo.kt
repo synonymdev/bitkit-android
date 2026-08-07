@@ -892,7 +892,25 @@ class TrezorRepo @Inject constructor(
     suspend fun forgetDevice(deviceId: String, walletKey: String? = null): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             TrezorDebugLog.log("FORGET", "forgetDevice called for: $deviceId")
-            val disconnectResult = if (_state.value.connectedDeviceId() == deviceId) {
+            // The store is the source of truth here: labels are written straight to it, so a
+            // cached entry taking precedence would rewrite the wallets left behind without theirs.
+            val stored = loadKnownDevices()
+            val storedEntries = stored.map { it.id to it.walletKey }.toSet()
+            val knownDevices = stored + _state.value.knownDevices.filter { (it.id to it.walletKey) !in storedEntries }
+            val isForgotten: (KnownDevice) -> Boolean = {
+                it.id == deviceId && (walletKey == null || it.walletKey == walletKey)
+            }
+            val forgotten = knownDevices.filter(isForgotten)
+            val updated = knownDevices.filterNot(isForgotten)
+            val keepsDevice = updated.any { it.id == deviceId }
+
+            // Only the session of what is being forgotten may be torn down: a device can hold
+            // another identity open, and that wallet is still paired and still signing.
+            val connectedWalletId = _state.value.connectedWalletId()
+            val sessionIsForgotten = !keepsDevice ||
+                connectedWalletId == null ||
+                forgotten.any { it.walletId == connectedWalletId }
+            val disconnectResult = if (_state.value.connectedDeviceId() == deviceId && sessionIsForgotten) {
                 try {
                     runSuspendCatching {
                         trezorService.disconnect()
@@ -908,15 +926,7 @@ class TrezorRepo @Inject constructor(
             } else {
                 Result.success(Unit)
             }
-            // The store is the source of truth here: labels are written straight to it, so a
-            // cached entry taking precedence would rewrite the wallets left behind without theirs.
-            val stored = loadKnownDevices()
-            val storedEntries = stored.map { it.id to it.walletKey }.toSet()
-            val knownDevices = stored + _state.value.knownDevices.filter { (it.id to it.walletKey) !in storedEntries }
-            val updated = knownDevices.filterNot {
-                it.id == deviceId && (walletKey == null || it.walletKey == walletKey)
-            }
-            val clearCredentialsResult = if (updated.none { it.id == deviceId }) {
+            val clearCredentialsResult = if (!keepsDevice) {
                 TrezorDebugLog.log("FORGET", "Clearing credentials...")
                 trezorTransport.clearDeviceCredential(deviceId)
                 runSuspendCatching { trezorService.clearCredentials(deviceId) }
