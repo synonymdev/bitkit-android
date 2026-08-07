@@ -426,6 +426,9 @@ class HwWalletRepo @Inject constructor(
             watcherMutex.withLock {
                 val knownDevices = hwWalletStore.loadKnownDevices()
                 val targets = knownDevices.filter { it.resolvedWalletId() == walletId }
+                // Without an entry there is nothing to forget, and the check below would pass on an
+                // empty set: report the failure instead of telling the user the wallet was removed.
+                require(targets.isNotEmpty()) { "Unknown hardware wallet '$walletId'" }
                 activeWatchers.toList()
                     .filter { it.toWalletId() == walletId }
                     .forEach {

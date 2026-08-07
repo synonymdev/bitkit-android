@@ -921,6 +921,20 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `removeDevice reports failure when no entry tracks the wallet`() = test {
+        // Nothing to forget must not read as a successful removal: the post-condition below holds
+        // trivially on an empty set, so the caller would show the wallet as gone while it stays.
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val sut = createRepo()
+
+        val result = sut.removeDevice("unknown-wallet")
+
+        assertTrue(result.isFailure)
+        verify(trezorRepo, never()).forgetDevice(any(), anyOrNull())
+        verify(activityRepo, never()).deleteForWallet("unknown-wallet")
+    }
+
+    @Test
     fun `removeDevice forgets only the requested identity of the device`() = test {
         storeData.value = HwWalletData(knownDevices = listOf(device, hiddenWallet))
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet), listOf(device))
