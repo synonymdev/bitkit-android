@@ -887,8 +887,11 @@ class TrezorRepo @Inject constructor(
             } else {
                 Result.success(Unit)
             }
-            val knownDevices = (_state.value.knownDevices + loadKnownDevices())
-                .distinctBy { it.id to it.walletKey }
+            // The store is the source of truth here: labels are written straight to it, so a
+            // cached entry taking precedence would rewrite the wallets left behind without theirs.
+            val stored = loadKnownDevices()
+            val storedEntries = stored.map { it.id to it.walletKey }.toSet()
+            val knownDevices = stored + _state.value.knownDevices.filter { (it.id to it.walletKey) !in storedEntries }
             val updated = knownDevices.filterNot {
                 it.id == deviceId && (walletKey == null || it.walletKey == walletKey)
             }

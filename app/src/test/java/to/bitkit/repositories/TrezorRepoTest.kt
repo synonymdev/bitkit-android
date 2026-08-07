@@ -1858,6 +1858,29 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `forgetDevice keeps the stored label of the identity left behind`() = test {
+        // Labels are written straight to the store, so the cached device list can be out of date;
+        // rewriting from it would drop the name the user gave the wallet that stays paired.
+        val removedXpubs = mapOf("nativeSegwit" to "removed-native-xpub")
+        val keptXpubs = mapOf("nativeSegwit" to "kept-native-xpub")
+        val removed = mockKnownDevice(xpubs = removedXpubs, passphraseProtected = true)
+        val keptWhenCached = mockKnownDevice(xpubs = keptXpubs, passphraseProtected = true)
+        val keptWhenStored = keptWhenCached.copy(customLabel = "Pass B")
+        whenever(hwWalletStore.loadKnownDevices())
+            .thenReturn(listOf(removed, keptWhenCached))
+            .thenReturn(listOf(removed, keptWhenStored))
+        sut = createSut()
+        sut.initialize()
+
+        val result = sut.forgetDevice(DEVICE_ID, walletKey = walletKeyOf(removedXpubs))
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertEquals(listOf(keptWhenStored), captor.lastValue)
+    }
+
+    @Test
     fun `forgetDevice clears credentials once the last identity is gone`() = test {
         val standardXpubs = mapOf("nativeSegwit" to "standard-native-xpub")
         val standard = mockKnownDevice(xpubs = standardXpubs)
