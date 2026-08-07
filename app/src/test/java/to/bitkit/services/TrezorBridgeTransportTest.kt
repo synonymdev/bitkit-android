@@ -91,6 +91,35 @@ class TrezorBridgeTransportTest {
     }
 
     @Test
+    fun `reacquires with the session the bridge reports when the remembered one is stale`() {
+        // A release the bridge applied but never confirmed, or one that never reached it, both
+        // leave the remembered session wrong; the bridge is the authority on which one it holds.
+        var reportedSession = "stale-session"
+        server.route = { request ->
+            when {
+                request.path == "/enumerate" ->
+                    TestHttpResponse("""[{"path":"emulator:21324","session":"$reportedSession"}]""")
+
+                request.path == "/acquire/emulator%3A21324/stale-session" ->
+                    TestHttpResponse("""{"error":"wrong previous session"}""", statusCode = 400)
+
+                request.path == "/acquire/emulator%3A21324/live-session" ->
+                    TestHttpResponse("""{"session":"live-session"}""")
+
+                else -> TestHttpResponse("""{"error":"unexpected"}""", statusCode = 404)
+            }
+        }
+        val sut = createSut()
+        val device = sut.enumerateDevices().single()
+        reportedSession = "live-session"
+
+        val result = sut.openDevice(device.path)
+
+        assertTrue(result.success, "requests=${server.requests}")
+        assertTrue(server.requests.contains("POST /acquire/emulator%3A21324/live-session"))
+    }
+
+    @Test
     fun `reopening after a release acquires without the stale session`() {
         // Switching to a passphrase wallet closes and reopens the session; offering the released
         // session id as the previous one makes the bridge answer 'wrong previous session'.

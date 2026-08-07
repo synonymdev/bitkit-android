@@ -44,6 +44,12 @@ class TrezorBridgeTransport(
         private const val READ_TIMEOUT_MS = 30_000
         private const val CALL_READ_TIMEOUT_MS = 120_000
 
+        /** What the bridge calls the absence of a held session in an acquire path. */
+        private const val NO_SESSION = "null"
+
+        /** The bridge's answer when the session offered as the previous one is not the one it holds. */
+        private const val WRONG_PREVIOUS_SESSION = "wrong previous session"
+
         /**
          * Trezor protobuf MessageType_SignTx. This is the only call that waits
          * for on-device signing.
@@ -90,18 +96,35 @@ class TrezorBridgeTransport(
 
     fun openDevice(path: String): TrezorTransportWriteResult {
         val rawPath = rawBridgePath(path)
-        val previousSession = openSessions.remove(path) ?: enumeratedSessions[path] ?: "null"
+        val previousSession = openSessions.remove(path) ?: enumeratedSessions[path] ?: NO_SESSION
 
-        return runCatching {
-            val response = post("/acquire/${encode(rawPath)}/${encode(previousSession)}")
-            val session = json.decodeFromString<BridgeSession>(response).session
-            openSessions[path] = session
-            Logger.info("Opened Trezor Bridge device '$path'", context = TAG)
-            TrezorTransportWriteResult(success = true, error = "", errorCode = null)
-        }.getOrElse {
-            Logger.warn("Failed to open Trezor Bridge device '$path'", it, context = TAG)
-            TrezorTransportWriteResult(success = false, error = it.message ?: "Bridge open failed", errorCode = null)
-        }
+        return acquire(path, rawPath, previousSession)
+            .recoverCatching { error ->
+                // The remembered session goes stale in both directions: a release the bridge applied
+                // but never confirmed, and one that never reached it at all. Rather than trust the
+                // cache, ask which session it holds and try once more.
+                if (error.message?.contains(WRONG_PREVIOUS_SESSION, ignoreCase = true) != true) throw error
+                Logger.info("Refreshing the session held for '$path' after a stale acquire", context = TAG)
+                runCatching { enumerateDevices() }
+                acquire(path, rawPath, enumeratedSessions[path] ?: NO_SESSION).getOrThrow()
+            }
+            .fold(
+                onSuccess = { TrezorTransportWriteResult(success = true, error = "", errorCode = null) },
+                onFailure = {
+                    Logger.warn("Failed to open Trezor Bridge device '$path'", it, context = TAG)
+                    TrezorTransportWriteResult(
+                        success = false,
+                        error = it.message ?: "Bridge open failed",
+                        errorCode = null,
+                    )
+                },
+            )
+    }
+
+    private fun acquire(path: String, rawPath: String, previousSession: String): Result<Unit> = runCatching {
+        val response = post("/acquire/${encode(rawPath)}/${encode(previousSession)}")
+        openSessions[path] = json.decodeFromString<BridgeSession>(response).session
+        Logger.info("Opened Trezor Bridge device '$path' after session '$previousSession'", context = TAG)
     }
 
     fun closeDevice(path: String): TrezorTransportWriteResult {
