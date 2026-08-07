@@ -71,6 +71,9 @@ class TrezorRepoTest : BaseUnitTest() {
         private const val TEST_SIGNATURE = "signature123"
         private const val TEST_ADDRESS = "bc1qtest"
         private const val DEVICE_BUSY_MESSAGE = "Your Trezor is busy. Unlock it on the device, then try again."
+
+        /** The address types the store keys account xpubs by. */
+        private val ALL_ADDRESS_TYPE_KEYS = listOf("legacy", "nestedSegwit", "nativeSegwit", "taproot")
     }
 
     @get:Rule(order = 1)
@@ -2089,8 +2092,6 @@ class TrezorRepoTest : BaseUnitTest() {
         verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
         verify(trezorService).clearCredentials(DEVICE_ID)
     }
-
-    private val ALL_ADDRESS_TYPE_KEYS = listOf("legacy", "nestedSegwit", "nativeSegwit", "taproot")
 
     private fun walletKeyOf(xpubs: Map<String, String>) = xpubs.values.sorted().joinToString()
 

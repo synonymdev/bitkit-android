@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.IBtOrder
 import to.bitkit.R
+import to.bitkit.models.safe
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FeeInfo
@@ -36,7 +37,6 @@ import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.models.safe
 import to.bitkit.viewmodels.TransferViewModel
 
 @Composable
