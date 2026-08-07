@@ -869,15 +869,18 @@ class TrezorRepo @Inject constructor(
      * wallet does not unpair the device for the others.
      */
     suspend fun forgetDevice(deviceId: String, walletKey: String? = null): Result<Unit> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             TrezorDebugLog.log("FORGET", "forgetDevice called for: $deviceId")
             val disconnectResult = if (_state.value.connectedDeviceId() == deviceId) {
-                runCatching {
-                    trezorService.disconnect()
-                    disconnectTransportDevice(deviceId)
-                }.also {
-                    // Clear any cached host passphrase so it can't be reused
-                    // against a different device on a later connect.
+                try {
+                    runSuspendCatching {
+                        trezorService.disconnect()
+                        disconnectTransportDevice(deviceId)
+                    }
+                } finally {
+                    // Clear any cached host passphrase so it can't be reused against a different
+                    // device on a later connect. In a finally so a cancelled disconnect, which now
+                    // propagates instead of being swallowed, still clears it.
                     trezorUiHandler.setWalletMode(TrezorWalletMode.STANDARD)
                     _state.update { it.copy(connected = null) }
                 }
@@ -892,7 +895,7 @@ class TrezorRepo @Inject constructor(
             val clearCredentialsResult = if (updated.none { it.id == deviceId }) {
                 TrezorDebugLog.log("FORGET", "Clearing credentials...")
                 trezorTransport.clearDeviceCredential(deviceId)
-                runCatching { trezorService.clearCredentials(deviceId) }
+                runSuspendCatching { trezorService.clearCredentials(deviceId) }
             } else {
                 TrezorDebugLog.log("FORGET", "Keeping credentials, another wallet still uses $deviceId")
                 Result.success(Unit)
