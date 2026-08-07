@@ -61,6 +61,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwPassphraseMismatchError
+import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.TransferRepo
@@ -1018,6 +1019,12 @@ class TransferViewModel @Inject constructor(
     private suspend fun handleHardwareTransferFailure(e: Throwable, walletId: String) {
         if (e.isTrezorUserCancellation()) {
             Logger.info("Hardware transfer cancelled on device for '$walletId'", context = TAG)
+            return
+        }
+        if (generateSequence(e) { it.cause }.any { it is HwPassphraseRequiredError }) {
+            // The device is open on another identity and only the passphrase reopens this one.
+            Logger.info("Asking for the passphrase to reopen hardware wallet '$walletId'", context = TAG)
+            _spendingUiState.update { it.copy(isHwPassphraseRequired = true) }
             return
         }
         if (e.isTrezorDeviceBusy()) {

@@ -216,11 +216,33 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
+    /**
+     * Makes the device session belong to [walletId], not merely to its transport. A device holds
+     * one identity open at a time, so a session opened for another wallet on the same device would
+     * otherwise be accepted and sign with the wrong seed. The standard wallet needs no secret to
+     * reopen; a passphrase wallet does, which the caller has to collect.
+     */
     suspend fun ensureConnected(walletId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
         runSuspendCatching {
-            trezorRepo.ensureConnected(transportDeviceId(walletId)).getOrThrow()
+            val deviceId = transportDeviceId(walletId)
+            val features = trezorRepo.ensureConnected(deviceId).getOrThrow()
+            if (trezorRepo.state.value.connectedWalletId().isIdentityOf(walletId)) {
+                return@runSuspendCatching features
+            }
+
+            Logger.info("Reopening '$walletId': session belongs to another identity", context = TAG)
+            if (devicesForWallet(walletId).any { it.passphraseProtected }) throw HwPassphraseRequiredError()
+
+            val reopened = trezorRepo.setWalletMode(TrezorWalletMode.STANDARD).getOrThrow()
+            if (!trezorRepo.state.value.connectedWalletId().isIdentityOf(walletId)) {
+                throw HwPassphraseRequiredError()
+            }
+            reopened
         }
     }
+
+    /** A session opened before its identity could be resolved reports none and stays usable. */
+    private fun String?.isIdentityOf(walletId: String): Boolean = this == null || this == walletId
 
     /**
      * Whether reaching [walletId] needs the passphrase again. The device only holds one hidden
@@ -327,6 +349,11 @@ class HwWalletRepo @Inject constructor(
         funding: HwFundingTransaction,
     ): Result<HwFundingSignedTx> = withContext(ioDispatcher) {
         runSuspendCatching {
+            // The session can change between connecting and signing, and signing the wrong seed
+            // would produce signatures that do not match the inputs being spent.
+            if (!trezorRepo.state.value.connectedWalletId().isIdentityOf(walletId)) {
+                throw HwPassphraseRequiredError()
+            }
             val signedTx = trezorRepo.signTxFromPsbt(
                 psbtBase64 = funding.psbt,
                 network = Env.network.toTrezorCoinType(),
@@ -796,6 +823,9 @@ private val KnownDevice.displayName: String
 
 /** The entered passphrase resolves to a wallet Bitkit already watches. */
 class HwPassphraseAlreadyAddedError : AppError("Passphrase wallet already added")
+
+/** The device session belongs to another identity, and only its passphrase can reopen this one. */
+class HwPassphraseRequiredError : AppError("Passphrase needed to reopen this wallet")
 
 /** The entered passphrase opened a different wallet than the one being signed from. */
 class HwPassphraseMismatchError : AppError("Passphrase opened a different wallet")

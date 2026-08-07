@@ -68,6 +68,7 @@ import to.bitkit.models.safe
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.BlocktankState
 import to.bitkit.repositories.HwPassphraseMismatchError
+import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
@@ -624,6 +625,21 @@ class TransferViewModelTest : BaseUnitTest() {
         assertTrue(sut.spendingUiState.value.isHwPassphraseRequired)
         assertFalse(sut.spendingUiState.value.isSigning)
         verify(hwWalletRepo, never()).ensureConnected(any())
+        verify(hwWalletRepo, never()).signFunding(any(), any())
+    }
+
+    @Test
+    fun `asks for the passphrase when the device session belongs to another identity`() = test {
+        val order = previewBtOrder()
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(HARDWARE_WALLET_ID, connected = false))))
+        whenever(hwWalletRepo.ensureConnected(HARDWARE_WALLET_ID))
+            .thenReturn(Result.failure(HwPassphraseRequiredError()))
+
+        sut.onTransferToSpendingHwConfirm(order, HARDWARE_WALLET_ID)
+        advanceUntilIdle()
+
+        assertTrue(sut.spendingUiState.value.isHwPassphraseRequired)
         verify(hwWalletRepo, never()).signFunding(any(), any())
     }
 
