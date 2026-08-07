@@ -1109,7 +1109,7 @@ class TrezorRepo @Inject constructor(
         val storedEntries = stored.map { it.id to it.walletKey }.toSet()
         val knownDevices = stored + _state.value.knownDevices.filter { (it.id to it.walletKey) !in storedEntries }
         val fetchResult = fetchAccountXpubs()
-        val isPassphraseSession = trezorUiHandler.currentSelection() != WalletSelection.Standard
+        val selection = trezorUiHandler.currentSelection()
         // A passphrase wallet is a separate identity on the same physical device, so the transport
         // id alone no longer identifies an entry: matching by it would overwrite another identity
         // or blend two identities' xpubs into one record. Shared key material is the identity, so
@@ -1144,8 +1144,15 @@ class TrezorRepo @Inject constructor(
             customLabel = previous?.customLabel,
             walletId = previous?.walletId?.takeIf { it.isNotBlank() }
                 ?: knownDevices.findHardwareWalletId(xpubs, fallback = deviceInfo.id),
-            // The selection bound to the session is what derived these xpubs.
-            passphraseProtected = previous?.passphraseProtected == true || isPassphraseSession,
+            // The selection that derived these keys is authoritative, so a wallet wrongly marked
+            // hidden is corrected the next time it is opened rather than staying gated behind a
+            // passphrase forever. On-device entry cannot say which wallet was opened, so it keeps
+            // what the entry already knew and assumes hidden only for one it has never seen.
+            passphraseProtected = when (selection) {
+                WalletSelection.Standard -> false
+                is WalletSelection.Hidden -> true
+                WalletSelection.OnDevice -> previous?.passphraseProtected ?: true
+            },
             trezorDeviceId = features.deviceId ?: previous?.trezorDeviceId,
         )
         val updated = knownDevices.filterNot { it.isReplacedBy(known, refreshed = previous) } + known

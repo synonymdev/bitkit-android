@@ -846,6 +846,53 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `connect clears a passphrase flag the standard wallet should never have had`() = test {
+        // Marked hidden it would demand a passphrase that opens a different wallet, so the standard
+        // wallet could never be signed with again; opening it must be able to correct that.
+        val misflagged = mockKnownDevice(
+            xpubs = mapOf("nativeSegwit" to "xpub-m/84'/1'/0'"),
+            passphraseProtected = true,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(misflagged))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertFalse(captor.firstValue.single().passphraseProtected)
+    }
+
+    @Test
+    fun `connect keeps the passphrase flag when the device asked on its own screen`() = test {
+        // On-device entry does not say which wallet was opened, so it must not downgrade a wallet
+        // already known to be hidden.
+        val hidden = mockKnownDevice(
+            xpubs = mapOf("nativeSegwit" to "xpub-m/84'/1'/0'"),
+            passphraseProtected = true,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(hidden))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.OnDevice)
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertTrue(captor.firstValue.single().passphraseProtected)
+    }
+
+    @Test
     fun `connect keeps the standard wallet unprotected when its keys are re-read`() = test {
         val standard = mockKnownDevice(xpubs = mapOf("nativeSegwit" to "xpub-m/84'/1'/0'"))
         val features = mockFeatures()
