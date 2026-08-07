@@ -15,6 +15,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -385,6 +386,50 @@ class HwConnectViewModelTest : BaseUnitTest() {
         assertEquals("standard-wallet", sut.uiState.value.pairedWalletId)
         assertEquals("No Pass", sut.uiState.value.deviceName)
         assertEquals("No Pass", sut.uiState.value.labelInput)
+    }
+
+    @Test
+    fun `finishing labels the session identity while the wallet list catches up`() = test {
+        // The paired wallet has not reached the list yet, so the typed name would otherwise be
+        // dropped and the flow closed instead of finished.
+        val connectedFeatures = features(model = "Safe 3")
+        deviceState.value = TrezorState(
+            nearbyDevices = persistentListOf(deviceInfo("dev1", model = "Safe 3")),
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = "wallet-1"),
+        )
+        whenever(hwWalletRepo.scan(includeBluetooth = true)).thenReturn(Result.success(emptyList()))
+        whenever(hwWalletRepo.connect("dev1")).thenReturn(Result.success(connectedFeatures))
+        whenever(hwWalletRepo.setDeviceLabel("wallet-1", "My Trezor")).thenReturn(Result.success(Unit))
+        sut.onIntroContinue()
+        runCurrent()
+        sut.onConnectClick()
+        runCurrent()
+        sut.onLabelChange("My Trezor")
+
+        sut.effects.test {
+            sut.onFinishClick()
+            assertEquals(HwConnectEffect.Finish, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        verify(hwWalletRepo).setDeviceLabel("wallet-1", "My Trezor")
+    }
+
+    @Test
+    fun `finishing completes the flow even when no identity resolved`() = test {
+        givenDeviceFound()
+        val connectedFeatures = features(model = "Safe 3")
+        whenever(hwWalletRepo.connect("dev1")).thenReturn(Result.success(connectedFeatures))
+        sut.onConnectClick()
+        runCurrent()
+
+        sut.effects.test {
+            sut.onFinishClick()
+            assertEquals(HwConnectEffect.Finish, awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        verify(hwWalletRepo, never()).setDeviceLabel(any(), any())
     }
 
     @Test

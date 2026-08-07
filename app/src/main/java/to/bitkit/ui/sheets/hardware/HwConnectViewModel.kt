@@ -253,14 +253,22 @@ class HwConnectViewModel @Inject constructor(
     }
 
     fun onFinishClick() {
-        val walletId = _uiState.value.pairedWalletId
-        if (walletId == null) {
+        val state = _uiState.value
+        if (state.pairedDeviceId == null) {
             setEffect(HwConnectEffect.Dismiss)
             return
         }
-        val label = _uiState.value.labelInput
+        // The wallet list can still be catching up with the identity that was just paired, so fall
+        // back to the one the session opened rather than dropping the name the user typed.
+        val walletId = state.pairedWalletId ?: hwWalletRepo.deviceState.value.connectedWalletId()
+        val label = state.labelInput
         viewModelScope.launch {
-            persistLabel(walletId, label)
+            if (walletId != null) {
+                persistLabel(walletId, label)
+            } else {
+                Logger.warn("Finished pairing '${state.pairedDeviceId}' before its identity resolved", context = TAG)
+            }
+            // The device is paired either way, so finish the flow instead of dropping out of it.
             setEffect(HwConnectEffect.Finish)
         }
     }
