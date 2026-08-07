@@ -448,6 +448,27 @@ class HwConnectViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `a wallet emission without the new identity does not switch back to the standard wallet`() = test {
+        // The store publishes the new identity asynchronously while other sources re-emit sooner,
+        // so an emission listing only the standard wallet must not take over the paired step.
+        givenPairedDevice()
+        whenever(hwWalletRepo.connectWithPassphrase("dev1", "secret"))
+            .thenReturn(Result.success("hidden-wallet"))
+        sut.onPassphraseClick()
+        sut.onPassphraseChange("secret")
+        sut.onPassphraseSubmit()
+        runCurrent()
+
+        wallets.value = persistentListOf(
+            hwWallet("dev1", name = "Standard Trezor", balance = 27uL, walletId = "standard-wallet"),
+        )
+
+        assertEquals("hidden-wallet", sut.uiState.value.pairedWalletId)
+        assertFalse(sut.uiState.value.deviceName == "Standard Trezor")
+        assertEquals(0uL, sut.uiState.value.balanceSats)
+    }
+
+    @Test
     fun `keeps the typed label when the new wallet is published afterwards`() = test {
         // The store publishes a newly watched identity asynchronously, so its emission can land
         // after the user has already named it; the entered name must survive and be persisted.

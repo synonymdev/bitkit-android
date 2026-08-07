@@ -356,12 +356,19 @@ class HwConnectViewModel @Inject constructor(
             hwWalletRepo.wallets.collect { wallets ->
                 val state = _uiState.value
                 val deviceId = state.pairedDeviceId ?: return@collect
-                // A device can hold several passphrase wallets, so prefer the identity being
-                // paired, then the one holding the session; sharing a transport id proves nothing.
-                val wallet = state.pairedWalletId?.let { id -> wallets.firstOrNull { it.id == id } }
-                    ?: wallets.firstOrNull { deviceId in it.deviceIds && it.isConnected }
-                    ?: wallets.firstOrNull { deviceId in it.deviceIds }
-                    ?: return@collect
+                // A device can hold several passphrase wallets, so sharing a transport id proves
+                // nothing about which one is being paired.
+                val pairedWalletId = state.pairedWalletId
+                val wallet = if (pairedWalletId != null) {
+                    // The store publishes a newly watched identity asynchronously: wait for it
+                    // rather than falling back to another wallet and reporting its name, balance
+                    // and label as this one's.
+                    wallets.firstOrNull { it.id == pairedWalletId } ?: return@collect
+                } else {
+                    wallets.firstOrNull { deviceId in it.deviceIds && it.isConnected }
+                        ?: wallets.firstOrNull { deviceId in it.deviceIds }
+                        ?: return@collect
+                }
                 _uiState.update {
                     it.copy(
                         pairedWalletId = wallet.id,
