@@ -45,6 +45,7 @@ import to.bitkit.models.toCoreNetwork
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
 import to.bitkit.services.TrezorUiHandler
+import to.bitkit.services.TrezorWalletMode
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
@@ -1855,6 +1856,36 @@ class TrezorRepoTest : BaseUnitTest() {
         verify(hwWalletStore).saveKnownDevices(listOf(standard))
         verify(trezorTransport, never()).clearDeviceCredential(any())
         verify(trezorService, never()).clearCredentials(any())
+    }
+
+    @Test
+    fun `connectWithWalletMode opens a passphrase session when none is live`() = test {
+        // Reopening a hidden wallet happens exactly when its session is gone, so requiring a live
+        // one would make the passphrase prompt unable to ever succeed.
+        val features = mockFeatures()
+        val knownDevice = mockKnownDevice(xpubs = mapOf("nativeSegwit" to "hidden-native-xpub"))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        sut = createSut()
+        sut.initialize()
+        assertNull(sut.state.value.connectedDeviceId())
+
+        val result = sut.connectWithWalletMode(DEVICE_ID, TrezorWalletMode.PASSPHRASE_HOST, "secret")
+
+        assertTrue(result.isSuccess, "err=${result.exceptionOrNull()}")
+        verify(trezorUiHandler).setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, "secret")
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId())
+    }
+
+    @Test
+    fun `setWalletMode still requires a live session to switch`() = test {
+        sut = createSut()
+
+        val result = sut.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, "secret")
+
+        assertTrue(result.isFailure)
+        verify(trezorUiHandler, never()).setWalletMode(any(), any())
     }
 
     @Test

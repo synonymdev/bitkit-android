@@ -943,7 +943,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     @Test
     fun `connectWithPassphrase opens the hidden wallet and returns its identity`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
-        whenever { trezorRepo.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, "secret") }
+        whenever { trezorRepo.connectWithWalletMode("dev1", TrezorWalletMode.PASSPHRASE_HOST, "secret") }
             .thenReturn(Result.success(mock()))
         trezorState.value = TrezorState(
             connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HIDDEN_WALLET_ID),
@@ -959,7 +959,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     @Test
     fun `connectWithPassphrase reports a passphrase wallet that is already watched`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
-        whenever { trezorRepo.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, "secret") }
+        whenever { trezorRepo.connectWithWalletMode("dev1", TrezorWalletMode.PASSPHRASE_HOST, "secret") }
             .thenReturn(Result.success(mock()))
         trezorState.value = TrezorState(
             connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HIDDEN_WALLET_ID),
@@ -1046,9 +1046,11 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `reconnectWithPassphrase accepts a session that reopens the same wallet`() = test {
+    fun `reconnectWithPassphrase opens the wallet without a live session`() = test {
+        // No session is live here, which is the normal state when the prompt appears: going
+        // through the switch helper instead would fail with "No connected Trezor".
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
-        whenever { trezorRepo.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, "secret") }
+        whenever { trezorRepo.connectWithWalletMode("dev1", TrezorWalletMode.PASSPHRASE_HOST, "secret") }
             .thenAnswer {
                 trezorState.value = TrezorState(
                     connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HIDDEN_WALLET_ID),
@@ -1060,6 +1062,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         val result = sut.reconnectWithPassphrase(HIDDEN_WALLET_ID, "secret")
 
         assertTrue(result.isSuccess)
+        verify(trezorRepo, never()).setWalletMode(any(), any())
         verify(trezorRepo, never()).disconnectStaleSession(any())
     }
 
@@ -1078,7 +1081,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             Result.success(Unit)
         }
         // A wrong passphrase derives another wallet, which reading its accounts already stored.
-        whenever { trezorRepo.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, "wrong") }
+        whenever { trezorRepo.connectWithWalletMode("dev1", TrezorWalletMode.PASSPHRASE_HOST, "wrong") }
             .thenAnswer {
                 stored = stored + strayWallet
                 trezorState.value = TrezorState(

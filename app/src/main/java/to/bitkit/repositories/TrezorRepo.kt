@@ -243,24 +243,45 @@ class TrezorRepo @Inject constructor(
         mode: TrezorWalletMode,
         passphrase: String = "",
     ): Result<TrezorFeatures> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val deviceId = _state.value.connectedDeviceId()
                 ?: throw AppError("No connected Trezor")
-            TrezorDebugLog.log("WALLET_MODE", "Switching to $mode, resetting session for $deviceId")
-            // Reset the session via disconnect/reconnect. disconnect() resets the
-            // UI handler's wallet mode to standard, so set the desired mode AFTER
-            // the disconnect and right before reconnecting.
-            runCatching { disconnect() }
-            // Reconnect by id WITHOUT a scan: scan() clears the discovered-device
-            // cache and a scan right after a disconnect usually finds nothing,
-            // whereas the cached handle (and direct address resolution) still work.
-            delay(WALLET_MODE_RECONNECT_DELAY_MS)
-            // Record the selection on the handler: THP reads it via
-            // currentSelection() to bind the passphrase at session creation,
-            // while non-THP devices re-request it mid-operation and are answered
-            // from the same value. connect() then derives the wallet from it.
+            connectWithWalletMode(deviceId, mode, passphrase).getOrThrow()
+        }
+    }
+
+    /**
+     * Opens [deviceId] with an explicit wallet selection, whether or not a session is live. A
+     * passphrase is bound when the session is created, so an existing one is torn down first; with
+     * none, the device is reconnected from its stored entry. Reopening a hidden wallet after the
+     * app was restarted, or retrying once a wrong passphrase closed the session, both start here.
+     */
+    suspend fun connectWithWalletMode(
+        deviceId: String,
+        mode: TrezorWalletMode,
+        passphrase: String = "",
+    ): Result<TrezorFeatures> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val hadSession = _state.value.connectedDeviceId() != null
+            TrezorDebugLog.log("WALLET_MODE", "Opening $mode session for $deviceId, hadSession=$hadSession")
+            if (hadSession) {
+                runSuspendCatching { disconnect() }
+                delay(WALLET_MODE_RECONNECT_DELAY_MS)
+            }
+            // Record the selection on the handler: THP reads it via currentSelection() to bind the
+            // passphrase at session creation, while non-THP devices re-request it mid-operation and
+            // are answered from the same value. Set it last, since disconnect() resets it.
             trezorUiHandler.setWalletMode(mode, passphrase)
-            connect(deviceId).getOrThrow()
+            if (hadSession) {
+                // Reconnect by id WITHOUT a scan: scan() clears the discovered-device cache and a
+                // scan right after a disconnect usually finds nothing, whereas the cached handle
+                // (and direct address resolution) still work.
+                connect(deviceId).getOrThrow()
+            } else {
+                // Nothing cached to reconnect to, so take the known-device path with its scan and
+                // bluetooth retries.
+                connectKnownDevice(deviceId, forceSession = true).getOrThrow()
+            }
         }
     }
 

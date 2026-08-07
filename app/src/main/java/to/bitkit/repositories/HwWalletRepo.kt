@@ -265,7 +265,9 @@ class HwWalletRepo @Inject constructor(
             runSuspendCatching {
                 val deviceId = transportDeviceId(walletId)
                 val watchedBefore = hwWalletStore.loadKnownDevices().mapNotNull { it.resolvedWalletId() }.toSet()
-                trezorRepo.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, passphrase).getOrThrow()
+                // Not setWalletMode: the session this reopens is usually already gone, either
+                // because the app restarted or because a wrong passphrase closed it.
+                trezorRepo.connectWithWalletMode(deviceId, TrezorWalletMode.PASSPHRASE_HOST, passphrase).getOrThrow()
                 val opened = trezorRepo.state.value.connectedWalletId()
                 if (opened == walletId) return@runSuspendCatching
 
