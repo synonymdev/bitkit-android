@@ -24,6 +24,7 @@ import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
 import to.bitkit.repositories.resolveHwWalletName
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.Logger
 import to.bitkit.utils.TrezorErrorPresenter
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
@@ -45,6 +46,8 @@ class HwConnectViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
     companion object {
+        private const val TAG = "HwConnectViewModel"
+
         /** Delay between scan attempts while searching for a nearby device. */
         private val SCAN_INTERVAL = 2.seconds
 
@@ -160,9 +163,20 @@ class HwConnectViewModel @Inject constructor(
         _uiState.update { it.copy(isConnecting = false) }
     }
 
-    fun onLabelChange(value: String) = _uiState.update { it.copy(labelInput = value.take(DEVICE_LABEL_MAX_LENGTH)) }
+    fun onLabelChange(value: String) {
+        // Once the user types, the field is theirs: a wallet emission arriving late (the store
+        // publishes a newly watched identity asynchronously) must not overwrite what they entered.
+        labelInitialized = true
+        _uiState.update { it.copy(labelInput = value.take(DEVICE_LABEL_MAX_LENGTH)) }
+    }
 
     fun onPassphraseClick() {
+        // Each identity is labelled on its own paired step, so persist the one being left before
+        // the next passphrase wallet takes over the field.
+        val state = _uiState.value
+        state.pairedWalletId?.let { walletId ->
+            viewModelScope.launch { persistLabel(walletId, state.labelInput) }
+        }
         _uiState.update { it.copy(passphraseInput = "", errorMessage = null) }
         setEffect(HwConnectEffect.NavigateToPassphrase)
     }
@@ -189,6 +203,18 @@ class HwConnectViewModel @Inject constructor(
                 .onFailure { onPassphraseFailed(it) }
             connectJob = null
         }
+    }
+
+    private suspend fun persistLabel(walletId: String, label: String) {
+        hwWalletRepo.setDeviceLabel(walletId, label)
+            .onFailure {
+                Logger.error("Failed to label hardware wallet '$walletId'", it, context = TAG)
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.common__error),
+                    description = context.getString(R.string.hardware__rename_error),
+                )
+            }
     }
 
     private fun onPassphraseWalletAdded(walletId: String) {
@@ -232,8 +258,9 @@ class HwConnectViewModel @Inject constructor(
             setEffect(HwConnectEffect.Dismiss)
             return
         }
+        val label = _uiState.value.labelInput
         viewModelScope.launch {
-            hwWalletRepo.setDeviceLabel(walletId, _uiState.value.labelInput)
+            persistLabel(walletId, label)
             setEffect(HwConnectEffect.Finish)
         }
     }

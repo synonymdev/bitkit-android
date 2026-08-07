@@ -362,6 +362,47 @@ class HwConnectViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `persists the label of the wallet left behind when adding a passphrase wallet`() = test {
+        // Each identity is named on its own paired step, so the standard wallet's name must be
+        // kept when the user moves on to add a passphrase wallet instead of finishing.
+        givenPairedDevice()
+        wallets.value = persistentListOf(hwWallet("dev1", name = "Trezor Safe 3", balance = 10uL))
+        whenever(hwWalletRepo.setDeviceLabel("wallet-dev1", "My Savings")).thenReturn(Result.success(Unit))
+        sut.onLabelChange("My Savings")
+
+        sut.onPassphraseClick()
+        runCurrent()
+
+        verify(hwWalletRepo).setDeviceLabel("wallet-dev1", "My Savings")
+    }
+
+    @Test
+    fun `keeps the typed label when the new wallet is published afterwards`() = test {
+        // The store publishes a newly watched identity asynchronously, so its emission can land
+        // after the user has already named it; the entered name must survive and be persisted.
+        givenPairedDevice()
+        whenever(hwWalletRepo.connectWithPassphrase("dev1", "secret"))
+            .thenReturn(Result.success("hidden-wallet"))
+        whenever(hwWalletRepo.setDeviceLabel("hidden-wallet", "My Hidden")).thenReturn(Result.success(Unit))
+        sut.onPassphraseClick()
+        sut.onPassphraseChange("secret")
+        sut.onPassphraseSubmit()
+        runCurrent()
+
+        sut.onLabelChange("My Hidden")
+        wallets.value = persistentListOf(
+            hwWallet("dev1", name = "Trezor Safe 3", balance = 0uL, walletId = "hidden-wallet"),
+        )
+
+        assertEquals("My Hidden", sut.uiState.value.labelInput)
+
+        sut.onFinishClick()
+        runCurrent()
+
+        verify(hwWalletRepo).setDeviceLabel("hidden-wallet", "My Hidden")
+    }
+
+    @Test
     fun `onPassphraseSubmit keeps the passphrase out of state when the wallet is already watched`() = test {
         givenPairedDevice()
         whenever(context.getString(R.string.hardware__passphrase_duplicate)).thenReturn(DUPLICATE_ERROR)
