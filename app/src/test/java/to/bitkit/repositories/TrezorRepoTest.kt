@@ -1977,6 +1977,26 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `forgetDevice removes an identity from every transport it was paired over`() = test {
+        // Removal walks the entries of one wallet, so each call has to take the whole identity out:
+        // a lagging store read or a connect landing mid-removal would otherwise write a sibling
+        // entry back and leave the wallet watched.
+        val sharedXpubs = mapOf("nativeSegwit" to "shared-native-xpub")
+        val overBluetooth = mockKnownDevice(id = "ble1", path = "ble:AA:BB", xpubs = sharedXpubs)
+        val overUsb = mockKnownDevice(id = "usb1", path = "/dev/trezor1", xpubs = sharedXpubs)
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(overBluetooth, overUsb))
+        sut = createSut()
+
+        val result = sut.forgetDevice("usb1", walletKey = walletKeyOf(sharedXpubs))
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertEquals(emptyList(), captor.lastValue)
+        assertTrue(sut.state.value.knownDevices.isEmpty())
+    }
+
+    @Test
     fun `forgetDevice keeps the device paired while another identity remains`() = test {
         val standardXpubs = mapOf("nativeSegwit" to "standard-native-xpub")
         val hiddenXpubs = mapOf("nativeSegwit" to "hidden-native-xpub")

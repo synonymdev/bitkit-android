@@ -897,8 +897,12 @@ class TrezorRepo @Inject constructor(
             val stored = loadKnownDevices()
             val storedEntries = stored.map { it.id to it.walletKey }.toSet()
             val knownDevices = stored + _state.value.knownDevices.filter { (it.id to it.walletKey) !in storedEntries }
-            val isForgotten: (KnownDevice) -> Boolean = {
-                it.id == deviceId && (walletKey == null || it.walletKey == walletKey)
+            // Scoped to the identity, not to the transport it was reached over: removing it in one
+            // write keeps repeated calls, a lagging read and a concurrent connect from leaving a
+            // sibling entry of the same wallet behind.
+            val isForgotten: (KnownDevice) -> Boolean = when (walletKey) {
+                null -> { entry -> entry.id == deviceId }
+                else -> { entry -> entry.walletKey == walletKey }
             }
             val forgotten = knownDevices.filter(isForgotten)
             val updated = knownDevices.filterNot(isForgotten)
