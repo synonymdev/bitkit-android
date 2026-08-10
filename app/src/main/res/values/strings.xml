@@ -193,6 +193,7 @@
     <string name="hardware__pairing_text">Enter the 6-digit code shown on your hardware device.</string>
     <string name="hardware__pairing_title">Pair Device</string>
     <string name="hardware__passphrase_button">Passphrase</string>
+    <string name="hardware__passphrase_disabled">Passphrase protection is turned off on this hardware device. Enable it in Trezor Suite, then try again.</string>
     <string name="hardware__passphrase_duplicate">You are already watching this passphrase wallet.</string>
     <string name="hardware__passphrase_error">Could not open the passphrase wallet. Make sure your hardware device is unlocked and try again.</string>
     <string name="hardware__passphrase_header">Enter &lt;accent&gt;passphrase&lt;/accent&gt;</string>

@@ -196,6 +196,12 @@ class HwWalletRepo @Inject constructor(
     suspend fun connectWithPassphrase(deviceId: String, passphrase: String): Result<String> =
         withContext(ioDispatcher) {
             runSuspendCatching {
+                // A device with passphrase protection turned off ignores the passphrase and simply
+                // reopens the standard wallet, which would surface as "already added" and leave the
+                // user retyping a passphrase that can never take effect.
+                if (trezorRepo.state.value.connectedDevice()?.passphraseProtection != true) {
+                    throw HwPassphraseDisabledError()
+                }
                 val watchedWalletIds = hwWalletStore.loadKnownDevices().mapNotNull { it.resolvedWalletId() }.toSet()
                 trezorRepo.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, passphrase).getOrThrow()
                 val walletId = requireNotNull(trezorRepo.state.value.connectedWalletId()) {
@@ -825,6 +831,9 @@ fun resolveHwWalletName(label: String?, model: String?, customLabel: String? = n
 
 private val KnownDevice.displayName: String
     get() = resolveHwWalletName(label = label, model = model, customLabel = customLabel)
+
+/** The device has passphrase protection turned off, so it cannot open a hidden wallet at all. */
+class HwPassphraseDisabledError : AppError("Passphrase protection is off on this device")
 
 /** The entered passphrase resolves to a wallet Bitkit already watches. */
 class HwPassphraseAlreadyAddedError : AppError("Passphrase wallet already added")

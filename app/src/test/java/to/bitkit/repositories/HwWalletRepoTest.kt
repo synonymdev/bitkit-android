@@ -115,6 +115,9 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever { activityRepo.deleteForWallet(any()) }.thenReturn(Result.success(Unit))
     }
 
+    private fun passphraseCapableFeatures(): TrezorFeatures =
+        mock { on { passphraseProtection }.thenReturn(true) }
+
     private fun createRepo() = HwWalletRepo(
         trezorRepo = trezorRepo,
         activityRepo = activityRepo,
@@ -957,10 +960,11 @@ class HwWalletRepoTest : BaseUnitTest() {
     @Test
     fun `connectWithPassphrase opens the hidden wallet and returns its identity`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val features = passphraseCapableFeatures()
         whenever { trezorRepo.connectWithWalletMode("dev1", TrezorWalletMode.PASSPHRASE_HOST, "secret") }
             .thenReturn(Result.success(mock()))
         trezorState.value = TrezorState(
-            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HIDDEN_WALLET_ID),
+            connected = ConnectedTrezorDevice(id = "dev1", features = features, walletId = HIDDEN_WALLET_ID),
         )
         val sut = createRepo()
 
@@ -971,12 +975,30 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `connectWithPassphrase reports a device that cannot open hidden wallets`() = test {
+        // With passphrase protection off the device ignores the passphrase and reopens the standard
+        // wallet, so the user would be told they already watch it instead of what is actually wrong.
+        val features = mock<TrezorFeatures> { on { passphraseProtection }.thenReturn(false) }
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = features, walletId = HARDWARE_WALLET_ID),
+        )
+        val sut = createRepo()
+
+        val result = sut.connectWithPassphrase(deviceId = "dev1", passphrase = "secret")
+
+        assertTrue(result.exceptionOrNull() is HwPassphraseDisabledError)
+        verify(trezorRepo, never()).setWalletMode(any(), any())
+    }
+
+    @Test
     fun `connectWithPassphrase reports a passphrase wallet that is already watched`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
+        val features = passphraseCapableFeatures()
         whenever { trezorRepo.connectWithWalletMode("dev1", TrezorWalletMode.PASSPHRASE_HOST, "secret") }
             .thenReturn(Result.success(mock()))
         trezorState.value = TrezorState(
-            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HIDDEN_WALLET_ID),
+            connected = ConnectedTrezorDevice(id = "dev1", features = features, walletId = HIDDEN_WALLET_ID),
         )
         val sut = createRepo()
 

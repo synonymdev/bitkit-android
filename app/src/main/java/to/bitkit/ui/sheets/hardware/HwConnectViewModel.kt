@@ -20,6 +20,7 @@ import to.bitkit.R
 import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.models.Toast
 import to.bitkit.repositories.HwPassphraseAlreadyAddedError
+import to.bitkit.repositories.HwPassphraseDisabledError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
 import to.bitkit.repositories.resolveHwWalletName
@@ -241,6 +242,7 @@ class HwConnectViewModel @Inject constructor(
     private suspend fun onPassphraseFailed(error: Throwable) {
         _uiState.update { it.copy(isSubmittingPassphrase = false, passphraseInput = "") }
         val description = when (error) {
+            is HwPassphraseDisabledError -> context.getString(R.string.hardware__passphrase_disabled)
             is HwPassphraseAlreadyAddedError -> context.getString(R.string.hardware__passphrase_duplicate)
             else if error.isTrezorDeviceBusy() -> TrezorErrorPresenter.userMessage(context, error)
             else -> context.getString(R.string.hardware__passphrase_error)
