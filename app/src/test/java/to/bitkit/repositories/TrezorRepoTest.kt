@@ -800,6 +800,39 @@ class TrezorRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `connect keeps the custom label when the wallet appears on a new transport`() = test {
+        // A restarted bridge or a fresh usb handle gives the same wallet a new transport id; the
+        // name the user set is the wallet's, and the tile prefers the connected entry, so losing it
+        // here renames the wallet to the device's own name and finishing writes that over the rest.
+        val sharedKey = "shared-native-xpub"
+        val onOldTransport = mockKnownDevice(
+            id = "old-transport",
+            path = "bridge:1",
+            xpubs = ALL_ADDRESS_TYPE_KEYS.associateWith { sharedKey },
+            customLabel = "No Pass",
+            walletId = "standard-wallet",
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(onOldTransport))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(
+            trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
+        ).thenAnswer { mockPublicKeyResponse(xpub = sharedKey, path = it.getArgument(0)) }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        val added = captor.firstValue.single { it.id == DEVICE_ID }
+        assertEquals("No Pass", added.customLabel)
+        assertEquals("standard-wallet", added.walletId)
+    }
+
+    @Test
     fun `connect supersedes entries of a seed the device no longer carries`() = test {
         // A wiped and restored device reports a new device id and different keys, so nothing would
         // ever match those entries again; they would linger as wallets that can never sign.

@@ -1132,6 +1132,11 @@ class TrezorRepo @Inject constructor(
         if (xpubs.isEmpty()) {
             throw AppError("Could not read any account keys from your Trezor. Reconnect and try again.")
         }
+        // Labels are set for the wallet, not for the transport it happens to be reached over, so a
+        // wallet showing up on a new path (a fresh usb/bluetooth handle, or a restarted bridge)
+        // must keep the name the user gave it instead of falling back to the device's own.
+        val identityKey = walletKey(xpubs, deviceInfo.id)
+        val named = previous ?: knownDevices.firstOrNull { it.walletKey == identityKey }
         val known = KnownDevice(
             id = deviceInfo.id,
             name = deviceInfo.name,
@@ -1141,7 +1146,7 @@ class TrezorRepo @Inject constructor(
             model = features.model ?: deviceInfo.model,
             lastConnectedAt = clock.nowMs(),
             xpubs = xpubs,
-            customLabel = previous?.customLabel,
+            customLabel = named?.customLabel,
             walletId = previous?.walletId?.takeIf { it.isNotBlank() }
                 ?: knownDevices.findHardwareWalletId(xpubs, fallback = deviceInfo.id),
             // The selection that derived these keys is authoritative, so a wallet wrongly marked
