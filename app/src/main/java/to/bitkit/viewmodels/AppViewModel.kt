@@ -2879,22 +2879,23 @@ class AppViewModel @Inject constructor(
         amount: ULong,
         tags: List<String> = emptyList(),
     ): Result<Txid> {
+        val state = _sendUiState.value
         return lightningRepo.sendOnChain(
             address = address,
             sats = amount,
-            speed = _sendUiState.value.speed,
-            utxosToSpend = _sendUiState.value.selectedUtxos,
-            isMaxAmount = _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
-                shouldDrainOnchain(address, amount),
+            speed = state.speed,
+            utxosToSpend = state.selectedUtxos,
+            feeRates = state.feeRates,
+            isMaxAmount = state.payMethod == SendMethod.ONCHAIN &&
+                shouldDrainOnchain(address, amount, state),
             tags = tags,
         )
     }
 
-    private suspend fun shouldDrainOnchain(address: String, amount: ULong): Boolean {
+    private suspend fun shouldDrainOnchain(address: String, amount: ULong, state: SendUiState): Boolean {
         // cached max is computed at the default speed, so drain only if it still holds for the selected one
         if (amount != walletRepo.balanceState.value.maxSendOnchainSats) return false
 
-        val state = _sendUiState.value
         val maxAtSelectedSpeed = lightningRepo.estimateMaxSendOnchain(
             address = address,
             speed = state.speed,

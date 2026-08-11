@@ -9,6 +9,7 @@ import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.core.net.toUri
 import app.cash.turbine.test
+import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
@@ -2152,12 +2153,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `max onchain send drains when max still matches the selected speed`() = test {
         val address = "bcrt1qmaxsend"
         val maxAmount = 100_000uL
+        val feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u)
         balanceState.value = BalanceState(maxSendOnchainSats = maxAmount)
         whenever {
             lightningRepo.estimateMaxSendOnchain(
                 address = address,
                 speed = TransactionSpeed.Fast,
-                feeRates = null,
+                feeRates = feeRates,
             )
         }.thenReturn(Result.success(maxAmount))
         whenever {
@@ -2166,6 +2168,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 sats = maxAmount,
                 speed = TransactionSpeed.Fast,
                 utxosToSpend = null,
+                feeRates = feeRates,
                 isMaxAmount = true,
                 tags = emptyList(),
             )
@@ -2176,17 +2179,25 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = maxAmount,
                 payMethod = SendMethod.ONCHAIN,
                 speed = TransactionSpeed.Fast,
+                feeRates = feeRates,
             ),
         )
 
         sut.setSendEvent(SendEvent.PayConfirmed)
         advanceUntilIdle()
 
+        // same rates must back both the drain check and the send
+        verify(lightningRepo).estimateMaxSendOnchain(
+            address = address,
+            speed = TransactionSpeed.Fast,
+            feeRates = feeRates,
+        )
         verify(lightningRepo).sendOnChain(
             address = address,
             sats = maxAmount,
             speed = TransactionSpeed.Fast,
             utxosToSpend = null,
+            feeRates = feeRates,
             isMaxAmount = true,
             tags = emptyList(),
         )
