@@ -2149,6 +2149,138 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `max onchain send drains when max still matches the selected speed`() = test {
+        val address = "bcrt1qmaxsend"
+        val maxAmount = 100_000uL
+        balanceState.value = BalanceState(maxSendOnchainSats = maxAmount)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(
+                address = address,
+                speed = TransactionSpeed.Fast,
+                feeRates = null,
+            )
+        }.thenReturn(Result.success(maxAmount))
+        whenever {
+            lightningRepo.sendOnChain(
+                address = address,
+                sats = maxAmount,
+                speed = TransactionSpeed.Fast,
+                utxosToSpend = null,
+                isMaxAmount = true,
+                tags = emptyList(),
+            )
+        }.thenReturn(Result.success("txid"))
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = maxAmount,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Fast,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(lightningRepo).sendOnChain(
+            address = address,
+            sats = maxAmount,
+            speed = TransactionSpeed.Fast,
+            utxosToSpend = null,
+            isMaxAmount = true,
+            tags = emptyList(),
+        )
+    }
+
+    @Test
+    fun `max onchain send falls back to exact amount when selected speed changes the max`() = test {
+        val address = "bcrt1qmaxsendstale"
+        val maxAmount = 100_000uL
+        balanceState.value = BalanceState(maxSendOnchainSats = maxAmount)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(
+                address = address,
+                speed = TransactionSpeed.Fast,
+                feeRates = null,
+            )
+        }.thenReturn(Result.success(maxAmount - 500uL))
+        whenever {
+            lightningRepo.sendOnChain(
+                address = address,
+                sats = maxAmount,
+                speed = TransactionSpeed.Fast,
+                utxosToSpend = null,
+                isMaxAmount = false,
+                tags = emptyList(),
+            )
+        }.thenReturn(Result.success("txid"))
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = maxAmount,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Fast,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(lightningRepo).sendOnChain(
+            address = address,
+            sats = maxAmount,
+            speed = TransactionSpeed.Fast,
+            utxosToSpend = null,
+            isMaxAmount = false,
+            tags = emptyList(),
+        )
+    }
+
+    @Test
+    fun `max onchain send falls back to exact amount when max cannot be recomputed`() = test {
+        val address = "bcrt1qmaxsendfailure"
+        val maxAmount = 100_000uL
+        balanceState.value = BalanceState(maxSendOnchainSats = maxAmount)
+        whenever {
+            lightningRepo.estimateMaxSendOnchain(
+                address = address,
+                speed = TransactionSpeed.Medium,
+                feeRates = null,
+            )
+        }.thenReturn(Result.failure(AppError("no estimate")))
+        whenever {
+            lightningRepo.sendOnChain(
+                address = address,
+                sats = maxAmount,
+                speed = TransactionSpeed.Medium,
+                utxosToSpend = null,
+                isMaxAmount = false,
+                tags = emptyList(),
+            )
+        }.thenReturn(Result.success("txid"))
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = maxAmount,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(lightningRepo).sendOnChain(
+            address = address,
+            sats = maxAmount,
+            speed = TransactionSpeed.Medium,
+            utxosToSpend = null,
+            isMaxAmount = false,
+            tags = emptyList(),
+        )
+    }
+
+    @Test
     fun `private lightning contact payment consumes private list before send`() = test {
         val bolt11 = "lnbcrt1privatecontact"
         val paymentHash = "payment_hash"

@@ -2885,9 +2885,34 @@ class AppViewModel @Inject constructor(
             speed = _sendUiState.value.speed,
             utxosToSpend = _sendUiState.value.selectedUtxos,
             isMaxAmount = _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
-                amount == walletRepo.balanceState.value.maxSendOnchainSats,
+                shouldDrainOnchain(address, amount),
             tags = tags,
         )
+    }
+
+    private suspend fun shouldDrainOnchain(address: String, amount: ULong): Boolean {
+        // cached max is computed at the default speed, so drain only if it still holds for the selected one
+        if (amount != walletRepo.balanceState.value.maxSendOnchainSats) return false
+
+        val state = _sendUiState.value
+        val maxAtSelectedSpeed = lightningRepo.estimateMaxSendOnchain(
+            address = address,
+            speed = state.speed,
+            feeRates = state.feeRates,
+        ).onFailure {
+            Logger.warn("Failed to recompute max send amount for speed '${state.speed}'", it, context = TAG)
+        }.getOrNull() ?: return false
+
+        if (amount != maxAtSelectedSpeed) {
+            Logger.info(
+                "Sending exact amount '$amount' instead of draining, " +
+                    "max at speed '${state.speed}' is '$maxAtSelectedSpeed'",
+                context = TAG,
+            )
+            return false
+        }
+
+        return true
     }
 
     private suspend fun sendLightning(
