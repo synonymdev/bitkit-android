@@ -585,6 +585,11 @@ class LightningRepo @Inject constructor(
      * Scheduling and cancelling are atomic: [cancelPendingStop] runs on the repo dispatcher while this
      * runs on the caller thread, so an interleaved cancel could otherwise miss the job being installed
      * and stop the node after the app is back in the foreground.
+     *
+     * [BACKGROUND_STOP_DELAY] plus the stop itself must stay under the cached-app freezer debounce
+     * (~10s once the process drops to `oom_adj` 900, which happens the moment the user opens another
+     * app). Past that the process is frozen mid-delay and the stop only fires on unfreeze, racing
+     * [cancelPendingStop] to tear the node down just as the user returns.
      */
     fun stopDebounced() = synchronized(pendingStopLock) {
         val job = scope.launch {
@@ -1896,7 +1901,7 @@ class LightningRepo @Inject constructor(
         private const val VSS_KEY_EXTERNAL_SCORES_CACHE = "external_pathfinding_scores_cache"
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
-        private val BACKGROUND_STOP_DELAY = 3.seconds
+        private val BACKGROUND_STOP_DELAY = 5.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
         private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
         val SEND_LN_TIMEOUT = 10.seconds
