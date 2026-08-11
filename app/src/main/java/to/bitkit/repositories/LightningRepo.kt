@@ -586,10 +586,16 @@ class LightningRepo @Inject constructor(
      * runs on the caller thread, so an interleaved cancel could otherwise miss the job being installed
      * and stop the node after the app is back in the foreground.
      *
-     * [BACKGROUND_STOP_DELAY] plus the stop itself must stay under the cached-app freezer debounce
-     * (~10s once the process drops to `oom_adj` 900, which happens the moment the user opens another
-     * app). Past that the process is frozen mid-delay and the stop only fires on unfreeze, racing
-     * [cancelPendingStop] to tear the node down just as the user returns.
+     * [BACKGROUND_STOP_DELAY] must stay under the cached-app freezer debounce (~10s once the process
+     * drops to `oom_adj` 900) so [stop] is at least entered before the process can be frozen. Past
+     * that the process freezes mid-delay and the stop only fires on unfreeze, racing
+     * [cancelPendingStop] to tear the node down just as the user returns — and [stop] runs
+     * `NonCancellable`, so losing that race is unrecoverable.
+     *
+     * Whether the stop *completes* in that window is out of scope here: on a wallet with real
+     * payment history ldk_node reliably hits its own 30s event-handling deadline, so no delay value
+     * makes the teardown fit. That also makes an avoided teardown valuable, since a user returning
+     * mid-stop waits it out before the ~8s node rebuild can start.
      */
     fun stopDebounced() = synchronized(pendingStopLock) {
         val job = scope.launch {
