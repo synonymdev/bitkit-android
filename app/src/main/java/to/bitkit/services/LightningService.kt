@@ -254,7 +254,6 @@ class LightningService @Inject constructor(
 
         val builder = Builder.fromConfig(config).apply {
             setCustomLogger(LdkLogWriter())
-            setAcceptStaleChannelMonitors(false)
             configureChainSource(customServerUrl)
             configureGossipSource(customRgsServerUrl)
             configureScorerSource()
