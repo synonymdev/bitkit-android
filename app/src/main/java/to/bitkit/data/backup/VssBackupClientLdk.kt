@@ -17,6 +17,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
@@ -52,6 +53,9 @@ class VssBackupClientLdk @Inject constructor(
                     ?: throw MnemonicNotAvailableException()
 
                 withTimeout(30.seconds) {
+                    if (Env.lnurlAuthServerUrl.isEmpty()) {
+                        throw ServiceError.VssAuthRequired()
+                    }
                     val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
                     vssNewLdkClientWithLnurlAuth(
                         baseUrl = Env.vssServerUrl,
