@@ -247,8 +247,14 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    /** A session opened before its identity could be resolved reports none and stays usable. */
-    private fun String?.isIdentityOf(walletId: String): Boolean = this == null || this == walletId
+    private suspend fun String?.isIdentityOf(walletId: String): Boolean = when {
+        this == walletId -> true
+        this != null -> false
+        // A session whose accounts could not be read reports no identity. The standard wallet
+        // tolerates that, since reopening it proves nothing either; a hidden wallet is only ever
+        // opened by proving its identity, so an unresolved session is never one of them.
+        else -> devicesForWallet(walletId).none { it.passphraseProtected }
+    }
 
     /**
      * Whether reaching [walletId] needs the passphrase again. The device only holds one hidden

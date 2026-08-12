@@ -1031,6 +1031,60 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `ensureConnected demands the passphrase when the session resolves to no identity`() = test {
+        // A session whose accounts could not be read reports no identity, and a hidden wallet is
+        // only ever opened by proving one, so accepting it would sign on an unknown wallet.
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = null),
+        )
+        whenever { trezorRepo.ensureConnected("dev1") }.thenReturn(Result.success(mock()))
+        val sut = createRepo()
+
+        val result = sut.ensureConnected(HIDDEN_WALLET_ID)
+
+        assertTrue(result.exceptionOrNull() is HwPassphraseRequiredError)
+    }
+
+    @Test
+    fun `ensureConnected accepts an unresolved session for the standard wallet`() = test {
+        // Reopening the standard wallet proves nothing either, so demanding a passphrase here would
+        // ask for one that does not exist.
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = null),
+        )
+        whenever { trezorRepo.ensureConnected("dev1") }.thenReturn(Result.success(mock()))
+        val sut = createRepo()
+
+        val result = sut.ensureConnected(HARDWARE_WALLET_ID)
+
+        assertTrue(result.isSuccess, "err=${result.exceptionOrNull()}")
+        verify(trezorRepo, never()).setWalletMode(any(), any())
+    }
+
+    @Test
+    fun `signFunding refuses an unresolved session for a hidden wallet`() = test {
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = 1_250uL,
+            feeRate = 2.0f,
+            totalSpent = 26_250uL,
+            satsPerVByte = 2uL,
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = null),
+        )
+        val sut = createRepo()
+
+        val result = sut.signFunding(HIDDEN_WALLET_ID, funding)
+
+        assertTrue(result.exceptionOrNull() is HwPassphraseRequiredError)
+        verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
+    }
+
+    @Test
     fun `ensureConnected demands the passphrase when another identity holds the session`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
         trezorState.value = TrezorState(
@@ -1467,6 +1521,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         )
         whenever(trezorRepo.signTxFromPsbt("psbt", Env.network.toTrezorCoinType()))
             .thenReturn(Result.success(signedTx))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
         val sut = createRepo()
 
         val result = sut.signFunding(HARDWARE_WALLET_ID, funding)
@@ -1550,6 +1605,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         )
         whenever(trezorRepo.signTxFromPsbt("psbt", Env.network.toTrezorCoinType()))
             .thenReturn(Result.failure(TrezorException.UserCancelled()))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
         val sut = createRepo()
 
         val result = sut.signFunding(HARDWARE_WALLET_ID, funding)
