@@ -53,7 +53,7 @@ class VssBackupClientLdk @Inject constructor(
                     ?: throw MnemonicNotAvailableException()
 
                 withTimeout(30.seconds) {
-                    if (Env.lnurlAuthServerUrl.isEmpty()) {
+                    if (Env.lnurlAuthServerUrl.isBlank()) {
                         throw ServiceError.VssAuthRequired()
                     }
                     val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)

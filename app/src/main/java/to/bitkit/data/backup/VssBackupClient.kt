@@ -51,7 +51,7 @@ class VssBackupClient @Inject constructor(
                     val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)
                     Logger.verbose("Building VSS client with vssUrl: '$vssUrl'", context = TAG)
                     Logger.verbose("Building VSS client with lnurlAuthServerUrl: '$lnurlAuthServerUrl'", context = TAG)
-                    if (lnurlAuthServerUrl.isEmpty()) {
+                    if (lnurlAuthServerUrl.isBlank()) {
                         throw ServiceError.VssAuthRequired()
                     }
                     val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)

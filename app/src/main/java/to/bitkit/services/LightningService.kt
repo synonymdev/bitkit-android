@@ -286,7 +286,7 @@ class LightningService @Inject constructor(
                 context = TAG,
             )
 
-            if (lnurlAuthServerUrl.isEmpty()) {
+            if (lnurlAuthServerUrl.isBlank()) {
                 throw ServiceError.VssAuthRequired()
             }
 
