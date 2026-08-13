@@ -14,8 +14,10 @@ object ScreenDeepLinks {
 
     private val CAMEL_HUMP = Regex("(?<=[a-z0-9])(?=[A-Z])")
 
+    val isEnabled: Boolean get() = ScreenDeepLinkRuntime.isEnabled
+
     fun shouldQueue(isDevModeEnabled: Boolean): Boolean =
-        ScreenDeepLinkRuntime.isEnabled && isDevModeEnabled
+        isEnabled && isDevModeEnabled
 
     fun screenId(route: KClass<out Routes.DeepLinkable>): String? = kebabId(route)
 
