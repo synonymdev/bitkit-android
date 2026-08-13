@@ -2,6 +2,7 @@ import com.android.build.api.artifact.SingleArtifact
 import com.android.build.api.variant.BuildConfigField
 import com.android.build.api.variant.BuiltArtifactsLoader
 import com.android.build.api.variant.FilterConfiguration
+import com.android.build.api.variant.HasUnitTestBuilder
 import io.gitlab.arturbosch.detekt.Detekt
 import org.gradle.api.artifacts.MinimalExternalModuleDependency
 import org.gradle.api.provider.Provider
@@ -315,6 +316,9 @@ kotlin {
 }
 
 androidComponents {
+    beforeVariants(selector().withFlavor("network", "dev").withBuildType("release")) { variant ->
+        (variant as HasUnitTestBuilder).enableUnitTest = true
+    }
     onVariants { variant ->
         val buildConfigFields = requireNotNull(variant.buildConfigFields) {
             "buildFeatures.buildConfig must stay enabled for '${variant.name}'."
