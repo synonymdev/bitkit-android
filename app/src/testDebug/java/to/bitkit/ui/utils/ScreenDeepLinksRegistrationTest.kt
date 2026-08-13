@@ -13,8 +13,8 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 class ScreenDeepLinksRegistrationTest : BaseUnitTest() {
     @Test
-    fun `debug runtime registers screen deeplinks`() {
-        assertTrue(ScreenDeepLinkRuntime.isEnabled)
+    fun `debug registers screen deeplinks`() {
+        assertTrue(ScreenDeepLinks.isEnabled)
     }
 
     @Test

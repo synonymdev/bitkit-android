@@ -49,7 +49,7 @@ class ScreenDeepLinksTest : BaseUnitTest() {
             val clash = ids.put(id, name)
             assertNull(clash, "screen id '$id' is used by both $clash and $name")
             val links = ScreenDeepLinks.linksFor(route)
-            if (ScreenDeepLinkRuntime.isEnabled) {
+            if (ScreenDeepLinks.isEnabled) {
                 assertEquals(1, links.size, "route $name has no deep link")
             } else {
                 assertTrue(links.isEmpty(), "route $name leaked a deep link in release")
@@ -87,9 +87,8 @@ class ScreenDeepLinksTest : BaseUnitTest() {
     }
 
     @Test
-    fun `shouldQueue requires a debug runtime and dev mode`() {
-        assertFalse(ScreenDeepLinks.shouldQueue(isDevModeEnabled = false))
-        assertEquals(ScreenDeepLinkRuntime.isEnabled, ScreenDeepLinks.shouldQueue(isDevModeEnabled = true))
+    fun `screen links are enabled only on debug`() {
+        assertEquals(ScreenDeepLinks.isEnabled, ScreenDeepLinks.linksFor(Routes.Settings::class).isNotEmpty())
     }
 
     @Test

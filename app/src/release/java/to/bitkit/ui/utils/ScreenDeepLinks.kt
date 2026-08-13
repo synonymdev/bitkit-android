@@ -10,14 +10,11 @@ object ScreenDeepLinks {
     const val SCHEME = "bitkit"
     const val HOST = "screen"
 
+    val isEnabled = false
+
     private const val BASE_URI = "$SCHEME://$HOST"
 
     private val CAMEL_HUMP = Regex("(?<=[a-z0-9])(?=[A-Z])")
-
-    val isEnabled: Boolean get() = ScreenDeepLinkRuntime.isEnabled
-
-    fun shouldQueue(isDevModeEnabled: Boolean): Boolean =
-        isEnabled && isDevModeEnabled
 
     fun screenId(route: KClass<out Routes.DeepLinkable>): String? = kebabId(route)
 
@@ -28,8 +25,8 @@ object ScreenDeepLinks {
 
     fun basePath(route: KClass<out Routes.DeepLinkable>): String? = screenId(route)?.let { "$BASE_URI/$it" }
 
-    fun <T : Routes.DeepLinkable> linksFor(route: KClass<T>): List<NavDeepLink> =
-        ScreenDeepLinkRuntime.linksFor(route)
+    @Suppress("UNUSED_PARAMETER")
+    fun <T : Routes.DeepLinkable> linksFor(route: KClass<T>): List<NavDeepLink> = emptyList()
 
     fun <T : Any> matchStart(path: String, default: T, starts: List<T>): T? = when {
         path.isEmpty() -> default

@@ -16,14 +16,13 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 class ScreenDeepLinksRegistrationTest : BaseUnitTest() {
     @Test
-    fun `release runtime never registers screen deeplinks`() {
-        assertFalse(ScreenDeepLinkRuntime.isEnabled)
+    fun `release never registers screen deeplinks`() {
+        assertFalse(ScreenDeepLinks.isEnabled)
         assertTrue(ScreenDeepLinks.linksFor(Routes.Settings::class).isEmpty())
         assertTrue(ScreenDeepLinks.linksFor(Routes.Home::class).isEmpty())
         assertTrue(SheetDeepLinks.sheetIds.isEmpty())
         assertNull(SheetDeepLinks.sheetFor(Uri.parse("bitkit://screen/send")))
         assertNull(SheetDeepLinks.sheetFor(Uri.parse("bitkit://screen/settings")))
-        assertFalse(ScreenDeepLinks.shouldQueue(isDevModeEnabled = true))
     }
 
     @Test
