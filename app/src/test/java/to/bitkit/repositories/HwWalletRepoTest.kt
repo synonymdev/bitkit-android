@@ -992,6 +992,60 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `reconnectWithPassphrase reports an unreadable reopen instead of a wrong passphrase`() = test {
+        // The session opened but its accounts could not be read, so nothing says the passphrase was
+        // wrong; telling the user it opens a different wallet sends them to re-enter a right one.
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
+        whenever { trezorRepo.connectWithWalletMode("dev1", TrezorWalletMode.PASSPHRASE_HOST, "secret") }
+            .thenAnswer {
+                trezorState.value = TrezorState(
+                    connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = null),
+                )
+                mock<TrezorFeatures>()
+            }
+        val sut = createRepo()
+
+        val result = sut.reconnectWithPassphrase(HIDDEN_WALLET_ID, "secret")
+
+        assertTrue(result.isFailure)
+        assertFalse(result.exceptionOrNull() is HwPassphraseMismatchError)
+        verify(trezorRepo).disconnectStaleSession("dev1")
+    }
+
+    @Test
+    fun `connectWithPassphrase reports a dropped session instead of disabled protection`() = test {
+        // With no session there is nothing to ask about passphrase protection, and sending the user
+        // to Trezor Suite to enable a setting they already have on helps nobody.
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        trezorState.value = TrezorState(connected = null)
+        val sut = createRepo()
+
+        val result = sut.connectWithPassphrase(deviceId = "dev1", passphrase = "secret")
+
+        assertTrue(result.isFailure)
+        assertFalse(result.exceptionOrNull() is HwPassphraseDisabledError)
+        verify(trezorRepo, never()).setWalletMode(any(), any())
+    }
+
+    @Test
+    fun `ensureConnected reports a reconnect failure when the standard wallet cannot be reopened`() = test {
+        // Passphrase wallets return earlier, so this wallet has none to ask for; prompting leads to
+        // a dead end where every entry is rejected as a mismatch.
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HIDDEN_WALLET_ID),
+        )
+        whenever { trezorRepo.ensureConnected("dev1") }.thenReturn(Result.success(mock()))
+        whenever { trezorRepo.setWalletMode(TrezorWalletMode.STANDARD, "") }.thenReturn(Result.success(mock()))
+        val sut = createRepo()
+
+        val result = sut.ensureConnected(HARDWARE_WALLET_ID)
+
+        assertTrue(result.isFailure)
+        assertFalse(result.exceptionOrNull() is HwPassphraseRequiredError)
+    }
+
+    @Test
     fun `connectWithPassphrase reports a passphrase wallet that is already watched`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
         val features = passphraseCapableFeatures()

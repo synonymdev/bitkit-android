@@ -198,10 +198,12 @@ class HwWalletRepo @Inject constructor(
             runSuspendCatching {
                 // A device with passphrase protection turned off ignores the passphrase and simply
                 // reopens the standard wallet, which would surface as "already added" and leave the
-                // user retyping a passphrase that can never take effect.
-                if (trezorRepo.state.value.connectedDevice()?.passphraseProtection != true) {
-                    throw HwPassphraseDisabledError()
-                }
+                // user retyping a passphrase that can never take effect. Only the device can say
+                // that though: with no session there is nothing to ask, and sending the user to
+                // enable a setting they already have on helps nobody.
+                val features = trezorRepo.state.value.connectedDevice()
+                    ?: throw AppError("Lost the session with device '$deviceId' before reading its wallet")
+                if (features.passphraseProtection != true) throw HwPassphraseDisabledError()
                 val watchedWalletIds = hwWalletStore.loadKnownDevices().mapNotNull { it.resolvedWalletId() }.toSet()
                 trezorRepo.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, passphrase).getOrThrow()
                 val walletId = requireNotNull(trezorRepo.state.value.connectedWalletId()) {
@@ -241,7 +243,9 @@ class HwWalletRepo @Inject constructor(
 
             val reopened = trezorRepo.setWalletMode(TrezorWalletMode.STANDARD).getOrThrow()
             if (!trezorRepo.state.value.connectedWalletId().isIdentityOf(walletId)) {
-                throw HwPassphraseRequiredError()
+                // Passphrase wallets already returned above, so this one has none to ask for: the
+                // device simply is not holding it, which is a reconnect failure.
+                throw AppError("Device '$deviceId' is not holding wallet '$walletId'")
             }
             reopened
         }
@@ -283,10 +287,18 @@ class HwWalletRepo @Inject constructor(
                 val opened = trezorRepo.state.value.connectedWalletId()
                 if (opened == walletId) return@runSuspendCatching
 
+                if (opened == null) {
+                    // The session opened but its accounts could not be read, so nothing says the
+                    // passphrase was wrong. Tear it down: an unresolved session is refused by every
+                    // later hidden-wallet call anyway.
+                    trezorRepo.disconnectStaleSession(deviceId)
+                    throw AppError("Could not read the accounts of the reopened wallet on '$deviceId'")
+                }
+
                 Logger.warn("Rejected hardware session for '$walletId': opened wallet '$opened'", context = TAG)
                 // Reading the accounts of the wrong wallet already stored it; a mistyped passphrase
                 // must not leave a stray watch-only wallet behind.
-                if (opened != null && opened !in watchedBefore) {
+                if (opened !in watchedBefore) {
                     removeDevice(opened)
                         .onFailure { Logger.warn("Failed to drop unwatched wallet '$opened'", it, context = TAG) }
                 }
