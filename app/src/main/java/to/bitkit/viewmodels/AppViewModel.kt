@@ -71,6 +71,7 @@ import org.lightningdevkit.ldknode.Txid
 import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
@@ -1620,8 +1621,8 @@ class AppViewModel @Inject constructor(
 
     private fun scanLogId(data: String): String {
         val scanLogInput = SamRockSetupRequest.sanitizedDescription(data.removeLightningSchemes()) ?: data
-        return if (scanLogInput.length > 24) {
-            "${scanLogInput.take(11)}…${scanLogInput.takeLast(11)}"
+        return if (scanLogInput.length > SCAN_LOG_ID_MAX_LENGTH) {
+            "${scanLogInput.take(SCAN_LOG_ID_AFFIX_LENGTH)}…${scanLogInput.takeLast(SCAN_LOG_ID_AFFIX_LENGTH)}"
         } else {
             scanLogInput
         }
@@ -2495,13 +2496,7 @@ class AppViewModel @Inject constructor(
         if (hasActiveContactPaymentContext()) return false
 
         val settings = settingsStore.data.first()
-        if (!settings.isQuickPayEnabled || amountSats == 0uL) {
-            return false
-        }
-        if (settings.isPinEnabled && settings.isPinForPaymentsEnabled) {
-            Logger.debug("Skipping QuickPay because PIN is required for payments", context = TAG)
-            return false
-        }
+        if (!canApplyQuickPay(settings, amountSats)) return false
 
         val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull()
             ?: return false
@@ -2532,6 +2527,15 @@ class AppViewModel @Inject constructor(
         }
 
         return false
+    }
+
+    private fun canApplyQuickPay(settings: SettingsData, amountSats: ULong): Boolean {
+        if (!settings.isQuickPayEnabled || amountSats == 0uL) return false
+        if (settings.isPinEnabled && settings.isPinForPaymentsEnabled) {
+            Logger.debug("Skipping QuickPay because PIN is required for payments", context = TAG)
+            return false
+        }
+        return true
     }
 
     private fun resetAmountInput() {
@@ -3773,6 +3777,13 @@ class AppViewModel @Inject constructor(
         private const val BITKIT_SCHEME = "bitkit"
         private const val PUBKYAUTH_SCHEME = "pubkyauth"
         private const val RECOVERY_MODE_DEEPLINK = "recovery-mode"
+
+        /** Max characters kept in a scan log id before truncating. */
+        private const val SCAN_LOG_ID_MAX_LENGTH = 24
+
+        /** Characters kept on each side of a truncated scan log id. */
+        private const val SCAN_LOG_ID_AFFIX_LENGTH = 11
+
         private val LNURL_WITHDRAW_EXPIRY_SEC = 1.hours.inWholeSeconds.toUInt()
 
         /** Intent actions carrying a deeplink URI: browsers and apps send VIEW, NFC tag taps send NDEF_DISCOVERED. */
