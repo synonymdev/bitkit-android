@@ -644,6 +644,68 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `retries a pending broadcast without asking for the passphrase`() = test {
+        // Rebroadcasting an already signed transaction is electrum-only and never reaches the
+        // device, so holding it behind a passphrase prompt strands a signed transfer.
+        val order = previewBtOrder()
+        val address = order.payment?.onchain?.address.orEmpty()
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FEE_RATE,
+        )
+        val signed = signedFunding(funding)
+        val broadcast = HwFundingBroadcastResult(
+            txId = TXID,
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE,
+            totalSpent = order.feeSat + MINING_FEE,
+        )
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(HARDWARE_WALLET_ID, connected = true))))
+        whenever(hwWalletRepo.ensureConnected(HARDWARE_WALLET_ID))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+        whenever(hwWalletRepo.signFunding(any(), any())).thenReturn(Result.success(signed))
+        whenever(hwWalletRepo.broadcastFunding(signed))
+            .thenReturn(Result.failure(AppError(BroadcastException.ElectrumException("DNS lookup failed"))))
+            .thenReturn(Result.success(broadcast))
+
+        // sign once so a broadcast is left pending, then lose the session
+        sut.onTransferToSpendingHwConfirm(order, HARDWARE_WALLET_ID)
+        advanceUntilIdle()
+        assertTrue(sut.spendingUiState.value.hasPendingHwBroadcast)
+        whenever { hwWalletRepo.needsPassphrase(HARDWARE_WALLET_ID) }.thenReturn(true)
+
+        sut.onTransferToSpendingHwConfirm(order, HARDWARE_WALLET_ID)
+        advanceUntilIdle()
+
+        assertFalse(sut.spendingUiState.value.isHwPassphraseRequired)
+        verify(hwWalletRepo, times(2)).broadcastFunding(signed)
+        verify(hwWalletRepo, times(1)).signFunding(any(), any())
+    }
+
+    @Test
+    fun `cancelHardwareTransfer clears the passphrase prompt`() = test {
+        val order = previewBtOrder()
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(HARDWARE_WALLET_ID, connected = false))))
+        whenever { hwWalletRepo.needsPassphrase(HARDWARE_WALLET_ID) }.thenReturn(true)
+        sut.onTransferToSpendingHwConfirm(order, HARDWARE_WALLET_ID)
+        advanceUntilIdle()
+        assertTrue(sut.spendingUiState.value.isHwPassphraseRequired)
+
+        sut.cancelHardwareTransfer()
+        advanceUntilIdle()
+
+        assertFalse(sut.spendingUiState.value.isHwPassphraseRequired)
+        assertFalse(sut.spendingUiState.value.isVerifyingHwPassphrase)
+    }
+
+    @Test
     fun `onHwPassphraseSubmit signs once the reopened wallet matches`() = test {
         val order = previewBtOrder()
         val funding = HwFundingTransaction(

@@ -727,6 +727,7 @@ class TransferViewModel @Inject constructor(
     }
 
     fun cancelHardwareTransfer() {
+        _spendingUiState.update { it.copy(isHwPassphraseRequired = false, isVerifyingHwPassphrase = false) }
         if (pendingHwFundingBroadcast != null) return
         val walletId = activeHwTransferWalletId
         hwTransferSignJob?.cancel()
@@ -819,14 +820,17 @@ class TransferViewModel @Inject constructor(
         hwTransferSignJob = viewModelScope.launch {
             // A hidden wallet whose session is gone can only be reopened with its passphrase, and
             // the device would otherwise sign from whichever wallet the current session holds.
-            if (hwWalletRepo.needsPassphrase(walletId)) {
+            // Rebroadcasting an already signed transaction never reaches the device, so it must not
+            // be held behind that prompt; a different order still asks.
+            val address = order.payment?.onchain?.address.orEmpty()
+            val isBroadcastRetry = pendingHwFundingBroadcast?.matches(order, walletId, address) == true
+            if (!isBroadcastRetry && hwWalletRepo.needsPassphrase(walletId)) {
                 _spendingUiState.update { it.copy(isHwPassphraseRequired = true) }
                 hwTransferSignJob = null
                 return@launch
             }
             _spendingUiState.update { it.copy(isSigning = true) }
             try {
-                val address = order.payment?.onchain?.address.orEmpty()
                 if (address.isEmpty()) {
                     ToastEventBus.send(type = Toast.ToastType.ERROR, title = context.getString(R.string.common__error))
                     return@launch
