@@ -1796,6 +1796,54 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `locked scans are replayed in order after authenticate`() = test {
+        val first = "lnbcrt1lockedfirst"
+        val second = "lnbcrt1lockedsecond"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = first, amountSats = 500u)
+        stubLightningScan(bolt11 = second, amountSats = 600u)
+
+        sut.onScanResult(first)
+        sut.onScanResult(second)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(500u, sut.sendUiState.value.amount)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(600u, sut.sendUiState.value.amount)
+    }
+
+    @Test
+    fun `duplicate locked scans are queued once`() = test {
+        val bolt11 = "lnbcrt1lockeddup"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.onScanResult(bolt11)
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
     fun `contact lightning payment skips QuickPay and opens confirm`() = test {
         val bolt11 = "lnbcrt1contact"
         enableQuickPay(thresholdSats = 1000u)

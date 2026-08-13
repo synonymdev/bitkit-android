@@ -257,8 +257,8 @@ class AppViewModel @Inject constructor(
     @Volatile
     private var activeScanInput: String? = null
 
-    @Volatile
-    private var pendingLockedScan: PendingLockedScan? = null
+    private val pendingLockedScansLock = Any()
+    private val pendingLockedScans = ArrayDeque<PendingLockedScan>()
 
     private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
@@ -1585,11 +1585,7 @@ class AppViewModel @Inject constructor(
         routePubkyKeys: Boolean = false,
     ) {
         if (!_isAuthenticated.value) {
-            Logger.info(
-                "Queuing '${source.label}' scan until authenticated: '${scanLogId(data)}'",
-                context = TAG,
-            )
-            pendingLockedScan = PendingLockedScan(
+            enqueueLockedScan(
                 source = source,
                 data = data,
                 startDelay = startDelay,
@@ -1616,7 +1612,13 @@ class AppViewModel @Inject constructor(
         activeScanJob = viewModelScope.launch {
             if (startDelay > Duration.ZERO) delay(startDelay)
             handleScan(data, routePubkyKeys)
-        }.also { it.invokeOnCompletion { if (activeScanInput == normalized) activeScanInput = null } }
+        }.also { job ->
+            job.invokeOnCompletion {
+                if (activeScanInput == normalized) activeScanInput = null
+                if (job.isCancelled) return@invokeOnCompletion
+                viewModelScope.launch { flushPendingLockedScan() }
+            }
+        }
     }
 
     private fun scanLogId(data: String): String {
@@ -1628,9 +1630,41 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun enqueueLockedScan(
+        source: ScanSource,
+        data: String,
+        startDelay: Duration,
+        routePubkyKeys: Boolean,
+    ) {
+        val scanId = scanLogId(data)
+        val normalized = data.removeLightningSchemes()
+        synchronized(pendingLockedScansLock) {
+            val alreadyQueued = pendingLockedScans.any { it.data.removeLightningSchemes() == normalized }
+            if (alreadyQueued) {
+                Logger.info("Skipping duplicate queued scan from '${source.label}': '$scanId'", context = TAG)
+                return
+            }
+            pendingLockedScans.addLast(
+                PendingLockedScan(
+                    source = source,
+                    data = data,
+                    startDelay = startDelay,
+                    routePubkyKeys = routePubkyKeys,
+                ),
+            )
+        }
+        Logger.info("Queuing '${source.label}' scan until authenticated: '$scanId'", context = TAG)
+    }
+
     private fun flushPendingLockedScan() {
-        val pending = pendingLockedScan ?: return
-        pendingLockedScan = null
+        if (!_isAuthenticated.value) return
+        if (activeScanJob?.isActive == true) return
+        if (_currentSheet.value != null) return
+
+        val pending = synchronized(pendingLockedScansLock) {
+            pendingLockedScans.removeFirstOrNull()
+        } ?: return
+
         launchScan(
             source = pending.source,
             data = pending.data,
@@ -3285,6 +3319,7 @@ class AppViewModel @Inject constructor(
         }
         clearActiveContactPaymentContext()
         showQueuedPairingCodeSheet()
+        flushPendingLockedScan()
     }
 
     // endregion
