@@ -1,10 +1,16 @@
 package to.bitkit.ui.screens.shop.shopWebView
 
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-class ShopWebViewInterfaceTest {
+@Config(sdk = [34])
+@RunWith(RobolectricTestRunner::class)
+class ShopWebViewInterfaceTest : BaseUnitTest() {
 
     @Test
     fun `payment_intent from an allowed origin is forwarded`() {

@@ -13,7 +13,7 @@ fun isAllowedShopHost(host: String?): Boolean {
 fun isAllowedShopOrigin(url: String?): Boolean {
     if (url.isNullOrBlank()) return false
     val parsed = runCatching { URI(url.trim()) }.getOrNull() ?: return false
-    if (!parsed.scheme.equals("https", ignoreCase = true)) return false
+    if (parsed.scheme?.equals("https", ignoreCase = true) != true) return false
     return isAllowedShopHost(parsed.host)
 }
 
