@@ -102,6 +102,7 @@ import to.bitkit.services.NodeServiceFgState
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
@@ -177,9 +178,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
 
     private val timedSheetManager = mock<TimedSheetManager>()
+    private val timedSheetType = MutableStateFlow<TimedSheetType?>(null)
 
     @Before
     fun setUp() {
+        timedSheetType.value = null
         stubRepositories()
         sut = createViewModel()
     }
@@ -213,7 +216,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever { blocktankRepo.refreshInfo() }.thenReturn(Result.success(Unit))
-        whenever(timedSheetManager.currentSheet).thenReturn(MutableStateFlow(null))
+        whenever(timedSheetManager.currentSheet).thenReturn(timedSheetType)
         whenever(migrationService.isShowingMigrationLoading).thenReturn(MutableStateFlow(false))
         whenever { migrationService.needsPostMigrationSync() }.thenReturn(false)
         whenever { migrationService.isMigrationChecked() }.thenReturn(true)
@@ -1841,6 +1844,85 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `locked scans restore their own contact payment context`() = test {
+        val normal = "lnbcrt1lockednormal"
+        val contact = "lnbcrt1lockedcontact"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = normal, amountSats = 500u)
+        stubLightningScan(bolt11 = contact, amountSats = 600u)
+
+        sut.onScanResult(normal)
+        sut.openContactPayment(paymentRequest = contact, publicKey = "pubkycontact")
+        advanceUntilIdle()
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(500u, sut.sendUiState.value.amount)
+        assertNull(activeContactPaymentContext())
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(600u, sut.sendUiState.value.amount)
+        assertEquals(ContactPaymentContext("pubkycontact"), activeContactPaymentContext())
+    }
+
+    @Test
+    fun `locked scan queue drops the oldest when full`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        val invoices = (1..6).map { index ->
+            "lnbcrt1lockedcap$index" to (100uL * index.toULong())
+        }
+        invoices.forEach { (bolt11, amount) -> stubLightningScan(bolt11 = bolt11, amountSats = amount) }
+
+        invoices.forEach { (bolt11, _) -> sut.onScanResult(bolt11) }
+        advanceUntilIdle()
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(200uL, sut.sendUiState.value.amount)
+
+        repeat(4) {
+            sut.hideSheet()
+            advanceUntilIdle()
+        }
+
+        assertEquals(600uL, sut.sendUiState.value.amount)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `queued scan flushes after timed sheet dismisses`() = test {
+        val bolt11 = "lnbcrt1lockedtimed"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        timedSheetType.value = TimedSheetType.BACKUP
+        advanceUntilIdle()
+
+        assertTrue(sut.currentSheet.value is Sheet.TimedSheet)
+
+        sut.onScanResult(bolt11)
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertTrue(sut.currentSheet.value is Sheet.TimedSheet)
+
+        timedSheetType.value = null
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
     }
 
     @Test

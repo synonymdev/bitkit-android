@@ -31,6 +31,10 @@ This document provides a comprehensive reference for all libraries used in the b
 ### Layout
 - **ConstraintLayout Compose**: https://developer.android.com/jetpack/compose/layouts/constraintlayout
 
+### WebKit
+- **Documentation**: https://developer.android.com/jetpack/androidx/releases/webkit
+- **WebMessageListener**: https://developer.android.com/develop/ui/views/layout/webapps/native-api-access-jsbridge
+
 ## Architecture & Dependency Injection
 
 ### Hilt

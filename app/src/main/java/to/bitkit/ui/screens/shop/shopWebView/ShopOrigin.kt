@@ -17,6 +17,11 @@ fun isAllowedShopOrigin(url: String?): Boolean {
     return isAllowedShopHost(parsed.host)
 }
 
+fun shopAllowedOriginRules(): Set<String> = setOf(
+    "https://$BITREFILL_ROOT_HOST",
+    "https://*.$BITREFILL_ROOT_HOST",
+)
+
 internal fun shopMessageBridgeScript(): String = """
     window.ReactNativeWebView = {
         postMessage: function(data) {

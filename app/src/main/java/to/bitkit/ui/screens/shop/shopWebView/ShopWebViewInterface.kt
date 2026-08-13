@@ -1,18 +1,21 @@
 package to.bitkit.ui.screens.shop.shopWebView
 
+import android.annotation.SuppressLint
 import android.os.Handler
 import android.os.Looper
 import android.webkit.JavascriptInterface
+import android.webkit.WebView
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import kotlinx.serialization.json.Json
 import to.bitkit.utils.Logger
 
 /**
  * JavaScript interface for handling WebView messages.
  *
- * SECURITY NOTE: This interface is exposed to JavaScript running in the WebView.
- * Only methods annotated with @JavascriptInterface are accessible from JavaScript
- * on API 17+ (Android 4.2+). All methods should validate input and handle errors
- * gracefully since they run on a background thread.
+ * Prefer [attachTo], which uses an origin-scoped WebMessageListener when the
+ * WebView supports it. [addJavascriptInterface] is only a fallback and cannot
+ * tell which iframe called [postMessage].
  *
  * Thread Safety: JavaScript interacts with this object on a private background
  * thread. All callbacks should be thread-safe or use appropriate dispatching.
@@ -26,10 +29,30 @@ class ShopWebViewInterface(
 ) {
     private companion object {
         const val TAG = "ShopWebViewInterface"
+        const val JS_OBJECT_NAME = "Android"
         const val PAYMENT_INTENT_EVENT = "payment_intent"
     }
 
     private val json = Json { ignoreUnknownKeys = true }
+
+    @SuppressLint("JavascriptInterface")
+    fun attachTo(webView: WebView) {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) {
+            WebViewCompat.addWebMessageListener(
+                webView,
+                JS_OBJECT_NAME,
+                shopAllowedOriginRules(),
+            ) { _, message, sourceOrigin, _, _ ->
+                onBridgeMessage(message.data.orEmpty(), sourceOrigin.toString())
+            }
+            return
+        }
+        Logger.warn(
+            "Using JavascriptInterface shop bridge because WebMessageListener is unavailable",
+            context = TAG,
+        )
+        webView.addJavascriptInterface(this, JS_OBJECT_NAME)
+    }
 
     /**
      * Handles messages posted from JavaScript.
@@ -39,11 +62,7 @@ class ShopWebViewInterface(
      */
     @JavascriptInterface
     fun postMessage(message: String) {
-        if (message.isBlank()) {
-            Logger.warn("Received empty shop WebView message", context = TAG)
-            return
-        }
-        runOnMain { handlePaymentMessage(message) }
+        onBridgeMessage(message, currentUrl())
     }
 
     /**
@@ -57,10 +76,17 @@ class ShopWebViewInterface(
         return true
     }
 
-    private fun handlePaymentMessage(message: String) {
-        val pageUrl = currentUrl()
-        if (!isAllowedShopOrigin(pageUrl)) {
-            Logger.warn("Rejected shop payment_intent from untrusted origin '$pageUrl'", context = TAG)
+    internal fun onBridgeMessage(message: String, sourceOrigin: String?) {
+        if (message.isBlank()) {
+            Logger.warn("Received empty shop WebView message", context = TAG)
+            return
+        }
+        runOnMain { handlePaymentMessage(message, sourceOrigin) }
+    }
+
+    internal fun handlePaymentMessage(message: String, sourceOrigin: String?) {
+        if (!isAllowedShopOrigin(sourceOrigin)) {
+            Logger.warn("Rejected shop payment_intent from untrusted origin '$sourceOrigin'", context = TAG)
             return
         }
 

@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.shop.shopWebView
 
 import org.junit.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -23,6 +24,10 @@ class ShopOriginTest {
         assertTrue(isAllowedShopOrigin("https://www.bitrefill.com/esims"))
         assertTrue(isAllowedShopHost("embed.bitrefill.com"))
         assertTrue(isAllowedShopHost("BITREFILL.COM"))
+        assertEquals(
+            setOf("https://bitrefill.com", "https://*.bitrefill.com"),
+            shopAllowedOriginRules(),
+        )
     }
 
     @Test

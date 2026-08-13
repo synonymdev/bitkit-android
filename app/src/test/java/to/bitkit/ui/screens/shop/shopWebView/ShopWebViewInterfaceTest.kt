@@ -64,6 +64,38 @@ class ShopWebViewInterfaceTest : BaseUnitTest() {
         assertNull(received)
     }
 
+    @Test
+    fun `payment_intent from an iframe origin is rejected even if the top-level page is allowed`() {
+        var received: String? = null
+        val sut = interfaceOf(
+            pageUrl = "https://embed.bitrefill.com/gift-cards",
+            onPaymentIntent = { received = it },
+        )
+
+        sut.onBridgeMessage(
+            """{"event":"payment_intent","paymentUri":"lightning:lnbcrt1shop"}""",
+            "https://evil.example",
+        )
+
+        assertNull(received)
+    }
+
+    @Test
+    fun `payment_intent from a bitrefill iframe origin is forwarded`() {
+        var received: String? = null
+        val sut = interfaceOf(
+            pageUrl = "https://embed.bitrefill.com/gift-cards",
+            onPaymentIntent = { received = it },
+        )
+
+        sut.onBridgeMessage(
+            """{"event":"payment_intent","paymentUri":"lightning:lnbcrt1shop"}""",
+            "https://checkout.bitrefill.com",
+        )
+
+        assertEquals("lightning:lnbcrt1shop", received)
+    }
+
     private fun interfaceOf(
         pageUrl: String?,
         onPaymentIntent: (String) -> Unit,

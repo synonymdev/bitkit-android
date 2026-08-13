@@ -384,9 +384,12 @@ class AppViewModel @Inject constructor(
                     showPairingCodeSheet(requestId)
                 } else {
                     queuedPairingCodeRequestId = null
+                    val shouldFlush = _currentSheet.value is Sheet.Hardware &&
+                        (_currentSheet.value as? Sheet.Hardware)?.route is HardwareRoute.PairCode
                     _currentSheet.update { sheet ->
                         if (sheet is Sheet.Hardware && sheet.route is HardwareRoute.PairCode) null else sheet
                     }
+                    if (shouldFlush) flushPendingLockedScan()
                 }
             }
         }
@@ -400,10 +403,11 @@ class AppViewModel @Inject constructor(
                         showSheet(Sheet.TimedSheet(sheetType))
                     }
                 } else {
-                    // Clear the timed sheet when manager sets it to null
+                    val shouldFlush = _currentSheet.value is Sheet.TimedSheet
                     _currentSheet.update { current ->
                         if (current is Sheet.TimedSheet) null else current
                     }
+                    if (shouldFlush) flushPendingLockedScan()
                 }
             }
         }
@@ -1583,6 +1587,7 @@ class AppViewModel @Inject constructor(
         data: String,
         startDelay: Duration = Duration.ZERO,
         routePubkyKeys: Boolean = false,
+        contactPaymentContext: ContactPaymentContext? = null,
     ) {
         if (!_isAuthenticated.value) {
             enqueueLockedScan(
@@ -1590,6 +1595,7 @@ class AppViewModel @Inject constructor(
                 data = data,
                 startDelay = startDelay,
                 routePubkyKeys = routePubkyKeys,
+                contactPaymentContext = contactPaymentContext,
             )
             return
         }
@@ -1635,6 +1641,7 @@ class AppViewModel @Inject constructor(
         data: String,
         startDelay: Duration,
         routePubkyKeys: Boolean,
+        contactPaymentContext: ContactPaymentContext?,
     ) {
         val scanId = scanLogId(data)
         val normalized = data.removeLightningSchemes()
@@ -1644,12 +1651,20 @@ class AppViewModel @Inject constructor(
                 Logger.info("Skipping duplicate queued scan from '${source.label}': '$scanId'", context = TAG)
                 return
             }
+            while (pendingLockedScans.size >= MAX_PENDING_LOCKED_SCANS) {
+                val dropped = pendingLockedScans.removeFirst()
+                Logger.warn(
+                    "Dropping oldest queued scan from '${dropped.source.label}': '${scanLogId(dropped.data)}'",
+                    context = TAG,
+                )
+            }
             pendingLockedScans.addLast(
                 PendingLockedScan(
                     source = source,
                     data = data,
                     startDelay = startDelay,
                     routePubkyKeys = routePubkyKeys,
+                    contactPaymentContext = contactPaymentContext,
                 ),
             )
         }
@@ -1665,11 +1680,15 @@ class AppViewModel @Inject constructor(
             pendingLockedScans.removeFirstOrNull()
         } ?: return
 
+        synchronized(contactPaymentContextLock) {
+            activeContactPaymentContext = pending.contactPaymentContext
+        }
         launchScan(
             source = pending.source,
             data = pending.data,
             startDelay = pending.startDelay,
             routePubkyKeys = pending.routePubkyKeys,
+            contactPaymentContext = pending.contactPaymentContext,
         )
     }
 
@@ -1895,12 +1914,14 @@ class AppViewModel @Inject constructor(
         data: String,
         startDelay: Duration = Duration.ZERO,
         routePubkyKeys: Boolean = false,
+        contactPaymentContext: ContactPaymentContext? = null,
     ) {
         launchScan(
             source = ScanSource.SCAN_RESULT,
             data = data,
             startDelay = startDelay,
             routePubkyKeys = routePubkyKeys,
+            contactPaymentContext = contactPaymentContext,
         )
     }
 
@@ -1910,14 +1931,15 @@ class AppViewModel @Inject constructor(
         privatePaymentContext: PrivatePaykitPaymentContext? = null,
         incomingPaymentRequest: PaykitPaymentRequest? = null,
     ) {
+        val context = ContactPaymentContext(
+            publicKey = publicKey,
+            privatePaymentContext = privatePaymentContext,
+            incomingPaymentRequest = incomingPaymentRequest,
+        )
         synchronized(contactPaymentContextLock) {
-            activeContactPaymentContext = ContactPaymentContext(
-                publicKey = publicKey,
-                privatePaymentContext = privatePaymentContext,
-                incomingPaymentRequest = incomingPaymentRequest,
-            )
+            activeContactPaymentContext = context
         }
-        onScanResult(paymentRequest)
+        onScanResult(paymentRequest, contactPaymentContext = context)
     }
 
     fun preserveContactPaymentContext(paymentHash: String) {
@@ -3781,6 +3803,7 @@ class AppViewModel @Inject constructor(
         val data: String,
         val startDelay: Duration,
         val routePubkyKeys: Boolean,
+        val contactPaymentContext: ContactPaymentContext?,
     )
 
     companion object {
@@ -3818,6 +3841,8 @@ class AppViewModel @Inject constructor(
 
         /** Characters kept on each side of a truncated scan log id. */
         private const val SCAN_LOG_ID_AFFIX_LENGTH = 11
+
+        private const val MAX_PENDING_LOCKED_SCANS = 5
 
         private val LNURL_WITHDRAW_EXPIRY_SEC = 1.hours.inWholeSeconds.toUInt()
 

@@ -25,7 +25,7 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 
-@SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
+@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun ShopWebViewScreen(
     onClose: () -> Unit,
@@ -69,7 +69,7 @@ fun ShopWebViewScreen(
                         webView = this
                         this.webViewClient = webViewClient
                         configureForBasicWebContent()
-                        addJavascriptInterface(webViewInterface, "Android")
+                        webViewInterface.attachTo(this)
                         loadUrl(bitrefillUrlOf(page))
                     }
                 },
