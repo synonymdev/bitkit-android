@@ -1,10 +1,14 @@
 package to.bitkit.ui.screens.shop.shopWebView
 
 import android.webkit.WebResourceRequest
+import android.webkit.WebView
 import androidx.core.net.toUri
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -19,6 +23,7 @@ class ShopWebViewClientTest : BaseUnitTest() {
     private val sut = ShopWebViewClient(
         onLoadingStateChanged = {},
         onError = {},
+        isPaymentBridgeSupported = { true },
     )
 
     @Test
@@ -40,6 +45,29 @@ class ShopWebViewClientTest : BaseUnitTest() {
         val request = request(url = "https://cdn.example/script.js", isForMainFrame = false)
 
         assertFalse(sut.shouldOverrideUrlLoading(null, request))
+    }
+
+    @Test
+    fun `bridge script is not injected when the payment bridge is unsupported`() {
+        val webView = mock<WebView>()
+        val sut = ShopWebViewClient(
+            onLoadingStateChanged = {},
+            onError = {},
+            isPaymentBridgeSupported = { false },
+        )
+
+        sut.onPageFinished(webView, "https://embed.bitrefill.com")
+
+        verify(webView, never()).evaluateJavascript(any(), any())
+    }
+
+    @Test
+    fun `bridge script is injected when the payment bridge is supported`() {
+        val webView = mock<WebView>()
+
+        sut.onPageFinished(webView, "https://embed.bitrefill.com")
+
+        verify(webView).evaluateJavascript(shopMessageBridgeScript(), null)
     }
 
     private fun request(url: String, isForMainFrame: Boolean): WebResourceRequest {

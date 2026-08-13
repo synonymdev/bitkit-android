@@ -13,6 +13,7 @@ import to.bitkit.utils.Logger
 class ShopWebViewClient(
     private val onLoadingStateChanged: (Boolean) -> Unit,
     private val onError: () -> Unit,
+    private val isPaymentBridgeSupported: () -> Boolean,
 ) : WebViewClient() {
     private companion object {
         const val TAG = "ShopWebViewClient"
@@ -27,7 +28,9 @@ class ShopWebViewClient(
         super.onPageFinished(view, url)
         onLoadingStateChanged(false)
 
-        view?.evaluateJavascript(shopMessageBridgeScript(), null)
+        if (isPaymentBridgeSupported()) {
+            view?.evaluateJavascript(shopMessageBridgeScript(), null)
+        }
     }
 
     override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {

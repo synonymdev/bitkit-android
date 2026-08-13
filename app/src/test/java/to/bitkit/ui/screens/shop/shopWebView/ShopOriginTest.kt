@@ -8,12 +8,14 @@ import kotlin.test.assertTrue
 class ShopOriginTest {
 
     @Test
-    fun `bridge script checks message origin and does not override postMessage`() {
+    fun `bridge script accepts only Bitrefill https message origins`() {
         val script = shopMessageBridgeScript()
 
         assertTrue("addEventListener('message'" in script)
         assertFalse("window.postMessage =" in script)
-        assertTrue("bitrefill.com" in script)
+        assertTrue("originUrl.protocol !== 'https:'" in script)
+        assertTrue("host !== 'bitrefill.com' && !host.endsWith('.bitrefill.com')" in script)
+        assertTrue("catch (e)" in script)
     }
 
     @Test

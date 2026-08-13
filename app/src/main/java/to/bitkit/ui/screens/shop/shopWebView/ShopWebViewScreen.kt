@@ -40,13 +40,13 @@ fun ShopWebViewScreen(
     val webViewInterface = remember {
         ShopWebViewInterface(
             onPaymentIntent = onPaymentIntent,
-            currentUrl = { webView?.url },
         )
     }
     val webViewClient = remember {
         ShopWebViewClient(
             onLoadingStateChanged = { loading -> isLoading = loading },
             onError = onClose,
+            isPaymentBridgeSupported = webViewInterface::supportsPaymentBridge,
         )
     }
 
