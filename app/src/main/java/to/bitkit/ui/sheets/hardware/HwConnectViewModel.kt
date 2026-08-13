@@ -367,8 +367,12 @@ class HwConnectViewModel @Inject constructor(
                     // and label as this one's.
                     wallets.firstOrNull { it.id == pairedWalletId } ?: return@collect
                 } else {
-                    wallets.firstOrNull { deviceId in it.deviceIds && it.isConnected }
-                        ?: wallets.firstOrNull { deviceId in it.deviceIds }
+                    // A session whose identity is unresolved marks every wallet of the device
+                    // connected, so picking the first would adopt a sibling and rename it on
+                    // finish. Only an unambiguous match says which one was paired.
+                    val onDevice = wallets.filter { deviceId in it.deviceIds }
+                    onDevice.filter { it.isConnected }.singleOrNull()
+                        ?: onDevice.singleOrNull()
                         ?: return@collect
                 }
                 _uiState.update {

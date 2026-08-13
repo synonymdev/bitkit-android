@@ -469,6 +469,21 @@ class HwConnectViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `does not adopt an identity while the device holds several unresolved ones`() = test {
+        // An unresolved session marks every wallet of the device connected, so picking the first
+        // would show a sibling's name and balance and rename it on finish.
+        givenPairedDevice()
+        wallets.value = persistentListOf(
+            hwWallet("dev1", name = "Pass A", balance = 10uL, walletId = "hidden-a"),
+            hwWallet("dev1", name = "Pass B", balance = 20uL, walletId = "hidden-b"),
+        )
+
+        assertEquals(null, sut.uiState.value.pairedWalletId)
+        assertFalse(sut.uiState.value.deviceName == "Pass A")
+        assertEquals(0uL, sut.uiState.value.balanceSats)
+    }
+
+    @Test
     fun `keeps the typed label when the new wallet is published afterwards`() = test {
         // The store publishes a newly watched identity asynchronously, so its emission can land
         // after the user has already named it; the entered name must survive and be persisted.
