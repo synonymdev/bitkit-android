@@ -48,7 +48,7 @@ class ShopWebViewInterface(
         addWebMessageListener(
             webView,
             JS_OBJECT_NAME,
-            shopAllowedOriginRules(),
+            shopPaymentOriginRules(),
         ) { _, message, sourceOrigin, _, _ ->
             onWebMessage(message, sourceOrigin.toString())
         }
@@ -68,7 +68,7 @@ class ShopWebViewInterface(
     }
 
     internal fun handlePaymentMessage(message: String, sourceOrigin: String?) {
-        if (!isAllowedShopOrigin(sourceOrigin)) {
+        if (!isAllowedShopPaymentOrigin(sourceOrigin)) {
             Logger.warn("Rejected shop payment_intent from untrusted origin '$sourceOrigin'", context = TAG)
             return
         }

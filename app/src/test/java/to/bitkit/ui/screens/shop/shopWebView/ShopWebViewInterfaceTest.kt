@@ -31,7 +31,7 @@ class ShopWebViewInterfaceTest : BaseUnitTest() {
 
         sut.onWebMessage(
             WebMessageCompat("""{"event":"payment_intent","paymentUri":"lightning:lnbcrt1shop"}"""),
-            "https://embed.bitrefill.com/gift-cards",
+            "https://embed.bitrefill.com",
         )
 
         assertEquals("lightning:lnbcrt1shop", received)
@@ -83,7 +83,7 @@ class ShopWebViewInterfaceTest : BaseUnitTest() {
     }
 
     @Test
-    fun `payment_intent from a bitrefill iframe origin is forwarded`() {
+    fun `payment_intent from a Bitrefill sibling origin is ignored`() {
         var received: String? = null
         val sut = interfaceOf(
             onPaymentIntent = { received = it },
@@ -94,7 +94,7 @@ class ShopWebViewInterfaceTest : BaseUnitTest() {
             "https://checkout.bitrefill.com",
         )
 
-        assertEquals("lightning:lnbcrt1shop", received)
+        assertNull(received)
     }
 
     @Test
@@ -137,7 +137,7 @@ class ShopWebViewInterfaceTest : BaseUnitTest() {
         )
 
         assertEquals("Android", registeredObjectName)
-        assertEquals(shopAllowedOriginRules(), registeredOriginRules)
+        assertEquals(shopPaymentOriginRules(), registeredOriginRules)
         assertEquals("lightning:lnbcrt1shop", received)
     }
 

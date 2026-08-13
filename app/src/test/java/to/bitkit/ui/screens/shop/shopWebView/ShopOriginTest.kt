@@ -8,14 +8,13 @@ import kotlin.test.assertTrue
 class ShopOriginTest {
 
     @Test
-    fun `bridge script accepts only Bitrefill https message origins`() {
+    fun `bridge script accepts only the Bitrefill embed origin`() {
         val script = shopMessageBridgeScript()
 
         assertTrue("addEventListener('message'" in script)
         assertFalse("window.postMessage =" in script)
-        assertTrue("originUrl.protocol !== 'https:'" in script)
-        assertTrue("host !== 'bitrefill.com' && !host.endsWith('.bitrefill.com')" in script)
-        assertTrue("catch (e)" in script)
+        assertTrue("event.origin !== 'https://embed.bitrefill.com'" in script)
+        assertFalse("endsWith('.bitrefill.com')" in script)
     }
 
     @Test
@@ -26,10 +25,19 @@ class ShopOriginTest {
         assertTrue(isAllowedShopOrigin("https://www.bitrefill.com/esims"))
         assertTrue(isAllowedShopHost("embed.bitrefill.com"))
         assertTrue(isAllowedShopHost("BITREFILL.COM"))
-        assertEquals(
-            setOf("https://bitrefill.com", "https://*.bitrefill.com"),
-            shopAllowedOriginRules(),
-        )
+    }
+
+    @Test
+    fun `payment messages accept only the Bitrefill embed origin`() {
+        assertTrue(isAllowedShopPaymentOrigin("https://embed.bitrefill.com"))
+        assertTrue(isAllowedShopPaymentOrigin("HTTPS://EMBED.BITREFILL.COM"))
+        assertFalse(isAllowedShopPaymentOrigin("https://bitrefill.com"))
+        assertFalse(isAllowedShopPaymentOrigin("https://checkout.bitrefill.com"))
+        assertFalse(isAllowedShopPaymentOrigin("https://embed.bitrefill.com/gift-cards"))
+        assertFalse(isAllowedShopPaymentOrigin("https://embed.bitrefill.com.evil.example"))
+        assertFalse(isAllowedShopPaymentOrigin("http://embed.bitrefill.com"))
+        assertFalse(isAllowedShopPaymentOrigin("https://embed.bitrefill.com:444"))
+        assertEquals(setOf("https://embed.bitrefill.com"), shopPaymentOriginRules())
     }
 
     @Test

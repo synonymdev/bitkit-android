@@ -34,6 +34,13 @@ class ShopWebViewClientTest : BaseUnitTest() {
     }
 
     @Test
+    fun `main-frame Bitrefill sibling navigation remains allowed`() {
+        val request = request(url = "https://www.bitrefill.com/esims", isForMainFrame = true)
+
+        assertFalse(sut.shouldOverrideUrlLoading(null, request))
+    }
+
+    @Test
     fun `main-frame navigation off Bitrefill is blocked`() {
         val request = request(url = "https://evil.example/pay", isForMainFrame = true)
 
