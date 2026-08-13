@@ -105,7 +105,6 @@ import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
-import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import to.bitkit.utils.AppError
@@ -759,17 +758,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `screen deeplink is held for replay only on debug when dev mode is on`() = test {
+    fun `screen deeplink is held for replay when dev mode is on`() = test {
         settingsData.value = SettingsData(isDevModeEnabled = true)
 
         sut.handleDeeplinkIntent(screenIntent("settings"))
         advanceUntilIdle()
 
-        if (ScreenDeepLinks.isEnabled) {
-            assertNotNull(sut.pendingScreenDeepLink.value)
-        } else {
-            assertNull(sut.pendingScreenDeepLink.value)
-        }
+        assertNotNull(sut.pendingScreenDeepLink.value)
     }
 
     @Test
