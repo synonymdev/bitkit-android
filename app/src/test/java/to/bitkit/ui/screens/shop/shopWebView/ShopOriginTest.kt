@@ -29,6 +29,7 @@ class ShopOriginTest {
     fun `non-Bitrefill and non-https origins are rejected`() {
         assertFalse(isAllowedShopOrigin(null))
         assertFalse(isAllowedShopOrigin(""))
+        assertFalse(isAllowedShopOrigin("embed.bitrefill.com"))
         assertFalse(isAllowedShopOrigin("https://evil.example"))
         assertFalse(isAllowedShopOrigin("https://bitrefill.com.evil.example"))
         assertFalse(isAllowedShopOrigin("https://notbitrefill.com"))
