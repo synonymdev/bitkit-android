@@ -37,11 +37,16 @@ fun ShopWebViewScreen(
     var isLoading by remember { mutableStateOf(true) }
     var webView: WebView? by remember { mutableStateOf(null) }
 
-    val webViewInterface = remember { ShopWebViewInterface(onPaymentIntent) }
+    val webViewInterface = remember {
+        ShopWebViewInterface(
+            onPaymentIntent = onPaymentIntent,
+            currentUrl = { webView?.url },
+        )
+    }
     val webViewClient = remember {
         ShopWebViewClient(
             onLoadingStateChanged = { loading -> isLoading = loading },
-            onError = onClose
+            onError = onClose,
         )
     }
 
@@ -54,7 +59,6 @@ fun ShopWebViewScreen(
 
         Box(modifier = Modifier.weight(1f)) {
             AndroidView(
-                modifier = Modifier.fillMaxSize(),
                 factory = { context ->
                     WebView(context).apply {
                         layoutParams = ViewGroup.LayoutParams(
@@ -62,13 +66,14 @@ fun ShopWebViewScreen(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         )
 
+                        webView = this
                         this.webViewClient = webViewClient
                         configureForBasicWebContent()
                         addJavascriptInterface(webViewInterface, "Android")
                         loadUrl(bitrefillUrlOf(page))
-                        webView = this
                     }
                 },
+                modifier = Modifier.fillMaxSize()
             )
 
             if (isLoading) {

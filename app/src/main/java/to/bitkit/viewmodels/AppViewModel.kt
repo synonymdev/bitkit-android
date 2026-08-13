@@ -256,6 +256,9 @@ class AppViewModel @Inject constructor(
     @Volatile
     private var activeScanInput: String? = null
 
+    @Volatile
+    private var pendingLockedScan: PendingLockedScan? = null
+
     private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
     private fun setSendEffect(effect: SendEffect) = viewModelScope.launch { _sendEffect.emit(effect) }
@@ -318,6 +321,7 @@ class AppViewModel @Inject constructor(
 
     fun setIsAuthenticated(value: Boolean) {
         _isAuthenticated.value = value
+        if (value) flushPendingLockedScan()
     }
 
     val pinAttemptsRemaining = keychain.pinAttemptsRemaining()
@@ -1579,13 +1583,22 @@ class AppViewModel @Inject constructor(
         startDelay: Duration = Duration.ZERO,
         routePubkyKeys: Boolean = false,
     ) {
-        val normalized = data.removeLightningSchemes()
-        val scanLogInput = SamRockSetupRequest.sanitizedDescription(normalized) ?: data
-        val scanId = if (scanLogInput.length > 24) {
-            "${scanLogInput.take(11)}…${scanLogInput.takeLast(11)}"
-        } else {
-            scanLogInput
+        if (!_isAuthenticated.value) {
+            Logger.info(
+                "Queuing '${source.label}' scan until authenticated: '${scanLogId(data)}'",
+                context = TAG,
+            )
+            pendingLockedScan = PendingLockedScan(
+                source = source,
+                data = data,
+                startDelay = startDelay,
+                routePubkyKeys = routePubkyKeys,
+            )
+            return
         }
+
+        val normalized = data.removeLightningSchemes()
+        val scanId = scanLogId(data)
 
         if (normalized == activeScanInput && activeScanJob?.isActive == true) {
             Logger.info("Skipping duplicate scan from '${source.label}': '$scanId'", context = TAG)
@@ -1603,6 +1616,26 @@ class AppViewModel @Inject constructor(
             if (startDelay > Duration.ZERO) delay(startDelay)
             handleScan(data, routePubkyKeys)
         }.also { it.invokeOnCompletion { if (activeScanInput == normalized) activeScanInput = null } }
+    }
+
+    private fun scanLogId(data: String): String {
+        val scanLogInput = SamRockSetupRequest.sanitizedDescription(data.removeLightningSchemes()) ?: data
+        return if (scanLogInput.length > 24) {
+            "${scanLogInput.take(11)}…${scanLogInput.takeLast(11)}"
+        } else {
+            scanLogInput
+        }
+    }
+
+    private fun flushPendingLockedScan() {
+        val pending = pendingLockedScan ?: return
+        pendingLockedScan = null
+        launchScan(
+            source = pending.source,
+            data = pending.data,
+            startDelay = pending.startDelay,
+            routePubkyKeys = pending.routePubkyKeys,
+        )
     }
 
     private fun onAddressContinue(data: String) {
@@ -2465,6 +2498,10 @@ class AppViewModel @Inject constructor(
         if (!settings.isQuickPayEnabled || amountSats == 0uL) {
             return false
         }
+        if (settings.isPinEnabled && settings.isPinForPaymentsEnabled) {
+            Logger.debug("Skipping QuickPay because PIN is required for payments", context = TAG)
+            return false
+        }
 
         val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull()
             ?: return false
@@ -3305,6 +3342,7 @@ class AppViewModel @Inject constructor(
         val settings = settingsStore.data.first()
         val needsAuth = settings.isPinEnabled
         _isAuthenticated.value = !needsAuth
+        if (!needsAuth) flushPendingLockedScan()
     }
 
     fun resetIsAuthenticatedState() {
@@ -3698,6 +3736,13 @@ class AppViewModel @Inject constructor(
         ADDRESS_CONTINUE("address continue"),
         DEEPLINK("deeplink"),
     }
+
+    private data class PendingLockedScan(
+        val source: ScanSource,
+        val data: String,
+        val startDelay: Duration,
+        val routePubkyKeys: Boolean,
+    )
 
     companion object {
         private const val TAG = "AppViewModel"

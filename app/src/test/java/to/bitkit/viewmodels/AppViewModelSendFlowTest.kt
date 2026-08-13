@@ -1729,6 +1729,73 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `lightning scan skips QuickPay when PIN is required for payments`() = test {
+        val bolt11 = "lnbcrt1quickpaypin"
+        enableQuickPay(thresholdSats = 1000u)
+        settingsData.value = settingsData.value.copy(
+            isPinEnabled = true,
+            isPinForPaymentsEnabled = true,
+        )
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lightning scan uses QuickPay when PIN is on without PIN for payments`() = test {
+        val bolt11 = "lnbcrt1quickpayunlocked"
+        enableQuickPay(thresholdSats = 1000u)
+        settingsData.value = settingsData.value.copy(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lightning scan is queued until authenticated when PIN is enabled`() = test {
+        val bolt11 = "lnbcrt1lockedscan"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `payment deeplink is queued until authenticated when PIN is enabled`() = test {
+        val bolt11 = "lnbcrt1lockeddeeplink"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "lightning:$bolt11".toUri()))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
     fun `contact lightning payment skips QuickPay and opens confirm`() = test {
         val bolt11 = "lnbcrt1contact"
         enableQuickPay(thresholdSats = 1000u)

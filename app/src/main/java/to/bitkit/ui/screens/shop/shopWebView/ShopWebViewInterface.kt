@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.shop.shopWebView
 
+import android.os.Handler
+import android.os.Looper
 import android.webkit.JavascriptInterface
 import kotlinx.serialization.json.Json
 import to.bitkit.utils.Logger
@@ -17,7 +19,16 @@ import to.bitkit.utils.Logger
  */
 class ShopWebViewInterface(
     private val onPaymentIntent: (String) -> Unit,
+    private val currentUrl: () -> String?,
+    private val runOnMain: (() -> Unit) -> Unit = { action ->
+        Handler(Looper.getMainLooper()).post(action)
+    },
 ) {
+    private companion object {
+        const val TAG = "ShopWebViewInterface"
+        const val PAYMENT_INTENT_EVENT = "payment_intent"
+    }
+
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
@@ -26,35 +37,13 @@ class ShopWebViewInterface(
      *
      * @param message JSON string containing the message data
      */
-    @Suppress("NestedBlockDepth")
     @JavascriptInterface
     fun postMessage(message: String) {
         if (message.isBlank()) {
-            Logger.warn("Received empty message", context = "WebView")
+            Logger.warn("Received empty shop WebView message", context = TAG)
             return
         }
-
-        runCatching {
-            val data = json.decodeFromString<WebViewMessage>(message)
-            when (data.event) {
-                "payment_intent" -> {
-                    data.paymentUri?.let { uri ->
-                        // Validate URI before passing it along
-                        if (uri.isNotBlank()) {
-                            onPaymentIntent(uri)
-                        } else {
-                            Logger.warn("Received payment_intent with empty URI", context = "WebView")
-                        }
-                    } ?: Logger.warn("Received payment_intent without URI", context = "WebView")
-                }
-
-                else -> {
-                    Logger.debug("Unknown event type: ${data.event}", context = "WebView")
-                }
-            }
-        }.onFailure {
-            Logger.error("Error parsing message: $message", it, context = "WebView")
-        }
+        runOnMain { handlePaymentMessage(message) }
     }
 
     /**
@@ -66,5 +55,30 @@ class ShopWebViewInterface(
     @JavascriptInterface
     fun isReady(): Boolean {
         return true
+    }
+
+    private fun handlePaymentMessage(message: String) {
+        val pageUrl = currentUrl()
+        if (!isAllowedShopOrigin(pageUrl)) {
+            Logger.warn("Rejected shop payment_intent from untrusted origin '$pageUrl'", context = TAG)
+            return
+        }
+
+        runCatching {
+            val data = json.decodeFromString<WebViewMessage>(message)
+            when (data.event) {
+                PAYMENT_INTENT_EVENT -> {
+                    val uri = data.paymentUri?.trim().orEmpty()
+                    if (uri.isBlank()) {
+                        Logger.warn("Received payment_intent with empty URI", context = TAG)
+                        return
+                    }
+                    onPaymentIntent(uri)
+                }
+                else -> Logger.debug("Ignored shop WebView event '${data.event}'", context = TAG)
+            }
+        }.onFailure {
+            Logger.error("Failed to parse shop WebView message", it, context = TAG)
+        }
     }
 }

@@ -12,8 +12,11 @@ import to.bitkit.utils.Logger
  */
 class ShopWebViewClient(
     private val onLoadingStateChanged: (Boolean) -> Unit,
-    private val onError: () -> Unit
+    private val onError: () -> Unit,
 ) : WebViewClient() {
+    private companion object {
+        const val TAG = "ShopWebViewClient"
+    }
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         super.onPageStarted(view, url, favicon)
@@ -24,29 +27,15 @@ class ShopWebViewClient(
         super.onPageFinished(view, url)
         onLoadingStateChanged(false)
 
-        // Inject JavaScript to bridge postMessage to Android
-        view?.evaluateJavascript(
-            """
-            window.ReactNativeWebView = {
-                postMessage: function(data) {
-                    Android.postMessage(data);
-                }
-            };
+        view?.evaluateJavascript(shopMessageBridgeScript(), null)
+    }
 
-            // Override the default postMessage if it exists
-            if (window.postMessage) {
-                window.originalPostMessage = window.postMessage;
-                window.postMessage = function(data) {
-                    if (typeof data === 'string') {
-                        Android.postMessage(data);
-                    } else {
-                        Android.postMessage(JSON.stringify(data));
-                    }
-                };
-            }
-            """.trimIndent(),
-            null
-        )
+    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+        if (request?.isForMainFrame != true) return false
+        val url = request.url?.toString()
+        if (isAllowedShopOrigin(url)) return false
+        Logger.warn("Blocked shop navigation to untrusted origin '$url'", context = TAG)
+        return true
     }
 
     @Suppress("ComplexCondition")
@@ -58,7 +47,7 @@ class ShopWebViewClient(
         super.onReceivedError(view, request, error)
         Logger.warn(
             "Error: ${error?.description}, Code: ${error?.errorCode}, URL: ${request?.url}",
-            context = "ShopWebViewScreen"
+            context = TAG,
         )
         onLoadingStateChanged(false)
 
