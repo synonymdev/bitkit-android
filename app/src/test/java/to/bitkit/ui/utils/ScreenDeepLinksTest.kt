@@ -1,5 +1,6 @@
 package to.bitkit.ui.utils
 
+import android.content.Intent
 import android.net.Uri
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -50,6 +51,7 @@ class ScreenDeepLinksTest : BaseUnitTest() {
 
     @Test
     fun `routes without arguments produce a bare pattern`() {
+        if (!ScreenDeepLinks.isEnabled) return
         val links = ScreenDeepLinks.linksFor(Routes.Settings::class)
 
         assertEquals(1, links.size)
@@ -58,6 +60,7 @@ class ScreenDeepLinksTest : BaseUnitTest() {
 
     @Test
     fun `required arguments are appended as path segments`() {
+        if (!ScreenDeepLinks.isEnabled) return
         val links = ScreenDeepLinks.linksFor(Routes.ActivityAssignContact::class)
 
         assertEquals("bitkit://screen/activity-assign-contact/{id}", links.single().uriPattern)
@@ -65,6 +68,7 @@ class ScreenDeepLinksTest : BaseUnitTest() {
 
     @Test
     fun `a route with both argument kinds keeps the required one in the path`() {
+        if (!ScreenDeepLinks.isEnabled) return
         val links = ScreenDeepLinks.linksFor(Routes.ActivityDetail::class)
 
         assertEquals("bitkit://screen/activity-detail/{id}?walletId={walletId}", links.single().uriPattern)
@@ -72,6 +76,7 @@ class ScreenDeepLinksTest : BaseUnitTest() {
 
     @Test
     fun `arguments with defaults are appended as query parameters`() {
+        if (!ScreenDeepLinks.isEnabled) return
         val links = ScreenDeepLinks.linksFor(Routes.Contacts::class)
 
         assertEquals(
@@ -90,7 +95,7 @@ class ScreenDeepLinksTest : BaseUnitTest() {
     }
 
     @Test
-    fun `every deep-linkable route has a unique screen id and one link`() {
+    fun `every deep-linkable route has a unique screen id and variant-correct links`() {
         val ids = mutableMapOf<String, String>()
 
         Routes.DeepLinkable::class.sealedSubclasses.forEach { route ->
@@ -100,7 +105,12 @@ class ScreenDeepLinksTest : BaseUnitTest() {
             assertNotNull(id, "route $name has no screen id")
             val clash = ids.put(id, name)
             assertNull(clash, "screen id '$id' is used by both $clash and $name")
-            assertEquals(1, ScreenDeepLinks.linksFor(route).size, "route $name has no deep link")
+            val links = ScreenDeepLinks.linksFor(route)
+            if (ScreenDeepLinks.isEnabled) {
+                assertEquals(1, links.size, "route $name has no deep link")
+            } else {
+                assertTrue(links.isEmpty(), "route $name leaked a deep link in release")
+            }
         }
     }
 
@@ -131,5 +141,22 @@ class ScreenDeepLinksTest : BaseUnitTest() {
         assertFalse(recoveryMode)
         assertFalse(pubkyAuth)
         assertFalse(lightning)
+    }
+
+    @Test
+    fun `screen links are enabled only on debug`() {
+        assertEquals(ScreenDeepLinks.isEnabled, ScreenDeepLinks.linksFor(Routes.Settings::class).isNotEmpty())
+        assertEquals(ScreenDeepLinks.isEnabled, ScreenDeepLinks.shouldQueue(true))
+        assertFalse(ScreenDeepLinks.shouldQueue(false))
+    }
+
+    @Test
+    fun `screen uris are detached from the activity intent`() {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse("bitkit://screen/settings"))
+
+        val detached = ScreenDeepLinks.detachScreenUri(intent)
+
+        assertTrue(detached)
+        assertNull(intent.data)
     }
 }
