@@ -246,28 +246,11 @@ class LightningService @Inject constructor(
                 context = TAG,
             )
 
-            fun buildNode() = runCatching {
-                if (lnurlAuthServerUrl.isNotEmpty()) {
-                    builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
-                } else {
-                    builder.buildWithVssStoreAndFixedHeaders(vssUrl, vssStoreId, fixedHeaders)
-                }
+            if (lnurlAuthServerUrl.isNotEmpty()) {
+                builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
+            } else {
+                builder.buildWithVssStoreAndFixedHeaders(vssUrl, vssStoreId, fixedHeaders)
             }
-
-            buildNode().recoverCatching { error ->
-                if (error !is BuildException.DangerousValue) throw error
-                Logger.warn(
-                    "Retrying build failed with 'DangerousValue' using 'setAcceptStaleChannelMonitors' for recovery.",
-                    error,
-                    context = TAG,
-                )
-                builder.setAcceptStaleChannelMonitors(true)
-                buildNode()
-                    .onFailure {
-                        Logger.error("Failed recovery retry using 'setAcceptStaleChannelMonitors'.", it, context = TAG)
-                    }
-                    .getOrThrow()
-            }.getOrThrow()
         } catch (e: BuildException) {
             throw LdkError(e)
         } finally {
