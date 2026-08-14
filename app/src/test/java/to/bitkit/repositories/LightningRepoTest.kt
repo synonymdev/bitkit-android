@@ -80,7 +80,7 @@ import kotlin.time.Duration.Companion.seconds
 class LightningRepoTest : BaseUnitTest() {
     companion object {
         private const val NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS = 2_500L
-        private const val BACKGROUND_STOP_DELAY_MS = 3_000L
+        private const val BACKGROUND_STOP_DELAY_MS = 5_000L
     }
 
     private lateinit var sut: LightningRepo
