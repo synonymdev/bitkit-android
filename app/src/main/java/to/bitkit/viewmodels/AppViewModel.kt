@@ -74,7 +74,6 @@ import org.lightningdevkit.ldknode.Txid
 import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.data.CacheStore
-import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
@@ -2604,7 +2603,7 @@ class AppViewModel @Inject constructor(
         if (hasActiveContactPaymentContext()) return false
 
         val settings = settingsStore.data.first()
-        if (!canApplyQuickPay(settings, amountSats)) return false
+        if (!settings.isQuickPayEnabled || amountSats == 0uL) return false
 
         val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull()
             ?: return false
@@ -2635,15 +2634,6 @@ class AppViewModel @Inject constructor(
         }
 
         return false
-    }
-
-    private fun canApplyQuickPay(settings: SettingsData, amountSats: ULong): Boolean {
-        if (!settings.isQuickPayEnabled || amountSats == 0uL) return false
-        if (settings.isPinEnabled && settings.isPinForPaymentsEnabled) {
-            Logger.debug("Skipping QuickPay because PIN is required for payments", context = TAG)
-            return false
-        }
-        return true
     }
 
     private fun resetAmountInput() {
