@@ -61,7 +61,7 @@ import to.bitkit.ui.theme.TopBarGradient
 
 @Composable
 fun HardwareWalletScreen(
-    deviceId: String,
+    walletId: String,
     onActivityItemClick: (Activity) -> Unit,
     onTransferToSpendingClick: (String) -> Unit,
     onBackClick: () -> Unit,
@@ -70,7 +70,7 @@ fun HardwareWalletScreen(
     val wallets by viewModel.wallets.collectAsStateWithLifecycle()
     val walletsLoaded by viewModel.walletsLoaded.collectAsStateWithLifecycle()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val wallet = remember(wallets, deviceId) { wallets.find { deviceId in it.deviceIds } }
+    val wallet = remember(wallets, walletId) { wallets.find { it.id == walletId } }
 
     // Leave the screen once the device is gone, whether removed here or forgotten elsewhere.
     LaunchedEffect(wallet, walletsLoaded) {
@@ -84,7 +84,7 @@ fun HardwareWalletScreen(
             onActivityItemClick = onActivityItemClick,
             onTransferToSpendingClick = onTransferToSpendingClick,
             onRemoveClick = { viewModel.onRemoveClick(device) },
-            onConfirmRemove = { viewModel.removeDevice(deviceId) },
+            onConfirmRemove = { viewModel.removeDevice(walletId) },
             onDismissRemoveDialog = viewModel::onDismissRemoveDialog,
             onBackClick = onBackClick,
         )

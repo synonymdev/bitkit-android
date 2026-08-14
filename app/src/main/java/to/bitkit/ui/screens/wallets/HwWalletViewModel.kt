@@ -108,13 +108,13 @@ class HwWalletViewModel @Inject constructor(
         }
     }
 
-    private fun HwWalletDetailUiState.matchesRenameSession(deviceId: String, sessionId: Long) =
-        renameSessionId == sessionId && isPendingRename?.id == deviceId
+    private fun HwWalletDetailUiState.matchesRenameSession(walletId: String, sessionId: Long) =
+        renameSessionId == sessionId && isPendingRename?.id == walletId
 
-    fun removeDevice(deviceId: String) {
+    fun removeDevice(walletId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(isPendingRemoval = null) }
-            hwWalletRepo.removeDevice(deviceId).onFailure {
+            hwWalletRepo.removeDevice(walletId).onFailure {
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.common__error),
