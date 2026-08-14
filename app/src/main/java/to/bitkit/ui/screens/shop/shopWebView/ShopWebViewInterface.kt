@@ -73,21 +73,20 @@ class ShopWebViewInterface(
             return
         }
 
-        runCatching {
-            val data = json.decodeFromString<WebViewMessage>(message)
-            when (data.event) {
-                PAYMENT_INTENT_EVENT -> {
-                    val uri = data.paymentUri?.trim().orEmpty()
-                    if (uri.isBlank()) {
-                        Logger.warn("Received payment_intent with empty URI", context = TAG)
-                        return
-                    }
-                    onPaymentIntent(uri)
+        val data = runCatching { json.decodeFromString<WebViewMessage>(message) }.getOrElse {
+            Logger.debug("Ignored unrecognized shop WebView message", context = TAG)
+            return
+        }
+        when (data.event) {
+            PAYMENT_INTENT_EVENT -> {
+                val uri = data.paymentUri?.trim().orEmpty()
+                if (uri.isBlank()) {
+                    Logger.warn("Received payment_intent with empty URI", context = TAG)
+                    return
                 }
-                else -> Logger.debug("Ignored shop WebView event '${data.event}'", context = TAG)
+                onPaymentIntent(uri)
             }
-        }.onFailure {
-            Logger.error("Failed to parse shop WebView message", it, context = TAG)
+            else -> Logger.debug("Ignored shop WebView event '${data.event}'", context = TAG)
         }
     }
 }

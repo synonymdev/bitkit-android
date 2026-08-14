@@ -48,15 +48,18 @@ internal fun isAllowedShopPaymentOrigin(origin: String?): Boolean {
 internal fun shopPaymentOriginRules(): Set<String> = setOf(Env.BITREFILL_URL)
 
 internal fun shopMessageBridgeScript(): String = """
-    window.ReactNativeWebView = {
-        postMessage: function(data) {
+    if (!window.__bitkitShopBridgeInstalled) {
+        window.__bitkitShopBridgeInstalled = true;
+        window.ReactNativeWebView = {
+            postMessage: function(data) {
+                Android.postMessage(typeof data === 'string' ? data : JSON.stringify(data));
+            }
+        };
+        window.addEventListener('message', function(event) {
+            if (event.origin !== '${Env.BITREFILL_URL}') return;
+            var data = event.data;
+            if (data == null) return;
             Android.postMessage(typeof data === 'string' ? data : JSON.stringify(data));
-        }
-    };
-    window.addEventListener('message', function(event) {
-        if (event.origin !== '${Env.BITREFILL_URL}') return;
-        var data = event.data;
-        if (data == null) return;
-        Android.postMessage(typeof data === 'string' ? data : JSON.stringify(data));
-    });
+        });
+    }
 """.trimIndent()

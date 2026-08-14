@@ -31,6 +31,7 @@ fun ShopWebViewScreen(
     onClose: () -> Unit,
     onBack: () -> Unit,
     onPaymentIntent: (String) -> Unit,
+    onBlockedNavigation: () -> Unit,
     page: String,
     title: String,
 ) {
@@ -46,6 +47,7 @@ fun ShopWebViewScreen(
         ShopWebViewClient(
             onLoadingStateChanged = { loading -> isLoading = loading },
             onError = onClose,
+            onBlockedNavigation = onBlockedNavigation,
             isPaymentBridgeSupported = webViewInterface::supportsPaymentBridge,
         )
     }
@@ -101,6 +103,7 @@ private fun Preview() {
             onClose = {},
             onBack = {},
             onPaymentIntent = {},
+            onBlockedNavigation = {},
             page = "esims",
             title = "Gift Cards"
         )

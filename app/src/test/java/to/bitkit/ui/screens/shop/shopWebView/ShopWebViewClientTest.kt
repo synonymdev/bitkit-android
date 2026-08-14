@@ -23,6 +23,7 @@ class ShopWebViewClientTest : BaseUnitTest() {
     private val sut = ShopWebViewClient(
         onLoadingStateChanged = {},
         onError = {},
+        onBlockedNavigation = {},
         isPaymentBridgeSupported = { true },
     )
 
@@ -42,9 +43,17 @@ class ShopWebViewClientTest : BaseUnitTest() {
 
     @Test
     fun `main-frame navigation off Bitrefill is blocked`() {
+        var wasReported = false
+        val sut = ShopWebViewClient(
+            onLoadingStateChanged = {},
+            onError = {},
+            onBlockedNavigation = { wasReported = true },
+            isPaymentBridgeSupported = { true },
+        )
         val request = request(url = "https://evil.example/pay", isForMainFrame = true)
 
         assertTrue(sut.shouldOverrideUrlLoading(null, request))
+        assertTrue(wasReported)
     }
 
     @Test
@@ -60,6 +69,7 @@ class ShopWebViewClientTest : BaseUnitTest() {
         val sut = ShopWebViewClient(
             onLoadingStateChanged = {},
             onError = {},
+            onBlockedNavigation = {},
             isPaymentBridgeSupported = { false },
         )
 

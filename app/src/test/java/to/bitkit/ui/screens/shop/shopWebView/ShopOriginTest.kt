@@ -12,6 +12,7 @@ class ShopOriginTest {
         val script = shopMessageBridgeScript()
 
         assertTrue("addEventListener('message'" in script)
+        assertTrue("__bitkitShopBridgeInstalled" in script)
         assertFalse("window.postMessage =" in script)
         assertTrue("event.origin !== 'https://embed.bitrefill.com'" in script)
         assertFalse("endsWith('.bitrefill.com')" in script)

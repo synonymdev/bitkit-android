@@ -83,6 +83,21 @@ class ShopWebViewInterfaceTest : BaseUnitTest() {
     }
 
     @Test
+    fun `messages without an event are ignored`() {
+        var received: String? = null
+        val sut = interfaceOf(
+            onPaymentIntent = { received = it },
+        )
+
+        sut.onWebMessage(
+            WebMessageCompat("""{"type":"navigation"}"""),
+            "https://embed.bitrefill.com",
+        )
+
+        assertNull(received)
+    }
+
+    @Test
     fun `payment_intent from a Bitrefill sibling origin is ignored`() {
         var received: String? = null
         val sut = interfaceOf(

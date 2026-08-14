@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -51,6 +52,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.R
 import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.appWidgetRefreshScheduler
 import to.bitkit.env.Env
@@ -1446,6 +1448,7 @@ private fun NavGraphBuilder.shop(
         )
     }
     deepLinkableComposable<Routes.ShopWebView> {
+        val blockedNavigationMessage = stringResource(R.string.other__shop__external_link_blocked)
         ShopWebViewScreen(
             onClose = { navController.navigateToHome() },
             onBack = { navController.popBackStack() },
@@ -1453,7 +1456,13 @@ private fun NavGraphBuilder.shop(
             title = it.toRoute<Routes.ShopWebView>().title,
             onPaymentIntent = { data ->
                 appViewModel.onScanResult(data)
-            }
+            },
+            onBlockedNavigation = {
+                appViewModel.toast(
+                    type = Toast.ToastType.WARNING,
+                    title = blockedNavigationMessage,
+                )
+            },
         )
     }
 }

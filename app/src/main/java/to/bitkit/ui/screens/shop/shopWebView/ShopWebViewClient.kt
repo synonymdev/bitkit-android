@@ -13,6 +13,7 @@ import to.bitkit.utils.Logger
 class ShopWebViewClient(
     private val onLoadingStateChanged: (Boolean) -> Unit,
     private val onError: () -> Unit,
+    private val onBlockedNavigation: () -> Unit,
     private val isPaymentBridgeSupported: () -> Boolean,
 ) : WebViewClient() {
     private companion object {
@@ -38,6 +39,7 @@ class ShopWebViewClient(
         val url = request.url?.toString()
         if (isAllowedShopOrigin(url)) return false
         Logger.warn("Blocked shop navigation to untrusted origin '$url'", context = TAG)
+        onBlockedNavigation()
         return true
     }
 

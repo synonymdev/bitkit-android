@@ -111,6 +111,7 @@ import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
+import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import to.bitkit.utils.AppError
@@ -2370,6 +2371,51 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.currentSheet.first { it is Sheet.Send && sut.sendUiState.value.amount == 600uL }
 
         assertEquals(1, newScanDecodeCount)
+    }
+
+    @Test
+    fun `deferred scan waits for an active sheet transition`() = test {
+        val firstInvoice = "lnbcrt1sheettransitionfirst"
+        val secondInvoice = "lnbcrt1sheettransitionsecond"
+        val firstScanStarted = CompletableDeferred<Unit>()
+        val finishFirstScan = CompletableDeferred<Unit>()
+        var secondScanDecodeCount = 0
+        settingsData.value = SettingsData(isPinEnabled = true)
+        whenever(coreService.decode(firstInvoice)).doSuspendableAnswer {
+            firstScanStarted.complete(Unit)
+            finishFirstScan.await()
+            Scanner.Lightning(lightningInvoice(firstInvoice, 500u))
+        }
+        whenever(coreService.decode(secondInvoice)).doSuspendableAnswer {
+            secondScanDecodeCount += 1
+            Scanner.Lightning(lightningInvoice(secondInvoice, 600u))
+        }
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+
+        sut.onScanResult(firstInvoice)
+        sut.setIsAuthenticated(true)
+        firstScanStarted.await()
+        sut.showSheet(Sheet.ConnectionClosed)
+        sut.onScanResult(secondInvoice)
+
+        finishFirstScan.complete(Unit)
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        assertEquals(0, secondScanDecodeCount)
+        assertEquals(500u, sut.sendUiState.value.amount)
+
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(0, secondScanDecodeCount)
+        assertEquals(500u, sut.sendUiState.value.amount)
+
+        sut.hideSheet()
+        sut.currentSheet.first { it is Sheet.Send && sut.sendUiState.value.amount == 600uL }
+
+        assertEquals(1, secondScanDecodeCount)
     }
 
     @Test

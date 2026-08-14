@@ -34,6 +34,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
@@ -255,7 +256,6 @@ class AppViewModel @Inject constructor(
     private val _quickPayData = MutableStateFlow<QuickPayData?>(null)
     val quickPayData = _quickPayData.asStateFlow()
 
-    private var activeScanJob: Job? = null
     private val scanMutex = Mutex()
 
     @Volatile
@@ -286,6 +286,7 @@ class AppViewModel @Inject constructor(
 
     private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
     val currentSheet = _currentSheet.asStateFlow()
+    private var sheetTransitionJob: Job? = null
     private var queuedPairingCodeRequestId: Long? = null
     private var receiveSheetContext: ReceiveSheetContext? = null
 
@@ -1610,43 +1611,45 @@ class AppViewModel @Inject constructor(
 
         val scheduled = scheduledScan
         val isSameActiveScan = normalized == scheduled?.normalizedInput &&
-            activeScanJob?.isActive == true &&
+            scheduled.job.isActive &&
             (scheduled.contactPaymentContext == contactPaymentContext || contactPaymentContext == null)
         if (isSameActiveScan) {
             Logger.info("Skipping duplicate scan from '${source.label}': '$scanId'", context = TAG)
             return
         }
 
-        if (activeScanJob?.isActive == true && scheduled?.mustComplete == true) {
+        if (scheduled?.job?.isActive == true && scheduled.mustComplete) {
             enqueueDeferredScan(source, data, startDelay, routePubkyKeys, contactPaymentContext)
             return
         }
 
-        activeScanJob?.let {
-            Logger.info("Cancelling prior scan for new '${source.label}': '$scanId'", context = TAG)
-            it.cancel()
-        }
-
-        scheduledScan = ScheduledScan(
-            normalizedInput = normalized,
-            contactPaymentContext = contactPaymentContext,
-            mustComplete = preserveUntilComplete,
-        )
-        Logger.debug("Starting scan from '${source.label}': '$scanId'", context = TAG)
-        activeScanJob = viewModelScope.launch {
+        val previousJob = scheduled?.job
+        val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             scanMutex.withLock {
                 setActiveContactPaymentContext(contactPaymentContext)
                 if (startDelay > Duration.ZERO) delay(startDelay)
                 handleScan(data, routePubkyKeys)
             }
-        }.also { job ->
-            job.invokeOnCompletion {
-                if (activeScanJob === job) {
-                    scheduledScan = null
-                }
-                if (job.isCancelled) return@invokeOnCompletion
-                viewModelScope.launch { flushDeferredScan() }
-            }
+        }
+        val nextScheduledScan = ScheduledScan(
+            job = nextJob,
+            normalizedInput = normalized,
+            contactPaymentContext = contactPaymentContext,
+            mustComplete = preserveUntilComplete,
+        )
+
+        scheduledScan = nextScheduledScan
+        nextJob.invokeOnCompletion {
+            if (scheduledScan === nextScheduledScan) scheduledScan = null
+            if (nextJob.isCancelled) return@invokeOnCompletion
+            viewModelScope.launch { flushDeferredScan() }
+        }
+
+        Logger.debug("Starting scan from '${source.label}': '$scanId'", context = TAG)
+        nextJob.start()
+        previousJob?.let {
+            Logger.info("Cancelling prior scan for new '${source.label}': '$scanId'", context = TAG)
+            it.cancel()
         }
     }
 
@@ -1702,18 +1705,20 @@ class AppViewModel @Inject constructor(
     }
 
     private fun isScanPendingOrActive(): Boolean {
-        if (activeScanJob?.isActive == true) return true
+        if (scheduledScan?.job?.isActive == true) return true
         return synchronized(deferredScanLock) { deferredScan != null }
     }
 
     private fun isPaymentRequestPresentationBlocked() = !_isAuthenticated.value ||
         currentSheet.value != null ||
+        sheetTransitionJob?.isActive == true ||
         hasActiveContactPaymentContext() ||
         isScanPendingOrActive()
 
     private fun flushDeferredScan() {
         if (!_isAuthenticated.value) return
-        if (activeScanJob?.isActive == true) return
+        if (scheduledScan?.job?.isActive == true) return
+        if (sheetTransitionJob?.isActive == true) return
         if (_currentSheet.value != null) return
 
         val pending = synchronized(deferredScanLock) {
@@ -3354,7 +3359,8 @@ class AppViewModel @Inject constructor(
     }
 
     fun showSheet(sheetType: Sheet) {
-        viewModelScope.launch {
+        val previousJob = sheetTransitionJob
+        val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             receiveSheetContext = null
             _currentSheet.value?.let {
                 _currentSheet.update { null }
@@ -3369,6 +3375,12 @@ class AppViewModel @Inject constructor(
             }
             _currentSheet.update { sheetType }
         }
+        sheetTransitionJob = nextJob
+        nextJob.invokeOnCompletion {
+            if (sheetTransitionJob === nextJob) sheetTransitionJob = null
+        }
+        previousJob?.cancel()
+        nextJob.start()
     }
 
     fun hideSheet() = hideSheet(shouldFlushDeferredScan = true)
@@ -3376,6 +3388,8 @@ class AppViewModel @Inject constructor(
     private fun hideSheet(shouldFlushDeferredScan: Boolean) {
         scanResultHandler = null
         receiveSheetContext = null
+        sheetTransitionJob?.cancel()
+        sheetTransitionJob = null
         clearActiveContactPaymentContext()
         when {
             currentSheet.value is Sheet.TimedSheet -> {
@@ -3892,6 +3906,7 @@ private enum class ScanSource(val label: String) {
 }
 
 private data class ScheduledScan(
+    val job: Job,
     val normalizedInput: String,
     val contactPaymentContext: ContactPaymentContext?,
     val mustComplete: Boolean,
