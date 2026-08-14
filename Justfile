@@ -185,29 +185,7 @@ install:
     {{ gradle }} installDevDebug
 
 test target="" value="":
-    #!/usr/bin/env sh
-    set -eu
-    if [ "{{ target }}" = "" ]; then
-        {{ gradle }} testDevDebugUnitTest
-        {{ gradle }} testDevReleaseUnitTest --tests 'to.bitkit.ui.utils.ScreenDeepLinksRegistrationTest'
-    elif [ "{{ target }}" = "android" ]; then
-        {{ gradle }} connectedDevDebugAndroidTest
-    elif [ "{{ target }}" = "file" ]; then
-        if [ "{{ value }}" = "" ]; then
-            echo "usage: just test file PATTERN" >&2
-            exit 1
-        fi
-        {{ gradle }} testDevDebugUnitTest --tests '{{ value }}'
-    elif [ "{{ target }}" = "lane" ]; then
-        if [ "{{ value }}" = "" ]; then
-            echo "usage: just test lane LANE" >&2
-            exit 1
-        fi
-        {{ gradle }} connectedDevDebug{{ value }}AndroidTest
-    else
-        echo "usage: just test [file PATTERN|android|lane LANE]" >&2
-        exit 1
-    fi
+    {{ if target == "" { gradle + " testDevDebugUnitTest" } else if target == "android" { gradle + " connectedDevDebugAndroidTest" } else if target == "file" { if value == "" { error("usage: just test file PATTERN") } else { gradle + " testDevDebugUnitTest --tests '" + value + "'" } } else if target == "lane" { if value == "" { error("usage: just test lane LANE") } else { gradle + " connectedDevDebug" + value + "AndroidTest" } } else { error("usage: just test [file PATTERN|android|lane LANE]") } }}
 
 lint target="":
     {{ if target == "" { gradle + " detekt --rerun-tasks" } else if target == "baseline" { gradle + " detektBaseline --rerun-tasks" } else { error("usage: just lint [baseline]") } }}
