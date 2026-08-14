@@ -41,6 +41,17 @@ class ShopOriginTest {
     }
 
     @Test
+    fun `payment bridge pages use only the Bitrefill embed origin`() {
+        assertTrue(isAllowedShopPaymentPage("https://embed.bitrefill.com/gift-cards?region=us"))
+        assertTrue(isAllowedShopPaymentPage("https://embed.bitrefill.com:443/gift-cards"))
+        assertFalse(isAllowedShopPaymentPage("https://www.bitrefill.com/esims"))
+        assertFalse(isAllowedShopPaymentPage("https://embed.bitrefill.com.evil.example"))
+        assertFalse(isAllowedShopPaymentPage("http://embed.bitrefill.com"))
+        assertFalse(isAllowedShopPaymentPage("https://embed.bitrefill.com:444/gift-cards"))
+        assertFalse(isAllowedShopPaymentPage("https://user@embed.bitrefill.com/gift-cards"))
+    }
+
+    @Test
     fun `non-Bitrefill and non-https origins are rejected`() {
         assertFalse(isAllowedShopOrigin(null))
         assertFalse(isAllowedShopOrigin(""))

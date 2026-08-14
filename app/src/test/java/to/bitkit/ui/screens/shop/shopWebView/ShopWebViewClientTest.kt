@@ -77,6 +77,15 @@ class ShopWebViewClientTest : BaseUnitTest() {
         verify(webView).evaluateJavascript(shopMessageBridgeScript(), null)
     }
 
+    @Test
+    fun `bridge script is not injected on a Bitrefill sibling origin`() {
+        val webView = mock<WebView>()
+
+        sut.onPageFinished(webView, "https://www.bitrefill.com/esims")
+
+        verify(webView, never()).evaluateJavascript(any(), any())
+    }
+
     private fun request(url: String, isForMainFrame: Boolean): WebResourceRequest {
         val request = mock<WebResourceRequest>()
         whenever(request.isForMainFrame).thenReturn(isForMainFrame)

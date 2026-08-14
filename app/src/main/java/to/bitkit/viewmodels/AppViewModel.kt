@@ -5,7 +5,6 @@ import android.content.Intent
 import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.annotation.StringRes
-import androidx.annotation.VisibleForTesting
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -260,16 +259,10 @@ class AppViewModel @Inject constructor(
     private val scanMutex = Mutex()
 
     @Volatile
-    private var scheduledScanInput: String? = null
+    private var scheduledScan: ScheduledScan? = null
 
-    @Volatile
-    private var scheduledScanContext: ContactPaymentContext? = null
-
-    @Volatile
-    private var scheduledScanMustComplete = false
-
-    private val pendingLockedScansLock = Any()
-    private val pendingLockedScans = ArrayDeque<PendingLockedScan>()
+    private val deferredScanLock = Any()
+    private var deferredScan: DeferredScan? = null
 
     private val _sendEffect = MutableSharedFlow<SendEffect>(extraBufferCapacity = 1)
     val sendEffect = _sendEffect.asSharedFlow()
@@ -333,7 +326,7 @@ class AppViewModel @Inject constructor(
 
     fun setIsAuthenticated(value: Boolean) {
         _isAuthenticated.value = value
-        if (value) flushPendingLockedScan()
+        if (value) flushDeferredScan()
     }
 
     val pinAttemptsRemaining = keychain.pinAttemptsRemaining()
@@ -400,7 +393,7 @@ class AppViewModel @Inject constructor(
                     _currentSheet.update { sheet ->
                         if (sheet is Sheet.Hardware && sheet.route is HardwareRoute.PairCode) null else sheet
                     }
-                    if (shouldFlush) flushPendingLockedScan()
+                    if (shouldFlush) flushDeferredScan()
                 }
             }
         }
@@ -418,7 +411,7 @@ class AppViewModel @Inject constructor(
                     _currentSheet.update { current ->
                         if (current is Sheet.TimedSheet) null else current
                     }
-                    if (shouldFlush) flushPendingLockedScan()
+                    if (shouldFlush) flushDeferredScan()
                 }
             }
         }
@@ -1541,8 +1534,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update { it.copy(isAddressInputValid = true) }
     }
 
-    @VisibleForTesting
-    internal suspend fun extractViableLightningInvoice(params: Map<String, String>?): LightningInvoice? =
+    private suspend fun extractViableLightningInvoice(params: Map<String, String>?): LightningInvoice? =
         params?.get("lightning")?.let { bolt11 ->
             runSuspendCatching { coreService.decode(bolt11) }.getOrNull()
                 ?.let { it as? Scanner.Lightning }
@@ -1603,7 +1595,7 @@ class AppViewModel @Inject constructor(
         preserveUntilComplete: Boolean = false,
     ) {
         if (!_isAuthenticated.value) {
-            enqueueLockedScan(
+            enqueueDeferredScan(
                 source = source,
                 data = data,
                 startDelay = startDelay,
@@ -1616,16 +1608,17 @@ class AppViewModel @Inject constructor(
         val normalized = data.removeLightningSchemes()
         val scanId = scanLogId(data)
 
-        val isSameActiveScan = normalized == scheduledScanInput &&
+        val scheduled = scheduledScan
+        val isSameActiveScan = normalized == scheduled?.normalizedInput &&
             activeScanJob?.isActive == true &&
-            (scheduledScanContext == contactPaymentContext || contactPaymentContext == null)
+            (scheduled.contactPaymentContext == contactPaymentContext || contactPaymentContext == null)
         if (isSameActiveScan) {
             Logger.info("Skipping duplicate scan from '${source.label}': '$scanId'", context = TAG)
             return
         }
 
-        if (activeScanJob?.isActive == true && scheduledScanMustComplete) {
-            enqueueLockedScan(source, data, startDelay, routePubkyKeys, contactPaymentContext)
+        if (activeScanJob?.isActive == true && scheduled?.mustComplete == true) {
+            enqueueDeferredScan(source, data, startDelay, routePubkyKeys, contactPaymentContext)
             return
         }
 
@@ -1634,9 +1627,11 @@ class AppViewModel @Inject constructor(
             it.cancel()
         }
 
-        scheduledScanInput = normalized
-        scheduledScanContext = contactPaymentContext
-        scheduledScanMustComplete = preserveUntilComplete
+        scheduledScan = ScheduledScan(
+            normalizedInput = normalized,
+            contactPaymentContext = contactPaymentContext,
+            mustComplete = preserveUntilComplete,
+        )
         Logger.debug("Starting scan from '${source.label}': '$scanId'", context = TAG)
         activeScanJob = viewModelScope.launch {
             scanMutex.withLock {
@@ -1647,15 +1642,10 @@ class AppViewModel @Inject constructor(
         }.also { job ->
             job.invokeOnCompletion {
                 if (activeScanJob === job) {
-                    scheduledScanInput = null
-                    scheduledScanContext = null
-                    scheduledScanMustComplete = false
+                    scheduledScan = null
                 }
                 if (job.isCancelled) return@invokeOnCompletion
-                viewModelScope.launch {
-                    flushPendingLockedScan()
-                    presentNextIncomingPaykitPaymentRequest()
-                }
+                viewModelScope.launch { flushDeferredScan() }
             }
         }
     }
@@ -1669,7 +1659,7 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun enqueueLockedScan(
+    private fun enqueueDeferredScan(
         source: ScanSource,
         data: String,
         startDelay: Duration,
@@ -1678,17 +1668,11 @@ class AppViewModel @Inject constructor(
     ) {
         val scanId = scanLogId(data)
         val normalized = data.removeLightningSchemes()
-        synchronized(pendingLockedScansLock) {
-            val queuedIndex = pendingLockedScans.indexOfFirst { it.data.removeLightningSchemes() == normalized }
-            if (queuedIndex >= 0) {
-                val queued = pendingLockedScans[queuedIndex]
+        synchronized(deferredScanLock) {
+            val queued = deferredScan
+            if (queued?.data?.removeLightningSchemes() == normalized) {
                 if (contactPaymentContext != null) {
-                    val queuedRequestId = queued.contactPaymentContext?.incomingPaymentRequest?.id
-                    val incomingRequestId = contactPaymentContext.incomingPaymentRequest?.id
-                    if (queuedRequestId != null && queuedRequestId != incomingRequestId) {
-                        releasePaymentRequestPresentation(queued)
-                    }
-                    pendingLockedScans[queuedIndex] = PendingLockedScan(
+                    deferredScan = DeferredScan(
                         source = source,
                         data = data,
                         startDelay = startDelay,
@@ -1700,52 +1684,45 @@ class AppViewModel @Inject constructor(
                 Logger.info("Skipping duplicate queued scan from '${source.label}': '$scanId'", context = TAG)
                 return
             }
-            while (pendingLockedScans.size >= MAX_PENDING_LOCKED_SCANS) {
-                val dropped = pendingLockedScans.removeFirst()
-                releasePaymentRequestPresentation(dropped)
+            if (queued != null) {
                 Logger.warn(
-                    "Dropping oldest queued scan from '${dropped.source.label}': '${scanLogId(dropped.data)}'",
+                    "Replacing deferred scan from '${queued.source.label}': '${scanLogId(queued.data)}'",
                     context = TAG,
                 )
             }
-            pendingLockedScans.addLast(
-                PendingLockedScan(
-                    source = source,
-                    data = data,
-                    startDelay = startDelay,
-                    routePubkyKeys = routePubkyKeys,
-                    contactPaymentContext = contactPaymentContext,
-                ),
+            deferredScan = DeferredScan(
+                source = source,
+                data = data,
+                startDelay = startDelay,
+                routePubkyKeys = routePubkyKeys,
+                contactPaymentContext = contactPaymentContext,
             )
         }
         Logger.info("Queuing '${source.label}' scan for deferred handling: '$scanId'", context = TAG)
     }
 
-    private fun releasePaymentRequestPresentation(scan: PendingLockedScan) {
-        val requestId = scan.contactPaymentContext?.incomingPaymentRequest?.id ?: return
-        presentedPaymentRequestIds -= requestId
-    }
-
     private fun isScanPendingOrActive(): Boolean {
         if (activeScanJob?.isActive == true) return true
-        return synchronized(pendingLockedScansLock) { pendingLockedScans.isNotEmpty() }
+        return synchronized(deferredScanLock) { deferredScan != null }
     }
 
-    private fun isPaymentRequestPresentationBlocked() = currentSheet.value != null ||
+    private fun isPaymentRequestPresentationBlocked() = !_isAuthenticated.value ||
+        currentSheet.value != null ||
         hasActiveContactPaymentContext() ||
         isScanPendingOrActive()
 
-    private fun flushPendingLockedScan() {
+    private fun flushDeferredScan() {
         if (!_isAuthenticated.value) return
         if (activeScanJob?.isActive == true) return
         if (_currentSheet.value != null) return
 
-        val pending = takeNextPendingLockedScan() ?: run {
+        val pending = synchronized(deferredScanLock) {
+            deferredScan.also { deferredScan = null }
+        } ?: run {
             viewModelScope.launch { presentNextIncomingPaykitPaymentRequest() }
             return
         }
 
-        setActiveContactPaymentContext(pending.contactPaymentContext)
         launchScan(
             source = pending.source,
             data = pending.data,
@@ -1754,23 +1731,6 @@ class AppViewModel @Inject constructor(
             contactPaymentContext = pending.contactPaymentContext,
             preserveUntilComplete = true,
         )
-    }
-
-    private fun takeNextPendingLockedScan(): PendingLockedScan? {
-        while (true) {
-            val pending = synchronized(pendingLockedScansLock) {
-                pendingLockedScans.removeFirstOrNull()
-            } ?: return null
-            val request = pending.contactPaymentContext?.incomingPaymentRequest
-            if (request == null || paykitPaymentRequestRepo.isPending(request)) return pending
-
-            releasePaymentRequestPresentation(pending)
-            synchronized(contactPaymentContextLock) {
-                if (activeContactPaymentContext == pending.contactPaymentContext) {
-                    activeContactPaymentContext = null
-                }
-            }
-        }
     }
 
     private fun onAddressContinue(data: String) {
@@ -3324,12 +3284,12 @@ class AppViewModel @Inject constructor(
         val handler = scanResultHandler
         val shouldHandleAsProtocol = SamRockSetupRequest.isProtocolUrl(data.removeLightningSchemes())
         scanResultHandler = null
-        hideSheet(flushPendingScan = false)
+        hideSheet(shouldFlushDeferredScan = false)
         if (handler != null && !shouldHandleAsProtocol) {
             viewModelScope.launch {
                 delay(SCREEN_TRANSITION_DELAY)
                 handler(data)
-                flushPendingLockedScan()
+                flushDeferredScan()
             }
         } else {
             launchScan(
@@ -3411,9 +3371,9 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun hideSheet() = hideSheet(flushPendingScan = true)
+    fun hideSheet() = hideSheet(shouldFlushDeferredScan = true)
 
-    private fun hideSheet(flushPendingScan: Boolean) {
+    private fun hideSheet(shouldFlushDeferredScan: Boolean) {
         scanResultHandler = null
         receiveSheetContext = null
         clearActiveContactPaymentContext()
@@ -3431,7 +3391,7 @@ class AppViewModel @Inject constructor(
             else -> _currentSheet.update { null }
         }
         showQueuedPairingCodeSheet()
-        if (flushPendingScan) flushPendingLockedScan()
+        if (shouldFlushDeferredScan) flushDeferredScan()
     }
 
     // endregion
@@ -3493,7 +3453,7 @@ class AppViewModel @Inject constructor(
         val settings = settingsStore.data.first()
         val needsAuth = settings.isPinEnabled
         _isAuthenticated.value = !needsAuth
-        if (!needsAuth) flushPendingLockedScan()
+        if (!needsAuth) flushDeferredScan()
     }
 
     fun resetIsAuthenticatedState() {
@@ -3880,22 +3840,6 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private enum class ScanSource(val label: String) {
-        PASTE("paste"),
-        SCAN_RESULT("scan result"),
-        SCANNER_SHEET("scanner sheet"),
-        ADDRESS_CONTINUE("address continue"),
-        DEEPLINK("deeplink"),
-    }
-
-    private data class PendingLockedScan(
-        val source: ScanSource,
-        val data: String,
-        val startDelay: Duration,
-        val routePubkyKeys: Boolean,
-        val contactPaymentContext: ContactPaymentContext?,
-    )
-
     companion object {
         private const val TAG = "AppViewModel"
         private val LIGHTNING_SCHEME_PATTERNS = listOf("lightning", "lnurl", "lnurlw", "lnurlc", "lnurlp")
@@ -3932,14 +3876,34 @@ class AppViewModel @Inject constructor(
         /** Characters kept on each side of a truncated scan log id. */
         private const val SCAN_LOG_ID_AFFIX_LENGTH = 11
 
-        private const val MAX_PENDING_LOCKED_SCANS = 5
-
         private val LNURL_WITHDRAW_EXPIRY_SEC = 1.hours.inWholeSeconds.toUInt()
 
         /** Intent actions carrying a deeplink URI: browsers and apps send VIEW, NFC tag taps send NDEF_DISCOVERED. */
         internal val DEEPLINK_ACTIONS = setOf(Intent.ACTION_VIEW, NfcAdapter.ACTION_NDEF_DISCOVERED)
     }
 }
+
+private enum class ScanSource(val label: String) {
+    PASTE("paste"),
+    SCAN_RESULT("scan result"),
+    SCANNER_SHEET("scanner sheet"),
+    ADDRESS_CONTINUE("address continue"),
+    DEEPLINK("deeplink"),
+}
+
+private data class ScheduledScan(
+    val normalizedInput: String,
+    val contactPaymentContext: ContactPaymentContext?,
+    val mustComplete: Boolean,
+)
+
+private data class DeferredScan(
+    val source: ScanSource,
+    val data: String,
+    val startDelay: Duration,
+    val routePubkyKeys: Boolean,
+    val contactPaymentContext: ContactPaymentContext?,
+)
 
 // region send contract
 @Stable

@@ -28,7 +28,7 @@ class ShopWebViewClient(
         super.onPageFinished(view, url)
         onLoadingStateChanged(false)
 
-        if (isPaymentBridgeSupported()) {
+        if (isPaymentBridgeSupported() && isAllowedShopPaymentPage(url)) {
             view?.evaluateJavascript(shopMessageBridgeScript(), null)
         }
     }
