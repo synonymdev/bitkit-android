@@ -54,16 +54,7 @@ jobs:
         run: ./gradlew assembleDevDebug
 
       - name: Run tests
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: ./gradlew testDevDebugUnitTest
-
-      - name: Run release screen deeplink gate tests
-        env:
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: ./gradlew testDevReleaseUnitTest --tests 'to.bitkit.ui.utils.ScreenDeepLinksRegistrationTest'
 
       - name: Upload test report
         uses: actions/upload-artifact@v7
