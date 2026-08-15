@@ -7,7 +7,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,7 +33,9 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -60,7 +61,7 @@ private const val LABEL_TOP_PADDING_DP = 4
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
-fun StepSlider(
+fun Slider(
     value: Int,
     steps: ImmutableList<Int>,
     onValueChange: (Int) -> Unit,
@@ -71,20 +72,42 @@ fun StepSlider(
     val coroutineScope = rememberCoroutineScope()
     val knobPosition = remember { Animatable(0f) }
     var isDragging by remember { mutableStateOf(false) }
+    var layoutWidthPx by remember { mutableIntStateOf(0) }
+    val knobHeightPx = with(density) { KNOB_SIZE_DP.dp.roundToPx() }
+    val labelTopPadPx = with(density) { LABEL_TOP_PADDING_DP.dp.roundToPx() }
 
-    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
-        val sliderWidth = constraints.maxWidth.toFloat()
-        val stepPositions = remember(steps, sliderWidth) {
-            if (sliderWidth <= 0f) {
-                emptyList()
-            } else {
-                val numSteps = (steps.size - 1).coerceAtLeast(1)
-                steps.indices.map { index -> (index.toFloat() / numSteps) * sliderWidth }
-            }
+    val compositionStepPositions = remember(steps, layoutWidthPx) {
+        val sliderWidth = layoutWidthPx.toFloat()
+        if (sliderWidth <= 0f) {
+            emptyList()
+        } else {
+            val numSteps = (steps.size - 1).coerceAtLeast(1)
+            steps.indices.map { index -> (index.toFloat() / numSteps) * sliderWidth }
         }
-        val valueIndex = steps.indexOf(value).takeIf { it >= 0 } ?: 0
-        val settledX = stepPositions.getOrElse(valueIndex) { 0f }
-        val knobX = if (isDragging) knobPosition.value else settledX
+    }
+    val valueIndex = steps.indexOf(value).takeIf { it >= 0 } ?: 0
+    val settledX = compositionStepPositions.getOrElse(valueIndex) { 0f }
+
+    LaunchedEffect(settledX, isDragging) {
+        if (!isDragging) {
+            knobPosition.snapTo(settledX)
+        }
+    }
+
+    SubcomposeLayout(
+        modifier = modifier
+            .fillMaxWidth()
+            .onSizeChanged { layoutWidthPx = it.width }
+    ) { constraints ->
+        val width = constraints.maxWidth
+        val sliderWidth = width.toFloat()
+        val stepPositions = if (sliderWidth <= 0f) {
+            emptyList()
+        } else {
+            val numSteps = (steps.size - 1).coerceAtLeast(1)
+            steps.indices.map { index -> (index.toFloat() / numSteps) * sliderWidth }
+        }
+        val knobX = if (isDragging) knobPosition.value else stepPositions.getOrElse(valueIndex) { 0f }
 
         fun findClosestStep(currentPosition: Float): Pair<Float, Int> {
             if (stepPositions.isEmpty()) return 0f to 0
@@ -105,13 +128,7 @@ fun StepSlider(
             return closestPosition to closestIndex
         }
 
-        LaunchedEffect(settledX, isDragging) {
-            if (!isDragging) {
-                knobPosition.snapTo(settledX)
-            }
-        }
-
-        Column(modifier = Modifier.fillMaxWidth()) {
+        val trackPlaceable = subcompose(StepSliderSlot.Track) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -222,17 +239,24 @@ fun StepSlider(
                     }
                 }
             }
+        }.first().measure(Constraints.fixed(width, knobHeightPx))
 
+        val labelsPlaceable = subcompose(StepSliderSlot.Labels) {
             StepSliderLabels(
                 steps = steps,
                 formatLabel = formatLabel,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = LABEL_TOP_PADDING_DP.dp)
             )
+        }.first().measure(Constraints.fixedWidth(width))
+
+        val height = trackPlaceable.height + labelTopPadPx + labelsPlaceable.height
+        layout(width, height) {
+            trackPlaceable.placeRelative(0, 0)
+            labelsPlaceable.placeRelative(0, trackPlaceable.height + labelTopPadPx)
         }
     }
 }
+
+private enum class StepSliderSlot { Track, Labels }
 
 @Composable
 private fun StepSliderLabels(
@@ -272,7 +296,7 @@ private fun StepSliderLabels(
 }
 
 /**
- * Continuous slider over a [min]..[max] range, styled to match [StepSlider] (same track and
+ * Continuous slider over a [min]..[max] range, styled to match [Slider] (same track and
  * knob) but without discrete steps. Used to pick a transfer amount within its allowed limits.
  */
 @Composable
@@ -393,7 +417,7 @@ private fun Preview() {
     AppThemeSurface {
         var value by remember { mutableIntStateOf(10) }
         Column(modifier = Modifier.padding(32.dp)) {
-            StepSlider(
+            Slider(
                 value = value,
                 steps = persistentListOf(1, 5, 10, 20, 50),
                 onValueChange = { value = it },
@@ -404,7 +428,7 @@ private fun Preview() {
 
 @Preview
 @Composable
-private fun AmountSliderPreview() {
+private fun PreviewUnitStops() {
     AppThemeSurface {
         var value by remember { mutableLongStateOf(72_000L) }
         Column(modifier = Modifier.padding(32.dp)) {
@@ -420,13 +444,22 @@ private fun AmountSliderPreview() {
 
 @Preview
 @Composable
-private fun Preview2() {
+private fun PreviewVerticalStack() {
     AppThemeSurface {
+        var dollars by remember { mutableIntStateOf(1) }
+        var times by remember { mutableIntStateOf(1) }
         Column(modifier = Modifier.padding(32.dp)) {
-            StepSlider(
-                value = 5,
-                steps = persistentListOf(1, 2, 5, 10),
-                onValueChange = {},
+            Slider(
+                value = dollars,
+                steps = persistentListOf(1, 5, 10, 20, 50),
+                onValueChange = { dollars = it },
+            )
+            VerticalSpacer(32.dp)
+            Slider(
+                value = 50,
+                steps = persistentListOf(1, 3, 5, 10, 50),
+                onValueChange = { times = it },
+                formatLabel = { "${it}×" },
             )
         }
     }
