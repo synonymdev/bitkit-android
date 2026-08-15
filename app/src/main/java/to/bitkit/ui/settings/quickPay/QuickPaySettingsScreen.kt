@@ -2,7 +2,6 @@ package to.bitkit.ui.settings.quickPay
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -22,7 +21,9 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.Slider
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -75,7 +76,7 @@ fun QuickPaySettingsScreenContent(
         Column(
             modifier = Modifier.padding(horizontal = 16.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             SettingsSwitchRow(
                 title = stringResource(R.string.settings__quickpay__settings__toggle),
@@ -84,7 +85,7 @@ fun QuickPaySettingsScreenContent(
                 modifier = Modifier.testTag("QuickpayToggle")
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             BodyM(
                 text = stringResource(R.string.settings__quickpay__settings__text)
@@ -92,14 +93,14 @@ fun QuickPaySettingsScreenContent(
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             Caption13Up(
                 text = stringResource(R.string.settings__quickpay__settings__label),
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             Slider(
                 value = quickPayAmount,
@@ -108,14 +109,14 @@ fun QuickPaySettingsScreenContent(
                 modifier = Modifier.testTag("QuickpayAmountSlider")
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            VerticalSpacer(32.dp)
 
             Caption13Up(
                 text = stringResource(R.string.settings__quickpay__settings__daily_label),
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             BodyM(
                 text = stringResource(R.string.settings__quickpay__settings__daily_text)
@@ -124,7 +125,7 @@ fun QuickPaySettingsScreenContent(
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
 
             Slider(
                 value = quickPayDailyLimitMultiplier,
@@ -134,7 +135,7 @@ fun QuickPaySettingsScreenContent(
                 modifier = Modifier.testTag("QuickpayDailyLimitSlider")
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
             Image(
                 painter = painterResource(R.drawable.fast_forward),
                 contentDescription = null,
@@ -142,14 +143,14 @@ fun QuickPaySettingsScreenContent(
                     .fillMaxWidth()
                     .height(256.dp)
             )
-            Spacer(modifier = Modifier.weight(1f))
+            FillHeight()
 
             BodyS(
                 text = stringResource(R.string.settings__quickpay__settings__note),
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            VerticalSpacer(16.dp)
         }
     }
 }

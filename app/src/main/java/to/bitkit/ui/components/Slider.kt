@@ -24,6 +24,7 @@ import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -87,6 +88,7 @@ fun Slider(
     }
     val valueIndex = steps.indexOf(value).takeIf { it >= 0 } ?: 0
     val settledX = compositionStepPositions.getOrElse(valueIndex) { 0f }
+    val settledXState = rememberUpdatedState(settledX)
 
     LaunchedEffect(settledX, isDragging) {
         if (!isDragging) {
@@ -142,8 +144,8 @@ fun Slider(
                             detectTapGestures { offset ->
                                 val (closestStep, closestIndex) = findClosestStep(offset.x)
                                 coroutineScope.launch {
+                                    knobPosition.snapTo(settledXState.value)
                                     isDragging = true
-                                    knobPosition.snapTo(knobX)
                                     knobPosition.animateTo(
                                         targetValue = closestStep,
                                         animationSpec = SpringSpec(dampingRatio = 0.8f, stiffness = 400f),
@@ -200,8 +202,10 @@ fun Slider(
                         .pointerInput(stepPositions, steps, sliderWidth) {
                             detectDragGestures(
                                 onDragStart = {
-                                    isDragging = true
-                                    coroutineScope.launch { knobPosition.snapTo(settledX) }
+                                    coroutineScope.launch {
+                                        knobPosition.snapTo(settledXState.value)
+                                        isDragging = true
+                                    }
                                 },
                                 onDragEnd = {
                                     val (closestStep, closestIndex) = findClosestStep(knobPosition.value)
