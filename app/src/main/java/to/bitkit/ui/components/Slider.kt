@@ -7,6 +7,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,6 +22,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
@@ -31,10 +33,12 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
@@ -52,6 +56,7 @@ private const val SLIDER_EDGE_INSET_DP = 16
 private const val TRACK_HEIGHT_DP = 8
 private const val STEP_MARKER_WIDTH_DP = 4
 private const val STEP_MARKER_HEIGHT_DP = 16
+private const val LABEL_TOP_PADDING_DP = 4
 
 @Suppress("CyclomaticComplexMethod")
 @Composable
@@ -64,78 +69,69 @@ fun StepSlider(
 ) {
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
-
-    var sliderWidth by remember { mutableIntStateOf(0) }
     val knobPosition = remember { Animatable(0f) }
+    var isDragging by remember { mutableStateOf(false) }
 
-    // Calculate step positions (evenly spaced)
-    val stepPositions = remember(steps, sliderWidth) {
-        if (sliderWidth == 0) {
-            emptyList()
-        } else {
-            steps.indices.map { index ->
+    BoxWithConstraints(modifier = modifier.fillMaxWidth()) {
+        val sliderWidth = constraints.maxWidth.toFloat()
+        val stepPositions = remember(steps, sliderWidth) {
+            if (sliderWidth <= 0f) {
+                emptyList()
+            } else {
                 val numSteps = (steps.size - 1).coerceAtLeast(1)
-                (index.toFloat() / numSteps) * sliderWidth
+                steps.indices.map { index -> (index.toFloat() / numSteps) * sliderWidth }
             }
         }
-    }
+        val valueIndex = steps.indexOf(value).takeIf { it >= 0 } ?: 0
+        val settledX = stepPositions.getOrElse(valueIndex) { 0f }
+        val knobX = if (isDragging) knobPosition.value else settledX
 
-    // Initialize knob position when value changes
-    LaunchedEffect(value, stepPositions) {
-        if (stepPositions.isNotEmpty()) {
-            val valueIndex = steps.indexOf(value)
-            if (valueIndex >= 0) {
-                knobPosition.snapTo(stepPositions[valueIndex])
+        fun findClosestStep(currentPosition: Float): Pair<Float, Int> {
+            if (stepPositions.isEmpty()) return 0f to 0
+
+            var closestPosition = stepPositions[0]
+            var closestIndex = 0
+            var minDistance = abs(currentPosition - stepPositions[0])
+
+            stepPositions.forEachIndexed { index, position ->
+                val distance = abs(currentPosition - position)
+                if (distance < minDistance) {
+                    minDistance = distance
+                    closestPosition = position
+                    closestIndex = index
+                }
             }
-        }
-    }
 
-    // Find closest step position
-    fun findClosestStep(currentPosition: Float): Pair<Float, Int> {
-        if (stepPositions.isEmpty()) return 0f to 0
-
-        var closestPosition = stepPositions[0]
-        var closestIndex = 0
-        var minDistance = abs(currentPosition - stepPositions[0])
-
-        stepPositions.forEachIndexed { index, position ->
-            val distance = abs(currentPosition - position)
-            if (distance < minDistance) {
-                minDistance = distance
-                closestPosition = position
-                closestIndex = index
-            }
+            return closestPosition to closestIndex
         }
 
-        return closestPosition to closestIndex
-    }
-
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .onGloballyPositioned { coordinates ->
-                sliderWidth = coordinates.size.width
+        LaunchedEffect(settledX, isDragging) {
+            if (!isDragging) {
+                knobPosition.snapTo(settledX)
             }
-    ) {
+        }
+
         Column(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(KNOB_SIZE_DP.dp)
             ) {
-                // Track and step markers
                 Canvas(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(KNOB_SIZE_DP.dp)
-                        .pointerInput(Unit) {
+                        .pointerInput(stepPositions, steps) {
                             detectTapGestures { offset ->
                                 val (closestStep, closestIndex) = findClosestStep(offset.x)
                                 coroutineScope.launch {
+                                    isDragging = true
+                                    knobPosition.snapTo(knobX)
                                     knobPosition.animateTo(
                                         targetValue = closestStep,
                                         animationSpec = SpringSpec(dampingRatio = 0.8f, stiffness = 400f),
                                     )
+                                    isDragging = false
                                 }
                                 onValueChange(steps[closestIndex])
                             }
@@ -145,7 +141,6 @@ fun StepSlider(
                     val trackHeight = density.run { TRACK_HEIGHT_DP.dp.toPx() }
                     val cornerRadius = density.run { 3.dp.toPx() }
 
-                    // Draw inactive track
                     drawRoundRect(
                         color = Colors.Green32,
                         topLeft = Offset(0f, trackY - trackHeight / 2),
@@ -153,18 +148,15 @@ fun StepSlider(
                         cornerRadius = CornerRadius(cornerRadius),
                     )
 
-                    // Draw active track
-                    val activeWidth = knobPosition.value
-                    if (activeWidth > 0) {
+                    if (knobX > 0f) {
                         drawRoundRect(
                             color = Colors.Green,
                             topLeft = Offset(0f, trackY - trackHeight / 2),
-                            size = Size(activeWidth, trackHeight),
+                            size = Size(knobX, trackHeight),
                             cornerRadius = CornerRadius(cornerRadius),
                         )
                     }
 
-                    // Draw step markers
                     val markerWidth = density.run { STEP_MARKER_WIDTH_DP.dp.toPx() }
                     val markerHeight = density.run { STEP_MARKER_HEIGHT_DP.dp.toPx() }
                     val markerRadius = density.run { 2.5.dp.toPx() }
@@ -179,20 +171,20 @@ fun StepSlider(
                     }
                 }
 
-                // Knob
                 Box(
                     modifier = Modifier
                         .offset {
                             IntOffset(
-                                x = (knobPosition.value - with(density) { KNOB_SIZE_DP.dp.toPx() / 2 }).roundToInt(),
+                                x = (knobX - with(density) { KNOB_SIZE_DP.dp.toPx() / 2 }).roundToInt(),
                                 y = 0,
                             )
                         }
                         .size(KNOB_SIZE_DP.dp)
-                        .pointerInput(Unit) {
+                        .pointerInput(stepPositions, steps, sliderWidth) {
                             detectDragGestures(
-                                onDragStart = { _ ->
-                                    // No action needed on drag start
+                                onDragStart = {
+                                    isDragging = true
+                                    coroutineScope.launch { knobPosition.snapTo(settledX) }
                                 },
                                 onDragEnd = {
                                     val (closestStep, closestIndex) = findClosestStep(knobPosition.value)
@@ -201,26 +193,25 @@ fun StepSlider(
                                             targetValue = closestStep,
                                             animationSpec = SpringSpec(dampingRatio = 0.8f, stiffness = 400f),
                                         )
+                                        isDragging = false
                                     }
                                     onValueChange(steps[closestIndex])
                                 },
                             ) { _, dragAmount ->
                                 coroutineScope.launch {
                                     val newPosition = (knobPosition.value + dragAmount.x)
-                                        .coerceIn(0f, sliderWidth.toFloat())
+                                        .coerceIn(0f, sliderWidth)
                                     knobPosition.snapTo(newPosition)
                                 }
                             }
                         }
                 ) {
-                    // Outer green circle
                     Box(
                         modifier = Modifier
                             .size(KNOB_SIZE_DP.dp)
                             .clip(CircleShape)
                             .background(Colors.Green)
                     ) {
-                        // Inner white circle
                         Box(
                             modifier = Modifier
                                 .size(16.dp)
@@ -232,32 +223,49 @@ fun StepSlider(
                 }
             }
 
-            // Labels participate in layout height (horizontal offset only)
-            Box(
+            StepSliderLabels(
+                steps = steps,
+                formatLabel = formatLabel,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp)
-            ) {
-                steps.forEachIndexed { index, step ->
-                    Caption13Up(
-                        text = formatLabel(step),
-                        color = Colors.White64,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier
-                            .width(KNOB_SIZE_DP.dp)
-                            .offset {
-                                val x = if (index < stepPositions.size) {
-                                    (
-                                        stepPositions[index] -
-                                            with(density) { KNOB_SIZE_DP.dp.toPx() / 2 }
-                                        ).roundToInt()
-                                } else {
-                                    0
-                                }
-                                IntOffset(x = x, y = 0)
-                            }
-                    )
-                }
+                    .padding(top = LABEL_TOP_PADDING_DP.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StepSliderLabels(
+    steps: ImmutableList<Int>,
+    formatLabel: (Int) -> String,
+    modifier: Modifier = Modifier,
+) {
+    Layout(
+        modifier = modifier,
+        content = {
+            steps.forEach { step ->
+                Caption13Up(
+                    text = formatLabel(step),
+                    color = Colors.White64,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.width(KNOB_SIZE_DP.dp)
+                )
+            }
+        },
+    ) { measurables, constraints ->
+        val placeables = measurables.map { measurable ->
+            measurable.measure(Constraints())
+        }
+        val height = placeables.maxOfOrNull { it.height } ?: 0
+        val width = constraints.maxWidth
+        val numSteps = (placeables.size - 1).coerceAtLeast(1)
+
+        layout(width, height) {
+            placeables.forEachIndexed { index, placeable ->
+                val centerX = (index.toFloat() / numSteps) * width
+                val x = (centerX - placeable.width / 2f).roundToInt()
+                    .coerceIn(0, (width - placeable.width).coerceAtLeast(0))
+                placeable.placeRelative(x, 0)
             }
         }
     }
