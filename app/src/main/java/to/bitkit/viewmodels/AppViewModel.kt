@@ -3566,7 +3566,7 @@ class AppViewModel @Inject constructor(
 
         if (ScreenDeepLinks.isScreenDeepLink(uri)) {
             if (!ScreenDeepLinks.shouldQueue(settingsStore.data.first().isDevModeEnabled)) {
-                Logger.warn("Ignoring screen deeplink, dev mode is off", context = TAG)
+                Logger.warn("Ignoring screen deeplink, not queued", context = TAG)
                 return@launch
             }
 
