@@ -60,6 +60,7 @@ fun StepSlider(
     steps: ImmutableList<Int>,
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
+    formatLabel: (Int) -> String = { "$$it" },
 ) {
     val density = LocalDensity.current
     val coroutineScope = rememberCoroutineScope()
@@ -228,7 +229,7 @@ fun StepSlider(
         steps.forEachIndexed { index, step ->
             if (stepPositions.isNotEmpty() && index < stepPositions.size) {
                 Caption13Up(
-                    text = "$$step",
+                    text = formatLabel(step),
                     color = Colors.White64,
                     textAlign = TextAlign.Center,
                     modifier = Modifier

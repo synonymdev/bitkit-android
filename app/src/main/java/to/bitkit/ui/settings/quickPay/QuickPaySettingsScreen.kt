@@ -130,6 +130,7 @@ fun QuickPaySettingsScreenContent(
                 value = quickPayDailyLimitMultiplier,
                 steps = dailyLimitSteps,
                 onValueChange = onQuickPayDailyLimitMultiplierChange,
+                formatLabel = { "${it}×" },
                 modifier = Modifier.testTag("QuickpayDailyLimitSlider")
             )
 
