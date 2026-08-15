@@ -38,12 +38,15 @@ fun QuickPaySettingsScreen(
 ) {
     val isQuickPayEnabled by settingsViewModel.isQuickpayEnabled.collectAsStateWithLifecycle()
     val quickPayAmount by settingsViewModel.quickPayAmount.collectAsStateWithLifecycle()
+    val quickPayDailyLimitMultiplier by settingsViewModel.quickPayDailyLimitMultiplier.collectAsStateWithLifecycle()
 
     QuickPaySettingsScreenContent(
         isQuickPayEnabled = isQuickPayEnabled,
         quickPayAmount = quickPayAmount,
+        quickPayDailyLimitMultiplier = quickPayDailyLimitMultiplier,
         onToggleQuickPay = settingsViewModel::setIsQuickPayEnabled,
         onQuickPayAmountChange = settingsViewModel::setQuickPayAmount,
+        onQuickPayDailyLimitMultiplierChange = settingsViewModel::setQuickPayDailyLimitMultiplier,
         onBack = onBack,
     )
 }
@@ -52,11 +55,15 @@ fun QuickPaySettingsScreen(
 fun QuickPaySettingsScreenContent(
     isQuickPayEnabled: Boolean,
     quickPayAmount: Int,
+    quickPayDailyLimitMultiplier: Int,
     onToggleQuickPay: (Boolean) -> Unit = {},
     onQuickPayAmountChange: (Int) -> Unit = {},
+    onQuickPayDailyLimitMultiplierChange: (Int) -> Unit = {},
     onBack: () -> Unit = {},
 ) {
     val sliderSteps = remember { persistentListOf(1, 5, 10, 20, 50) }
+    val dailyLimitSteps = remember { persistentListOf(1, 3, 5, 10, 50) }
+    val dailyLimitUsd = quickPayAmount * quickPayDailyLimitMultiplier
 
     ScreenColumn {
         AppTopBar(
@@ -98,7 +105,32 @@ fun QuickPaySettingsScreenContent(
                 value = quickPayAmount,
                 steps = sliderSteps,
                 onValueChange = onQuickPayAmountChange,
-                modifier = Modifier.testTag("quickpay_amount_slider")
+                modifier = Modifier.testTag("QuickpayAmountSlider")
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            Caption13Up(
+                text = stringResource(R.string.settings__quickpay__settings__daily_label),
+                color = Colors.White64,
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            BodyM(
+                text = stringResource(R.string.settings__quickpay__settings__daily_text)
+                    .replace("{limit}", dailyLimitUsd.toString())
+                    .replace("{multiplier}", quickPayDailyLimitMultiplier.toString()),
+                color = Colors.White64,
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            StepSlider(
+                value = quickPayDailyLimitMultiplier,
+                steps = dailyLimitSteps,
+                onValueChange = onQuickPayDailyLimitMultiplierChange,
+                modifier = Modifier.testTag("QuickpayDailyLimitSlider")
             )
 
             Spacer(modifier = Modifier.weight(1f))
@@ -128,6 +160,7 @@ private fun Preview() {
         QuickPaySettingsScreenContent(
             isQuickPayEnabled = true,
             quickPayAmount = 5,
+            quickPayDailyLimitMultiplier = 5,
         )
     }
 }

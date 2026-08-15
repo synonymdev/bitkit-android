@@ -139,6 +139,21 @@ class CacheStore @Inject constructor(
         store.updateData { it.copy(backgroundReceive = null) }
     }
 
+    suspend fun quickPaySpentUsdForDay(dayKey: String): Double {
+        val data = store.data.first()
+        return if (data.quickPaySpendDayKey == dayKey) data.quickPaySpentUsdToday else 0.0
+    }
+
+    suspend fun recordQuickPaySpendUsd(amountUsd: Double, dayKey: String) {
+        store.updateData {
+            if (it.quickPaySpendDayKey != dayKey) {
+                it.copy(quickPaySpendDayKey = dayKey, quickPaySpentUsdToday = amountUsd)
+            } else {
+                it.copy(quickPaySpentUsdToday = it.quickPaySpentUsdToday + amountUsd)
+            }
+        }
+    }
+
     suspend fun reset() {
         store.updateData { AppCacheData() }
         Logger.info("Deleted all app cached data.")
@@ -164,6 +179,8 @@ data class AppCacheData(
     val backgroundReceive: NewTransactionSheetDetails? = null,
     val addressSearchLastUsedReceiveIndexes: Map<String, Int> = mapOf(),
     val addressSearchLastUsedChangeIndexes: Map<String, Int> = mapOf(),
+    val quickPaySpendDayKey: String = "",
+    val quickPaySpentUsdToday: Double = 0.0,
 ) {
     fun isActivityDeleted(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in deletedActivities ||

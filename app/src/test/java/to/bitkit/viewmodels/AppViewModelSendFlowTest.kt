@@ -60,6 +60,7 @@ import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.BalanceState
+import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -117,8 +118,10 @@ import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import to.bitkit.utils.AppError
 import to.bitkit.utils.timedsheets.TimedSheetManager
+import java.math.BigDecimal
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -220,6 +223,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(backupRepo.isRestoring).thenReturn(MutableStateFlow(false))
         stubSettingsStore()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
+        whenever { cacheStore.quickPaySpentUsdForDay(any()) }.thenReturn(0.0)
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever { blocktankRepo.refreshInfo() }.thenReturn(Result.success(Unit))
@@ -2155,7 +2159,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `lightning scan skips QuickPay when PIN is required for payments`() = test {
+    fun `lightning scan uses QuickPay when PIN is required for payments under daily cap`() = test {
         val bolt11 = "lnbcrt1quickpaypin"
         enableQuickPay(thresholdSats = 1000u)
         settingsData.value = settingsData.value.copy(
@@ -2168,8 +2172,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onScanResult(bolt11)
         advanceUntilIdle()
 
-        assertNull(sut.quickPayData.value)
-        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
     }
 
     @Test
@@ -2185,6 +2189,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lightning scan skips QuickPay when daily spend cap is exceeded`() = test {
+        val bolt11 = "lnbcrt1quickpaycap"
+        enableQuickPay(thresholdSats = 1000u, spentUsdToday = 24.0)
+        settingsData.value = settingsData.value.copy(quickPayDailyLimitMultiplier = 5)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
     }
 
     @Test
@@ -2207,8 +2226,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setIsAuthenticated(true)
         advanceUntilIdle()
 
-        assertNull(sut.quickPayData.value)
-        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
         verify(coreService).decode(bolt11)
     }
 
@@ -3194,9 +3213,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
     }
 
-    private fun enableQuickPay(thresholdSats: ULong) {
+    private fun enableQuickPay(
+        thresholdSats: ULong,
+        spentUsdToday: Double = 0.0,
+    ) {
         settingsData.value = SettingsData(isQuickPayEnabled = true, quickPayAmount = 5)
         whenever(currencyRepo.convertFiatToSats(5.0, "USD")).thenReturn(Result.success(thresholdSats))
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenAnswer { invocation ->
+            val sats = invocation.getArgument<Long>(0)
+            val usd = 5.0 * sats.toDouble() / thresholdSats.toDouble()
+            ConvertedAmount(
+                value = BigDecimal.valueOf(usd),
+                formatted = usd.toString(),
+                symbol = "$",
+                currency = "USD",
+                flag = "",
+                sats = sats,
+                locale = Locale.US,
+            )
+        }
+        whenever { cacheStore.quickPaySpentUsdForDay(any<String>()) }.thenReturn(spentUsdToday)
     }
 
     private suspend fun stubLightningScan(bolt11: String, amountSats: ULong) {

@@ -74,7 +74,6 @@ import org.lightningdevkit.ldknode.Txid
 import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.data.CacheStore
-import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
@@ -98,6 +97,7 @@ import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
 import to.bitkit.ext.minWithdrawableSat
+import to.bitkit.ext.quickPaySpendDayKey
 import to.bitkit.ext.rawId
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.runSuspendCatching
@@ -2601,48 +2601,52 @@ class AppViewModel @Inject constructor(
         lnurlPay: LnurlPayData? = null,
         invoice: LightningInvoice? = null,
     ): Boolean {
+        if (!canApplyQuickPay(amountSats)) return false
+
+        Logger.info("Using QuickPay for '$amountSats' sats", context = TAG)
+
+        val quickPayData: QuickPayData = when {
+            lnurlPay != null -> {
+                QuickPayData.LnurlPay(
+                    sats = amountSats,
+                    data = lnurlPay,
+                )
+            }
+
+            else -> {
+                val decodedInvoice = requireNotNull(invoice)
+                QuickPayData.Bolt11(sats = amountSats, bolt11 = decodedInvoice.bolt11)
+            }
+        }
+
+        _quickPayData.update { quickPayData }
+
+        Logger.debug("QuickPayData: $quickPayData", context = TAG)
+
+        navigateToSendRoute(fromMainScanner, SendRoute.QuickPay, SendEffect.NavigateToQuickPay)
+        return true
+    }
+
+    private suspend fun canApplyQuickPay(amountSats: ULong): Boolean {
         if (hasActiveContactPaymentContext()) return false
 
         val settings = settingsStore.data.first()
-        if (!canApplyQuickPay(settings, amountSats)) return false
+        if (!settings.isQuickPayEnabled || amountSats == 0uL) return false
 
         val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull()
-            ?: return false
+        val amountUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), "USD").getOrNull()?.value?.toDouble()
+        if (quickPayAmountSats == null || amountUsd == null || amountSats > quickPayAmountSats) return false
 
-        if (amountSats <= quickPayAmountSats) {
-            Logger.info("Using QuickPay: $amountSats sats <= $quickPayAmountSats sats threshold", context = TAG)
-
-            val quickPayData: QuickPayData = when {
-                lnurlPay != null -> {
-                    QuickPayData.LnurlPay(
-                        sats = amountSats,
-                        data = lnurlPay,
-                    )
-                }
-
-                else -> {
-                    val decodedInvoice = requireNotNull(invoice)
-                    QuickPayData.Bolt11(sats = amountSats, bolt11 = decodedInvoice.bolt11)
-                }
-            }
-
-            _quickPayData.update { quickPayData }
-
-            Logger.debug("QuickPayData: $quickPayData", context = TAG)
-
-            navigateToSendRoute(fromMainScanner, SendRoute.QuickPay, SendEffect.NavigateToQuickPay)
-            return true
-        }
-
-        return false
-    }
-
-    private fun canApplyQuickPay(settings: SettingsData, amountSats: ULong): Boolean {
-        if (!settings.isQuickPayEnabled || amountSats == 0uL) return false
-        if (settings.isPinEnabled && settings.isPinForPaymentsEnabled) {
-            Logger.debug("Skipping QuickPay because PIN is required for payments", context = TAG)
+        val dailyCapUsd = settings.quickPayAmount.toDouble() * settings.quickPayDailyLimitMultiplier
+        val spentUsdToday = cacheStore.quickPaySpentUsdForDay(quickPaySpendDayKey())
+        if (spentUsdToday + amountUsd > dailyCapUsd) {
+            Logger.info(
+                "Skipping QuickPay: daily spend '$spentUsdToday' + '$amountUsd' exceeds cap '$dailyCapUsd'",
+                context = TAG,
+            )
             return false
         }
+
         return true
     }
 

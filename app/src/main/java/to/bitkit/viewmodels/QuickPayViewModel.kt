@@ -11,10 +11,13 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
+import to.bitkit.data.CacheStore
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.callbackAmountMsats
+import to.bitkit.ext.quickPaySpendDayKey
 import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.watchUntil
+import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentRepo
@@ -27,6 +30,8 @@ class QuickPayViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val lightningRepo: LightningRepo,
     private val pendingPaymentRepo: PendingPaymentRepo,
+    private val currencyRepo: CurrencyRepo,
+    private val cacheStore: CacheStore,
 ) : ViewModel() {
 
     companion object {
@@ -65,6 +70,7 @@ class QuickPayViewModel @Inject constructor(
             sendLightning(bolt11, amount)
                 .onSuccess { paymentHash ->
                     Logger.info("QuickPay lightning payment successful")
+                    recordQuickPaySpend(displaySats)
                     _uiState.update {
                         it.copy(
                             result = QuickPayResult.Success(
@@ -77,6 +83,7 @@ class QuickPayViewModel @Inject constructor(
                     if (error is PaymentPendingException) {
                         Logger.info("QuickPay lightning payment pending", context = TAG)
                         pendingPaymentRepo.track(error.paymentHash)
+                        recordQuickPaySpend(displaySats)
                         _uiState.update {
                             it.copy(
                                 result = QuickPayResult.Pending(
@@ -94,6 +101,12 @@ class QuickPayViewModel @Inject constructor(
                     }
                 }
         }
+    }
+
+    private suspend fun recordQuickPaySpend(amountSats: ULong) {
+        val amountUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), "USD").getOrNull()?.value?.toDouble()
+            ?: return
+        cacheStore.recordQuickPaySpendUsd(amountUsd, quickPaySpendDayKey())
     }
 
     private suspend fun sendLightning(

@@ -91,4 +91,29 @@ class CacheStoreTest : BaseUnitTest() {
             sut.data.first().deletedActivities,
         )
     }
+
+    @Test
+    fun `quickPaySpentUsdForDay returns spend for matching day key`() = test {
+        sut.recordQuickPaySpendUsd(amountUsd = 3.5, dayKey = "2026-08-15")
+
+        assertEquals(3.5, sut.quickPaySpentUsdForDay("2026-08-15"))
+    }
+
+    @Test
+    fun `quickPaySpentUsdForDay returns zero for a different day key`() = test {
+        sut.recordQuickPaySpendUsd(amountUsd = 12.0, dayKey = "2026-08-14")
+
+        assertEquals(0.0, sut.quickPaySpentUsdForDay("2026-08-15"))
+    }
+
+    @Test
+    fun `recordQuickPaySpendUsd accumulates on the same day and resets on a new day`() = test {
+        sut.recordQuickPaySpendUsd(amountUsd = 2.0, dayKey = "2026-08-15")
+        sut.recordQuickPaySpendUsd(amountUsd = 1.5, dayKey = "2026-08-15")
+        assertEquals(3.5, sut.quickPaySpentUsdForDay("2026-08-15"))
+
+        sut.recordQuickPaySpendUsd(amountUsd = 4.0, dayKey = "2026-08-16")
+        assertEquals(4.0, sut.quickPaySpentUsdForDay("2026-08-16"))
+        assertEquals(0.0, sut.quickPaySpentUsdForDay("2026-08-15"))
+    }
 }
