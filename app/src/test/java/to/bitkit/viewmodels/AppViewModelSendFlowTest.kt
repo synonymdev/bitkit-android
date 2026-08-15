@@ -2155,13 +2155,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `lightning scan uses QuickPay when PIN is required for payments`() = test {
+    fun `lightning scan skips QuickPay when PIN is required for payments`() = test {
         val bolt11 = "lnbcrt1quickpaypin"
         enableQuickPay(thresholdSats = 1000u)
         settingsData.value = settingsData.value.copy(
             isPinEnabled = true,
             isPinForPaymentsEnabled = true,
         )
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lightning scan uses QuickPay when PIN is on without PIN for payments`() = test {
+        val bolt11 = "lnbcrt1quickpayunlocked"
+        enableQuickPay(thresholdSats = 1000u)
+        settingsData.value = settingsData.value.copy(isPinEnabled = true)
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
         sut.setIsAuthenticated(true)
 
@@ -2192,8 +2207,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setIsAuthenticated(true)
         advanceUntilIdle()
 
-        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
-        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+        assertNull(sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         verify(coreService).decode(bolt11)
     }
 
