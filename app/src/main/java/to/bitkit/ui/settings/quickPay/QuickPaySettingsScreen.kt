@@ -22,7 +22,7 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.StepSlider
+import to.bitkit.ui.components.Slider
 import to.bitkit.ui.components.settings.SettingsSwitchRow
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -101,7 +101,7 @@ fun QuickPaySettingsScreenContent(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            StepSlider(
+            Slider(
                 value = quickPayAmount,
                 steps = sliderSteps,
                 onValueChange = onQuickPayAmountChange,
@@ -115,7 +115,7 @@ fun QuickPaySettingsScreenContent(
                 color = Colors.White64,
             )
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             BodyM(
                 text = stringResource(R.string.settings__quickpay__settings__daily_text)
@@ -126,7 +126,7 @@ fun QuickPaySettingsScreenContent(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            StepSlider(
+            Slider(
                 value = quickPayDailyLimitMultiplier,
                 steps = dailyLimitSteps,
                 onValueChange = onQuickPayDailyLimitMultiplierChange,
