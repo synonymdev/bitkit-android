@@ -564,6 +564,7 @@
     <string name="other__shop__discover__tabs__shop">Shop</string>
     <string name="other__shop__discover__travel__description">Book your ₿ holiday</string>
     <string name="other__shop__discover__travel__title">Travel</string>
+    <string name="other__shop__external_link_blocked">This link can’t be opened from the shop.</string>
     <string name="other__shop__intro__description">Get your life on the Bitcoin standard. Spend your Bitcoin on digital gift cards, eSIMs, phone refills, and more.</string>
     <string name="other__shop__intro__title">Shop</string>
     <string name="other__swipe">Swipe To Confirm</string>
