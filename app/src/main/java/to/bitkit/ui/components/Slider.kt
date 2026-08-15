@@ -463,7 +463,7 @@ private fun PreviewVerticalStack() {
                 value = 50,
                 steps = persistentListOf(1, 3, 5, 10, 50),
                 onValueChange = { times = it },
-                formatLabel = { "${it}×" },
+                formatLabel = { "$it×" },
             )
         }
     }
