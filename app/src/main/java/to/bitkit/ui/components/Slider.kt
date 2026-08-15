@@ -117,130 +117,147 @@ fun StepSlider(
                 sliderWidth = coordinates.size.width
             }
     ) {
-        // Track and step markers
-        Canvas(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(KNOB_SIZE_DP.dp)
-                .pointerInput(Unit) {
-                    detectTapGestures { offset ->
-                        val (closestStep, closestIndex) = findClosestStep(offset.x)
-                        coroutineScope.launch {
-                            knobPosition.animateTo(
-                                targetValue = closestStep,
-                                animationSpec = SpringSpec(dampingRatio = 0.8f, stiffness = 400f),
-                            )
-                        }
-                        onValueChange(steps[closestIndex])
-                    }
-                }
-        ) {
-            val trackY = center.y
-            val trackHeight = density.run { TRACK_HEIGHT_DP.dp.toPx() }
-            val cornerRadius = density.run { 3.dp.toPx() }
-
-            // Draw inactive track
-            drawRoundRect(
-                color = Colors.Green32,
-                topLeft = Offset(0f, trackY - trackHeight / 2),
-                size = Size(size.width, trackHeight),
-                cornerRadius = CornerRadius(cornerRadius),
-            )
-
-            // Draw active track
-            val activeWidth = knobPosition.value
-            if (activeWidth > 0) {
-                drawRoundRect(
-                    color = Colors.Green,
-                    topLeft = Offset(0f, trackY - trackHeight / 2),
-                    size = Size(activeWidth, trackHeight),
-                    cornerRadius = CornerRadius(cornerRadius),
-                )
-            }
-
-            // Draw step markers
-            val markerWidth = density.run { STEP_MARKER_WIDTH_DP.dp.toPx() }
-            val markerHeight = density.run { STEP_MARKER_HEIGHT_DP.dp.toPx() }
-            val markerRadius = density.run { 2.5.dp.toPx() }
-
-            stepPositions.forEach { position ->
-                drawRoundRect(
-                    color = Colors.White,
-                    topLeft = Offset(position - markerWidth / 2, trackY - markerHeight / 2),
-                    size = Size(markerWidth, markerHeight),
-                    cornerRadius = CornerRadius(markerRadius),
-                )
-            }
-        }
-
-        // Knob
-        Box(
-            modifier = Modifier
-                .offset {
-                    IntOffset(
-                        x = (knobPosition.value - with(density) { KNOB_SIZE_DP.dp.toPx() / 2 }).roundToInt(),
-                        y = 0,
-                    )
-                }
-                .size(KNOB_SIZE_DP.dp)
-                .pointerInput(Unit) {
-                    detectDragGestures(
-                        onDragStart = { _ ->
-                            // No action needed on drag start
-                        },
-                        onDragEnd = {
-                            val (closestStep, closestIndex) = findClosestStep(knobPosition.value)
-                            coroutineScope.launch {
-                                knobPosition.animateTo(
-                                    targetValue = closestStep,
-                                    animationSpec = SpringSpec(dampingRatio = 0.8f, stiffness = 400f),
-                                )
-                            }
-                            onValueChange(steps[closestIndex])
-                        },
-                    ) { _, dragAmount ->
-                        coroutineScope.launch {
-                            val newPosition = (knobPosition.value + dragAmount.x)
-                                .coerceIn(0f, sliderWidth.toFloat())
-                            knobPosition.snapTo(newPosition)
-                        }
-                    }
-                }
-        ) {
-            // Outer green circle
+        Column(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
-                    .size(KNOB_SIZE_DP.dp)
-                    .clip(CircleShape)
-                    .background(Colors.Green)
+                    .fillMaxWidth()
+                    .height(KNOB_SIZE_DP.dp)
             ) {
-                // Inner white circle
+                // Track and step markers
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(KNOB_SIZE_DP.dp)
+                        .pointerInput(Unit) {
+                            detectTapGestures { offset ->
+                                val (closestStep, closestIndex) = findClosestStep(offset.x)
+                                coroutineScope.launch {
+                                    knobPosition.animateTo(
+                                        targetValue = closestStep,
+                                        animationSpec = SpringSpec(dampingRatio = 0.8f, stiffness = 400f),
+                                    )
+                                }
+                                onValueChange(steps[closestIndex])
+                            }
+                        }
+                ) {
+                    val trackY = center.y
+                    val trackHeight = density.run { TRACK_HEIGHT_DP.dp.toPx() }
+                    val cornerRadius = density.run { 3.dp.toPx() }
+
+                    // Draw inactive track
+                    drawRoundRect(
+                        color = Colors.Green32,
+                        topLeft = Offset(0f, trackY - trackHeight / 2),
+                        size = Size(size.width, trackHeight),
+                        cornerRadius = CornerRadius(cornerRadius),
+                    )
+
+                    // Draw active track
+                    val activeWidth = knobPosition.value
+                    if (activeWidth > 0) {
+                        drawRoundRect(
+                            color = Colors.Green,
+                            topLeft = Offset(0f, trackY - trackHeight / 2),
+                            size = Size(activeWidth, trackHeight),
+                            cornerRadius = CornerRadius(cornerRadius),
+                        )
+                    }
+
+                    // Draw step markers
+                    val markerWidth = density.run { STEP_MARKER_WIDTH_DP.dp.toPx() }
+                    val markerHeight = density.run { STEP_MARKER_HEIGHT_DP.dp.toPx() }
+                    val markerRadius = density.run { 2.5.dp.toPx() }
+
+                    stepPositions.forEach { position ->
+                        drawRoundRect(
+                            color = Colors.White,
+                            topLeft = Offset(position - markerWidth / 2, trackY - markerHeight / 2),
+                            size = Size(markerWidth, markerHeight),
+                            cornerRadius = CornerRadius(markerRadius),
+                        )
+                    }
+                }
+
+                // Knob
                 Box(
                     modifier = Modifier
-                        .size(16.dp)
-                        .clip(CircleShape)
-                        .background(Colors.White)
-                        .align(Alignment.Center)
-                )
-            }
-        }
-
-        // Step labels
-        steps.forEachIndexed { index, step ->
-            if (stepPositions.isNotEmpty() && index < stepPositions.size) {
-                Caption13Up(
-                    text = formatLabel(step),
-                    color = Colors.White64,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .width(KNOB_SIZE_DP.dp)
                         .offset {
                             IntOffset(
-                                x = (stepPositions[index] - with(density) { KNOB_SIZE_DP.dp.toPx() / 2 }).roundToInt(),
-                                y = with(density) { (KNOB_SIZE_DP.dp + 4.dp).toPx() }.roundToInt(),
+                                x = (knobPosition.value - with(density) { KNOB_SIZE_DP.dp.toPx() / 2 }).roundToInt(),
+                                y = 0,
                             )
                         }
-                )
+                        .size(KNOB_SIZE_DP.dp)
+                        .pointerInput(Unit) {
+                            detectDragGestures(
+                                onDragStart = { _ ->
+                                    // No action needed on drag start
+                                },
+                                onDragEnd = {
+                                    val (closestStep, closestIndex) = findClosestStep(knobPosition.value)
+                                    coroutineScope.launch {
+                                        knobPosition.animateTo(
+                                            targetValue = closestStep,
+                                            animationSpec = SpringSpec(dampingRatio = 0.8f, stiffness = 400f),
+                                        )
+                                    }
+                                    onValueChange(steps[closestIndex])
+                                },
+                            ) { _, dragAmount ->
+                                coroutineScope.launch {
+                                    val newPosition = (knobPosition.value + dragAmount.x)
+                                        .coerceIn(0f, sliderWidth.toFloat())
+                                    knobPosition.snapTo(newPosition)
+                                }
+                            }
+                        }
+                ) {
+                    // Outer green circle
+                    Box(
+                        modifier = Modifier
+                            .size(KNOB_SIZE_DP.dp)
+                            .clip(CircleShape)
+                            .background(Colors.Green)
+                    ) {
+                        // Inner white circle
+                        Box(
+                            modifier = Modifier
+                                .size(16.dp)
+                                .clip(CircleShape)
+                                .background(Colors.White)
+                                .align(Alignment.Center)
+                        )
+                    }
+                }
+            }
+
+            // Labels participate in layout height (horizontal offset only)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp)
+            ) {
+                steps.forEachIndexed { index, step ->
+                    Caption13Up(
+                        text = formatLabel(step),
+                        color = Colors.White64,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .width(KNOB_SIZE_DP.dp)
+                            .offset {
+                                val x = if (index < stepPositions.size) {
+                                    (
+                                        stepPositions[index] -
+                                            with(density) { KNOB_SIZE_DP.dp.toPx() / 2 }
+                                        ).roundToInt()
+                                } else {
+                                    0
+                                }
+                                IntOffset(x = x, y = 0)
+                            }
+                    )
+                }
             }
         }
     }
