@@ -16,14 +16,19 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -102,9 +107,11 @@ import to.bitkit.services.NodeServiceFgState
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.TimedSheetType
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
+import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
@@ -178,9 +185,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
 
     private val timedSheetManager = mock<TimedSheetManager>()
+    private val timedSheetType = MutableStateFlow<TimedSheetType?>(null)
 
     @Before
     fun setUp() {
+        timedSheetType.value = null
         stubRepositories()
         sut = createViewModel()
     }
@@ -214,7 +223,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever { blocktankRepo.refreshInfo() }.thenReturn(Result.success(Unit))
-        whenever(timedSheetManager.currentSheet).thenReturn(MutableStateFlow(null))
+        whenever(timedSheetManager.currentSheet).thenReturn(timedSheetType)
         whenever(migrationService.isShowingMigrationLoading).thenReturn(MutableStateFlow(false))
         whenever { migrationService.needsPostMigrationSync() }.thenReturn(false)
         whenever { migrationService.isMigrationChecked() }.thenReturn(true)
@@ -359,7 +368,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `payment requests refresh periodically only while polling is active`() = test {
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
         runCurrent()
 
         sut.startPaykitPaymentRequestPolling()
@@ -387,11 +396,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `payment request waiting for a newer private list is retried after backoff`() = test {
+        sut.setIsAuthenticated(true)
         val request = paymentRequest()
         val bolt11 = "lnbcrt1updatedpaymentrequest"
         val privateContext = PrivatePaykitPaymentContext("bitkit/server", 8uL)
-        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.beginPaymentRequest(request) }.thenReturn(
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
             Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList),
             Result.success(
                 PublicPaykitPaymentResult.Opened(
@@ -408,29 +418,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyPublicKey.value = testPublicKey
         runCurrent()
 
-        sut.startPaykitPaymentRequestPolling()
-        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        sut.onHomeResumed()
         runCurrent()
         assertNull(sut.currentSheet.value)
         verify(privatePaykitRepo).beginPaymentRequest(request)
+        clearInvocations(privatePaykitRepo)
 
         advanceTimeBy(29.seconds.inWholeMilliseconds)
         runCurrent()
-        verify(privatePaykitRepo).beginPaymentRequest(request)
+        verify(privatePaykitRepo, never()).beginPaymentRequest(request)
 
         advanceTimeBy(1.seconds.inWholeMilliseconds)
         runCurrent()
-        sut.stopPaykitPaymentRequestPolling()
 
-        verify(privatePaykitRepo, times(2)).beginPaymentRequest(request)
+        verify(privatePaykitRepo).beginPaymentRequest(request)
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
     }
 
     @Test
     fun `unresolvable payment request retries are bounded`() = test {
         val request = paymentRequest()
-        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.beginPaymentRequest(request) }
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.beginPaymentRequest(request))
             .thenReturn(Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList))
         pendingPaykitPaymentRequests.value = listOf(request)
         isPaykitEnabled.value = true
@@ -453,7 +462,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(pendingRequest)
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
         runCurrent()
 
         sut.startPaykitPaymentRequestPolling()
@@ -466,27 +475,57 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `dismissing a payment request presents the next request with its context`() = test {
+        sut.setIsAuthenticated(true)
+        val firstRequest = paymentRequest()
+        val secondRequest = firstRequest.copy(paymentRequestId = "next-request")
+        val firstInvoice = "lnbcrt1firstpendingrequest"
+        val secondInvoice = "lnbcrt1secondpendingrequest"
+        stubOpenedPaymentRequest(firstRequest, firstInvoice)
+        stubOpenedPaymentRequest(secondRequest, secondInvoice, privateListIndex = 8uL)
+        stubLightningScan(bolt11 = firstInvoice, amountSats = 0u)
+        stubLightningScan(bolt11 = secondInvoice, amountSats = 0u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        pendingPaykitPaymentRequests.value = listOf(firstRequest, secondRequest)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+
+        sut.onHomeResumed()
+        sut.currentSheet.first {
+            it is Sheet.Send && activeContactPaymentContext()?.incomingPaymentRequest == firstRequest
+        }
+
+        sut.setIsAuthenticated(false)
+        sut.hideSheet()
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        verify(privatePaykitRepo, never()).beginPaymentRequest(secondRequest)
+
+        sut.setIsAuthenticated(true)
+        sut.currentSheet.first {
+            it is Sheet.Send && activeContactPaymentContext()?.incomingPaymentRequest == secondRequest
+        }
+
+        verify(privatePaykitRepo).beginPaymentRequest(firstRequest)
+        verify(privatePaykitRepo).beginPaymentRequest(secondRequest)
+        assertTrue(sut.sendUiState.value.isPaymentRequest)
+    }
+
+    @Test
     fun `request removed during endpoint resolution is not presented`() = test {
+        sut.setIsAuthenticated(true)
         val request = paymentRequest()
-        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
-        whenever { privatePaykitRepo.beginPaymentRequest(request) }.thenReturn(
-            Result.success(
-                PublicPaykitPaymentResult.Opened(
-                    paymentRequest = "lnbcrt1stale",
-                    privatePaymentContext = privateContext,
-                ),
-            ),
-        )
+        stubOpenedPaymentRequest(request, "lnbcrt1stale")
         whenever(paykitPaymentRequestRepo.isPending(request)).thenReturn(false)
         pendingPaykitPaymentRequests.value = listOf(request)
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
 
-        sut.startPaykitPaymentRequestPolling()
-        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        sut.onHomeResumed()
         runCurrent()
-        sut.stopPaykitPaymentRequestPolling()
 
         verify(privatePaykitRepo).beginPaymentRequest(request)
         assertNull(sut.currentSheet.value)
@@ -497,7 +536,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `contact payment opened during request resolution is not overwritten`() = test {
         val request = paymentRequest()
         val manualContext = ContactPaymentContext("pubkymanual")
-        whenever { privatePaykitRepo.beginPaymentRequest(request) }.thenAnswer {
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenAnswer {
             setActiveContactPaymentContext(manualContext.publicKey)
             PublicPaykitPaymentResult.Opened(
                 paymentRequest = "lnbcrt1incoming",
@@ -507,7 +546,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pendingPaykitPaymentRequests.value = listOf(request)
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
 
         sut.startPaykitPaymentRequestPolling()
         advanceTimeBy(30.seconds.inWholeMilliseconds)
@@ -519,26 +558,363 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `payment request waits for scan started during endpoint resolution`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val requestInvoice = "lnbcrt1resolvedrequest"
+        val scanInvoice = "lnbcrt1concurrentscan"
+        val resolutionStarted = CompletableDeferred<Unit>()
+        val resumeResolution = CompletableDeferred<Unit>()
+        val scanStarted = CompletableDeferred<Unit>()
+        val resumeScan = CompletableDeferred<Unit>()
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer {
+            resolutionStarted.complete(Unit)
+            resumeResolution.await()
+            Result.success(
+                PublicPaykitPaymentResult.Opened(
+                    paymentRequest = requestInvoice,
+                    privatePaymentContext = PrivatePaykitPaymentContext("bitkit/server", 7uL),
+                ),
+            )
+        }
+        whenever(coreService.decode(scanInvoice)).doSuspendableAnswer {
+            scanStarted.complete(Unit)
+            resumeScan.await()
+            Scanner.Lightning(lightningInvoice(scanInvoice, 500u))
+        }
+        stubLightningScan(bolt11 = requestInvoice, amountSats = 0u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        pendingPaykitPaymentRequests.value = listOf(request)
+        isPaykitEnabled.value = true
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+
+        sut.onHomeResumed()
+        resolutionStarted.await()
+
+        sut.onScanResult(scanInvoice)
+        scanStarted.await()
+        resumeResolution.complete(Unit)
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        assertNull(activeContactPaymentContext())
+
+        resumeScan.complete(Unit)
+        sut.currentSheet.first { it is Sheet.Send }
+
+        assertEquals(500u, sut.sendUiState.value.amount)
+        assertFalse(sut.sendUiState.value.isPaymentRequest)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+
+        sut.hideSheet()
+        sut.currentSheet.first { it is Sheet.Send && sut.sendUiState.value.isPaymentRequest }
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertTrue(sut.sendUiState.value.isPaymentRequest)
+        verify(privatePaykitRepo, times(2)).beginPaymentRequest(request)
+    }
+
+    @Test
+    fun `new scan does not inherit an active payment request context`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val requestInvoice = "lnbcrt1interruptedrequest"
+        val replacementInvoice = "lnbcrt1replacementscan"
+        val requestScanStarted = CompletableDeferred<Unit>()
+        val holdRequestScan = CompletableDeferred<Unit>()
+        stubOpenedPaymentRequest(request, requestInvoice)
+        whenever(coreService.decode(requestInvoice)).doSuspendableAnswer {
+            requestScanStarted.complete(Unit)
+            holdRequestScan.await()
+            Scanner.Lightning(lightningInvoice(requestInvoice, 0u))
+        }
+        stubLightningScan(bolt11 = replacementInvoice, amountSats = request.amountSats)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+
+        sut.onHomeResumed()
+        requestScanStarted.await()
+        sut.onScanResult(replacementInvoice)
+        sut.currentSheet.first { it is Sheet.Send }
+        sut.sendUiState.first { it.addressInput == replacementInvoice }
+
+        assertFalse(sut.sendUiState.value.isPaymentRequest)
+        assertNull(activeContactPaymentContext())
+        assertEquals(replacementInvoice, sut.sendUiState.value.addressInput)
+
+        runCurrent()
+        holdRequestScan.complete(Unit)
+        sut.hideSheet()
+        runCurrent()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertTrue(sut.sendUiState.value.isPaymentRequest)
+        verify(privatePaykitRepo, times(2)).beginPaymentRequest(request)
+        assertEquals(request, activeContactPaymentContext()?.incomingPaymentRequest)
+    }
+
+    @Test
+    fun `same active scan restarts when payment request context changes`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1sameactivescan"
+        val firstScanStarted = CompletableDeferred<Unit>()
+        val holdFirstScan = CompletableDeferred<Unit>()
+        var decodeCount = 0
+        whenever(coreService.decode(bolt11)).doSuspendableAnswer {
+            decodeCount += 1
+            if (decodeCount == 1) {
+                firstScanStarted.complete(Unit)
+                holdFirstScan.await()
+            }
+            Scanner.Lightning(lightningInvoice(bolt11, 0u))
+        }
+        whenever(lightningRepo.canSend(request.amountSats)).thenReturn(true)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+
+        sut.onScanResult(bolt11)
+        firstScanStarted.await()
+        sut.openContactPayment(
+            paymentRequest = bolt11,
+            publicKey = testPublicKey,
+            incomingPaymentRequest = request,
+        )
+        sut.currentSheet.first { it is Sheet.Send }
+
+        assertEquals(2, decodeCount)
+        assertTrue(sut.sendUiState.value.isPaymentRequest)
+        assertEquals(request, activeContactPaymentContext()?.incomingPaymentRequest)
+    }
+
+    @Test
+    fun `same context-free scan does not downgrade an active payment request`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1paykitduplicateresult"
+        val scanStarted = CompletableDeferred<Unit>()
+        val finishScan = CompletableDeferred<Unit>()
+        var decodeCount = 0
+        whenever(coreService.decode(bolt11)).doSuspendableAnswer {
+            decodeCount += 1
+            scanStarted.complete(Unit)
+            finishScan.await()
+            Scanner.Lightning(lightningInvoice(bolt11, 0u))
+        }
+        whenever(lightningRepo.canSend(request.amountSats)).thenReturn(true)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+
+        sut.openContactPayment(
+            paymentRequest = bolt11,
+            publicKey = testPublicKey,
+            incomingPaymentRequest = request,
+        )
+        scanStarted.await()
+        sut.onScanResult(bolt11)
+        finishScan.complete(Unit)
+        sut.currentSheet.first { it is Sheet.Send }
+
+        assertEquals(1, decodeCount)
+        assertTrue(sut.sendUiState.value.isPaymentRequest)
+        assertEquals(request, activeContactPaymentContext()?.incomingPaymentRequest)
+    }
+
+    @Test
+    fun `latest scan waits for prior cancellation and skips intermediate replacement`() = test {
+        sut.setIsAuthenticated(true)
+        val firstInvoice = "lnbcrt1firstcanceledscan"
+        val intermediateInvoice = "lnbcrt1intermediatescan"
+        val latestInvoice = "lnbcrt1latestscan"
+        val firstDecodeStarted = CompletableDeferred<Unit>()
+        val cleanupStarted = CompletableDeferred<Unit>()
+        var intermediateDecodeCount = 0
+        var latestDecodeCount = 0
+        whenever(coreService.decode(firstInvoice)).doSuspendableAnswer {
+            firstDecodeStarted.complete(Unit)
+            try {
+                awaitCancellation()
+            } finally {
+                withContext(NonCancellable) {
+                    cleanupStarted.complete(Unit)
+                    delay(1.seconds)
+                }
+            }
+        }
+        whenever(coreService.decode(intermediateInvoice)).doSuspendableAnswer {
+            intermediateDecodeCount += 1
+            Scanner.Lightning(lightningInvoice(intermediateInvoice, 500u))
+        }
+        whenever(coreService.decode(latestInvoice)).doSuspendableAnswer {
+            latestDecodeCount += 1
+            Scanner.Lightning(lightningInvoice(latestInvoice, 600u))
+        }
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+        balanceState.value = BalanceState(
+            maxSendLightningSats = 100_000u,
+            maxSendOnchainSats = 100_000u,
+        )
+
+        sut.onScanResult(firstInvoice)
+        firstDecodeStarted.await()
+        sut.onScanResult(intermediateInvoice)
+        cleanupStarted.await()
+        sut.onScanResult(latestInvoice)
+
+        assertEquals(0, intermediateDecodeCount)
+        assertEquals(0, latestDecodeCount)
+
+        advanceTimeBy(1.seconds.inWholeMilliseconds)
+        sut.sendUiState.first { it.addressInput == latestInvoice }
+
+        assertEquals(0, intermediateDecodeCount)
+        assertEquals(1, latestDecodeCount)
+        assertEquals(latestInvoice, sut.sendUiState.value.addressInput)
+        assertEquals(600u, sut.sendUiState.value.amount)
+        assertNull(activeContactPaymentContext())
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `payment request retries when a blocking scan finishes without a sheet`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val requestInvoice = "lnbcrt1requestafterfailedscan"
+        val scanInput = "invalid-active-scan"
+        val resolutionStarted = CompletableDeferred<Unit>()
+        val resumeResolution = CompletableDeferred<Unit>()
+        val scanStarted = CompletableDeferred<Unit>()
+        val resumeScan = CompletableDeferred<Unit>()
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer {
+            resolutionStarted.complete(Unit)
+            resumeResolution.await()
+            Result.success(
+                PublicPaykitPaymentResult.Opened(
+                    paymentRequest = requestInvoice,
+                    privatePaymentContext = PrivatePaykitPaymentContext("bitkit/server", 7uL),
+                ),
+            )
+        }
+        whenever(coreService.decode(scanInput)).doSuspendableAnswer {
+            scanStarted.complete(Unit)
+            resumeScan.await()
+            throw AppError("Invalid scan")
+        }
+        stubLightningScan(bolt11 = requestInvoice, amountSats = 0u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+
+        sut.onHomeResumed()
+        resolutionStarted.await()
+        sut.onScanResult(scanInput)
+        scanStarted.await()
+        resumeResolution.complete(Unit)
+        runCurrent()
+
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+        assertNull(sut.currentSheet.value)
+
+        resumeScan.complete(Unit)
+        sut.currentSheet.first { it is Sheet.Send && sut.sendUiState.value.isPaymentRequest }
+
+        verify(privatePaykitRepo, times(2)).beginPaymentRequest(request)
+        assertTrue(sut.sendUiState.value.isPaymentRequest)
+    }
+
+    @Test
+    fun `payment request waits for an active scan and its send sheet`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val requestInvoice = "lnbcrt1requestafterscan"
+        val scanInvoice = "lnbcrt1activescan"
+        val scanStarted = CompletableDeferred<Unit>()
+        val resumeScan = CompletableDeferred<Unit>()
+        whenever(coreService.decode(scanInvoice)).doSuspendableAnswer {
+            scanStarted.complete(Unit)
+            resumeScan.await()
+            Scanner.Lightning(lightningInvoice(scanInvoice, 500u))
+        }
+        stubOpenedPaymentRequest(request, requestInvoice)
+        stubLightningScan(bolt11 = requestInvoice, amountSats = 0u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+
+        sut.onScanResult(scanInvoice)
+        scanStarted.await()
+        pendingPaykitPaymentRequests.value = listOf(request)
+        isPaykitEnabled.value = true
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        sut.onHomeResumed()
+        runCurrent()
+
+        verify(privatePaykitRepo, never()).beginPaymentRequest(request)
+
+        resumeScan.complete(Unit)
+        sut.currentSheet.first { it is Sheet.Send }
+
+        verify(privatePaykitRepo, never()).beginPaymentRequest(request)
+
+        sut.hideSheet()
+        sut.currentSheet.first { it is Sheet.Send && sut.sendUiState.value.isPaymentRequest }
+
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+        assertTrue(sut.sendUiState.value.isPaymentRequest)
+    }
+
+    @Test
+    fun `payment request waits for a queued locked scan and its send sheet`() = test {
+        val request = paymentRequest()
+        val requestInvoice = "lnbcrt1requestafterlockedscan"
+        val scanInvoice = "lnbcrt1queuedlockedscan"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubOpenedPaymentRequest(request, requestInvoice)
+        stubLightningScan(bolt11 = requestInvoice, amountSats = 0u)
+        stubLightningScan(bolt11 = scanInvoice, amountSats = 500u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+
+        sut.onScanResult(scanInvoice)
+        runCurrent()
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        sut.onHomeResumed()
+        runCurrent()
+
+        verify(privatePaykitRepo, never()).beginPaymentRequest(request)
+
+        sut.setIsAuthenticated(true)
+        sut.currentSheet.first { it is Sheet.Send }
+
+        assertFalse(sut.sendUiState.value.isPaymentRequest)
+        verify(privatePaykitRepo, never()).beginPaymentRequest(request)
+
+        sut.hideSheet()
+        sut.currentSheet.first { it is Sheet.Send && sut.sendUiState.value.isPaymentRequest }
+
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+        assertTrue(sut.sendUiState.value.isPaymentRequest)
+    }
+
+    @Test
     fun `unavailable request does not starve a later payable request`() = test {
         val unavailableRequest = paymentRequest()
         val payableRequest = unavailableRequest.copy(paymentRequestId = "payable-request")
         val bolt11 = "lnbcrt1payablerequest"
-        whenever { privatePaykitRepo.beginPaymentRequest(unavailableRequest) }
+        whenever(privatePaykitRepo.beginPaymentRequest(unavailableRequest))
             .thenReturn(Result.success(PublicPaykitPaymentResult.NoEndpoint))
-        whenever { privatePaykitRepo.beginPaymentRequest(payableRequest) }.thenReturn(
-            Result.success(
-                PublicPaykitPaymentResult.Opened(
-                    paymentRequest = bolt11,
-                    privatePaymentContext = PrivatePaykitPaymentContext("bitkit/server", 7uL),
-                ),
-            ),
-        )
+        stubOpenedPaymentRequest(payableRequest, bolt11)
         stubLightningScan(bolt11 = bolt11, amountSats = 0u)
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         pendingPaykitPaymentRequests.value = listOf(unavailableRequest, payableRequest)
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
 
         sut.startPaykitPaymentRequestPolling()
         advanceTimeBy(30.seconds.inWholeMilliseconds)
@@ -554,11 +930,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `cancelled request resolution releases the presentation guard`() = test {
         val request = paymentRequest()
-        whenever { privatePaykitRepo.beginPaymentRequest(request) }.thenThrow(CancellationException())
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenThrow(CancellationException())
         pendingPaykitPaymentRequests.value = listOf(request)
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
-        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
 
         sut.startPaykitPaymentRequestPolling()
         advanceTimeBy(30.seconds.inWholeMilliseconds)
@@ -1465,7 +1841,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `received onchain payment preserves a replacement receive sheet`() = test {
         val processingStarted = CompletableDeferred<Unit>()
         val resumeProcessing = CompletableDeferred<Unit>()
-        whenever { privatePaykitRepo.contactPublicKeyForPrivateOnchainAddresses(any<Collection<String>>()) }
+        whenever(privatePaykitRepo.contactPublicKeyForPrivateOnchainAddresses(any<Collection<String>>()))
             .doSuspendableAnswer {
                 processingStarted.complete(Unit)
                 resumeProcessing.await()
@@ -1527,7 +1903,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         whenever(notifyPaymentReceivedHandler(any()))
             .thenReturn(Result.success(NotifyPaymentReceived.Result.ShowSheet(details)))
-        whenever { notifyPaymentReceivedHandler.present(any(), any(), any()) }.thenAnswer {
+        whenever(notifyPaymentReceivedHandler.present(any(), any(), any())).thenAnswer {
             it.getArgument<() -> Unit>(2).invoke()
             true
         }
@@ -1557,7 +1933,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         whenever(notifyPaymentReceivedHandler(any()))
             .thenReturn(Result.success(NotifyPaymentReceived.Result.ShowSheet(details)))
-        whenever { notifyPaymentReceivedHandler.present(any(), any(), any()) }.thenAnswer {
+        whenever(notifyPaymentReceivedHandler.present(any(), any(), any())).thenAnswer {
             it.getArgument<() -> Unit>(2).invoke()
             true
         }
@@ -1587,7 +1963,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         whenever(notifyPaymentReceivedHandler(any()))
             .thenReturn(Result.success(NotifyPaymentReceived.Result.ShowSheet(details)))
-        whenever { notifyPaymentReceivedHandler.present(any(), any(), any()) }.thenReturn(false)
+        whenever(notifyPaymentReceivedHandler.present(any(), any(), any())).thenReturn(false)
         App.currentActivity = CurrentActivity()
 
         emitNodeEvent(
@@ -1695,6 +2071,51 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scanner result does not discard a queued locked scan`() = test {
+        val queuedInvoice = "lnbcrt1queuedbeforescanner"
+        val scannerInvoice = "lnbcrt1scannerauthresult"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = queuedInvoice, amountSats = 500u)
+        stubLightningScan(bolt11 = scannerInvoice, amountSats = 600u)
+
+        sut.onScanResult(queuedInvoice)
+        sut.showScannerSheet()
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+
+        sut.onScannerSheetResult(scannerInvoice)
+        sut.currentSheet.first { it is Sheet.Send }
+
+        assertEquals(600u, sut.sendUiState.value.amount)
+
+        sut.hideSheet()
+        sut.currentSheet.first { it is Sheet.Send && sut.sendUiState.value.amount == 500uL }
+
+        assertEquals(500u, sut.sendUiState.value.amount)
+    }
+
+    @Test
+    fun `custom scanner result flushes a queued locked scan`() = test {
+        val queuedInvoice = "lnbcrt1queuedbeforecustomscanner"
+        val customResult = "pubky-custom-result"
+        var receivedResult: String? = null
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = queuedInvoice, amountSats = 500u)
+
+        sut.onScanResult(queuedInvoice)
+        sut.showScannerSheet(onResult = { receivedResult = it })
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+
+        sut.onScannerSheetResult(customResult)
+        advanceUntilIdle()
+        sut.currentSheet.first { it is Sheet.Send }
+
+        assertEquals(customResult, receivedResult)
+        assertEquals(500u, sut.sendUiState.value.amount)
+    }
+
+    @Test
     fun `main scanner zero amount lightning scan opens amount sheet`() = test {
         val bolt11 = "lnbcrt1zeroamount"
         stubLightningScan(bolt11 = bolt11, amountSats = 0u)
@@ -1734,6 +2155,317 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `lightning scan uses QuickPay when PIN is required for payments`() = test {
+        val bolt11 = "lnbcrt1quickpaypin"
+        enableQuickPay(thresholdSats = 1000u)
+        settingsData.value = settingsData.value.copy(
+            isPinEnabled = true,
+            isPinForPaymentsEnabled = true,
+        )
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `QuickPay eligible scan remains deferred until authenticated`() = test {
+        val bolt11 = "lnbcrt1lockedscan"
+        enableQuickPay(thresholdSats = 1_000u)
+        settingsData.value = settingsData.value.copy(
+            isPinEnabled = true,
+            isPinForPaymentsEnabled = true,
+        )
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        assertNull(sut.quickPayData.value)
+        verify(coreService, never()).decode(bolt11)
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+        verify(coreService).decode(bolt11)
+    }
+
+    @Test
+    fun `payment deeplink is queued until authenticated when PIN is enabled`() = test {
+        val bolt11 = "lnbcrt1lockeddeeplink"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "lightning:$bolt11".toUri()))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `latest locked scan replaces earlier input`() = test {
+        val first = "lnbcrt1lockedfirst"
+        val second = "lnbcrt1lockedsecond"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = first, amountSats = 500u)
+        stubLightningScan(bolt11 = second, amountSats = 600u)
+
+        sut.openContactPayment(paymentRequest = first, publicKey = "pubkyfirst")
+        sut.onScanResult(second)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        assertNull(activeContactPaymentContext())
+        verify(coreService, never()).decode(any())
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(600u, sut.sendUiState.value.amount)
+        assertNull(activeContactPaymentContext())
+        verify(coreService, never()).decode(first)
+        verify(coreService).decode(second)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `duplicate locked scans are queued once`() = test {
+        val bolt11 = "lnbcrt1lockeddup"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.onScanResult(bolt11)
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `locked contact scan restores its payment context`() = test {
+        val contact = "lnbcrt1lockedcontact"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = contact, amountSats = 600u)
+
+        sut.openContactPayment(paymentRequest = contact, publicKey = "pubkycontact")
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(600u, sut.sendUiState.value.amount)
+        assertEquals(ContactPaymentContext("pubkycontact"), activeContactPaymentContext())
+    }
+
+    @Test
+    fun `duplicate locked scan keeps incoming payment request context`() = test {
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1lockedrequest"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+
+        sut.onScanResult(bolt11)
+        sut.openContactPayment(
+            paymentRequest = bolt11,
+            publicKey = testPublicKey,
+            incomingPaymentRequest = request,
+        )
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertTrue(sut.sendUiState.value.isPaymentRequest)
+        assertEquals(request, activeContactPaymentContext()?.incomingPaymentRequest)
+    }
+
+    @Test
+    fun `context-free locked duplicate does not replace incoming payment request`() = test {
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1lockedrequestduplicate"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+
+        sut.openContactPayment(
+            paymentRequest = bolt11,
+            publicKey = testPublicKey,
+            incomingPaymentRequest = request,
+        )
+        sut.onScanResult(bolt11)
+        sut.setIsAuthenticated(true)
+        sut.currentSheet.first { it is Sheet.Send }
+
+        assertTrue(sut.sendUiState.value.isPaymentRequest)
+        assertEquals(request, activeContactPaymentContext()?.incomingPaymentRequest)
+    }
+
+    @Test
+    fun `new scan waits for an active locked replay`() = test {
+        val lockedInvoice = "lnbcrt1activelockedreplay"
+        val newInvoice = "lnbcrt1afteractivelockedreplay"
+        val lockedScanStarted = CompletableDeferred<Unit>()
+        val finishLockedScan = CompletableDeferred<Unit>()
+        var newScanDecodeCount = 0
+        settingsData.value = SettingsData(isPinEnabled = true)
+        whenever(coreService.decode(lockedInvoice)).doSuspendableAnswer {
+            lockedScanStarted.complete(Unit)
+            finishLockedScan.await()
+            Scanner.Lightning(lightningInvoice(lockedInvoice, 500u))
+        }
+        whenever(coreService.decode(newInvoice)).doSuspendableAnswer {
+            newScanDecodeCount += 1
+            Scanner.Lightning(lightningInvoice(newInvoice, 600u))
+        }
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+
+        sut.onScanResult(lockedInvoice)
+        sut.setIsAuthenticated(true)
+        lockedScanStarted.await()
+        sut.onScanResult(newInvoice)
+        runCurrent()
+
+        assertEquals(0, newScanDecodeCount)
+
+        finishLockedScan.complete(Unit)
+        sut.currentSheet.first { it is Sheet.Send }
+
+        assertEquals(500u, sut.sendUiState.value.amount)
+
+        sut.hideSheet()
+        sut.currentSheet.first { it is Sheet.Send && sut.sendUiState.value.amount == 600uL }
+
+        assertEquals(1, newScanDecodeCount)
+    }
+
+    @Test
+    fun `deferred scan waits for an active sheet transition`() = test {
+        val firstInvoice = "lnbcrt1sheettransitionfirst"
+        val secondInvoice = "lnbcrt1sheettransitionsecond"
+        val firstScanStarted = CompletableDeferred<Unit>()
+        val finishFirstScan = CompletableDeferred<Unit>()
+        var secondScanDecodeCount = 0
+        settingsData.value = SettingsData(isPinEnabled = true)
+        whenever(coreService.decode(firstInvoice)).doSuspendableAnswer {
+            firstScanStarted.complete(Unit)
+            finishFirstScan.await()
+            Scanner.Lightning(lightningInvoice(firstInvoice, 500u))
+        }
+        whenever(coreService.decode(secondInvoice)).doSuspendableAnswer {
+            secondScanDecodeCount += 1
+            Scanner.Lightning(lightningInvoice(secondInvoice, 600u))
+        }
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+
+        sut.onScanResult(firstInvoice)
+        sut.setIsAuthenticated(true)
+        firstScanStarted.await()
+        sut.showSheet(Sheet.ConnectionClosed)
+        sut.onScanResult(secondInvoice)
+
+        finishFirstScan.complete(Unit)
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        assertEquals(0, secondScanDecodeCount)
+        assertEquals(500u, sut.sendUiState.value.amount)
+
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(0, secondScanDecodeCount)
+        assertEquals(500u, sut.sendUiState.value.amount)
+
+        sut.hideSheet()
+        sut.currentSheet.first { it is Sheet.Send && sut.sendUiState.value.amount == 600uL }
+
+        assertEquals(1, secondScanDecodeCount)
+    }
+
+    @Test
+    fun `active locked replay ignores the same scan`() = test {
+        val bolt11 = "lnbcrt1duplicatelockedreplay"
+        val scanStarted = CompletableDeferred<Unit>()
+        val finishScan = CompletableDeferred<Unit>()
+        var decodeCount = 0
+        settingsData.value = SettingsData(isPinEnabled = true)
+        whenever(coreService.decode(bolt11)).doSuspendableAnswer {
+            decodeCount += 1
+            scanStarted.complete(Unit)
+            finishScan.await()
+            Scanner.Lightning(lightningInvoice(bolt11, 500u))
+        }
+        whenever(lightningRepo.canSend(any())).thenReturn(true)
+
+        sut.onScanResult(bolt11)
+        sut.setIsAuthenticated(true)
+        scanStarted.await()
+        sut.onScanResult(bolt11)
+        finishScan.complete(Unit)
+        sut.currentSheet.first { it is Sheet.Send }
+
+        assertEquals(1, decodeCount)
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        assertEquals(1, decodeCount)
+    }
+
+    @Test
+    fun `queued scan flushes after timed sheet dismisses`() = test {
+        val bolt11 = "lnbcrt1lockedtimed"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        timedSheetType.value = TimedSheetType.BACKUP
+        advanceUntilIdle()
+
+        assertTrue(sut.currentSheet.value is Sheet.TimedSheet)
+
+        sut.onScanResult(bolt11)
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertTrue(sut.currentSheet.value is Sheet.TimedSheet)
+
+        timedSheetType.value = null
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
     fun `contact lightning payment skips QuickPay and opens confirm`() = test {
         val bolt11 = "lnbcrt1contact"
         enableQuickPay(thresholdSats = 1000u)
@@ -1750,21 +2482,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `incoming payment request opens the existing confirm flow with its fixed amount`() = test {
         val request = paymentRequest()
         val bolt11 = "lnbcrt1paymentrequest"
-        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         stubLightningScan(bolt11 = bolt11, amountSats = 0u)
         whenever(lightningRepo.canSend(request.amountSats)).thenReturn(true)
-        whenever { privatePaykitRepo.beginPaymentRequest(request) }.thenReturn(
-            Result.success(
-                PublicPaykitPaymentResult.Opened(
-                    paymentRequest = bolt11,
-                    privatePaymentContext = privateContext,
-                ),
-            ),
-        )
-        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(Unit))
+        val privateContext = stubOpenedPaymentRequest(request, bolt11)
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
 
         pendingPaykitPaymentRequests.value = listOf(request)
         sut.startPaykitPaymentRequestPolling()
@@ -1789,15 +2513,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyPublicKey.value = testPublicKey
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         stubLightningScan(bolt11 = bolt11, amountSats = 0u)
-        whenever { privatePaykitRepo.beginPaymentRequest(request) }.thenReturn(
-            Result.success(
-                PublicPaykitPaymentResult.Opened(
-                    paymentRequest = bolt11,
-                    privatePaymentContext = PrivatePaykitPaymentContext("bitkit/server", 7uL),
-                ),
-            ),
-        )
-        whenever { paykitPaymentRequestRepo.refresh() }.thenReturn(Result.success(Unit))
+        stubOpenedPaymentRequest(request, bolt11)
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
 
         pendingPaykitPaymentRequests.value = listOf(request)
         sut.startPaykitPaymentRequestPolling()
@@ -1826,8 +2543,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val request = paymentRequest()
         val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
-        whenever { paykitPaymentRequestRepo.accept(request) }.thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext) }
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
         whenever {
             lightningRepo.sendOnChain(
@@ -1925,7 +2642,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 tags = emptyList(),
             )
         }.thenReturn(Result.success("txid"))
-        whenever { privatePaykitRepo.consumePrivatePaymentList(contactKey, privateContext) }
+        whenever(privatePaykitRepo.consumePrivatePaymentList(contactKey, privateContext))
             .thenReturn(Result.success(Unit))
         setActiveContactPaymentContext(contactKey, privateContext)
         setSendState(
@@ -1948,8 +2665,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val request = paymentRequest()
         val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
-        whenever { paykitPaymentRequestRepo.accept(request) }.thenReturn(Result.success(Unit))
-        whenever { privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext) }
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
         whenever {
             lightningRepo.sendOnChain(
@@ -1986,7 +2703,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val request = paymentRequest()
         val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
-        whenever { privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext) }
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.failure(IllegalStateException("Payment list already consumed")))
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
@@ -2161,7 +2878,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val privateContext = PrivatePaykitPaymentContext("bitkit/wallet", 7uL)
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
-        whenever { privatePaykitRepo.consumePrivatePaymentList(contactKey, privateContext) }
+        whenever(privatePaykitRepo.consumePrivatePaymentList(contactKey, privateContext))
             .thenReturn(Result.success(Unit))
         setActiveContactPaymentContext(contactKey, privateContext)
         setSendState(
@@ -2197,7 +2914,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
             .thenReturn(Result.failure(PaymentPendingException(paymentHash)))
-        whenever { privatePaykitRepo.consumePrivatePaymentList(contactKey, privateContext) }
+        whenever(privatePaykitRepo.consumePrivatePaymentList(contactKey, privateContext))
             .thenReturn(Result.success(Unit))
         setActiveContactPaymentContext(contactKey, privateContext)
         setSendState(
@@ -2223,7 +2940,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null))
             .thenReturn(Result.failure(AppError("DuplicatePayment")))
-        whenever { privatePaykitRepo.consumePrivatePaymentList(contactKey, privateContext) }
+        whenever(privatePaykitRepo.consumePrivatePaymentList(contactKey, privateContext))
             .thenReturn(Result.success(Unit))
         setActiveContactPaymentContext(contactKey, privateContext)
         setSendState(
@@ -2415,7 +3132,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `private Paykit refresh retries public cleanup while UI is disabled`() = test {
         settingsData.value = SettingsData(publicPaykitCleanupPending = true)
-        whenever { publicPaykitRepo.syncPublishedEndpoints(publish = false) }.thenReturn(Result.success(Unit))
+        whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false)).thenReturn(Result.success(Unit))
 
         sut.refreshPrivatePaykitEndpoints()
         advanceUntilIdle()
@@ -2433,7 +3150,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sharesPublicPaykitEndpoints = true,
             publicPaykitCleanupPending = true,
         )
-        whenever { publicPaykitRepo.syncCurrentPublishedEndpoints() }.thenReturn(Result.success(Unit))
+        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints()).thenReturn(Result.success(Unit))
 
         sut.refreshPrivatePaykitEndpoints()
         advanceUntilIdle()
@@ -2468,8 +3185,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     private suspend fun stubLightningScan(bolt11: String, amountSats: ULong) {
-        whenever(coreService.decode(bolt11)).thenReturn(Scanner.Lightning(lightningInvoice(bolt11, amountSats)))
+        whenever { coreService.decode(bolt11) }
+            .thenReturn(Scanner.Lightning(lightningInvoice(bolt11, amountSats)))
         whenever(lightningRepo.canSend(amountSats)).thenReturn(true)
+    }
+
+    private suspend fun stubOpenedPaymentRequest(
+        request: PaykitPaymentRequest,
+        paymentRequest: String,
+        privateListIndex: ULong = 7uL,
+    ): PrivatePaykitPaymentContext {
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", privateListIndex)
+        whenever { privatePaykitRepo.beginPaymentRequest(request) }.thenReturn(
+            Result.success(
+                PublicPaykitPaymentResult.Opened(
+                    paymentRequest = paymentRequest,
+                    privatePaymentContext = privateContext,
+                ),
+            ),
+        )
+        return privateContext
     }
 
     private fun lightningInvoice(bolt11: String, amountSats: ULong) = LightningInvoice(
@@ -2485,7 +3220,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     )
 
     private suspend fun enablePublicPaykitSharing() {
-        whenever { publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any())).thenReturn(Result.success(Unit))
         walletState.value = WalletState(onchainAddress = "bc1qtest")
         isPaykitEnabled.value = true
         settingsData.value = SettingsData(sharesPublicPaykitEndpoints = true)
