@@ -824,12 +824,14 @@ class ActivityRepo @Inject constructor(
     }
 
     /**
-     * Get all [ActivityTags] for backup
+     * Get all [ActivityTags] for backup, including hardware wallet scopes.
+     *
+     * Hardware wallet activities are rebuilt from the device watcher on every reconnect, but their tags
+     * are user authored and cannot be re-derived, so every wallet scope is backed up.
      */
     suspend fun getAllActivitiesTags(): Result<List<ActivityTags>> = withContext(bgDispatcher) {
         runCatching {
             coreService.activity.getAllActivitiesTags()
-                .filter { it.walletId == WalletScope.default }
         }.onFailure {
             Logger.error("getAllActivityTags error", it, context = TAG)
         }
