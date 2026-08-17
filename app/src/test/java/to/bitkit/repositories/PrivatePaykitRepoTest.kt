@@ -339,6 +339,41 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `restarting initial link burst replaces saved contact keys`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+
+        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
+        runCurrent()
+        clearInvocations(pubkyService)
+
+        sut.startInitialLinkBurst(listOf(OTHER_CONTACT_KEY), "test")
+        runCurrent()
+        clearInvocations(pubkyService)
+        advanceTimeBy(2_000)
+        runCurrent()
+
+        verifyBlocking(pubkyService) { discoverRelevantReceiverPaths(OTHER_CONTACT_KEY) }
+        verifyBlocking(pubkyService, never()) { discoverRelevantReceiverPaths(CONTACT_KEY) }
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `restarting initial link burst with no contacts cancels retries`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+
+        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
+        runCurrent()
+        clearInvocations(pubkyService)
+
+        sut.startInitialLinkBurst(emptyList(), "test")
+        advanceTimeBy(30_000)
+        runCurrent()
+
+        verifyBlocking(pubkyService, never()) { discoverRelevantReceiverPaths(any()) }
+        sut.closeAndClear()
+    }
+
+    @Test
     fun `prepareSavedContacts clears receiver paths that are no longer eligible`() = test {
         settingsData.value = SettingsData(
             sharesPrivatePaykitEndpoints = true,

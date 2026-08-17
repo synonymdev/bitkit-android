@@ -231,13 +231,16 @@ class PrivatePaykitRepo @Inject constructor(
 
     fun startInitialLinkBurst(publicKeys: Collection<String>, reason: String) {
         val publicKeys = normalizedPublicKeyBatch(publicKeys).normalizedKeys
-        if (publicKeys.isEmpty()) return
 
         synchronized(initialLinkBurstLock) {
-            initialLinkBurstPublicKeys += publicKeys
             initialLinkBurstGeneration += 1
-            val generation = initialLinkBurstGeneration
             initialLinkBurstJob?.cancel()
+            initialLinkBurstJob = null
+            initialLinkBurstPublicKeys.clear()
+            initialLinkBurstPublicKeys += publicKeys
+            if (publicKeys.isEmpty()) return
+
+            val generation = initialLinkBurstGeneration
             _initialLinkBurstStarted.tryEmit(Unit)
 
             initialLinkBurstJob = retryScope.launch {
