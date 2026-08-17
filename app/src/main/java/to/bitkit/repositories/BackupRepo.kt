@@ -1,9 +1,6 @@
 package to.bitkit.repositories
 
 import android.content.Context
-import com.synonym.bitkitcore.migrateBackupActivitiesJson
-import com.synonym.bitkitcore.migrateBackupActivityTagsJson
-import com.synonym.bitkitcore.migrateBackupPreActivityMetadataJson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.FlowPreview
@@ -584,7 +581,7 @@ class BackupRepo @Inject constructor(
             performRestore(BackupCategory.METADATA) { dataBytes ->
                 val migrated = migrateCoreOwnedBackupFields(
                     String(dataBytes),
-                    mapOf("tagMetadata" to ::migrateBackupPreActivityMetadataJson),
+                    mapOf("tagMetadata" to preActivityMetadataRepo::migrateBackupPreActivityMetadataJson),
                 )
                 val parsed = json.decodeFromString<MetadataBackupV1>(migrated)
                 val cleanCache = parsed.cache.resetBip21() // Force address rotation
@@ -625,8 +622,8 @@ class BackupRepo @Inject constructor(
                 val migrated = migrateCoreOwnedBackupFields(
                     String(dataBytes),
                     mapOf(
-                        "activities" to ::migrateBackupActivitiesJson,
-                        "activityTags" to ::migrateBackupActivityTagsJson,
+                        "activities" to activityRepo::migrateBackupActivitiesJson,
+                        "activityTags" to activityRepo::migrateBackupActivityTagsJson,
                     ),
                 )
                 val parsed = json.decodeFromString<ActivityBackupV1>(migrated)
@@ -714,18 +711,23 @@ class BackupRepo @Inject constructor(
      * Core migration helper as raw JSON, so the app never edits Core model JSON
      * itself. Records that already carry a wallet id are left unchanged, so this
      * is safe to run on current backups too.
+     *
+     * A field whose migration fails keeps its original JSON, so a Core failure degrades to the
+     * pre-migration behaviour instead of losing the whole category.
      */
-    private fun migrateCoreOwnedBackupFields(
+    private suspend fun migrateCoreOwnedBackupFields(
         raw: String,
-        fieldMigrations: Map<String, (String) -> String>,
+        fieldMigrations: Map<String, suspend (String) -> Result<String>>,
     ): String {
         val root = json.parseToJsonElement(raw).jsonObject
         val patched = root.toMutableMap()
         for ((field, migrate) in fieldMigrations) {
             val element = root[field]
-            if (element is JsonArray) {
-                patched[field] = json.parseToJsonElement(migrate(element.toString()))
-            }
+            if (element !is JsonArray) continue
+
+            migrate(element.toString())
+                .onSuccess { patched[field] = json.parseToJsonElement(it) }
+                .onFailure { Logger.warn("Failed to migrate backup field '$field'", it, context = TAG) }
         }
         return JsonObject(patched).toString()
     }

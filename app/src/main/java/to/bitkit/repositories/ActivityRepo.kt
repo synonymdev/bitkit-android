@@ -837,6 +837,25 @@ class ActivityRepo @Inject constructor(
         }
     }
 
+    /**
+     * Fill in wallet ids missing from a backup envelope's `activities` slice, letting Core migrate its own
+     * model JSON before the app decodes it.
+     */
+    suspend fun migrateBackupActivitiesJson(json: String): Result<String> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            coreService.activity.migrateBackupActivitiesJson(json)
+        }
+    }
+
+    /**
+     * Fill in wallet ids missing from a backup envelope's `activityTags` slice.
+     */
+    suspend fun migrateBackupActivityTagsJson(json: String): Result<String> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            coreService.activity.migrateBackupActivityTagsJson(json)
+        }
+    }
+
     suspend fun getWalletIds(): Result<Set<String>> = withContext(bgDispatcher) {
         runSuspendCatching {
             coreService.activity.getWalletIds()

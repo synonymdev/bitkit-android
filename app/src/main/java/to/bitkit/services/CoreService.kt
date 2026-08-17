@@ -587,6 +587,18 @@ class ActivityService(
         getAllClosedChannels(sortDirection)
     }
 
+    suspend fun migrateBackupActivitiesJson(json: String): String = ServiceQueue.CORE.background {
+        com.synonym.bitkitcore.migrateBackupActivitiesJson(json)
+    }
+
+    suspend fun migrateBackupActivityTagsJson(json: String): String = ServiceQueue.CORE.background {
+        com.synonym.bitkitcore.migrateBackupActivityTagsJson(json)
+    }
+
+    suspend fun migrateBackupPreActivityMetadataJson(json: String): String = ServiceQueue.CORE.background {
+        com.synonym.bitkitcore.migrateBackupPreActivityMetadataJson(json)
+    }
+
     suspend fun handlePaymentEvent(paymentHash: String) = ServiceQueue.CORE.background {
         val payments = lightningService.listPayments() ?: run {
             Logger.warn("No payments available for hash $paymentHash", context = TAG)
