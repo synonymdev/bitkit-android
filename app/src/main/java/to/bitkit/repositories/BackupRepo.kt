@@ -78,7 +78,7 @@ import kotlin.time.ExperimentalTime
  *   Idle State:          running=false, synced≥required
  * ```
  */
-@Suppress("LongParameterList", "TooManyFunctions")
+@Suppress("LongParameterList", "TooManyFunctions", "LargeClass")
 @OptIn(ExperimentalTime::class)
 @Singleton
 class BackupRepo @Inject constructor(
@@ -582,30 +582,9 @@ class BackupRepo @Inject constructor(
 
         val result = runCatching {
             performRestore(BackupCategory.METADATA) { dataBytes ->
-                val migration = migrateCoreOwnedBackupFields(
-                    String(dataBytes),
-                    mapOf("tagMetadata" to preActivityMetadataRepo::migrateBackupPreActivityMetadataJson),
-                )
-                val parsed = json.decodeFromString<MetadataBackupV1>(migration.json)
-                val cleanCache = parsed.cache.resetBip21() // Force address rotation
-                cacheStore.update { cleanCache }
-                Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
-                onCacheRestored()
-                // Only rewrite once Core holds the migrated rows, otherwise the rewrite would replace the
-                // legacy backup with whatever Core happens to have.
-                preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata)
-                    .onSuccess { if (migration.changed) categoriesNeedingRewrite += BackupCategory.METADATA }
-                    .onFailure { Logger.warn("Failed to restore pre-activity metadata", it, context = TAG) }
-                pubkyRepo.restoreSessionBackupState(parsed.pubkySession)
-                    .onFailure {
-                        Logger.warn("Failed to restore pubky session backup state", it, context = TAG)
-                    }
-                pubkyRepo.restoreContactProfileOverrides(parsed.pubkyContactProfileOverrides)
-                    .onFailure {
-                        Logger.warn("Failed to restore pubky contact profile overrides", it, context = TAG)
-                    }
-                Logger.debug("Restored ${parsed.tagMetadata.size} pre-activity metadata", TAG)
-                parsed.createdAt
+                val restored = restoreMetadataBackup(dataBytes, onCacheRestored)
+                if (restored.needsRewrite) categoriesNeedingRewrite += BackupCategory.METADATA
+                restored.createdAt
             }
             performRestore(BackupCategory.SETTINGS) { dataBytes ->
                 val parsed = json.decodeFromString<SettingsBackupV1>(String(dataBytes))
@@ -626,18 +605,9 @@ class BackupRepo @Inject constructor(
                 parsed.createdAt
             }
             performRestore(BackupCategory.ACTIVITY) { dataBytes ->
-                val migration = migrateCoreOwnedBackupFields(
-                    String(dataBytes),
-                    mapOf(
-                        "activities" to activityRepo::migrateBackupActivitiesJson,
-                        "activityTags" to activityRepo::migrateBackupActivityTagsJson,
-                    ),
-                )
-                val parsed = json.decodeFromString<ActivityBackupV1>(migration.json)
-                activityRepo.restoreFromBackup(parsed)
-                    .onSuccess { if (migration.changed) categoriesNeedingRewrite += BackupCategory.ACTIVITY }
-                    .onFailure { Logger.warn("Failed to restore activity backup", it, context = TAG) }
-                parsed.createdAt
+                val restored = restoreActivityBackup(dataBytes)
+                if (restored.needsRewrite) categoriesNeedingRewrite += BackupCategory.ACTIVITY
+                restored.createdAt
             }
 
             Logger.info("Full restore success", context = TAG)
@@ -654,6 +624,51 @@ class BackupRepo @Inject constructor(
         }
 
         return@withContext result
+    }
+
+    private suspend fun restoreMetadataBackup(
+        dataBytes: ByteArray,
+        onCacheRestored: suspend () -> Unit,
+    ): RestoredCoreBackup {
+        val migration = migrateCoreOwnedBackupFields(
+            String(dataBytes),
+            mapOf("tagMetadata" to preActivityMetadataRepo::migrateBackupPreActivityMetadataJson),
+        )
+        val parsed = json.decodeFromString<MetadataBackupV1>(migration.json)
+        val cleanCache = parsed.cache.resetBip21() // Force address rotation
+        cacheStore.update { cleanCache }
+        Logger.debug("Restored caches: ${jsonLogOf(parsed.cache.copy(cachedRates = emptyList()))}", TAG)
+        onCacheRestored()
+        val persisted = preActivityMetadataRepo.upsertPreActivityMetadata(parsed.tagMetadata)
+            .onFailure { Logger.warn("Failed to restore pre-activity metadata", it, context = TAG) }
+            .isSuccess
+        pubkyRepo.restoreSessionBackupState(parsed.pubkySession)
+            .onFailure {
+                Logger.warn("Failed to restore pubky session backup state", it, context = TAG)
+            }
+        pubkyRepo.restoreContactProfileOverrides(parsed.pubkyContactProfileOverrides)
+            .onFailure {
+                Logger.warn("Failed to restore pubky contact profile overrides", it, context = TAG)
+            }
+        Logger.debug("Restored ${parsed.tagMetadata.size} pre-activity metadata", TAG)
+
+        return RestoredCoreBackup(createdAt = parsed.createdAt, needsRewrite = migration.changed && persisted)
+    }
+
+    private suspend fun restoreActivityBackup(dataBytes: ByteArray): RestoredCoreBackup {
+        val migration = migrateCoreOwnedBackupFields(
+            String(dataBytes),
+            mapOf(
+                "activities" to activityRepo::migrateBackupActivitiesJson,
+                "activityTags" to activityRepo::migrateBackupActivityTagsJson,
+            ),
+        )
+        val parsed = json.decodeFromString<ActivityBackupV1>(migration.json)
+        val persisted = activityRepo.restoreFromBackup(parsed)
+            .onFailure { Logger.warn("Failed to restore activity backup", it, context = TAG) }
+            .isSuccess
+
+        return RestoredCoreBackup(createdAt = parsed.createdAt, needsRewrite = migration.changed && persisted)
     }
 
     private suspend fun restoreWalletBackup(dataBytes: ByteArray): Long {
@@ -815,4 +830,16 @@ class BackupRepo @Inject constructor(
 private data class CoreFieldMigration(
     val json: String,
     val changed: Boolean,
+)
+
+/**
+ * Outcome of restoring a backup category that embeds Core-owned data.
+ *
+ * @param createdAt the restored envelope's timestamp, used as the category's synced marker.
+ * @param needsRewrite whether the envelope was migrated **and** Core persisted the result, meaning its VSS
+ * backup can safely be rewritten with current entries.
+ */
+private data class RestoredCoreBackup(
+    val createdAt: Long,
+    val needsRewrite: Boolean,
 )
