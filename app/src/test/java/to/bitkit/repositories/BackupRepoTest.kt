@@ -1,6 +1,8 @@
 package to.bitkit.repositories
 
 import android.content.Context
+import com.synonym.bitkitcore.ActivityTags
+import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.vssclient.VssItem
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -9,6 +11,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -38,9 +42,12 @@ import to.bitkit.data.backup.VssBackupClientLdk
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.json
+import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.BackupCategory
 import to.bitkit.models.BackupItemStatus
+import to.bitkit.models.MetadataBackupV1
 import to.bitkit.models.WalletBackupV1
+import to.bitkit.models.WalletScope
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.services.LightningService
@@ -370,6 +377,202 @@ class BackupRepoTest : BaseUnitTest() {
         verify(settingsStore, never()).update(any())
     }
 
+    @Test
+    fun `legacy activity backup is migrated by core before decode`() = test {
+        stubWalletBackup()
+        stubActivityRestore()
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(activityRepo) { migrateBackupActivitiesJson(LEGACY_ACTIVITIES_JSON) }
+        verifyBlocking(activityRepo) { migrateBackupActivityTagsJson(LEGACY_TAGS_JSON) }
+
+        val payloadCaptor = argumentCaptor<ActivityBackupV1>()
+        verifyBlocking(activityRepo) { restoreFromBackup(payloadCaptor.capture()) }
+        assertEquals(listOf(defaultTag()), payloadCaptor.firstValue.activityTags)
+    }
+
+    @Test
+    fun `legacy metadata backup is migrated by core before decode`() = test {
+        stubWalletBackup()
+        stubMetadataRestore()
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(preActivityMetadataRepo) { migrateBackupPreActivityMetadataJson(LEGACY_METADATA_JSON) }
+
+        val metadataCaptor = argumentCaptor<List<PreActivityMetadata>>()
+        verifyBlocking(preActivityMetadataRepo) { upsertPreActivityMetadata(metadataCaptor.capture()) }
+        assertEquals(listOf(preActivityMetadata()), metadataCaptor.firstValue)
+    }
+
+    @Test
+    fun `migrated backups are rewritten to vss after restore`() = test {
+        stubWalletBackup()
+        stubActivityRestore()
+        stubMetadataRestore()
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.ACTIVITY.name), any()) }
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.METADATA.name), any()) }
+    }
+
+    @Test
+    fun `current backups are not rewritten after restore`() = test {
+        stubWalletBackup()
+        // Envelopes already carry wallet ids, so Core hands the slices back untouched.
+        stubActivityRestore(envelope = activityEnvelope(tags = listOf(defaultTag())))
+        stubMetadataRestore(envelope = metadataEnvelope(metadata = listOf(preActivityMetadata())))
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        assertTrue(result.isSuccess)
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+    }
+
+    @Test
+    fun `rewritten activity backup preserves hardware wallet tags`() = test {
+        stubWalletBackup()
+        val hardwareTag = ActivityTags(walletId = HARDWARE_WALLET_ID, activityId = "a2", tags = listOf("hw"))
+        stubActivityRestore(backedUpTags = listOf(defaultTag(), hardwareTag))
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(vssBackupClient) {
+            putObject(eq(BackupCategory.ACTIVITY.name), dataCaptor.capture())
+        }
+        val payload = json.decodeFromString<ActivityBackupV1>(dataCaptor.firstValue.decodeToString())
+        assertEquals(listOf(defaultTag(), hardwareTag), payload.activityTags)
+    }
+
+    @Test
+    fun `activity backup is not rewritten when core restore fails`() = test {
+        stubWalletBackup()
+        stubActivityRestore()
+        whenever { activityRepo.restoreFromBackup(any()) }
+            .thenReturn(Result.failure(BackupRepoTestError("upsert failed")))
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        assertTrue(result.isSuccess)
+        // Rewriting here would replace the legacy backup with whatever Core happens to hold.
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
+    }
+
+    @Test
+    fun `failed core migration neither fails the restore nor rewrites the backup`() = test {
+        stubWalletBackup()
+        stubActivityRestore()
+        whenever { activityRepo.migrateBackupActivityTagsJson(any()) }
+            .thenReturn(Result.failure(BackupRepoTestError("core migration failed")))
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        assertTrue(result.isSuccess)
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
+    }
+
+    private fun stubActivityRestore(
+        envelope: String = legacyActivityEnvelope(),
+        migratedTagsJson: String = json.encodeToString(listOf(defaultTag())),
+        backedUpTags: List<ActivityTags> = listOf(defaultTag()),
+    ) {
+        stubRestoreEnvelope(BackupCategory.ACTIVITY, envelope)
+        whenever { activityRepo.migrateBackupActivitiesJson(any()) }.thenReturn(Result.success("[]"))
+        whenever { activityRepo.migrateBackupActivityTagsJson(any()) }.thenReturn(Result.success(migratedTagsJson))
+        whenever { activityRepo.restoreFromBackup(any()) }.thenReturn(Result.success(Unit))
+        // Read back by the rewrite through getBackupDataBytes(ACTIVITY).
+        whenever { activityRepo.getActivities() }.thenReturn(Result.success(emptyList()))
+        whenever { activityRepo.getClosedChannels() }.thenReturn(Result.success(emptyList()))
+        whenever { activityRepo.getAllActivitiesTags() }.thenReturn(Result.success(backedUpTags))
+    }
+
+    private fun stubMetadataRestore(
+        envelope: String = legacyMetadataEnvelope(),
+        migratedMetadataJson: String = json.encodeToString(listOf(preActivityMetadata())),
+        restorableMetadata: List<PreActivityMetadata> = listOf(preActivityMetadata()),
+    ) {
+        stubRestoreEnvelope(BackupCategory.METADATA, envelope)
+        whenever { preActivityMetadataRepo.migrateBackupPreActivityMetadataJson(any()) }
+            .thenReturn(Result.success(migratedMetadataJson))
+        whenever { preActivityMetadataRepo.upsertPreActivityMetadata(any()) }.thenReturn(Result.success(Unit))
+        whenever { pubkyRepo.restoreSessionBackupState(anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever { pubkyRepo.restoreContactProfileOverrides(anyOrNull()) }.thenReturn(Result.success(Unit))
+        // Read back by the rewrite through getMetadataBackupDataBytes().
+        whenever { preActivityMetadataRepo.getAllPreActivityMetadata() }
+            .thenReturn(Result.success(restorableMetadata))
+        whenever { pubkyRepo.snapshotSessionBackupState() }.thenReturn(Result.success(null))
+        whenever { pubkyRepo.snapshotContactProfileOverrides() }.thenReturn(Result.success(null))
+    }
+
+    private fun stubRestoreEnvelope(category: BackupCategory, envelope: String) {
+        whenever { vssBackupClient.getObject(category.name) }.thenReturn(
+            Result.success(
+                VssItem(key = category.name, value = envelope.toByteArray(), version = 1)
+            )
+        )
+    }
+
+    /** An `ActivityBackupV1` whose Core-owned tag records predate `walletId`. */
+    private fun legacyActivityEnvelope(): String = envelopeWithRawField(
+        base = activityEnvelope(),
+        field = "activityTags",
+        rawJson = LEGACY_TAGS_JSON,
+    )
+
+    /** A `MetadataBackupV1` whose Core-owned metadata records predate `walletId`. */
+    private fun legacyMetadataEnvelope(): String = envelopeWithRawField(
+        base = metadataEnvelope(),
+        field = "tagMetadata",
+        rawJson = LEGACY_METADATA_JSON,
+    )
+
+    private fun activityEnvelope(tags: List<ActivityTags> = emptyList()) = json.encodeToString(
+        ActivityBackupV1(
+            createdAt = 123,
+            activities = emptyList(),
+            activityTags = tags,
+            closedChannels = emptyList(),
+        )
+    )
+
+    private fun metadataEnvelope(metadata: List<PreActivityMetadata> = emptyList()) = json.encodeToString(
+        MetadataBackupV1(createdAt = 123, tagMetadata = metadata, cache = AppCacheData())
+    )
+
+    private fun envelopeWithRawField(base: String, field: String, rawJson: String): String {
+        val patched = json.parseToJsonElement(base).jsonObject.toMutableMap()
+        patched[field] = json.parseToJsonElement(rawJson)
+        return JsonObject(patched).toString()
+    }
+
+    private fun defaultTag() = ActivityTags(
+        walletId = WalletScope.default,
+        activityId = "a1",
+        tags = listOf("coffee"),
+    )
+
+    private fun preActivityMetadata() = PreActivityMetadata(
+        walletId = WalletScope.default,
+        paymentId = "p1",
+        tags = listOf("coffee"),
+        paymentHash = null,
+        txId = null,
+        address = null,
+        isReceive = true,
+        feeRate = 1uL,
+        isTransfer = false,
+        channelId = null,
+        createdAt = 1uL,
+    )
+
     private fun stubWalletBackup(
         paykitSdkBackupState: String? = null,
         watchOnlyAccounts: List<WatchOnlyAccountRecord>? = null,
@@ -450,6 +653,17 @@ class BackupRepoTest : BaseUnitTest() {
     )
 
     private class BackupRepoTestError(message: String) : AppError(message)
+
+    private companion object {
+        const val HARDWARE_WALLET_ID = "trezor:abc123"
+
+        /** Core-owned slices as written before `walletId` existed. */
+        const val LEGACY_ACTIVITIES_JSON = "[]"
+        const val LEGACY_TAGS_JSON = """[{"activityId":"a1","tags":["coffee"]}]"""
+        const val LEGACY_METADATA_JSON =
+            """[{"paymentId":"p1","tags":["coffee"],"isReceive":true,"feeRate":1,""" +
+                """"isTransfer":false,"createdAt":1}]"""
+    }
 
     private fun watchOnlyAccount() = WatchOnlyAccountRecord(
         id = "account-7",

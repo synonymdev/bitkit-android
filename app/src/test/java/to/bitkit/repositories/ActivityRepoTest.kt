@@ -769,15 +769,16 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `getAllActivitiesTags returns only default wallet tags`() = test {
+    fun `getAllActivitiesTags returns tags for every wallet scope`() = test {
         val defaultTags = ActivityTags(WalletScope.default, "default-activity", listOf("daily"))
-        val hardwareTags = ActivityTags("hardware-wallet", "hardware-activity", listOf("cold"))
+        val hardwareTags = ActivityTags("trezor:abc123", "hardware-activity", listOf("cold"))
         whenever { coreService.activity.getAllActivitiesTags() }
             .thenReturn(listOf(defaultTags, hardwareTags))
 
         val result = sut.getAllActivitiesTags()
 
-        assertEquals(listOf(defaultTags), result.getOrThrow())
+        // Hardware wallet tags are user authored and cannot be re-derived, so they must reach the backup.
+        assertEquals(listOf(defaultTags, hardwareTags), result.getOrThrow())
     }
 
     @Test
