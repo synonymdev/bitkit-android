@@ -125,7 +125,6 @@
                 <data android:scheme="lnurlw" />
                 <data android:scheme="lnurlc" />
                 <data android:scheme="lnurlp" />
-                <data android:scheme="pubkyauth" />
             </intent-filter>
 
             <!-- NFC -->
@@ -163,6 +162,20 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- Enabled only while Bitkit can authorize pubkyauth requests locally. -->
+        <activity-alias
+            android:name=".ui.MainActivityPubkyAuth"
+            android:targetActivity=".ui.MainActivity"
+            android:enabled="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="pubkyauth" />
+            </intent-filter>
+        </activity-alias>
 
         <service
             android:name=".fcm.FcmService"
