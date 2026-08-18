@@ -21,6 +21,8 @@ import to.bitkit.ext.quickPaySpendDayKey
 import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.USD
+import to.bitkit.models.msatFloorOf
+import to.bitkit.models.safe
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PaymentPendingException
@@ -55,7 +57,7 @@ class QuickPayViewModel @Inject constructor(
             if (!reserveSpend(prepared.amountUsd, dayKey)) return@launch
 
             sendLightning(prepared.bolt11, prepared.amount)
-                .onSuccess { onPaymentSuccess(it, prepared.displaySats) }
+                .onSuccess { onPaymentSuccess(it.paymentHash, prepared.displaySats, it.feePaidSats) }
                 .onFailure { onPaymentFailure(it, prepared.displaySats, prepared.amountUsd, dayKey) }
         }
     }
@@ -101,13 +103,13 @@ class QuickPayViewModel @Inject constructor(
         return reserved
     }
 
-    private fun onPaymentSuccess(paymentHash: String, displaySats: ULong) {
+    private fun onPaymentSuccess(paymentHash: String, displaySats: ULong, feePaidSats: ULong) {
         Logger.info("QuickPay lightning payment successful")
         _uiState.update {
             it.copy(
                 result = QuickPayResult.Success(
                     paymentHash = paymentHash,
-                    amountWithFee = displaySats.toLong() // TODO GET FEE WHEN AVAILABLE
+                    amountWithFee = (displaySats.safe() + feePaidSats.safe()).toLong(),
                 )
             )
         }
@@ -158,7 +160,7 @@ class QuickPayViewModel @Inject constructor(
     private suspend fun sendLightning(
         bolt11: String,
         amount: ULong? = null,
-    ): Result<PaymentId> {
+    ): Result<SettledQuickPayPayment> {
         val hash = lightningRepo.payInvoice(bolt11 = bolt11, sats = amount)
             .onFailure { exception ->
                 return Result.failure(exception)
@@ -168,7 +170,15 @@ class QuickPayViewModel @Inject constructor(
         // Wait until matching payment event is received (with timeout for hold invoices)
         val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
             when (it) {
-                is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(Result.success(hash))
+                is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(
+                    Result.success(
+                        SettledQuickPayPayment(
+                            paymentHash = hash,
+                            feePaidSats = msatFloorOf(it.feePaidMsat ?: 0u),
+                        )
+                    )
+                )
+
                 is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
                     Result.failure(AppError(it.reason.toUserMessage(context)))
                 )
@@ -185,6 +195,11 @@ private data class PreparedQuickPay(
     val amount: ULong?,
     val displaySats: ULong,
     val amountUsd: Double,
+)
+
+private data class SettledQuickPayPayment(
+    val paymentHash: PaymentId,
+    val feePaidSats: ULong,
 )
 
 private class QuickPayCurrencyConversionError : AppError("Currency conversion failed")
