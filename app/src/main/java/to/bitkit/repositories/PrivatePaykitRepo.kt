@@ -1397,10 +1397,13 @@ class PrivatePaykitRepo @Inject constructor(
 
         return runSuspendCatching {
             val discoveredPaths = pubkyService.discoverRelevantReceiverPaths(publicKey)
-            val mergedPaths = supportedReceiverPaths(savedPaths + discoveredPaths)
-            if (mergedPaths == savedPaths) return@runSuspendCatching savedPaths
+            val currentRecord = paykitSdkService.contactRecord(publicKey)
+                ?: return@runSuspendCatching savedPaths
+            val currentSavedPaths = supportedReceiverPaths(currentRecord.receiverPaths)
+            val mergedPaths = supportedReceiverPaths(currentSavedPaths + discoveredPaths)
+            if (mergedPaths == currentSavedPaths) return@runSuspendCatching currentSavedPaths
 
-            val updatedRecord = pubkyService.saveContact(publicKey, record?.label, mergedPaths)
+            val updatedRecord = pubkyService.saveContact(publicKey, currentRecord.label, mergedPaths)
             _initialLinkBurstStarted.tryEmit(Unit)
             Logger.info("Discovered new Paykit receiver paths for '${redacted(publicKey)}'", context = TAG)
             supportedReceiverPaths(updatedRecord.receiverPaths)

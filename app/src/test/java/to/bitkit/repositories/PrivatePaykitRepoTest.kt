@@ -339,6 +339,28 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `initial link burst does not recreate a contact deleted during discovery`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        whenever(paykitSdkService.contactRecord(CONTACT_KEY))
+            .thenReturn(contactRecord(CONTACT_KEY, listOf(WALLET_RECEIVER_PATH)), null)
+        whenever { pubkyService.discoverRelevantReceiverPaths(CONTACT_KEY) }
+            .thenReturn(listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH))
+
+        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
+        runCurrent()
+
+        verify(paykitSdkService, times(2)).contactRecord(CONTACT_KEY)
+        verifyBlocking(pubkyService, never()) {
+            saveContact(
+                CONTACT_KEY,
+                null,
+                listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH),
+            )
+        }
+        sut.closeAndClear()
+    }
+
+    @Test
     fun `restarting initial link burst replaces saved contact keys`() = test {
         settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
 
