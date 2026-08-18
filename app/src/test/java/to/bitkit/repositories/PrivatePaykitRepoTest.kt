@@ -122,6 +122,8 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
         whenever(clock.now()).thenReturn(Instant.fromEpochSeconds(NOW_SECONDS))
         whenever(pubkyService.currentPublicKey()).thenReturn(OWN_KEY)
+        whenever { pubkyService.discoverRelevantReceiverPaths(any()) }
+            .thenReturn(listOf(WALLET_RECEIVER_PATH))
         whenever(paykitSdkService.hasPrivatePaymentAccess()).thenReturn(true)
         whenever(walletRepo.walletExists()).thenReturn(true)
         whenever { walletRepo.refreshReusableReceiveAddressIfReserved() }.thenReturn(Result.success(Unit))
@@ -297,6 +299,100 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         verifyBlocking(paykitSdkService) { ensureLinkWithPeer(CONTACT_KEY, SERVER_RECEIVER_PATH) }
         verifyBlocking(paykitSdkService, never()) { syncPrivatePaymentListsWithReservations(any(), any()) }
         verify(addressReservationRepo, never()).currentOrRotatedAddress(any(), any())
+    }
+
+    @Test
+    fun `initial link burst discovers a server receiver published after the contact was saved`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        whenever { paykitSdkService.contactRecord(CONTACT_KEY) }
+            .thenReturn(contactRecord(CONTACT_KEY, listOf(WALLET_RECEIVER_PATH)))
+        whenever { pubkyService.discoverRelevantReceiverPaths(CONTACT_KEY) }
+            .thenReturn(listOf(WALLET_RECEIVER_PATH))
+            .thenReturn(listOf(WALLET_RECEIVER_PATH))
+            .thenReturn(listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH))
+        whenever {
+            pubkyService.saveContact(
+                CONTACT_KEY,
+                null,
+                listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH),
+            )
+        }.thenReturn(contactRecord(CONTACT_KEY, listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH)))
+
+        assertTrue(sut.prepareSavedContacts(listOf(CONTACT_KEY)).isSuccess)
+        clearInvocations(paykitSdkService, pubkyService)
+
+        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
+        runCurrent()
+        advanceTimeBy(2_000)
+        runCurrent()
+
+        verifyBlocking(pubkyService) {
+            saveContact(
+                CONTACT_KEY,
+                null,
+                listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH),
+            )
+        }
+        verifyBlocking(paykitSdkService) { ensureLinkWithPeer(CONTACT_KEY, SERVER_RECEIVER_PATH) }
+        verifyBlocking(publicPaykitRepo, never()) { beginPayment(any()) }
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `initial link burst does not recreate a contact deleted during discovery`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+        whenever(paykitSdkService.contactRecord(CONTACT_KEY))
+            .thenReturn(contactRecord(CONTACT_KEY, listOf(WALLET_RECEIVER_PATH)), null)
+        whenever { pubkyService.discoverRelevantReceiverPaths(CONTACT_KEY) }
+            .thenReturn(listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH))
+
+        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
+        runCurrent()
+
+        verify(paykitSdkService, times(2)).contactRecord(CONTACT_KEY)
+        verifyBlocking(pubkyService, never()) {
+            saveContact(
+                CONTACT_KEY,
+                null,
+                listOf(WALLET_RECEIVER_PATH, SERVER_RECEIVER_PATH),
+            )
+        }
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `restarting initial link burst replaces saved contact keys`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+
+        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
+        runCurrent()
+        clearInvocations(pubkyService)
+
+        sut.startInitialLinkBurst(listOf(OTHER_CONTACT_KEY), "test")
+        runCurrent()
+        clearInvocations(pubkyService)
+        advanceTimeBy(2_000)
+        runCurrent()
+
+        verifyBlocking(pubkyService) { discoverRelevantReceiverPaths(OTHER_CONTACT_KEY) }
+        verifyBlocking(pubkyService, never()) { discoverRelevantReceiverPaths(CONTACT_KEY) }
+        sut.closeAndClear()
+    }
+
+    @Test
+    fun `restarting initial link burst with no contacts cancels retries`() = test {
+        settingsData.value = SettingsData(sharesPrivatePaykitEndpoints = false)
+
+        sut.startInitialLinkBurst(listOf(CONTACT_KEY), "test")
+        runCurrent()
+        clearInvocations(pubkyService)
+
+        sut.startInitialLinkBurst(emptyList(), "test")
+        advanceTimeBy(30_000)
+        runCurrent()
+
+        verifyBlocking(pubkyService, never()) { discoverRelevantReceiverPaths(any()) }
+        sut.closeAndClear()
     }
 
     @Test
