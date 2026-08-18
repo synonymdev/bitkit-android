@@ -517,7 +517,7 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `failed core migration neither fails the restore nor rewrites the backup`() = test {
+    fun `failed core migration skips the category without failing the restore`() = test {
         stubWalletBackup()
         stubActivityRestore()
         whenever { activityRepo.migrateBackupActivityTagsJson(any()) }
@@ -525,7 +525,11 @@ class BackupRepoTest : BaseUnitTest() {
 
         val result = sut.performFullRestoreFromLatestBackup()
 
+        // Only WALLET is fatal, so the restore still reports success overall.
         assertTrue(result.isSuccess)
+        // The legacy slice stays unmigrated and no longer decodes, so nothing of this category is applied.
+        verifyBlocking(activityRepo, never()) { restoreFromBackup(any()) }
+        // Nothing was restored, so the stored backup must not be replaced.
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
     }
 

@@ -750,8 +750,9 @@ class BackupRepo @Inject constructor(
      * itself. Records that already carry a wallet id are left unchanged, so this
      * is safe to run on current backups too.
      *
-     * A field whose migration fails keeps its original JSON, so a Core failure degrades to the
-     * pre-migration behaviour instead of losing the whole category.
+     * A field whose migration fails keeps its original JSON. For an envelope that already carries wallet
+     * ids that is a no-op, so a Core failure costs nothing. For a legacy envelope the unmigrated field
+     * then fails to decode and the category is skipped, which [performRestore] logs.
      */
     private suspend fun migrateCoreOwnedBackupFields(
         raw: String,
@@ -815,6 +816,9 @@ class BackupRepo @Inject constructor(
         cacheStore.updateBackupStatus(category) {
             it.copy(running = false, synced = createdAtTimestamp, required = createdAtTimestamp)
         }
+    }.onFailure {
+        // Only WALLET is fatal to a full restore, so without this every other category fails silently.
+        Logger.warn("Failed to restore: '$category'", it, context = TAG)
     }
 
     companion object {
