@@ -246,11 +246,11 @@ class LightningService @Inject constructor(
                 context = TAG,
             )
 
-            if (lnurlAuthServerUrl.isNotEmpty()) {
-                builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
-            } else {
-                builder.buildWithVssStoreAndFixedHeaders(vssUrl, vssStoreId, fixedHeaders)
+            if (lnurlAuthServerUrl.isBlank()) {
+                throw ServiceError.VssAuthRequired()
             }
+
+            builder.buildWithVssStore(vssUrl, vssStoreId, lnurlAuthServerUrl, fixedHeaders)
         } catch (e: BuildException) {
             throw LdkError(e)
         } finally {

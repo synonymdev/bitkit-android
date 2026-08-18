@@ -16,6 +16,7 @@ sealed class ServiceError(message: String) : AppError(message) {
     class NodeNotSetup : ServiceError("Node is not setup")
     class NodeNotStarted : ServiceError("Node is not started")
     class MnemonicNotFound : ServiceError("Mnemonic not found")
+    class VssAuthRequired : ServiceError("VSS requires LNURL-auth")
     class NodeStillRunning : ServiceError("Node is still running")
     class NodeReleaseTimeout : ServiceError("Previous node release did not finish in time")
     class InvalidNodeSigningMessage : ServiceError("Invalid node signing message")
