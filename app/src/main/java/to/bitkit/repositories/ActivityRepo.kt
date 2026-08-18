@@ -80,7 +80,23 @@ class ActivityRepo @Inject constructor(
     private val _activitiesChanged = MutableStateFlow(0L)
     val activitiesChanged: StateFlow<Long> = _activitiesChanged
 
-    private fun notifyActivitiesChanged() = _activitiesChanged.update { nowMillis(clock) }
+    private val _activityTagsChanged = MutableStateFlow(0L)
+
+    /**
+     * Emits only when the stored tag set can have changed, unlike [activitiesChanged] which also fires on
+     * every payment and sync. Backups that carry tags observe this so they are not rewritten for unrelated
+     * activity traffic.
+     */
+    val activityTagsChanged: StateFlow<Long> = _activityTagsChanged
+
+    /**
+     * @param tagsChanged whether the stored tag set can have changed. A tag change always implies the
+     * activity's displayed state changed, so [activityTagsChanged] never fires without [activitiesChanged].
+     */
+    private fun notifyActivitiesChanged(tagsChanged: Boolean = false) {
+        if (tagsChanged) _activityTagsChanged.update { nowMillis(clock) }
+        _activitiesChanged.update { nowMillis(clock) }
+    }
 
     suspend fun resetState() = withContext(bgDispatcher) {
         _state.update { ActivityState() }
@@ -227,14 +243,16 @@ class ActivityRepo @Inject constructor(
     ): Result<List<Activity>> = withContext(bgDispatcher) {
         runSuspendCatching {
             val transferChannelIds = transferRepo.getChannelIdsByFundingTxId().getOrDefault(emptyMap())
-            val persistedActivities = coreService.activity.replaceHwSnapshot(
+            val snapshot = coreService.activity.replaceHwSnapshot(
                 walletId = walletId,
                 activities = activities,
                 transactionDetails = transactionDetails,
                 transferChannelIdsByFundingTxId = transferChannelIds,
             )
-            notifyActivitiesChanged()
-            persistedActivities
+            // Only a deletion can drop tags, via the cascade. A plain upsert leaves the tag set untouched,
+            // so it must not trigger a rewrite of the backups that carry tags.
+            notifyActivitiesChanged(tagsChanged = snapshot.removedActivities)
+            snapshot.activities
         }.onFailure {
             Logger.error("Failed to persist hardware activities for '$walletId'", it, context = TAG)
         }
@@ -243,7 +261,7 @@ class ActivityRepo @Inject constructor(
     suspend fun deleteForWallet(walletId: String): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
             val deleted = coreService.activity.deleteByWalletId(walletId)
-            notifyActivitiesChanged()
+            notifyActivitiesChanged(tagsChanged = true)
             Logger.info("Deleted '$deleted' activities for hardware wallet '$walletId'", context = TAG)
         }.onFailure {
             Logger.error("Failed to delete activities for hardware wallet '$walletId'", it, context = TAG)
@@ -650,7 +668,7 @@ class ActivityRepo @Inject constructor(
             val deleted = coreService.activity.delete(id, walletId)
             check(deleted) { "Activity not deleted" }
             cacheStore.addActivityToDeletedList(id, walletId)
-            notifyActivitiesChanged()
+            notifyActivitiesChanged(tagsChanged = true)
         }.onFailure {
             Logger.error("deleteActivity error for ID: $id", it, context = TAG)
         }
@@ -748,7 +766,7 @@ class ActivityRepo @Inject constructor(
 
             if (newTags.isNotEmpty()) {
                 coreService.activity.appendTags(activityId, newTags, walletId).getOrThrow()
-                notifyActivitiesChanged()
+                notifyActivitiesChanged(tagsChanged = true)
                 Logger.info("Added ${newTags.size} new tags to activity $activityId", context = TAG)
             } else {
                 Logger.info("No new tags to add to activity $activityId", context = TAG)
@@ -793,7 +811,7 @@ class ActivityRepo @Inject constructor(
                 }
 
                 coreService.activity.dropTags(activityId, tags, walletId)
-                notifyActivitiesChanged()
+                notifyActivitiesChanged(tagsChanged = true)
                 Logger.info("Removed ${tags.size} tags from activity $activityId", context = TAG)
             }.onFailure {
                 Logger.error("removeTagsFromActivity error for activity $activityId", it, context = TAG)
@@ -921,7 +939,7 @@ class ActivityRepo @Inject constructor(
                     "${payload.closedChannels.size} closed channels",
                 context = TAG,
             )
-            notifyActivitiesChanged()
+            notifyActivitiesChanged(tagsChanged = true)
         }
     }
 

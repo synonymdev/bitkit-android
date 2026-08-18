@@ -313,8 +313,9 @@ class BackupRepo @Inject constructor(
 
         // ACTIVITY - Observe activity changes
         dataListenerJobs.add(observeBackupChanges(activityRepo.activitiesChanged, BackupCategory.ACTIVITY))
-        // Hardware tags are carried by the metadata backup, and tagging emits activitiesChanged.
-        dataListenerJobs.add(observeBackupChanges(activityRepo.activitiesChanged, BackupCategory.METADATA))
+        // Hardware tags are carried by the metadata backup. Observe the narrower tag signal so ordinary
+        // payment and sync traffic does not re-upload the whole metadata envelope.
+        dataListenerJobs.add(observeBackupChanges(activityRepo.activityTagsChanged, BackupCategory.METADATA))
 
         // LIGHTNING_CONNECTIONS - Only display sync timestamp, ldk-node manages its own backups
         @OptIn(FlowPreview::class)

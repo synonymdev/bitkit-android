@@ -460,6 +460,43 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `activity traffic alone does not trigger a metadata backup`() = test {
+        val activitiesChanged = MutableStateFlow(0L)
+        val activityTagsChanged = MutableStateFlow(0L)
+        stubMetadataBackupReads()
+        stubBackupObservers()
+        whenever(activityRepo.activitiesChanged).thenReturn(activitiesChanged)
+        whenever(activityRepo.activityTagsChanged).thenReturn(activityTagsChanged)
+        stubBackupStatuses(
+            MutableStateFlow(emptyMap()),
+            CompletableDeferred<Unit>().apply { complete(Unit) },
+        ) {}
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+
+            // A payment or sync bumps activities without touching tags.
+            activitiesChanged.update { 1L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+
+            // Tagging does bump the tag signal, which the metadata backup must follow.
+            activityTagsChanged.update { 2L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.METADATA.name), any()) }
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
     fun `metadata backup fails when pre-activity metadata cannot be read`() = test {
         stubMetadataBackupReads()
         whenever { preActivityMetadataRepo.getAllPreActivityMetadata() }
@@ -685,6 +722,7 @@ class BackupRepoTest : BaseUnitTest() {
         whenever { transferDao.observeAll() }.thenReturn(MutableStateFlow(emptyList()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever(activityRepo.activitiesChanged).thenReturn(MutableStateFlow(0L))
+        whenever(activityRepo.activityTagsChanged).thenReturn(MutableStateFlow(0L))
         whenever(pubkyRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(paykitSdkService.backupStateVersion).thenReturn(MutableStateFlow(0L))
         whenever(privatePaykitRepo.backupStateVersion).thenReturn(MutableStateFlow(0L))

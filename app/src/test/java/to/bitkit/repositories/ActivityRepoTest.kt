@@ -32,6 +32,7 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.mock
 import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
+import to.bitkit.services.HwSnapshotResult
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
@@ -300,12 +301,47 @@ class ActivityRepoTest : BaseUnitTest() {
                 transactionDetails = emptyList(),
                 transferChannelIdsByFundingTxId = emptyMap(),
             )
-        ).thenReturn(listOf(activity))
+        ).thenReturn(HwSnapshotResult(listOf(activity), removedActivities = false))
 
         val result = sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
 
         assertEquals(listOf(activity), result.getOrThrow())
         verify(coreService.activity).replaceHwSnapshot(walletId, listOf(activity), emptyList(), emptyMap())
+    }
+
+    @Test
+    fun `persistHwSnapshot signals tag changes only when activities were removed`() = test {
+        val walletId = "hardware-wallet"
+        val activity = createOnchainActivity().copy(v1 = baseOnchainActivity.copy(walletId = walletId))
+        whenever(
+            coreService.activity.replaceHwSnapshot(
+                walletId = walletId,
+                activities = listOf(activity),
+                transactionDetails = emptyList(),
+                transferChannelIdsByFundingTxId = emptyMap(),
+            )
+        ).thenReturn(HwSnapshotResult(listOf(activity), removedActivities = false))
+
+        val tagsBefore = sut.activityTagsChanged.value
+        sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
+
+        // A plain upsert cannot drop tags, so backups carrying tags must not be rewritten for it.
+        assertEquals(tagsBefore, sut.activityTagsChanged.value)
+        assertTrue(sut.activitiesChanged.value > 0L)
+
+        whenever(
+            coreService.activity.replaceHwSnapshot(
+                walletId = walletId,
+                activities = listOf(activity),
+                transactionDetails = emptyList(),
+                transferChannelIdsByFundingTxId = emptyMap(),
+            )
+        ).thenReturn(HwSnapshotResult(listOf(activity), removedActivities = true))
+
+        sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
+
+        // A deletion cascades to that activity's tags, so the tag signal must fire.
+        assertTrue(sut.activityTagsChanged.value > tagsBefore)
     }
 
     @Test
@@ -323,7 +359,7 @@ class ActivityRepoTest : BaseUnitTest() {
                 transactionDetails = emptyList(),
                 transferChannelIdsByFundingTxId = channelIds,
             )
-        ).thenReturn(listOf(activity))
+        ).thenReturn(HwSnapshotResult(listOf(activity), removedActivities = false))
 
         val result = sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
 
@@ -345,7 +381,7 @@ class ActivityRepoTest : BaseUnitTest() {
                 transactionDetails = emptyList(),
                 transferChannelIdsByFundingTxId = emptyMap(),
             )
-        ).thenReturn(listOf(activity))
+        ).thenReturn(HwSnapshotResult(listOf(activity), removedActivities = false))
 
         val result = sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
 
