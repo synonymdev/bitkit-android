@@ -335,13 +335,13 @@ fun SendSheet(
                     SendPendingScreen(
                         paymentHash = route.paymentHash,
                         amount = route.amount,
-                        onPaymentSuccess = { paymentHash ->
+                        onPaymentSuccess = { paymentHash, amountWithFee ->
                             appViewModel.onSendSuccess(
                                 NewTransactionSheetDetails(
                                     type = NewTransactionSheetType.LIGHTNING,
                                     direction = NewTransactionSheetDirection.SENT,
                                     paymentHashOrTxId = paymentHash,
-                                    sats = route.amount,
+                                    sats = amountWithFee,
                                 ),
                             )
                         },

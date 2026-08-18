@@ -225,7 +225,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(backupRepo.isRestoring).thenReturn(MutableStateFlow(false))
         stubSettingsStore()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
-        whenever { cacheStore.quickPaySpentUsdForDay(any()) }.thenReturn(0.0)
+        whenever { cacheStore.quickPaySpentSatsForDay(any()) }.thenReturn(0L)
+        whenever { cacheStore.clearQuickPayReservation(any()) }.thenReturn(Unit)
+        whenever { cacheStore.releaseQuickPayReservation(any()) }.thenReturn(Unit)
+        whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
+            .thenReturn(Result.failure(Exception("activity not found")))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever { blocktankRepo.refreshInfo() }.thenReturn(Result.success(Unit))
@@ -1718,6 +1722,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
         verify(activityRepo).setContact(contactPublicKey = contactKey, forPaymentId = paymentHash)
+        verify(cacheStore).clearQuickPayReservation(paymentHash)
     }
 
     @Test
@@ -1738,6 +1743,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Failure(paymentHash))
+        verify(cacheStore).releaseQuickPayReservation(paymentHash)
         assertNull(pendingContactPaymentContext(paymentHash))
     }
 
@@ -2206,7 +2212,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `lightning scan skips QuickPay when daily spend cap is exceeded`() = test {
         val bolt11 = "lnbcrt1quickpaycap"
-        enableQuickPay(thresholdSats = 1000u, spentUsdToday = 24.0)
+        enableQuickPay(thresholdSats = 1000u, spentSatsToday = 4_600L)
         settingsData.value = settingsData.value.copy(quickPayDailyLimitMultiplier = 5)
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
         sut.setIsAuthenticated(true)
@@ -3227,7 +3233,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private fun enableQuickPay(
         thresholdSats: ULong,
-        spentUsdToday: Double = 0.0,
+        spentSatsToday: Long = 0L,
     ) {
         settingsData.value = SettingsData(isQuickPayEnabled = true, quickPayAmount = 5)
         whenever(currencyRepo.convertFiatToSats(5.0, "USD")).thenReturn(Result.success(thresholdSats))
@@ -3244,7 +3250,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 locale = Locale.US,
             )
         }
-        whenever { cacheStore.quickPaySpentUsdForDay(any<String>()) }.thenReturn(spentUsdToday)
+        whenever { cacheStore.quickPaySpentSatsForDay(any<String>()) }.thenReturn(spentSatsToday)
     }
 
     private suspend fun stubLightningScan(bolt11: String, amountSats: ULong) {

@@ -54,11 +54,11 @@ class QuickPayViewModel @Inject constructor(
         viewModelScope.launch {
             val prepared = preparePayment(data) ?: return@launch
             val dayKey = quickPaySpendDayKey()
-            if (!reserveSpend(prepared.amountUsd, dayKey)) return@launch
+            if (!reserveSpend(prepared.displaySats, dayKey)) return@launch
 
             sendLightning(prepared.bolt11, prepared.amount)
                 .onSuccess { onPaymentSuccess(it.paymentHash, prepared.displaySats, it.feePaidSats) }
-                .onFailure { onPaymentFailure(it, prepared.displaySats, prepared.amountUsd, dayKey) }
+                .onFailure { onPaymentFailure(it, prepared.displaySats, dayKey) }
         }
     }
 
@@ -81,23 +81,22 @@ class QuickPayViewModel @Inject constructor(
                 Triple(invoice.bolt11, null, data.sats)
             }
         }
-        val amountUsd = currencyRepo.convertSatsToFiat(displaySats.toLong(), USD).getOrNull()?.value?.toDouble()
-        if (amountUsd == null) {
-            setError(QuickPayCurrencyConversionError())
-            return null
-        }
-        return PreparedQuickPay(bolt11, amount, displaySats, amountUsd)
+        return PreparedQuickPay(bolt11, amount, displaySats)
     }
 
-    private suspend fun reserveSpend(amountUsd: Double, dayKey: String): Boolean {
-        val dailyCapUsd = resolveDailyCapUsd()
-        if (dailyCapUsd == null) {
+    private suspend fun reserveSpend(amountSats: ULong, dayKey: String): Boolean {
+        val dailyCapSats = resolveDailyCapSats()
+        if (dailyCapSats == null) {
             setError(QuickPayCurrencyConversionError())
             return false
         }
-        val reserved = cacheStore.tryReserveQuickPaySpendUsd(amountUsd, dayKey, dailyCapUsd)
+        val reserved = cacheStore.tryReserveQuickPaySpendSats(
+            amountSats = amountSats.toLong(),
+            dayKey = dayKey,
+            dailyCapSats = dailyCapSats.toLong(),
+        )
         if (!reserved) {
-            Logger.info("Skipping QuickPay pay: daily spend reserve failed for '$amountUsd'", context = TAG)
+            Logger.info("Skipping QuickPay pay: daily spend reserve failed for '$amountSats'", context = TAG)
             setError(QuickPayDailyLimitReachedError())
         }
         return reserved
@@ -118,12 +117,16 @@ class QuickPayViewModel @Inject constructor(
     private suspend fun onPaymentFailure(
         error: Throwable,
         displaySats: ULong,
-        amountUsd: Double,
         dayKey: String,
     ) {
         if (error is PaymentPendingException) {
             Logger.info("QuickPay lightning payment pending", context = TAG)
             pendingPaymentRepo.track(error.paymentHash)
+            cacheStore.rememberQuickPayReservation(
+                paymentHash = error.paymentHash,
+                amountSats = displaySats.toLong(),
+                dayKey = dayKey,
+            )
             _uiState.update {
                 it.copy(
                     result = QuickPayResult.Pending(
@@ -135,7 +138,7 @@ class QuickPayViewModel @Inject constructor(
             return
         }
         Logger.error("QuickPay lightning payment failed", error, context = TAG)
-        cacheStore.releaseQuickPaySpendUsd(amountUsd, dayKey)
+        cacheStore.releaseQuickPaySpendSats(displaySats.toLong(), dayKey)
         setError(error)
     }
 
@@ -149,12 +152,11 @@ class QuickPayViewModel @Inject constructor(
         else -> error.message?.takeIf { it.isNotBlank() } ?: context.getString(R.string.common__error_body)
     }
 
-    private suspend fun resolveDailyCapUsd(): Double? {
+    private suspend fun resolveDailyCapSats(): ULong? {
         val settings = settingsStore.data.first()
         val thresholdSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), USD).getOrNull()
             ?: return null
-        val dailyCapSats = thresholdSats * settings.quickPayDailyLimitMultiplier.toULong()
-        return currencyRepo.convertSatsToFiat(dailyCapSats.toLong(), USD).getOrNull()?.value?.toDouble()
+        return thresholdSats * settings.quickPayDailyLimitMultiplier.toULong()
     }
 
     private suspend fun sendLightning(
@@ -194,7 +196,6 @@ private data class PreparedQuickPay(
     val bolt11: String,
     val amount: ULong?,
     val displaySats: ULong,
-    val amountUsd: Double,
 )
 
 private data class SettledQuickPayPayment(

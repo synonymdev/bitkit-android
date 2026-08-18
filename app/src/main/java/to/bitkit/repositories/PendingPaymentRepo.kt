@@ -47,7 +47,11 @@ class PaymentPendingException(val paymentHash: String) : AppError("Payment pendi
 sealed interface PendingPaymentResolution {
     val paymentHash: String
 
-    data class Success(override val paymentHash: String) : PendingPaymentResolution
+    data class Success(
+        override val paymentHash: String,
+        val amountWithFeeSats: Long? = null,
+    ) : PendingPaymentResolution
+
     data class Failure(override val paymentHash: String) : PendingPaymentResolution
 }
 

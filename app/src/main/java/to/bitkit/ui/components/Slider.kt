@@ -4,7 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -38,6 +38,7 @@ import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
@@ -47,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -57,6 +59,15 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val KNOB_SIZE_DP = 32
+
+internal fun sliderPointerToLogical(x: Float, width: Float, isRtl: Boolean): Float =
+    if (isRtl) width - x else x
+
+internal fun sliderLogicalToVisual(x: Float, width: Float, isRtl: Boolean): Float =
+    if (isRtl) width - x else x
+
+internal fun sliderDragDeltaToLogical(deltaX: Float, isRtl: Boolean): Float =
+    if (isRtl) -deltaX else deltaX
 
 /** Horizontal inset so the knob stays clear of the screen edge and its system back-gesture zone. */
 private const val SLIDER_EDGE_INSET_DP = 16
@@ -75,6 +86,7 @@ fun Slider(
     formatLabel: (Int) -> String = { "$$it" },
 ) {
     val density = LocalDensity.current
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val coroutineScope = rememberCoroutineScope()
     val knobPosition = remember { Animatable(0f) }
     var isDragging by remember { mutableStateOf(false) }
@@ -121,6 +133,7 @@ fun Slider(
             steps.indices.map { index -> (index.toFloat() / numSteps) * sliderWidth }
         }
         val knobX = if (isDragging) knobPosition.value else stepPositions.getOrElse(valueIndex) { 0f }
+        val visualKnobX = sliderLogicalToVisual(knobX, sliderWidth, isRtl)
 
         fun findClosestStep(currentPosition: Float): Pair<Float, Int> {
             if (stepPositions.isEmpty()) return 0f to 0
@@ -151,9 +164,10 @@ fun Slider(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(KNOB_SIZE_DP.dp)
-                        .pointerInput(stepPositions, steps) {
+                        .pointerInput(stepPositions, steps, isRtl, sliderWidth) {
                             detectTapGestures { offset ->
-                                val (closestStep, closestIndex) = findClosestStep(offset.x)
+                                val logicalX = sliderPointerToLogical(offset.x, sliderWidth, isRtl)
+                                val (closestStep, closestIndex) = findClosestStep(logicalX)
                                 coroutineScope.launch {
                                     knobPosition.snapTo(settledXState.value)
                                     isDragging = true
@@ -179,10 +193,12 @@ fun Slider(
                     )
 
                     if (knobX > 0f) {
+                        val activeLeft = if (isRtl) visualKnobX else 0f
+                        val activeWidth = if (isRtl) size.width - visualKnobX else visualKnobX
                         drawRoundRect(
                             color = Colors.Green,
-                            topLeft = Offset(0f, trackY - trackHeight / 2),
-                            size = Size(knobX, trackHeight),
+                            topLeft = Offset(activeLeft, trackY - trackHeight / 2),
+                            size = Size(activeWidth, trackHeight),
                             cornerRadius = CornerRadius(cornerRadius),
                         )
                     }
@@ -192,9 +208,10 @@ fun Slider(
                     val markerRadius = density.run { 2.5.dp.toPx() }
 
                     stepPositions.forEach { position ->
+                        val visualX = sliderLogicalToVisual(position, size.width, isRtl)
                         drawRoundRect(
                             color = Colors.White,
-                            topLeft = Offset(position - markerWidth / 2, trackY - markerHeight / 2),
+                            topLeft = Offset(visualX - markerWidth / 2, trackY - markerHeight / 2),
                             size = Size(markerWidth, markerHeight),
                             cornerRadius = CornerRadius(markerRadius),
                         )
@@ -205,13 +222,13 @@ fun Slider(
                     modifier = Modifier
                         .offset {
                             IntOffset(
-                                x = (knobX - with(density) { KNOB_SIZE_DP.dp.toPx() / 2 }).roundToInt(),
+                                x = (visualKnobX - with(density) { KNOB_SIZE_DP.dp.toPx() / 2 }).roundToInt(),
                                 y = 0,
                             )
                         }
                         .size(KNOB_SIZE_DP.dp)
-                        .pointerInput(stepPositions, steps, sliderWidth) {
-                            detectDragGestures(
+                        .pointerInput(stepPositions, steps, sliderWidth, isRtl) {
+                            detectHorizontalDragGestures(
                                 onDragStart = {
                                     coroutineScope.launch {
                                         knobPosition.snapTo(settledXState.value)
@@ -237,8 +254,9 @@ fun Slider(
                                 },
                             ) { _, dragAmount ->
                                 coroutineScope.launch {
-                                    val newPosition = (knobPosition.value + dragAmount.x)
-                                        .coerceIn(0f, sliderWidth)
+                                    val newPosition = (
+                                        knobPosition.value + sliderDragDeltaToLogical(dragAmount, isRtl)
+                                        ).coerceIn(0f, sliderWidth)
                                     knobPosition.snapTo(newPosition)
                                 }
                             }
@@ -348,6 +366,7 @@ fun AmountSlider(
     modifier: Modifier = Modifier,
 ) {
     val density = LocalDensity.current
+    val isRtl = LocalLayoutDirection.current == LayoutDirection.Rtl
     val coroutineScope = rememberCoroutineScope()
 
     var sliderWidth by remember { mutableIntStateOf(0) }
@@ -356,9 +375,9 @@ fun AmountSlider(
 
     fun fractionFor(v: Long): Float = ((v - min).toFloat() / span).coerceIn(0f, 1f)
 
-    fun valueFor(positionPx: Float): Long {
+    fun valueFor(logicalPositionPx: Float): Long {
         if (sliderWidth == 0) return min
-        val fraction = (positionPx / sliderWidth).coerceIn(0f, 1f)
+        val fraction = (logicalPositionPx / sliderWidth).coerceIn(0f, 1f)
         return (min + (fraction * span).roundToInt()).coerceIn(min, max)
     }
 
@@ -368,6 +387,9 @@ fun AmountSlider(
             knobPosition.snapTo(fractionFor(value) * sliderWidth)
         }
     }
+
+    val widthPx = sliderWidth.toFloat()
+    val visualKnobX = sliderLogicalToVisual(knobPosition.value, widthPx, isRtl)
 
     Box(
         modifier = modifier
@@ -381,10 +403,11 @@ fun AmountSlider(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(KNOB_SIZE_DP.dp)
-                .pointerInput(sliderWidth, min, max) {
+                .pointerInput(sliderWidth, min, max, isRtl) {
                     detectTapGestures { offset ->
-                        val v = valueFor(offset.x)
-                        coroutineScope.launch { knobPosition.snapTo(fractionFor(v) * sliderWidth) }
+                        val logicalX = sliderPointerToLogical(offset.x, widthPx, isRtl)
+                        val v = valueFor(logicalX)
+                        coroutineScope.launch { knobPosition.snapTo(fractionFor(v) * widthPx) }
                         onValueChange(v)
                     }
                 }
@@ -401,11 +424,12 @@ fun AmountSlider(
                 cornerRadius = CornerRadius(cornerRadius),
             )
             // Active track
-            val activeWidth = knobPosition.value
-            if (activeWidth > 0) {
+            if (knobPosition.value > 0) {
+                val activeLeft = if (isRtl) visualKnobX else 0f
+                val activeWidth = if (isRtl) size.width - visualKnobX else visualKnobX
                 drawRoundRect(
                     color = Colors.Green,
-                    topLeft = Offset(0f, trackY - trackHeight / 2),
+                    topLeft = Offset(activeLeft, trackY - trackHeight / 2),
                     size = Size(activeWidth, trackHeight),
                     cornerRadius = CornerRadius(cornerRadius),
                 )
@@ -417,16 +441,17 @@ fun AmountSlider(
             modifier = Modifier
                 .offset {
                     IntOffset(
-                        x = (knobPosition.value - with(density) { KNOB_SIZE_DP.dp.toPx() / 2 }).roundToInt(),
+                        x = (visualKnobX - with(density) { KNOB_SIZE_DP.dp.toPx() / 2 }).roundToInt(),
                         y = 0,
                     )
                 }
                 .size(KNOB_SIZE_DP.dp)
-                .pointerInput(sliderWidth, min, max) {
-                    detectDragGestures { _, dragAmount ->
+                .pointerInput(sliderWidth, min, max, isRtl) {
+                    detectHorizontalDragGestures { _, dragAmount ->
                         coroutineScope.launch {
-                            val newPosition = (knobPosition.value + dragAmount.x)
-                                .coerceIn(0f, sliderWidth.toFloat())
+                            val newPosition = (
+                                knobPosition.value + sliderDragDeltaToLogical(dragAmount, isRtl)
+                                ).coerceIn(0f, widthPx)
                             knobPosition.snapTo(newPosition)
                             onValueChange(valueFor(newPosition))
                         }

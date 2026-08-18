@@ -1160,6 +1160,7 @@ class AppViewModel @Inject constructor(
             activityRepo.handlePaymentEvent(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
+                cacheStore.releaseQuickPayReservation(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash))
                 if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
                     notifyPendingPaymentFailed()
@@ -1225,7 +1226,19 @@ class AppViewModel @Inject constructor(
             activityRepo.handlePaymentEvent(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 syncContactForActivity(paymentHash)
-                pendingPaymentRepo.resolve(PendingPaymentResolution.Success(paymentHash))
+                cacheStore.clearQuickPayReservation(paymentHash)
+                val amountWithFeeSats = activityRepo.findActivityByPaymentId(
+                    paymentHashOrTxId = paymentHash,
+                    type = ActivityFilter.LIGHTNING,
+                    txType = PaymentType.SENT,
+                    retry = true,
+                ).getOrNull()?.totalValue()?.toLong()
+                pendingPaymentRepo.resolve(
+                    PendingPaymentResolution.Success(
+                        paymentHash = paymentHash,
+                        amountWithFeeSats = amountWithFeeSats,
+                    ),
+                )
                 if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
                     notifyPendingPaymentSucceeded()
                 }
@@ -2678,15 +2691,11 @@ class AppViewModel @Inject constructor(
         val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), USD).getOrNull()
             ?: return false
         val dailyCapSats = quickPayAmountSats * settings.quickPayDailyLimitMultiplier.toULong()
-        val dailyCapUsd = currencyRepo.convertSatsToFiat(dailyCapSats.toLong(), USD).getOrNull()?.value?.toDouble()
-            ?: return false
-        val amountUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrNull()?.value?.toDouble()
-            ?: return false
-        val spentUsdToday = cacheStore.quickPaySpentUsdForDay(quickPaySpendDayKey())
-        if (spentUsdToday + amountUsd <= dailyCapUsd) return true
+        val spentSatsToday = cacheStore.quickPaySpentSatsForDay(quickPaySpendDayKey()).toULong()
+        if (spentSatsToday + amountSats <= dailyCapSats) return true
 
         Logger.info(
-            "Skipping QuickPay: daily spend '$spentUsdToday' + '$amountUsd' exceeds cap '$dailyCapUsd'",
+            "Skipping QuickPay: daily spend '$spentSatsToday' + '$amountSats' exceeds cap '$dailyCapSats'",
             context = TAG,
         )
         return false

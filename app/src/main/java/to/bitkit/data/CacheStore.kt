@@ -139,40 +139,72 @@ class CacheStore @Inject constructor(
         store.updateData { it.copy(backgroundReceive = null) }
     }
 
-    suspend fun quickPaySpentUsdForDay(dayKey: String): Double {
+    suspend fun quickPaySpentSatsForDay(dayKey: String): Long {
         val data = store.data.first()
-        return if (data.quickPaySpendDayKey == dayKey) data.quickPaySpentUsdToday else 0.0
+        return data.quickPaySpendFor(dayKey).spentSats
     }
 
-    suspend fun tryReserveQuickPaySpendUsd(amountUsd: Double, dayKey: String, dailyCapUsd: Double): Boolean {
+    suspend fun tryReserveQuickPaySpendSats(amountSats: Long, dayKey: String, dailyCapSats: Long): Boolean {
         var reserved = false
         store.updateData {
-            val spent = if (it.quickPaySpendDayKey == dayKey) it.quickPaySpentUsdToday else 0.0
-            if (spent + amountUsd > dailyCapUsd) return@updateData it
+            val spend = it.quickPaySpendFor(dayKey)
+            if (spend.spentSats + amountSats > dailyCapSats) return@updateData it
             reserved = true
-            if (it.quickPaySpendDayKey != dayKey) {
-                it.copy(quickPaySpendDayKey = dayKey, quickPaySpentUsdToday = amountUsd)
-            } else {
-                it.copy(quickPaySpentUsdToday = spent + amountUsd)
-            }
+            it.copy(
+                quickPaySpendDayKey = spend.dayKey,
+                quickPaySpentSatsToday = spend.spentSats + amountSats,
+            )
         }
         return reserved
     }
 
-    suspend fun releaseQuickPaySpendUsd(amountUsd: Double, dayKey: String) {
+    suspend fun releaseQuickPaySpendSats(amountSats: Long, dayKey: String) {
         store.updateData {
-            if (it.quickPaySpendDayKey != dayKey) return@updateData it
-            it.copy(quickPaySpentUsdToday = (it.quickPaySpentUsdToday - amountUsd).coerceAtLeast(0.0))
+            val spend = it.quickPaySpendFor(dayKey)
+            if (spend.dayKey != it.quickPaySpendDayKey) return@updateData it
+            it.copy(quickPaySpentSatsToday = (spend.spentSats - amountSats).coerceAtLeast(0L))
         }
     }
 
-    suspend fun recordQuickPaySpendUsd(amountUsd: Double, dayKey: String) {
+    suspend fun recordQuickPaySpendSats(amountSats: Long, dayKey: String) {
         store.updateData {
-            if (it.quickPaySpendDayKey != dayKey) {
-                it.copy(quickPaySpendDayKey = dayKey, quickPaySpentUsdToday = amountUsd)
-            } else {
-                it.copy(quickPaySpentUsdToday = it.quickPaySpentUsdToday + amountUsd)
-            }
+            val spend = it.quickPaySpendFor(dayKey)
+            it.copy(
+                quickPaySpendDayKey = spend.dayKey,
+                quickPaySpentSatsToday = spend.spentSats + amountSats,
+            )
+        }
+    }
+
+    suspend fun rememberQuickPayReservation(paymentHash: String, amountSats: Long, dayKey: String) {
+        if (paymentHash.isBlank()) return
+        store.updateData {
+            it.copy(
+                quickPayReservations = it.quickPayReservations + (
+                    paymentHash to QuickPaySpendReservation(amountSats = amountSats, dayKey = dayKey)
+                    ),
+            )
+        }
+    }
+
+    suspend fun releaseQuickPayReservation(paymentHash: String) {
+        if (paymentHash.isBlank()) return
+        store.updateData { data ->
+            val reservation = data.quickPayReservations[paymentHash] ?: return@updateData data
+            val spend = data.quickPaySpendFor(reservation.dayKey)
+            data.copy(
+                quickPaySpendDayKey = spend.dayKey,
+                quickPaySpentSatsToday = (spend.spentSats - reservation.amountSats).coerceAtLeast(0L),
+                quickPayReservations = data.quickPayReservations - paymentHash,
+            )
+        }
+    }
+
+    suspend fun clearQuickPayReservation(paymentHash: String) {
+        if (paymentHash.isBlank()) return
+        store.updateData {
+            if (paymentHash !in it.quickPayReservations) return@updateData it
+            it.copy(quickPayReservations = it.quickPayReservations - paymentHash)
         }
     }
 
@@ -202,7 +234,8 @@ data class AppCacheData(
     val addressSearchLastUsedReceiveIndexes: Map<String, Int> = mapOf(),
     val addressSearchLastUsedChangeIndexes: Map<String, Int> = mapOf(),
     val quickPaySpendDayKey: String = "",
-    val quickPaySpentUsdToday: Double = 0.0,
+    val quickPaySpentSatsToday: Long = 0L,
+    val quickPayReservations: Map<String, QuickPaySpendReservation> = emptyMap(),
 ) {
     fun isActivityDeleted(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in deletedActivities ||
@@ -213,4 +246,21 @@ data class AppCacheData(
     fun invalidateReceiveLightningInvoice() = copy(bip21 = "", bolt11 = "", bolt11PaymentHash = "")
 
     fun invalidateReceiveOnchainAddress() = copy(bip21 = "", onchainAddress = "")
+
+    fun quickPaySpendFor(dayKey: String): QuickPayDaySpend = when {
+        quickPaySpendDayKey.isEmpty() || dayKey > quickPaySpendDayKey -> QuickPayDaySpend(dayKey, 0L)
+        dayKey == quickPaySpendDayKey -> QuickPayDaySpend(dayKey, quickPaySpentSatsToday)
+        else -> QuickPayDaySpend(quickPaySpendDayKey, quickPaySpentSatsToday)
+    }
 }
+
+@Serializable
+data class QuickPaySpendReservation(
+    val amountSats: Long,
+    val dayKey: String,
+)
+
+data class QuickPayDaySpend(
+    val dayKey: String,
+    val spentSats: Long,
+)
