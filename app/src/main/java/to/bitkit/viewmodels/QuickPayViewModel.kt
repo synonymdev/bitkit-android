@@ -20,6 +20,7 @@ import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.quickPaySpendDayKey
 import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.watchUntil
+import to.bitkit.models.USD
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PaymentPendingException
@@ -78,7 +79,7 @@ class QuickPayViewModel @Inject constructor(
                 Triple(invoice.bolt11, null, data.sats)
             }
         }
-        val amountUsd = currencyRepo.convertSatsToFiat(displaySats.toLong(), "USD").getOrNull()?.value?.toDouble()
+        val amountUsd = currencyRepo.convertSatsToFiat(displaySats.toLong(), USD).getOrNull()?.value?.toDouble()
         if (amountUsd == null) {
             setError(QuickPayCurrencyConversionError())
             return null
@@ -148,10 +149,10 @@ class QuickPayViewModel @Inject constructor(
 
     private suspend fun resolveDailyCapUsd(): Double? {
         val settings = settingsStore.data.first()
-        val thresholdSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull()
+        val thresholdSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), USD).getOrNull()
             ?: return null
         val dailyCapSats = thresholdSats * settings.quickPayDailyLimitMultiplier.toULong()
-        return currencyRepo.convertSatsToFiat(dailyCapSats.toLong(), "USD").getOrNull()?.value?.toDouble()
+        return currencyRepo.convertSatsToFiat(dailyCapSats.toLong(), USD).getOrNull()?.value?.toDouble()
     }
 
     private suspend fun sendLightning(

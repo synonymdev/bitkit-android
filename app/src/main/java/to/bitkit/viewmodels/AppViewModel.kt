@@ -124,6 +124,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
+import to.bitkit.models.USD
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
 import to.bitkit.models.sanitizedDeeplinkLogValue
@@ -2638,18 +2639,18 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun isWithinQuickPayThreshold(amountSats: ULong, settings: SettingsData): Boolean {
-        val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull()
+        val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), USD).getOrNull()
             ?: return false
         return amountSats <= quickPayAmountSats
     }
 
     private suspend fun isWithinQuickPayDailyCap(amountSats: ULong, settings: SettingsData): Boolean {
-        val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull()
+        val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), USD).getOrNull()
             ?: return false
         val dailyCapSats = quickPayAmountSats * settings.quickPayDailyLimitMultiplier.toULong()
-        val dailyCapUsd = currencyRepo.convertSatsToFiat(dailyCapSats.toLong(), "USD").getOrNull()?.value?.toDouble()
+        val dailyCapUsd = currencyRepo.convertSatsToFiat(dailyCapSats.toLong(), USD).getOrNull()?.value?.toDouble()
             ?: return false
-        val amountUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), "USD").getOrNull()?.value?.toDouble()
+        val amountUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrNull()?.value?.toDouble()
             ?: return false
         val spentUsdToday = cacheStore.quickPaySpentUsdForDay(quickPaySpendDayKey())
         if (spentUsdToday + amountUsd <= dailyCapUsd) return true
@@ -2702,7 +2703,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val amountInUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), "USD").getOrNull() ?: return
+        val amountInUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrNull() ?: return
         if (
             amountInUsd.value > BigDecimal(SEND_AMOUNT_WARNING_THRESHOLD) &&
             settings.enableSendAmountWarning &&
@@ -2735,7 +2736,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val feeInUsd = currencyRepo.convertSatsToFiat(totalFee.toLong(), "USD").getOrNull() ?: return
+        val feeInUsd = currencyRepo.convertSatsToFiat(totalFee.toLong(), USD).getOrNull() ?: return
         if (
             feeInUsd.value > BigDecimal(TEN_USD) &&
             SanityWarning.FEE_OVER_10_USD !in _sendUiState.value.confirmedWarnings
