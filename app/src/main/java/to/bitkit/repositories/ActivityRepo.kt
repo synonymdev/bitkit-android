@@ -975,6 +975,9 @@ data class ActivityState(
     val tags: ImmutableList<String> = persistentListOf(),
 )
 
+/** Activity timestamps are epoch seconds, while pre-activity metadata stores epoch millis. */
+private const val SECONDS_TO_MILLIS = 1_000uL
+
 /**
  * Renders an on-chain activity's tags as a [PreActivityMetadata] Core can re-attach later.
  *
@@ -994,6 +997,6 @@ private fun OnchainActivity.toPreActivityMetadata(tags: List<String>): PreActivi
         feeRate = 0uL,
         isTransfer = false,
         channelId = null,
-        createdAt = timestamp,
+        createdAt = timestamp * SECONDS_TO_MILLIS,
     )
 }
