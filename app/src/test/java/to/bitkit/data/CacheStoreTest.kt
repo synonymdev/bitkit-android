@@ -116,4 +116,19 @@ class CacheStoreTest : BaseUnitTest() {
         assertEquals(4.0, sut.quickPaySpentUsdForDay("2026-08-16"))
         assertEquals(0.0, sut.quickPaySpentUsdForDay("2026-08-15"))
     }
+
+    @Test
+    fun `tryReserveQuickPaySpendUsd reserves under the cap and rejects over it`() = test {
+        assertTrue(sut.tryReserveQuickPaySpendUsd(amountUsd = 10.0, dayKey = "2026-08-15", dailyCapUsd = 25.0))
+        assertTrue(sut.tryReserveQuickPaySpendUsd(amountUsd = 10.0, dayKey = "2026-08-15", dailyCapUsd = 25.0))
+        assertFalse(sut.tryReserveQuickPaySpendUsd(amountUsd = 10.0, dayKey = "2026-08-15", dailyCapUsd = 25.0))
+        assertEquals(20.0, sut.quickPaySpentUsdForDay("2026-08-15"))
+    }
+
+    @Test
+    fun `releaseQuickPaySpendUsd rolls back a reservation`() = test {
+        assertTrue(sut.tryReserveQuickPaySpendUsd(amountUsd = 5.0, dayKey = "2026-08-15", dailyCapUsd = 25.0))
+        sut.releaseQuickPaySpendUsd(amountUsd = 5.0, dayKey = "2026-08-15")
+        assertEquals(0.0, sut.quickPaySpentUsdForDay("2026-08-15"))
+    }
 }

@@ -144,6 +144,28 @@ class CacheStore @Inject constructor(
         return if (data.quickPaySpendDayKey == dayKey) data.quickPaySpentUsdToday else 0.0
     }
 
+    suspend fun tryReserveQuickPaySpendUsd(amountUsd: Double, dayKey: String, dailyCapUsd: Double): Boolean {
+        var reserved = false
+        store.updateData {
+            val spent = if (it.quickPaySpendDayKey == dayKey) it.quickPaySpentUsdToday else 0.0
+            if (spent + amountUsd > dailyCapUsd) return@updateData it
+            reserved = true
+            if (it.quickPaySpendDayKey != dayKey) {
+                it.copy(quickPaySpendDayKey = dayKey, quickPaySpentUsdToday = amountUsd)
+            } else {
+                it.copy(quickPaySpentUsdToday = spent + amountUsd)
+            }
+        }
+        return reserved
+    }
+
+    suspend fun releaseQuickPaySpendUsd(amountUsd: Double, dayKey: String) {
+        store.updateData {
+            if (it.quickPaySpendDayKey != dayKey) return@updateData it
+            it.copy(quickPaySpentUsdToday = (it.quickPaySpentUsdToday - amountUsd).coerceAtLeast(0.0))
+        }
+    }
+
     suspend fun recordQuickPaySpendUsd(amountUsd: Double, dayKey: String) {
         store.updateData {
             if (it.quickPaySpendDayKey != dayKey) {

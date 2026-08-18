@@ -34,12 +34,14 @@ class QuickPaySettingsScreenTest {
                 QuickPaySettingsScreenContent(
                     isQuickPayEnabled = true,
                     quickPayAmount = 5,
+                    quickPayDailyLimitMultiplier = 5,
                 )
             }
         }
 
         composeTestRule.onNodeWithTag("QuickpayToggle").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("quickpay_amount_slider").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("QuickpayAmountSlider").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("QuickpayDailyLimitSlider").assertIsDisplayed()
     }
 
     @Test
@@ -52,6 +54,7 @@ class QuickPaySettingsScreenTest {
                 QuickPaySettingsScreenContent(
                     isQuickPayEnabled = false,
                     quickPayAmount = 5,
+                    quickPayDailyLimitMultiplier = 5,
                     onToggleQuickPay = { enabled ->
                         toggleCalled = true
                         toggleValue = enabled

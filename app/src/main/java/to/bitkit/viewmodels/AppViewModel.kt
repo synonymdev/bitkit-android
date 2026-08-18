@@ -74,6 +74,7 @@ import org.lightningdevkit.ldknode.Txid
 import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.data.CacheStore
+import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.resetPin
@@ -2633,21 +2634,31 @@ class AppViewModel @Inject constructor(
         val settings = settingsStore.data.first()
         if (!settings.isQuickPayEnabled || amountSats == 0uL) return false
 
+        return isWithinQuickPayThreshold(amountSats, settings) && isWithinQuickPayDailyCap(amountSats, settings)
+    }
+
+    private suspend fun isWithinQuickPayThreshold(amountSats: ULong, settings: SettingsData): Boolean {
         val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull()
+            ?: return false
+        return amountSats <= quickPayAmountSats
+    }
+
+    private suspend fun isWithinQuickPayDailyCap(amountSats: ULong, settings: SettingsData): Boolean {
+        val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull()
+            ?: return false
+        val dailyCapSats = quickPayAmountSats * settings.quickPayDailyLimitMultiplier.toULong()
+        val dailyCapUsd = currencyRepo.convertSatsToFiat(dailyCapSats.toLong(), "USD").getOrNull()?.value?.toDouble()
+            ?: return false
         val amountUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), "USD").getOrNull()?.value?.toDouble()
-        if (quickPayAmountSats == null || amountUsd == null || amountSats > quickPayAmountSats) return false
-
-        val dailyCapUsd = settings.quickPayAmount.toDouble() * settings.quickPayDailyLimitMultiplier
+            ?: return false
         val spentUsdToday = cacheStore.quickPaySpentUsdForDay(quickPaySpendDayKey())
-        if (spentUsdToday + amountUsd > dailyCapUsd) {
-            Logger.info(
-                "Skipping QuickPay: daily spend '$spentUsdToday' + '$amountUsd' exceeds cap '$dailyCapUsd'",
-                context = TAG,
-            )
-            return false
-        }
+        if (spentUsdToday + amountUsd <= dailyCapUsd) return true
 
-        return true
+        Logger.info(
+            "Skipping QuickPay: daily spend '$spentUsdToday' + '$amountUsd' exceeds cap '$dailyCapUsd'",
+            context = TAG,
+        )
+        return false
     }
 
     private fun resetAmountInput() {

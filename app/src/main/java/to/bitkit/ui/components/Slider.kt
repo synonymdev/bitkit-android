@@ -38,6 +38,11 @@ import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Constraints
@@ -100,6 +105,12 @@ fun Slider(
         modifier = modifier
             .fillMaxWidth()
             .onSizeChanged { layoutWidthPx = it.width }
+            .stepSliderSemantics(
+                valueIndex = valueIndex,
+                stepCount = steps.size,
+                stateDescription = formatLabel(value),
+                onIndexChange = { onValueChange(steps[it]) },
+            )
     ) { constraints ->
         val width = constraints.maxWidth
         val sliderWidth = width.toFloat()
@@ -218,6 +229,12 @@ fun Slider(
                                     }
                                     onValueChange(steps[closestIndex])
                                 },
+                                onDragCancel = {
+                                    coroutineScope.launch {
+                                        knobPosition.snapTo(settledXState.value)
+                                        isDragging = false
+                                    }
+                                },
                             ) { _, dragAmount ->
                                 coroutineScope.launch {
                                     val newPosition = (knobPosition.value + dragAmount.x)
@@ -261,6 +278,25 @@ fun Slider(
 }
 
 private enum class StepSliderSlot { Track, Labels }
+
+private fun Modifier.stepSliderSemantics(
+    valueIndex: Int,
+    stepCount: Int,
+    stateDescription: String,
+    onIndexChange: (Int) -> Unit,
+): Modifier = semantics {
+    this.stateDescription = stateDescription
+    val lastIndex = (stepCount - 1).coerceAtLeast(0)
+    progressBarRangeInfo = ProgressBarRangeInfo(
+        current = valueIndex.toFloat(),
+        range = 0f..lastIndex.toFloat(),
+        steps = (stepCount - 2).coerceAtLeast(0),
+    )
+    setProgress { target ->
+        onIndexChange(target.roundToInt().coerceIn(0, lastIndex))
+        true
+    }
+}
 
 @Composable
 private fun StepSliderLabels(

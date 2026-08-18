@@ -5,6 +5,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -21,7 +23,6 @@ import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.Slider
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.settings.SettingsSwitchRow
@@ -74,7 +75,9 @@ fun QuickPaySettingsScreenContent(
         )
 
         Column(
-            modifier = Modifier.padding(horizontal = 16.dp)
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             VerticalSpacer(16.dp)
 
@@ -135,7 +138,7 @@ fun QuickPaySettingsScreenContent(
                 modifier = Modifier.testTag("QuickpayDailyLimitSlider")
             )
 
-            FillHeight()
+            VerticalSpacer(32.dp)
             Image(
                 painter = painterResource(R.drawable.fast_forward),
                 contentDescription = null,
@@ -143,7 +146,7 @@ fun QuickPaySettingsScreenContent(
                     .fillMaxWidth()
                     .height(256.dp)
             )
-            FillHeight()
+            VerticalSpacer(32.dp)
 
             BodyS(
                 text = stringResource(R.string.settings__quickpay__settings__note),
