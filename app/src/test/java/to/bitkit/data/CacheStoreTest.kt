@@ -111,7 +111,13 @@ class CacheStoreTest : BaseUnitTest() {
         sut.recordQuickPaySpendSats(amountSats = 12_000L, dayKey = "2026-08-15")
 
         assertEquals(12_000L, sut.quickPaySpentSatsForDay("2026-08-14"))
-        assertTrue(sut.tryReserveQuickPaySpendSats(amountSats = 1_000L, dayKey = "2026-08-14", dailyCapSats = 20_000L))
+        assertTrue(
+            sut.tryReserveQuickPaySpendSats(
+                amountSats = 1_000L,
+                dayKey = "2026-08-14",
+                dailyCapSats = 20_000L,
+            ),
+        )
         assertEquals(13_000L, sut.quickPaySpentSatsForDay("2026-08-14"))
         assertEquals(13_000L, sut.quickPaySpentSatsForDay("2026-08-15"))
     }
@@ -129,22 +135,52 @@ class CacheStoreTest : BaseUnitTest() {
 
     @Test
     fun `tryReserveQuickPaySpendSats reserves under the cap and rejects over it`() = test {
-        assertTrue(sut.tryReserveQuickPaySpendSats(amountSats = 10_000L, dayKey = "2026-08-15", dailyCapSats = 25_000L))
-        assertTrue(sut.tryReserveQuickPaySpendSats(amountSats = 10_000L, dayKey = "2026-08-15", dailyCapSats = 25_000L))
-        assertFalse(sut.tryReserveQuickPaySpendSats(amountSats = 10_000L, dayKey = "2026-08-15", dailyCapSats = 25_000L))
+        assertTrue(
+            sut.tryReserveQuickPaySpendSats(
+                amountSats = 10_000L,
+                dayKey = "2026-08-15",
+                dailyCapSats = 25_000L,
+            ),
+        )
+        assertTrue(
+            sut.tryReserveQuickPaySpendSats(
+                amountSats = 10_000L,
+                dayKey = "2026-08-15",
+                dailyCapSats = 25_000L,
+            ),
+        )
+        assertFalse(
+            sut.tryReserveQuickPaySpendSats(
+                amountSats = 10_000L,
+                dayKey = "2026-08-15",
+                dailyCapSats = 25_000L,
+            ),
+        )
         assertEquals(20_000L, sut.quickPaySpentSatsForDay("2026-08-15"))
     }
 
     @Test
     fun `releaseQuickPaySpendSats rolls back a reservation`() = test {
-        assertTrue(sut.tryReserveQuickPaySpendSats(amountSats = 5_000L, dayKey = "2026-08-15", dailyCapSats = 25_000L))
+        assertTrue(
+            sut.tryReserveQuickPaySpendSats(
+                amountSats = 5_000L,
+                dayKey = "2026-08-15",
+                dailyCapSats = 25_000L,
+            ),
+        )
         sut.releaseQuickPaySpendSats(amountSats = 5_000L, dayKey = "2026-08-15")
         assertEquals(0L, sut.quickPaySpentSatsForDay("2026-08-15"))
     }
 
     @Test
     fun `releaseQuickPayReservation frees pending spend by payment hash`() = test {
-        assertTrue(sut.tryReserveQuickPaySpendSats(amountSats = 5_000L, dayKey = "2026-08-15", dailyCapSats = 25_000L))
+        assertTrue(
+            sut.tryReserveQuickPaySpendSats(
+                amountSats = 5_000L,
+                dayKey = "2026-08-15",
+                dailyCapSats = 25_000L,
+            ),
+        )
         sut.rememberQuickPayReservation(paymentHash = "abc", amountSats = 5_000L, dayKey = "2026-08-15")
 
         sut.releaseQuickPayReservation("abc")
@@ -154,7 +190,13 @@ class CacheStoreTest : BaseUnitTest() {
 
     @Test
     fun `clearQuickPayReservation keeps spend after success`() = test {
-        assertTrue(sut.tryReserveQuickPaySpendSats(amountSats = 5_000L, dayKey = "2026-08-15", dailyCapSats = 25_000L))
+        assertTrue(
+            sut.tryReserveQuickPaySpendSats(
+                amountSats = 5_000L,
+                dayKey = "2026-08-15",
+                dailyCapSats = 25_000L,
+            ),
+        )
         sut.rememberQuickPayReservation(paymentHash = "abc", amountSats = 5_000L, dayKey = "2026-08-15")
 
         sut.clearQuickPayReservation("abc")
