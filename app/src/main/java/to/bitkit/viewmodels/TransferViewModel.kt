@@ -1124,7 +1124,7 @@ class TransferViewModel @Inject constructor(
         ToastEventBus.send(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.common__error),
-            description = context.getString(R.string.wallet__toast_payment_failed_timeout),
+            description = context.getString(R.string.wallet__payment_timeout),
         )
     }
 

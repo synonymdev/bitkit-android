@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import org.lightningdevkit.ldknode.PaymentFailureReason
 import to.bitkit.R
 import to.bitkit.models.NotificationDetails
 import to.bitkit.utils.AppError
@@ -48,7 +49,10 @@ sealed interface PendingPaymentResolution {
     val paymentHash: String
 
     data class Success(override val paymentHash: String) : PendingPaymentResolution
-    data class Failure(override val paymentHash: String) : PendingPaymentResolution
+    data class Failure(
+        override val paymentHash: String,
+        val reason: PaymentFailureReason? = null,
+    ) : PendingPaymentResolution
 }
 
 object PendingPaymentNotification {

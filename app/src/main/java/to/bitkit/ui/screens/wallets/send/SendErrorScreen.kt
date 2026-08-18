@@ -1,9 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,23 +29,29 @@ import to.bitkit.ui.theme.Colors
 
 @Composable
 fun SendErrorScreen(
+    title: String,
     message: String?,
+    isRetrying: Boolean,
     onRetry: () -> Unit,
-    onClose: () -> Unit,
+    onContactSupport: () -> Unit,
 ) {
     Content(
+        title = title,
         message,
+        isRetrying = isRetrying,
         onRetry = onRetry,
-        onClose = onClose,
+        onContactSupport = onContactSupport,
     )
 }
 
 @Composable
 private fun Content(
+    title: String,
     message: String?,
     modifier: Modifier = Modifier,
+    isRetrying: Boolean = false,
     onRetry: () -> Unit = {},
-    onClose: () -> Unit = {},
+    onContactSupport: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -55,7 +59,7 @@ private fun Content(
             .gradientBackground()
             .navigationBarsPadding()
     ) {
-        SheetTopBar(stringResource(R.string.wallet__send_error_tx_failed))
+        SheetTopBar(title)
 
         Column(
             modifier = Modifier
@@ -64,9 +68,10 @@ private fun Content(
         ) {
             VerticalSpacer(16.dp)
 
-            message?.let {
-                BodyM(it, color = Colors.White64)
-            }
+            BodyM(
+                text = message ?: stringResource(R.string.wallet__payment_failed_description),
+                color = Colors.White64,
+            )
 
             FillHeight()
             Image(
@@ -78,25 +83,25 @@ private fun Content(
             )
             FillHeight()
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                SecondaryButton(
-                    text = stringResource(R.string.common__cancel),
-                    onClick = onClose,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("Close")
-                )
-                PrimaryButton(
-                    text = stringResource(R.string.common__try_again),
-                    onClick = onRetry,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("Retry")
-                )
-            }
+            SecondaryButton(
+                text = stringResource(R.string.wallet__send_error_support),
+                onClick = onContactSupport,
+                enabled = !isRetrying,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("Support")
+            )
+
+            VerticalSpacer(16.dp)
+
+            PrimaryButton(
+                text = stringResource(R.string.common__try_again),
+                onClick = onRetry,
+                isLoading = isRetrying,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("Retry")
+            )
 
             VerticalSpacer(16.dp)
         }
@@ -109,6 +114,7 @@ private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
             Content(
+                title = stringResource(R.string.wallet__send_error_tx_failed),
                 message = stringResource(R.string.wallet__send_error_create_tx),
                 modifier = Modifier.sheetHeight(),
             )
@@ -122,6 +128,7 @@ private fun PreviewUnknown() {
     AppThemeSurface {
         BottomSheetPreview {
             Content(
+                title = stringResource(R.string.wallet__toast_payment_failed_title),
                 message = null,
                 modifier = Modifier.sheetHeight(),
             )

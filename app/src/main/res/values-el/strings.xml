@@ -929,6 +929,7 @@
     <string name="wallet__send_dialog3">Το τέλος συναλλαγής φαίνεται να είναι πάνω από 50% του ποσού που στέλνεις. Θέλεις να συνεχίσεις;</string>
     <string name="wallet__send_dialog4">Το τέλος συναλλαγής φαίνεται να είναι πάνω από $10. Θέλεις να συνεχίσεις;</string>
     <string name="wallet__send_error_create_tx">Δεν ήταν δυνατή η μετάδοση της συναλλαγής. Δοκίμασε ξανά.</string>
+    <string name="wallet__send_error_support">Επικοινωνία με Υποστήριξη</string>
     <string name="wallet__send_error_tx_failed">Αποτυχία συναλλαγής</string>
     <string name="wallet__send_fee_and_speed">Ταχύτητα και τέλος</string>
     <string name="wallet__send_fee_custom">Ορισμός προσαρμοσμένου τέλους</string>
@@ -938,6 +939,7 @@
     <string name="wallet__send_fee_speed">Ταχύτητα</string>
     <string name="wallet__send_fee_total">₿ {feeSats} για αυτή τη συναλλαγή</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} για αυτή τη συναλλαγή ({fiatSymbol}{fiatFormatted})</string>
+    <string name="wallet__send_instant_failed">Αποτυχία πληρωμής</string>
     <string name="wallet__send_invoice">Τιμολόγιο</string>
     <string name="wallet__send_invoice_expiration">Λήξη τιμολογίου</string>
     <string name="wallet__send_max">ΜΑΧ</string>
@@ -960,6 +962,16 @@
     <string name="wallet__tags_new">Νέα ετικέτα</string>
     <string name="wallet__tags_new_enter">Εισάγαγε νέα ετικέτα</string>
     <string name="wallet__tags_previously">Προηγούμενες ετικέτες</string>
+    <string name="wallet__payment_abandoned">Η πληρωμή Lightning σταμάτησε πριν ολοκληρωθεί.</string>
+    <string name="wallet__payment_expired">Αυτή η πληρωμή Lightning έληξε. Ζητήστε νέο τιμολόγιο.</string>
+    <string name="wallet__payment_failed_description">Η άμεση πληρωμή σας απέτυχε. Παρακαλώ δοκιμάστε ξανά.</string>
+    <string name="wallet__payment_invoice_request_expired">Αυτό το αίτημα τιμολογίου Lightning έληξε. Ζητήστε νέο τιμολόγιο.</string>
+    <string name="wallet__payment_invoice_request_rejected">Ο παραλήπτης απέρριψε αυτό το αίτημα τιμολογίου Lightning.</string>
+    <string name="wallet__payment_recipient_rejected">Ο παραλήπτης απέρριψε αυτήν την πληρωμή Lightning. Ελέγξτε το τιμολόγιο και δοκιμάστε ξανά.</string>
+    <string name="wallet__payment_retries_exhausted">Το Bitkit δοκίμασε αρκετές διαδρομές Lightning, αλλά η πληρωμή δεν μπόρεσε να ολοκληρωθεί.</string>
+    <string name="wallet__payment_route_not_found">Το Bitkit δεν μπόρεσε να βρει διαδρομή Lightning για αυτήν την πληρωμή.</string>
+    <string name="wallet__payment_timeout">Το χρονικό όριο πληρωμής έληξε. Δοκιμάστε ξανά.</string>
+    <string name="wallet__payment_unknown_required_features">Αυτό το τιμολόγιο Lightning χρησιμοποιεί λειτουργίες που το Bitkit δεν υποστηρίζει ακόμη.</string>
     <string name="wallet__toast_payment_failed_description">Η άμεση πληρωμή σου απέτυχε. Δοκίμασε ξανά.</string>
     <string name="wallet__toast_payment_failed_title">Αποτυχία πληρωμής</string>
     <string name="wallet__toast_received_transaction_replaced_description">Η εισερχόμενη συναλλαγή σου αντικαταστάθηκε από αύξηση τέλους</string>
