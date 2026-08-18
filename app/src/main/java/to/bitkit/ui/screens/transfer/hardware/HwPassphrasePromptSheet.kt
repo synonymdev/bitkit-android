@@ -2,6 +2,7 @@ package to.bitkit.ui.screens.transfer.hardware
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -21,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -38,6 +40,7 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.Display
@@ -46,6 +49,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.TextInput
+import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.effects.BlockScreenshots
@@ -90,16 +94,31 @@ fun HwPassphrasePromptSheet(
         sheetState = sheetState,
         modifier = Modifier.imePadding()
     ) {
-        Content(
-            isVerifying = isVerifying,
-            onSubmit = {
-                dismissKeyboard()
-                onSubmit(it)
-            },
-            onCancel = { closeSheet() },
-            modifier = Modifier.sheetHeight(SheetSize.LARGE, isModal = true)
-        )
+        Box {
+            Content(
+                isVerifying = isVerifying,
+                onSubmit = {
+                    dismissKeyboard()
+                    onSubmit(it)
+                },
+                onCancel = { closeSheet() },
+                modifier = Modifier.sheetHeight(SheetSize.LARGE, isModal = true)
+            )
+            SheetToastHost()
+        }
     }
+}
+
+@Composable
+private fun SheetToastHost() {
+    val app = appViewModel ?: return
+    val currentToast by app.currentToast.collectAsStateWithLifecycle()
+    ToastOverlay(
+        toast = currentToast,
+        onDismiss = { app.hideToast() },
+        onDragStart = { app.pauseToast() },
+        onDragEnd = { app.resumeToast() },
+    )
 }
 
 @Composable
