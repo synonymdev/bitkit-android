@@ -436,20 +436,44 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `rewritten activity backup preserves hardware wallet tags`() = test {
-        stubWalletBackup()
-        val hardwareTag = ActivityTags(walletId = HARDWARE_WALLET_ID, activityId = "a2", tags = listOf("hw"))
-        stubActivityRestore(backedUpTags = listOf(defaultTag(), hardwareTag))
+    fun `metadata backup carries hardware tags as pre-activity metadata`() = test {
+        val hardwareTagMetadata = preActivityMetadata().copy(
+            walletId = HARDWARE_WALLET_ID,
+            paymentId = "hw-txid",
+            tags = listOf("hw"),
+        )
+        whenever { preActivityMetadataRepo.getAllPreActivityMetadata() }
+            .thenReturn(Result.success(listOf(preActivityMetadata())))
+        whenever { activityRepo.getHardwareTagsAsPreActivityMetadata() }
+            .thenReturn(Result.success(listOf(hardwareTagMetadata)))
+        whenever { pubkyRepo.snapshotSessionBackupState() }.thenReturn(Result.success(null))
+        whenever { pubkyRepo.snapshotContactProfileOverrides() }.thenReturn(Result.success(null))
         val dataCaptor = argumentCaptor<ByteArray>()
 
-        val result = sut.performFullRestoreFromLatestBackup()
+        sut.triggerBackup(BackupCategory.METADATA)
 
-        assertTrue(result.isSuccess)
+        verifyBlocking(vssBackupClient) {
+            putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture())
+        }
+        val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
+        assertEquals(listOf(preActivityMetadata(), hardwareTagMetadata), payload.tagMetadata)
+    }
+
+    @Test
+    fun `activity backup excludes hardware tags`() = test {
+        whenever { activityRepo.getActivities() }.thenReturn(Result.success(emptyList()))
+        whenever { activityRepo.getClosedChannels() }.thenReturn(Result.success(emptyList()))
+        // ActivityRepo already scopes this to the default wallet, so a hardware tag can never appear here.
+        whenever { activityRepo.getAllActivitiesTags() }.thenReturn(Result.success(listOf(defaultTag())))
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.ACTIVITY)
+
         verifyBlocking(vssBackupClient) {
             putObject(eq(BackupCategory.ACTIVITY.name), dataCaptor.capture())
         }
         val payload = json.decodeFromString<ActivityBackupV1>(dataCaptor.firstValue.decodeToString())
-        assertEquals(listOf(defaultTag(), hardwareTag), payload.activityTags)
+        assertTrue(payload.activityTags.none { it.walletId == HARDWARE_WALLET_ID })
     }
 
     @Test
@@ -508,6 +532,7 @@ class BackupRepoTest : BaseUnitTest() {
         // Read back by the rewrite through getMetadataBackupDataBytes().
         whenever { preActivityMetadataRepo.getAllPreActivityMetadata() }
             .thenReturn(Result.success(restorableMetadata))
+        whenever { activityRepo.getHardwareTagsAsPreActivityMetadata() }.thenReturn(Result.success(emptyList()))
         whenever { pubkyRepo.snapshotSessionBackupState() }.thenReturn(Result.success(null))
         whenever { pubkyRepo.snapshotContactProfileOverrides() }.thenReturn(Result.success(null))
     }

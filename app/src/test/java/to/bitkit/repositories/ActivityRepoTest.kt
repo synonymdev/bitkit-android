@@ -769,17 +769,101 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `getAllActivitiesTags returns tags for every wallet scope`() = test {
+    fun `getAllActivitiesTags returns only default wallet tags`() = test {
         val defaultTags = ActivityTags(WalletScope.default, "default-activity", listOf("daily"))
-        val hardwareTags = ActivityTags("trezor:abc123", "hardware-activity", listOf("cold"))
+        val hardwareTags = ActivityTags(HARDWARE_WALLET_ID, "hardware-activity", listOf("cold"))
         whenever { coreService.activity.getAllActivitiesTags() }
             .thenReturn(listOf(defaultTags, hardwareTags))
 
         val result = sut.getAllActivitiesTags()
 
-        // Hardware wallet tags are user authored and cannot be re-derived, so they must reach the backup.
-        assertEquals(listOf(defaultTags, hardwareTags), result.getOrThrow())
+        // Hardware tags would have no parent activity on restore, they travel as pre-activity metadata.
+        assertEquals(listOf(defaultTags), result.getOrThrow())
     }
+
+    @Test
+    fun `getHardwareTagsAsPreActivityMetadata keys a received activity by address`() = test {
+        stubHardwareTagLookup(hardwareOnchainActivity(txType = PaymentType.RECEIVED))
+
+        val result = sut.getHardwareTagsAsPreActivityMetadata().getOrThrow()
+
+        val metadata = result.single()
+        assertEquals(HARDWARE_WALLET_ID, metadata.walletId)
+        assertEquals("hw-activity", metadata.paymentId)
+        assertEquals("bcrt1qhw", metadata.address)
+        assertTrue(metadata.isReceive)
+        assertEquals(listOf("cold"), metadata.tags)
+        // Core copies these onto the activity it attaches to, so a tag-only record must leave them unset.
+        assertEquals(0uL, metadata.feeRate)
+        assertFalse(metadata.isTransfer)
+        assertNull(metadata.channelId)
+    }
+
+    @Test
+    fun `getHardwareTagsAsPreActivityMetadata keys a sent activity by payment id`() = test {
+        stubHardwareTagLookup(hardwareOnchainActivity(txType = PaymentType.SENT))
+
+        val result = sut.getHardwareTagsAsPreActivityMetadata().getOrThrow()
+
+        val metadata = result.single()
+        assertEquals("hw-txid", metadata.paymentId)
+        assertNull(metadata.address)
+        assertFalse(metadata.isReceive)
+    }
+
+    @Test
+    fun `getHardwareTagsAsPreActivityMetadata ignores default wallet tags`() = test {
+        whenever { coreService.activity.getAllActivitiesTags() }
+            .thenReturn(listOf(ActivityTags(WalletScope.default, "default-activity", listOf("daily"))))
+
+        val result = sut.getHardwareTagsAsPreActivityMetadata().getOrThrow()
+
+        assertEquals(emptyList(), result)
+    }
+
+    private suspend fun stubHardwareTagLookup(activity: Activity.Onchain) {
+        whenever { coreService.activity.getAllActivitiesTags() }
+            .thenReturn(listOf(ActivityTags(HARDWARE_WALLET_ID, "hw-activity", listOf("cold"))))
+        whenever {
+            coreService.activity.get(
+                walletId = anyOrNull(),
+                filter = anyOrNull(),
+                txType = anyOrNull(),
+                tags = anyOrNull(),
+                search = anyOrNull(),
+                minDate = anyOrNull(),
+                maxDate = anyOrNull(),
+                limit = anyOrNull(),
+                sortDirection = anyOrNull(),
+            )
+        }.thenReturn(listOf(activity))
+    }
+
+    private fun hardwareOnchainActivity(txType: PaymentType) = Activity.Onchain(
+        OnchainActivity(
+            walletId = HARDWARE_WALLET_ID,
+            id = "hw-activity",
+            txType = txType,
+            txId = "hw-txid",
+            value = 1000uL,
+            fee = 1uL,
+            feeRate = 1uL,
+            address = "bcrt1qhw",
+            confirmed = true,
+            timestamp = 123uL,
+            isBoosted = false,
+            boostTxIds = emptyList(),
+            isTransfer = false,
+            doesExist = true,
+            confirmTimestamp = null,
+            channelId = null,
+            transferTxId = null,
+            contact = null,
+            createdAt = null,
+            updatedAt = null,
+            seenAt = null,
+        )
+    )
 
     @Test
     fun `removeAllActivities removes all activities successfully`() = test {
@@ -1086,5 +1170,9 @@ class ActivityRepoTest : BaseUnitTest() {
         verify(coreService.activity, never()).update(eq(activityId), any())
         // Verify pending boost was removed (skipped)
         verify(cacheStore).removeActivityFromPendingBoost(pendingBoost)
+    }
+
+    private companion object {
+        const val HARDWARE_WALLET_ID = "trezor:abc123"
     }
 }

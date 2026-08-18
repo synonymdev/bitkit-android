@@ -11,6 +11,7 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -824,18 +825,63 @@ class ActivityRepo @Inject constructor(
     }
 
     /**
-     * Get all [ActivityTags] for backup, including hardware wallet scopes.
+     * Get all [ActivityTags] for backup.
      *
-     * Hardware wallet activities are rebuilt from the device watcher on every reconnect, but their tags
-     * are user authored and cannot be re-derived, so every wallet scope is backed up.
+     * Scoped to the default wallet: hardware activities are rebuilt by the device watcher and are not
+     * backed up, so a restored hardware [ActivityTags] row would have no parent activity and Core's
+     * foreign key would reject it. Hardware tags travel as [PreActivityMetadata] instead, see
+     * [getHardwareTagsAsPreActivityMetadata].
      */
     suspend fun getAllActivitiesTags(): Result<List<ActivityTags>> = withContext(bgDispatcher) {
         runCatching {
             coreService.activity.getAllActivitiesTags()
+                .filter { it.walletId == WalletScope.default }
         }.onFailure {
             Logger.error("getAllActivityTags error", it, context = TAG)
         }
     }
+
+    /**
+     * Hardware wallet tags rendered as [PreActivityMetadata] so they can travel in the metadata backup.
+     *
+     * Hardware activities are rebuilt by the device watcher and are deliberately not backed up, so a
+     * restored hardware [ActivityTags] row would reference a missing activity. Core re-attaches
+     * pre-activity metadata when the watcher recreates the activity, matching received activities on
+     * address and sent activities on payment id, so the tags land back on the right rows.
+     *
+     * Every other field is left neutral: Core copies `address`, `feeRate`, `isTransfer` and `channelId`
+     * onto the activity it attaches to, and only when they are set, so a tag-only record must not carry
+     * them.
+     */
+    suspend fun getHardwareTagsAsPreActivityMetadata(): Result<List<PreActivityMetadata>> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                val hardwareTags = coreService.activity.getAllActivitiesTags()
+                    .filter { it.walletId != WalletScope.default }
+                if (hardwareTags.isEmpty()) return@runSuspendCatching emptyList()
+
+                val onchainByScopedId = coreService.activity.get(
+                    walletId = null,
+                    filter = ActivityFilter.ONCHAIN,
+                    txType = null,
+                    tags = null,
+                    search = null,
+                    minDate = null,
+                    maxDate = null,
+                    limit = null,
+                    sortDirection = null,
+                )
+                    .filterIsInstance<Activity.Onchain>()
+                    .associateBy { it.v1.walletId to it.v1.id }
+
+                hardwareTags.mapNotNull { tag ->
+                    val activity = onchainByScopedId[tag.walletId to tag.activityId] ?: return@mapNotNull null
+                    activity.v1.toPreActivityMetadata(tag.tags)
+                }
+            }.onFailure {
+                Logger.error("getHardwareTagsAsPreActivityMetadata error", it, context = TAG)
+            }
+        }
 
     /**
      * Fill in wallet ids missing from a backup envelope's `activities` slice, letting Core migrate its own
@@ -928,3 +974,26 @@ class ActivityRepo @Inject constructor(
 data class ActivityState(
     val tags: ImmutableList<String> = persistentListOf(),
 )
+
+/**
+ * Renders an on-chain activity's tags as a [PreActivityMetadata] Core can re-attach later.
+ *
+ * The lookup key mirrors Core: received activities are matched on `address` with `isReceive` set, sent
+ * activities on `paymentId`.
+ */
+private fun OnchainActivity.toPreActivityMetadata(tags: List<String>): PreActivityMetadata {
+    val isReceive = txType == PaymentType.RECEIVED
+    return PreActivityMetadata(
+        walletId = walletId,
+        paymentId = if (isReceive) id else txId,
+        tags = tags,
+        paymentHash = null,
+        txId = txId,
+        address = address.takeIf { isReceive },
+        isReceive = isReceive,
+        feeRate = 0uL,
+        isTransfer = false,
+        channelId = null,
+        createdAt = timestamp,
+    )
+}

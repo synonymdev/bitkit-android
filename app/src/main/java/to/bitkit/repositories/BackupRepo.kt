@@ -313,6 +313,8 @@ class BackupRepo @Inject constructor(
 
         // ACTIVITY - Observe activity changes
         dataListenerJobs.add(observeBackupChanges(activityRepo.activitiesChanged, BackupCategory.ACTIVITY))
+        // Hardware tags are carried by the metadata backup, and tagging emits activitiesChanged.
+        dataListenerJobs.add(observeBackupChanges(activityRepo.activitiesChanged, BackupCategory.METADATA))
 
         // LIGHTNING_CONNECTIONS - Only display sync timestamp, ldk-node manages its own backups
         @OptIn(FlowPreview::class)
@@ -537,13 +539,18 @@ class BackupRepo @Inject constructor(
 
     private suspend fun getMetadataBackupDataBytes(): ByteArray = withContext(ioDispatcher) {
         val preActivityMetadata = preActivityMetadataRepo.getAllPreActivityMetadata().getOrDefault(emptyList())
+        // Hardware tags ride here rather than in the activity backup: their activities are rebuilt by the
+        // device watcher, so Core re-attaches them once the watcher recreates the rows.
+        val hardwareTagMetadata = activityRepo.getHardwareTagsAsPreActivityMetadata().getOrDefault(emptyList())
+        val tagMetadata = (preActivityMetadata + hardwareTagMetadata)
+            .distinctBy { it.walletId to it.paymentId }
         val cacheData = cacheStore.data.first()
         val pubkySession = pubkyRepo.snapshotSessionBackupState().getOrDefault(null)
         val pubkyContactProfileOverrides = pubkyRepo.snapshotContactProfileOverrides().getOrDefault(null)
 
         val payload = MetadataBackupV1(
             createdAt = currentTimeMillis(),
-            tagMetadata = preActivityMetadata,
+            tagMetadata = tagMetadata,
             cache = cacheData,
             pubkySession = pubkySession,
             pubkyContactProfileOverrides = pubkyContactProfileOverrides,
