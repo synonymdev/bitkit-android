@@ -538,10 +538,13 @@ class BackupRepo @Inject constructor(
     }
 
     private suspend fun getMetadataBackupDataBytes(): ByteArray = withContext(ioDispatcher) {
-        val preActivityMetadata = preActivityMetadataRepo.getAllPreActivityMetadata().getOrDefault(emptyList())
+        // These reads must not fall back to an empty list: this envelope is the only copy of the tags, so
+        // uploading a partial payload would replace the stored ones. Failing here marks the backup failed
+        // and leaves the previous upload intact until the retry succeeds.
+        val preActivityMetadata = preActivityMetadataRepo.getAllPreActivityMetadata().getOrThrow()
         // Hardware tags ride here rather than in the activity backup: their activities are rebuilt by the
         // device watcher, so Core re-attaches them once the watcher recreates the rows.
-        val hardwareTagMetadata = activityRepo.getHardwareTagsAsPreActivityMetadata().getOrDefault(emptyList())
+        val hardwareTagMetadata = activityRepo.getHardwareTagsAsPreActivityMetadata().getOrThrow()
         val tagMetadata = (preActivityMetadata + hardwareTagMetadata)
             .distinctBy { it.walletId to it.paymentId }
         val cacheData = cacheStore.data.first()

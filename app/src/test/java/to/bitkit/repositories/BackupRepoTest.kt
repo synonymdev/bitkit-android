@@ -460,6 +460,32 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `metadata backup fails when pre-activity metadata cannot be read`() = test {
+        stubMetadataBackupReads()
+        whenever { preActivityMetadataRepo.getAllPreActivityMetadata() }
+            .thenReturn(Result.failure(BackupRepoTestError("core unavailable")))
+
+        val result = sut.triggerBackup(BackupCategory.METADATA)
+
+        assertTrue(result.isFailure)
+        // Uploading here would replace the stored tags with an empty set.
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+    }
+
+    @Test
+    fun `metadata backup fails when hardware tags cannot be read`() = test {
+        stubMetadataBackupReads()
+        whenever { activityRepo.getHardwareTagsAsPreActivityMetadata() }
+            .thenReturn(Result.failure(BackupRepoTestError("core unavailable")))
+
+        val result = sut.triggerBackup(BackupCategory.METADATA)
+
+        assertTrue(result.isFailure)
+        // This envelope is the only copy of hardware tags, so a partial upload would lose them.
+        verify(vssBackupClient, never()).putObject(eq(BackupCategory.METADATA.name), any())
+    }
+
+    @Test
     fun `activity backup excludes hardware tags`() = test {
         whenever { activityRepo.getActivities() }.thenReturn(Result.success(emptyList()))
         whenever { activityRepo.getClosedChannels() }.thenReturn(Result.success(emptyList()))
@@ -501,6 +527,14 @@ class BackupRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
+    }
+
+    private fun stubMetadataBackupReads() {
+        whenever { preActivityMetadataRepo.getAllPreActivityMetadata() }
+            .thenReturn(Result.success(listOf(preActivityMetadata())))
+        whenever { activityRepo.getHardwareTagsAsPreActivityMetadata() }.thenReturn(Result.success(emptyList()))
+        whenever { pubkyRepo.snapshotSessionBackupState() }.thenReturn(Result.success(null))
+        whenever { pubkyRepo.snapshotContactProfileOverrides() }.thenReturn(Result.success(null))
     }
 
     private fun stubActivityRestore(
