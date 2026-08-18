@@ -36,6 +36,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
@@ -72,6 +73,7 @@ fun HwPassphrasePromptSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val toastHazeState = rememberHazeState(blurEnabled = true)
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -102,19 +104,22 @@ fun HwPassphrasePromptSheet(
                     onSubmit(it)
                 },
                 onCancel = { closeSheet() },
-                modifier = Modifier.sheetHeight(SheetSize.LARGE, isModal = true)
+                modifier = Modifier
+                    .sheetHeight(SheetSize.LARGE, isModal = true)
+                    .hazeSource(toastHazeState, zIndex = 0f)
             )
-            SheetToastHost()
+            SheetToastHost(hazeState = toastHazeState)
         }
     }
 }
 
 @Composable
-private fun SheetToastHost() {
+private fun SheetToastHost(hazeState: HazeState) {
     val app = appViewModel ?: return
     val currentToast by app.currentToast.collectAsStateWithLifecycle()
     ToastOverlay(
         toast = currentToast,
+        hazeState = hazeState,
         onDismiss = { app.hideToast() },
         onDragStart = { app.pauseToast() },
         onDragEnd = { app.resumeToast() },
