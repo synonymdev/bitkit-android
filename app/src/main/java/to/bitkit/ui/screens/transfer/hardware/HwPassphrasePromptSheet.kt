@@ -22,7 +22,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
@@ -36,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
@@ -59,6 +59,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.AppViewModel
 
 /**
  * Asks for the passphrase of the hidden wallet a transfer signs from. Bitkit never stores it, so
@@ -74,6 +75,7 @@ fun HwPassphrasePromptSheet(
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val toastHazeState = rememberHazeState(blurEnabled = true)
+    val app = appViewModel
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -96,7 +98,7 @@ fun HwPassphrasePromptSheet(
         sheetState = sheetState,
         modifier = Modifier.imePadding()
     ) {
-        Box {
+        Box(modifier = Modifier.fillMaxSize()) {
             Content(
                 isVerifying = isVerifying,
                 onSubmit = {
@@ -108,19 +110,26 @@ fun HwPassphrasePromptSheet(
                     .sheetHeight(SheetSize.LARGE, isModal = true)
                     .hazeSource(toastHazeState, zIndex = 0f)
             )
-            SheetToastHost(hazeState = toastHazeState)
+            if (app != null) {
+                SheetToastHost(
+                    app = app,
+                    hazeState = toastHazeState,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun SheetToastHost(hazeState: HazeState) {
-    val app = appViewModel ?: return
+private fun SheetToastHost(
+    app: AppViewModel,
+    hazeState: HazeState,
+) {
     val currentToast by app.currentToast.collectAsStateWithLifecycle()
     ToastOverlay(
         toast = currentToast,
-        hazeState = hazeState,
         onDismiss = { app.hideToast() },
+        hazeState = hazeState,
         onDragStart = { app.pauseToast() },
         onDragEnd = { app.resumeToast() },
     )
