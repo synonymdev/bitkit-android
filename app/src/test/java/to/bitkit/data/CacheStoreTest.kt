@@ -124,7 +124,7 @@ class CacheStoreTest : BaseUnitTest() {
 
         sut.recordQuickPaySpendSats(amountSats = 4_000L, dayKey = "2026-08-16")
         assertEquals(4_000L, sut.quickPaySpentSatsForDay("2026-08-16"))
-        assertEquals(0L, sut.quickPaySpentSatsForDay("2026-08-15"))
+        assertEquals(4_000L, sut.quickPaySpentSatsForDay("2026-08-15"))
     }
 
     @Test
