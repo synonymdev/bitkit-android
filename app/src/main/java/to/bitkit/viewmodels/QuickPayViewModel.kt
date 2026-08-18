@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentId
+import to.bitkit.R
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.ext.WatchResult
@@ -71,7 +72,7 @@ class QuickPayViewModel @Inject constructor(
                     data = data.data,
                     amountMsats = data.data.callbackAmountMsats(data.sats),
                 ).getOrElse { error ->
-                    _uiState.update { it.copy(result = QuickPayResult.Error(error.message.orEmpty())) }
+                    setError(error)
                     return null
                 }
                 Triple(invoice.bolt11, null, data.sats)
@@ -79,7 +80,7 @@ class QuickPayViewModel @Inject constructor(
         }
         val amountUsd = currencyRepo.convertSatsToFiat(displaySats.toLong(), "USD").getOrNull()?.value?.toDouble()
         if (amountUsd == null) {
-            _uiState.update { it.copy(result = QuickPayResult.Error("Currency conversion failed")) }
+            setError(QuickPayCurrencyConversionError())
             return null
         }
         return PreparedQuickPay(bolt11, amount, displaySats, amountUsd)
@@ -88,13 +89,13 @@ class QuickPayViewModel @Inject constructor(
     private suspend fun reserveSpend(amountUsd: Double, dayKey: String): Boolean {
         val dailyCapUsd = resolveDailyCapUsd()
         if (dailyCapUsd == null) {
-            _uiState.update { it.copy(result = QuickPayResult.Error("Currency conversion failed")) }
+            setError(QuickPayCurrencyConversionError())
             return false
         }
         val reserved = cacheStore.tryReserveQuickPaySpendUsd(amountUsd, dayKey, dailyCapUsd)
         if (!reserved) {
             Logger.info("Skipping QuickPay pay: daily spend reserve failed for '$amountUsd'", context = TAG)
-            _uiState.update { it.copy(result = QuickPayResult.Error("Daily QuickPay limit reached")) }
+            setError(QuickPayDailyLimitReachedError())
         }
         return reserved
     }
@@ -132,7 +133,17 @@ class QuickPayViewModel @Inject constructor(
         }
         Logger.error("QuickPay lightning payment failed", error, context = TAG)
         cacheStore.releaseQuickPaySpendUsd(amountUsd, dayKey)
-        _uiState.update { it.copy(result = QuickPayResult.Error(error.message.orEmpty())) }
+        setError(error)
+    }
+
+    private fun setError(error: Throwable) {
+        _uiState.update { it.copy(result = QuickPayResult.Error(errorMessage(error))) }
+    }
+
+    private fun errorMessage(error: Throwable): String = when (error) {
+        is QuickPayCurrencyConversionError -> context.getString(R.string.wallet__send_quickpay__currency_conversion)
+        is QuickPayDailyLimitReachedError -> context.getString(R.string.wallet__send_quickpay__daily_limit)
+        else -> error.message?.takeIf { it.isNotBlank() } ?: context.getString(R.string.common__error_body)
     }
 
     private suspend fun resolveDailyCapUsd(): Double? {
@@ -174,6 +185,10 @@ private data class PreparedQuickPay(
     val displaySats: ULong,
     val amountUsd: Double,
 )
+
+private class QuickPayCurrencyConversionError : AppError("Currency conversion failed")
+
+private class QuickPayDailyLimitReachedError : AppError("Daily QuickPay limit reached")
 
 sealed class QuickPayResult {
     data class Success(

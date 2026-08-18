@@ -66,6 +66,7 @@ fun QuickPaySettingsScreenContent(
     val sliderSteps = remember { persistentListOf(1, 5, 10, 20, 50) }
     val dailyLimitSteps = remember { persistentListOf(1, 3, 5, 10, 50) }
     val dailyLimitUsd = quickPayAmount * quickPayDailyLimitMultiplier
+    val multiplierFormat = stringResource(R.string.settings__quickpay__settings__multiplier_format)
 
     ScreenColumn {
         AppTopBar(
@@ -134,7 +135,7 @@ fun QuickPaySettingsScreenContent(
                 value = quickPayDailyLimitMultiplier,
                 steps = dailyLimitSteps,
                 onValueChange = onQuickPayDailyLimitMultiplierChange,
-                formatLabel = { "$it×" },
+                formatLabel = { multiplierFormat.replace("{multiplier}", it.toString()) },
                 modifier = Modifier.testTag("QuickpayDailyLimitSlider")
             )
 
