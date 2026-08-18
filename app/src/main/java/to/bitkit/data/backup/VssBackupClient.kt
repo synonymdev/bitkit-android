@@ -5,7 +5,6 @@ import com.synonym.vssclient.VssItem
 import com.synonym.vssclient.vssDelete
 import com.synonym.vssclient.vssGet
 import com.synonym.vssclient.vssListKeys
-import com.synonym.vssclient.vssNewClient
 import com.synonym.vssclient.vssNewClientWithLnurlAuth
 import com.synonym.vssclient.vssStore
 import kotlinx.coroutines.CompletableDeferred
@@ -19,6 +18,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Duration.Companion.seconds
@@ -51,22 +51,18 @@ class VssBackupClient @Inject constructor(
                     val vssStoreId = vssStoreIdProvider.getVssStoreId(walletIndex)
                     Logger.verbose("Building VSS client with vssUrl: '$vssUrl'", context = TAG)
                     Logger.verbose("Building VSS client with lnurlAuthServerUrl: '$lnurlAuthServerUrl'", context = TAG)
-                    if (lnurlAuthServerUrl.isNotEmpty()) {
-                        val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
-
-                        vssNewClientWithLnurlAuth(
-                            baseUrl = vssUrl,
-                            storeId = vssStoreId,
-                            mnemonic = mnemonic,
-                            passphrase = passphrase,
-                            lnurlAuthServerUrl = lnurlAuthServerUrl,
-                        )
-                    } else {
-                        vssNewClient(
-                            baseUrl = vssUrl,
-                            storeId = vssStoreId,
-                        )
+                    if (lnurlAuthServerUrl.isBlank()) {
+                        throw ServiceError.VssAuthRequired()
                     }
+                    val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
+
+                    vssNewClientWithLnurlAuth(
+                        baseUrl = vssUrl,
+                        storeId = vssStoreId,
+                        mnemonic = mnemonic,
+                        passphrase = passphrase,
+                        lnurlAuthServerUrl = lnurlAuthServerUrl,
+                    )
                     isSetup.complete(Unit)
                     Logger.info("VSS client setup with server: '$vssUrl'", context = TAG)
                 }
