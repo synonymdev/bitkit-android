@@ -2,7 +2,6 @@ package to.bitkit.ui.screens.transfer.hardware
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -35,13 +34,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.Display
@@ -50,7 +46,6 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.TextInput
-import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.effects.BlockScreenshots
@@ -59,7 +54,6 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.viewmodels.AppViewModel
 
 /**
  * Asks for the passphrase of the hidden wallet a transfer signs from. Bitkit never stores it, so
@@ -74,8 +68,6 @@ fun HwPassphrasePromptSheet(
     onDismiss: () -> Unit,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val toastHazeState = rememberHazeState(blurEnabled = true)
-    val app = appViewModel
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -98,41 +90,16 @@ fun HwPassphrasePromptSheet(
         sheetState = sheetState,
         modifier = Modifier.imePadding()
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            Content(
-                isVerifying = isVerifying,
-                onSubmit = {
-                    dismissKeyboard()
-                    onSubmit(it)
-                },
-                onCancel = { closeSheet() },
-                modifier = Modifier
-                    .sheetHeight(SheetSize.LARGE, isModal = true)
-                    .hazeSource(toastHazeState, zIndex = 0f)
-            )
-            if (app != null) {
-                SheetToastHost(
-                    app = app,
-                    hazeState = toastHazeState,
-                )
-            }
-        }
+        Content(
+            isVerifying = isVerifying,
+            onSubmit = {
+                dismissKeyboard()
+                onSubmit(it)
+            },
+            onCancel = { closeSheet() },
+            modifier = Modifier.sheetHeight(SheetSize.LARGE, isModal = true)
+        )
     }
-}
-
-@Composable
-private fun SheetToastHost(
-    app: AppViewModel,
-    hazeState: HazeState,
-) {
-    val currentToast by app.currentToast.collectAsStateWithLifecycle()
-    ToastOverlay(
-        toast = currentToast,
-        onDismiss = { app.hideToast() },
-        hazeState = hazeState,
-        onDragStart = { app.pauseToast() },
-        onDragEnd = { app.resumeToast() },
-    )
 }
 
 @Composable
