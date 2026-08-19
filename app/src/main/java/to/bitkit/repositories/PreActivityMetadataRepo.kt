@@ -10,8 +10,9 @@ import kotlinx.coroutines.withContext
 import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.nowMillis
 import to.bitkit.ext.nowTimestamp
-import to.bitkit.services.CoreService
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.WalletScope
+import to.bitkit.services.CoreService
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -44,6 +45,16 @@ class PreActivityMetadataRepo @Inject constructor(
             notifyChanged()
         }.onFailure { e ->
             Logger.error("upsertPreActivityMetadata error", e, context = TAG)
+        }
+    }
+
+    /**
+     * Fill in wallet ids missing from a backup envelope's `tagMetadata` slice, letting Core migrate its own
+     * model JSON before the app decodes it.
+     */
+    suspend fun migrateBackupPreActivityMetadataJson(json: String): Result<String> = withContext(ioDispatcher) {
+        return@withContext runSuspendCatching {
+            coreService.activity.migrateBackupPreActivityMetadataJson(json)
         }
     }
 

@@ -241,6 +241,18 @@ class CoreService @Inject constructor(
 // region Activity
 private const val CHUNK_SIZE = 50
 
+/**
+ * Outcome of replacing a hardware wallet's on-chain snapshot.
+ *
+ * @param activities the wallet's activities after the replacement.
+ * @param removedActivities whether any stale activity was deleted. Deletions cascade to that activity's
+ * tags, so callers that mirror tags elsewhere only need to react when this is true.
+ */
+data class HwSnapshotResult(
+    val activities: List<Activity>,
+    val removedActivities: Boolean,
+)
+
 internal data class HwSnapshotMerge(
     val toDelete: List<Activity.Onchain>,
     val toUpsert: List<Activity>,
@@ -353,7 +365,7 @@ class ActivityService(
         activities: List<Activity>,
         transactionDetails: List<BitkitCoreTransactionDetails>,
         transferChannelIdsByFundingTxId: Map<String, String>,
-    ): List<Activity> = ServiceQueue.CORE.background {
+    ): HwSnapshotResult = ServiceQueue.CORE.background {
         val existingActivities = getActivities(
             walletId = walletId,
             filter = ActivityFilter.ONCHAIN,
@@ -378,16 +390,19 @@ class ActivityService(
         if (merge.toUpsert.isNotEmpty()) upsertActivities(merge.toUpsert)
         if (transactionDetails.isNotEmpty()) upsertTransactionDetails(transactionDetails)
 
-        getActivities(
-            walletId = walletId,
-            filter = ActivityFilter.ONCHAIN,
-            txType = null,
-            tags = null,
-            search = null,
-            minDate = null,
-            maxDate = null,
-            limit = null,
-            sortDirection = null,
+        HwSnapshotResult(
+            activities = getActivities(
+                walletId = walletId,
+                filter = ActivityFilter.ONCHAIN,
+                txType = null,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = null,
+                sortDirection = null,
+            ),
+            removedActivities = merge.toDelete.isNotEmpty(),
         )
     }
 
@@ -585,6 +600,18 @@ class ActivityService(
         sortDirection: SortDirection,
     ): List<ClosedChannelDetails> = ServiceQueue.CORE.background {
         getAllClosedChannels(sortDirection)
+    }
+
+    suspend fun migrateBackupActivitiesJson(json: String): String = ServiceQueue.CORE.background {
+        com.synonym.bitkitcore.migrateBackupActivitiesJson(json)
+    }
+
+    suspend fun migrateBackupActivityTagsJson(json: String): String = ServiceQueue.CORE.background {
+        com.synonym.bitkitcore.migrateBackupActivityTagsJson(json)
+    }
+
+    suspend fun migrateBackupPreActivityMetadataJson(json: String): String = ServiceQueue.CORE.background {
+        com.synonym.bitkitcore.migrateBackupPreActivityMetadataJson(json)
     }
 
     suspend fun handlePaymentEvent(paymentHash: String) = ServiceQueue.CORE.background {

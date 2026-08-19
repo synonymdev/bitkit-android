@@ -32,6 +32,7 @@ import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.mock
 import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
+import to.bitkit.services.HwSnapshotResult
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
@@ -300,12 +301,47 @@ class ActivityRepoTest : BaseUnitTest() {
                 transactionDetails = emptyList(),
                 transferChannelIdsByFundingTxId = emptyMap(),
             )
-        ).thenReturn(listOf(activity))
+        ).thenReturn(HwSnapshotResult(listOf(activity), removedActivities = false))
 
         val result = sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
 
         assertEquals(listOf(activity), result.getOrThrow())
         verify(coreService.activity).replaceHwSnapshot(walletId, listOf(activity), emptyList(), emptyMap())
+    }
+
+    @Test
+    fun `persistHwSnapshot signals tag changes only when activities were removed`() = test {
+        val walletId = "hardware-wallet"
+        val activity = createOnchainActivity().copy(v1 = baseOnchainActivity.copy(walletId = walletId))
+        whenever(
+            coreService.activity.replaceHwSnapshot(
+                walletId = walletId,
+                activities = listOf(activity),
+                transactionDetails = emptyList(),
+                transferChannelIdsByFundingTxId = emptyMap(),
+            )
+        ).thenReturn(HwSnapshotResult(listOf(activity), removedActivities = false))
+
+        val tagsBefore = sut.activityTagsChanged.value
+        sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
+
+        // A plain upsert cannot drop tags, so backups carrying tags must not be rewritten for it.
+        assertEquals(tagsBefore, sut.activityTagsChanged.value)
+        assertTrue(sut.activitiesChanged.value > 0L)
+
+        whenever(
+            coreService.activity.replaceHwSnapshot(
+                walletId = walletId,
+                activities = listOf(activity),
+                transactionDetails = emptyList(),
+                transferChannelIdsByFundingTxId = emptyMap(),
+            )
+        ).thenReturn(HwSnapshotResult(listOf(activity), removedActivities = true))
+
+        sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
+
+        // A deletion cascades to that activity's tags, so the tag signal must fire.
+        assertTrue(sut.activityTagsChanged.value > tagsBefore)
     }
 
     @Test
@@ -323,7 +359,7 @@ class ActivityRepoTest : BaseUnitTest() {
                 transactionDetails = emptyList(),
                 transferChannelIdsByFundingTxId = channelIds,
             )
-        ).thenReturn(listOf(activity))
+        ).thenReturn(HwSnapshotResult(listOf(activity), removedActivities = false))
 
         val result = sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
 
@@ -345,7 +381,7 @@ class ActivityRepoTest : BaseUnitTest() {
                 transactionDetails = emptyList(),
                 transferChannelIdsByFundingTxId = emptyMap(),
             )
-        ).thenReturn(listOf(activity))
+        ).thenReturn(HwSnapshotResult(listOf(activity), removedActivities = false))
 
         val result = sut.persistHwSnapshot(walletId, listOf(activity), emptyList())
 
@@ -771,14 +807,99 @@ class ActivityRepoTest : BaseUnitTest() {
     @Test
     fun `getAllActivitiesTags returns only default wallet tags`() = test {
         val defaultTags = ActivityTags(WalletScope.default, "default-activity", listOf("daily"))
-        val hardwareTags = ActivityTags("hardware-wallet", "hardware-activity", listOf("cold"))
+        val hardwareTags = ActivityTags(HARDWARE_WALLET_ID, "hardware-activity", listOf("cold"))
         whenever { coreService.activity.getAllActivitiesTags() }
             .thenReturn(listOf(defaultTags, hardwareTags))
 
         val result = sut.getAllActivitiesTags()
 
+        // Hardware tags would have no parent activity on restore, they travel as pre-activity metadata.
         assertEquals(listOf(defaultTags), result.getOrThrow())
     }
+
+    @Test
+    fun `getHardwareTagsAsPreActivityMetadata keys a received activity by address`() = test {
+        stubHardwareTagLookup(hardwareOnchainActivity(txType = PaymentType.RECEIVED))
+
+        val result = sut.getHardwareTagsAsPreActivityMetadata().getOrThrow()
+
+        val metadata = result.single()
+        assertEquals(HARDWARE_WALLET_ID, metadata.walletId)
+        assertEquals("hw-activity", metadata.paymentId)
+        assertEquals("bcrt1qhw", metadata.address)
+        assertTrue(metadata.isReceive)
+        assertEquals(listOf("cold"), metadata.tags)
+        // Core copies these onto the activity it attaches to, so a tag-only record must leave them unset.
+        assertEquals(0uL, metadata.feeRate)
+        assertFalse(metadata.isTransfer)
+        assertNull(metadata.channelId)
+    }
+
+    @Test
+    fun `getHardwareTagsAsPreActivityMetadata keys a sent activity by payment id`() = test {
+        stubHardwareTagLookup(hardwareOnchainActivity(txType = PaymentType.SENT))
+
+        val result = sut.getHardwareTagsAsPreActivityMetadata().getOrThrow()
+
+        val metadata = result.single()
+        assertEquals("hw-txid", metadata.paymentId)
+        assertNull(metadata.address)
+        assertFalse(metadata.isReceive)
+    }
+
+    @Test
+    fun `getHardwareTagsAsPreActivityMetadata ignores default wallet tags`() = test {
+        whenever { coreService.activity.getAllActivitiesTags() }
+            .thenReturn(listOf(ActivityTags(WalletScope.default, "default-activity", listOf("daily"))))
+
+        val result = sut.getHardwareTagsAsPreActivityMetadata().getOrThrow()
+
+        assertEquals(emptyList(), result)
+    }
+
+    private suspend fun stubHardwareTagLookup(activity: Activity.Onchain) {
+        whenever { coreService.activity.getAllActivitiesTags() }
+            .thenReturn(listOf(ActivityTags(HARDWARE_WALLET_ID, "hw-activity", listOf("cold"))))
+        whenever {
+            coreService.activity.get(
+                walletId = anyOrNull(),
+                filter = anyOrNull(),
+                txType = anyOrNull(),
+                tags = anyOrNull(),
+                search = anyOrNull(),
+                minDate = anyOrNull(),
+                maxDate = anyOrNull(),
+                limit = anyOrNull(),
+                sortDirection = anyOrNull(),
+            )
+        }.thenReturn(listOf(activity))
+    }
+
+    private fun hardwareOnchainActivity(txType: PaymentType) = Activity.Onchain(
+        OnchainActivity(
+            walletId = HARDWARE_WALLET_ID,
+            id = "hw-activity",
+            txType = txType,
+            txId = "hw-txid",
+            value = 1000uL,
+            fee = 1uL,
+            feeRate = 1uL,
+            address = "bcrt1qhw",
+            confirmed = true,
+            timestamp = 123uL,
+            isBoosted = false,
+            boostTxIds = emptyList(),
+            isTransfer = false,
+            doesExist = true,
+            confirmTimestamp = null,
+            channelId = null,
+            transferTxId = null,
+            contact = null,
+            createdAt = null,
+            updatedAt = null,
+            seenAt = null,
+        )
+    )
 
     @Test
     fun `removeAllActivities removes all activities successfully`() = test {
@@ -1085,5 +1206,9 @@ class ActivityRepoTest : BaseUnitTest() {
         verify(coreService.activity, never()).update(eq(activityId), any())
         // Verify pending boost was removed (skipped)
         verify(cacheStore).removeActivityFromPendingBoost(pendingBoost)
+    }
+
+    private companion object {
+        const val HARDWARE_WALLET_ID = "trezor:abc123"
     }
 }
