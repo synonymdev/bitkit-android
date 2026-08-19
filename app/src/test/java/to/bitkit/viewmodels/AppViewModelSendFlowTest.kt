@@ -9,6 +9,7 @@ import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.core.net.toUri
 import app.cash.turbine.test
+import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
@@ -41,6 +42,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.check
 import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
@@ -55,6 +57,7 @@ import to.bitkit.CurrentActivity
 import to.bitkit.R
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
+import to.bitkit.data.QuickPaySpendReservation
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
@@ -227,7 +230,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(backupRepo.isRestoring).thenReturn(MutableStateFlow(false))
         stubSettingsStore()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
-        whenever { cacheStore.quickPaySpentSatsForDay(any()) }.thenReturn(0L)
+        whenever { cacheStore.quickPaySpentCentsForDay(any()) }.thenReturn(0L)
+        whenever { cacheStore.quickPayReservation(any()) }.thenReturn(null)
         whenever { cacheStore.clearQuickPayReservation(any()) }.thenReturn(Unit)
         whenever { cacheStore.releaseQuickPayReservation(any()) }.thenReturn(Unit)
         whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
@@ -1755,6 +1759,64 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pending confirm lightning success keeps invoice amount`() = test {
+        val paymentHash = "pending_confirm_hash"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        whenever { cacheStore.quickPayReservation(paymentHash) }.thenReturn(null)
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
+        verify(activityRepo, never()).findActivityByPaymentId(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `pending quickpay lightning success includes settled amount`() = test {
+        val paymentHash = "pending_quickpay_hash"
+        val activityV1 = mock<LightningActivity> {
+            on { value } doReturn 500u
+            on { fee } doReturn 10u
+        }
+        val activity = mock<com.synonym.bitkitcore.Activity.Lightning> { on { v1 } doReturn activityV1 }
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        whenever { cacheStore.quickPayReservation(paymentHash) }.thenReturn(
+            QuickPaySpendReservation(amountCents = 250L, dayKey = "2026-08-15"),
+        )
+        whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
+            .thenReturn(Result.success(activity))
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(
+            PendingPaymentResolution.Success(
+                paymentHash = paymentHash,
+                amountWithFeeSats = 510L,
+            ),
+        )
+        verify(cacheStore).clearQuickPayReservation(paymentHash)
+    }
+
+    @Test
     fun `active lightning send failure navigates to failure screen`() = test {
         val bolt11 = "lnbcrt1activefailure"
         val paymentHash = "010203"
@@ -2181,8 +2243,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
-        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
-        assertNull(sut.sendUiState.value.decodedInvoice)
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(bolt11, sut.sendUiState.value.decodedInvoice?.bolt11)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
     }
 
@@ -2196,8 +2258,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
-        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
-        assertNull(sut.sendUiState.value.decodedInvoice)
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(bolt11, sut.sendUiState.value.decodedInvoice?.bolt11)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
     }
 
@@ -2237,7 +2299,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `lightning scan skips QuickPay when daily spend cap is exceeded`() = test {
         val bolt11 = "lnbcrt1quickpaycap"
-        enableQuickPay(thresholdSats = 1000u, spentSatsToday = 4_600L)
+        enableQuickPay(thresholdSats = 1000u, spentCentsToday = 2_300L)
         settingsData.value = settingsData.value.copy(quickPayDailyLimitMultiplier = 5)
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
         sut.setIsAuthenticated(true)
@@ -3258,7 +3320,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private fun enableQuickPay(
         thresholdSats: ULong,
-        spentSatsToday: Long = 0L,
+        spentCentsToday: Long = 0L,
     ) {
         settingsData.value = SettingsData(isQuickPayEnabled = true, quickPayAmount = 5)
         whenever(currencyRepo.convertFiatToSats(5.0, "USD")).thenReturn(Result.success(thresholdSats))
@@ -3275,7 +3337,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 locale = Locale.US,
             )
         }
-        whenever { cacheStore.quickPaySpentSatsForDay(any<String>()) }.thenReturn(spentSatsToday)
+        whenever { cacheStore.quickPaySpentCentsForDay(any<String>()) }.thenReturn(spentCentsToday)
     }
 
     private suspend fun stubLightningScan(bolt11: String, amountSats: ULong) {

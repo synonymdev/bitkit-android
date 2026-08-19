@@ -39,6 +39,7 @@ fun SendQuickPayScreen(
     quickPayData: QuickPayData,
     onPaymentComplete: (String, Long) -> Unit,
     onPaymentPending: (String, Long, String) -> Unit,
+    onFallBackToConfirm: () -> Unit,
     onShowError: (SendFailureDetails) -> Unit,
     viewModel: QuickPayViewModel = hiltViewModel(),
 ) {
@@ -59,6 +60,7 @@ fun SendQuickPayScreen(
             is QuickPayResult.Pending -> {
                 onPaymentPending(result.paymentHash, result.amount, result.paymentRequest)
             }
+            is QuickPayResult.FallBackToConfirm -> onFallBackToConfirm()
             is QuickPayResult.Error -> onShowError(result.failure)
             null -> Unit // continue showing loading state
         }

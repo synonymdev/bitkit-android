@@ -351,6 +351,11 @@ fun SendSheet(
                                 popUpTo(startDestination) { inclusive = true }
                             }
                         },
+                        onFallBackToConfirm = {
+                            navController.navigateTo(SendRoute.Confirm) {
+                                popUpTo<SendRoute.QuickPay> { inclusive = true }
+                            }
+                        },
                         onShowError = { failure ->
                             appViewModel.clearActiveContactPaymentContext()
                             navController.navigateTo(

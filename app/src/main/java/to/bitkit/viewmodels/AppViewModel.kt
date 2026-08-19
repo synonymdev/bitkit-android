@@ -77,6 +77,8 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.quickPayCapCents
+import to.bitkit.data.quickPayReserveCents
 import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
 import to.bitkit.domain.commands.NotifyChannelReady
@@ -1240,13 +1242,18 @@ class AppViewModel @Inject constructor(
             activityRepo.handlePaymentEvent(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 syncContactForActivity(paymentHash)
+                val isQuickPay = cacheStore.quickPayReservation(paymentHash) != null
                 cacheStore.clearQuickPayReservation(paymentHash)
-                val amountWithFeeSats = activityRepo.findActivityByPaymentId(
-                    paymentHashOrTxId = paymentHash,
-                    type = ActivityFilter.LIGHTNING,
-                    txType = PaymentType.SENT,
-                    retry = true,
-                ).getOrNull()?.totalValue()?.toLong()
+                val amountWithFeeSats = if (isQuickPay) {
+                    activityRepo.findActivityByPaymentId(
+                        paymentHashOrTxId = paymentHash,
+                        type = ActivityFilter.LIGHTNING,
+                        txType = PaymentType.SENT,
+                        retry = true,
+                    ).getOrNull()?.totalValue()?.toLong()
+                } else {
+                    null
+                }
                 pendingPaymentRepo.resolve(
                     PendingPaymentResolution.Success(
                         paymentHash = paymentHash,
@@ -2680,6 +2687,26 @@ class AppViewModel @Inject constructor(
 
         _quickPayData.update { quickPayData }
 
+        if (lnurlPay != null) {
+            _sendUiState.update {
+                it.copy(
+                    amount = amountSats,
+                    payMethod = SendMethod.LIGHTNING,
+                    lnurl = LnurlParams.LnurlPay(lnurlPay),
+                )
+            }
+        } else if (invoice != null) {
+            _sendUiState.update {
+                it.copy(
+                    amount = amountSats,
+                    addressInput = invoice.bolt11,
+                    isAddressInputValid = true,
+                    decodedInvoice = invoice,
+                    payMethod = SendMethod.LIGHTNING,
+                )
+            }
+        }
+
         Logger.debug("QuickPayData: $quickPayData", context = TAG)
 
         navigateToSendRoute(fromMainScanner, SendRoute.QuickPay, SendEffect.NavigateToQuickPay)
@@ -2702,14 +2729,14 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun isWithinQuickPayDailyCap(amountSats: ULong, settings: SettingsData): Boolean {
-        val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), USD).getOrNull()
-            ?: return false
-        val dailyCapSats = quickPayAmountSats * settings.quickPayDailyLimitMultiplier.toULong()
-        val spentSatsToday = cacheStore.quickPaySpentSatsForDay(quickPaySpendDayKey()).toULong()
-        if (spentSatsToday + amountSats <= dailyCapSats) return true
+        val converted = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrNull() ?: return false
+        val reserveCents = quickPayReserveCents(converted.toUsdCents(), settings.quickPayAmount)
+        val capCents = quickPayCapCents(settings.quickPayAmount, settings.quickPayDailyLimitMultiplier)
+        val spentCentsToday = cacheStore.quickPaySpentCentsForDay(quickPaySpendDayKey())
+        if (spentCentsToday + reserveCents <= capCents) return true
 
         Logger.info(
-            "Skipping QuickPay: daily spend '$spentSatsToday' + '$amountSats' exceeds cap '$dailyCapSats'",
+            "Skipping QuickPay: daily spend '$spentCentsToday' + '$reserveCents' exceeds cap '$capCents'",
             context = TAG,
         )
         return false
