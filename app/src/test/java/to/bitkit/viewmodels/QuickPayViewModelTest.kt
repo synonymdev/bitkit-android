@@ -2,7 +2,6 @@ package to.bitkit.viewmodels
 
 import android.content.Context
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -10,7 +9,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
-import kotlinx.coroutines.test.setMain
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -57,7 +55,6 @@ class QuickPayViewModelTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        Dispatchers.setMain(testDispatcher)
         nodeEvents = MutableSharedFlow(replay = 0, extraBufferCapacity = 0)
         whenever(context.getString(any())).thenReturn("error")
         whenever(context.getString(R.string.wallet__send_quickpay__currency_conversion)).thenReturn("conversion")
