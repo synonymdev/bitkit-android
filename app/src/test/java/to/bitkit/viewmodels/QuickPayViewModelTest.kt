@@ -83,10 +83,6 @@ class QuickPayViewModelTest : BaseUnitTest() {
             )
         }
         whenever { cacheStore.tryReserveQuickPaySpendCents(any(), any(), any()) }.thenReturn(true)
-        whenever { cacheStore.rememberQuickPayReservation(any(), any(), any()) }.thenReturn(Unit)
-        whenever { cacheStore.clearQuickPayReservation(any()) }.thenReturn(Unit)
-        whenever { cacheStore.releaseQuickPayReservation(any()) }.thenReturn(Unit)
-        whenever { cacheStore.releaseQuickPaySpendCents(any(), any()) }.thenReturn(Unit)
         sut = QuickPayViewModel(
             context = context,
             lightningRepo = lightningRepo,
