@@ -198,6 +198,17 @@ class QuickPayRepoTest : BaseUnitTest() {
 
         assertFalse(sut.canApply(500u).getOrThrow())
     }
+
+    @Test
+    fun `tryReserve fails with conversion error when rates are unavailable`() = test {
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenAnswer {
+            throw QuickPayConversionError()
+        }
+
+        val result = sut.tryReserve(500u)
+
+        assertTrue(result.exceptionOrNull() is QuickPayConversionError)
+    }
 }
 
 @OptIn(ExperimentalTime::class)

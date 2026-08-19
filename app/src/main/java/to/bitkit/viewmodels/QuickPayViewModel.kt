@@ -5,6 +5,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -26,6 +29,7 @@ import to.bitkit.models.safe
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentRepo
+import to.bitkit.repositories.QuickPayConversionError
 import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -47,9 +51,11 @@ class QuickPayViewModel @Inject constructor(
     val uiState = _uiState.asStateFlow()
 
     val lightningState = lightningRepo.lightningState
+    private var payJob: Job? = null
 
     fun pay(data: QuickPayData) {
-        viewModelScope.launch { payNow(data) }
+        if (payJob?.isActive == true || _uiState.value.result != null) return
+        payJob = viewModelScope.launch { payNow(data) }
     }
 
     internal suspend fun payNow(data: QuickPayData) {
@@ -63,7 +69,7 @@ class QuickPayViewModel @Inject constructor(
 
     private suspend fun reserveSpend(amountSats: ULong): QuickPaySpendReservation? {
         val reserved = quickPayRepo.tryReserve(amountSats).getOrElse {
-            setError(QuickPayCurrencyConversionError())
+            setError(it)
             return null
         }
         if (reserved == null) {
@@ -75,7 +81,7 @@ class QuickPayViewModel @Inject constructor(
     }
 
     private suspend fun onPaymentSuccess(paymentHash: String, displaySats: ULong, feePaidSats: ULong) {
-        Logger.info("QuickPay lightning payment successful")
+        Logger.info("QuickPay lightning payment successful", context = TAG)
         quickPayRepo.clear(paymentHash)
         _uiState.update {
             it.copy(
@@ -116,7 +122,7 @@ class QuickPayViewModel @Inject constructor(
 
     private fun setError(error: Throwable, paymentRequest: String? = null) {
         val localizedMessage = when (error) {
-            is QuickPayCurrencyConversionError -> {
+            is QuickPayConversionError -> {
                 context.getString(R.string.wallet__send_quickpay__currency_conversion)
             }
             else -> null
@@ -183,37 +189,39 @@ class QuickPayViewModel @Inject constructor(
             }
             .getOrDefault("")
 
-        quickPayRepo.remember(paymentHash = hash, reservation = reservation)
-
-        // Wait until matching payment event is received (with timeout for hold invoices)
-        val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
-            when (it) {
-                is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(
-                    Result.success(
-                        SettledQuickPayPayment(
-                            paymentHash = hash,
-                            feePaidSats = msatFloorOf(it.feePaidMsat ?: 0u),
+        return coroutineScope {
+            val settled = async {
+                lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
+                    when (it) {
+                        is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(
+                            Result.success(
+                                SettledQuickPayPayment(
+                                    paymentHash = hash,
+                                    feePaidSats = msatFloorOf(it.feePaidMsat ?: 0u),
+                                )
+                            )
                         )
-                    )
-                )
 
-                is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
-                    Result.failure(
-                        QuickPayPaymentFailedError(
-                            paymentHash = hash,
-                            reason = it.reason,
-                            paymentRequest = invoice.bolt11,
+                        is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
+                            Result.failure(
+                                QuickPayPaymentFailedError(
+                                    paymentHash = hash,
+                                    reason = it.reason,
+                                    paymentRequest = invoice.bolt11,
+                                )
+                            )
                         )
-                    )
-                )
 
-                else -> WatchResult.Continue()
+                        else -> WatchResult.Continue()
+                    }
+                }
             }
+            quickPayRepo.remember(paymentHash = hash, reservation = reservation)
+            val result = settled.await()
+            if (result != null) return@coroutineScope result
+            pendingPaymentRepo.track(hash)
+            Result.failure(PaymentPendingException(hash))
         }
-        if (result != null) return result
-
-        pendingPaymentRepo.track(hash)
-        return Result.failure(PaymentPendingException(hash))
     }
 }
 
@@ -221,8 +229,6 @@ private data class SettledQuickPayPayment(
     val paymentHash: PaymentId,
     val feePaidSats: ULong,
 )
-
-private class QuickPayCurrencyConversionError : AppError("Currency conversion failed")
 
 sealed class QuickPayResult {
     data class Success(

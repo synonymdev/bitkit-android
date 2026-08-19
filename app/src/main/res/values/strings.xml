@@ -1253,7 +1253,6 @@
     <string name="wallet__send_pending__description">This payment is taking a bit longer than expected. You can continue using Bitkit.</string>
     <string name="wallet__send_pending__nav_title">Payment Pending</string>
     <string name="wallet__send_quickpay__currency_conversion">Currency conversion failed</string>
-    <string name="wallet__send_quickpay__daily_limit">Daily QuickPay limit reached</string>
     <string name="wallet__send_quickpay__nav_title">QuickPay</string>
     <string name="wallet__send_quickpay__title">Paying\n&lt;accent&gt;invoice...&lt;/accent&gt;</string>
     <string name="wallet__send_review">Confirm</string>

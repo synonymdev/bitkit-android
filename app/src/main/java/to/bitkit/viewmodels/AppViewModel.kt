@@ -1176,6 +1176,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun closeActiveSendForFailedPayment(paymentHash: String, reason: PaymentFailureReason?): Boolean {
+        if (_quickPayData.value != null) return false
         val activePaymentHash = _sendUiState.value.decodedInvoice?.paymentHash?.toHex()
         if (_currentSheet.value !is Sheet.Send || activePaymentHash != paymentHash) return false
 

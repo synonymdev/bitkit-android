@@ -12,6 +12,7 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.quickPaySpendDayKey
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.USD
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -66,9 +67,9 @@ class QuickPayRepo @Inject constructor(
     suspend fun tryReserve(amountSats: ULong): Result<QuickPaySpendReservation?> = withContext(ioDispatcher) {
         runSuspendCatching {
             val settings = settingsStore.data.first()
-            val converted = requireNotNull(
-                currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrNull(),
-            ) { "Currency conversion failed" }
+            val converted = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrElse {
+                throw QuickPayConversionError()
+            }
             val amountCents = quickPayReserveCents(converted.toUsdCents(), settings.quickPayAmount)
             val capCents = quickPayCapCents(settings.quickPayAmount, settings.quickPayDailyLimitMultiplier)
             val dayKey = currentDayKey()
@@ -149,11 +150,13 @@ class QuickPayRepo @Inject constructor(
     private fun currentDayKey(): String = quickPaySpendDayKey(clock)
 }
 
-fun quickPayCapCents(thresholdUsd: Int, multiplier: Int): Long =
+private fun quickPayCapCents(thresholdUsd: Int, multiplier: Int): Long =
     thresholdUsd.toLong() * 100L * multiplier.toLong()
 
-fun quickPayReserveCents(convertedCents: Long, thresholdUsd: Int): Long =
+private fun quickPayReserveCents(convertedCents: Long, thresholdUsd: Int): Long =
     minOf(convertedCents, thresholdUsd.toLong() * 100L)
+
+class QuickPayConversionError : AppError("Currency conversion failed")
 
 private fun AppCacheData.spendFor(dayKey: String): QuickPayDaySpend = when {
     quickPaySpendDayKey.isEmpty() || dayKey > quickPaySpendDayKey -> QuickPayDaySpend(dayKey, 0L)

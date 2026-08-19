@@ -352,6 +352,7 @@ fun SendSheet(
                             }
                         },
                         onFallBackToConfirm = {
+                            appViewModel.resetQuickPay()
                             navController.navigateTo(SendRoute.Confirm) {
                                 popUpTo<SendRoute.QuickPay> { inclusive = true }
                             }

@@ -1859,6 +1859,61 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `in-flight QuickPay failure does not navigate to confirm error`() = test {
+        val bolt11 = "lnbcrt1quickpayfail"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        sut.sendEffect.test {
+            emitNodeEvent(
+                Event.PaymentFailed(
+                    paymentId = "payment_id",
+                    paymentHash = "010203",
+                    reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+                ),
+            )
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `confirm failure still navigates after QuickPay fallback`() = test {
+        val bolt11 = "lnbcrt1quickpayfallback"
+        val errorMessage = "Bitkit could not find a route"
+        whenever(context.getString(R.string.wallet__payment_route_not_found)).thenReturn(errorMessage)
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        sut.resetQuickPay()
+
+        sut.sendEffect.test {
+            emitNodeEvent(
+                Event.PaymentFailed(
+                    paymentId = "payment_id",
+                    paymentHash = "010203",
+                    reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+                ),
+            )
+            advanceUntilIdle()
+            assertEquals(
+                SendEffect.NavigateToError(
+                    SendFailureDetails(
+                        message = errorMessage,
+                        failureType = "routeNotFound",
+                        resetRoutingCachesOnRetry = true,
+                        paymentRequest = bolt11,
+                    )
+                ),
+                awaitItem(),
+            )
+        }
+    }
+
+    @Test
     fun `received lightning payment closes the active receive sheet after wallet invoice is cleared`() = test {
         walletState.value = WalletState(bolt11 = "settled-invoice")
         sut.showSheet(Sheet.Receive())
