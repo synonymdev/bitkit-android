@@ -636,7 +636,12 @@ class HwWalletRepo @Inject constructor(
             val desiredWatchers = combine(
                 hwWalletStore.data,
                 settingsStore.data
-                    .map { WatcherSettings(it.addressTypesToMonitor.toSet(), it.electrumServer) }
+                    .map {
+                        WatcherSettings(
+                            monitoredTypes = it.addressTypesToMonitor.toSet(),
+                            electrumUrl = Env.trezorElectrumUrlOrDefault(it.electrumServer),
+                        )
+                    }
                     .distinctUntilChanged(),
             ) { data, settings ->
                 data.knownDevices to settings

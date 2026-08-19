@@ -975,7 +975,7 @@ class TrezorRepo @Inject constructor(
                 gapLimit = gapLimit,
             )
             trezorService.startWatcher(params, eventBridge)
-            TrezorDebugLog.log(WATCHER_TAG, "Started watcher '$watcherId'")
+            TrezorDebugLog.log(WATCHER_TAG, "Started watcher '$watcherId' on '$electrumUrl'")
         }.onFailure {
             Logger.error("Start watcher failed", it, context = TAG)
             _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
@@ -1240,7 +1240,8 @@ class TrezorRepo @Inject constructor(
 
     private fun electrumUrlForNetwork(network: BitkitCoreNetwork): String = Env.electrumUrlForNetwork(network)
 
-    private suspend fun currentElectrumUrl(): String = settingsStore.data.first().electrumServer
+    private suspend fun currentElectrumUrl(): String =
+        Env.trezorElectrumUrlOrDefault(settingsStore.data.first().electrumServer)
 
     private suspend fun ensureConnected() {
         if (trezorService.isConnected()) return
