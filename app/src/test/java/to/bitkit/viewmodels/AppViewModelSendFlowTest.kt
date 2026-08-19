@@ -229,7 +229,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(backupRepo.isRestoring).thenReturn(MutableStateFlow(false))
         stubSettingsStore()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
-        whenever { quickPayRepo.canApply(org.mockito.kotlin.any<ULong>()) }.thenReturn(Result.success(false))
+        whenever { quickPayRepo.canApply(any<ULong>()) }.thenReturn(Result.success(false))
         whenever { quickPayRepo.reservation(any()) }.thenReturn(Result.success(null))
         whenever { quickPayRepo.clear(any()) }.thenReturn(Result.success(Unit))
         whenever { quickPayRepo.release(any()) }.thenReturn(Result.success(Unit))
@@ -3319,7 +3319,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private fun enableQuickPay(canApply: Boolean = true) {
         settingsData.value = SettingsData(isQuickPayEnabled = true, quickPayAmount = 5)
-        whenever { quickPayRepo.canApply(org.mockito.kotlin.any<ULong>()) }.thenReturn(Result.success(canApply))
+        whenever { quickPayRepo.canApply(any<ULong>()) }.thenReturn(Result.success(canApply))
     }
 
     private suspend fun stubLightningScan(bolt11: String, amountSats: ULong) {
