@@ -57,7 +57,6 @@ import to.bitkit.CurrentActivity
 import to.bitkit.R
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
-import to.bitkit.repositories.QuickPaySpendReservation
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
@@ -99,6 +98,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayRepo
+import to.bitkit.repositories.QuickPaySpendReservation
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.SettledReceiveAddress
 import to.bitkit.repositories.SettledReceiveInvoice

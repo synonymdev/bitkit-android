@@ -26,13 +26,13 @@ import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.R
-import to.bitkit.repositories.QuickPaySpendReservation
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PendingPaymentRepo
 import to.bitkit.repositories.QuickPayConversionError
 import to.bitkit.repositories.QuickPayRepo
+import to.bitkit.repositories.QuickPaySpendReservation
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
