@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.setMain
 import org.junit.Before
 import org.junit.Test
@@ -38,6 +39,7 @@ import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -56,7 +58,7 @@ class QuickPayViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
-        nodeEvents = MutableSharedFlow(replay = 0, extraBufferCapacity = 8)
+        nodeEvents = MutableSharedFlow(replay = 0, extraBufferCapacity = 0)
         whenever(context.getString(any())).thenReturn("error")
         whenever(context.getString(R.string.wallet__send_quickpay__currency_conversion)).thenReturn("conversion")
         whenever(lightningRepo.lightningState).thenReturn(
@@ -173,6 +175,8 @@ class QuickPayViewModelTest : BaseUnitTest() {
         }
 
         launch { sut.payNow(QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test")) }
+        runCurrent()
+        assertTrue(nodeEvents.subscriptionCount.value > 0)
         nodeEvents.emit(
             Event.PaymentFailed(
                 paymentId = "pid",

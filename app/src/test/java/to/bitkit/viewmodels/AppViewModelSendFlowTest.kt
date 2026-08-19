@@ -1759,6 +1759,46 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `PaymentFailed releases disk reservation when not pending`() = test {
+        val paymentHash = "restart_hash"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(false)
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.RETRIES_EXHAUSTED,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(quickPayRepo).release(paymentHash)
+        verify(pendingPaymentRepo, never()).resolve(any())
+    }
+
+    @Test
+    fun `PaymentSuccessful clears disk reservation when not pending`() = test {
+        val paymentHash = "restart_ok"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(false)
+        whenever { quickPayRepo.reservation(paymentHash) }.thenReturn(
+            Result.success(QuickPaySpendReservation(amountCents = 250L, dayKey = "2026-08-15")),
+        )
+
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(quickPayRepo).clear(paymentHash)
+        verify(pendingPaymentRepo, never()).resolve(any())
+    }
+
+    @Test
     fun `pending confirm lightning success keeps invoice amount`() = test {
         val paymentHash = "pending_confirm_hash"
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)

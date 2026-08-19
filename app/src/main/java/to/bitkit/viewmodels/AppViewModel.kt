@@ -1161,9 +1161,9 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentFailed(event: Event.PaymentFailed) {
         event.paymentHash?.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
+            quickPayRepo.release(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
-                quickPayRepo.release(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
                 if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
                     notifyPendingPaymentFailed()
@@ -1239,10 +1239,10 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentSuccessful(event: Event.PaymentSuccessful) {
         event.paymentHash.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
+            val isQuickPay = quickPayRepo.reservation(paymentHash).getOrNull() != null
+            quickPayRepo.clear(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 syncContactForActivity(paymentHash)
-                val isQuickPay = quickPayRepo.reservation(paymentHash).getOrNull() != null
-                quickPayRepo.clear(paymentHash)
                 val amountWithFeeSats = if (isQuickPay) {
                     activityRepo.findActivityByPaymentId(
                         paymentHashOrTxId = paymentHash,
