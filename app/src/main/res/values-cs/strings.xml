@@ -929,6 +929,7 @@
     <string name="wallet__send_dialog3">Zdá se, že transakční poplatek přesahuje 50 % částky, kterou odesíláte. Přejete si pokračovat?</string>
     <string name="wallet__send_dialog4">Transakční poplatek se zdá být vyšší než $10. Přejete si pokračovat?</string>
     <string name="wallet__send_error_create_tx">Transakci se nepodařilo provést. Zkuste to prosím znovu.</string>
+    <string name="wallet__send_error_support">Kontaktovat podporu</string>
     <string name="wallet__send_error_tx_failed">Transakce selhala</string>
     <string name="wallet__send_fee_and_speed">Rychlost a poplatek</string>
     <string name="wallet__send_fee_custom">Nastavit vlastní poplatek</string>
@@ -938,6 +939,7 @@
     <string name="wallet__send_fee_speed">Rychlost</string>
     <string name="wallet__send_fee_total">₿ {feeSats} za tuto transakci</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} za tuto transakci ({fiatSymbol}{fiatFormatted} ).</string>
+    <string name="wallet__send_instant_failed">Platba se nezdařila</string>
     <string name="wallet__send_invoice">Faktura</string>
     <string name="wallet__send_invoice_expiration">Expirace faktury</string>
     <string name="wallet__send_max">MAX</string>
@@ -960,6 +962,16 @@
     <string name="wallet__tags_new">Nový tag</string>
     <string name="wallet__tags_new_enter">Vložte nový tag</string>
     <string name="wallet__tags_previously">Dříve použité tagy</string>
+    <string name="wallet__payment_abandoned">Lightning platba byla zastavena před dokončením.</string>
+    <string name="wallet__payment_expired">Platnost této Lightning platby vypršela. Vyžádejte si novou fakturu.</string>
+    <string name="wallet__payment_failed_description">Vaše okamžitá platba se nezdařila. Zkuste to prosím znovu.</string>
+    <string name="wallet__payment_invoice_request_expired">Platnost této žádosti o Lightning fakturu vypršela. Vyžádejte si novou fakturu.</string>
+    <string name="wallet__payment_invoice_request_rejected">Příjemce tuto žádost o Lightning fakturu odmítl.</string>
+    <string name="wallet__payment_recipient_rejected">Příjemce tuto Lightning platbu odmítl. Zkontrolujte fakturu a zkuste to znovu.</string>
+    <string name="wallet__payment_retries_exhausted">Bitkit vyzkoušel několik Lightning tras, ale platbu se nepodařilo dokončit.</string>
+    <string name="wallet__payment_route_not_found">Bitkit nenašel pro tuto platbu žádnou Lightning trasu.</string>
+    <string name="wallet__payment_timeout">Časový limit platby vypršel. Zkuste to znovu.</string>
+    <string name="wallet__payment_unknown_required_features">Tato Lightning faktura používá funkce, které Bitkit zatím nepodporuje.</string>
     <string name="wallet__toast_payment_failed_description">Vaše okamžitá platba se nezdařila. Zkuste to prosím znovu.</string>
     <string name="wallet__toast_payment_failed_title">Platba se nezdařila</string>
     <string name="wallet__toast_received_transaction_replaced_description">Vaše přijatá transakce byla nahrazena navýšením poplatku</string>

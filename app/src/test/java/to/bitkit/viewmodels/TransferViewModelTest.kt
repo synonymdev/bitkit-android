@@ -1607,7 +1607,7 @@ class TransferViewModelTest : BaseUnitTest() {
     @Test
     fun `startSavingsSwap fails when the paid invoice reports a lightning routing failure`() = test {
         stubSavingsSwapHappyPath()
-        whenever(context.getString(R.string.wallet__toast_payment_failed_route_not_found))
+        whenever(context.getString(R.string.wallet__payment_route_not_found))
             .thenReturn(ROUTE_NOT_FOUND_MSG)
         sut.loadSavingsSwapQuote(REQUESTED_SAT)
         advanceUntilIdle()

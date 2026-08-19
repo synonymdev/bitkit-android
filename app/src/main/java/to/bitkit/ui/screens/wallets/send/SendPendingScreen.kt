@@ -46,7 +46,7 @@ fun SendPendingScreen(
     paymentHash: String,
     amount: Long,
     onPaymentSuccess: (String, Long) -> Unit,
-    onPaymentError: () -> Unit,
+    onPaymentError: (PendingPaymentResolution.Failure) -> Unit,
     onClose: () -> Unit,
     onViewDetails: (String) -> Unit,
     viewModel: SendPendingViewModel,
@@ -62,7 +62,7 @@ fun SendPendingScreen(
                     resolution.paymentHash,
                     resolution.amountWithFeeSats ?: amount,
                 )
-                is PendingPaymentResolution.Failure -> onPaymentError()
+                is PendingPaymentResolution.Failure -> onPaymentError(resolution)
             }
             viewModel.onResolutionHandled()
         }

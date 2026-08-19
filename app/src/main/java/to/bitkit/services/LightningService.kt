@@ -509,14 +509,22 @@ class LightningService @Inject constructor(
         if (node != null) throw ServiceError.NodeStillRunning()
         awaitNodeRelease()
         Logger.warn("Resetting network graph cache…", context = TAG)
-        val ldkPath = Path(Env.ldkStoragePath(walletIndex)).toFile()
-        val graphFile = ldkPath.resolve("network_graph_cache")
+        val graphFile = networkGraphCacheFile(walletIndex)
         if (graphFile.exists()) {
-            graphFile.delete()
+            if (!graphFile.delete()) throw NetworkGraphCacheDeleteError()
             Logger.info("Network graph cache deleted", context = TAG)
         } else {
             Logger.info("No network graph cache found", context = TAG)
         }
+    }
+
+    fun networkGraphCacheModificationDate(walletIndex: Int): Long? {
+        val graphFile = networkGraphCacheFile(walletIndex)
+        return graphFile.takeIf { it.exists() }?.lastModified()
+    }
+
+    private fun networkGraphCacheFile(walletIndex: Int): File {
+        return Path(Env.ldkStoragePath(walletIndex)).toFile().resolve("network_graph_cache")
     }
 
     @Suppress("ReturnCount")
@@ -1368,3 +1376,5 @@ data class NetworkGraphInfo(
 class TrustedPeerForceCloseException : AppError(
     "Cannot force close channel with trusted peer. Force close is disabled for Blocktank LSP channels."
 )
+
+class NetworkGraphCacheDeleteError : AppError("Failed to delete network graph cache")

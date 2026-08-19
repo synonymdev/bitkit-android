@@ -34,6 +34,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -69,6 +70,7 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
+import to.bitkit.models.SendFailureDetails
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransportType
 import to.bitkit.repositories.ActivityRepo
@@ -1737,20 +1739,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             Event.PaymentFailed(
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
-                reason = null,
+                reason = PaymentFailureReason.RETRIES_EXHAUSTED,
             ),
         )
         advanceUntilIdle()
 
-        verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Failure(paymentHash))
+        verify(pendingPaymentRepo).resolve(
+            PendingPaymentResolution.Failure(
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.RETRIES_EXHAUSTED,
+            )
+        )
         verify(cacheStore).releaseQuickPayReservation(paymentHash)
         assertNull(pendingContactPaymentContext(paymentHash))
     }
 
     @Test
-    fun `active lightning send failure hides send sheet`() = test {
+    fun `active lightning send failure navigates to failure screen`() = test {
         val bolt11 = "lnbcrt1activefailure"
         val paymentHash = "010203"
+        val errorMessage = "Bitkit could not find a route"
+        whenever(context.getString(R.string.wallet__payment_route_not_found)).thenReturn(errorMessage)
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(false)
         setSendState(
             SendUiState(
@@ -1763,16 +1772,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.showSheet(Sheet.Send())
         advanceUntilIdle()
 
-        emitNodeEvent(
-            Event.PaymentFailed(
-                paymentId = "payment_id",
-                paymentHash = paymentHash,
-                reason = null,
-            ),
-        )
-        advanceUntilIdle()
+        sut.sendEffect.test {
+            emitNodeEvent(
+                Event.PaymentFailed(
+                    paymentId = "payment_id",
+                    paymentHash = paymentHash,
+                    reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+                ),
+            )
+            advanceUntilIdle()
 
-        assertNull(sut.currentSheet.value)
+            assertEquals(
+                SendEffect.NavigateToError(
+                    SendFailureDetails(
+                        message = errorMessage,
+                        failureType = "routeNotFound",
+                        resetRoutingCachesOnRetry = true,
+                        paymentRequest = bolt11,
+                    )
+                ),
+                awaitItem(),
+            )
+        }
     }
 
     @Test
@@ -2160,6 +2181,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertNull(sut.sendUiState.value.decodedInvoice)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
     }
 
@@ -2173,6 +2196,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        assertNull(sut.sendUiState.value.decodedInvoice)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
     }
 

@@ -103,7 +103,9 @@ import to.bitkit.ext.rawId
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.setClipboardText
+import to.bitkit.ext.supportPaymentRequest
 import to.bitkit.ext.toHex
+import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.ext.toUserMessage
 import to.bitkit.ext.totalValue
 import to.bitkit.ext.walletId
@@ -119,6 +121,7 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkyRingAuthCallback
 import to.bitkit.models.PubkyRingAuthCallbackHandlingResult
 import to.bitkit.models.SamRockSetupRequest
+import to.bitkit.models.SendFailureDetails
 import to.bitkit.models.Suggestion
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
@@ -1161,7 +1164,7 @@ class AppViewModel @Inject constructor(
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
                 cacheStore.releaseQuickPayReservation(paymentHash)
-                pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash))
+                pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
                 if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
                     notifyPendingPaymentFailed()
                 }
@@ -1176,9 +1179,20 @@ class AppViewModel @Inject constructor(
         val activePaymentHash = _sendUiState.value.decodedInvoice?.paymentHash?.toHex()
         if (_currentSheet.value !is Sheet.Send || activePaymentHash != paymentHash) return false
 
-        notifyPaymentFailed(reason)
-        hideSheet()
+        setSendEffect(
+            SendEffect.NavigateToError(
+                reason.toSendFailureDetails(
+                    context = context,
+                    paymentRequest = _sendUiState.value.currentLightningPaymentRequest(),
+                )
+            )
+        )
         return true
+    }
+
+    private fun SendUiState.currentLightningPaymentRequest(): String? {
+        if (payMethod != SendMethod.LIGHTNING) return null
+        return decodedInvoice?.bolt11 ?: (lnurl as? LnurlParams.LnurlPay)?.data?.supportPaymentRequest()
     }
 
     private suspend fun handlePaymentReceived(
@@ -2909,8 +2923,13 @@ class AppViewModel @Inject constructor(
                         preActivityMetadataRepo.deletePreActivityMetadata(createdMetadataPaymentId)
                     }
                     Logger.error("Error sending lightning payment", it, context = TAG)
-                    toast(it)
-                    hideSheet()
+                    val failure = when (it) {
+                        is LightningPaymentFailedError -> it.reason.toSendFailureDetails(context, it.paymentRequest)
+                        else -> it.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
+                    }
+                    setSendEffect(
+                        SendEffect.NavigateToError(failure)
+                    )
                 }
             }
         }
@@ -3104,7 +3123,9 @@ class AppViewModel @Inject constructor(
                 when (it) {
                     is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(Result.success(hash))
                     is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
-                        Result.failure(AppError(it.reason.toUserMessage(context)))
+                        Result.failure(
+                            LightningPaymentFailedError(reason = it.reason, paymentRequest = bolt11)
+                        )
                     )
 
                     else -> WatchResult.Continue()
@@ -3129,6 +3150,13 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             hideSheet()
             mainScreenEffect(MainScreenEffect.Navigate(Routes.ActivityDetail(activityRawId)))
+        }
+    }
+
+    fun navigateToReportIssue(prefillMessage: String) {
+        viewModelScope.launch {
+            hideSheet()
+            mainScreenEffect(MainScreenEffect.Navigate(Routes.ReportIssue(prefillMessage)))
         }
     }
 
@@ -4050,6 +4078,7 @@ sealed class SendEffect {
     data object NavigateToContacts : SendEffect()
     data object NavigateToComingSoon : SendEffect()
     data object PaymentSuccess : SendEffect()
+    data class NavigateToError(val failure: SendFailureDetails) : SendEffect()
     data class NavigateToPending(val paymentHash: String, val amount: Long) : SendEffect()
 }
 
@@ -4092,6 +4121,11 @@ sealed interface SendEvent {
     data object NavToAddress : SendEvent
     data object Contacts : SendEvent
 }
+
+private class LightningPaymentFailedError(
+    val reason: PaymentFailureReason?,
+    val paymentRequest: String?,
+) : AppError(reason?.name)
 
 sealed interface LnurlParams {
     data class LnurlPay(val data: LnurlPayData) : LnurlParams

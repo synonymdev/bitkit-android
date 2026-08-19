@@ -1779,7 +1779,9 @@ private fun NavGraphBuilder.support(
     }
 
     deepLinkableComposable<Routes.ReportIssue> {
+        val route = it.toRoute<Routes.ReportIssue>()
         ReportIssueScreen(
+            prefillMessage = route.prefillMessage,
             onBack = { navController.popBackStack() },
             navigateResultScreen = { isSuccess ->
                 if (isSuccess) {
@@ -2196,7 +2198,7 @@ sealed interface Routes {
     data object Support : Routes.DeepLinkable
 
     @Serializable
-    data object ReportIssue : Routes.DeepLinkable
+    data class ReportIssue(val prefillMessage: String? = null) : Routes.DeepLinkable
 
     @Serializable
     data object ReportIssueSuccess : Routes.DeepLinkable
