@@ -17,9 +17,7 @@ import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
-@OptIn(ExperimentalTime::class)
 @Singleton
 class QuickPayRepo @Inject constructor(
     private val cacheStore: CacheStore,

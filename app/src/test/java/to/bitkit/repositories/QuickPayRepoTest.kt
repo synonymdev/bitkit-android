@@ -29,10 +29,8 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
-@OptIn(ExperimentalTime::class)
 @Config(application = Application::class, sdk = [34])
 @RunWith(RobolectricTestRunner::class)
 class QuickPayRepoTest : BaseUnitTest() {
@@ -211,7 +209,6 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 }
 
-@OptIn(ExperimentalTime::class)
 private class MutableClock(var instant: Instant) : Clock {
     override fun now(): Instant = instant
 }
