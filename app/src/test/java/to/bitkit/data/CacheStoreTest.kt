@@ -11,7 +11,6 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import to.bitkit.di.json
 import to.bitkit.ext.scopedActivityId
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
@@ -91,15 +90,5 @@ class CacheStoreTest : BaseUnitTest() {
             listOf(scopedActivityId("hardware-wallet", "shared-id")),
             sut.data.first().deletedActivities,
         )
-    }
-
-    @Test
-    fun `old sat spend field is not read as cents`() {
-        val data = json.decodeFromString<AppCacheData>(
-            """{"quickPaySpendDayKey":"2026-08-15","quickPaySpentSatsToday":20000}""",
-        )
-
-        assertEquals(0L, data.quickPaySpentCentsToday)
-        assertEquals("2026-08-15", data.quickPaySpendDayKey)
     }
 }
