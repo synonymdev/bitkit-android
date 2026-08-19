@@ -3,13 +3,14 @@ package to.bitkit.repositories
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.QuickPayDaySpend
 import to.bitkit.data.QuickPaySpendReservation
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
-import to.bitkit.ext.quickPaySpendDayKey
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.USD
 import to.bitkit.utils.AppError
@@ -147,7 +148,8 @@ class QuickPayRepo @Inject constructor(
         }
     }
 
-    private fun currentDayKey(): String = quickPaySpendDayKey(clock)
+    private fun currentDayKey(): String =
+        clock.now().toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
 }
 
 private fun quickPayCapCents(thresholdUsd: Int, multiplier: Int): Long =

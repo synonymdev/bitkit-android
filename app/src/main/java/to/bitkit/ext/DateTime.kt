@@ -39,12 +39,6 @@ fun nowMillis(clock: Clock = Clock.System): Long = clock.now().toEpochMillisecon
 @OptIn(ExperimentalTime::class)
 fun Clock.nowMs(): Long = now().toEpochMilliseconds()
 
-@OptIn(ExperimentalTime::class)
-fun quickPaySpendDayKey(
-    clock: Clock = Clock.System,
-    timeZone: TimeZone = TimeZone.currentSystemDefault(),
-): String = clock.now().toLocalDateTime(timeZone).date.toString()
-
 fun nowTimestamp(): Instant = Instant.now().truncatedTo(ChronoUnit.SECONDS)
 
 fun dateTimeFormatterOf(
