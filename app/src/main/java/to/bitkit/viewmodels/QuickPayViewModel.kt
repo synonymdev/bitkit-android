@@ -16,7 +16,7 @@ import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import to.bitkit.R
-import to.bitkit.data.QuickPaySpendReservation
+import to.bitkit.repositories.QuickPaySpendReservation
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.supportPaymentRequest

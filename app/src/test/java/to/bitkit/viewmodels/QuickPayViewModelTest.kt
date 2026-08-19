@@ -26,7 +26,7 @@ import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.R
-import to.bitkit.data.QuickPaySpendReservation
+import to.bitkit.repositories.QuickPaySpendReservation
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState

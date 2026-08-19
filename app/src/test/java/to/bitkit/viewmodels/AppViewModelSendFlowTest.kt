@@ -57,7 +57,7 @@ import to.bitkit.CurrentActivity
 import to.bitkit.R
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
-import to.bitkit.data.QuickPaySpendReservation
+import to.bitkit.repositories.QuickPaySpendReservation
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
