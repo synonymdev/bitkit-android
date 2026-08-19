@@ -65,7 +65,6 @@ import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.BalanceState
-import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -99,6 +98,7 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
+import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.SettledReceiveAddress
 import to.bitkit.repositories.SettledReceiveInvoice
@@ -124,10 +124,8 @@ import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import to.bitkit.utils.AppError
 import to.bitkit.utils.timedsheets.TimedSheetManager
-import java.math.BigDecimal
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -162,6 +160,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val notifyPaymentReceivedHandler = mock<NotifyPaymentReceivedHandler>()
     private val notifyChannelReadyHandler = mock<NotifyChannelReadyHandler>()
     private val cacheStore = mock<CacheStore>()
+    private val quickPayRepo = mock<QuickPayRepo>()
     private val transferRepo = mock<TransferRepo>()
     private val migrationService = mock<MigrationService>()
     private val coreService = mock<CoreService>()
@@ -230,10 +229,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(backupRepo.isRestoring).thenReturn(MutableStateFlow(false))
         stubSettingsStore()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
-        whenever { cacheStore.quickPaySpentCentsForDay(any()) }.thenReturn(0L)
-        whenever { cacheStore.quickPayReservation(any()) }.thenReturn(null)
-        whenever { cacheStore.clearQuickPayReservation(any()) }.thenReturn(Unit)
-        whenever { cacheStore.releaseQuickPayReservation(any()) }.thenReturn(Unit)
+        whenever { quickPayRepo.canApply(org.mockito.kotlin.any<ULong>()) }.thenReturn(Result.success(false))
+        whenever { quickPayRepo.reservation(any()) }.thenReturn(Result.success(null))
+        whenever { quickPayRepo.clear(any()) }.thenReturn(Result.success(Unit))
+        whenever { quickPayRepo.release(any()) }.thenReturn(Result.success(Unit))
         whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
             .thenReturn(Result.failure(Exception("activity not found")))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
@@ -334,6 +333,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         notifyPaymentReceivedHandler = notifyPaymentReceivedHandler,
         notifyChannelReadyHandler = notifyChannelReadyHandler,
         cacheStore = cacheStore,
+        quickPayRepo = quickPayRepo,
         transferRepo = transferRepo,
         migrationService = migrationService,
         coreService = coreService,
@@ -1728,7 +1728,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
         verify(activityRepo).setContact(contactPublicKey = contactKey, forPaymentId = paymentHash)
-        verify(cacheStore).clearQuickPayReservation(paymentHash)
+        verify(quickPayRepo).clear(paymentHash)
     }
 
     @Test
@@ -1754,7 +1754,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 reason = PaymentFailureReason.RETRIES_EXHAUSTED,
             )
         )
-        verify(cacheStore).releaseQuickPayReservation(paymentHash)
+        verify(quickPayRepo).release(paymentHash)
         assertNull(pendingContactPaymentContext(paymentHash))
     }
 
@@ -1763,7 +1763,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val paymentHash = "pending_confirm_hash"
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
         whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
-        whenever { cacheStore.quickPayReservation(paymentHash) }.thenReturn(null)
+        whenever { quickPayRepo.reservation(paymentHash) }.thenReturn(Result.success(null))
         advanceUntilIdle()
 
         emitNodeEvent(
@@ -1790,8 +1790,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val activity = mock<com.synonym.bitkitcore.Activity.Lightning> { on { v1 } doReturn activityV1 }
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
         whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
-        whenever { cacheStore.quickPayReservation(paymentHash) }.thenReturn(
-            QuickPaySpendReservation(amountCents = 250L, dayKey = "2026-08-15"),
+        whenever { quickPayRepo.reservation(paymentHash) }.thenReturn(
+            Result.success(QuickPaySpendReservation(amountCents = 250L, dayKey = "2026-08-15")),
         )
         whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
             .thenReturn(Result.success(activity))
@@ -1813,7 +1813,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amountWithFeeSats = 510L,
             ),
         )
-        verify(cacheStore).clearQuickPayReservation(paymentHash)
+        verify(quickPayRepo).clear(paymentHash)
     }
 
     @Test
@@ -2235,7 +2235,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `main scanner lightning scan opens QuickPay when enabled`() = test {
         val bolt11 = "lnbcrt1scannerquickpay"
-        enableQuickPay(thresholdSats = 1000u)
+        enableQuickPay()
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
 
         sut.showScannerSheet()
@@ -2251,7 +2251,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `lightning scan uses QuickPay when enabled`() = test {
         val bolt11 = "lnbcrt1quickpay"
-        enableQuickPay(thresholdSats = 1000u)
+        enableQuickPay()
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
 
         sut.onScanResult(bolt11)
@@ -2266,7 +2266,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `lightning scan uses QuickPay when PIN is required for payments under daily cap`() = test {
         val bolt11 = "lnbcrt1quickpaypin"
-        enableQuickPay(thresholdSats = 1000u)
+        enableQuickPay()
         settingsData.value = settingsData.value.copy(
             isPinEnabled = true,
             isPinForPaymentsEnabled = true,
@@ -2284,7 +2284,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `lightning scan uses QuickPay when PIN is on without PIN for payments`() = test {
         val bolt11 = "lnbcrt1quickpayunlocked"
-        enableQuickPay(thresholdSats = 1000u)
+        enableQuickPay()
         settingsData.value = settingsData.value.copy(isPinEnabled = true)
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
         sut.setIsAuthenticated(true)
@@ -2299,8 +2299,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `lightning scan skips QuickPay when daily spend cap is exceeded`() = test {
         val bolt11 = "lnbcrt1quickpaycap"
-        enableQuickPay(thresholdSats = 1000u, spentCentsToday = 2_300L)
-        settingsData.value = settingsData.value.copy(quickPayDailyLimitMultiplier = 5)
+        enableQuickPay(canApply = false)
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
         sut.setIsAuthenticated(true)
 
@@ -2314,7 +2313,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `QuickPay eligible scan remains deferred until authenticated`() = test {
         val bolt11 = "lnbcrt1lockedscan"
-        enableQuickPay(thresholdSats = 1_000u)
+        enableQuickPay()
         settingsData.value = settingsData.value.copy(
             isPinEnabled = true,
             isPinForPaymentsEnabled = true,
@@ -2607,7 +2606,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `contact lightning payment skips QuickPay and opens confirm`() = test {
         val bolt11 = "lnbcrt1contact"
-        enableQuickPay(thresholdSats = 1000u)
+        enableQuickPay()
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
 
         sut.openContactPayment(paymentRequest = bolt11, publicKey = "pubkycontact")
@@ -3318,26 +3317,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
     }
 
-    private fun enableQuickPay(
-        thresholdSats: ULong,
-        spentCentsToday: Long = 0L,
-    ) {
+    private fun enableQuickPay(canApply: Boolean = true) {
         settingsData.value = SettingsData(isQuickPayEnabled = true, quickPayAmount = 5)
-        whenever(currencyRepo.convertFiatToSats(5.0, "USD")).thenReturn(Result.success(thresholdSats))
-        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenAnswer { invocation ->
-            val sats = invocation.getArgument<Long>(0)
-            val usd = 5.0 * sats.toDouble() / thresholdSats.toDouble()
-            ConvertedAmount(
-                value = BigDecimal.valueOf(usd),
-                formatted = usd.toString(),
-                symbol = "$",
-                currency = "USD",
-                flag = "",
-                sats = sats,
-                locale = Locale.US,
-            )
-        }
-        whenever { cacheStore.quickPaySpentCentsForDay(any<String>()) }.thenReturn(spentCentsToday)
+        whenever { quickPayRepo.canApply(org.mockito.kotlin.any<ULong>()) }.thenReturn(Result.success(canApply))
     }
 
     private suspend fun stubLightningScan(bolt11: String, amountSats: ULong) {

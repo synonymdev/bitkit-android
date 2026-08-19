@@ -139,83 +139,6 @@ class CacheStore @Inject constructor(
         store.updateData { it.copy(backgroundReceive = null) }
     }
 
-    suspend fun quickPaySpentCentsForDay(dayKey: String): Long {
-        val data = store.data.first()
-        return data.quickPaySpendFor(dayKey).spentCents
-    }
-
-    suspend fun tryReserveQuickPaySpendCents(amountCents: Long, dayKey: String, dailyCapCents: Long): Boolean {
-        var reserved = false
-        store.updateData {
-            val spend = it.quickPaySpendFor(dayKey)
-            if (spend.spentCents + amountCents > dailyCapCents) return@updateData it
-            reserved = true
-            it.copy(
-                quickPaySpendDayKey = spend.dayKey,
-                quickPaySpentCentsToday = spend.spentCents + amountCents,
-            )
-        }
-        return reserved
-    }
-
-    suspend fun releaseQuickPaySpendCents(amountCents: Long, dayKey: String) {
-        store.updateData {
-            val spend = it.quickPaySpendFor(dayKey)
-            if (spend.dayKey != it.quickPaySpendDayKey) return@updateData it
-            it.copy(quickPaySpentCentsToday = (spend.spentCents - amountCents).coerceAtLeast(0L))
-        }
-    }
-
-    suspend fun recordQuickPaySpendCents(amountCents: Long, dayKey: String) {
-        store.updateData {
-            val spend = it.quickPaySpendFor(dayKey)
-            it.copy(
-                quickPaySpendDayKey = spend.dayKey,
-                quickPaySpentCentsToday = spend.spentCents + amountCents,
-            )
-        }
-    }
-
-    suspend fun rememberQuickPayReservation(paymentHash: String, amountCents: Long, dayKey: String) {
-        if (paymentHash.isBlank()) return
-        store.updateData {
-            it.copy(
-                quickPayReservations = it.quickPayReservations + (
-                    paymentHash to QuickPaySpendReservation(amountCents = amountCents, dayKey = dayKey)
-                    ),
-            )
-        }
-    }
-
-    suspend fun quickPayReservation(paymentHash: String): QuickPaySpendReservation? {
-        if (paymentHash.isBlank()) return null
-        return store.data.first().quickPayReservations[paymentHash]
-    }
-
-    suspend fun releaseQuickPayReservation(paymentHash: String) {
-        if (paymentHash.isBlank()) return
-        store.updateData { data ->
-            val reservation = data.quickPayReservations[paymentHash] ?: return@updateData data
-            val remaining = data.quickPayReservations - paymentHash
-            val spend = data.quickPaySpendFor(reservation.dayKey)
-            if (reservation.dayKey != spend.dayKey) {
-                return@updateData data.copy(quickPayReservations = remaining)
-            }
-            data.copy(
-                quickPaySpentCentsToday = (spend.spentCents - reservation.amountCents).coerceAtLeast(0L),
-                quickPayReservations = remaining,
-            )
-        }
-    }
-
-    suspend fun clearQuickPayReservation(paymentHash: String) {
-        if (paymentHash.isBlank()) return
-        store.updateData {
-            if (paymentHash !in it.quickPayReservations) return@updateData it
-            it.copy(quickPayReservations = it.quickPayReservations - paymentHash)
-        }
-    }
-
     suspend fun reset() {
         store.updateData { AppCacheData() }
         Logger.info("Deleted all app cached data.")
@@ -254,12 +177,6 @@ data class AppCacheData(
     fun invalidateReceiveLightningInvoice() = copy(bip21 = "", bolt11 = "", bolt11PaymentHash = "")
 
     fun invalidateReceiveOnchainAddress() = copy(bip21 = "", onchainAddress = "")
-
-    fun quickPaySpendFor(dayKey: String): QuickPayDaySpend = when {
-        quickPaySpendDayKey.isEmpty() || dayKey > quickPaySpendDayKey -> QuickPayDaySpend(dayKey, 0L)
-        dayKey == quickPaySpendDayKey -> QuickPayDaySpend(dayKey, quickPaySpentCentsToday)
-        else -> QuickPayDaySpend(quickPaySpendDayKey, quickPaySpentCentsToday)
-    }
 }
 
 @Serializable
@@ -272,9 +189,3 @@ data class QuickPayDaySpend(
     val dayKey: String,
     val spentCents: Long,
 )
-
-fun quickPayCapCents(thresholdUsd: Int, multiplier: Int): Long =
-    thresholdUsd.toLong() * 100L * multiplier.toLong()
-
-fun quickPayReserveCents(convertedCents: Long, thresholdUsd: Int): Long =
-    minOf(convertedCents, thresholdUsd.toLong() * 100L)

@@ -74,11 +74,8 @@ import org.lightningdevkit.ldknode.Txid
 import to.bitkit.BuildConfig
 import to.bitkit.R
 import to.bitkit.data.CacheStore
-import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.data.quickPayCapCents
-import to.bitkit.data.quickPayReserveCents
 import to.bitkit.data.resetPin
 import to.bitkit.di.BgDispatcher
 import to.bitkit.domain.commands.NotifyChannelReady
@@ -100,7 +97,6 @@ import to.bitkit.ext.maxSendableSat
 import to.bitkit.ext.maxWithdrawableSat
 import to.bitkit.ext.minSendableSat
 import to.bitkit.ext.minWithdrawableSat
-import to.bitkit.ext.quickPaySpendDayKey
 import to.bitkit.ext.rawId
 import to.bitkit.ext.removeSpaces
 import to.bitkit.ext.runSuspendCatching
@@ -161,6 +157,7 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
+import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
@@ -225,6 +222,7 @@ class AppViewModel @Inject constructor(
     private val notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler,
     private val notifyChannelReadyHandler: NotifyChannelReadyHandler,
     private val cacheStore: CacheStore,
+    private val quickPayRepo: QuickPayRepo,
     private val transferRepo: TransferRepo,
     private val migrationService: MigrationService,
     private val coreService: CoreService,
@@ -1165,7 +1163,7 @@ class AppViewModel @Inject constructor(
             activityRepo.handlePaymentEvent(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
-                cacheStore.releaseQuickPayReservation(paymentHash)
+                quickPayRepo.release(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
                 if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
                     notifyPendingPaymentFailed()
@@ -1242,8 +1240,8 @@ class AppViewModel @Inject constructor(
             activityRepo.handlePaymentEvent(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 syncContactForActivity(paymentHash)
-                val isQuickPay = cacheStore.quickPayReservation(paymentHash) != null
-                cacheStore.clearQuickPayReservation(paymentHash)
+                val isQuickPay = quickPayRepo.reservation(paymentHash).getOrNull() != null
+                quickPayRepo.clear(paymentHash)
                 val amountWithFeeSats = if (isQuickPay) {
                     activityRepo.findActivityByPaymentId(
                         paymentHashOrTxId = paymentHash,
@@ -2715,31 +2713,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun canApplyQuickPay(amountSats: ULong): Boolean {
         if (hasActiveContactPaymentContext()) return false
-
-        val settings = settingsStore.data.first()
-        if (!settings.isQuickPayEnabled || amountSats == 0uL) return false
-
-        return isWithinQuickPayThreshold(amountSats, settings) && isWithinQuickPayDailyCap(amountSats, settings)
-    }
-
-    private suspend fun isWithinQuickPayThreshold(amountSats: ULong, settings: SettingsData): Boolean {
-        val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), USD).getOrNull()
-            ?: return false
-        return amountSats <= quickPayAmountSats
-    }
-
-    private suspend fun isWithinQuickPayDailyCap(amountSats: ULong, settings: SettingsData): Boolean {
-        val converted = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrNull() ?: return false
-        val reserveCents = quickPayReserveCents(converted.toUsdCents(), settings.quickPayAmount)
-        val capCents = quickPayCapCents(settings.quickPayAmount, settings.quickPayDailyLimitMultiplier)
-        val spentCentsToday = cacheStore.quickPaySpentCentsForDay(quickPaySpendDayKey())
-        if (spentCentsToday + reserveCents <= capCents) return true
-
-        Logger.info(
-            "Skipping QuickPay: daily spend '$spentCentsToday' + '$reserveCents' exceeds cap '$capCents'",
-            context = TAG,
-        )
-        return false
+        return quickPayRepo.canApply(amountSats).getOrDefault(false)
     }
 
     private fun resetAmountInput() {

@@ -23,19 +23,13 @@ import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.R
-import to.bitkit.data.CacheStore
-import to.bitkit.data.SettingsData
-import to.bitkit.data.SettingsStore
-import to.bitkit.ext.quickPaySpendDayKey
-import to.bitkit.models.ConvertedAmount
+import to.bitkit.data.QuickPaySpendReservation
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PendingPaymentRepo
+import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.test.BaseUnitTest
-import java.math.BigDecimal
-import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNull
@@ -47,14 +41,10 @@ class QuickPayViewModelTest : BaseUnitTest() {
     private val context: Context = mock()
     private val lightningRepo: LightningRepo = mock()
     private val pendingPaymentRepo: PendingPaymentRepo = mock()
-    private val currencyRepo: CurrencyRepo = mock()
-    private val cacheStore: CacheStore = mock()
-    private val settingsStore: SettingsStore = mock()
+    private val quickPayRepo: QuickPayRepo = mock()
 
     private lateinit var nodeEvents: MutableSharedFlow<Event>
-    private val settingsData = MutableStateFlow(
-        SettingsData(isQuickPayEnabled = true, quickPayAmount = 5, quickPayDailyLimitMultiplier = 5),
-    )
+    private val reserved = QuickPaySpendReservation(amountCents = 250L, dayKey = "2026-08-15")
 
     private lateinit var sut: QuickPayViewModel
 
@@ -68,28 +58,16 @@ class QuickPayViewModelTest : BaseUnitTest() {
             MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)),
         )
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEvents)
-        whenever(settingsStore.data).thenReturn(settingsData)
-        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenAnswer { invocation ->
-            val sats = invocation.getArgument<Long>(0)
-            val usd = 5.0 * sats.toDouble() / 1000.0
-            ConvertedAmount(
-                value = BigDecimal.valueOf(usd),
-                formatted = usd.toString(),
-                symbol = "$",
-                currency = "USD",
-                flag = "",
-                sats = sats,
-                locale = Locale.US,
-            )
-        }
-        whenever { cacheStore.tryReserveQuickPaySpendCents(any(), any(), any()) }.thenReturn(true)
+        whenever { quickPayRepo.tryReserve(any()) }.thenReturn(Result.success(reserved))
+        whenever { quickPayRepo.remember(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { quickPayRepo.clear(any()) }.thenReturn(Result.success(Unit))
+        whenever { quickPayRepo.release(any()) }.thenReturn(Result.success(Unit))
+        whenever { quickPayRepo.releaseUnbound(any()) }.thenReturn(Result.success(Unit))
         sut = QuickPayViewModel(
             context = context,
             lightningRepo = lightningRepo,
             pendingPaymentRepo = pendingPaymentRepo,
-            currencyRepo = currencyRepo,
-            cacheStore = cacheStore,
-            settingsStore = settingsStore,
+            quickPayRepo = quickPayRepo,
         )
     }
 
@@ -108,19 +86,11 @@ class QuickPayViewModelTest : BaseUnitTest() {
         sut.payNow(QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test"))
         advanceUntilIdle()
 
-        val order = inOrder(cacheStore, lightningRepo)
-        order.verify(cacheStore).tryReserveQuickPaySpendCents(
-            amountCents = 250L,
-            dayKey = quickPaySpendDayKey(),
-            dailyCapCents = 2_500L,
-        )
+        val order = inOrder(quickPayRepo, lightningRepo)
+        order.verify(quickPayRepo).tryReserve(500u)
         order.verify(lightningRepo).payInvoice(bolt11 = "lnbcrt1test", sats = null)
-        order.verify(cacheStore).rememberQuickPayReservation(
-            paymentHash = "hash1",
-            amountCents = 250L,
-            dayKey = quickPaySpendDayKey(),
-        )
-        order.verify(cacheStore).clearQuickPayReservation("hash1")
+        order.verify(quickPayRepo).remember("hash1", reserved)
+        order.verify(quickPayRepo).clear("hash1")
         verify(pendingPaymentRepo, never()).track(any())
         val success = assertIs<QuickPayResult.Success>(sut.uiState.value.result)
         assertEquals("hash1", success.paymentHash)
@@ -136,12 +106,8 @@ class QuickPayViewModelTest : BaseUnitTest() {
         advanceTimeBy(LightningRepo.SEND_LN_TIMEOUT.inWholeMilliseconds + 1)
         advanceUntilIdle()
 
-        val order = inOrder(cacheStore, pendingPaymentRepo)
-        order.verify(cacheStore).rememberQuickPayReservation(
-            paymentHash = "hash1",
-            amountCents = 250L,
-            dayKey = quickPaySpendDayKey(),
-        )
+        val order = inOrder(quickPayRepo, pendingPaymentRepo)
+        order.verify(quickPayRepo).remember("hash1", reserved)
         order.verify(pendingPaymentRepo).track("hash1")
         val pending = assertIs<QuickPayResult.Pending>(sut.uiState.value.result)
         assertEquals("hash1", pending.paymentHash)
@@ -155,8 +121,8 @@ class QuickPayViewModelTest : BaseUnitTest() {
         sut.payNow(QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test"))
         advanceUntilIdle()
 
-        verify(cacheStore).releaseQuickPaySpendCents(250L, quickPaySpendDayKey())
-        verify(cacheStore, never()).rememberQuickPayReservation(any(), any(), any())
+        verify(quickPayRepo).releaseUnbound(reserved)
+        verify(quickPayRepo, never()).remember(any(), any())
         verify(pendingPaymentRepo, never()).track(any())
         assertIs<QuickPayResult.Error>(sut.uiState.value.result)
     }
@@ -175,14 +141,14 @@ class QuickPayViewModelTest : BaseUnitTest() {
         sut.payNow(QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test"))
         advanceUntilIdle()
 
-        verify(cacheStore).rememberQuickPayReservation("hash1", 250L, quickPaySpendDayKey())
-        verify(cacheStore).releaseQuickPayReservation("hash1")
+        verify(quickPayRepo).remember("hash1", reserved)
+        verify(quickPayRepo).release("hash1")
         assertIs<QuickPayResult.Error>(sut.uiState.value.result)
     }
 
     @Test
     fun `reserve failure emits FallBackToConfirm`() = test {
-        whenever { cacheStore.tryReserveQuickPaySpendCents(any(), any(), any()) }.thenReturn(false)
+        whenever { quickPayRepo.tryReserve(any()) }.thenReturn(Result.success(null))
 
         sut.payNow(QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test"))
         advanceUntilIdle()

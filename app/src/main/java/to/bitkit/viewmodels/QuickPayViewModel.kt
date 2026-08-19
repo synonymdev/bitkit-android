@@ -7,32 +7,26 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import to.bitkit.R
-import to.bitkit.data.CacheStore
-import to.bitkit.data.SettingsStore
-import to.bitkit.data.quickPayCapCents
-import to.bitkit.data.quickPayReserveCents
+import to.bitkit.data.QuickPaySpendReservation
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.callbackAmountMsats
-import to.bitkit.ext.quickPaySpendDayKey
 import to.bitkit.ext.supportPaymentRequest
 import to.bitkit.ext.toCompactFailureType
 import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.ext.watchUntil
 import to.bitkit.models.SendFailureDetails
-import to.bitkit.models.USD
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
-import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentRepo
+import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -42,9 +36,7 @@ class QuickPayViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val lightningRepo: LightningRepo,
     private val pendingPaymentRepo: PendingPaymentRepo,
-    private val currencyRepo: CurrencyRepo,
-    private val cacheStore: CacheStore,
-    private val settingsStore: SettingsStore,
+    private val quickPayRepo: QuickPayRepo,
 ) : ViewModel() {
 
     companion object {
@@ -62,38 +54,29 @@ class QuickPayViewModel @Inject constructor(
 
     internal suspend fun payNow(data: QuickPayData) {
         val invoice = resolveQuickPayInvoice(data) ?: return
-        val dayKey = quickPaySpendDayKey()
-        val reservedCents = reserveSpend(invoice.displaySats, dayKey) ?: return
+        val reservation = reserveSpend(invoice.displaySats) ?: return
 
-        sendLightning(invoice, reservedCents, dayKey)
+        sendLightning(invoice, reservation)
             .onSuccess { onPaymentSuccess(it.paymentHash, invoice.displaySats, it.feePaidSats) }
-            .onFailure { onPaymentFailure(it, invoice, reservedCents, dayKey) }
+            .onFailure { onPaymentFailure(it, invoice, reservation) }
     }
 
-    private suspend fun reserveSpend(amountSats: ULong, dayKey: String): Long? {
-        val settings = settingsStore.data.first()
-        val converted = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrNull()
-        if (converted == null) {
+    private suspend fun reserveSpend(amountSats: ULong): QuickPaySpendReservation? {
+        val reserved = quickPayRepo.tryReserve(amountSats).getOrElse {
             setError(QuickPayCurrencyConversionError())
             return null
         }
-        val reserveCents = quickPayReserveCents(converted.toUsdCents(), settings.quickPayAmount)
-        val reserved = cacheStore.tryReserveQuickPaySpendCents(
-            amountCents = reserveCents,
-            dayKey = dayKey,
-            dailyCapCents = quickPayCapCents(settings.quickPayAmount, settings.quickPayDailyLimitMultiplier),
-        )
-        if (!reserved) {
+        if (reserved == null) {
             Logger.info("Skipping QuickPay pay: daily spend reserve failed for '$amountSats'", context = TAG)
             _uiState.update { it.copy(result = QuickPayResult.FallBackToConfirm) }
             return null
         }
-        return reserveCents
+        return reserved
     }
 
     private suspend fun onPaymentSuccess(paymentHash: String, displaySats: ULong, feePaidSats: ULong) {
         Logger.info("QuickPay lightning payment successful")
-        cacheStore.clearQuickPayReservation(paymentHash)
+        quickPayRepo.clear(paymentHash)
         _uiState.update {
             it.copy(
                 result = QuickPayResult.Success(
@@ -107,8 +90,7 @@ class QuickPayViewModel @Inject constructor(
     private suspend fun onPaymentFailure(
         error: Throwable,
         invoice: QuickPayInvoice,
-        reservedCents: Long,
-        dayKey: String,
+        reservation: QuickPaySpendReservation,
     ) {
         if (error is PaymentPendingException) {
             Logger.info("QuickPay lightning payment pending", context = TAG)
@@ -125,9 +107,9 @@ class QuickPayViewModel @Inject constructor(
         }
         Logger.error("QuickPay lightning payment failed", error, context = TAG)
         if (error is QuickPayPaymentFailedError) {
-            cacheStore.releaseQuickPayReservation(error.paymentHash)
+            quickPayRepo.release(error.paymentHash)
         } else {
-            cacheStore.releaseQuickPaySpendCents(reservedCents, dayKey)
+            quickPayRepo.releaseUnbound(reservation)
         }
         handleQuickPayFailure(error, invoice)
     }
@@ -193,8 +175,7 @@ class QuickPayViewModel @Inject constructor(
 
     private suspend fun sendLightning(
         invoice: QuickPayInvoice,
-        reservedCents: Long,
-        dayKey: String,
+        reservation: QuickPaySpendReservation,
     ): Result<SettledQuickPayPayment> {
         val hash = lightningRepo.payInvoice(bolt11 = invoice.bolt11, sats = invoice.amount)
             .onFailure { exception ->
@@ -202,11 +183,7 @@ class QuickPayViewModel @Inject constructor(
             }
             .getOrDefault("")
 
-        cacheStore.rememberQuickPayReservation(
-            paymentHash = hash,
-            amountCents = reservedCents,
-            dayKey = dayKey,
-        )
+        quickPayRepo.remember(paymentHash = hash, reservation = reservation)
 
         // Wait until matching payment event is received (with timeout for hold invoices)
         val result = lightningRepo.nodeEvents.watchUntil(LightningRepo.SEND_LN_TIMEOUT) {
