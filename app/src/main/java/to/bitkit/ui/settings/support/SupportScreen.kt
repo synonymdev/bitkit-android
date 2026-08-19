@@ -83,7 +83,7 @@ fun SupportScreen(
 
     Content(
         onBack = { navController.popBackStack() },
-        onClickReportIssue = { navController.navigateTo(Routes.ReportIssue) },
+        onClickReportIssue = { navController.navigateTo(Routes.ReportIssue()) },
         onClickHelpCenter = {
             val intent = Intent(Intent.ACTION_VIEW, Env.BITKIT_HELP_CENTER.toUri())
             context.startActivity(intent)

@@ -32,6 +32,8 @@ fun LnurlPayData.isFixedAmount(): Boolean =
 fun LnurlPayData.callbackAmountMsats(userSats: ULong? = null): ULong =
     if (isFixedAmount()) minSendable else (userSats ?: minSendableSat()) * MSat.PER_SAT
 
+fun LnurlPayData.supportPaymentRequest(): String = "LNURL: $uri"
+
 fun LnurlWithdrawData.minWithdrawableSat(): ULong = msatCeilOf(minWithdrawable ?: 0u)
 fun LnurlWithdrawData.maxWithdrawableSat(): ULong = msatFloorOf(maxWithdrawable)
 

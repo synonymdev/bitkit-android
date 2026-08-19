@@ -34,11 +34,14 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
     constructor(inner: NodeException) : this(LdkException.Node(inner))
 
     override val message get() = inner.message ?: super.message
+    val compactType get() = inner.compactType
 
     sealed interface LdkException {
         val message: String?
+        val compactType: String?
 
         class Build(exception: BuildException) : LdkException {
+            override val compactType = exception::class.simpleName
             override val message = when (exception) {
                 is BuildException.InvalidChannelMonitor -> "Invalid channel monitor."
                 is BuildException.InvalidSystemTime -> "Invalid system time."
@@ -58,6 +61,7 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
         }
 
         class Node(exception: NodeException) : LdkException {
+            override val compactType = exception::class.simpleName
             override val message = when (exception) {
                 is NodeException.AlreadyRunning -> "The node is already running."
                 is NodeException.NotRunning -> "The node is not running."

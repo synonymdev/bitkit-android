@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -19,7 +18,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.ui.appViewModel
+import to.bitkit.models.SendFailureDetails
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
@@ -39,11 +38,10 @@ import to.bitkit.viewmodels.QuickPayViewModel
 fun SendQuickPayScreen(
     quickPayData: QuickPayData,
     onPaymentComplete: (String, Long) -> Unit,
-    onPaymentPending: (String, Long) -> Unit,
-    onShowError: (String) -> Unit,
+    onPaymentPending: (String, Long, String) -> Unit,
+    onShowError: (SendFailureDetails) -> Unit,
     viewModel: QuickPayViewModel = hiltViewModel(),
 ) {
-    val app = appViewModel ?: return
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lightningState by viewModel.lightningState.collectAsStateWithLifecycle()
 
@@ -53,17 +51,15 @@ fun SendQuickPayScreen(
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            app.resetQuickPay()
-        }
-    }
-
     LaunchedEffect(uiState.result) {
         when (val result = uiState.result) {
-            is QuickPayResult.Success -> onPaymentComplete(result.paymentHash, result.amountWithFee)
-            is QuickPayResult.Pending -> onPaymentPending(result.paymentHash, result.amount)
-            is QuickPayResult.Error -> onShowError(result.message)
+            is QuickPayResult.Success -> {
+                onPaymentComplete(result.paymentHash, result.amountWithFee)
+            }
+            is QuickPayResult.Pending -> {
+                onPaymentPending(result.paymentHash, result.amount, result.paymentRequest)
+            }
+            is QuickPayResult.Error -> onShowError(result.failure)
             null -> Unit // continue showing loading state
         }
     }

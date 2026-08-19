@@ -929,6 +929,7 @@
     <string name="wallet__send_dialog3">La commissione della transazione sembra essere superiore al 50% dell\'importo che stai inviando. Vuoi continuare?</string>
     <string name="wallet__send_dialog4">La commissione della transazione sembra essere superiore a $10. Vuoi continuare?</string>
     <string name="wallet__send_error_create_tx">Impossibile trasmettere la transazione. Per favore riprova.</string>
+    <string name="wallet__send_error_support">Contatta l\'Assistenza</string>
     <string name="wallet__send_error_tx_failed">Transazione Fallita</string>
     <string name="wallet__send_fee_and_speed">Velocità e commissioni</string>
     <string name="wallet__send_fee_custom">Imposta commissione personalizzata</string>
@@ -938,6 +939,7 @@
     <string name="wallet__send_fee_speed">Velocità</string>
     <string name="wallet__send_fee_total">₿ {feeSats} per questa transazione</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} per questa transazione ({fiatSymbol}{fiatFormatted})</string>
+    <string name="wallet__send_instant_failed">Pagamento fallito</string>
     <string name="wallet__send_invoice">Invoice</string>
     <string name="wallet__send_invoice_expiration">Scadenza invoice</string>
     <string name="wallet__send_max">MASSIMO</string>
@@ -960,6 +962,16 @@
     <string name="wallet__tags_new">Nuovo tag</string>
     <string name="wallet__tags_new_enter">Inserisci un nuovo tag</string>
     <string name="wallet__tags_previously">Tag usati in precedenza</string>
+    <string name="wallet__payment_abandoned">Il pagamento Lightning è stato interrotto prima del completamento.</string>
+    <string name="wallet__payment_expired">Questo pagamento Lightning è scaduto. Richiedi una nuova fattura.</string>
+    <string name="wallet__payment_failed_description">Il tuo pagamento istantaneo non è riuscito. Per favore riprova.</string>
+    <string name="wallet__payment_invoice_request_expired">Questa richiesta di fattura Lightning è scaduta. Richiedi una nuova fattura.</string>
+    <string name="wallet__payment_invoice_request_rejected">Il destinatario ha rifiutato questa richiesta di fattura Lightning.</string>
+    <string name="wallet__payment_recipient_rejected">Il destinatario ha rifiutato questo pagamento Lightning. Controlla la fattura e riprova.</string>
+    <string name="wallet__payment_retries_exhausted">Bitkit ha provato diverse rotte Lightning, ma il pagamento non è stato completato.</string>
+    <string name="wallet__payment_route_not_found">Bitkit non ha trovato una rotta Lightning per questo pagamento.</string>
+    <string name="wallet__payment_timeout">Il pagamento è scaduto. Riprova.</string>
+    <string name="wallet__payment_unknown_required_features">Questa fattura Lightning usa funzionalità che Bitkit non supporta ancora.</string>
     <string name="wallet__toast_payment_failed_description">Il tuo pagamento istantaneo non è riuscito. Per favore riprova.</string>
     <string name="wallet__toast_payment_failed_title">Pagamento fallito</string>
     <string name="wallet__toast_received_transaction_replaced_description">La tua transazione ricevuta è stata sostituita da un aumento di commissione</string>

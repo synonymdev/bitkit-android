@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.PeerDetails
@@ -44,6 +45,7 @@ import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.onboarding.LOADING_MS
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.isTxSyncTimeout
 import javax.inject.Inject
@@ -103,6 +105,10 @@ class WalletViewModel @Inject constructor(
 
     private val _isRefreshing = MutableStateFlow(false)
     val isRefreshing = _isRefreshing.asStateFlow()
+
+    private val retryLightningPaymentMutex = Mutex()
+    private val _isRetryingLightningPayment = MutableStateFlow(false)
+    val isRetryingLightningPayment = _isRetryingLightningPayment.asStateFlow()
 
     private var syncJob: Job? = null
     private var pendingWalletStart = false
@@ -455,6 +461,18 @@ class WalletViewModel @Inject constructor(
         lightningRepo.syncState()
     }
 
+    suspend fun resetPaymentRoutingCachesAndWait(): Result<Unit> {
+        if (!retryLightningPaymentMutex.tryLock()) return Result.failure(LightningPaymentRetryInProgressError())
+
+        _isRetryingLightningPayment.update { true }
+        return try {
+            lightningRepo.resetPaymentRoutingCachesAndWait()
+        } finally {
+            _isRetryingLightningPayment.update { false }
+            retryLightningPaymentMutex.unlock()
+        }
+    }
+
     fun onPullToRefresh() {
         // Cancel any existing sync, manual or event triggered
         syncJob?.cancel()
@@ -587,3 +605,5 @@ sealed interface RestoreState {
     fun isOngoing() = this is InProgress
     fun isIdle() = this is Initial || this is Settled
 }
+
+class LightningPaymentRetryInProgressError : AppError("Lightning payment retry already in progress")

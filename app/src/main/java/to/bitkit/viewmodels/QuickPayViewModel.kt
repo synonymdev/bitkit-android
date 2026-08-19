@@ -10,11 +10,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import to.bitkit.ext.WatchResult
 import to.bitkit.ext.callbackAmountMsats
-import to.bitkit.ext.toUserMessage
+import to.bitkit.ext.supportPaymentRequest
+import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.ext.watchUntil
+import to.bitkit.models.SendFailureDetails
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentRepo
@@ -40,36 +43,16 @@ class QuickPayViewModel @Inject constructor(
 
     fun pay(data: QuickPayData) {
         viewModelScope.launch {
-            val (bolt11, amount, displaySats) = when (data) {
-                is QuickPayData.Bolt11 -> {
-                    Logger.info("QuickPay: processing bolt11 invoice")
-                    Triple(data.bolt11, null, data.sats)
-                }
+            val invoice = resolveQuickPayInvoice(data) ?: return@launch
 
-                is QuickPayData.LnurlPay -> {
-                    Logger.info("QuickPay: fetching LNURL Pay invoice from callback")
-                    val invoice = lightningRepo.fetchLnurlInvoice(
-                        data = data.data,
-                        amountMsats = data.data.callbackAmountMsats(data.sats),
-                    )
-                        .getOrElse { error ->
-                            _uiState.update {
-                                it.copy(result = QuickPayResult.Error(error.message.orEmpty()))
-                            }
-                            return@launch
-                        }
-                    Triple(invoice.bolt11, null, data.sats)
-                }
-            }
-
-            sendLightning(bolt11, amount)
+            sendLightning(invoice.bolt11, invoice.amount)
                 .onSuccess { paymentHash ->
                     Logger.info("QuickPay lightning payment successful")
                     _uiState.update {
                         it.copy(
                             result = QuickPayResult.Success(
                                 paymentHash = paymentHash,
-                                amountWithFee = displaySats.toLong() // TODO GET FEE WHEN AVAILABLE
+                                amountWithFee = invoice.displaySats.toLong() // TODO GET FEE WHEN AVAILABLE
                             )
                         )
                     }
@@ -81,7 +64,8 @@ class QuickPayViewModel @Inject constructor(
                             it.copy(
                                 result = QuickPayResult.Pending(
                                     paymentHash = error.paymentHash,
-                                    amount = displaySats.toLong(),
+                                    amount = invoice.displaySats.toLong(),
+                                    paymentRequest = invoice.paymentRequest,
                                 )
                             )
                         }
@@ -89,10 +73,47 @@ class QuickPayViewModel @Inject constructor(
                     }
                     Logger.error("QuickPay lightning payment failed", error, context = TAG)
 
-                    _uiState.update {
-                        it.copy(result = QuickPayResult.Error(error.message.orEmpty()))
-                    }
+                    handleQuickPayFailure(error, invoice)
                 }
+        }
+    }
+
+    private suspend fun resolveQuickPayInvoice(data: QuickPayData): QuickPayInvoice? {
+        return when (data) {
+            is QuickPayData.Bolt11 -> {
+                Logger.info("QuickPay: processing bolt11 invoice")
+                QuickPayInvoice(data.bolt11, null, data.sats, data.bolt11)
+            }
+
+            is QuickPayData.LnurlPay -> {
+                Logger.info("QuickPay: fetching LNURL Pay invoice from callback")
+                lightningRepo.fetchLnurlInvoice(
+                    data = data.data,
+                    amountMsats = data.data.callbackAmountMsats(data.sats),
+                ).fold(
+                    onSuccess = { QuickPayInvoice(it.bolt11, null, data.sats, data.data.supportPaymentRequest()) },
+                    onFailure = {
+                        _uiState.update { state ->
+                            state.copy(
+                                result = QuickPayResult.Error(
+                                    it.toSendFailureDetails(context, data.data.supportPaymentRequest())
+                                )
+                            )
+                        }
+                        null
+                    },
+                )
+            }
+        }
+    }
+
+    private fun handleQuickPayFailure(error: Throwable, invoice: QuickPayInvoice) {
+        val failure = when (error) {
+            is QuickPayPaymentFailedError -> error.reason.toSendFailureDetails(context, error.paymentRequest)
+            else -> error.toSendFailureDetails(context, invoice.bolt11.ifBlank { invoice.fallbackPaymentRequest })
+        }
+        _uiState.update {
+            it.copy(result = QuickPayResult.Error(failure))
         }
     }
 
@@ -111,7 +132,9 @@ class QuickPayViewModel @Inject constructor(
             when (it) {
                 is Event.PaymentSuccessful if it.paymentHash == hash -> WatchResult.Complete(Result.success(hash))
                 is Event.PaymentFailed if it.paymentHash == hash -> WatchResult.Complete(
-                    Result.failure(AppError(it.reason.toUserMessage(context)))
+                    Result.failure(
+                        QuickPayPaymentFailedError(reason = it.reason, paymentRequest = bolt11)
+                    )
                 )
 
                 else -> WatchResult.Continue()
@@ -130,11 +153,26 @@ sealed class QuickPayResult {
     data class Pending(
         val paymentHash: String,
         val amount: Long,
+        val paymentRequest: String,
     ) : QuickPayResult()
 
-    data class Error(val message: String) : QuickPayResult()
+    data class Error(val failure: SendFailureDetails) : QuickPayResult()
 }
 
 data class QuickPayUiState(
     val result: QuickPayResult? = null,
 )
+
+private data class QuickPayInvoice(
+    val bolt11: String,
+    val amount: ULong?,
+    val displaySats: ULong,
+    val fallbackPaymentRequest: String,
+) {
+    val paymentRequest get() = bolt11.ifBlank { fallbackPaymentRequest }
+}
+
+private class QuickPayPaymentFailedError(
+    val reason: PaymentFailureReason?,
+    val paymentRequest: String?,
+) : AppError(reason?.name)

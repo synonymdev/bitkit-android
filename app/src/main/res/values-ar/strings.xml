@@ -929,6 +929,7 @@
     <string name="wallet__send_dialog3">تبدو رسوم المعاملة أكثر من 50% من المبلغ الذي ترسله. هل تريد المتابعة؟</string>
     <string name="wallet__send_dialog4">تبدو رسوم المعاملة أكثر من 10$. هل تريد المتابعة؟</string>
     <string name="wallet__send_error_create_tx">تعذر بث المعاملة. يرجى المحاولة مرة أخرى.</string>
+    <string name="wallet__send_error_support">الدعم</string>
     <string name="wallet__send_error_tx_failed">فشلت المعاملة</string>
     <string name="wallet__send_fee_and_speed">السرعة والرسوم</string>
     <string name="wallet__send_fee_custom">تعيين رسوم مخصصة</string>
@@ -938,6 +939,7 @@
     <string name="wallet__send_fee_speed">السرعة</string>
     <string name="wallet__send_fee_total">₿ {feeSats} لهذه المعاملة</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} لهذه المعاملة ({fiatSymbol}{fiatFormatted})</string>
+    <string name="wallet__send_instant_failed">فشل الدفع</string>
     <string name="wallet__send_invoice">الفاتورة</string>
     <string name="wallet__send_invoice_expiration">انتهاء صلاحية الفاتورة</string>
     <string name="wallet__send_max">الحد الأقصى</string>
@@ -960,6 +962,16 @@
     <string name="wallet__tags_new">علامة جديدة</string>
     <string name="wallet__tags_new_enter">أدخل علامة جديدة</string>
     <string name="wallet__tags_previously">العلامات المستخدمة سابقًا</string>
+    <string name="wallet__payment_abandoned">تم إيقاف دفعة Lightning قبل اكتمالها.</string>
+    <string name="wallet__payment_expired">انتهت صلاحية دفعة Lightning هذه. اطلب فاتورة جديدة.</string>
+    <string name="wallet__payment_failed_description">فشل دفعك الفوري. يرجى المحاولة مرة أخرى.</string>
+    <string name="wallet__payment_invoice_request_expired">انتهت صلاحية طلب فاتورة Lightning هذا. اطلب فاتورة جديدة.</string>
+    <string name="wallet__payment_invoice_request_rejected">رفض المستلم طلب فاتورة Lightning هذا.</string>
+    <string name="wallet__payment_recipient_rejected">رفض المستلم دفعة Lightning هذه. تحقق من الفاتورة وحاول مرة أخرى.</string>
+    <string name="wallet__payment_retries_exhausted">جرّب Bitkit عدة مسارات Lightning، لكن تعذر إكمال الدفعة.</string>
+    <string name="wallet__payment_route_not_found">لم يتمكن Bitkit من العثور على مسار Lightning لهذه الدفعة.</string>
+    <string name="wallet__payment_timeout">انتهت مهلة الدفع. حاول مرة أخرى.</string>
+    <string name="wallet__payment_unknown_required_features">تستخدم فاتورة Lightning هذه ميزات لا يدعمها Bitkit بعد.</string>
     <string name="wallet__toast_payment_failed_description">فشل دفعك الفوري. يرجى المحاولة مرة أخرى.</string>
     <string name="wallet__toast_payment_failed_title">فشل الدفع</string>
     <string name="wallet__toast_received_transaction_replaced_description">تم استبدال معاملتك المستلمة برفع الرسوم</string>

@@ -929,6 +929,7 @@
     <string name="wallet__send_dialog3">De transactievergoeding lijkt meer dan 50% van het bedrag dat je verstuurt te zijn. Wil je doorgaan?</string>
     <string name="wallet__send_dialog4">De transactievergoeding lijkt meer dan $10 te zijn. Wil je doorgaan?</string>
     <string name="wallet__send_error_create_tx">Kan de transactie niet verzenden. Probeer het opnieuw.</string>
+    <string name="wallet__send_error_support">Contact Opnemen</string>
     <string name="wallet__send_error_tx_failed">Transactie mislukt</string>
     <string name="wallet__send_fee_and_speed">Snelheid en vergoeding</string>
     <string name="wallet__send_fee_custom">Aangepaste vergoeding instellen</string>
@@ -938,6 +939,7 @@
     <string name="wallet__send_fee_speed">Snelheid</string>
     <string name="wallet__send_fee_total">₿ {feeSats} voor deze transactie</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} voor deze transactie ({fiatSymbol}{fiatFormatted})</string>
+    <string name="wallet__send_instant_failed">Betaling mislukt</string>
     <string name="wallet__send_invoice">Factuur</string>
     <string name="wallet__send_invoice_expiration">Factuutvervaldatum</string>
     <string name="wallet__send_max">MAX</string>
@@ -960,6 +962,16 @@
     <string name="wallet__tags_new">Nieuwe tag</string>
     <string name="wallet__tags_new_enter">Voer een nieuwe tag in</string>
     <string name="wallet__tags_previously">Eerder gebruikte tags</string>
+    <string name="wallet__payment_abandoned">De Lightning-betaling is gestopt voordat deze was voltooid.</string>
+    <string name="wallet__payment_expired">Deze Lightning-betaling is verlopen. Vraag een nieuwe factuur aan.</string>
+    <string name="wallet__payment_failed_description">Uw directe betaling is mislukt. Probeer het opnieuw.</string>
+    <string name="wallet__payment_invoice_request_expired">Deze Lightning-factuuraanvraag is verlopen. Vraag een nieuwe factuur aan.</string>
+    <string name="wallet__payment_invoice_request_rejected">De ontvanger heeft deze Lightning-factuuraanvraag geweigerd.</string>
+    <string name="wallet__payment_recipient_rejected">De ontvanger heeft deze Lightning-betaling geweigerd. Controleer de factuur en probeer het opnieuw.</string>
+    <string name="wallet__payment_retries_exhausted">Bitkit heeft meerdere Lightning-routes geprobeerd, maar de betaling kon niet worden voltooid.</string>
+    <string name="wallet__payment_route_not_found">Bitkit kon geen Lightning-route voor deze betaling vinden.</string>
+    <string name="wallet__payment_timeout">Time-out voor betaling. Probeer het opnieuw.</string>
+    <string name="wallet__payment_unknown_required_features">Deze Lightning-factuur gebruikt functies die Bitkit nog niet ondersteunt.</string>
     <string name="wallet__toast_payment_failed_description">Je directe betaling is mislukt. Probeer het opnieuw.</string>
     <string name="wallet__toast_payment_failed_title">Betaling mislukt</string>
     <string name="wallet__toast_received_transaction_replaced_description">Je ontvangen transactie is vervangen door een vergoedingsverhoging</string>

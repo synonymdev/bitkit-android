@@ -32,9 +32,14 @@ import to.bitkit.ui.theme.Colors
 @Composable
 fun ReportIssueScreen(
     viewModel: ReportIssueViewModel = hiltViewModel(),
+    prefillMessage: String? = null,
     onBack: () -> Unit,
     navigateResultScreen: (Boolean) -> Unit,
 ) {
+    LaunchedEffect(prefillMessage) {
+        viewModel.applyPrefillMessage(prefillMessage)
+    }
+
     LaunchedEffect(Unit) {
         viewModel.reportIssueEffect.collect { event ->
             when (event) {

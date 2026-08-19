@@ -956,6 +956,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__send_dialog3">Комиссия за транзакцию составляет более 50% от суммы, которую вы отправляете. Вы хотите продолжать?</string>
     <string name="wallet__send_dialog4">Комиссия за транзакцию составляет более 10$. Вы хотите продолжать?</string>
     <string name="wallet__send_error_create_tx">Не удалось отправить транзакцию. Пожалуйста, попробуйте снова.</string>
+    <string name="wallet__send_error_support">Связаться с Поддержкой</string>
     <string name="wallet__send_error_tx_failed">Транзакция не удалась</string>
     <string name="wallet__send_fee_and_speed">Скорость и комиссия</string>
     <string name="wallet__send_fee_custom">Установить Пользовательскую Комиссию</string>
@@ -965,6 +966,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__send_fee_speed">Скорость</string>
     <string name="wallet__send_fee_total">₿ {feeSats} за эту транзакцию</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} за эту транзакцию ({fiatSymbol}{fiatFormatted})</string>
+    <string name="wallet__send_instant_failed">Платеж не выполнен</string>
     <string name="wallet__send_invoice">Инвойс</string>
     <string name="wallet__send_invoice_expiration">Срок действия инвойса</string>
     <string name="wallet__send_max">МАКС</string>
@@ -988,6 +990,16 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__tags_new">Новый тег</string>
     <string name="wallet__tags_new_enter">Введите тег</string>
     <string name="wallet__tags_previously">Ранее использовавшиеся теги</string>
+    <string name="wallet__payment_abandoned">Платеж Lightning был остановлен до завершения.</string>
+    <string name="wallet__payment_expired">Срок действия этого платежа Lightning истек. Запросите новый счет.</string>
+    <string name="wallet__payment_failed_description">Ваш мгновенный платеж не удался. Пожалуйста, попробуйте снова.</string>
+    <string name="wallet__payment_invoice_request_expired">Срок действия этого запроса счета Lightning истек. Запросите новый счет.</string>
+    <string name="wallet__payment_invoice_request_rejected">Получатель отклонил этот запрос счета Lightning.</string>
+    <string name="wallet__payment_recipient_rejected">Получатель отклонил этот платеж Lightning. Проверьте счет и попробуйте снова.</string>
+    <string name="wallet__payment_retries_exhausted">Bitkit попробовал несколько маршрутов Lightning, но платеж не удалось завершить.</string>
+    <string name="wallet__payment_route_not_found">Bitkit не смог найти маршрут Lightning для этого платежа.</string>
+    <string name="wallet__payment_timeout">Время ожидания платежа истекло. Попробуйте еще раз.</string>
+    <string name="wallet__payment_unknown_required_features">Этот счет Lightning использует функции, которые Bitkit пока не поддерживает.</string>
     <string name="wallet__toast_payment_failed_description">Ваш мгновенный платеж не удался. Пожалуйста, попробуйте снова.</string>
     <string name="wallet__toast_payment_failed_title">Платеж не выполнен</string>
     <string name="wallet__toast_received_transaction_replaced_description">Ваша полученная транзакция была заменена повышением комиссии</string>
