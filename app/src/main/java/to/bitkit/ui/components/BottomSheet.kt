@@ -17,6 +17,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -27,12 +28,18 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.viewmodels.AppViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +67,9 @@ fun BottomSheet(
     properties: ModalBottomSheetProperties = ModalBottomSheetDefaults.properties,
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    val toastHazeState = rememberHazeState(blurEnabled = true)
+    val app = appViewModel
+
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
         modifier = modifier.semantics { testTagsAsResourceId = true },
@@ -73,7 +83,40 @@ fun BottomSheet(
         dragHandle = dragHandle,
         contentWindowInsets = contentWindowInsets,
         properties = properties,
-        content = content,
+    ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .hazeSource(toastHazeState, zIndex = 0f)
+            ) {
+                content()
+            }
+            if (app != null) {
+                SheetToastHost(
+                    app = app,
+                    hazeState = toastHazeState,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SheetToastHost(
+    app: AppViewModel,
+    hazeState: HazeState,
+    modifier: Modifier = Modifier,
+) {
+    val currentToast by app.currentToast.collectAsStateWithLifecycle()
+    ToastOverlay(
+        toast = currentToast,
+        onDismiss = { app.hideToast() },
+        hazeState = hazeState,
+        onDragStart = { app.pauseToast() },
+        onDragEnd = { app.resumeToast() },
+        modifier = modifier
     )
 }
 
