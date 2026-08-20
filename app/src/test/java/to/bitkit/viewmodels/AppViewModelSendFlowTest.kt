@@ -2359,6 +2359,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `hiding send sheet clears quickPayData`() = test {
+        val bolt11 = "lnbcrt1quickpayhide"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        sut.hideSheet()
+
+        assertNull(sut.quickPayData.value)
+    }
+
+    @Test
     fun `lightning scan uses QuickPay when PIN is required for payments under daily cap`() = test {
         val bolt11 = "lnbcrt1quickpaypin"
         enableQuickPay()

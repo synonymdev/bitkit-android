@@ -3481,6 +3481,7 @@ class AppViewModel @Inject constructor(
     fun hideSheet() = hideSheet(shouldFlushDeferredScan = true)
 
     private fun hideSheet(shouldFlushDeferredScan: Boolean) {
+        if (_currentSheet.value is Sheet.Send) resetQuickPay()
         scanResultHandler = null
         receiveSheetContext = null
         sheetTransitionJob?.cancel()

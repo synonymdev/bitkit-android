@@ -24,6 +24,7 @@ class PendingPaymentRepo @Inject constructor() {
     private val lastResolutions = MutableStateFlow<Map<String, PendingPaymentResolution>>(emptyMap())
 
     fun track(paymentHash: String) {
+        lastResolutions.update { it - paymentHash }
         _state.update { it.copy(pendingPayments = it.pendingPayments + paymentHash) }
     }
 

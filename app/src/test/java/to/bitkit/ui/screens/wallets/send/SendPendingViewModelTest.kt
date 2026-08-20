@@ -109,6 +109,7 @@ class SendPendingViewModelTest : BaseUnitTest() {
         val resolution = sut.uiState.value.resolution
         assertIs<PendingPaymentResolution.Success>(resolution)
         assertEquals(hash, resolution.paymentHash)
+        assertNull(pendingPaymentRepo.consumeResolution(hash))
     }
 
     @Test

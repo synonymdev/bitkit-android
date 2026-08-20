@@ -109,6 +109,15 @@ class PendingPaymentRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `track clears a cached resolution for that hash`() = test {
+        sut.resolve(PendingPaymentResolution.Failure("hash1"))
+        sut.track("hash1")
+
+        assertNull(sut.consumeResolution("hash1"))
+        assertTrue(sut.isPending("hash1"))
+    }
+
+    @Test
     fun `consumeResolution ignores other hashes`() = test {
         sut.resolve(PendingPaymentResolution.Failure("hash1"))
 

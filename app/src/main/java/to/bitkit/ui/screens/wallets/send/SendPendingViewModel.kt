@@ -68,6 +68,7 @@ class SendPendingViewModel @Inject constructor(
             pendingPaymentRepo.resolution
                 .filter { it.paymentHash == paymentHash }
                 .collect { resolution ->
+                    pendingPaymentRepo.consumeResolution(paymentHash)
                     Logger.info(
                         "Received payment resolution '${resolution::class.simpleName}' for '$paymentHash'",
                         context = TAG,
