@@ -135,7 +135,6 @@ import to.bitkit.ui.Routes
 import to.bitkit.ui.components.ActivityBanner
 import to.bitkit.ui.components.AppStatus
 import to.bitkit.ui.components.BalanceHeaderView
-import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.EmptyStateView
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
@@ -202,7 +201,6 @@ import to.bitkit.viewmodels.WalletViewModel
 private const val SMALL_SCREEN_HEIGHT_DP = 800
 private const val SMALL_SCREEN_SLOT_CAPACITY = 3
 private const val LARGE_SCREEN_SLOT_CAPACITY = 4
-private const val MAX_PAYMENT_REQUEST_BADGE_COUNT = 99
 private val CALCULATOR_LIFT_SPEC = spring<Float>(
     dampingRatio = Spring.DampingRatioNoBouncy,
     stiffness = Spring.StiffnessMediumLow,
@@ -241,7 +239,6 @@ fun HomeScreen(
     val latestActivities by activityListViewModel.latestActivities.collectAsStateWithLifecycle()
     val hardwareIds by activityListViewModel.hardwareIds.collectAsStateWithLifecycle()
     val pendingPaymentRequests by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
-    val sentPaymentRequests by appViewModel.sentPaymentRequests.collectAsStateWithLifecycle()
 
     val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
 
@@ -279,18 +276,10 @@ fun HomeScreen(
         profileDisplayName = profileDisplayName,
         profileDisplayImageUri = profileDisplayImageUri,
         showProfileButton = isPaykitEnabled,
-        showPaymentRequests = isPaykitEnabled && (
-            pendingPaymentRequests.isNotEmpty() || sentPaymentRequests.isNotEmpty()
-            ),
+        showPaymentRequests = isPaykitEnabled && pendingPaymentRequests.isNotEmpty(),
         pendingPaymentRequestCount = pendingPaymentRequests.size,
         onClickProfile = navigateToProfile,
-        onClickPaymentRequests = {
-            if (pendingPaymentRequests.isNotEmpty()) {
-                appViewModel.showPaymentRequests()
-            } else {
-                rootNavController.navigateTo(Routes.PaymentRequests)
-            }
-        },
+        onClickPaymentRequests = appViewModel::showPaymentRequests,
         latestActivities = latestActivities,
         hardwareIds = hardwareIds,
         onRefresh = {
@@ -1398,40 +1387,12 @@ private fun TopBar(
                             }
                             .testTag("PaymentRequestsBell"),
                     ) {
-                        Box {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_bell),
-                                tint = Colors.Purple,
-                                contentDescription = null,
-                                modifier = Modifier.size(24.dp),
-                            )
-                            if (pendingPaymentRequestCount > 0) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .align(Alignment.TopEnd)
-                                        .size(
-                                            if (pendingPaymentRequestCount > MAX_PAYMENT_REQUEST_BADGE_COUNT) {
-                                                22.dp
-                                            } else {
-                                                18.dp
-                                            }
-                                        )
-                                        .clip(CircleShape)
-                                        .background(Colors.Purple)
-                                        .testTag("PaymentRequestsBadge"),
-                                ) {
-                                    BodySSB(
-                                        text = if (pendingPaymentRequestCount > MAX_PAYMENT_REQUEST_BADGE_COUNT) {
-                                            "$MAX_PAYMENT_REQUEST_BADGE_COUNT+"
-                                        } else {
-                                            pendingPaymentRequestCount.toString()
-                                        },
-                                        color = Colors.Black,
-                                    )
-                                }
-                            }
-                        }
+                        Icon(
+                            painter = painterResource(R.drawable.ic_bell),
+                            tint = Colors.Brand,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp),
+                        )
                     }
                 }
                 IconButton(

@@ -580,13 +580,6 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun actionableReceivedPaymentRequests(): List<PaymentRequestRecord> {
-        isSetup.await()
-        return operationMutex.withLock {
-            handle().actionableReceivedPaymentRequests()
-        }
-    }
-
     suspend fun paymentRequests(): List<PaymentRequestRecord> {
         isSetup.await()
         return operationMutex.withLock {

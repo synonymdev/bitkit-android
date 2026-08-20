@@ -70,6 +70,8 @@ data class PaykitPaymentRequest(
     val expiresAt: Instant?,
     val acceptedPaymentEndpointIdentifiers: List<String>,
     val deliveryStatus: PaykitPaymentRequestDeliveryStatus? = null,
+    val direction: PaykitPaymentRequestDirection = PaykitPaymentRequestDirection.Incoming,
+    val lifecycleState: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROPOSED,
 ) {
     val id: PaykitPaymentRequestId
         get() = PaykitPaymentRequestId(paymentRequestId, counterparty, counterpartyReceiverPath)
@@ -86,6 +88,8 @@ data class PaykitPaymentRequest(
 }
 
 enum class PaykitPaymentRequestDeliveryStatus { Queued, Sent }
+
+enum class PaykitPaymentRequestDirection { Incoming, Outgoing }
 
 data class PaykitPaymentRequestTarget(
     val publicKey: String,
@@ -132,8 +136,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private var expirationJob: Job? = null
     private val _pendingRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     val pendingRequests: StateFlow<List<PaykitPaymentRequest>> = _pendingRequests.asStateFlow()
-    private val _sentRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
-    val sentRequests: StateFlow<List<PaykitPaymentRequest>> = _sentRequests.asStateFlow()
+    private val _paymentRequestHistory = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
+    val paymentRequestHistory: StateFlow<List<PaykitPaymentRequest>> = _paymentRequestHistory.asStateFlow()
     private val _eligibleTargets = MutableStateFlow<List<PaykitPaymentRequestTarget>>(emptyList())
     val eligibleTargets: StateFlow<List<PaykitPaymentRequestTarget>> = _eligibleTargets.asStateFlow()
     private val _isCreatingRequest = MutableStateFlow(false)
@@ -259,7 +263,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     ): PaykitPaymentRequestCreation {
         val wasPublishedToActiveState = isCurrentState(generation, creatorIdentity)
         if (wasPublishedToActiveState) {
-            _sentRequests.update { requests ->
+            _paymentRequestHistory.update { requests ->
                 listOf(request) + requests.filterNot { it.id == request.id }
             }
             scheduleExpirationLocked()
@@ -267,7 +271,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
         return PaykitPaymentRequestCreation(request, creatorIdentity, wasPublishedToActiveState)
     }
 
-    suspend fun accept(request: PaykitPaymentRequest): Result<Unit> = updateRequest(request) {
+    suspend fun accept(request: PaykitPaymentRequest): Result<Unit> = updateRequest(
+        request = request,
+        resultingState = PaymentRequestLifecycleState.ACCEPTED,
+    ) {
         paykitSdkService.acceptPaymentRequest(
             counterparty = it.counterparty,
             counterpartyReceiverPath = it.counterpartyReceiverPath,
@@ -277,7 +284,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
         Logger.warn("Failed to accept incoming Paykit payment request", it, context = TAG)
     }
 
-    suspend fun reject(request: PaykitPaymentRequest): Result<Unit> = updateRequest(request) {
+    suspend fun reject(request: PaykitPaymentRequest): Result<Unit> = updateRequest(
+        request = request,
+        resultingState = PaymentRequestLifecycleState.REJECTED,
+    ) {
         paykitSdkService.rejectPaymentRequest(
             counterparty = it.counterparty,
             counterpartyReceiverPath = it.counterpartyReceiverPath,
@@ -315,12 +325,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
         processPendingMessages()
         paykitSdkService.receivePrivateMessagesFromLinkedPeers().also(::logIntakeFailures)
         val now = clock.now()
-        val incoming = paykitSdkService.actionableReceivedPaymentRequests().mapNotNull {
-            it.toPaykitPaymentRequest(PaymentRequestLocalRole.PAYER, now)
-        }
-        val sent = paykitSdkService.paymentRequests().mapNotNull {
-            it.toPaykitPaymentRequest(PaymentRequestLocalRole.PAYEE, now)
-        }
+        val records = paykitSdkService.paymentRequests()
+        val incoming = records.mapNotNull { it.toPaykitPaymentRequest(PaymentRequestLocalRole.PAYER, now) }
+        val history = records.mapNotNull { it.toPaykitPaymentRequestHistory(now) }
+            .sortedByDescending { it.createdAt }
         val targets = expectedIdentity?.let { eligibleTargets(savedPublicKeys, it) }.orEmpty()
         if (
             stateGeneration.get() != generation ||
@@ -329,7 +337,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             return
         }
         _pendingRequests.update { incoming }
-        _sentRequests.update { sent }
+        _paymentRequestHistory.update { history }
         _eligibleTargets.update { targets }
         prunePresentedRequestIds(incoming)
         scheduleExpirationLocked()
@@ -394,6 +402,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     private suspend fun updateRequest(
         request: PaykitPaymentRequest,
+        resultingState: PaymentRequestLifecycleState,
         operation: suspend (PaykitPaymentRequest) -> Unit,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
@@ -409,6 +418,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         ?: throw PaykitPaymentRequestError.RequestUnavailable
 
                     operation(current)
+                    val updatedRequest = current.copy(lifecycleState = resultingState)
+                    _paymentRequestHistory.update { requests ->
+                        listOf(updatedRequest) + requests.filterNot { it.id == current.id }
+                    }
                     _pendingRequests.update { requests -> requests.filterNot { it.id == current.id } }
                     discardExpiredRequestsLocked()
                     processPendingMessages()
@@ -459,7 +472,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private suspend fun discardExpiredRequestsLocked() {
         val now = clock.now()
         _pendingRequests.update { requests -> requests.filterNot { it.isExpired(now) } }
-        _sentRequests.update { requests -> requests.filterNot { it.isExpired(now) } }
+        _paymentRequestHistory.update { requests -> requests.withExpiredLifecycle(now) }
         prunePresentedRequestIds(_pendingRequests.value)
         scheduleExpirationLocked()
     }
@@ -478,7 +491,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         expirationJob?.cancel()
         expirationJob = null
         _pendingRequests.update { emptyList() }
-        _sentRequests.update { emptyList() }
+        _paymentRequestHistory.update { emptyList() }
         _eligibleTargets.update { emptyList() }
     }
 
@@ -486,7 +499,9 @@ class PaykitPaymentRequestRepo @Inject constructor(
         expirationJob?.cancel()
         expirationJob = null
 
-        val nextExpiration = (_pendingRequests.value + _sentRequests.value)
+        val nextExpiration = (_pendingRequests.value + _paymentRequestHistory.value)
+            .asSequence()
+            .filter { it.lifecycleState == PaymentRequestLifecycleState.PROPOSED }
             .mapNotNull { it.expiresAt }
             .minOrNull()
             ?: return
@@ -501,14 +516,24 @@ class PaykitPaymentRequestRepo @Inject constructor(
     }
 }
 
+private fun List<PaykitPaymentRequest>.withExpiredLifecycle(now: Instant): List<PaykitPaymentRequest> = map { request ->
+    if (request.lifecycleState == PaymentRequestLifecycleState.PROPOSED && request.isExpired(now)) {
+        request.copy(lifecycleState = PaymentRequestLifecycleState.PROPOSAL_EXPIRED)
+    } else {
+        request
+    }
+}
+
 private val bitcoinAmountPattern = Regex("(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)")
 
 @Suppress("CyclomaticComplexMethod", "ReturnCount")
 private fun PaymentRequestRecord.toPaykitPaymentRequest(
     expectedRole: PaymentRequestLocalRole,
     now: Instant,
+    requiresActionableRequest: Boolean = true,
 ): PaykitPaymentRequest? {
-    if (localRole != expectedRole || state != PaymentRequestLifecycleState.PROPOSED) return null
+    if (localRole != expectedRole || state == PaymentRequestLifecycleState.ACTIVE_RECURRING) return null
+    if (requiresActionableRequest && state != PaymentRequestLifecycleState.PROPOSED) return null
     val requestTerms = terms ?: return null
     if (requestTerms.recurrence != null || requestTerms.amount.asset != "btc") return null
     val amountSats = requestTerms.amount.value.toSats()
@@ -517,12 +542,12 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(
     val endpoints = requestTerms.acceptedPaymentEndpointIdentifiers
         .filter { MethodId.fromRawValue(it) != null }
         .distinct()
-    if (endpoints.isEmpty()) return null
+    if (requiresActionableRequest && endpoints.isEmpty()) return null
 
     val expiresAt = requestTerms.proposalExpiresAt?.let {
         runCatching { Instant.parse(it) }.getOrNull() ?: return null
     }
-    if (expiresAt != null && expiresAt <= now) return null
+    if (requiresActionableRequest && expiresAt != null && expiresAt <= now) return null
 
     return PaykitPaymentRequest(
         paymentRequestId = paymentRequestId,
@@ -543,7 +568,23 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(
         } else {
             null
         },
+        direction = if (expectedRole == PaymentRequestLocalRole.PAYER) {
+            PaykitPaymentRequestDirection.Incoming
+        } else {
+            PaykitPaymentRequestDirection.Outgoing
+        },
+        lifecycleState = if (state == PaymentRequestLifecycleState.PROPOSED && expiresAt?.let { it <= now } == true) {
+            PaymentRequestLifecycleState.PROPOSAL_EXPIRED
+        } else {
+            state
+        },
     )
+}
+
+private fun PaymentRequestRecord.toPaykitPaymentRequestHistory(now: Instant): PaykitPaymentRequest? {
+    val role = localRole ?: return null
+    if (role == PaymentRequestLocalRole.UNKNOWN) return null
+    return toPaykitPaymentRequest(role, now, requiresActionableRequest = false)
 }
 
 private fun PaymentRequestRecord.toCreatedPaykitPaymentRequest(
@@ -575,6 +616,8 @@ private fun PaymentRequestRecord.toCreatedPaykitPaymentRequest(
         } else {
             PaykitPaymentRequestDeliveryStatus.Queued
         },
+        direction = PaykitPaymentRequestDirection.Outgoing,
+        lifecycleState = PaymentRequestLifecycleState.PROPOSED,
     )
 }
 

@@ -91,8 +91,6 @@ fun ReceiveQrScreen(
     lightningState: LightningState,
     onClickEditInvoice: () -> Unit,
     onClickReceiveCjit: () -> Unit,
-    showPaymentRequestButton: Boolean = false,
-    onClickPaymentRequest: () -> Unit = {},
     modifier: Modifier = Modifier,
     initialTab: ReceiveTab? = null,
 ) {
@@ -292,17 +290,6 @@ fun ReceiveQrScreen(
             VerticalSpacer(24.dp)
 
             val showCjitButton = showingCjitOnboarding && selectedTab == ReceiveTab.SPENDING
-            if (showPaymentRequestButton && !showCjitButton) {
-                TertiaryButton(
-                    text = stringResource(R.string.wallet__payment_request_send),
-                    onClick = onClickPaymentRequest,
-                    fullWidth = true,
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .testTag("PaymentRequestSendButton"),
-                )
-                VerticalSpacer(12.dp)
-            }
             val buttonVariant = when {
                 showCjitButton -> BottomButtonVariant.CJIT
                 showDetails -> BottomButtonVariant.SHOW_QR

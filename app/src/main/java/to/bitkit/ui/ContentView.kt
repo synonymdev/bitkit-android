@@ -731,6 +731,9 @@ private fun RootNavHost(
             PaymentRequestsScreen(
                 appViewModel = appViewModel,
                 onBack = { navController.popBackStack() },
+                onRequestPayment = {
+                    appViewModel.showSheet(Sheet.Receive(route = ReceiveRoute.PaymentRequestDetails))
+                },
             )
         }
         settings(navController, settingsViewModel)

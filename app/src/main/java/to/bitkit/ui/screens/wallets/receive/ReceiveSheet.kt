@@ -72,8 +72,8 @@ fun ReceiveSheet(
     var paymentRequestDraft by remember {
         mutableStateOf(
             PaykitPaymentRequestDraft(
-                amountSats = walletState.bip21AmountSats ?: 0uL,
-                note = walletState.bip21Description,
+                amountSats = 0uL,
+                note = "",
                 expiresAt = Clock.System.now() + 7.days,
             )
         )
@@ -124,15 +124,6 @@ fun ReceiveSheet(
                             }
                         },
                         onClickEditInvoice = { navController.navigateTo(ReceiveRoute.EditInvoice) },
-                        showPaymentRequestButton = paymentRequestTargets.isNotEmpty(),
-                        onClickPaymentRequest = {
-                            paymentRequestDraft = PaykitPaymentRequestDraft(
-                                amountSats = walletState.bip21AmountSats ?: 0uL,
-                                note = walletState.bip21Description,
-                                expiresAt = Clock.System.now() + 7.days,
-                            )
-                            navController.navigateTo(ReceiveRoute.PaymentRequestDetails)
-                        },
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestDetails> {
@@ -160,6 +151,7 @@ fun ReceiveSheet(
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestSent> {
                     createdPaymentRequest?.let {
                         PaymentRequestSentScreen(
+                            appViewModel = appViewModel,
                             request = it,
                             onDone = appViewModel::hideSheet,
                         )
@@ -261,6 +253,15 @@ fun ReceiveSheet(
                         onClickAddTag = { navController.navigateTo(ReceiveRoute.AddTag) },
                         onClickTag = wallet::removeTag,
                         onDescriptionUpdate = wallet::updateBip21Description,
+                        showPaymentRequestButton = paymentRequestTargets.isNotEmpty(),
+                        onClickPaymentRequest = { amountSats, note ->
+                            paymentRequestDraft = PaykitPaymentRequestDraft(
+                                amountSats = amountSats,
+                                note = note,
+                                expiresAt = Clock.System.now() + 7.days,
+                            )
+                            navController.navigateTo(ReceiveRoute.PaymentRequestDetails)
+                        },
                         navigateReceiveConfirm = { entry ->
                             cjitEntryDetails.value = entry
                             navController.navigateTo(ReceiveRoute.ConfirmIncreaseInbound)

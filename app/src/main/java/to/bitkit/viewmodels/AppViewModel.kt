@@ -298,7 +298,7 @@ class AppViewModel @Inject constructor(
     private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
     val currentSheet = _currentSheet.asStateFlow()
     val pendingPaymentRequests = paykitPaymentRequestRepo.pendingRequests
-    val sentPaymentRequests = paykitPaymentRequestRepo.sentRequests
+    val paymentRequestHistory = paykitPaymentRequestRepo.paymentRequestHistory
     val eligiblePaymentRequestTargets = paykitPaymentRequestRepo.eligibleTargets
     val isCreatingPaymentRequest = paykitPaymentRequestRepo.isCreatingRequest
     val pubkyContacts = pubkyRepo.contacts

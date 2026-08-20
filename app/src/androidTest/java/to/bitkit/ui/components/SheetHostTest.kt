@@ -19,12 +19,12 @@ import androidx.compose.ui.unit.dp
 import androidx.test.espresso.Espresso.pressBack
 import dagger.hilt.android.testing.HiltAndroidRule
 import dagger.hilt.android.testing.HiltAndroidTest
-import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
+import kotlin.test.assertEquals
 
 @HiltAndroidTest
 @ComposeUi

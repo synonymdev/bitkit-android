@@ -55,6 +55,7 @@ import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -78,6 +79,8 @@ fun EditInvoiceScreen(
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
     onDescriptionUpdate: (String) -> Unit,
+    showPaymentRequestButton: Boolean,
+    onClickPaymentRequest: (amountSats: ULong, note: String) -> Unit,
     onBack: () -> Unit,
     navigateReceiveConfirm: (CjitEntryDetails) -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
@@ -147,6 +150,10 @@ fun EditInvoiceScreen(
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
         isSoftKeyboardVisible = isSoftKeyboardVisible,
+        showPaymentRequestButton = showPaymentRequestButton,
+        onClickPaymentRequest = {
+            onClickPaymentRequest(amountInputUiState.sats.toULong(), walletUiState.bip21Description)
+        },
     )
 }
 
@@ -166,6 +173,8 @@ fun EditInvoiceContent(
     onTextChanged: (String) -> Unit,
     onClickTag: (String) -> Unit,
     modifier: Modifier = Modifier,
+    showPaymentRequestButton: Boolean = false,
+    onClickPaymentRequest: () -> Unit = {},
     isLoading: Boolean = false,
     currencies: CurrencyState = LocalCurrencies.current,
 ) {
@@ -337,6 +346,15 @@ fun EditInvoiceContent(
                         )
 
                         FillHeight()
+
+                        if (showPaymentRequestButton) {
+                            SecondaryButton(
+                                text = stringResource(R.string.wallet__payment_request_send),
+                                onClick = onClickPaymentRequest,
+                                modifier = Modifier.testTag("PaymentRequestSendButton"),
+                            )
+                            VerticalSpacer(12.dp)
+                        }
 
                         PrimaryButton(
                             text = stringResource(R.string.wallet__receive_show_qr),

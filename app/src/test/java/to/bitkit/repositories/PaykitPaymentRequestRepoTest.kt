@@ -79,7 +79,6 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         schedulerOriginMillis = testDispatcher.scheduler.currentTime
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
         whenever(paykitSdkService.receivePrivateMessagesFromLinkedPeers()).thenReturn(emptyList())
-        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(emptyList())
         whenever(paykitSdkService.paymentRequests()).thenReturn(emptyList())
         whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(true))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = true)))
@@ -96,7 +95,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `refresh maps actionable bitcoin request`() = test {
         val record = paymentRequestRecord(expiresAt = clock.now().plus(60.seconds).toString())
-        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
 
         sut.refresh(emptyList()).getOrThrow()
 
@@ -107,7 +106,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `refresh rejects amounts outside the app payment range`() = test {
-        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
             listOf(
                 paymentRequestRecord(id = "millisatoshi-safe-max", amount = "184467440.73709551"),
                 paymentRequestRecord(id = "millisatoshi-overflow", amount = "184467440.73709552"),
@@ -143,7 +142,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `refresh drops expired unsupported and non payer requests`() = test {
-        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
             listOf(
                 paymentRequestRecord(expiresAt = clock.now().toString()),
                 paymentRequestRecord(id = "unsupported", endpoints = listOf("btc-unsupported-method")),
@@ -157,8 +156,43 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `refresh keeps one time bitcoin lifecycle history`() = test {
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(
+                paymentRequestRecord(id = "incoming"),
+                paymentRequestRecord(id = "accepted", state = PaymentRequestLifecycleState.ACCEPTED),
+                paymentRequestRecord(id = "rejected", state = PaymentRequestLifecycleState.REJECTED),
+                paymentRequestRecord(
+                    id = "expired",
+                    state = PaymentRequestLifecycleState.PROPOSAL_EXPIRED,
+                    expiresAt = clock.now().toString(),
+                ),
+                paymentRequestRecord(id = "outgoing", role = PaymentRequestLocalRole.PAYEE),
+                paymentRequestRecord(id = "unsupported", endpoints = listOf("btc-unsupported-method")),
+                paymentRequestRecord(id = "recurring", state = PaymentRequestLifecycleState.ACTIVE_RECURRING),
+            ),
+        )
+
+        sut.refresh(emptyList()).getOrThrow()
+
+        assertEquals(listOf("incoming"), sut.pendingRequests.value.map { it.paymentRequestId })
+        assertEquals(
+            setOf("incoming", "accepted", "rejected", "expired", "outgoing", "unsupported"),
+            sut.paymentRequestHistory.value.map { it.paymentRequestId }.toSet(),
+        )
+        assertEquals(
+            PaymentRequestLifecycleState.ACCEPTED,
+            sut.paymentRequestHistory.value.first { it.paymentRequestId == "accepted" }.lifecycleState,
+        )
+        assertEquals(
+            PaykitPaymentRequestDirection.Outgoing,
+            sut.paymentRequestHistory.value.first { it.paymentRequestId == "outgoing" }.direction,
+        )
+    }
+
+    @Test
     fun `pending request is removed exactly when it expires`() = test {
-        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
             listOf(paymentRequestRecord(expiresAt = clock.now().plus(10.seconds).toString())),
         )
         sut.refresh(emptyList()).getOrThrow()
@@ -170,12 +204,40 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         advanceTimeBy(1)
         runCurrent()
         assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(
+            PaymentRequestLifecycleState.PROPOSAL_EXPIRED,
+            sut.paymentRequestHistory.value.single().lifecycleState,
+        )
+    }
+
+    @Test
+    fun `outgoing request moves to expired history exactly when it expires`() = test {
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(
+                paymentRequestRecord(
+                    role = PaymentRequestLocalRole.PAYEE,
+                    expiresAt = clock.now().plus(10.seconds).toString(),
+                ),
+            ),
+        )
+        sut.refresh(emptyList()).getOrThrow()
+
+        advanceTimeBy(9_999)
+        runCurrent()
+        assertEquals(PaymentRequestLifecycleState.PROPOSED, sut.paymentRequestHistory.value.single().lifecycleState)
+
+        advanceTimeBy(1)
+        runCurrent()
+        assertEquals(
+            PaymentRequestLifecycleState.PROPOSAL_EXPIRED,
+            sut.paymentRequestHistory.value.single().lifecycleState,
+        )
     }
 
     @Test
     fun `accept removes current request and delivers queued response`() = test {
         val record = paymentRequestRecord()
-        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(
             paykitSdkService.acceptPaymentRequest(
                 COUNTERPARTY,
@@ -189,13 +251,14 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.accept(sut.pendingRequests.value.single()).getOrThrow()
 
         assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(PaymentRequestLifecycleState.ACCEPTED, sut.paymentRequestHistory.value.single().lifecycleState)
         verifyBlocking(paykitSdkService) { processPendingPrivateMessages() }
     }
 
     @Test
     fun `reject removes current request and delivers queued response`() = test {
         val record = paymentRequestRecord()
-        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(
             paykitSdkService.rejectPaymentRequest(
                 COUNTERPARTY,
@@ -209,12 +272,13 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.reject(sut.pendingRequests.value.single()).getOrThrow()
 
         assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(PaymentRequestLifecycleState.REJECTED, sut.paymentRequestHistory.value.single().lifecycleState)
         verifyBlocking(paykitSdkService) { processPendingPrivateMessages() }
     }
 
     @Test
     fun `surfaced request stays pending and is excluded from automatic presentation`() = test {
-        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
         sut.refresh(emptyList()).getOrThrow()
         val request = sut.pendingRequests.value.single()
 
@@ -227,7 +291,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
     @Test
     fun `switching identity clears request state and restores only that identity suppression`() = test {
-        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
         sut.refresh(emptyList()).getOrThrow()
         val request = sut.pendingRequests.value.single()
         sut.markPresented(request)
@@ -236,7 +300,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.activate(SECOND_IDENTITY)
 
         assertTrue(sut.pendingRequests.value.isEmpty())
-        assertTrue(sut.sentRequests.value.isEmpty())
+        assertTrue(sut.paymentRequestHistory.value.isEmpty())
         assertTrue(sut.eligibleTargets.value.isEmpty())
     }
 
@@ -249,7 +313,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             resumeRefresh.await()
             emptyList()
         }
-        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
         whenever(presentationStore.load(SECOND_IDENTITY)).thenReturn(emptySet())
 
         val refresh = async { sut.refresh(emptyList()) }
@@ -263,7 +327,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         activation.await()
 
         assertTrue(sut.pendingRequests.value.isEmpty())
-        assertTrue(sut.sentRequests.value.isEmpty())
+        assertTrue(sut.paymentRequestHistory.value.isEmpty())
         assertTrue(sut.eligibleTargets.value.isEmpty())
     }
 
@@ -356,7 +420,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertEquals(LOCAL_IDENTITY, creation.creatorIdentity)
         assertFalse(creation.wasPublishedToActiveState)
-        assertTrue(sut.sentRequests.value.isEmpty())
+        assertTrue(sut.paymentRequestHistory.value.isEmpty())
     }
 
     @Test
@@ -409,7 +473,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `expired request cannot be accepted`() = test {
         val record = paymentRequestRecord(expiresAt = clock.now().plus(1.seconds).toString())
-        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         sut.refresh(emptyList()).getOrThrow()
         val request = sut.pendingRequests.value.single()
         advanceTimeBy(1_000)
@@ -425,7 +489,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `expired request is no longer pending before the expiration job runs`() = test {
         val record = paymentRequestRecord(expiresAt = clock.now().plus(1.seconds).toString())
-        whenever(paykitSdkService.actionableReceivedPaymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         sut.refresh(emptyList()).getOrThrow()
         val request = sut.pendingRequests.value.single()
         advanceTimeBy(1_000)
@@ -437,6 +501,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private fun paymentRequestRecord(
         id: String = PAYMENT_REQUEST_ID,
         role: PaymentRequestLocalRole? = PaymentRequestLocalRole.PAYER,
+        state: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROPOSED,
         amount: String = "0.001",
         expiresAt: String? = null,
         endpoints: List<String> = listOf(MethodId.Bolt11.rawValue),
@@ -447,7 +512,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         counterpartyReceiverPath = receiverPath,
         paymentRequestId = id,
         localRole = role,
-        state = PaymentRequestLifecycleState.PROPOSED,
+        state = state,
         proposalStreamItemId = 1uL,
         proposalOutboundMessageId = null,
         proposalOutboundStatus = null,
