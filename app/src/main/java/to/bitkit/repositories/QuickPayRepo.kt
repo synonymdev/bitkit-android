@@ -30,12 +30,6 @@ class QuickPayRepo @Inject constructor(
         private const val TAG = "QuickPayRepo"
     }
 
-    suspend fun spentCentsToday(): Result<Long> = withContext(ioDispatcher) {
-        runSuspendCatching {
-            cacheStore.data.first().spendFor(currentDayKey()).spentCents
-        }
-    }
-
     suspend fun canApply(amountSats: ULong): Result<Boolean> = withContext(ioDispatcher) {
         runSuspendCatching {
             val settings = settingsStore.data.first()

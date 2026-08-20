@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -76,41 +77,25 @@ class QuickPayRepoTest : BaseUnitTest() {
     fun tearDown() = runBlocking { cacheStore.reset() }
 
     @Test
-    fun `spentCentsToday returns spend for matching day`() = test {
-        assertNotNull(sut.tryReserve(500u).getOrThrow())
-
-        assertEquals(250L, sut.spentCentsToday().getOrThrow())
-    }
-
-    @Test
-    fun `spentCentsToday returns zero for a later day`() = test {
-        assertNotNull(sut.tryReserve(500u).getOrThrow())
-        clock.instant = Instant.parse("2026-08-16T12:00:00Z")
-
-        assertEquals(0L, sut.spentCentsToday().getOrThrow())
-    }
-
-    @Test
-    fun `spentCentsToday keeps spend on clock rollback`() = test {
+    fun `tryReserve on clock rollback keeps existing spend`() = test {
         assertNotNull(sut.tryReserve(500u).getOrThrow())
         clock.instant = Instant.parse("2026-08-14T12:00:00Z")
 
-        assertEquals(250L, sut.spentCentsToday().getOrThrow())
         assertNotNull(sut.tryReserve(200u).getOrThrow())
-        assertEquals(350L, sut.spentCentsToday().getOrThrow())
+        assertEquals(350L, cacheStore.data.first().quickPaySpentCentsToday)
         clock.instant = Instant.parse("2026-08-15T12:00:00Z")
-        assertEquals(350L, sut.spentCentsToday().getOrThrow())
+        assertEquals(350L, cacheStore.data.first().quickPaySpentCentsToday)
     }
 
     @Test
     fun `tryReserve accumulates on the same day and resets on a new day`() = test {
         assertNotNull(sut.tryReserve(400u).getOrThrow())
         assertNotNull(sut.tryReserve(300u).getOrThrow())
-        assertEquals(350L, sut.spentCentsToday().getOrThrow())
+        assertEquals(350L, cacheStore.data.first().quickPaySpentCentsToday)
 
         clock.instant = Instant.parse("2026-08-16T12:00:00Z")
         assertNotNull(sut.tryReserve(800u).getOrThrow())
-        assertEquals(400L, sut.spentCentsToday().getOrThrow())
+        assertEquals(400L, cacheStore.data.first().quickPaySpentCentsToday)
     }
 
     @Test
@@ -119,7 +104,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         assertNotNull(sut.tryReserve(1000u).getOrThrow())
         assertNotNull(sut.tryReserve(1000u).getOrThrow())
         assertNull(sut.tryReserve(1000u).getOrThrow())
-        assertEquals(1000L, sut.spentCentsToday().getOrThrow())
+        assertEquals(1000L, cacheStore.data.first().quickPaySpentCentsToday)
     }
 
     @Test
@@ -128,7 +113,7 @@ class QuickPayRepoTest : BaseUnitTest() {
 
         sut.releaseUnbound(reserved).getOrThrow()
 
-        assertEquals(0L, sut.spentCentsToday().getOrThrow())
+        assertEquals(0L, cacheStore.data.first().quickPaySpentCentsToday)
     }
 
     @Test
@@ -139,7 +124,7 @@ class QuickPayRepoTest : BaseUnitTest() {
 
         sut.releaseUnbound(old).getOrThrow()
 
-        assertEquals(400L, sut.spentCentsToday().getOrThrow())
+        assertEquals(400L, cacheStore.data.first().quickPaySpentCentsToday)
     }
 
     @Test
@@ -149,7 +134,7 @@ class QuickPayRepoTest : BaseUnitTest() {
 
         sut.release("abc").getOrThrow()
 
-        assertEquals(0L, sut.spentCentsToday().getOrThrow())
+        assertEquals(0L, cacheStore.data.first().quickPaySpentCentsToday)
         assertNull(sut.reservation("abc").getOrThrow())
     }
 
@@ -160,7 +145,7 @@ class QuickPayRepoTest : BaseUnitTest() {
 
         sut.clear("abc").getOrThrow()
 
-        assertEquals(500L, sut.spentCentsToday().getOrThrow())
+        assertEquals(500L, cacheStore.data.first().quickPaySpentCentsToday)
         assertNull(sut.reservation("abc").getOrThrow())
     }
 
@@ -173,7 +158,7 @@ class QuickPayRepoTest : BaseUnitTest() {
 
         sut.release("old").getOrThrow()
 
-        assertEquals(400L, sut.spentCentsToday().getOrThrow())
+        assertEquals(400L, cacheStore.data.first().quickPaySpentCentsToday)
         assertNull(sut.reservation("old").getOrThrow())
     }
 
@@ -213,7 +198,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         val reserved = requireNotNull(sut.tryReserve(7u).getOrThrow())
 
         assertEquals(1L, reserved.amountCents)
-        assertEquals(1L, sut.spentCentsToday().getOrThrow())
+        assertEquals(1L, cacheStore.data.first().quickPaySpentCentsToday)
         assertTrue(sut.canApply(7u).getOrThrow())
     }
 
