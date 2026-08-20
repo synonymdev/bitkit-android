@@ -1188,7 +1188,8 @@ class TrezorRepo @Inject constructor(
      */
     private suspend fun pendingNameFor(walletId: String): String? = walletId
         .takeIf { it.isNotBlank() }
-        ?.let { hwWalletStore.loadPendingNames()[it] }
+        // Only a name: failing to read one must not stop the device being paired.
+        ?.let { runSuspendCatching { hwWalletStore.loadPendingNames()[it] }.getOrNull() }
         ?.takeIf { it.isNotBlank() }
 
     /**
