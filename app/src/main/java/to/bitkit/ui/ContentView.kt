@@ -91,6 +91,8 @@ import to.bitkit.ui.screens.contacts.ContactsViewModel
 import to.bitkit.ui.screens.contacts.EditContactScreen
 import to.bitkit.ui.screens.contacts.EditContactViewModel
 import to.bitkit.ui.screens.contacts.shouldDiscardPendingImport
+import to.bitkit.ui.screens.paymentrequests.PaymentRequestsScreen
+import to.bitkit.ui.screens.paymentrequests.PaymentRequestsSheet
 import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.CreateProfileViewModel
 import to.bitkit.ui.screens.profile.EditProfileScreen
@@ -451,6 +453,7 @@ fun ContentView(
         val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
         val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
+        val isCreatingPaymentRequest by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
         var homeWalletPageRequest by remember { mutableIntStateOf(0) }
         var homeWidgetsPageRequest by remember { mutableIntStateOf(0) }
         val navigateToHomeWallet = {
@@ -474,6 +477,9 @@ fun ContentView(
             SheetHost(
                 shouldExpand = currentSheet != null,
                 onDismiss = { appViewModel.hideSheet() },
+                visibilityKey = currentSheet,
+                onVisible = { appViewModel.onSheetVisible(currentSheet) },
+                dismissEnabled = !isCreatingPaymentRequest,
                 sheetHandlePlacement = when (currentSheet) {
                     is Sheet.Widgets -> SheetHandlePlacement.ContentOverlay
                     else -> SheetHandlePlacement.ScaffoldSlot
@@ -497,6 +503,7 @@ fun ContentView(
                             val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
                             val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                             ReceiveSheet(
+                                appViewModel = appViewModel,
                                 startRoute = sheet.route,
                                 walletState = walletState,
                                 isOffline = connectivityState != ConnectivityState.CONNECTED,
@@ -506,6 +513,15 @@ fun ContentView(
                                 },
                             )
                         }
+
+                        Sheet.PaymentRequests -> PaymentRequestsSheet(
+                            appViewModel = appViewModel,
+                            onNotNow = appViewModel::hideSheet,
+                            onSeeAll = {
+                                appViewModel.hideSheet()
+                                navController.navigateTo(Routes.PaymentRequests)
+                            },
+                        )
 
                         is Sheet.ActivityDateRangeSelector -> DateRangeSelectorSheet()
                         is Sheet.ActivityTagSelector -> TagSelectorSheet()
@@ -711,6 +727,12 @@ private fun RootNavHost(
             activityListViewModel = activityListViewModel,
             navController = navController,
         )
+        composableWithDefaultTransitions<Routes.PaymentRequests> {
+            PaymentRequestsScreen(
+                appViewModel = appViewModel,
+                onBack = { navController.popBackStack() },
+            )
+        }
         settings(navController, settingsViewModel)
         contacts(navController, settingsViewModel, appViewModel)
         profile(navController, settingsViewModel)
@@ -2292,6 +2314,9 @@ sealed interface Routes {
 
     @Serializable
     data object AllActivity : Routes.DeepLinkable
+
+    @Serializable
+    data object PaymentRequests : Routes.InternalOnly
 
     @Serializable
     data object Trezor : Routes.DeepLinkable

@@ -13,6 +13,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -24,10 +25,15 @@ import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.PaykitPaymentRequest
+import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.WalletState
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.openNotificationSettings
+import to.bitkit.ui.screens.paymentrequests.PaymentRequestDetailsScreen
+import to.bitkit.ui.screens.paymentrequests.PaymentRequestRecipientScreen
+import to.bitkit.ui.screens.paymentrequests.PaymentRequestSentScreen
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.utils.ScreenDeepLinks
@@ -35,15 +41,22 @@ import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.rememberNotificationToggleClick
 import to.bitkit.ui.walletViewModel
 import to.bitkit.viewmodels.AmountInputViewModel
+import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.SettingsViewModel
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 @Composable
 fun ReceiveSheet(
+    appViewModel: AppViewModel,
     navigateToExternalConnection: () -> Unit,
     walletState: WalletState,
     isOffline: Boolean,
     startRoute: ReceiveRoute = ReceiveRoute.QR,
     editInvoiceAmountViewModel: AmountInputViewModel = hiltViewModel(),
+    paymentRequestAmountViewModel: AmountInputViewModel = hiltViewModel(key = "PaymentRequestAmount"),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val wallet = requireNotNull(walletViewModel)
@@ -55,6 +68,17 @@ fun ReceiveSheet(
     val showCreateCjit = remember { mutableStateOf(false) }
     val cjitEntryDetails = remember { mutableStateOf<CjitEntryDetails?>(null) }
     val lightningState: LightningState by wallet.lightningState.collectAsStateWithLifecycle()
+    val paymentRequestTargets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
+    var paymentRequestDraft by remember {
+        mutableStateOf(
+            PaykitPaymentRequestDraft(
+                amountSats = walletState.bip21AmountSats ?: 0uL,
+                note = walletState.bip21Description,
+                expiresAt = Clock.System.now() + 7.days,
+            )
+        )
+    }
+    var createdPaymentRequest by remember { mutableStateOf<PaykitPaymentRequest?>(null) }
 
     LaunchedEffect(Unit) {
         wallet.resetPreActivityMetadataTagsForCurrentInvoice()
@@ -100,7 +124,46 @@ fun ReceiveSheet(
                             }
                         },
                         onClickEditInvoice = { navController.navigateTo(ReceiveRoute.EditInvoice) },
+                        showPaymentRequestButton = paymentRequestTargets.isNotEmpty(),
+                        onClickPaymentRequest = {
+                            paymentRequestDraft = PaykitPaymentRequestDraft(
+                                amountSats = walletState.bip21AmountSats ?: 0uL,
+                                note = walletState.bip21Description,
+                                expiresAt = Clock.System.now() + 7.days,
+                            )
+                            navController.navigateTo(ReceiveRoute.PaymentRequestDetails)
+                        },
                     )
+                }
+                composableWithDefaultTransitions<ReceiveRoute.PaymentRequestDetails> {
+                    PaymentRequestDetailsScreen(
+                        amountInputViewModel = paymentRequestAmountViewModel,
+                        initialDraft = paymentRequestDraft,
+                        onBack = { navController.popBackStack() },
+                        onContinue = {
+                            paymentRequestDraft = it
+                            navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
+                        },
+                    )
+                }
+                composableWithDefaultTransitions<ReceiveRoute.PaymentRequestRecipient> {
+                    PaymentRequestRecipientScreen(
+                        appViewModel = appViewModel,
+                        draft = paymentRequestDraft,
+                        onBack = { navController.popBackStack() },
+                        onSent = {
+                            createdPaymentRequest = it
+                            navController.navigateTo(ReceiveRoute.PaymentRequestSent)
+                        },
+                    )
+                }
+                composableWithDefaultTransitions<ReceiveRoute.PaymentRequestSent> {
+                    createdPaymentRequest?.let {
+                        PaymentRequestSentScreen(
+                            request = it,
+                            onDone = appViewModel::hideSheet,
+                        )
+                    }
                 }
                 composableWithDefaultTransitions<ReceiveRoute.Amount> {
                     ReceiveAmountScreen(
@@ -258,6 +321,15 @@ sealed interface ReceiveRoute {
 
     @Serializable
     data object AddTag : DeepLinkStart
+
+    @Serializable
+    data object PaymentRequestDetails : InternalOnly
+
+    @Serializable
+    data object PaymentRequestRecipient : InternalOnly
+
+    @Serializable
+    data object PaymentRequestSent : InternalOnly
 
     @Serializable
     data object GeoBlock : DeepLinkStart

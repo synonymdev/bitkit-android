@@ -1,12 +1,17 @@
 package to.bitkit.ui.components
 
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.unit.dp
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.STUB_RATE
@@ -25,14 +30,37 @@ import java.math.BigDecimal
 fun MoneyDisplay(
     sats: Long,
     onClick: (() -> Unit)? = null,
+    showSymbol: Boolean? = null,
 ) {
-    rememberMoneyText(sats)?.let { text ->
+    val text = if (showSymbol == null) rememberMoneyText(sats) else rememberMoneyText(sats, showSymbol = showSymbol)
+    text?.let {
         Display(
-            text = text.withAccent(accentColor = Colors.White64),
+            text = it.withAccent(accentColor = Colors.White64),
             modifier = Modifier
                 .clickableAlpha(onClick = onClick)
                 .testTag("MoneyText")
         )
+    }
+}
+
+@Composable
+fun MoneyStack(
+    sats: Long,
+    modifier: Modifier = Modifier,
+) {
+    val currencies = LocalCurrencies.current
+    Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        horizontalAlignment = Alignment.Start,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        MoneySSB(
+            sats = sats,
+            unit = currencies.primaryDisplay.not(),
+            color = Colors.White64,
+            showSymbol = true,
+        )
+        MoneyDisplay(sats = sats, showSymbol = true)
     }
 }
 

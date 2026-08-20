@@ -394,6 +394,11 @@ class PrivatePaykitRepo @Inject constructor(
                 (context.receiverPath to context.paymentListVersion)
             contactState.remoteEndpoints = emptyList()
             persistState(markWalletBackup = true)
+            Logger.info(
+                "Consumed private Paykit payment list version ${context.paymentListVersion} " +
+                    "for '${redacted(normalizedKey)}'",
+                context = TAG,
+            )
         }
     }.onFailure {
         Logger.warn("Failed to consume private Paykit payment details", it, context = TAG)
@@ -556,6 +561,7 @@ class PrivatePaykitRepo @Inject constructor(
                     publicKey = publicKey,
                     receiverPath = receiverPath,
                     resolution = resolution,
+                    consumedVersion = consumedVersion,
                     acceptedEndpointIdentifiers = paymentRequest?.acceptedPaymentEndpointIdentifiers?.toSet(),
                 )
                 if (paymentRequest?.isExpired(clock.now()) == true) {
@@ -621,6 +627,7 @@ class PrivatePaykitRepo @Inject constructor(
         publicKey: String,
         receiverPath: String,
         resolution: PaykitPrivateContactPaymentResolution,
+        consumedVersion: ULong?,
         acceptedEndpointIdentifiers: Set<String>? = null,
     ): PublicPaykitPaymentResult {
         val privateEndpoints = resolution.payableEndpoints
@@ -633,7 +640,11 @@ class PrivatePaykitRepo @Inject constructor(
         val privatePayable = privatePayableEndpoints(acceptedEndpoints, publicKey)
         val paymentListVersion = resolution.privatePaymentListVersion
         if (privatePayable.isNotEmpty() && paymentListVersion != null) {
-            Logger.info("Opened private Paykit payment for '${redacted(publicKey)}'", context = TAG)
+            Logger.info(
+                "Opened private Paykit payment for '${redacted(publicKey)}' using payment list version " +
+                    "$paymentListVersion after ${consumedVersion ?: "none"}",
+                context = TAG,
+            )
             return PublicPaykitPaymentResult.Opened(
                 paymentRequest = PublicPaykitRepo.paymentRequest(privatePayable),
                 privatePaymentContext = PrivatePaykitPaymentContext(receiverPath, paymentListVersion),
@@ -650,6 +661,11 @@ class PrivatePaykitRepo @Inject constructor(
             )
         }
         if (resolution.status == PrivatePaymentResolutionStatus.WAITING_FOR_UPDATED_PAYMENT_LIST) {
+            Logger.info(
+                "Waiting for a private Paykit payment list newer than ${consumedVersion ?: "none"} " +
+                    "for '${redacted(publicKey)}'; public resolution is disabled for this request",
+                context = TAG,
+            )
             return PublicPaykitPaymentResult.WaitingForUpdatedPaymentList
         }
 
