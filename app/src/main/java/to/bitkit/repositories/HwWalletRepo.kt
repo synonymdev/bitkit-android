@@ -77,6 +77,7 @@ import kotlin.time.Duration.Companion.seconds
 class HwWalletRepo @Inject constructor(
     private val trezorRepo: TrezorRepo,
     private val activityRepo: ActivityRepo,
+    private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val hwWalletStore: HwWalletStore,
     private val settingsStore: SettingsStore,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
@@ -444,8 +445,15 @@ class HwWalletRepo @Inject constructor(
      * is stored once per transport but shares an xpub-derived identity, so forgetting a single id
      * would leave the tile reappearing through the other transport. Other identities on the same
      * device — the standard wallet, or another passphrase wallet — are left paired.
+     *
+     * @param keepBackupData whether to carry the wallet's name and tags in the backup, so re-pairing
+     * the device restores them. Off by default: only a user removing a wallet is asked, and internal
+     * cleanup of a wallet the user never meant to watch must not leave its data behind.
      */
-    suspend fun removeDevice(walletId: String): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun removeDevice(
+        walletId: String,
+        keepBackupData: Boolean = false,
+    ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             watcherMutex.withLock {
                 val knownDevices = hwWalletStore.loadKnownDevices()
@@ -453,6 +461,13 @@ class HwWalletRepo @Inject constructor(
                 // Without an entry there is nothing to forget, and the check below would pass on an
                 // empty set: report the failure instead of telling the user the wallet was removed.
                 require(targets.isNotEmpty()) { "Unknown hardware wallet '$walletId'" }
+                // Read before the deletion below, which takes the tags with the activities they are on.
+                val keptName = targets.firstNotNullOfOrNull { it.customLabel?.takeIf(String::isNotBlank) }
+                    .takeIf { keepBackupData }
+                val keptTagMetadata = when {
+                    keepBackupData -> activityRepo.getTagMetadataForWallet(walletId).getOrThrow()
+                    else -> emptyList()
+                }
                 activeWatchers.toList()
                     .filter { it.toWalletId() == walletId }
                     .forEach {
@@ -461,6 +476,17 @@ class HwWalletRepo @Inject constructor(
                         }
                     }
                 activityRepo.deleteForWallet(walletId).getOrThrow()
+                // Written back only now: the deletion above drops the wallet's stored tag metadata
+                // along with its activities. Core re-attaches these once the watcher recreates them,
+                // so re-pairing the device brings the tags back.
+                if (keptTagMetadata.isNotEmpty()) {
+                    // Nothing to roll back to at this point, and the wallet is already half removed,
+                    // so a failure here loses the tags rather than failing the removal.
+                    preActivityMetadataRepo.upsertPreActivityMetadata(keptTagMetadata)
+                }
+                // Before forgetting the entries below, so the name is never absent from the backup:
+                // dropping the entries takes their label with them.
+                hwWalletStore.setPendingName(walletId, keptName)
                 trackedWalletIds -= walletId
                 lastPersistedHwSnapshots -= walletId
                 val failures = targets.mapNotNull {

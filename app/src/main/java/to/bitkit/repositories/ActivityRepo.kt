@@ -902,6 +902,27 @@ class ActivityRepo @Inject constructor(
         }
 
     /**
+     * The slice of the metadata backup's tag data that belongs to [walletId], built the same way the
+     * envelope builds it so a caller can preserve a wallet's tags across a deletion.
+     *
+     * Both sources are needed: Core drops the stored [PreActivityMetadata] of a wallet along with its
+     * activities, and those rows are not covered by [getHardwareTagsAsPreActivityMetadata], which only
+     * renders tags that already reached an activity.
+     */
+    suspend fun getTagMetadataForWallet(walletId: String): Result<List<PreActivityMetadata>> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                val stored = coreService.activity.getAllPreActivityMetadata()
+                    .filter { it.walletId == walletId }
+                val rendered = getHardwareTagsAsPreActivityMetadata().getOrThrow()
+                    .filter { it.walletId == walletId }
+                (stored + rendered).distinctBy { it.walletId to it.paymentId }
+            }.onFailure {
+                Logger.error("Failed to read tag metadata of '$walletId'", it, context = TAG)
+            }
+        }
+
+    /**
      * Fill in wallet ids missing from a backup envelope's `activities` slice, letting Core migrate its own
      * model JSON before the app decodes it.
      */
