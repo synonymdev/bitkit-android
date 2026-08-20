@@ -95,7 +95,7 @@ class QuickPayViewModelTest : BaseUnitTest() {
         order.verify(lightningRepo).payInvoice(bolt11 = "lnbcrt1test", sats = null)
         order.verify(quickPayRepo).remember("hash1", reserved)
         order.verify(quickPayRepo).clear("hash1")
-        verify(pendingPaymentRepo, never()).track(any())
+        verify(pendingPaymentRepo).track("hash1")
         val success = assertIs<QuickPayResult.Success>(sut.uiState.value.result)
         assertEquals("hash1", success.paymentHash)
         assertEquals(501L, success.amountWithFee)
@@ -185,7 +185,7 @@ class QuickPayViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(quickPayRepo).release("hash1")
-        verify(pendingPaymentRepo, never()).track(any())
+        verify(pendingPaymentRepo).track("hash1")
         assertIs<QuickPayResult.Error>(sut.uiState.value.result)
     }
 

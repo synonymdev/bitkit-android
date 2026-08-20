@@ -217,9 +217,9 @@ class QuickPayViewModel @Inject constructor(
                 }
             }
             quickPayRepo.remember(paymentHash = hash, reservation = reservation)
+            pendingPaymentRepo.track(hash)
             val result = settled.await()
             if (result != null) return@coroutineScope result
-            pendingPaymentRepo.track(hash)
             Result.failure(PaymentPendingException(hash))
         }
     }

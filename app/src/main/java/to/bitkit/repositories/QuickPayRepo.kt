@@ -49,7 +49,7 @@ class QuickPayRepo @Inject constructor(
 
             val converted = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrNull()
                 ?: return@runSuspendCatching false
-            val reserveCents = quickPayReserveCents(converted.toUsdCents(), settings.quickPayAmount)
+            val reserveCents = quickPayReserveCents(converted.toUsdCents(), settings.quickPayAmount, amountSats)
             val capCents = quickPayCapCents(settings.quickPayAmount, settings.quickPayDailyLimitMultiplier)
             val spentCentsToday = cacheStore.data.first().spendFor(currentDayKey()).spentCents
             if (spentCentsToday + reserveCents <= capCents) return@runSuspendCatching true
@@ -68,7 +68,7 @@ class QuickPayRepo @Inject constructor(
             val converted = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrElse {
                 throw QuickPayConversionError()
             }
-            val amountCents = quickPayReserveCents(converted.toUsdCents(), settings.quickPayAmount)
+            val amountCents = quickPayReserveCents(converted.toUsdCents(), settings.quickPayAmount, amountSats)
             val capCents = quickPayCapCents(settings.quickPayAmount, settings.quickPayDailyLimitMultiplier)
             val dayKey = currentDayKey()
             var reserved: QuickPaySpendReservation? = null
@@ -163,8 +163,15 @@ private data class QuickPayDaySpend(
 private fun quickPayCapCents(thresholdUsd: Int, multiplier: Int): Long =
     thresholdUsd.toLong() * 100L * multiplier.toLong()
 
-private fun quickPayReserveCents(convertedCents: Long, thresholdUsd: Int): Long =
-    minOf(convertedCents, thresholdUsd.toLong() * 100L)
+private fun quickPayReserveCents(
+    convertedCents: Long,
+    thresholdUsd: Int,
+    amountSats: ULong,
+): Long {
+    val clamped = minOf(convertedCents, thresholdUsd.toLong() * 100L)
+    if (amountSats == 0uL) return clamped
+    return maxOf(clamped, 1L)
+}
 
 class QuickPayConversionError : AppError("Currency conversion failed")
 

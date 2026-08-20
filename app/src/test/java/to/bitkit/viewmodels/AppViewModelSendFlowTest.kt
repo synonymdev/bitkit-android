@@ -1825,7 +1825,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val paymentHash = "pending_quickpay_hash"
         val activityV1 = mock<LightningActivity> {
             on { value } doReturn 500u
-            on { fee } doReturn 10u
+            on { fee } doReturn 0u
         }
         val activity = mock<com.synonym.bitkitcore.Activity.Lightning> { on { v1 } doReturn activityV1 }
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
@@ -1842,7 +1842,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 paymentId = "payment_id",
                 paymentHash = paymentHash,
                 paymentPreimage = "preimage",
-                feePaidMsat = 10uL,
+                feePaidMsat = 10_000uL,
             ),
         )
         advanceUntilIdle()

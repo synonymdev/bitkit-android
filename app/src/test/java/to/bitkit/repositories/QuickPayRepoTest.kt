@@ -198,6 +198,42 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `zero cent conversion at a full cap is rejected`() = test {
+        stubZeroCentConversion(7L)
+        repeat(5) { assertNotNull(sut.tryReserve(1000u).getOrThrow()) }
+
+        assertFalse(sut.canApply(7u).getOrThrow())
+        assertNull(sut.tryReserve(7u).getOrThrow())
+    }
+
+    @Test
+    fun `zero cent conversion on a fresh day reserves one cent`() = test {
+        stubZeroCentConversion(7L)
+
+        val reserved = requireNotNull(sut.tryReserve(7u).getOrThrow())
+
+        assertEquals(1L, reserved.amountCents)
+        assertEquals(1L, sut.spentCentsToday().getOrThrow())
+        assertTrue(sut.canApply(7u).getOrThrow())
+    }
+
+    private fun stubZeroCentConversion(dustSats: Long) {
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenAnswer { invocation ->
+            val sats = invocation.getArgument<Long>(0)
+            val usd = if (sats == dustSats) 0.004 else 5.0 * sats.toDouble() / 1000.0
+            ConvertedAmount(
+                value = BigDecimal.valueOf(usd),
+                formatted = usd.toString(),
+                symbol = "$",
+                currency = "USD",
+                flag = "",
+                sats = sats,
+                locale = Locale.US,
+            )
+        }
+    }
+
+    @Test
     fun `tryReserve fails with conversion error when rates are unavailable`() = test {
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenAnswer {
             throw QuickPayConversionError()

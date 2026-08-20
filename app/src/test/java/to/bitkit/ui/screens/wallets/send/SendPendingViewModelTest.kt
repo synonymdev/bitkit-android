@@ -54,6 +54,20 @@ class SendPendingViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `init applies an already resolved hash`() = test {
+        pendingPaymentRepo.track(hash)
+        pendingPaymentRepo.resolve(PendingPaymentResolution.Success(hash, amountWithFeeSats = 510L))
+
+        sut.init(hash, amount)
+        advanceUntilIdle()
+
+        val resolution = sut.uiState.value.resolution
+        assertIs<PendingPaymentResolution.Success>(resolution)
+        assertEquals(510L, resolution.amountWithFeeSats)
+        assertNull(pendingPaymentRepo.consumeResolution(hash))
+    }
+
+    @Test
     fun `init is idempotent`() = test {
         sut.init(hash, amount)
         sut.init(hash, 9999L)

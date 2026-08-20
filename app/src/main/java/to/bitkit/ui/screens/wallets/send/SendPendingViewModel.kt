@@ -37,6 +37,9 @@ class SendPendingViewModel @Inject constructor(
         isInitialized = true
         pendingPaymentRepo.setActiveHash(paymentHash)
         _uiState.update { it.copy(amount = amount) }
+        pendingPaymentRepo.consumeResolution(paymentHash)?.let { resolution ->
+            _uiState.update { it.copy(resolution = resolution) }
+        }
         findActivity(paymentHash)
         observeResolution(paymentHash)
     }

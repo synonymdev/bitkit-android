@@ -1165,7 +1165,7 @@ class AppViewModel @Inject constructor(
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
-                if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
+                if (shouldNotifyPendingResolution(paymentHash)) {
                     notifyPendingPaymentFailed()
                 }
                 return
@@ -1173,6 +1173,11 @@ class AppViewModel @Inject constructor(
             if (closeActiveSendForFailedPayment(paymentHash, event.reason)) return
         }
         notifyPaymentFailed(event.reason)
+    }
+
+    private fun shouldNotifyPendingResolution(paymentHash: String): Boolean {
+        if (_quickPayData.value != null) return false
+        return _currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)
     }
 
     private fun closeActiveSendForFailedPayment(paymentHash: String, reason: PaymentFailureReason?): Boolean {
@@ -1244,12 +1249,17 @@ class AppViewModel @Inject constructor(
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 syncContactForActivity(paymentHash)
                 val amountWithFeeSats = if (isQuickPay) {
-                    activityRepo.findActivityByPaymentId(
-                        paymentHashOrTxId = paymentHash,
-                        type = ActivityFilter.LIGHTNING,
-                        txType = PaymentType.SENT,
-                        retry = true,
-                    ).getOrNull()?.totalValue()?.toLong()
+                    val principal = (
+                        activityRepo.findActivityByPaymentId(
+                            paymentHashOrTxId = paymentHash,
+                            type = ActivityFilter.LIGHTNING,
+                            txType = PaymentType.SENT,
+                            retry = true,
+                        ).getOrNull() as? Activity.Lightning
+                        )?.v1?.value
+                    principal?.let {
+                        (it.safe() + msatFloorOf(event.feePaidMsat ?: 0u).safe()).toLong()
+                    }
                 } else {
                     null
                 }
@@ -1259,7 +1269,7 @@ class AppViewModel @Inject constructor(
                         amountWithFeeSats = amountWithFeeSats,
                     ),
                 )
-                if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
+                if (shouldNotifyPendingResolution(paymentHash)) {
                     notifyPendingPaymentSucceeded()
                 }
                 return

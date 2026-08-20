@@ -21,6 +21,7 @@ class PendingPaymentRepo @Inject constructor() {
 
     private val _resolution = MutableSharedFlow<PendingPaymentResolution>(extraBufferCapacity = 1)
     val resolution = _resolution.asSharedFlow()
+    private val lastResolutions = MutableStateFlow<Map<String, PendingPaymentResolution>>(emptyMap())
 
     fun track(paymentHash: String) {
         _state.update { it.copy(pendingPayments = it.pendingPayments + paymentHash) }
@@ -30,7 +31,14 @@ class PendingPaymentRepo @Inject constructor() {
 
     suspend fun resolve(resolution: PendingPaymentResolution) {
         _state.update { it.copy(pendingPayments = it.pendingPayments - resolution.paymentHash) }
+        lastResolutions.update { it + (resolution.paymentHash to resolution) }
         _resolution.emit(resolution)
+    }
+
+    fun consumeResolution(paymentHash: String): PendingPaymentResolution? {
+        val taken = lastResolutions.value[paymentHash] ?: return null
+        lastResolutions.update { it - paymentHash }
+        return taken
     }
 
     fun setActiveHash(hash: String?) = _state.update { it.copy(activeHash = hash) }
