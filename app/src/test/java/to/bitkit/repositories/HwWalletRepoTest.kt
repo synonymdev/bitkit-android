@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.TransactionDetails
 import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
@@ -61,6 +62,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     private val trezorRepo = mock<TrezorRepo>()
     private val activityRepo = mock<ActivityRepo>()
+    private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val hwWalletStore = mock<HwWalletStore>()
     private val settingsStore = mock<SettingsStore>()
 
@@ -113,6 +115,9 @@ class HwWalletRepoTest : BaseUnitTest() {
         }
         whenever { activityRepo.getWalletIds() }.thenReturn(Result.success(emptySet()))
         whenever { activityRepo.deleteForWallet(any()) }.thenReturn(Result.success(Unit))
+        whenever { activityRepo.getTagMetadataForWallet(any()) }.thenReturn(Result.success(emptyList()))
+        whenever { preActivityMetadataRepo.upsertPreActivityMetadata(any()) }.thenReturn(Result.success(Unit))
+        whenever { hwWalletStore.setPendingName(any(), anyOrNull()) }.thenReturn(Unit)
     }
 
     private fun passphraseCapableFeatures(): TrezorFeatures =
@@ -121,6 +126,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     private fun createRepo() = HwWalletRepo(
         trezorRepo = trezorRepo,
         activityRepo = activityRepo,
+        preActivityMetadataRepo = preActivityMetadataRepo,
         hwWalletStore = hwWalletStore,
         settingsStore = settingsStore,
         ioDispatcher = testDispatcher,
@@ -1373,6 +1379,102 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `removeDevice keeping backup data rewrites the tag metadata after deleting the activities`() = test {
+        val named = device.copy(customLabel = "Cold Storage")
+        val tagMetadata = listOf(preActivityMetadata())
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(named), emptyList())
+        whenever { activityRepo.getTagMetadataForWallet(HARDWARE_WALLET_ID) }
+            .thenReturn(Result.success(tagMetadata))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+
+        assertTrue(result.isSuccess)
+        // Core drops the wallet's tag metadata with its activities, so the rewrite must follow the delete.
+        inOrder(activityRepo, preActivityMetadataRepo) {
+            verify(activityRepo).deleteForWallet(HARDWARE_WALLET_ID)
+            verify(preActivityMetadataRepo).upsertPreActivityMetadata(tagMetadata)
+        }
+    }
+
+    @Test
+    fun `removeDevice keeping backup data stores the wallet name before forgetting the device`() = test {
+        val named = device.copy(customLabel = "Cold Storage")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(named), emptyList())
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+
+        assertTrue(result.isSuccess)
+        // Forgetting the entry takes its label, so the name must be stored while it is still there.
+        inOrder(hwWalletStore, trezorRepo) {
+            verify(hwWalletStore).setPendingName(HARDWARE_WALLET_ID, "Cold Storage")
+            verify(trezorRepo).forgetDevice("dev1", "zpubNS")
+        }
+    }
+
+    @Test
+    fun `removeDevice keeping backup data stores no name for a wallet that was never renamed`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+
+        assertTrue(result.isSuccess)
+        verify(hwWalletStore).setPendingName(HARDWARE_WALLET_ID, null)
+    }
+
+    @Test
+    fun `removeDevice without keeping backup data drops the name and the tag metadata`() = test {
+        val named = device.copy(customLabel = "Cold Storage")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(named), emptyList())
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = false)
+
+        assertTrue(result.isSuccess)
+        verify(hwWalletStore).setPendingName(HARDWARE_WALLET_ID, null)
+        verify(activityRepo, never()).getTagMetadataForWallet(any())
+        verify(preActivityMetadataRepo, never()).upsertPreActivityMetadata(any())
+    }
+
+    @Test
+    fun `removeDevice keeps nothing by default`() = test {
+        val named = device.copy(customLabel = "Cold Storage")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(named), emptyList())
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID)
+
+        assertTrue(result.isSuccess)
+        verify(hwWalletStore).setPendingName(HARDWARE_WALLET_ID, null)
+        verify(preActivityMetadataRepo, never()).upsertPreActivityMetadata(any())
+    }
+
+    @Test
+    fun `removeDevice still removes the wallet when the tag metadata cannot be rewritten`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        whenever { activityRepo.getTagMetadataForWallet(HARDWARE_WALLET_ID) }
+            .thenReturn(Result.success(listOf(preActivityMetadata())))
+        whenever { preActivityMetadataRepo.upsertPreActivityMetadata(any()) }
+            .thenReturn(Result.failure(AppError("core unavailable")))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+
+        // The activities are already gone and the watchers stopped, so there is nothing to roll back to:
+        // the tags are lost rather than the removal reported as failed.
+        assertTrue(result.isSuccess)
+        verify(trezorRepo).forgetDevice("dev1", "zpubNS")
+    }
+
+    @Test
     fun `removeDevice fails when forget reports credential cleanup failure despite the device being gone`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
         whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.failure(AppError("clear failed")))
@@ -1822,6 +1924,20 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals("My Cold Wallet", sut.wallets.value.single().name)
     }
+
+    private fun preActivityMetadata() = PreActivityMetadata(
+        walletId = HARDWARE_WALLET_ID,
+        paymentId = "hw-txid",
+        tags = listOf("cold"),
+        paymentHash = null,
+        txId = "hw-txid",
+        address = null,
+        isReceive = false,
+        feeRate = 0uL,
+        isTransfer = false,
+        channelId = null,
+        createdAt = 1uL,
+    )
 
     private suspend fun wheneverStartWatcher() = whenever(
         trezorRepo.startWatcher(

@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -98,20 +99,57 @@ class HwWalletViewModelTest : BaseUnitTest() {
 
     @Test
     fun `removeDevice delegates to the repo and clears the pending device`() = test {
-        whenever { hwWalletRepo.removeDevice("dev1") }.thenReturn(Result.success(Unit))
+        whenever { hwWalletRepo.removeDevice("dev1", true) }.thenReturn(Result.success(Unit))
         val sut = createSut()
         sut.onRemoveClick(wallet)
 
         sut.removeDevice("dev1")
         advanceUntilIdle()
 
-        verify(hwWalletRepo).removeDevice("dev1")
+        verify(hwWalletRepo).removeDevice("dev1", true)
         assertNull(sut.uiState.value.isPendingRemoval)
     }
 
     @Test
+    fun `onRemoveClick offers to keep the backup data`() = test {
+        val sut = createSut()
+
+        sut.onRemoveClick(wallet)
+
+        assertEquals(true, sut.uiState.value.keepBackupDataOnRemoval)
+    }
+
+    @Test
+    fun `onRemoveClick restores the default after a wallet was removed without keeping its data`() = test {
+        whenever { hwWalletRepo.removeDevice(any(), any()) }.thenReturn(Result.success(Unit))
+        val sut = createSut()
+        sut.onRemoveClick(wallet)
+        sut.onKeepBackupDataChange(false)
+        sut.removeDevice("dev1")
+        advanceUntilIdle()
+
+        // Reopening starts from the default rather than from the last choice.
+        sut.onRemoveClick(otherWallet)
+
+        assertEquals(true, sut.uiState.value.keepBackupDataOnRemoval)
+    }
+
+    @Test
+    fun `removeDevice forwards the choice to keep nothing`() = test {
+        whenever { hwWalletRepo.removeDevice("dev1", false) }.thenReturn(Result.success(Unit))
+        val sut = createSut()
+        sut.onRemoveClick(wallet)
+        sut.onKeepBackupDataChange(false)
+
+        sut.removeDevice("dev1")
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).removeDevice("dev1", false)
+    }
+
+    @Test
     fun `removeDevice sends an error toast on failure`() = test {
-        whenever { hwWalletRepo.removeDevice("dev1") }.thenReturn(Result.failure(AppError("nope")))
+        whenever { hwWalletRepo.removeDevice(any(), any()) }.thenReturn(Result.failure(AppError("nope")))
         val sut = createSut()
 
         val toasts = mutableListOf<Toast>()

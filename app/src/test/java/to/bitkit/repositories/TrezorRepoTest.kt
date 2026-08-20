@@ -112,6 +112,8 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(context.getString(R.string.hardware__connect_error)).thenReturn("Could not connect to your Trezor.")
         whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
         whenever { hwWalletStore.loadKnownDevices() }.thenReturn(emptyList())
+        whenever { hwWalletStore.loadPendingNames() }.thenReturn(emptyMap())
+        whenever { hwWalletStore.setPendingName(any(), anyOrNull()) }.thenReturn(Unit)
         stubAccountXpubFetch()
     }
 
@@ -830,6 +832,97 @@ class TrezorRepoTest : BaseUnitTest() {
         val added = captor.firstValue.single { it.id == DEVICE_ID }
         assertEquals("No Pass", added.customLabel)
         assertEquals("standard-wallet", added.walletId)
+    }
+
+    @Test
+    fun `connect adopts the pending name of a wallet paired again`() = test {
+        // Restored from a backup, or kept when the wallet was removed: pairing takes the name over.
+        val sharedKey = "shared-native-xpub"
+        val unnamed = mockKnownDevice(
+            id = DEVICE_ID,
+            xpubs = ALL_ADDRESS_TYPE_KEYS.associateWith { sharedKey },
+            customLabel = null,
+            walletId = "standard-wallet",
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(unnamed))
+        whenever { hwWalletStore.loadPendingNames() }.thenReturn(mapOf("standard-wallet" to "Cold Storage"))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(
+            trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
+        ).thenAnswer { mockPublicKeyResponse(xpub = sharedKey, path = it.getArgument(0)) }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertEquals("Cold Storage", captor.firstValue.single { it.id == DEVICE_ID }.customLabel)
+        // Consumed, so clearing the name later cannot fall back to it again.
+        verify(hwWalletStore).setPendingName("standard-wallet", null)
+    }
+
+    @Test
+    fun `connect prefers the stored custom label over a pending name`() = test {
+        val sharedKey = "shared-native-xpub"
+        val stored = mockKnownDevice(
+            id = DEVICE_ID,
+            xpubs = ALL_ADDRESS_TYPE_KEYS.associateWith { sharedKey },
+            customLabel = "Renamed Here",
+            walletId = "standard-wallet",
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(stored))
+        whenever { hwWalletStore.loadPendingNames() }.thenReturn(mapOf("standard-wallet" to "Cold Storage"))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(
+            trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
+        ).thenAnswer { mockPublicKeyResponse(xpub = sharedKey, path = it.getArgument(0)) }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertEquals("Renamed Here", captor.firstValue.single { it.id == DEVICE_ID }.customLabel)
+        // The pending name lost, so it is stale: dropping it keeps a later rename from falling back to it.
+        verify(hwWalletStore).setPendingName("standard-wallet", null)
+    }
+
+    @Test
+    fun `connect leaves the pending name of another identity on the device alone`() = test {
+        val sharedKey = "shared-native-xpub"
+        val unnamed = mockKnownDevice(
+            id = DEVICE_ID,
+            xpubs = ALL_ADDRESS_TYPE_KEYS.associateWith { sharedKey },
+            customLabel = null,
+            walletId = "standard-wallet",
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(unnamed))
+        // A passphrase wallet on the same device derives its own keys, so its name is its own.
+        whenever { hwWalletStore.loadPendingNames() }.thenReturn(mapOf("hidden-wallet" to "Hidden Stash"))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(
+            trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
+        ).thenAnswer { mockPublicKeyResponse(xpub = sharedKey, path = it.getArgument(0)) }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        assertNull(captor.firstValue.single { it.id == DEVICE_ID }.customLabel)
+        verify(hwWalletStore, never()).setPendingName(any(), anyOrNull())
     }
 
     @Test
