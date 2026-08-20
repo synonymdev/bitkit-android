@@ -488,7 +488,7 @@ private fun PreviewUnitStops() {
 private fun PreviewVerticalStack() {
     AppThemeSurface {
         var dollars by remember { mutableIntStateOf(1) }
-        var times by remember { mutableIntStateOf(1) }
+        var times by remember { mutableIntStateOf(5) }
         Column(modifier = Modifier.padding(32.dp)) {
             Slider(
                 value = dollars,
@@ -497,7 +497,7 @@ private fun PreviewVerticalStack() {
             )
             VerticalSpacer(32.dp)
             Slider(
-                value = 50,
+                value = times,
                 steps = persistentListOf(1, 3, 5, 10, 50),
                 onValueChange = { times = it },
                 formatLabel = { "$it×" },

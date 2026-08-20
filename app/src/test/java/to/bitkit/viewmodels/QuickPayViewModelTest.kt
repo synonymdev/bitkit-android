@@ -36,7 +36,6 @@ import to.bitkit.repositories.QuickPaySpendReservation
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -159,7 +158,6 @@ class QuickPayViewModelTest : BaseUnitTest() {
 
         assertEquals(QuickPayResult.FallBackToConfirm, sut.uiState.value.result)
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
-        assertNull(sut.uiState.value.result.takeIf { it is QuickPayResult.Error })
     }
 
     @Test

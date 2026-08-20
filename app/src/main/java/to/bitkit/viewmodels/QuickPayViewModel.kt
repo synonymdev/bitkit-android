@@ -120,7 +120,7 @@ class QuickPayViewModel @Inject constructor(
         handleQuickPayFailure(error, invoice)
     }
 
-    private fun setError(error: Throwable, paymentRequest: String? = null) {
+    private fun setError(error: Throwable) {
         val localizedMessage = when (error) {
             is QuickPayConversionError -> {
                 context.getString(R.string.wallet__send_quickpay__currency_conversion)
@@ -132,10 +132,9 @@ class QuickPayViewModel @Inject constructor(
                 message = localizedMessage,
                 failureType = error.toCompactFailureType(),
                 resetRoutingCachesOnRetry = false,
-                paymentRequest = paymentRequest,
             )
         } else {
-            error.toSendFailureDetails(context, paymentRequest)
+            error.toSendFailureDetails(context)
         }
         _uiState.update { it.copy(result = QuickPayResult.Error(failure)) }
     }
