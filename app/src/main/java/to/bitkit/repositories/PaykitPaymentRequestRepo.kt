@@ -98,6 +98,12 @@ data class PaykitPaymentRequestDraft(
     val expiresAt: Instant,
 )
 
+data class PaykitPaymentRequestCreation(
+    val request: PaykitPaymentRequest,
+    val creatorIdentity: String,
+    val wasPublishedToActiveState: Boolean,
+)
+
 sealed class PaykitPaymentRequestError(message: String) : AppError(message) {
     data object RequestUnavailable : PaykitPaymentRequestError("Payment request is unavailable")
     data object RequestExpired : PaykitPaymentRequestError("Payment request has expired")
@@ -193,7 +199,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         draft: PaykitPaymentRequestDraft,
         target: PaykitPaymentRequestTarget,
         savedPublicKeys: List<String>,
-    ): Result<PaykitPaymentRequest> = withContext(ioDispatcher) {
+    ): Result<PaykitPaymentRequestCreation> = withContext(ioDispatcher) {
         runSuspendCatching {
             if (!creationMutex.tryLock()) throw PaykitPaymentRequestError.OperationInProgress
             _isCreatingRequest.update { true }
@@ -235,13 +241,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         createdAt = proposalDate,
                         reports = reports,
                     )
-                    if (isCurrentState(generation, expectedIdentity)) {
-                        _sentRequests.update { requests ->
-                            listOf(request) + requests.filterNot { it.id == request.id }
-                        }
-                        scheduleExpirationLocked()
-                    }
-                    request
+                    publishCreatedRequest(request, generation, expectedIdentity)
                 }
             } finally {
                 _isCreatingRequest.update { false }
@@ -250,6 +250,21 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }.onFailure {
             Logger.warn("Failed to create Paykit payment request", it, context = TAG)
         }
+    }
+
+    private fun publishCreatedRequest(
+        request: PaykitPaymentRequest,
+        generation: Long,
+        creatorIdentity: String,
+    ): PaykitPaymentRequestCreation {
+        val wasPublishedToActiveState = isCurrentState(generation, creatorIdentity)
+        if (wasPublishedToActiveState) {
+            _sentRequests.update { requests ->
+                listOf(request) + requests.filterNot { it.id == request.id }
+            }
+            scheduleExpirationLocked()
+        }
+        return PaykitPaymentRequestCreation(request, creatorIdentity, wasPublishedToActiveState)
     }
 
     suspend fun accept(request: PaykitPaymentRequest): Result<Unit> = updateRequest(request) {

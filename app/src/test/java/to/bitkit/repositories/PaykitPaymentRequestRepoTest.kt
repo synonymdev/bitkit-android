@@ -293,11 +293,12 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         val expiry = clock.now().plus(60.seconds)
 
-        val request = sut.propose(
+        val creation = sut.propose(
             draft = PaykitPaymentRequestDraft(amountSats = 1uL, note = " Lunch ", expiresAt = expiry),
             target = target,
             savedPublicKeys = listOf(COUNTERPARTY),
         ).getOrThrow()
+        val request = creation.request
 
         val proposal = argumentCaptor<PaykitPaymentRequestProposalTerms>()
         verifyBlocking(paykitSdkService) {
@@ -315,6 +316,47 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertEquals("{\"note\":\"Lunch\"}", proposal.firstValue.metadataJson)
         assertEquals("Lunch", request.note)
         assertEquals(PaykitPaymentRequestDeliveryStatus.Queued, request.deliveryStatus)
+        assertEquals(LOCAL_IDENTITY, creation.creatorIdentity)
+        assertTrue(creation.wasPublishedToActiveState)
+    }
+
+    @Test
+    fun `identity switch keeps a committed proposal out of the replacement identity state`() = test {
+        val target = PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)
+        val proposalStarted = CompletableDeferred<Unit>()
+        val finishProposal = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+            listOf(PaykitReceiverPaths.SERVER),
+        )
+        whenever(paykitSdkService.proposePaymentRequest(any(), any(), any(), eq(LOCAL_IDENTITY))).doSuspendableAnswer {
+            proposalStarted.complete(Unit)
+            finishProposal.await()
+            paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE)
+        }
+        whenever(presentationStore.load(SECOND_IDENTITY)).thenReturn(emptySet())
+
+        val proposal = async {
+            sut.propose(
+                draft = PaykitPaymentRequestDraft(1uL, "Lunch", clock.now().plus(60.seconds)),
+                target = target,
+                savedPublicKeys = listOf(COUNTERPARTY),
+            ).getOrThrow()
+        }
+        proposalStarted.await()
+        val activation = async { sut.activate(SECOND_IDENTITY) }
+        runCurrent()
+        finishProposal.complete(Unit)
+
+        val creation = proposal.await()
+        activation.await()
+
+        assertEquals(LOCAL_IDENTITY, creation.creatorIdentity)
+        assertFalse(creation.wasPublishedToActiveState)
+        assertTrue(sut.sentRequests.value.isEmpty())
     }
 
     @Test

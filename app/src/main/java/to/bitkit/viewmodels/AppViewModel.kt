@@ -144,6 +144,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.PaykitPaymentRequest
+import to.bitkit.repositories.PaykitPaymentRequestCreation
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
@@ -3938,10 +3939,10 @@ class AppViewModel @Inject constructor(
         return paykitPaymentRequestRepo.reject(request).onFailure(::toast)
     }
 
-    suspend fun createPaymentRequest(
+    private suspend fun createPaymentRequest(
         draft: PaykitPaymentRequestDraft,
         target: PaykitPaymentRequestTarget,
-    ): Result<PaykitPaymentRequest> = paykitPaymentRequestRepo.propose(
+    ): Result<PaykitPaymentRequestCreation> = paykitPaymentRequestRepo.propose(
         draft = draft,
         target = target,
         savedPublicKeys = pubkyRepo.contacts.value.map { it.publicKey },
@@ -3952,11 +3953,24 @@ class AppViewModel @Inject constructor(
         target: PaykitPaymentRequestTarget,
         onCreated: (PaykitPaymentRequest) -> Unit,
     ) {
+        val sourceReceiveSheet = currentSheet.value as? Sheet.Receive
         viewModelScope.launch {
             createPaymentRequest(draft, target)
-                .onSuccess { request ->
-                    if (sentPaymentRequests.value.any { it.id == request.id }) {
-                        onCreated(request)
+                .onSuccess { creation ->
+                    val creatorIsCurrent = PubkyPublicKeyFormat.matches(
+                        creation.creatorIdentity,
+                        pubkyRepo.publicKey.value,
+                    )
+                    if (creation.wasPublishedToActiveState && creatorIsCurrent) {
+                        onCreated(creation.request)
+                    } else {
+                        if (sourceReceiveSheet != null && currentSheet.value === sourceReceiveSheet) hideSheet()
+                        toast(
+                            type = Toast.ToastType.INFO,
+                            title = context.getString(R.string.wallet__payment_request),
+                            description = context.getString(R.string.wallet__payment_request_queued_description),
+                            testTag = "PaymentRequestQueuedToast",
+                        )
                     }
                 }
                 .onFailure(::toast)

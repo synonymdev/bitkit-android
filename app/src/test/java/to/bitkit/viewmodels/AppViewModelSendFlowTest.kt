@@ -87,6 +87,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.PaykitPaymentRequest
+import to.bitkit.repositories.PaykitPaymentRequestCreation
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitPaymentRequestRepo
@@ -3338,11 +3339,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val creationStarted = CompletableDeferred<Unit>()
         val finishCreation = CompletableDeferred<Unit>()
         val callbackRequest = CompletableDeferred<PaykitPaymentRequest>()
+        pubkyPublicKey.value = testPublicKey
         whenever(paykitPaymentRequestRepo.propose(draft, target, emptyList())).doSuspendableAnswer {
             creationStarted.complete(Unit)
             finishCreation.await()
-            sentPaykitPaymentRequests.value = listOf(request)
-            Result.success(request)
+            Result.success(paymentRequestCreation(request))
         }
 
         sut.createPaymentRequest(draft, target) { callbackRequest.complete(it) }
@@ -3351,6 +3352,71 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
 
         assertEquals(request, callbackRequest.await())
+    }
+
+    @Test
+    fun `committed outgoing request closes inactive identity flow and shows queued feedback`() = test {
+        val request = paymentRequest().copy(counterparty = "pubkyrecipient")
+        val target = PaykitPaymentRequestTarget(request.counterparty, request.counterpartyReceiverPath)
+        val draft = PaykitPaymentRequestDraft(
+            amountSats = request.amountSats,
+            note = "Lunch",
+            expiresAt = Clock.System.now() + 60.seconds,
+        )
+        val callbackRequest = CompletableDeferred<PaykitPaymentRequest>()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.propose(draft, target, emptyList())).thenReturn(
+            Result.success(paymentRequestCreation(request, wasPublishedToActiveState = false))
+        )
+        sut.showSheet(Sheet.Receive())
+        runCurrent()
+
+        sut.createPaymentRequest(draft, target) { callbackRequest.complete(it) }
+        runCurrent()
+
+        assertFalse(callbackRequest.isCompleted)
+        assertNull(sut.currentSheet.value)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("PaymentRequestQueuedToast", it.testTag)
+            }
+        )
+    }
+
+    @Test
+    fun `inactive identity completion preserves a replacement sheet`() = test {
+        val request = paymentRequest().copy(counterparty = "pubkyrecipient")
+        val target = PaykitPaymentRequestTarget(request.counterparty, request.counterpartyReceiverPath)
+        val draft = PaykitPaymentRequestDraft(
+            amountSats = request.amountSats,
+            note = "Lunch",
+            expiresAt = Clock.System.now() + 60.seconds,
+        )
+        val creationStarted = CompletableDeferred<Unit>()
+        val finishCreation = CompletableDeferred<Unit>()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.propose(draft, target, emptyList())).doSuspendableAnswer {
+            creationStarted.complete(Unit)
+            finishCreation.await()
+            Result.success(paymentRequestCreation(request, wasPublishedToActiveState = false))
+        }
+        sut.showSheet(Sheet.Receive())
+        runCurrent()
+
+        sut.createPaymentRequest(draft, target) {}
+        creationStarted.await()
+        sut.showSheet(Sheet.PaymentRequests)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        finishCreation.complete(Unit)
+        runCurrent()
+
+        assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("PaymentRequestQueuedToast", it.testTag)
+            }
+        )
     }
 
     @Test
@@ -4225,6 +4291,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         amountSats = 2_500uL,
         expiresAt = null,
         acceptedPaymentEndpointIdentifiers = listOf("lightning_bolt11"),
+    )
+
+    private fun paymentRequestCreation(
+        request: PaykitPaymentRequest,
+        wasPublishedToActiveState: Boolean = true,
+    ) = PaykitPaymentRequestCreation(
+        request = request,
+        creatorIdentity = testPublicKey,
+        wasPublishedToActiveState = wasPublishedToActiveState,
     )
 }
 

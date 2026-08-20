@@ -174,7 +174,11 @@ class PaykitSdkService @Inject constructor(
                     } catch (e: PaykitException.Identity) {
                         if (!sessionProvider.canDeferStaleSession(e.context)) throw e
 
-                        Logger.warn("Deferring stale Paykit session restoration until SDK setup completes", e, context = TAG)
+                        Logger.warn(
+                            "Deferring stale Paykit session restoration until SDK setup completes",
+                            e,
+                            context = TAG,
+                        )
                         sessionProvider.suspendStoredSessionAccess()
                         resetRuntime()
                         try {
