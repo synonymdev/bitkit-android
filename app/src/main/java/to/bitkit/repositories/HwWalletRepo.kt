@@ -403,7 +403,10 @@ class HwWalletRepo @Inject constructor(
         signedTx: HwFundingSignedTx,
     ): Result<HwFundingBroadcastResult> = withContext(ioDispatcher) {
         runSuspendCatching {
-            val txId = trezorRepo.broadcastRawTx(serializedTx = signedTx.serializedTx).getOrThrow()
+            val txId = trezorRepo.broadcastRawTx(
+                serializedTx = signedTx.serializedTx,
+                network = Env.network.toCoreNetwork(),
+            ).getOrThrow()
             HwFundingBroadcastResult(
                 txId = txId,
                 miningFeeSats = signedTx.miningFeeSats,
@@ -639,7 +642,10 @@ class HwWalletRepo @Inject constructor(
                     .map {
                         WatcherSettings(
                             monitoredTypes = it.addressTypesToMonitor.toSet(),
-                            electrumUrl = Env.trezorElectrumUrlOrDefault(it.electrumServer),
+                            electrumUrl = Env.trezorElectrumUrlOrDefault(
+                                configured = it.electrumServer,
+                                network = Env.network.toCoreNetwork(),
+                            ),
                         )
                     }
                     .distinctUntilChanged(),

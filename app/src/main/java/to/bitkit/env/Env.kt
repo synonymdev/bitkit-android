@@ -192,8 +192,8 @@ internal object Env {
     val trezorElectrumUrl: String?
         get() = BuildConfig.TREZOR_ELECTRUM_URL.takeIf { it.isNotBlank() && (isDebug || isE2eTest) }
 
-    fun trezorElectrumUrlOrDefault(configured: String): String =
-        trezorElectrumUrl?.takeIf { network == Network.REGTEST } ?: configured
+    fun trezorElectrumUrlOrDefault(configured: String, network: BitkitCoreNetwork): String =
+        trezorElectrumUrl?.takeIf { network == BitkitCoreNetwork.REGTEST } ?: configured
 
     fun electrumUrlForNetwork(network: BitkitCoreNetwork): String {
         val isE2eLocal = isE2eTest && e2eBackend == "local"
