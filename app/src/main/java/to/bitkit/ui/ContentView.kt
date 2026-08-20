@@ -728,13 +728,15 @@ private fun RootNavHost(
             navController = navController,
         )
         composableWithDefaultTransitions<Routes.PaymentRequests> {
-            PaymentRequestsScreen(
-                appViewModel = appViewModel,
-                onBack = { navController.popBackStack() },
-                onRequestPayment = {
-                    appViewModel.showSheet(Sheet.Receive(route = ReceiveRoute.PaymentRequestDetails))
-                },
-            )
+            PaykitRouteGuard(settingsViewModel, navController) {
+                PaymentRequestsScreen(
+                    appViewModel = appViewModel,
+                    onBack = { navController.popBackStack() },
+                    onRequestPayment = {
+                        appViewModel.showSheet(Sheet.Receive(route = ReceiveRoute.PaymentRequestDetails))
+                    },
+                )
+            }
         }
         settings(navController, settingsViewModel)
         contacts(navController, settingsViewModel, appViewModel)

@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -149,6 +150,64 @@ class DrawerMenuWidgetsTest {
         composeTestRule.onNodeWithTag("DrawerWidgets").performClick()
 
         composeTestRule.onNodeWithTag("WidgetsSheetRequested").assertIsDisplayed()
+    }
+
+    @Test
+    fun paymentRequestsIsAvailableFromDrawerWhenPaykitIsEnabled() {
+        composeTestRule.setContent {
+            val navController = rememberNavController()
+            val drawerState = rememberDrawerState(DrawerValue.Open)
+
+            DrawerMenuTestSurface {
+                NavHost(
+                    navController = navController,
+                    startDestination = Routes.Home,
+                ) {
+                    composable<Routes.Home> {
+                        Text("Home", modifier = Modifier.testTag("HomeRoute"))
+                    }
+                    composable<Routes.PaymentRequests> {
+                        Text("Payment Requests", modifier = Modifier.testTag("PaymentRequestsRoute"))
+                    }
+                }
+                DrawerMenu(
+                    drawerState = drawerState,
+                    rootNavController = navController,
+                    hasSeenWidgetsIntro = true,
+                    hasSeenShopIntro = true,
+                    onBeforeNavigate = {},
+                    showWidgets = true,
+                    isPaykitEnabled = true,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("REQUESTS").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("DrawerPaymentRequests").performClick()
+
+        composeTestRule.onNodeWithTag("PaymentRequestsRoute").assertIsDisplayed()
+    }
+
+    @Test
+    fun paymentRequestsIsHiddenFromDrawerWhenPaykitIsDisabled() {
+        composeTestRule.setContent {
+            val navController = rememberNavController()
+            val drawerState = rememberDrawerState(DrawerValue.Open)
+
+            DrawerMenuTestSurface {
+                DrawerMenu(
+                    drawerState = drawerState,
+                    rootNavController = navController,
+                    hasSeenWidgetsIntro = true,
+                    hasSeenShopIntro = true,
+                    onBeforeNavigate = {},
+                    showWidgets = true,
+                    isPaykitEnabled = false,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("DrawerPaymentRequests").assertDoesNotExist()
     }
 }
 

@@ -1134,6 +1134,7 @@
     <string name="wallet__details_transfer_subtitle">Incoming Transfer: </string>
     <string name="wallet__drawer__activity">Activity</string>
     <string name="wallet__drawer__contacts">Contacts</string>
+    <string name="wallet__drawer__payment_requests">Requests</string>
     <string name="wallet__drawer__profile">Profile</string>
     <string name="wallet__drawer__settings">Settings</string>
     <string name="wallet__drawer__shop">Shop</string>
@@ -1212,7 +1213,8 @@
     <string name="wallet__payment_request_waiting_for_recipient">Waiting for %1$s to pay</string>
     <string name="wallet__payment_request_waiting_for_details">Waiting for updated private payment details. Bitkit will retry automatically.</string>
     <string name="wallet__payment_requests">Payment Requests</string>
-    <string name="wallet__payment_requests_empty">No payment requests yet.</string>
+    <string name="wallet__payment_requests_empty_description">You have not made any payments to providers and don’t have any payment requests yet.</string>
+    <string name="wallet__payment_requests_empty_headline"><![CDATA[No Payment\n<accent>History</accent>]]></string>
     <string name="wallet__payment_requests_earlier">Earlier</string>
     <string name="wallet__payment_requests_month_year">%1$s %2$d</string>
     <string name="wallet__payment_requests_not_now">Not Now</string>

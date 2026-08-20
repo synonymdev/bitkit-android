@@ -2,9 +2,11 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,7 +55,9 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.MoneySSB
+import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.MoneyCell
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SecondaryButton
@@ -67,6 +71,7 @@ import to.bitkit.ui.shared.util.outerGlow
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.uiDateText
+import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
 import java.time.YearMonth
 import java.time.ZoneId
@@ -112,7 +117,8 @@ internal fun PaymentRequestsSheetContent(
 ) {
     Column(
         modifier = modifier
-            .fillMaxSize()
+            .fillMaxWidth()
+            .sheetHeight()
             .gradientBackground()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
@@ -206,56 +212,75 @@ internal fun PaymentRequestsContent(
             onBackClick = onBack,
             actions = { DrawerNavIcon() },
         )
-        LazyColumn(
-            verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 16.dp),
-        ) {
-            if (requests.isEmpty()) {
-                item {
-                    BodyM(
-                        text = stringResource(R.string.wallet__payment_requests_empty),
-                        color = Colors.White64,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 120.dp),
-                    )
-                }
+        if (requests.isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp),
+            ) {
+                FillHeight()
+                Image(
+                    painter = painterResource(R.drawable.restore),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(256.dp)
+                        .align(Alignment.CenterHorizontally)
+                        .testTag("PaymentRequestsEmptyIllustration"),
+                )
+                FillHeight()
+                Display(
+                    text = stringResource(R.string.wallet__payment_requests_empty_headline)
+                        .withAccent(accentColor = Colors.Purple),
+                )
+                VerticalSpacer(12.dp)
+                BodyM(
+                    text = stringResource(R.string.wallet__payment_requests_empty_description),
+                    color = Colors.White64,
+                )
+                VerticalSpacer(24.dp)
             }
-            if (sections.active.isNotEmpty()) {
-                item {
-                    Caption13Up(
-                        text = stringResource(R.string.wallet__payment_requests_section),
-                        color = Colors.White64,
-                    )
+        } else {
+            LazyColumn(
+                contentPadding = PaddingValues(top = 24.dp, bottom = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp),
+            ) {
+                if (sections.active.isNotEmpty()) {
+                    item {
+                        Caption13Up(
+                            text = stringResource(R.string.wallet__payment_requests_section),
+                            color = Colors.White64,
+                        )
+                    }
+                    items(sections.active, key = { it.lazyListKey }) { request ->
+                        ActivePaymentRequestCard(
+                            request = request,
+                            isIncoming = pending.any { it.id == request.id },
+                            contact = contacts.contactFor(request),
+                            onPay = onPay,
+                            onReject = onReject,
+                        )
+                    }
                 }
-                items(sections.active, key = { it.lazyListKey }) { request ->
-                    ActivePaymentRequestCard(
-                        request = request,
-                        isIncoming = pending.any { it.id == request.id },
-                        contact = contacts.contactFor(request),
-                        onPay = onPay,
-                        onReject = onReject,
-                    )
+                sections.historyByMonth.forEach { (month, history) ->
+                    item(key = "history-${month ?: "earlier"}") {
+                        Caption13Up(
+                            text = paymentRequestHistorySectionTitle(month, currentMonth),
+                            color = Colors.White64,
+                        )
+                    }
+                    items(history, key = { it.lazyListKey }) { request ->
+                        PaymentRequestCard(
+                            request = request,
+                            contact = contacts.contactFor(request),
+                            compactSubtitle = paymentRequestDate(request),
+                        )
+                    }
                 }
+                item { VerticalSpacer(8.dp) }
             }
-            sections.historyByMonth.forEach { (month, history) ->
-                item(key = "history-${month ?: "earlier"}") {
-                    Caption13Up(
-                        text = paymentRequestHistorySectionTitle(month, currentMonth),
-                        color = Colors.White64,
-                    )
-                }
-                items(history, key = { it.lazyListKey }) { request ->
-                    PaymentRequestCard(
-                        request = request,
-                        contact = contacts.contactFor(request),
-                        compactSubtitle = paymentRequestDate(request),
-                    )
-                }
-            }
-            item { VerticalSpacer(8.dp) }
         }
         if (canRequestPayment) {
             PrimaryButton(
@@ -453,9 +478,8 @@ internal fun PaymentRequestCard(
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            MoneySSB(
+            MoneyCell(
                 sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
-                showSymbol = true,
             )
         }
         if (onPay != null || onReject != null) {
@@ -535,7 +559,6 @@ private fun PaymentRequestsSheetPreview() {
                 onSeeAll = {},
                 onPay = {},
                 onReject = { Result.success(Unit) },
-                modifier = Modifier.sheetHeight(),
             )
         }
     }

@@ -65,6 +65,33 @@ fun MoneyStack(
 }
 
 @Composable
+fun MoneyCell(
+    sats: Long,
+    modifier: Modifier = Modifier,
+) {
+    val currencies = LocalCurrencies.current
+    Column(
+        horizontalAlignment = Alignment.End,
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+        modifier = modifier,
+    ) {
+        rememberMoneyText(sats = sats, unit = currencies.primaryDisplay, showSymbol = true)?.let { text ->
+            BodyMSB(
+                text = text.withAccent(accentColor = Colors.White64),
+                modifier = Modifier.testTag("MoneyPrimary"),
+            )
+        }
+        rememberMoneyText(sats = sats, unit = currencies.primaryDisplay.not(), showSymbol = true)?.let { text ->
+            CaptionB(
+                text = text.withAccent(accentColor = Colors.White64),
+                color = Colors.White64,
+                modifier = Modifier.testTag("MoneySecondary"),
+            )
+        }
+    }
+}
+
+@Composable
 fun MoneySSB(
     sats: Long,
     modifier: Modifier = Modifier,
