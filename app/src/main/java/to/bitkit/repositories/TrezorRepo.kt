@@ -1141,6 +1141,15 @@ class TrezorRepo @Inject constructor(
         // must keep the name the user gave it instead of falling back to the device's own.
         val identityKey = walletKey(xpubs, deviceInfo.id)
         val named = previous ?: knownDevices.firstOrNull { it.walletKey == identityKey }
+        val resolvedWalletId = previous?.walletId?.takeIf { it.isNotBlank() }
+            ?: knownDevices.findHardwareWalletId(xpubs, fallback = deviceInfo.id)
+        // A name restored from a backup, or kept when this wallet was removed, belongs to the wallet
+        // identity rather than to any device entry, so adopt it the first time the identity is paired
+        // again. An entry that already carries one was named on this device more recently.
+        val pendingName = resolvedWalletId.takeIf { it.isNotBlank() }
+            ?.let { hwWalletStore.loadPendingNames()[it] }
+            ?.takeIf { it.isNotBlank() }
+        val customLabel = named?.customLabel ?: pendingName
         val known = KnownDevice(
             id = deviceInfo.id,
             name = deviceInfo.name,
@@ -1150,9 +1159,8 @@ class TrezorRepo @Inject constructor(
             model = features.model ?: deviceInfo.model,
             lastConnectedAt = clock.nowMs(),
             xpubs = xpubs,
-            customLabel = named?.customLabel,
-            walletId = previous?.walletId?.takeIf { it.isNotBlank() }
-                ?: knownDevices.findHardwareWalletId(xpubs, fallback = deviceInfo.id),
+            customLabel = customLabel,
+            walletId = resolvedWalletId,
             // The selection that derived these keys is authoritative, so a wallet wrongly marked
             // hidden is corrected the next time it is opened rather than staying gated behind a
             // passphrase forever. On-device entry cannot say which wallet was opened, so it keeps
@@ -1166,6 +1174,11 @@ class TrezorRepo @Inject constructor(
         )
         val updated = knownDevices.filterNot { it.isReplacedBy(known, refreshed = previous) } + known
         saveKnownDevices(updated)
+        // Consumed, so the name lives on the entry alone: leaving it would resurrect a name the user
+        // later clears, since the entry would then fall back to the pending one again.
+        if (pendingName != null) {
+            hwWalletStore.setPendingName(resolvedWalletId, null)
+        }
         _state.update { it.copy(knownDevices = updated.toImmutableList()) }
         return known
     }
