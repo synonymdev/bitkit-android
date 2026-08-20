@@ -1143,12 +1143,7 @@ class TrezorRepo @Inject constructor(
         val named = previous ?: knownDevices.firstOrNull { it.walletKey == identityKey }
         val resolvedWalletId = previous?.walletId?.takeIf { it.isNotBlank() }
             ?: knownDevices.findHardwareWalletId(xpubs, fallback = deviceInfo.id)
-        // A name restored from a backup, or kept when this wallet was removed, belongs to the wallet
-        // identity rather than to any device entry, so adopt it the first time the identity is paired
-        // again. An entry that already carries one was named on this device more recently.
-        val pendingName = resolvedWalletId.takeIf { it.isNotBlank() }
-            ?.let { hwWalletStore.loadPendingNames()[it] }
-            ?.takeIf { it.isNotBlank() }
+        val pendingName = pendingNameFor(resolvedWalletId)
         val customLabel = named?.customLabel ?: pendingName
         val known = KnownDevice(
             id = deviceInfo.id,
@@ -1161,15 +1156,7 @@ class TrezorRepo @Inject constructor(
             xpubs = xpubs,
             customLabel = customLabel,
             walletId = resolvedWalletId,
-            // The selection that derived these keys is authoritative, so a wallet wrongly marked
-            // hidden is corrected the next time it is opened rather than staying gated behind a
-            // passphrase forever. On-device entry cannot say which wallet was opened, so it keeps
-            // what the entry already knew and assumes hidden only for one it has never seen.
-            passphraseProtected = when (selection) {
-                WalletSelection.Standard -> false
-                is WalletSelection.Hidden -> true
-                WalletSelection.OnDevice -> previous?.passphraseProtected ?: true
-            },
+            passphraseProtected = selection.isPassphraseProtected(previous),
             trezorDeviceId = features.deviceId ?: previous?.trezorDeviceId,
         )
         val updated = knownDevices.filterNot { it.isReplacedBy(known, refreshed = previous) } + known
@@ -1182,6 +1169,27 @@ class TrezorRepo @Inject constructor(
         _state.update { it.copy(knownDevices = updated.toImmutableList()) }
         return known
     }
+
+    /**
+     * The selection that derived a device's keys is authoritative, so a wallet wrongly marked hidden is
+     * corrected the next time it is opened rather than staying gated behind a passphrase forever.
+     * On-device entry cannot say which wallet was opened, so it keeps what the entry already knew and
+     * assumes hidden only for one it has never seen.
+     */
+    private fun WalletSelection.isPassphraseProtected(previous: KnownDevice?): Boolean = when (this) {
+        WalletSelection.Standard -> false
+        is WalletSelection.Hidden -> true
+        WalletSelection.OnDevice -> previous?.passphraseProtected ?: true
+    }
+
+    /**
+     * The name a wallet identity carries while it has no device entry: restored from a backup, or kept
+     * when the wallet was removed. Adopted the first time the identity is paired again.
+     */
+    private suspend fun pendingNameFor(walletId: String): String? = walletId
+        .takeIf { it.isNotBlank() }
+        ?.let { hwWalletStore.loadPendingNames()[it] }
+        ?.takeIf { it.isNotBlank() }
 
     /**
      * Reads account-level extended public keys for every supported address type so a

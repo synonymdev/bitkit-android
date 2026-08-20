@@ -34,7 +34,13 @@ class HwWalletViewModel @Inject constructor(
 
     private var renameSessionId = 0L
 
-    fun onRemoveClick(wallet: HwWallet) = _uiState.update { it.copy(isPendingRemoval = wallet) }
+    // Reset on open rather than on dismiss, so a back press, a failed removal or another wallet picked
+    // from the list all start from the default rather than from the last choice.
+    fun onRemoveClick(wallet: HwWallet) = _uiState.update {
+        it.copy(isPendingRemoval = wallet, keepBackupDataOnRemoval = true)
+    }
+
+    fun onKeepBackupDataChange(value: Boolean) = _uiState.update { it.copy(keepBackupDataOnRemoval = value) }
 
     fun onDismissRemoveDialog() = _uiState.update { it.copy(isPendingRemoval = null) }
 
@@ -112,9 +118,12 @@ class HwWalletViewModel @Inject constructor(
         renameSessionId == sessionId && isPendingRename?.id == walletId
 
     fun removeDevice(walletId: String) {
+        // Read before the update below clears the pending state this choice was made in.
+        val keepBackupData = _uiState.value.keepBackupDataOnRemoval
+
         viewModelScope.launch {
             _uiState.update { it.copy(isPendingRemoval = null) }
-            hwWalletRepo.removeDevice(walletId).onFailure {
+            hwWalletRepo.removeDevice(walletId, keepBackupData).onFailure {
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.common__error),
@@ -128,6 +137,7 @@ class HwWalletViewModel @Inject constructor(
 @Immutable
 data class HwWalletDetailUiState(
     val isPendingRemoval: HwWallet? = null,
+    val keepBackupDataOnRemoval: Boolean = true,
     val isPendingRename: HwWallet? = null,
     val labelInput: String = "",
     val isSavingLabel: Boolean = false,

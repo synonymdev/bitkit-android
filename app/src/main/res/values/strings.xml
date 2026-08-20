@@ -204,6 +204,7 @@
     <string name="hardware__passphrase_text">If you have funds protected by a passphrase, enter it below to add these funds to your wallet balance as well.</string>
     <string name="hardware__passphrase_title">Passphrase</string>
     <string name="hardware__remove_button">Remove %1$s</string>
+    <string name="hardware__remove_dialog_keep">Keep name and tags in backup</string>
     <string name="hardware__remove_dialog_text">Don\'t worry, your funds are safe and your coins won\'t be deleted. Bitkit will simply stop displaying the amounts in the wallet.</string>
     <string name="hardware__remove_dialog_title">Remove %1$s</string>
     <string name="hardware__remove_error">Could not remove the hardware wallet. Please try again.</string>
