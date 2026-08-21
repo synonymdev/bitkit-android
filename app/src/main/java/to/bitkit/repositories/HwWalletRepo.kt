@@ -33,6 +33,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import to.bitkit.async.appScope
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
@@ -489,13 +490,17 @@ class HwWalletRepo @Inject constructor(
                     // so a failure here loses the tags rather than failing the removal.
                     preActivityMetadataRepo.upsertPreActivityMetadata(keptTagMetadata)
                 }
-                // Before forgetting the entries below, so the name is never absent from the backup:
-                // dropping the entries takes their label with them.
-                hwWalletStore.setPendingName(walletId, keptName)
                 trackedWalletIds -= walletId
                 lastPersistedHwSnapshots -= walletId
-                val failures = targets.mapNotNull {
-                    trezorRepo.forgetDevice(it.id, walletKey = it.walletKey).exceptionOrNull()
+                // The name is stored in the same write that forgets the entries carrying it, so the
+                // store never publishes a device list still holding this wallet. A separate write would,
+                // and a reconcile reading it restarts the watcher of the wallet being removed.
+                val failures = targets.mapNotNull { device ->
+                    trezorRepo.forgetDevice(
+                        device.id,
+                        walletKey = device.walletKey,
+                        pendingName = PendingNameUpdate(walletId, keptName),
+                    ).exceptionOrNull()
                 }
                 val remaining = hwWalletStore.loadKnownDevices()
                 failures.firstOrNull()?.let { throw it }

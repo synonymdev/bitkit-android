@@ -36,6 +36,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
@@ -861,7 +862,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val captor = argumentCaptor<List<KnownDevice>>()
         // Consumed in the same write as the entry that adopted it, so a failed save cannot lose it,
         // and clearing the name later cannot fall back to it again.
-        verify(hwWalletStore).saveKnownDevices(captor.capture(), eq("standard-wallet"))
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), eq(PendingNameUpdate("standard-wallet", name = null)))
         assertEquals("Cold Storage", captor.firstValue.single { it.id == DEVICE_ID }.customLabel)
     }
 
@@ -890,7 +891,7 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
         // The pending name lost, so it is stale: dropping it keeps a later rename from falling back to it.
-        verify(hwWalletStore).saveKnownDevices(captor.capture(), eq("standard-wallet"))
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), eq(PendingNameUpdate("standard-wallet", name = null)))
         assertEquals("Renamed Here", captor.firstValue.single { it.id == DEVICE_ID }.customLabel)
     }
 

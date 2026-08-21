@@ -34,20 +34,18 @@ class HwWalletStore @Inject constructor(
     }
 
     /**
-     * @param consumedPendingName the wallet whose pending name one of [devices] has just adopted, dropped
-     * in the same write. Splitting the two would let the entry carrying the name fail to save while the
-     * pending copy is deleted anyway, leaving the name nowhere.
+     * @param pendingName a pending-name change to apply in the same write, or null to leave them alone.
+     * Splitting the two would publish a device list without its matching name change, which restarts a
+     * watcher for a wallet already being removed and can leave a name in both places or in neither.
      */
     suspend fun saveKnownDevices(
         devices: List<KnownDevice>,
-        consumedPendingName: String? = null,
+        pendingName: PendingNameUpdate? = null,
     ) = withContext(ioDispatcher) {
         store.updateData { data ->
             data.copy(
                 knownDevices = devices,
-                pendingNames = consumedPendingName
-                    ?.let { data.pendingNames - it }
-                    ?: data.pendingNames,
+                pendingNames = pendingName?.applyTo(data.pendingNames) ?: data.pendingNames,
             )
         }
         Unit
@@ -89,6 +87,18 @@ class HwWalletStore @Inject constructor(
     suspend fun reset() = withContext(ioDispatcher) {
         store.updateData { HwWalletData() }
         Unit
+    }
+}
+
+/** A pending-name change applied together with a device list write; a null [name] drops the entry. */
+data class PendingNameUpdate(
+    val walletId: String,
+    val name: String?,
+) {
+    fun applyTo(pendingNames: Map<String, String>): Map<String, String> = when {
+        walletId.isBlank() -> pendingNames
+        name.isNullOrBlank() -> pendingNames - walletId
+        else -> pendingNames + (walletId to name)
     }
 }
 

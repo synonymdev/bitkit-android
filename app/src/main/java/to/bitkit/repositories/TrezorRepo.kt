@@ -53,6 +53,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import to.bitkit.async.appScope
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
@@ -889,7 +890,11 @@ class TrezorRepo @Inject constructor(
      * credentials are only cleared once no identity of the device remains, so removing one hidden
      * wallet does not unpair the device for the others.
      */
-    suspend fun forgetDevice(deviceId: String, walletKey: String? = null): Result<Unit> = withContext(ioDispatcher) {
+    suspend fun forgetDevice(
+        deviceId: String,
+        walletKey: String? = null,
+        pendingName: PendingNameUpdate? = null,
+    ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             TrezorDebugLog.log("FORGET", "forgetDevice called for: $deviceId")
             // The store is the source of truth here: labels are written straight to it, so a
@@ -938,7 +943,7 @@ class TrezorRepo @Inject constructor(
                 TrezorDebugLog.log("FORGET", "Keeping credentials, another wallet still uses $deviceId")
                 Result.success(Unit)
             }
-            saveKnownDevices(updated)
+            saveKnownDevices(updated, pendingName)
             _state.update { it.copy(knownDevices = updated.toImmutableList()) }
             clearCredentialsResult.getOrThrow()
             disconnectResult.onFailure {
@@ -1163,7 +1168,10 @@ class TrezorRepo @Inject constructor(
         // The pending name is consumed in the same write as the entry that adopted it, so the name
         // lives in exactly one place: leaving it pending would resurrect it once the user clears the
         // entry's own label, and dropping it separately would lose it if saving the entry failed.
-        saveKnownDevices(updated, consumedPendingName = resolvedWalletId.takeIf { pendingName != null })
+        saveKnownDevices(
+            updated,
+            pendingName = pendingName?.let { PendingNameUpdate(resolvedWalletId, name = null) },
+        )
         _state.update { it.copy(knownDevices = updated.toImmutableList()) }
         return known
     }
@@ -1252,9 +1260,9 @@ class TrezorRepo @Inject constructor(
         Logger.error("Failed to load known devices", it, context = TAG)
     }.getOrDefault(emptyList())
 
-    private suspend fun saveKnownDevices(devices: List<KnownDevice>, consumedPendingName: String? = null) {
+    private suspend fun saveKnownDevices(devices: List<KnownDevice>, pendingName: PendingNameUpdate? = null) {
         runSuspendCatching {
-            hwWalletStore.saveKnownDevices(devices, consumedPendingName)
+            hwWalletStore.saveKnownDevices(devices, pendingName)
         }.onFailure { Logger.error("Failed to save known devices", it, context = TAG) }
     }
 
