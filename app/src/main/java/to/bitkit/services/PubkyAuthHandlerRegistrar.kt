@@ -6,11 +6,11 @@ import android.content.pm.PackageManager
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
-import to.bitkit.async.appScope
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.flags.PaykitFeatureFlags
@@ -28,7 +28,7 @@ internal class PubkyAuthHandlerRegistrar @Inject constructor(
     private val settingsStore: SettingsStore,
     @IoDispatcher ioDispatcher: CoroutineDispatcher,
 ) {
-    private val scope: CoroutineScope = appScope(ioDispatcher, TAG)
+    private val scope: CoroutineScope = CoroutineScope(ioDispatcher + SupervisorJob())
     private val aliasComponent = ComponentName(context.packageName, PUBKY_AUTH_ALIAS_CLASS)
     private val started = AtomicBoolean()
 

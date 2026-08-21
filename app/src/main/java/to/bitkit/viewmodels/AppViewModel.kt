@@ -1488,10 +1488,7 @@ class AppViewModel @Inject constructor(
 
         val pending = synchronized(deferredScanLock) {
             deferredScan.also { deferredScan = null }
-        } ?: run {
-            viewModelScope.launch { presentNextIncomingPaykitPaymentRequest() }
-            return
-        }
+        } ?: return
 
         launchScan(
             source = pending.source,
@@ -1902,12 +1899,9 @@ class AppViewModel @Inject constructor(
     }
 
     private fun setActiveContactPaymentContext(context: ContactPaymentContext?) {
-        val replacedRequestId = synchronized(contactPaymentContextLock) {
-            val currentRequestId = activeContactPaymentContext?.incomingPaymentRequest?.id
+        synchronized(contactPaymentContextLock) {
             activeContactPaymentContext = context
-            currentRequestId?.takeIf { it != context?.incomingPaymentRequest?.id }
         }
-        if (replacedRequestId != null) presentedPaymentRequestIds -= replacedRequestId
     }
 
     private fun clearPendingContactPaymentContext(paymentHash: String) {
