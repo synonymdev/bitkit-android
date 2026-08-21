@@ -535,6 +535,26 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `metadata restore records the category when the hardware wallet names cannot be stored`() = test {
+        stubWalletBackup()
+        stubMetadataRestore(
+            envelope = metadataEnvelope(
+                metadata = listOf(preActivityMetadata()),
+                hwWalletNames = mapOf(HARDWARE_WALLET_ID to "Cold Storage"),
+            ),
+        )
+        whenever { hwWalletStore.restoreNames(any()) }
+            .doSuspendableAnswer { throw BackupRepoTestError("store unavailable") }
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        assertTrue(result.isSuccess)
+        // The names are the last and the least of this envelope: the caches and tags above them were
+        // already applied, so losing the whole category's synced marker over a name would be wrong.
+        verifyBlocking(cacheStore) { updateBackupStatus(eq(BackupCategory.METADATA), any()) }
+    }
+
+    @Test
     fun `renaming a hardware wallet triggers a metadata backup`() = test {
         stubMetadataBackupReads()
         stubBackupObservers()

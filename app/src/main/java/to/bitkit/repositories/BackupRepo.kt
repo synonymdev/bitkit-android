@@ -683,8 +683,10 @@ class BackupRepo @Inject constructor(
                 Logger.warn("Failed to restore pubky contact profile overrides", it, context = TAG)
             }
         // App-owned, so it takes no part in the Core field migration above and never sets needsRewrite.
-        // Restored names wait as pending ones until each wallet is paired again.
-        hwWalletStore.restoreNames(parsed.hwWalletNames.orEmpty())
+        // Restored names wait as pending ones until each wallet is paired again. Failing to store them
+        // must not discard the rest of this envelope, which has already been applied by here.
+        runSuspendCatching { hwWalletStore.restoreNames(parsed.hwWalletNames.orEmpty()) }
+            .onFailure { Logger.warn("Failed to restore hardware wallet names", it, context = TAG) }
         Logger.debug("Restored ${parsed.tagMetadata.size} pre-activity metadata", TAG)
         Logger.debug("Restored ${parsed.hwWalletNames.orEmpty().size} hardware wallet names", TAG)
 
