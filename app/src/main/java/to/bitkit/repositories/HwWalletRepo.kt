@@ -298,9 +298,11 @@ class HwWalletRepo @Inject constructor(
 
                 Logger.warn("Rejected hardware session for '$walletId': opened wallet '$opened'", context = TAG)
                 // Reading the accounts of the wrong wallet already stored it; a mistyped passphrase
-                // must not leave a stray watch-only wallet behind.
+                // must not leave a stray watch-only wallet behind. Its backup data is kept: the wallet
+                // is a real one the user owns, and storing it has already consumed any name restored
+                // for it into the entry about to be forgotten.
                 if (opened !in watchedBefore) {
-                    removeDevice(opened)
+                    removeDevice(opened, keepBackupData = true)
                         .onFailure { Logger.warn("Failed to drop unwatched wallet '$opened'", it, context = TAG) }
                 }
                 trezorRepo.disconnectStaleSession(deviceId)

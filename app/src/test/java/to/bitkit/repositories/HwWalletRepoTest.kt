@@ -1249,6 +1249,43 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `reconnectWithPassphrase keeps the backup data of the wallet a wrong passphrase opened`() = test {
+        // The wallet is a real one the user owns, and storing it consumed the name restored for it,
+        // so dropping it here would erase a backed up name a typo was never meant to touch.
+        val strayWallet = device.copy(
+            xpubs = mapOf("nativeSegwit" to "zpubStray"),
+            walletId = "stray-wallet",
+            customLabel = "Hidden Stash",
+            passphraseProtected = true,
+        )
+        val strayTagMetadata = listOf(preActivityMetadata().copy(walletId = "stray-wallet"))
+        var stored = listOf(device, hiddenWallet)
+        whenever { hwWalletStore.loadKnownDevices() }.thenAnswer { stored }
+        whenever { activityRepo.getTagMetadataForWallet("stray-wallet") }
+            .thenReturn(Result.success(strayTagMetadata))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenAnswer {
+            stored = stored.filterNot { it.walletId == "stray-wallet" }
+            Result.success(Unit)
+        }
+        whenever { trezorRepo.connectWithWalletMode("dev1", TrezorWalletMode.PASSPHRASE_HOST, "wrong") }
+            .thenAnswer {
+                stored = stored + strayWallet
+                trezorState.value = TrezorState(
+                    connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = "stray-wallet"),
+                )
+                Result.success(mock<TrezorFeatures>())
+            }
+        val sut = createRepo()
+
+        val result = sut.reconnectWithPassphrase(HIDDEN_WALLET_ID, "wrong")
+
+        assertTrue(result.exceptionOrNull() is HwPassphraseMismatchError)
+        verify(hwWalletStore).setPendingName("stray-wallet", "Hidden Stash")
+        verify(preActivityMetadataRepo).upsertPreActivityMetadata(strayTagMetadata)
+    }
+
+    @Test
     fun `funding account resolves the requested identity on a shared device`() = test {
         storeData.value = HwWalletData(knownDevices = listOf(device, hiddenWallet))
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet))
