@@ -1346,6 +1346,8 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `store removal deletes the hardware wallet activity scope`() = test {
+        // Only a wallet with activities left behind is cleaned up, so it must have some to clean.
+        whenever { activityRepo.getWalletIds() }.thenReturn(Result.success(setOf(HARDWARE_WALLET_ID)))
         wheneverStartWatcher().thenReturn(Result.success(Unit))
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
         createRepo()
@@ -1371,6 +1373,33 @@ class HwWalletRepoTest : BaseUnitTest() {
         verify(activityRepo).deleteForWallet("orphan-wallet")
         verify(activityRepo, never()).deleteForWallet(WalletScope.default)
         verify(activityRepo, never()).deleteForWallet(HARDWARE_WALLET_ID)
+    }
+
+    @Test
+    fun `removing a wallet deletes its activities exactly once`() = test {
+        // A second delete would run Core's cascade again and take the tag metadata the removal
+        // deliberately kept. The interleaving that caused this in the field — the cleanup deciding from
+        // a scope set read before it takes the lock — needs real concurrency and is covered by manual
+        // QA; this pins the simpler invariant that the cleanup adds no delete of its own.
+        var persisted = setOf(HARDWARE_WALLET_ID)
+        whenever { activityRepo.getWalletIds() }.thenAnswer { Result.success(persisted) }
+        whenever { activityRepo.deleteForWallet(any()) }.thenAnswer {
+            persisted = emptySet()
+            Result.success(Unit)
+        }
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+        runCurrent()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+        storeData.value = HwWalletData(knownDevices = emptyList())
+        runCurrent()
+
+        assertTrue(result.isSuccess)
+        verify(activityRepo, times(1)).deleteForWallet(HARDWARE_WALLET_ID)
     }
 
     @Test

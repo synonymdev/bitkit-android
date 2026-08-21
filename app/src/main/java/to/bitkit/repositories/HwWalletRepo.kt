@@ -688,15 +688,21 @@ class HwWalletRepo @Inject constructor(
         knownDevices: List<KnownDevice>,
         watcherSettings: WatcherSettings,
     ) {
-        val persistedWalletIds = activityRepo.getWalletIds().getOrDefault(emptySet())
-            .filterNot { it == WalletScope.default }
-            .toSet()
         watcherMutex.withLock {
+            // Read under the lock: a removal deletes a wallet's activities while holding it, and this
+            // set decides what to delete. Reading it first would let a removal complete in between and
+            // then be undone here, taking the tag metadata it deliberately kept with it.
+            val persistedWalletIds = activityRepo.getWalletIds().getOrDefault(emptySet())
+                .filterNot { it == WalletScope.default }
+                .toSet()
             val specs = knownDevices.toWatcherSpecs(watcherSettings.electrumUrl)
             val desiredIds = specs.map { it.watcherId }.toSet()
             val knownWalletIds = knownDevices.mapNotNull { it.resolvedWalletId() }.toSet()
             trackedWalletIds += persistedWalletIds
-            val removedWalletIds = trackedWalletIds - knownWalletIds
+            // Only wallets that still have activities to clear. Core drops a wallet's tag metadata
+            // along with its activities whether or not any matched, so cleaning up a wallet that has
+            // none is not a no-op: it takes the metadata a removal deliberately kept.
+            val removedWalletIds = (trackedWalletIds - knownWalletIds).intersect(persistedWalletIds)
             trackedWalletIds += knownWalletIds
 
             specs.forEach { spec ->
