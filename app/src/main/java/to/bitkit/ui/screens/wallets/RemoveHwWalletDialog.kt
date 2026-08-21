@@ -15,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import to.bitkit.R
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.shared.modifiers.clickableAlpha
@@ -68,7 +69,11 @@ private fun KeepBackupDataRow(
             .clickableAlpha { onKeepBackupDataChange(!keepBackupData) }
             .testTag("HwRemoveKeepBackupToggle")
     ) {
-        BodyMSB(text = stringResource(R.string.hardware__remove_dialog_keep))
+        BodyMSB(
+            text = stringResource(R.string.hardware__remove_dialog_keep),
+            modifier = Modifier.weight(1f)
+        )
+        HorizontalSpacer(16.dp)
         Switch(
             checked = keepBackupData,
             onCheckedChange = null, // handled by parent
