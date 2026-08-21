@@ -1182,6 +1182,7 @@
     <string name="wallet__payment_request_choose_recipient">Choose Recipient</string>
     <string name="wallet__payment_request_contact_timestamp">%1$s - %2$s</string>
     <string name="wallet__payment_request_dismiss">Dismiss</string>
+    <string name="wallet__payment_request_edit_expiration">Edit expiration</string>
     <string name="wallet__payment_request_enter_pubky">Enter pubky</string>
     <string name="wallet__payment_request_expires">Expires in</string>
     <string name="wallet__payment_request_expiry_day">1 day</string>
@@ -1192,6 +1193,7 @@
     <string name="wallet__payment_request_note">Note</string>
     <string name="wallet__payment_request_note_placeholder">What is this payment for?</string>
     <string name="wallet__payment_request_pay">Pay</string>
+    <string name="wallet__payment_request_paste">Paste</string>
     <string name="wallet__payment_request_queued_description">Your payment request is queued and will send automatically</string>
     <string name="wallet__payment_request_recipient">RECIPIENT</string>
     <string name="wallet__payment_request_request_payment">Request Payment</string>

@@ -61,7 +61,8 @@ class CreatePaymentRequestScreenTest {
                     targets = persistentListOf(target),
                     contacts = persistentListOf(PubkyProfile.placeholder(target.publicKey)),
                     isCreating = false,
-                    onBack = {},
+                    onEditExpiration = {},
+                    onPaste = { target.publicKey },
                     onSend = {},
                 )
             }
@@ -69,6 +70,8 @@ class CreatePaymentRequestScreenTest {
 
         composeTestRule.onNodeWithTag("PaymentRequestContact${target.publicKey}").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRecipientSearch").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestEditExpiration").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestRecipientPaste").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsDisplayed()
 
         composeTestRule.onNodeWithTag("PaymentRequestRecipientSearch").performTextInput("not this contact")

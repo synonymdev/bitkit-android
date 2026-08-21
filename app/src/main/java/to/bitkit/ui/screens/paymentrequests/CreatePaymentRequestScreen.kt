@@ -26,6 +26,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -41,6 +42,7 @@ import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import to.bitkit.R
+import to.bitkit.ext.getClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.AmountInputHandler
@@ -50,6 +52,7 @@ import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
@@ -59,13 +62,13 @@ import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactRow
-import to.bitkit.ui.components.SearchInput
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -249,9 +252,10 @@ internal fun PaymentRequestDetailsContent(
 fun PaymentRequestRecipientScreen(
     appViewModel: AppViewModel,
     draft: PaykitPaymentRequestDraft,
-    onBack: () -> Unit,
+    onEditExpiration: () -> Unit,
     onSent: (PaykitPaymentRequest) -> Unit,
 ) {
+    val context = LocalContext.current
     val targets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val isCreating by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
@@ -260,7 +264,8 @@ fun PaymentRequestRecipientScreen(
         targets = targets.toImmutableList(),
         contacts = contacts.toImmutableList(),
         isCreating = isCreating,
-        onBack = onBack,
+        onEditExpiration = onEditExpiration,
+        onPaste = { context.getClipboardText()?.trim().orEmpty() },
         onSend = { target -> appViewModel.createPaymentRequest(draft, target, onSent) },
     )
 }
@@ -271,7 +276,8 @@ internal fun PaymentRequestRecipientContent(
     targets: ImmutableList<PaykitPaymentRequestTarget>,
     contacts: ImmutableList<PubkyProfile>,
     isCreating: Boolean,
-    onBack: () -> Unit,
+    onEditExpiration: () -> Unit,
+    onPaste: () -> String,
     onSend: (PaykitPaymentRequestTarget) -> Unit,
 ) {
     var selectedTarget by remember { mutableStateOf<PaykitPaymentRequestTarget?>(null) }
@@ -303,14 +309,49 @@ internal fun PaymentRequestRecipientContent(
     ) {
         SheetTopBar(
             titleText = stringResource(R.string.wallet__payment_request_choose_recipient),
-            onBack = if (isCreating) null else onBack,
+            action = {
+                IconButton(
+                    onClick = onEditExpiration,
+                    enabled = !isCreating,
+                    modifier = Modifier.testTag("PaymentRequestEditExpiration"),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_timer),
+                        contentDescription = stringResource(R.string.wallet__payment_request_edit_expiration),
+                        tint = Colors.White,
+                        modifier = Modifier.size(24.dp),
+                    )
+                }
+            },
         )
         Caption13Up(text = stringResource(R.string.wallet__payment_request_recipient), color = Colors.White64)
         VerticalSpacer(8.dp)
-        SearchInput(
+        TextInput(
             value = query,
             onValueChange = { query = it },
             placeholder = stringResource(R.string.wallet__payment_request_enter_pubky),
+            singleLine = true,
+            textStyle = AppTextStyles.BodyM,
+            trailingIcon = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .clickableAlpha {
+                            query = PubkyPublicKeyFormat.bounded(onPaste())
+                        }
+                        .padding(horizontal = 12.dp)
+                        .testTag("PaymentRequestRecipientPaste"),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_clipboard_text),
+                        contentDescription = null,
+                        tint = Colors.White,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    BodyMSB(text = stringResource(R.string.wallet__payment_request_paste))
+                }
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("PaymentRequestRecipientSearch"),
@@ -330,6 +371,7 @@ internal fun PaymentRequestRecipientContent(
                     isSelected = target == selectedTarget,
                     isEnabled = !isCreating,
                     verticalPadding = 16.dp,
+                    selectionColor = Colors.Brand,
                     modifier = Modifier.testTag("PaymentRequestContact${contact.publicKey}"),
                 )
                 HorizontalDivider(color = Colors.White10)
@@ -475,7 +517,8 @@ private fun PaymentRequestRecipientPreview() {
                 targets = persistentListOf(previewTarget),
                 contacts = persistentListOf(PubkyProfile.placeholder(previewTarget.publicKey)),
                 isCreating = false,
-                onBack = {},
+                onEditExpiration = {},
+                onPaste = { "" },
                 onSend = {},
                 modifier = Modifier.sheetHeight(),
             )

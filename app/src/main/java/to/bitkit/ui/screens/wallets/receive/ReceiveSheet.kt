@@ -137,11 +137,24 @@ fun ReceiveSheet(
                         },
                     )
                 }
+                composableWithDefaultTransitions<ReceiveRoute.PaymentRequestExpiration> {
+                    PaymentRequestDetailsScreen(
+                        amountInputViewModel = paymentRequestAmountViewModel,
+                        initialDraft = paymentRequestDraft,
+                        onBack = { navController.popBackStack() },
+                        onContinue = {
+                            paymentRequestDraft = it
+                            navController.popBackStack()
+                        },
+                    )
+                }
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestRecipient> {
                     PaymentRequestRecipientScreen(
                         appViewModel = appViewModel,
                         draft = paymentRequestDraft,
-                        onBack = { navController.popBackStack() },
+                        onEditExpiration = {
+                            navController.navigateTo(ReceiveRoute.PaymentRequestExpiration)
+                        },
                         onSent = {
                             createdPaymentRequest = it
                             navController.navigateTo(ReceiveRoute.PaymentRequestSent)
@@ -260,7 +273,7 @@ fun ReceiveSheet(
                                 note = note,
                                 expiresAt = Clock.System.now() + 7.days,
                             )
-                            navController.navigateTo(ReceiveRoute.PaymentRequestDetails)
+                            navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
                         },
                         navigateReceiveConfirm = { entry ->
                             cjitEntryDetails.value = entry
@@ -325,6 +338,9 @@ sealed interface ReceiveRoute {
 
     @Serializable
     data object PaymentRequestDetails : InternalOnly
+
+    @Serializable
+    data object PaymentRequestExpiration : InternalOnly
 
     @Serializable
     data object PaymentRequestRecipient : InternalOnly

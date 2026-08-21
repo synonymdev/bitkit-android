@@ -25,6 +25,7 @@ fun SheetTopBar(
     titleText: String?,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
+    action: (@Composable () -> Unit)? = null,
 ) {
     Box(
         modifier = modifier
@@ -49,6 +50,16 @@ fun SheetTopBar(
                     .align(Alignment.CenterStart)
                     .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Horizontal))
             )
+        }
+        action?.let {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Horizontal))
+            ) {
+                it()
+            }
         }
     }
 }

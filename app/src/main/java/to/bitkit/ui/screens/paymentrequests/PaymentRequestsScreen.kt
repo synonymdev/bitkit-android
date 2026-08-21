@@ -3,6 +3,7 @@
 package to.bitkit.ui.screens.paymentrequests
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,7 +18,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
@@ -509,10 +509,12 @@ internal fun PaymentRequestCard(
             )
         }
         if (onPay != null || onReject != null) {
-            HorizontalDivider(color = Colors.White10)
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.padding(16.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Colors.Gray5)
+                    .padding(16.dp),
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.wallet__payment_request_dismiss),
