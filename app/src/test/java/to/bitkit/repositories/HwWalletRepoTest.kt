@@ -1581,7 +1581,8 @@ class HwWalletRepoTest : BaseUnitTest() {
     @Test
     fun `removeDevice fails when forget reports credential cleanup failure despite the device being gone`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
-        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.failure(AppError("clear failed")))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.failure(AppError("clear failed")))
         val sut = createRepo()
 
         val result = sut.removeDevice(HARDWARE_WALLET_ID)
