@@ -53,12 +53,13 @@ class PaymentRequestsScreenTest {
 
     @Test
     fun historyGroupsCompletedRequestsAndKeepsActiveOutgoingRequests() {
+        val now = Clock.System.now()
         val accepted = request(id = "accepted").copy(
-            createdAt = Clock.System.now(),
+            createdAt = now,
             lifecycleState = PaymentRequestLifecycleState.ACCEPTED,
         )
         val outgoing = request(id = "outgoing").copy(
-            createdAt = Clock.System.now(),
+            createdAt = now,
             direction = PaykitPaymentRequestDirection.Outgoing,
             deliveryStatus = PaykitPaymentRequestDeliveryStatus.Sent,
         )
@@ -82,7 +83,7 @@ class PaymentRequestsScreenTest {
         composeTestRule.onNodeWithTag("PaymentRequestRowoutgoing").assertIsDisplayed()
         composeTestRule.onNodeWithText("Waiting for", substring = true).assertIsDisplayed()
         composeTestRule.onNodeWithText("PAYMENT REQUESTS").assertIsDisplayed()
-        composeTestRule.onNodeWithText("THIS MONTH").assertIsDisplayed()
+        composeTestRule.onNodeWithText("TODAY").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestCreate").assertIsDisplayed()
     }
 

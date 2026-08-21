@@ -73,9 +73,9 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.uiDateText
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
-import java.time.YearMonth
 import java.time.ZoneId
-import java.time.format.TextStyle
+import java.time.temporal.TemporalAdjusters
+import java.time.temporal.WeekFields
 import java.util.Locale
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -198,7 +198,6 @@ internal fun PaymentRequestsContent(
     onReject: suspend (PaykitPaymentRequest) -> Result<Unit>,
 ) {
     val sections = paymentRequestSections(requests, pending, Clock.System.now())
-    val currentMonth = YearMonth.now()
 
     Column(
         modifier = modifier
@@ -264,14 +263,14 @@ internal fun PaymentRequestsContent(
                         )
                     }
                 }
-                sections.historyByMonth.forEach { (month, history) ->
-                    item(key = "history-${month ?: "earlier"}") {
+                sections.history.forEach { section ->
+                    item(key = "history-${section.period.name}") {
                         Caption13Up(
-                            text = paymentRequestHistorySectionTitle(month, currentMonth),
+                            text = paymentRequestHistorySectionTitle(section.period),
                             color = Colors.White64,
                         )
                     }
-                    items(history, key = { it.lazyListKey }) { request ->
+                    items(section.requests, key = { it.lazyListKey }) { request ->
                         PaymentRequestCard(
                             request = request,
                             contact = contacts.contactFor(request),
@@ -297,8 +296,22 @@ internal fun PaymentRequestsContent(
 
 private data class PaymentRequestSections(
     val active: List<PaykitPaymentRequest>,
-    val historyByMonth: Map<YearMonth?, List<PaykitPaymentRequest>>,
+    val history: List<PaymentRequestHistorySection>,
 )
+
+private data class PaymentRequestHistorySection(
+    val period: PaymentRequestHistoryPeriod,
+    val requests: List<PaykitPaymentRequest>,
+)
+
+private enum class PaymentRequestHistoryPeriod {
+    Today,
+    Yesterday,
+    ThisWeek,
+    ThisMonth,
+    ThisYear,
+    Earlier,
+}
 
 private fun paymentRequestSections(
     requests: List<PaykitPaymentRequest>,
@@ -313,8 +326,14 @@ private fun paymentRequestSections(
             !request.isExpired(now)
     }
     val activeIds = active.mapTo(mutableSetOf()) { it.id }
-    val historyByMonth = requests.filterNot { it.id in activeIds }.groupBy { it.historyMonth() }
-    return PaymentRequestSections(active, historyByMonth)
+    val groupedHistory = requests
+        .filterNot { it.id in activeIds }
+        .sortedWith { first, second -> compareValues(second.createdAt, first.createdAt) }
+        .groupBy { it.historyPeriod(now) }
+    val history = PaymentRequestHistoryPeriod.entries.mapNotNull { period ->
+        groupedHistory[period]?.let { PaymentRequestHistorySection(period, it) }
+    }
+    return PaymentRequestSections(active, history)
 }
 
 @Composable
@@ -346,14 +365,34 @@ private fun ActivePaymentRequestCard(
 }
 
 @Composable
-private fun paymentRequestHistorySectionTitle(month: YearMonth?, currentMonth: YearMonth): String = when {
-    month == currentMonth -> stringResource(R.string.wallet__payment_requests_this_month)
-    month != null -> month.sectionTitle(currentMonth)
-    else -> stringResource(R.string.wallet__payment_requests_earlier)
+private fun paymentRequestHistorySectionTitle(period: PaymentRequestHistoryPeriod): String = when (period) {
+    PaymentRequestHistoryPeriod.Today -> stringResource(R.string.wallet__payment_requests_today)
+    PaymentRequestHistoryPeriod.Yesterday -> stringResource(R.string.wallet__payment_requests_yesterday)
+    PaymentRequestHistoryPeriod.ThisWeek -> stringResource(R.string.wallet__payment_requests_this_week)
+    PaymentRequestHistoryPeriod.ThisMonth -> stringResource(R.string.wallet__payment_requests_this_month)
+    PaymentRequestHistoryPeriod.ThisYear -> stringResource(R.string.wallet__payment_requests_this_year)
+    PaymentRequestHistoryPeriod.Earlier -> stringResource(R.string.wallet__payment_requests_earlier)
 }
 
-private fun PaykitPaymentRequest.historyMonth(): YearMonth? = createdAt?.let {
-    YearMonth.from(JavaInstant.ofEpochMilli(it.toEpochMilliseconds()).atZone(ZoneId.systemDefault()))
+private fun PaykitPaymentRequest.historyPeriod(
+    now: Instant,
+    zoneId: ZoneId = ZoneId.systemDefault(),
+    locale: Locale = Locale.getDefault(),
+): PaymentRequestHistoryPeriod {
+    val date = createdAt?.let {
+        JavaInstant.ofEpochMilli(it.toEpochMilliseconds()).atZone(zoneId).toLocalDate()
+    } ?: return PaymentRequestHistoryPeriod.Earlier
+    val today = JavaInstant.ofEpochMilli(now.toEpochMilliseconds()).atZone(zoneId).toLocalDate()
+    val startOfWeek = today.with(TemporalAdjusters.previousOrSame(WeekFields.of(locale).firstDayOfWeek))
+
+    return when {
+        date == today -> PaymentRequestHistoryPeriod.Today
+        date == today.minusDays(1) -> PaymentRequestHistoryPeriod.Yesterday
+        !date.isBefore(startOfWeek) -> PaymentRequestHistoryPeriod.ThisWeek
+        date.year == today.year && date.month == today.month -> PaymentRequestHistoryPeriod.ThisMonth
+        date.year == today.year -> PaymentRequestHistoryPeriod.ThisYear
+        else -> PaymentRequestHistoryPeriod.Earlier
+    }
 }
 
 @Composable
@@ -370,19 +409,6 @@ private fun paymentRequestDateTime(request: PaykitPaymentRequest): String = requ
         uiDateText(timestamp, UiDateStyle.TIME),
     )
 } ?: paymentRequestStatus(request)
-
-@Composable
-private fun YearMonth.sectionTitle(
-    currentMonth: YearMonth,
-    locale: Locale = Locale.getDefault(),
-): String {
-    val monthName = month.getDisplayName(TextStyle.FULL, locale)
-    return if (year == currentMonth.year) {
-        monthName
-    } else {
-        stringResource(R.string.wallet__payment_requests_month_year, monthName, year)
-    }
-}
 
 @Composable
 private fun paymentRequestStatus(request: PaykitPaymentRequest): String {
