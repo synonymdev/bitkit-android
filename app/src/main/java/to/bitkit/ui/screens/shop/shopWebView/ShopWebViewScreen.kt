@@ -25,23 +25,30 @@ import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.theme.AppThemeSurface
 
-@SuppressLint("SetJavaScriptEnabled", "JavascriptInterface")
+@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun ShopWebViewScreen(
     onClose: () -> Unit,
     onBack: () -> Unit,
     onPaymentIntent: (String) -> Unit,
+    onBlockedNavigation: () -> Unit,
     page: String,
     title: String,
 ) {
     var isLoading by remember { mutableStateOf(true) }
     var webView: WebView? by remember { mutableStateOf(null) }
 
-    val webViewInterface = remember { ShopWebViewInterface(onPaymentIntent) }
+    val webViewInterface = remember {
+        ShopWebViewInterface(
+            onPaymentIntent = onPaymentIntent,
+        )
+    }
     val webViewClient = remember {
         ShopWebViewClient(
             onLoadingStateChanged = { loading -> isLoading = loading },
-            onError = onClose
+            onError = onClose,
+            onBlockedNavigation = onBlockedNavigation,
+            isPaymentBridgeSupported = webViewInterface::supportsPaymentBridge,
         )
     }
 
@@ -54,7 +61,6 @@ fun ShopWebViewScreen(
 
         Box(modifier = Modifier.weight(1f)) {
             AndroidView(
-                modifier = Modifier.fillMaxSize(),
                 factory = { context ->
                     WebView(context).apply {
                         layoutParams = ViewGroup.LayoutParams(
@@ -62,13 +68,14 @@ fun ShopWebViewScreen(
                             ViewGroup.LayoutParams.MATCH_PARENT,
                         )
 
+                        webView = this
                         this.webViewClient = webViewClient
                         configureForBasicWebContent()
-                        addJavascriptInterface(webViewInterface, "Android")
+                        webViewInterface.attachTo(this)
                         loadUrl(bitrefillUrlOf(page))
-                        webView = this
                     }
                 },
+                modifier = Modifier.fillMaxSize()
             )
 
             if (isLoading) {
@@ -96,6 +103,7 @@ private fun Preview() {
             onClose = {},
             onBack = {},
             onPaymentIntent = {},
+            onBlockedNavigation = {},
             page = "esims",
             title = "Gift Cards"
         )

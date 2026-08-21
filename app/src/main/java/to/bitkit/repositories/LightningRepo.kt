@@ -48,6 +48,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.CoinSelectionAlgorithm
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.Network
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentHash
@@ -92,6 +93,7 @@ import to.bitkit.services.LnurlChannelResponse
 import to.bitkit.services.LnurlService
 import to.bitkit.services.LnurlWithdrawResponse
 import to.bitkit.services.LspNotificationsService
+import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -585,6 +587,17 @@ class LightningRepo @Inject constructor(
      * Scheduling and cancelling are atomic: [cancelPendingStop] runs on the repo dispatcher while this
      * runs on the caller thread, so an interleaved cancel could otherwise miss the job being installed
      * and stop the node after the app is back in the foreground.
+     *
+     * [BACKGROUND_STOP_DELAY] must stay under the cached-app freezer debounce (~10s once the process
+     * drops to `oom_adj` 900) so [stop] is at least entered before the process can be frozen. Past
+     * that the process freezes mid-delay and the stop only fires on unfreeze, racing
+     * [cancelPendingStop] to tear the node down just as the user returns — and [stop] runs
+     * `NonCancellable`, so losing that race is unrecoverable.
+     *
+     * Whether the stop *completes* in that window is out of scope here: on a wallet with real
+     * payment history ldk_node reliably hits its own 30s event-handling deadline, so no delay value
+     * makes the teardown fit. That also makes an avoided teardown valuable, since a user returning
+     * mid-stop waits it out before the ~8s node rebuild can start.
      */
     fun stopDebounced() = synchronized(pendingStopLock) {
         val job = scope.launch {
@@ -637,8 +650,14 @@ class LightningRepo @Inject constructor(
     }
 
     private suspend fun clearNetworkGraph(walletIndex: Int): Result<Unit> {
-        lightningService.resetNetworkGraph(walletIndex)
-        return runCatching {
+        runSuspendCatching {
+            lightningService.resetNetworkGraph(walletIndex)
+        }.onFailure {
+            Logger.warn("Failed to clear local network graph", it, context = TAG)
+            return Result.failure(it)
+        }
+
+        return runSuspendCatching {
             vssBackupClientLdk.setup(walletIndex).getOrThrow()
             vssBackupClientLdk.deleteObject("network_graph").getOrThrow()
             Logger.info("Cleared network graph from VSS", context = TAG)
@@ -1859,7 +1878,7 @@ class LightningRepo @Inject constructor(
             vssBackupClientLdk.deleteObject(VSS_KEY_EXTERNAL_SCORES_CACHE).getOrThrow()
         }.onFailure {
             Logger.error("Failed to delete pathfinding scores from VSS", it, context = TAG)
-            start(walletIndex = walletIndex, shouldRetry = false).onFailure { startError ->
+            start(walletIndex = walletIndex, shouldRetry = false, shouldValidateGraph = false).onFailure { startError ->
                 Logger.error("Failed to restart node after pathfinding scores reset failure", startError, context = TAG)
             }
             return@withContext Result.failure(it)
@@ -1867,11 +1886,118 @@ class LightningRepo @Inject constructor(
 
         val resetAtSecs = nowMillis() / 1000
 
-        start(walletIndex = walletIndex, shouldRetry = false)
+        start(walletIndex = walletIndex, shouldRetry = false, shouldValidateGraph = false)
             .map { resetAtSecs }
             .onSuccess {
                 Logger.info("Pathfinding scores reset at '$resetAtSecs'", context = TAG)
             }
+    }
+
+    suspend fun resetPaymentRoutingCachesAndWait(walletIndex: Int = 0): Result<Unit> = withContext(bgDispatcher) {
+        val refreshStartedAtMs = nowMillis()
+        val refreshStartedAtSecs = (refreshStartedAtMs / 1000).toULong()
+        val requiresRgsRefresh = Env.network != Network.REGTEST &&
+            !settingsStore.data.first().rgsServerUrl.isNullOrEmpty()
+        val requiresScorerRefresh = Env.ldkScorerUrl != null
+        val resetErrors = mutableListOf<Throwable>()
+
+        Logger.info(
+            "Started payment routing refresh rgs='$requiresRgsRefresh' scorer='$requiresScorerRefresh'",
+            context = TAG,
+        )
+
+        val resetResult = withContext(NonCancellable) reset@{
+            stop().onFailure {
+                start(
+                    walletIndex = walletIndex,
+                    shouldRetry = false,
+                    shouldValidateGraph = false,
+                ).onFailure { startError ->
+                    Logger.error(
+                        "Failed to restart node after payment routing refresh stop failure",
+                        startError,
+                        context = TAG,
+                    )
+                }
+                return@reset Result.failure(it)
+            }
+
+            clearNetworkGraph(walletIndex).onFailure {
+                resetErrors.add(it)
+            }
+
+            resetPathfindingScores(walletIndex).onFailure {
+                resetErrors.add(it)
+            }
+
+            resetErrors.firstOrNull()?.let {
+                Result.failure(it)
+            } ?: Result.success(Unit)
+        }
+        resetResult.onFailure {
+            return@withContext Result.failure(it)
+        }
+
+        val result = waitForPaymentRoutingDataRefresh(
+            walletIndex = walletIndex,
+            refreshStartedAtMs = refreshStartedAtMs,
+            refreshStartedAtSecs = refreshStartedAtSecs,
+            requiresRgsRefresh = requiresRgsRefresh,
+            requiresScorerRefresh = requiresScorerRefresh,
+        )
+        result.onSuccess {
+            Logger.info(
+                "Finished payment routing refresh elapsedMs='${nowMillis() - refreshStartedAtMs}'",
+                context = TAG,
+            )
+        }
+    }
+
+    private suspend fun waitForPaymentRoutingDataRefresh(
+        walletIndex: Int,
+        refreshStartedAtMs: Long,
+        refreshStartedAtSecs: ULong,
+        requiresRgsRefresh: Boolean,
+        requiresScorerRefresh: Boolean,
+    ): Result<Unit> = withContext(bgDispatcher) {
+        if (!requiresRgsRefresh && !requiresScorerRefresh) {
+            Logger.info(
+                "Skipped payment routing refresh wait because no routing sources are required",
+                context = TAG,
+            )
+            return@withContext Result.success(Unit)
+        }
+
+        var lastStatus: PaymentRoutingRefreshStatus? = null
+        val refreshed = withTimeoutOrNull(PAYMENT_ROUTING_REFRESH_TIMEOUT) {
+            while (isActive) {
+                syncState()
+                val status = _lightningState.value.paymentRoutingRefreshStatus(
+                    graphCacheModificationDate = lightningService.networkGraphCacheModificationDate(walletIndex),
+                    networkGraphInfo = getNetworkGraphInfo(),
+                    refreshStartedAtSecs = refreshStartedAtSecs,
+                    requiresRgsRefresh = requiresRgsRefresh,
+                    requiresScorerRefresh = requiresScorerRefresh,
+                )
+                lastStatus = status
+                if (status.isFresh) {
+                    return@withTimeoutOrNull true
+                }
+                delay(PAYMENT_ROUTING_REFRESH_POLL_DELAY)
+            }
+            false
+        } == true
+
+        if (refreshed) {
+            Result.success(Unit)
+        } else {
+            Logger.warn(
+                "Timed out payment routing refresh elapsedMs='${nowMillis() - refreshStartedAtMs}' " +
+                    lastStatus?.toLogFields().orEmpty(),
+                context = TAG,
+            )
+            Result.failure(PaymentRoutingRefreshTimeoutError())
+        }
     }
     // endregion
 
@@ -1896,11 +2022,69 @@ class LightningRepo @Inject constructor(
         private const val VSS_KEY_EXTERNAL_SCORES_CACHE = "external_pathfinding_scores_cache"
         private const val MS_SYNC_LOOP_DEBOUNCE = 500L
         private const val SYNC_RETRY_DELAY_MS = 15_000L
-        private val BACKGROUND_STOP_DELAY = 3.seconds
+        private val BACKGROUND_STOP_DELAY = 5.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
         private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
         val SEND_LN_TIMEOUT = 10.seconds
         private val PROBE_TIMEOUT = 60.seconds
+        private val PAYMENT_ROUTING_REFRESH_TIMEOUT = 20.seconds
+        private val PAYMENT_ROUTING_REFRESH_POLL_DELAY = 500.milliseconds
+    }
+}
+
+private fun LightningState.paymentRoutingRefreshStatus(
+    graphCacheModificationDate: Long?,
+    networkGraphInfo: NetworkGraphInfo?,
+    refreshStartedAtSecs: ULong,
+    requiresRgsRefresh: Boolean,
+    requiresScorerRefresh: Boolean,
+): PaymentRoutingRefreshStatus {
+    val status = nodeStatus
+    val nodeRunning = nodeLifecycleState.isRunning()
+    val graphNodeCount = networkGraphInfo?.nodeCount
+    val graphChannelCount = networkGraphInfo?.channelCount
+    val hasInMemoryGraph = (graphNodeCount ?: 0) > 0 && (graphChannelCount ?: 0) > 0
+
+    val hasFreshRgs = !requiresRgsRefresh ||
+        graphCacheModificationDate != null && (graphCacheModificationDate / 1000).toULong() >= refreshStartedAtSecs ||
+        hasInMemoryGraph
+
+    val latestScoresTimestamp = status?.latestPathfindingScoresSyncTimestamp
+    val hasFreshScores = !requiresScorerRefresh ||
+        latestScoresTimestamp != null && latestScoresTimestamp >= refreshStartedAtSecs
+
+    return PaymentRoutingRefreshStatus(
+        nodeRunning = nodeRunning,
+        graphFresh = hasFreshRgs,
+        scorerFresh = hasFreshScores,
+        graphCacheModificationDate = graphCacheModificationDate,
+        graphNodeCount = graphNodeCount,
+        graphChannelCount = graphChannelCount,
+        latestPathfindingScoresSyncTimestamp = latestScoresTimestamp,
+        refreshStartedAtSecs = refreshStartedAtSecs,
+    )
+}
+
+private data class PaymentRoutingRefreshStatus(
+    val nodeRunning: Boolean,
+    val graphFresh: Boolean,
+    val scorerFresh: Boolean,
+    val graphCacheModificationDate: Long?,
+    val graphNodeCount: Int?,
+    val graphChannelCount: Int?,
+    val latestPathfindingScoresSyncTimestamp: ULong?,
+    val refreshStartedAtSecs: ULong,
+) {
+    val isFresh: Boolean = nodeRunning && graphFresh && scorerFresh
+
+    fun toLogFields(): String {
+        return "nodeRunning='$nodeRunning' graphFresh='$graphFresh' scorerFresh='$scorerFresh' " +
+            "graphMtime='${graphCacheModificationDate ?: "-"}' " +
+            "graphMtimeSecs='${graphCacheModificationDate?.let { it / 1000 } ?: "-"}' " +
+            "graphNodes='${graphNodeCount ?: "-"}' " +
+            "graphChannels='${graphChannelCount ?: "-"}' " +
+            "scorerTs='${latestPathfindingScoresSyncTimestamp ?: "-"}' " +
+            "refreshStartedAtSecs='$refreshStartedAtSecs'"
     }
 }
 
@@ -1912,6 +2096,7 @@ class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node t
 class GetPaymentsError : AppError("It wasn't possible get the payments")
 class SyncUnhealthyError : AppError("Wallet sync failed before send")
 class LnurlPayInvoiceMismatchError : AppError("The invoice did not match the requested payment. Payment cancelled.")
+class PaymentRoutingRefreshTimeoutError : AppError("Timeout waiting for payment routing data refresh")
 
 data class NodeEventUpdate(
     val event: Event,

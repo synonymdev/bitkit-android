@@ -1,0 +1,42 @@
+<journey name="Hardware Wallet Passphrase Duplicate">
+  <description>
+    Re-entering a passphrase that is already watched must not add a second tile for the same
+    wallet: Bitkit reports it as already added and the hardware tile count stays unchanged.
+    Requires the emulator started with passphrase protection enabled and the hidden wallet from
+    passphrase-pairing.xml already paired.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Count the hardware wallet tiles shown beneath the SAVINGS and SPENDING tiles and remember the number
+    </action>
+    <action>
+      Open the menu, navigate to Settings, then General, then Payments, then tap the "Hardware Wallets" row
+    </action>
+    <action>
+      Tap the "Add Hardware Wallet" button (testTag "AddHardwareWallet"), tap "Continue" (testTag "HardwareWalletIntroContinue"), wait for the Found Device step and tap "Connect" (testTag "HardwareWalletFoundConnect")
+    </action>
+    <action>
+      On the "Device Connected" step tap "Passphrase" (testTag "HardwareWalletPairedPassphrase")
+    </action>
+    <action>
+      Type the already paired passphrase "bitkit-hidden" into the passphrase field (testTag "HardwareWalletPassphraseInput") and tap "Continue" (testTag "HardwareWalletPassphraseContinue")
+    </action>
+    <action>
+      Confirm on the emulated device for every account the passphrase session reads: the device
+      prompts once per address type and the call blocks until it is acknowledged. Either tap the
+      emulator UI or run: ../bitkit-docker/scripts/trezor-emulator send-json '{"type":"emulator-press-yes","id":1}'
+    </action>
+    <action>
+      Verify an error toast reports the passphrase wallet is already being watched, and that the sheet stays on the Passphrase step (testTag "HardwareWalletPassphraseScreen") with an empty input
+    </action>
+    <action>
+      Dismiss the sheet and return to the wallet home screen
+    </action>
+    <action>
+      Verify the number of hardware wallet tiles is unchanged from the count noted at the start
+    </action>
+  </actions>
+</journey>

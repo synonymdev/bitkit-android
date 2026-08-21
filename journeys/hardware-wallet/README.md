@@ -23,10 +23,12 @@ The Bridge transport is HTTP (`TrezorBridgeTransport` → `http://127.0.0.1:2132
   is still needed to verify the "Open with Bitkit" path that opens the Found Device sheet for
   an unpaired Trezor.
 - **Not simulated**: kernel/libusbhost behavior, USB enumeration timing, permission
-  grants, the OS app picker, BLE runtime/settings recovery, THP one-time pairing code
-  (the inline Pair Device step), and passphrase/hidden-wallet selection. Those need a physical
-  device or a dedicated emulator scenario; passphrase coverage is tracked in
-  synonymdev/bitkit-android#1030.
+  grants, the OS app picker, BLE runtime/settings recovery, and the THP one-time pairing code
+  (the inline Pair Device step). Those need a physical device.
+- **Simulated with extra setup**: passphrase (hidden) wallets. The emulator derives a separate
+  account set per passphrase, but the device must be set up with passphrase protection enabled —
+  see the prerequisites below. Host-side entry is the only mode Bitkit ships, so nothing has to
+  be typed on the emulated device.
 
 Journey steps that start with `adb:` are device commands the runner executes verbatim
 instead of UI interactions.
@@ -42,6 +44,10 @@ instead of UI interactions.
    ```sh
    ../bitkit-docker/scripts/trezor-emulator start
    ```
+   The `passphrase-*` journeys additionally need passphrase protection enabled on the device:
+   ```sh
+   TREZOR_PASSPHRASE_PROTECTION=true ../bitkit-docker/scripts/trezor-emulator start
+   ```
 3. For a physical phone, reverse the Bridge port and install with Bridge enabled:
    ```sh
    ../bitkit-docker/scripts/trezor-emulator adb
@@ -55,7 +61,9 @@ instead of UI interactions.
 Run in this order — `connect-home-tile.xml` pairs the emulator that the later journeys
 rely on, `suggestion-intro-sheet.xml`, `connect-flow.xml` and `settings-hardware-wallets.xml`
 each end by re-pairing after a forget, and `detail-overview.xml` runs last because its final
-Remove step forgets the device.
+Remove step forgets the device. The `passphrase-*` journeys run as a block after
+`connect-home-tile.xml`, in the order listed: `passphrase-pairing.xml` pairs the hidden wallet
+the other three rely on, and `passphrase-settings-remove.xml` removes it again.
 
 | Journey | Covers |
 | - | - |
@@ -70,6 +78,10 @@ Remove step forgets the device.
 | `transfer-to-spending.xml` | Happy-path transfer plus one scoped hardware Transfer activity |
 | `transfer-to-spending-max-lsp-cap.xml` | MAX when Trezor balance is higher than remaining LSP headroom; verifies MAX uses AVAILABLE and reaches sign without insufficient funds |
 | `transfer-to-spending-node-warmup.xml` | Transfer started during app/node warm-up; verifies loading recovers into the sign screen |
+| `passphrase-pairing.xml` | Passphrase button on Paired → Enter Passphrase → Passphrase Funds Found; second home tile, own label, no passphrase in logs |
+| `passphrase-duplicate.xml` | Re-entering a watched passphrase reports "already added" and adds no tile |
+| `passphrase-settings-remove.xml` | Per-identity settings row, rename and delete; removing the hidden wallet keeps the device paired |
+| `passphrase-transfer-to-spending.xml` | Signs with the live session, re-prompts after the session is dropped, refuses a wrong passphrase |
 
 Connect-flow testTags: `HardwareWalletSheet`, `HardwareWalletIntroScreen`,
 `HardwareWalletIntroCancel`, `HardwareWalletIntroContinue`,
@@ -83,6 +95,12 @@ Connect-flow testTags: `HardwareWalletSheet`, `HardwareWalletIntroScreen`,
 Settings rename testTags: `HardwareWalletsScreen`, `RenameHardwareWalletInput`,
 and `RenameHardwareWalletSave`.
 
+Passphrase testTags: `HardwareWalletPairedPassphrase`, `HardwareWalletPassphraseScreen`,
+`HardwareWalletPassphraseInput`, `HardwareWalletPassphraseBack`,
+`HardwareWalletPassphraseContinue`, `HardwareWalletPassphrasePairedScreen`, and on the transfer
+sign screen `HwTransferPassphraseSheet`, `HwTransferPassphraseInput`,
+`HwTransferPassphraseCancel`, `HwTransferPassphraseContinue`.
+
 The current Connect Hardware sheet starts USB discovery immediately after Continue. BLE is
 included only once Android nearby-devices permission is granted and Bluetooth is enabled.
 The sheet has no internal back navigation; Android back dismisses the sheet.
@@ -93,9 +111,12 @@ should show its Bluetooth access recovery dialog with an Open Settings action; t
 path is better validated on a physical device because the Bridge path can still find devices
 without BLE.
 
-Current journeys pair the standard wallet. Hidden/passphrase wallet behavior is intentionally
-not asserted here yet; it needs explicit UX and identity-scoping coverage as described in
-synonymdev/bitkit-android#1030.
+A physical device holds one hidden wallet open at a time, and Bitkit never stores the
+passphrase, so the `passphrase-*` journeys assert both halves of that: the tile, label,
+settings row, activity scope and removal are per identity, while signing reuses the live
+session and asks again once it is gone. They also grep the app log and datastore to prove the
+passphrase is never written anywhere — note `BlockScreenshots` is a no-op in debug builds, so
+the passphrase steps remain screenshottable while journeys run.
 
 To exercise the received-money sheet (not covered by a journey because it needs an
 out-of-band transfer), fund the emulator wallet on regtest from `bitkit-docker`, e.g.

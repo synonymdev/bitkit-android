@@ -22,6 +22,7 @@ data class HwWallet(
     val activities: ImmutableList<Activity>,
     val fundingBalanceSats: ULong = balanceSats,
     val deviceIds: ImmutableSet<String> = persistentSetOf(id),
+    val passphraseProtected: Boolean = false,
 )
 
 /** Serializable per-device balance snapshot carried by [BalanceState]. */

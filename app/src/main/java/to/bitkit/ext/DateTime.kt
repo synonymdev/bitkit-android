@@ -29,6 +29,7 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.ExperimentalTime
+import java.text.DateFormat as JavaDateFormat
 import java.time.LocalDate as JavaLocalDate
 import kotlin.time.Instant as KInstant
 
@@ -71,10 +72,10 @@ fun Long.toDateUTC(): String {
     return dateTime.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
 }
 
-fun Long.toLocalizedTimestamp(locale: Locale = Locale.US): String {
+fun Long.toLocalizedTimestamp(locale: Locale = Locale.getDefault()): String {
     val date = Date(this)
     val formatter = DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.SHORT, ULocale.forLocale(locale))
-        ?: return SimpleDateFormat("MMMM d, yyyy 'at' h:mm a", locale).format(date)
+        ?: return JavaDateFormat.getDateTimeInstance(JavaDateFormat.LONG, JavaDateFormat.SHORT, locale).format(date)
     return formatter.format(date)
 }
 

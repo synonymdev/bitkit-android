@@ -37,6 +37,7 @@ import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.viewmodels.AppViewModel
 
@@ -178,6 +179,26 @@ fun HardwareSheet(
                 HwPairedSheet(
                     uiState = uiState,
                     onLabelChange = viewModel::onLabelChange,
+                    onPassphrase = viewModel::onPassphraseClick,
+                    onFinish = viewModel::onFinishClick,
+                )
+            }
+            composableWithDefaultTransitions<HardwareRoute.Passphrase> {
+                HwPassphraseSheet(
+                    uiState = uiState,
+                    onPassphraseChange = viewModel::onPassphraseChange,
+                    onBack = {
+                        viewModel.onPassphraseBack()
+                        navController.popBackStack()
+                    },
+                    onContinue = viewModel::onPassphraseSubmit,
+                )
+            }
+            composableWithDefaultTransitions<HardwareRoute.PassphrasePaired> {
+                HwPassphrasePairedSheet(
+                    uiState = uiState,
+                    onLabelChange = viewModel::onLabelChange,
+                    onPassphrase = viewModel::onPassphraseClick,
                     onFinish = viewModel::onFinishClick,
                 )
             }
@@ -232,6 +253,9 @@ private fun ConnectEffectHandler(
                     HardwareRoute.PairCode(requestId = effect.requestId),
                 )
                 HwConnectEffect.NavigateToPaired -> navController.navigateTo(HardwareRoute.Paired)
+                HwConnectEffect.NavigateToPassphrase -> navController.navigateTo(HardwareRoute.Passphrase)
+                HwConnectEffect.NavigateToPassphrasePaired ->
+                    navController.navigateTo(HardwareRoute.PassphrasePaired)
                 HwConnectEffect.Dismiss -> appViewModel.hideSheet()
                 HwConnectEffect.Finish -> {
                     appViewModel.hideSheet()
@@ -243,21 +267,40 @@ private fun ConnectEffectHandler(
 }
 
 sealed interface HardwareRoute {
-    @Serializable
-    data object Intro : HardwareRoute
+    sealed interface DeepLinkStart : HardwareRoute
+
+    sealed interface InternalOnly : HardwareRoute
 
     @Serializable
-    data object Searching : HardwareRoute
+    data object Intro : DeepLinkStart
+
+    @Serializable
+    data object Searching : InternalOnly
 
     @Serializable
     data class Found(
         val deviceId: String? = null,
         val deviceModel: String = "",
-    ) : HardwareRoute
+    ) : InternalOnly
 
     @Serializable
-    data object Paired : HardwareRoute
+    data object Paired : InternalOnly
 
     @Serializable
-    data class PairCode(val requestId: Long) : HardwareRoute
+    data object Passphrase : InternalOnly
+
+    @Serializable
+    data object PassphrasePaired : InternalOnly
+
+    @Serializable
+    data class PairCode(val requestId: Long) : InternalOnly
+
+    companion object {
+        private val DEEP_LINK_STARTS: List<DeepLinkStart> = listOf(
+            Intro,
+        )
+
+        fun fromDeepLink(path: String): DeepLinkStart? =
+            ScreenDeepLinks.matchStart(path, Intro, DEEP_LINK_STARTS)
+    }
 }

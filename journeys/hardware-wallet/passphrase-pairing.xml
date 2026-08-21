@@ -1,0 +1,68 @@
+<journey name="Hardware Wallet Passphrase Pairing">
+  <description>
+    Adds a passphrase (hidden) wallet of an already paired Trezor: from the Paired step the
+    Passphrase button opens Enter Passphrase, and entering one watches the wallet it unlocks as a
+    separate identity with its own funds label. Verifies the home screen then shows two hardware
+    tiles and counts both in the headline balance. Requires the emulator started with passphrase
+    protection enabled (TREZOR_PASSPHRASE_PROTECTION=true ./scripts/trezor-emulator start) and a
+    paired Bridge emulator (run connect-home-tile.xml first).
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app, open the menu, navigate to Settings, then General, then Payments, then tap the "Hardware Wallets" row
+    </action>
+    <action>
+      Note the paired-device count shown, then tap the "Add Hardware Wallet" button (testTag "AddHardwareWallet")
+    </action>
+    <action>
+      Tap "Continue" (testTag "HardwareWalletIntroContinue") and wait for the Found Device step (testTag "HardwareWalletFoundScreen"), then tap "Connect" (testTag "HardwareWalletFoundConnect")
+    </action>
+    <action>
+      Verify the sheet reaches the "Device Connected" step (testTag "HardwareWalletPairedScreen"), showing both a "Passphrase" button (testTag "HardwareWalletPairedPassphrase") and a "Finish" button (testTag "HardwareWalletPairedFinish")
+    </action>
+    <action>
+      Tap "Passphrase" (testTag "HardwareWalletPairedPassphrase")
+    </action>
+    <action>
+      Verify the Passphrase step opens (testTag "HardwareWalletPassphraseScreen") headed "Enter passphrase", showing the shield illustration, and that "Continue" (testTag "HardwareWalletPassphraseContinue") is disabled while the input is empty
+    </action>
+    <action>
+      Type "bitkit-hidden" into the passphrase field (testTag "HardwareWalletPassphraseInput"), then tap "Continue" (testTag "HardwareWalletPassphraseContinue")
+    </action>
+    <action>
+      Confirm on the emulated device for every account the passphrase session reads: the device
+      prompts once per address type and the call blocks until it is acknowledged. Either tap the
+      emulator UI or run: ../bitkit-docker/scripts/trezor-emulator send-json '{"type":"emulator-press-yes","id":1}'
+    </action>
+    <action>
+      Verify the sheet advances to the passphrase paired step (testTag "HardwareWalletPassphrasePairedScreen") headed "Passphrase funds found", showing a balance and an editable "Label Funds" field prefilled with the device name
+    </action>
+    <action>
+      Clear the "Label Funds" field (testTag "HardwareWalletLabelInput") and type "Hidden Trezor"
+    </action>
+    <action>
+      Tap "Finish" (testTag "HardwareWalletPairedFinish") and verify the sheet closes
+    </action>
+    <action>
+      Navigate to the wallet home screen and verify two hardware wallet tiles are shown beneath the SAVINGS and SPENDING tiles, one of them labelled "Hidden Trezor"
+    </action>
+    <action>
+      Verify the headline total balance is at least the sum of both hardware tile balances
+    </action>
+    <action>
+      Tap the "Hidden Trezor" tile and verify its hardware wallet detail screen opens (testTag "HardwareWalletScreen") titled "Hidden Trezor"
+    </action>
+    <action>
+      adb: adb shell "run-as to.bitkit.dev sh -c 'grep -rl bitkit-hidden files/logs/ files/datastore/ || echo NO_PASSPHRASE_LEAK'"
+    </action>
+    <action>
+      Verify the previous command printed NO_PASSPHRASE_LEAK: the passphrase must never reach the app logs or the datastore, only the device session
+    </action>
+    <action>
+      adb: adb shell "run-as to.bitkit.dev sh -c 'grep -iE \"error|exception\" $(ls -t files/logs/*.log | head -1) | tail -20 || true'"
+    </action>
+    <action>
+      Verify the previous command reported no Trezor connect, session or watcher errors while the hidden wallet was paired
+    </action>
+  </actions>
+</journey>

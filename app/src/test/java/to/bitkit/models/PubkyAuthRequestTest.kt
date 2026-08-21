@@ -21,6 +21,25 @@ class PubkyAuthRequestTest {
     }
 
     @Test
+    fun `parse recognizes watch-only account claim with reordered capabilities`() {
+        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES.split(",").reversed().joinToString(",")
+        val request = PubkyAuthRequest.parse(
+            rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            relay = "https://httprelay.pubky.app/inbox/",
+            capabilities = capabilities,
+        ).getOrThrow()
+
+        assertEquals(PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1, request.bitkitClaim)
+    }
+
+    @Test
+    fun `matcher recognizes watch-only account claim with capability whitespace`() {
+        val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES.replace(",", " , ")
+
+        assertTrue(PubkyAuthClaim.matchesWatchOnlyAccountCapabilities(capabilities))
+    }
+
+    @Test
     fun `parse preserves normal auth without Bitkit claim`() {
         val request = PubkyAuthRequest.parse(
             rawUrl = authUrl("/pub/bitkit.to/:rw"),
@@ -29,6 +48,35 @@ class PubkyAuthRequestTest {
         ).getOrThrow()
 
         assertNull(request.bitkitClaim)
+    }
+
+    @Test
+    fun `parse deduplicates service name across public and private capabilities`() {
+        val capabilities = "/pub/locks.app/:rw,/priv/locks.app/:rw"
+
+        val request = PubkyAuthRequest.parse(
+            rawUrl = authUrl(capabilities),
+            relay = "https://httprelay.pubky.app/inbox/",
+            capabilities = capabilities,
+        ).getOrThrow()
+
+        assertEquals(listOf("/pub/locks.app/", "/priv/locks.app/"), request.permissions.map { it.path })
+        assertEquals(listOf("locks.app"), request.serviceNames)
+    }
+
+    @Test
+    fun `parse deduplicates service names across multiple paths in first-seen order`() {
+        val capabilities =
+            "/pub/locks.app/posts/:r,/pub/example.app/:r,/priv/locks.app/settings/:w,/priv/example.app/cache/:r"
+
+        val request = PubkyAuthRequest.parse(
+            rawUrl = authUrl(capabilities),
+            relay = "https://httprelay.pubky.app/inbox/",
+            capabilities = capabilities,
+        ).getOrThrow()
+
+        assertEquals(4, request.permissions.size)
+        assertEquals(listOf("locks.app", "example.app"), request.serviceNames)
     }
 
     @Test
@@ -75,6 +123,30 @@ class PubkyAuthRequestTest {
     @Test
     fun `parse rejects watch-only claim with other capabilities`() {
         val capabilities = "/pub/paykit/v0/:rw"
+        val result = PubkyAuthRequest.parse(
+            rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            relay = "https://httprelay.pubky.app/inbox/",
+            capabilities = capabilities,
+        )
+
+        assertIs<PubkyAuthRequestError.InvalidBitkitClaimCapabilities>(result.exceptionOrNull())
+    }
+
+    @Test
+    fun `parse rejects watch-only claim without private capability`() {
+        val capabilities = "/pub/paykit/v0/bitkit/server/:rw"
+        val result = PubkyAuthRequest.parse(
+            rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            relay = "https://httprelay.pubky.app/inbox/",
+            capabilities = capabilities,
+        )
+
+        assertIs<PubkyAuthRequestError.InvalidBitkitClaimCapabilities>(result.exceptionOrNull())
+    }
+
+    @Test
+    fun `parse rejects watch-only claim with empty capability`() {
+        val capabilities = "${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES},"
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
             relay = "https://httprelay.pubky.app/inbox/",

@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -48,8 +49,10 @@ import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import to.bitkit.R
 import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.appWidgetRefreshScheduler
 import to.bitkit.env.Env
@@ -208,7 +211,10 @@ import to.bitkit.ui.sheets.hardware.HardwareSheet
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.AutoReadClipboardHandler
 import to.bitkit.ui.utils.RequestNotificationPermissions
+import to.bitkit.ui.utils.ScreenDeepLinks
+import to.bitkit.ui.utils.SheetDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
+import to.bitkit.ui.utils.deepLinkableComposable
 import to.bitkit.ui.utils.navigationWithDefaultTransitions
 import to.bitkit.ui.utils.rememberIs24HourFormat
 import to.bitkit.ui.utils.rememberRequestNotificationPermission
@@ -277,9 +283,11 @@ fun ContentView(
                     blocktankViewModel.refreshOrders()
                     appViewModel.refreshPublicPaykitEndpoints()
                     appViewModel.refreshPrivatePaykitEndpoints()
+                    appViewModel.startPaykitPaymentRequestPolling()
                 }
 
                 Lifecycle.Event.ON_STOP -> {
+                    appViewModel.stopPaykitPaymentRequestPolling()
                     val keptAliveByService = notificationsGranted &&
                         keepActiveInBackground &&
                         appViewModel.isForegroundServiceRunning()
@@ -295,10 +303,36 @@ fun ContentView(
         lifecycle.addObserver(observer)
         onDispose {
             lifecycle.removeObserver(observer)
+            appViewModel.stopPaykitPaymentRequestPolling()
         }
     }
 
     LaunchedEffect(Unit) { walletViewModel.handleHideBalanceOnOpen() }
+
+    val pendingScreenDeepLink by appViewModel.pendingScreenDeepLink.collectAsStateWithLifecycle()
+
+    LaunchedEffect(pendingScreenDeepLink) {
+        val uri = pendingScreenDeepLink ?: return@LaunchedEffect
+
+        navController.currentBackStackEntryFlow.first()
+        appViewModel.consumeScreenDeepLink()
+
+        SheetDeepLinks.sheetFor(uri)?.let {
+            appViewModel.showSheet(it)
+            return@LaunchedEffect
+        }
+
+        val request = Intent(Intent.ACTION_VIEW, uri)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        val handled = navController.handleDeepLink(request)
+
+        if (shouldDismissSheetForScreenLink(handled, appViewModel.currentSheet.value)) {
+            appViewModel.hideSheet()
+        }
+        if (!handled) {
+            Logger.warn("Unhandled screen deeplink '$uri'", context = "ContentView")
+        }
+    }
 
     LaunchedEffect(appViewModel) {
         appViewModel.mainScreenEffect.collect {
@@ -713,7 +747,7 @@ private fun RootNavHost(
         navigationWithDefaultTransitions<Routes.TransferRoot>(
             startDestination = Routes.TransferIntro,
         ) {
-            composableWithDefaultTransitions<Routes.TransferIntro> {
+            deepLinkableComposable<Routes.TransferIntro> {
                 TransferIntroScreen(
                     onContinueClick = {
                         navController.navigateToTransferFunding()
@@ -722,7 +756,7 @@ private fun RootNavHost(
                     onBackClick = { navController.popBackStack() },
                 )
             }
-            composableWithDefaultTransitions<Routes.SavingsIntro> {
+            deepLinkableComposable<Routes.SavingsIntro> {
                 SavingsIntroScreen(
                     onContinueClick = {
                         navController.navigateTo(Routes.SavingsAvailability)
@@ -731,14 +765,14 @@ private fun RootNavHost(
                     onBackClick = { navController.popBackStack() },
                 )
             }
-            composableWithDefaultTransitions<Routes.SavingsAvailability> {
+            deepLinkableComposable<Routes.SavingsAvailability> {
                 SavingsAvailabilityScreen(
                     onBackClick = { navController.popBackStack() },
                     onCancelClick = { navController.navigateToHome() },
                     onContinueClick = { navController.navigateTo(Routes.SavingsConfirm) },
                 )
             }
-            composableWithDefaultTransitions<Routes.SavingsConfirm> {
+            deepLinkableComposable<Routes.SavingsConfirm> {
                 val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SavingsConfirmScreen(
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
@@ -747,7 +781,7 @@ private fun RootNavHost(
                     onBackClick = { navController.popBackStack() },
                 )
             }
-            composableWithDefaultTransitions<Routes.SavingsAdvanced> {
+            deepLinkableComposable<Routes.SavingsAdvanced> {
                 SavingsAdvancedScreen(
                     onContinueClick = { navController.popBackStack<Routes.SavingsConfirm>(inclusive = false) },
                     onBackClick = { navController.popBackStack() },
@@ -762,7 +796,7 @@ private fun RootNavHost(
                     onTransferUnavailable = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
                 )
             }
-            composableWithDefaultTransitions<Routes.SpendingIntro> {
+            deepLinkableComposable<Routes.SpendingIntro> {
                 SpendingIntroScreen(
                     onContinueClick = {
                         navController.navigateTo(Routes.SpendingAmount)
@@ -771,17 +805,17 @@ private fun RootNavHost(
                     onBackClick = { navController.popBackStack() },
                 )
             }
-            composableWithDefaultTransitions<Routes.SpendingIntroHw> { entry ->
-                val deviceId = entry.toRoute<Routes.SpendingIntroHw>().deviceId
+            deepLinkableComposable<Routes.SpendingIntroHw> { entry ->
+                val walletId = entry.toRoute<Routes.SpendingIntroHw>().walletId
                 SpendingIntroScreen(
                     onContinueClick = {
-                        navController.navigateTo(Routes.SpendingAmountHw(deviceId))
+                        navController.navigateTo(Routes.SpendingAmountHw(walletId))
                         settingsViewModel.setHasSeenSpendingIntro(true)
                     },
                     onBackClick = { navController.popBackStack() },
                 )
             }
-            composableWithDefaultTransitions<Routes.SpendingAmount> {
+            deepLinkableComposable<Routes.SpendingAmount> {
                 val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingAmountScreen(
                     viewModel = transferViewModel,
@@ -798,21 +832,21 @@ private fun RootNavHost(
                     },
                 )
             }
-            composableWithDefaultTransitions<Routes.SpendingAmountHw> { entry ->
-                val deviceId = entry.toRoute<Routes.SpendingAmountHw>().deviceId
+            deepLinkableComposable<Routes.SpendingAmountHw> { entry ->
+                val walletId = entry.toRoute<Routes.SpendingAmountHw>().walletId
                 val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
                 SpendingAmountHwScreen(
-                    deviceId = deviceId,
+                    walletId = walletId,
                     viewModel = transferViewModel,
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.navigateTo(Routes.SpendingHwSign(deviceId)) },
+                    onOrderCreated = { navController.navigateTo(Routes.SpendingHwSign(walletId)) },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingHwSign> { entry ->
-                val deviceId = entry.toRoute<Routes.SpendingHwSign>().deviceId
+                val walletId = entry.toRoute<Routes.SpendingHwSign>().walletId
                 SpendingHwSignScreen(
-                    deviceId = deviceId,
+                    walletId = walletId,
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
@@ -846,7 +880,7 @@ private fun RootNavHost(
                     onOrderCreated = { navController.popBackStack() },
                 )
             }
-            composableWithDefaultTransitions<Routes.TransferLiquidity> {
+            deepLinkableComposable<Routes.TransferLiquidity> {
                 LiquidityScreen(
                     onBackClick = { navController.popBackStack() },
                     onContinueClick = { navController.popBackStack() }
@@ -860,7 +894,7 @@ private fun RootNavHost(
                     }
                 )
             }
-            composableWithDefaultTransitions<Routes.Funding> {
+            deepLinkableComposable<Routes.Funding> {
                 val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
                 val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
 
@@ -880,7 +914,7 @@ private fun RootNavHost(
                     isGeoBlocked = isGeoBlocked,
                 )
             }
-            composableWithDefaultTransitions<Routes.FundingAdvanced> {
+            deepLinkableComposable<Routes.FundingAdvanced> {
                 FundingAdvancedScreen(
                     onLnurl = { appViewModel.showScannerSheet() },
                     onManual = { navController.navigateTo(Routes.ExternalNav) },
@@ -890,7 +924,7 @@ private fun RootNavHost(
             navigationWithDefaultTransitions<Routes.ExternalNav>(
                 startDestination = ExternalConnection(),
             ) {
-                composableWithDefaultTransitions<ExternalConnection> {
+                deepLinkableComposable<ExternalConnection> {
                     val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ExternalNav) }
                     val route = it.toRoute<ExternalConnection>()
                     val viewModel = hiltViewModel<ExternalNodeViewModel>(parentEntry)
@@ -963,7 +997,7 @@ private fun NavGraphBuilder.home(
     onConsumeHomeWidgetsPageRequest: () -> Unit,
     onCalculatorInputActiveChanged: (Boolean) -> Unit,
 ) {
-    composable<Routes.Home> {
+    composable<Routes.Home>(deepLinks = ScreenDeepLinks.linksFor(Routes.Home::class)) {
         val isRefreshing by walletViewModel.isRefreshing.collectAsStateWithLifecycle()
         val isRecoveryMode by walletViewModel.isRecoveryMode.collectAsStateWithLifecycle()
         val hazeState = rememberHazeState()
@@ -998,7 +1032,7 @@ private fun NavGraphBuilder.home(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.Savings> {
+    deepLinkableComposable<Routes.Savings> {
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val isGeoBlocked by appViewModel.isGeoBlocked.collectAsStateWithLifecycle()
         val onchainActivities by activityListViewModel.onchainActivities.collectAsStateWithLifecycle()
@@ -1017,7 +1051,7 @@ private fun NavGraphBuilder.home(
             forceCloseRemainingDuration = forceCloseRemainingDuration,
         )
     }
-    composableWithDefaultTransitions<Routes.Spending> {
+    deepLinkableComposable<Routes.Spending> {
         val hasSeenSavingsIntro by settingsViewModel.hasSeenSavingsIntro.collectAsStateWithLifecycle()
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
@@ -1042,11 +1076,11 @@ private fun NavGraphBuilder.home(
             onBackClick = { navController.popBackStack() },
         )
     }
-    composableWithDefaultTransitions<Routes.HardwareWallet> {
-        val deviceId = it.toRoute<Routes.HardwareWallet>().deviceId
+    deepLinkableComposable<Routes.HardwareWallet> {
+        val walletId = it.toRoute<Routes.HardwareWallet>().walletId
         val hasSeenSpendingIntro by settingsViewModel.hasSeenSpendingIntro.collectAsStateWithLifecycle()
         HardwareWalletScreen(
-            deviceId = deviceId,
+            walletId = walletId,
             onActivityItemClick = { navController.navToActivityDetail(it) },
             onTransferToSpendingClick = { selectedDeviceId ->
                 navController.navigateToTransferSpendingStart(hasSeenSpendingIntro, selectedDeviceId)
@@ -1060,7 +1094,7 @@ private fun NavGraphBuilder.allActivity(
     activityListViewModel: ActivityListViewModel,
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.AllActivity> {
+    deepLinkableComposable<Routes.AllActivity> {
         AllActivityScreen(
             viewModel = activityListViewModel,
             onBack = { navController.popBackStack() },
@@ -1073,12 +1107,12 @@ private fun NavGraphBuilder.settings(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
 ) {
-    composableWithDefaultTransitions<Routes.Settings> {
+    deepLinkableComposable<Routes.Settings> {
         SettingsScreen(navController)
     }
     @Suppress("ForbiddenComment")
     // TODO: display as sheet
-    composableWithDefaultTransitions<Routes.QuickPayIntro> {
+    deepLinkableComposable<Routes.QuickPayIntro> {
         QuickPayIntroScreen(
             onBack = { navController.popBackStack() },
             onContinue = {
@@ -1087,36 +1121,36 @@ private fun NavGraphBuilder.settings(
             }
         )
     }
-    composableWithDefaultTransitions<Routes.QuickPaySettings> {
+    deepLinkableComposable<Routes.QuickPaySettings> {
         QuickPaySettingsScreen(
             onBack = { navController.popBackStack() },
         )
     }
-    composableWithDefaultTransitions<Routes.DevSettings> {
+    deepLinkableComposable<Routes.DevSettings> {
         DevSettingsScreen(navController)
     }
     composableWithDefaultTransitions<Routes.LegacyRnRecovery> {
         LegacyRnRecoveryScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.Trezor> {
+    deepLinkableComposable<Routes.Trezor> {
         TrezorScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.LdkDebug> {
+    deepLinkableComposable<Routes.LdkDebug> {
         LdkDebugScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.VssDebug> {
+    deepLinkableComposable<Routes.VssDebug> {
         VssDebugScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.ProbingTool> {
+    deepLinkableComposable<Routes.ProbingTool> {
         ProbingToolScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.FeeSettings> {
+    deepLinkableComposable<Routes.FeeSettings> {
         FeeSettingsScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.RegtestSettings> {
+    deepLinkableComposable<Routes.RegtestSettings> {
         BlocktankRegtestScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.LanguageSettings> {
+    deepLinkableComposable<Routes.LanguageSettings> {
         LanguageSettingsScreen(
             onBackClick = { navController.popBackStack() },
         )
@@ -1153,7 +1187,7 @@ private fun NavGraphBuilder.contacts(
     settingsViewModel: SettingsViewModel,
     appViewModel: AppViewModel,
 ) {
-    composableWithDefaultTransitions<Routes.Contacts> { backStackEntry ->
+    deepLinkableComposable<Routes.Contacts> { backStackEntry ->
         PaykitRouteGuard(
             settingsViewModel = settingsViewModel,
             navController = navController,
@@ -1182,7 +1216,7 @@ private fun NavGraphBuilder.contacts(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.ContactsIntro> {
+    deepLinkableComposable<Routes.ContactsIntro> {
         PaykitRouteGuard(settingsViewModel, navController) {
             val isAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
             val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
@@ -1202,15 +1236,15 @@ private fun NavGraphBuilder.contacts(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.ContactDetail> { backStackEntry ->
+    deepLinkableComposable<Routes.ContactDetail> { backStackEntry ->
         PaykitRouteGuard(settingsViewModel, navController) {
             val route = backStackEntry.toRoute<Routes.ContactDetail>()
             val viewModel: ContactDetailViewModel = hiltViewModel()
             ContactDetailScreen(
                 viewModel = viewModel,
                 onBackClick = { navController.popBackStack() },
-                onPayContact = { paymentRequest, publicKey ->
-                    appViewModel.openContactPayment(paymentRequest, publicKey)
+                onPayContact = { paymentRequest, publicKey, privatePaymentContext ->
+                    appViewModel.openContactPayment(paymentRequest, publicKey, privatePaymentContext)
                 },
                 onActivityClick = { navController.navigateTo(Routes.ContactActivity(it)) },
                 showDeleteAction = route.showDeleteAction,
@@ -1221,7 +1255,7 @@ private fun NavGraphBuilder.contacts(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.ContactActivity> {
+    deepLinkableComposable<Routes.ContactActivity> {
         PaykitRouteGuard(settingsViewModel, navController) {
             val viewModel: ContactActivityViewModel = hiltViewModel()
             ContactActivityScreen(
@@ -1231,7 +1265,7 @@ private fun NavGraphBuilder.contacts(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.AddContact> {
+    deepLinkableComposable<Routes.AddContact> {
         PaykitRouteGuard(settingsViewModel, navController) {
             val viewModel: AddContactViewModel = hiltViewModel()
             AddContactScreen(
@@ -1251,7 +1285,7 @@ private fun NavGraphBuilder.contacts(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.EditContact> {
+    deepLinkableComposable<Routes.EditContact> {
         PaykitRouteGuard(settingsViewModel, navController) {
             val viewModel: EditContactViewModel = hiltViewModel()
             EditContactScreen(
@@ -1263,7 +1297,7 @@ private fun NavGraphBuilder.contacts(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.ContactImportOverview> {
+    deepLinkableComposable<Routes.ContactImportOverview> {
         PaykitRouteGuard(settingsViewModel, navController) {
             val viewModel: ContactImportOverviewViewModel = hiltViewModel()
             ContactImportOverviewScreen(
@@ -1276,7 +1310,7 @@ private fun NavGraphBuilder.contacts(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.ContactImportSelect> {
+    deepLinkableComposable<Routes.ContactImportSelect> {
         PaykitRouteGuard(settingsViewModel, navController) {
             val viewModel: ContactImportSelectViewModel = hiltViewModel()
             ContactImportSelectScreen(
@@ -1295,7 +1329,7 @@ private fun NavGraphBuilder.profile(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
 ) {
-    composableWithDefaultTransitions<Routes.Profile> {
+    deepLinkableComposable<Routes.Profile> {
         PaykitRouteGuard(
             settingsViewModel = settingsViewModel,
             navController = navController,
@@ -1315,7 +1349,7 @@ private fun NavGraphBuilder.profile(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.ProfileIntro> {
+    deepLinkableComposable<Routes.ProfileIntro> {
         PaykitRouteGuard(settingsViewModel, navController) {
             ProfileIntroScreen(
                 onContinue = {
@@ -1326,7 +1360,7 @@ private fun NavGraphBuilder.profile(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.PubkyChoice> {
+    deepLinkableComposable<Routes.PubkyChoice> {
         PaykitRouteGuard(settingsViewModel, navController) {
             val viewModel: PubkyChoiceViewModel = hiltViewModel()
             PubkyChoiceScreen(
@@ -1345,7 +1379,7 @@ private fun NavGraphBuilder.profile(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.CreateProfile> {
+    deepLinkableComposable<Routes.CreateProfile> {
         PaykitRouteGuard(settingsViewModel, navController) {
             val viewModel: CreateProfileViewModel = hiltViewModel()
             CreateProfileScreen(
@@ -1357,7 +1391,7 @@ private fun NavGraphBuilder.profile(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.EditProfile> {
+    deepLinkableComposable<Routes.EditProfile> {
         PaykitRouteGuard(settingsViewModel, navController) {
             val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
             val viewModel: EditProfileViewModel = hiltViewModel()
@@ -1375,7 +1409,7 @@ private fun NavGraphBuilder.profile(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.PayContacts> {
+    deepLinkableComposable<Routes.PayContacts> {
         PaykitRouteGuard(settingsViewModel, navController) {
             val viewModel: PayContactsViewModel = hiltViewModel()
             PayContactsScreen(
@@ -1394,7 +1428,7 @@ private fun NavGraphBuilder.shop(
     settingsViewModel: SettingsViewModel,
     appViewModel: AppViewModel,
 ) {
-    composableWithDefaultTransitions<Routes.ShopIntro> {
+    deepLinkableComposable<Routes.ShopIntro> {
         ShopIntroScreen(
             onContinue = {
                 settingsViewModel.setHasSeenShopIntro(true)
@@ -1405,7 +1439,7 @@ private fun NavGraphBuilder.shop(
             }
         )
     }
-    composableWithDefaultTransitions<Routes.ShopDiscover> {
+    deepLinkableComposable<Routes.ShopDiscover> {
         ShopDiscoverScreen(
             onBack = { navController.popBackStack() },
             navigateWebView = { page, title ->
@@ -1413,7 +1447,8 @@ private fun NavGraphBuilder.shop(
             }
         )
     }
-    composableWithDefaultTransitions<Routes.ShopWebView> {
+    deepLinkableComposable<Routes.ShopWebView> {
+        val blockedNavigationMessage = stringResource(R.string.other__shop__external_link_blocked)
         ShopWebViewScreen(
             onClose = { navController.navigateToHome() },
             onBack = { navController.popBackStack() },
@@ -1421,7 +1456,13 @@ private fun NavGraphBuilder.shop(
             title = it.toRoute<Routes.ShopWebView>().title,
             onPaymentIntent = { data ->
                 appViewModel.onScanResult(data)
-            }
+            },
+            onBlockedNavigation = {
+                appViewModel.toast(
+                    type = Toast.ToastType.WARNING,
+                    title = blockedNavigationMessage,
+                )
+            },
         )
     }
 }
@@ -1431,25 +1472,25 @@ private fun NavGraphBuilder.generalSettingsSubScreens(
     appViewModel: AppViewModel,
     settingsViewModel: SettingsViewModel,
 ) {
-    composableWithDefaultTransitions<Routes.WidgetsSettings> {
+    deepLinkableComposable<Routes.WidgetsSettings> {
         WidgetsSettingsScreen(navController)
     }
 
-    composableWithDefaultTransitions<Routes.TagsSettings> {
+    deepLinkableComposable<Routes.TagsSettings> {
         TagsSettingsScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.HardwareWalletsSettings> {
+    deepLinkableComposable<Routes.HardwareWalletsSettings> {
         HardwareWalletsSettingsScreen(
             navController = navController,
             onClickAdd = { appViewModel.showSheet(Sheet.Hardware()) },
         )
     }
-    composableWithDefaultTransitions<Routes.BackgroundPaymentsSettings> {
+    deepLinkableComposable<Routes.BackgroundPaymentsSettings> {
         BackgroundPaymentsSettings(
             onBack = { navController.popBackStack() },
         )
     }
-    composableWithDefaultTransitions<Routes.BackgroundPaymentsIntro> {
+    deepLinkableComposable<Routes.BackgroundPaymentsIntro> {
         val notificationPermissionLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestPermission()
         ) { granted ->
@@ -1469,40 +1510,41 @@ private fun NavGraphBuilder.generalSettingsSubScreens(
 }
 
 private fun NavGraphBuilder.advancedSettingsSubScreens(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.CoinSelectPreference> {
+    deepLinkableComposable<Routes.CoinSelectPreference> {
         CoinSelectPreferenceScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.ElectrumConfig> {
+    deepLinkableComposable<Routes.ElectrumConfig> {
         ElectrumConfigScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.RgsServer> {
+    deepLinkableComposable<Routes.RgsServer> {
         RgsServerScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.AddressTypePreference> {
+    deepLinkableComposable<Routes.AddressTypePreference> {
         AddressTypePreferenceScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.AddressViewer> {
+    deepLinkableComposable<Routes.AddressViewer> {
         AddressViewerScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.WatchOnlyAccounts> {
+    deepLinkableComposable<Routes.WatchOnlyAccounts> {
         WatchOnlyAccountsScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.NodeInfo> {
+
+    deepLinkableComposable<Routes.NodeInfo> {
         NodeInfoScreen(navController)
     }
 }
 
 private fun NavGraphBuilder.transactionSpeedSettings(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.TransactionSpeedSettings> {
+    deepLinkableComposable<Routes.TransactionSpeedSettings> {
         TransactionSpeedSettingsScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.CustomFeeSettings> {
+    deepLinkableComposable<Routes.CustomFeeSettings> {
         CustomFeeSettingsScreen(navController)
     }
 }
 
 private fun NavGraphBuilder.pinManagement(navController: NavHostController) {
-    composableWithDefaultTransitions<Routes.PinManagement> {
+    deepLinkableComposable<Routes.PinManagement> {
         PinManagementScreen(navController)
     }
 }
@@ -1511,7 +1553,7 @@ private fun NavGraphBuilder.defaultUnitSettings(
     currencyViewModel: CurrencyViewModel,
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.DefaultUnitSettings> {
+    deepLinkableComposable<Routes.DefaultUnitSettings> {
         DefaultUnitSettingsScreen(currencyViewModel, navController)
     }
 }
@@ -1520,7 +1562,7 @@ private fun NavGraphBuilder.localCurrencySettings(
     currencyViewModel: CurrencyViewModel,
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.LocalCurrencySettings> {
+    deepLinkableComposable<Routes.LocalCurrencySettings> {
         LocalCurrencySettingsScreen(currencyViewModel, navController)
     }
 }
@@ -1528,7 +1570,7 @@ private fun NavGraphBuilder.localCurrencySettings(
 private fun NavGraphBuilder.backupSettings(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.BackupSettings> {
+    deepLinkableComposable<Routes.BackupSettings> {
         BackupSettingsScreen(navController)
     }
 }
@@ -1536,7 +1578,7 @@ private fun NavGraphBuilder.backupSettings(
 private fun NavGraphBuilder.resetAndRestoreSettings(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.ResetAndRestoreSettings> {
+    deepLinkableComposable<Routes.ResetAndRestoreSettings> {
         ResetAndRestoreScreen(navController)
     }
 }
@@ -1544,7 +1586,7 @@ private fun NavGraphBuilder.resetAndRestoreSettings(
 private fun NavGraphBuilder.channelOrdersSettings(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.ChannelOrdersSettings> {
+    deepLinkableComposable<Routes.ChannelOrdersSettings> {
         ChannelOrdersScreen(
             onBackClick = { navController.popBackStack() },
             onOrderItemClick = { navController.navigateToOrderDetail(it) },
@@ -1556,7 +1598,7 @@ private fun NavGraphBuilder.channelOrdersSettings(
 private fun NavGraphBuilder.orderDetailSettings(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.OrderDetail> {
+    deepLinkableComposable<Routes.OrderDetail> {
         OrderDetailScreen(
             orderItem = it.toRoute(),
             onBackClick = { navController.popBackStack() },
@@ -1567,7 +1609,7 @@ private fun NavGraphBuilder.orderDetailSettings(
 private fun NavGraphBuilder.cjitDetailSettings(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.CjitDetail> {
+    deepLinkableComposable<Routes.CjitDetail> {
         CJitDetailScreen(
             cjitItem = it.toRoute(),
             onBackClick = { navController.popBackStack() },
@@ -1578,7 +1620,7 @@ private fun NavGraphBuilder.cjitDetailSettings(
 private fun NavGraphBuilder.swapsSettings(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.SwapsSettings> {
+    deepLinkableComposable<Routes.SwapsSettings> {
         SwapsScreen(
             onBackClick = { navController.popBackStack() },
             onSwapItemClick = { navController.navigateToSwapDetail(it) },
@@ -1589,7 +1631,7 @@ private fun NavGraphBuilder.swapsSettings(
 private fun NavGraphBuilder.swapDetailSettings(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.SwapDetail> {
+    deepLinkableComposable<Routes.SwapDetail> {
         SwapDetailScreen(
             swapItem = it.toRoute(),
             onBackClick = { navController.popBackStack() },
@@ -1603,19 +1645,19 @@ private fun NavGraphBuilder.lightningConnections(
     navigationWithDefaultTransitions<Routes.ConnectionsNav>(
         startDestination = Routes.LightningConnections,
     ) {
-        composableWithDefaultTransitions<Routes.LightningConnections> {
+        deepLinkableComposable<Routes.LightningConnections> {
             val parentEntry = remember(it) { navController.getBackStackEntry(Routes.ConnectionsNav) }
             val viewModel = hiltViewModel<LightningConnectionsViewModel>(parentEntry)
             LightningConnectionsScreen(navController, viewModel)
         }
-        composableWithDefaultTransitions<Routes.ChannelDetail> {
+        deepLinkableComposable<Routes.ChannelDetail> {
             val route = it.toRoute<Routes.ChannelDetail>()
             ChannelDetailScreen(
                 channelId = route.channelId,
                 navController = navController,
             )
         }
-        composableWithDefaultTransitions<Routes.CloseConnection> {
+        deepLinkableComposable<Routes.CloseConnection> {
             val route = it.toRoute<Routes.CloseConnection>()
             CloseConnectionScreen(
                 channelId = route.channelId,
@@ -1630,7 +1672,7 @@ private fun NavGraphBuilder.activityItem(
     navController: NavHostController,
     settingsViewModel: SettingsViewModel,
 ) {
-    composableWithDefaultTransitions<Routes.ActivityDetail> {
+    deepLinkableComposable<Routes.ActivityDetail> {
         val route = it.toRoute<Routes.ActivityDetail>()
         ActivityDetailScreen(
             listViewModel = activityListViewModel,
@@ -1644,7 +1686,7 @@ private fun NavGraphBuilder.activityItem(
             onCloseClick = { navController.navigateToHome() },
         )
     }
-    composableWithDefaultTransitions<Routes.ActivityAssignContact> {
+    deepLinkableComposable<Routes.ActivityAssignContact> {
         PaykitRouteGuard(settingsViewModel, navController) {
             val route = it.toRoute<Routes.ActivityAssignContact>()
             ActivityAssignContactScreen(
@@ -1653,7 +1695,7 @@ private fun NavGraphBuilder.activityItem(
             )
         }
     }
-    composableWithDefaultTransitions<Routes.ActivityExplore> {
+    deepLinkableComposable<Routes.ActivityExplore> {
         ActivityExploreScreen(
             route = it.toRoute(),
             onBackClick = { navController.popBackStack() },
@@ -1676,10 +1718,10 @@ private fun NavGraphBuilder.authCheck(
 private fun NavGraphBuilder.logs(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.Logs> {
+    deepLinkableComposable<Routes.Logs> {
         LogsScreen(navController)
     }
-    composableWithDefaultTransitions<Routes.LogDetail> {
+    deepLinkableComposable<Routes.LogDetail> {
         val route = it.toRoute<Routes.LogDetail>()
         LogDetailScreen(
             navController = navController,
@@ -1691,7 +1733,7 @@ private fun NavGraphBuilder.logs(
 private fun NavGraphBuilder.suggestions(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.BuyIntro> {
+    deepLinkableComposable<Routes.BuyIntro> {
         BuyIntroScreen(
             onBackClick = { navController.popBackStack() }
         )
@@ -1728,16 +1770,18 @@ private fun NavGraphBuilder.recoveryMode(
 private fun NavGraphBuilder.support(
     navController: NavHostController,
 ) {
-    composableWithDefaultTransitions<Routes.Support> {
+    deepLinkableComposable<Routes.Support> {
         SupportScreen(navController)
     }
 
-    composableWithDefaultTransitions<Routes.AppStatus> {
+    deepLinkableComposable<Routes.AppStatus> {
         AppStatusScreen(navController)
     }
 
-    composableWithDefaultTransitions<Routes.ReportIssue> {
+    deepLinkableComposable<Routes.ReportIssue> {
+        val route = it.toRoute<Routes.ReportIssue>()
         ReportIssueScreen(
+            prefillMessage = route.prefillMessage,
             onBack = { navController.popBackStack() },
             navigateResultScreen = { isSuccess ->
                 if (isSuccess) {
@@ -1749,7 +1793,7 @@ private fun NavGraphBuilder.support(
         )
     }
 
-    composableWithDefaultTransitions<Routes.ReportIssueSuccess> {
+    deepLinkableComposable<Routes.ReportIssueSuccess> {
         ReportIssueResultScreen(
             isSuccess = true,
             onBack = { navController.popBackStack() },
@@ -1757,7 +1801,7 @@ private fun NavGraphBuilder.support(
         )
     }
 
-    composableWithDefaultTransitions<Routes.ReportIssueFailure> {
+    deepLinkableComposable<Routes.ReportIssueFailure> {
         ReportIssueResultScreen(
             isSuccess = false,
             onBack = { navController.popBackStack() },
@@ -1772,7 +1816,7 @@ private fun NavGraphBuilder.widgets(
     appViewModel: AppViewModel,
     onNavigateHomeWidgets: () -> Unit,
 ) {
-    composableWithDefaultTransitions<Routes.WidgetsIntro> {
+    deepLinkableComposable<Routes.WidgetsIntro> {
         val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
 
         WidgetsIntroScreen(
@@ -1873,8 +1917,11 @@ fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean)
 
 fun NavController.navigateToTransferSpendingStart(
     hasSeenSpendingIntro: Boolean,
-    deviceId: String,
-) = navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro, deviceId))
+    walletId: String,
+) = navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro, walletId))
+
+internal fun shouldDismissSheetForScreenLink(handled: Boolean, currentSheet: Sheet?): Boolean =
+    handled && currentSheet != null
 
 internal fun transferEffectDestination(effect: TransferEffect): Routes? = when (effect) {
     TransferEffect.OnHwTxSigned -> Routes.SpendingHwSigned
@@ -1889,10 +1936,10 @@ internal fun transferSpendingStartRoute(hasSeenSpendingIntro: Boolean): Routes =
 
 internal fun transferSpendingStartRoute(
     hasSeenSpendingIntro: Boolean,
-    deviceId: String,
+    walletId: String,
 ): Routes = when {
-    hasSeenSpendingIntro -> Routes.SpendingAmountHw(deviceId)
-    else -> Routes.SpendingIntroHw(deviceId)
+    hasSeenSpendingIntro -> Routes.SpendingAmountHw(walletId)
+    else -> Routes.SpendingIntroHw(walletId)
 }
 
 fun NavController.navigateToTransferIntro() = navigateTo(Routes.TransferIntro)
@@ -1928,59 +1975,63 @@ fun NavController.navigateToLanguageSettings() = navigateTo(Routes.LanguageSetti
 
 @Stable
 sealed interface Routes {
-    @Serializable
-    data object Home : Routes
+    sealed interface DeepLinkable : Routes
+
+    sealed interface InternalOnly : Routes
 
     @Serializable
-    data object Savings : Routes
+    data object Home : Routes.DeepLinkable
 
     @Serializable
-    data object Spending : Routes
+    data object Savings : Routes.DeepLinkable
 
     @Serializable
-    data class HardwareWallet(val deviceId: String) : Routes
+    data object Spending : Routes.DeepLinkable
 
     @Serializable
-    data object Settings : Routes
+    data class HardwareWallet(val walletId: String) : Routes.DeepLinkable
 
     @Serializable
-    data object NodeInfo : Routes
+    data object Settings : Routes.DeepLinkable
 
     @Serializable
-    data object TransactionSpeedSettings : Routes
+    data object NodeInfo : Routes.DeepLinkable
 
     @Serializable
-    data object WidgetsSettings : Routes
+    data object WidgetsSettings : Routes.DeepLinkable
 
     @Serializable
-    data object TagsSettings : Routes
+    data object TransactionSpeedSettings : Routes.DeepLinkable
 
     @Serializable
-    data object HardwareWalletsSettings : Routes
+    data object TagsSettings : Routes.DeepLinkable
 
     @Serializable
-    data object CoinSelectPreference : Routes
+    data object HardwareWalletsSettings : Routes.DeepLinkable
 
     @Serializable
-    data object ElectrumConfig : Routes
+    data object CoinSelectPreference : Routes.DeepLinkable
 
     @Serializable
-    data object RgsServer : Routes
+    data object ElectrumConfig : Routes.DeepLinkable
 
     @Serializable
-    data object AddressTypePreference : Routes
+    data object RgsServer : Routes.DeepLinkable
 
     @Serializable
-    data object AddressViewer : Routes
+    data object AddressTypePreference : Routes.DeepLinkable
 
     @Serializable
-    data object WatchOnlyAccounts : Routes
+    data object WatchOnlyAccounts : Routes.DeepLinkable
 
     @Serializable
-    data object CustomFeeSettings : Routes
+    data object CustomFeeSettings : Routes.DeepLinkable
 
     @Serializable
-    data object PinManagement : Routes
+    data object AddressViewer : Routes.DeepLinkable
+
+    @Serializable
+    data object PinManagement : Routes.DeepLinkable
 
     @Serializable
     data class AuthCheck(
@@ -1988,260 +2039,260 @@ sealed interface Routes {
         val requirePin: Boolean = false,
         val requireBiometrics: Boolean = false,
         val onSuccessActionId: String,
-    ) : Routes
+    ) : Routes.InternalOnly
 
     @Serializable
-    data object DefaultUnitSettings : Routes
+    data object DefaultUnitSettings : Routes.DeepLinkable
 
     @Serializable
-    data object LocalCurrencySettings : Routes
+    data object LocalCurrencySettings : Routes.DeepLinkable
 
     @Serializable
-    data object BackupSettings : Routes
+    data object BackupSettings : Routes.DeepLinkable
 
     @Serializable
-    data object ResetAndRestoreSettings : Routes
+    data object ResetAndRestoreSettings : Routes.DeepLinkable
 
     @Serializable
-    data object ChannelOrdersSettings : Routes
+    data object ChannelOrdersSettings : Routes.DeepLinkable
 
     @Serializable
-    data object SwapsSettings : Routes
+    data object SwapsSettings : Routes.DeepLinkable
 
     @Serializable
-    data class SwapDetail(val id: String) : Routes
+    data class SwapDetail(val id: String) : Routes.DeepLinkable
 
     @Serializable
-    data object Logs : Routes
+    data object Logs : Routes.DeepLinkable
 
     @Serializable
-    data class LogDetail(val fileName: String) : Routes
+    data class LogDetail(val fileName: String) : Routes.DeepLinkable
 
     @Serializable
-    data class OrderDetail(val id: String) : Routes
+    data class OrderDetail(val id: String) : Routes.DeepLinkable
 
     @Serializable
-    data class CjitDetail(val id: String) : Routes
+    data class CjitDetail(val id: String) : Routes.DeepLinkable
 
     @Serializable
-    data object ConnectionsNav : Routes
+    data object ConnectionsNav : Routes.DeepLinkable
 
     @Serializable
-    data object LightningConnections : Routes
+    data object LightningConnections : Routes.DeepLinkable
 
     @Serializable
-    data class ChannelDetail(val channelId: String) : Routes
+    data class ChannelDetail(val channelId: String) : Routes.DeepLinkable
 
     @Serializable
-    data class CloseConnection(val channelId: String) : Routes
+    data class CloseConnection(val channelId: String) : Routes.DeepLinkable
 
     @Serializable
-    data object DevSettings : Routes
+    data object DevSettings : Routes.DeepLinkable
 
     @Serializable
-    data object LegacyRnRecovery : Routes
+    data object LegacyRnRecovery : Routes.InternalOnly
 
     @Serializable
-    data object LdkDebug : Routes
+    data object LdkDebug : Routes.DeepLinkable
 
     @Serializable
-    data object VssDebug : Routes
+    data object VssDebug : Routes.DeepLinkable
 
     @Serializable
-    data object ProbingTool : Routes
+    data object ProbingTool : Routes.DeepLinkable
 
     @Serializable
-    data object FeeSettings : Routes
+    data object FeeSettings : Routes.DeepLinkable
 
     @Serializable
-    data object RegtestSettings : Routes
+    data object RegtestSettings : Routes.DeepLinkable
 
     @Serializable
-    data object TransferRoot : Routes
+    data object TransferRoot : Routes.DeepLinkable
 
     @Serializable
-    data object TransferIntro : Routes
+    data object TransferIntro : Routes.DeepLinkable
 
     @Serializable
-    data object SpendingIntro : Routes
+    data object SpendingIntro : Routes.DeepLinkable
 
     @Serializable
-    data class SpendingIntroHw(val deviceId: String) : Routes
+    data class SpendingIntroHw(val walletId: String) : Routes.DeepLinkable
 
     @Serializable
-    data object SpendingAmount : Routes
+    data object SpendingAmount : Routes.DeepLinkable
 
     @Serializable
-    data class SpendingAmountHw(val deviceId: String) : Routes
+    data class SpendingAmountHw(val walletId: String) : Routes.DeepLinkable
 
     @Serializable
-    data class SpendingHwSign(val deviceId: String) : Routes
+    data class SpendingHwSign(val walletId: String) : Routes.InternalOnly
 
     @Serializable
-    data object SpendingHwSigned : Routes
+    data object SpendingHwSigned : Routes.InternalOnly
 
     @Serializable
-    data object SpendingConfirm : Routes
+    data object SpendingConfirm : Routes.InternalOnly
 
     @Serializable
-    data object SpendingAdvanced : Routes
+    data object SpendingAdvanced : Routes.InternalOnly
 
     @Serializable
-    data object TransferLiquidity : Routes
+    data object TransferLiquidity : Routes.DeepLinkable
 
     @Serializable
-    data object SettingUp : Routes
+    data object SettingUp : Routes.InternalOnly
 
     @Serializable
-    data object SavingsIntro : Routes
+    data object SavingsIntro : Routes.DeepLinkable
 
     @Serializable
-    data object SavingsAvailability : Routes
+    data object SavingsAvailability : Routes.DeepLinkable
 
     @Serializable
-    data object SavingsConfirm : Routes
+    data object SavingsConfirm : Routes.DeepLinkable
 
     @Serializable
-    data object SavingsAdvanced : Routes
+    data object SavingsAdvanced : Routes.DeepLinkable
 
     @Serializable
-    data object SavingsProgress : Routes
+    data object SavingsProgress : Routes.InternalOnly
 
     @Serializable
-    data object Funding : Routes
+    data object Funding : Routes.DeepLinkable
 
     @Serializable
-    data object FundingAdvanced : Routes
+    data object FundingAdvanced : Routes.DeepLinkable
 
     @Serializable
-    data object ExternalNav : Routes
+    data object ExternalNav : Routes.DeepLinkable
 
     @Serializable
-    data class ExternalConnection(val scannedNodeUri: String? = null) : Routes
+    data class ExternalConnection(val scannedNodeUri: String? = null) : Routes.DeepLinkable
 
     @Serializable
-    data object ExternalAmount : Routes
+    data object ExternalAmount : Routes.InternalOnly
 
     @Serializable
-    data object ExternalConfirm : Routes
+    data object ExternalConfirm : Routes.InternalOnly
 
     @Serializable
-    data object ExternalSuccess : Routes
+    data object ExternalSuccess : Routes.InternalOnly
 
     @Serializable
-    data class LnurlChannel(val uri: String, val callback: String, val k1: String) : Routes
+    data class LnurlChannel(val uri: String, val callback: String, val k1: String) : Routes.InternalOnly
 
     @Serializable
-    data class ActivityDetail(val id: String, val walletId: String? = null) : Routes
+    data class ActivityDetail(val id: String, val walletId: String? = null) : Routes.DeepLinkable
 
     @Serializable
-    data class ActivityAssignContact(val id: String) : Routes
+    data class ActivityAssignContact(val id: String) : Routes.DeepLinkable
 
     @Serializable
-    data class ActivityExplore(val id: String, val walletId: String? = null) : Routes
+    data class ActivityExplore(val id: String, val walletId: String? = null) : Routes.DeepLinkable
 
     @Serializable
-    data object BuyIntro : Routes
+    data object BuyIntro : Routes.DeepLinkable
 
     @Serializable
-    data object Support : Routes
+    data object Support : Routes.DeepLinkable
 
     @Serializable
-    data object ReportIssue : Routes
+    data class ReportIssue(val prefillMessage: String? = null) : Routes.DeepLinkable
 
     @Serializable
-    data object ReportIssueSuccess : Routes
+    data object ReportIssueSuccess : Routes.DeepLinkable
 
     @Serializable
-    data object ReportIssueFailure : Routes
+    data object ReportIssueFailure : Routes.DeepLinkable
 
     @Serializable
-    data object QuickPayIntro : Routes
+    data object QuickPayIntro : Routes.DeepLinkable
 
     @Serializable
-    data object QuickPaySettings : Routes
+    data object QuickPaySettings : Routes.DeepLinkable
 
     @Serializable
-    data object LanguageSettings : Routes
+    data object LanguageSettings : Routes.DeepLinkable
 
     @Serializable
-    data class Contacts(val showAddContactSheet: Boolean = false) : Routes
+    data class Contacts(val showAddContactSheet: Boolean = false) : Routes.DeepLinkable
 
     @Serializable
-    data object ContactsIntro : Routes
+    data object ContactsIntro : Routes.DeepLinkable
 
     @Serializable
     data class ContactDetail(
         val publicKey: String,
         val showDeleteAction: Boolean = false,
-    ) : Routes
+    ) : Routes.DeepLinkable
 
     @Serializable
-    data class ContactActivity(val publicKey: String) : Routes
+    data class ContactActivity(val publicKey: String) : Routes.DeepLinkable
 
     @Serializable
-    data object Profile : Routes
+    data object Profile : Routes.DeepLinkable
 
     @Serializable
-    data object ProfileIntro : Routes
+    data object ProfileIntro : Routes.DeepLinkable
 
     @Serializable
-    data object PubkyChoice : Routes
+    data object PubkyChoice : Routes.DeepLinkable
 
     @Serializable
-    data object CreateProfile : Routes
+    data object CreateProfile : Routes.DeepLinkable
 
     @Serializable
-    data object EditProfile : Routes
+    data object EditProfile : Routes.DeepLinkable
 
     @Serializable
-    data object PayContacts : Routes
+    data object PayContacts : Routes.DeepLinkable
 
     @Serializable
-    data class AddContact(val publicKey: String) : Routes
+    data class AddContact(val publicKey: String) : Routes.DeepLinkable
 
     @Serializable
-    data class EditContact(val publicKey: String) : Routes
+    data class EditContact(val publicKey: String) : Routes.DeepLinkable
 
     @Serializable
-    data object ContactImportOverview : Routes
+    data object ContactImportOverview : Routes.DeepLinkable
 
     @Serializable
-    data object ContactImportSelect : Routes
+    data object ContactImportSelect : Routes.DeepLinkable
 
     @Serializable
-    data object ShopIntro : Routes
+    data object ShopIntro : Routes.DeepLinkable
 
     @Serializable
-    data object ShopDiscover : Routes
+    data object ShopDiscover : Routes.DeepLinkable
 
     @Serializable
-    data class ShopWebView(val page: String, val title: String) : Routes
+    data class ShopWebView(val page: String, val title: String) : Routes.DeepLinkable
 
     @Serializable
-    data object WidgetsIntro : Routes
+    data object WidgetsIntro : Routes.DeepLinkable
 
     @Serializable
-    data object AppStatus : Routes
+    data object AppStatus : Routes.DeepLinkable
 
     @Serializable
-    data object CriticalUpdate : Routes
+    data object CriticalUpdate : Routes.InternalOnly
 
     @Serializable
-    data object RecoveryMode : Routes
+    data object RecoveryMode : Routes.InternalOnly
 
     @Serializable
-    data object RecoveryMnemonic : Routes
+    data object RecoveryMnemonic : Routes.InternalOnly
 
     @Serializable
-    data object BackgroundPaymentsIntro : Routes
+    data object BackgroundPaymentsIntro : Routes.DeepLinkable
 
     @Serializable
-    data object BackgroundPaymentsSettings : Routes
+    data object BackgroundPaymentsSettings : Routes.DeepLinkable
 
     @Serializable
-    data object AllActivity : Routes
+    data object AllActivity : Routes.DeepLinkable
 
     @Serializable
-    data object Trezor : Routes
+    data object Trezor : Routes.DeepLinkable
 }

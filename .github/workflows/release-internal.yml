@@ -24,7 +24,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Setup Java
         uses: actions/setup-java@v5
@@ -33,7 +33,7 @@ jobs:
           distribution: 'temurin'
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v5
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Setup Android NDK
         run: |
@@ -103,7 +103,7 @@ jobs:
                 exit 1
               fi
             done < <(find "$extract_dir" -name '*.so' -print0)
-          done < <(find app/build/outputs/apk/mainnet/release -type f -name '*.apk' -print0)
+          done < <(find app/build/outputs/bitkit/mainnetRelease -type f -name '*.apk' -print0)
           test "$native_count" -gt 0
 
       - name: Verify internal release signature
@@ -118,7 +118,7 @@ jobs:
           while IFS= read -r -d '' apk_path; do
             apk_count=$((apk_count + 1))
             "$apksigner_path" verify --verbose --print-certs "$apk_path"
-          done < <(find app/build/outputs/apk/mainnet/release -name 'bitkit-mainnet-release-*.apk' -print0)
+          done < <(find app/build/outputs/bitkit/mainnetRelease -name 'bitkit-mainnet-release-*.apk' -print0)
           test "$apk_count" -gt 0
 
       - name: Collect internal artifacts
@@ -127,7 +127,7 @@ jobs:
           set -euo pipefail
           artifact_dir="$RUNNER_TEMP/internal-release"
           mkdir -p "$artifact_dir"
-          mapfile -d '' apk_paths < <(find app/build/outputs/apk/mainnet/release -name 'bitkit-mainnet-release-*.apk' -print0)
+          mapfile -d '' apk_paths < <(find app/build/outputs/bitkit/mainnetRelease -name 'bitkit-mainnet-release-*.apk' -print0)
           mapfile -d '' symbol_paths < <(find app/build/outputs/native-debug-symbols/mainnetRelease -name 'native-debug-symbols-*.zip' -print0)
           test "${#apk_paths[@]}" -gt 0
           test "${#symbol_paths[@]}" -gt 0

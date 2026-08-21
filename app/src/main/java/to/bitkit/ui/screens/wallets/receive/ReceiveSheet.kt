@@ -30,6 +30,7 @@ import to.bitkit.ui.navigateTo
 import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.rememberNotificationToggleClick
 import to.bitkit.ui.walletViewModel
@@ -230,30 +231,47 @@ fun ReceiveSheet(
 }
 
 sealed interface ReceiveRoute {
-    @Serializable
-    data object QR : ReceiveRoute
+    sealed interface DeepLinkStart : ReceiveRoute
+
+    sealed interface InternalOnly : ReceiveRoute
 
     @Serializable
-    data object Amount : ReceiveRoute
+    data object QR : DeepLinkStart
 
     @Serializable
-    data object Confirm : ReceiveRoute
+    data object Amount : DeepLinkStart
 
     @Serializable
-    data object ConfirmIncreaseInbound : ReceiveRoute
+    data object Confirm : InternalOnly
 
     @Serializable
-    data object Liquidity : ReceiveRoute
+    data object ConfirmIncreaseInbound : InternalOnly
 
     @Serializable
-    data object LiquidityAdditional : ReceiveRoute
+    data object Liquidity : InternalOnly
 
     @Serializable
-    data object EditInvoice : ReceiveRoute
+    data object LiquidityAdditional : InternalOnly
 
     @Serializable
-    data object AddTag : ReceiveRoute
+    data object EditInvoice : DeepLinkStart
 
     @Serializable
-    data object GeoBlock : ReceiveRoute
+    data object AddTag : DeepLinkStart
+
+    @Serializable
+    data object GeoBlock : DeepLinkStart
+
+    companion object {
+        private val DEEP_LINK_STARTS: List<DeepLinkStart> = listOf(
+            QR,
+            Amount,
+            EditInvoice,
+            AddTag,
+            GeoBlock,
+        )
+
+        fun fromDeepLink(path: String): DeepLinkStart? =
+            ScreenDeepLinks.matchStart(path, QR, DEEP_LINK_STARTS)
+    }
 }

@@ -16,6 +16,7 @@ sealed class ServiceError(message: String) : AppError(message) {
     class NodeNotSetup : ServiceError("Node is not setup")
     class NodeNotStarted : ServiceError("Node is not started")
     class MnemonicNotFound : ServiceError("Mnemonic not found")
+    class VssAuthRequired : ServiceError("VSS requires LNURL-auth")
     class NodeStillRunning : ServiceError("Node is still running")
     class NodeReleaseTimeout : ServiceError("Previous node release did not finish in time")
     class InvalidNodeSigningMessage : ServiceError("Invalid node signing message")
@@ -33,11 +34,14 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
     constructor(inner: NodeException) : this(LdkException.Node(inner))
 
     override val message get() = inner.message ?: super.message
+    val compactType get() = inner.compactType
 
     sealed interface LdkException {
         val message: String?
+        val compactType: String?
 
         class Build(exception: BuildException) : LdkException {
+            override val compactType = exception::class.simpleName
             override val message = when (exception) {
                 is BuildException.InvalidChannelMonitor -> "Invalid channel monitor."
                 is BuildException.InvalidSystemTime -> "Invalid system time."
@@ -57,6 +61,7 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
         }
 
         class Node(exception: NodeException) : LdkException {
+            override val compactType = exception::class.simpleName
             override val message = when (exception) {
                 is NodeException.AlreadyRunning -> "The node is already running."
                 is NodeException.NotRunning -> "The node is not running."

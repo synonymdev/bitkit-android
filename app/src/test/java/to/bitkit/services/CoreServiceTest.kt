@@ -1,12 +1,15 @@
 package to.bitkit.services
 
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
 import org.junit.Test
 import to.bitkit.ext.create
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class CoreServiceTest {
@@ -21,7 +24,7 @@ class CoreServiceTest {
         )
         val incoming = activity(id = "transfer")
 
-        val result = mergeHwSnapshot(existing = listOf(existing), incoming = listOf(incoming))
+        val result = mergePlan(existing = listOf(existing), incoming = listOf(incoming))
 
         assertTrue(result.toDelete.isEmpty())
         assertEquals(1, result.toUpsert.size)
@@ -37,7 +40,7 @@ class CoreServiceTest {
         val transfer = activity(id = "transfer", isTransfer = true)
         val incoming = activity(id = "current")
 
-        val result = mergeHwSnapshot(
+        val result = mergePlan(
             existing = listOf(stale, transfer),
             incoming = listOf(incoming),
         )
@@ -47,8 +50,109 @@ class CoreServiceTest {
         assertFalse(result.toDelete.single().v1.isTransfer)
     }
 
+    @Test
+    fun `merge hw snapshot recovers transfer from known funding tx when no stored row remains`() {
+        val result = mergePlan(
+            existing = emptyList(),
+            incoming = listOf(activity(id = "fundingTx")),
+            transferChannelIdsByFundingTxId = mapOf("fundingTx" to "channel-1"),
+        )
+
+        val recovered = result.upserted("fundingTx")
+        assertEquals(true, recovered?.isTransfer)
+        assertEquals("channel-1", recovered?.channelId)
+    }
+
+    @Test
+    fun `merge hw snapshot leaves unrelated transaction unmarked`() {
+        val result = mergePlan(
+            existing = emptyList(),
+            incoming = listOf(activity(id = "someOtherTx")),
+            transferChannelIdsByFundingTxId = mapOf("fundingTx" to "channel-1"),
+        )
+
+        val untouched = result.upserted("someOtherTx")
+        assertEquals(false, untouched?.isTransfer)
+        assertNull(untouched?.channelId)
+    }
+
+    @Test
+    fun `merge hw snapshot keeps stored channel id over recovered channel id`() {
+        val result = mergePlan(
+            existing = listOf(activity(id = "fundingTx", isTransfer = true, channelId = "stored-channel")),
+            incoming = listOf(activity(id = "fundingTx")),
+            transferChannelIdsByFundingTxId = mapOf("fundingTx" to "channel-1"),
+        )
+
+        val merged = result.upserted("fundingTx")
+        assertEquals(true, merged?.isTransfer)
+        assertEquals("stored-channel", merged?.channelId)
+    }
+
+    @Test
+    fun `merge hw snapshot fills missing channel id on stored transfer`() {
+        val result = mergePlan(
+            existing = listOf(activity(id = "fundingTx", isTransfer = false, channelId = null)),
+            incoming = listOf(activity(id = "fundingTx")),
+            transferChannelIdsByFundingTxId = mapOf("fundingTx" to "channel-1"),
+        )
+
+        val merged = result.upserted("fundingTx")
+        assertEquals(true, merged?.isTransfer)
+        assertEquals("channel-1", merged?.channelId)
+    }
+
+    @Test
+    fun `merge hw snapshot recovers transfer matching on tx id not activity id`() {
+        val result = mergePlan(
+            existing = emptyList(),
+            incoming = listOf(activity(id = "rebuilt-activity-id", txId = "fundingTx")),
+            transferChannelIdsByFundingTxId = mapOf("fundingTx" to "channel-1"),
+        )
+
+        val recovered = result.upserted("rebuilt-activity-id")
+        assertEquals(true, recovered?.isTransfer)
+        assertEquals("channel-1", recovered?.channelId)
+    }
+
+    @Test
+    fun `merge hw snapshot leaves activities unchanged without known transfers`() {
+        val result = mergePlan(existing = emptyList(), incoming = listOf(activity(id = "fundingTx")))
+
+        val untouched = result.upserted("fundingTx")
+        assertEquals(false, untouched?.isTransfer)
+        assertNull(untouched?.channelId)
+    }
+
+    @Test
+    fun `merge hw snapshot leaves lightning activities untouched`() {
+        val lightning = lightningActivity(id = "fundingTx")
+
+        val result = mergePlan(
+            existing = emptyList(),
+            incoming = listOf(lightning),
+            transferChannelIdsByFundingTxId = mapOf("fundingTx" to "channel-1"),
+        )
+
+        assertEquals(listOf(lightning), result.toUpsert)
+    }
+
+    private fun mergePlan(
+        existing: List<Activity.Onchain>,
+        incoming: List<Activity>,
+        transferChannelIdsByFundingTxId: Map<String, String> = emptyMap(),
+    ) = mergeHwSnapshot(
+        existing = existing,
+        incoming = incoming,
+        transferChannelIdsByFundingTxId = transferChannelIdsByFundingTxId,
+    )
+
+    private fun HwSnapshotMerge.upserted(id: String): OnchainActivity? =
+        toUpsert.filterIsInstance<Activity.Onchain>().firstOrNull { it.v1.id == id }?.v1
+
     private fun activity(
         id: String,
+        txId: String = id,
         isTransfer: Boolean = false,
         channelId: String? = null,
         transferTxId: String? = null,
@@ -57,7 +161,7 @@ class CoreServiceTest {
             walletId = "hardware-wallet",
             id = id,
             txType = PaymentType.RECEIVED,
-            txId = id,
+            txId = txId,
             value = 1uL,
             fee = 0uL,
             address = "",
@@ -65,6 +169,18 @@ class CoreServiceTest {
             isTransfer = isTransfer,
             channelId = channelId,
             transferTxId = transferTxId,
+        )
+    )
+
+    private fun lightningActivity(id: String) = Activity.Lightning(
+        LightningActivity.create(
+            walletId = "hardware-wallet",
+            id = id,
+            txType = PaymentType.RECEIVED,
+            status = PaymentState.SUCCEEDED,
+            value = 1uL,
+            invoice = "",
+            timestamp = 1uL,
         )
     )
 }

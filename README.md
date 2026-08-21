@@ -180,8 +180,8 @@ just build assembleDevRelease
 # just build assembleRelease # for all flavors
 ```
 
-APK is generated in `app/build/outputs/apk/_flavor_/release`. (`_flavor_` can be any of 'dev', 'mainnet', 'tnet').
-Example for dev: `app/build/outputs/apk/dev/release`
+AGP writes its own APKs to `app/build/outputs/apk/_flavor_/release`, and the build publishes deterministically named copies to `app/build/outputs/bitkit/_variant_`. (`_flavor_` can be any of 'dev', 'mainnet', 'tnet'; `_variant_` is the flavor and build type, e.g. `devRelease`).
+Example for dev: `app/build/outputs/bitkit/devRelease/bitkit-dev-release-{versionCode}-universal.apk`
 
 ### Build for Release
 
@@ -195,8 +195,8 @@ just release
 
 Release artifacts:
 
-- APK: `app/build/outputs/apk/mainnet/release/`
-- AAB: `app/build/outputs/bundle/mainnetRelease/`
+- APK: `app/build/outputs/bitkit/mainnetRelease/bitkit-mainnet-release-{versionCode}-{abi}.apk`
+- AAB: `app/build/outputs/bitkit/mainnetRelease/bitkit-mainnet-release-{versionCode}.aab`
 - Native debug symbols: `app/build/outputs/native-debug-symbols/mainnetRelease/native-debug-symbols-{versionCode}.zip`
 
 The native debug symbols archive must come from the same `just release` build as the APK/AAB being published. Keep the build-numbered filename, e.g. `native-debug-symbols-182.zip`, so it matches the APK/AAB build number. Native Rust dependencies publish stripped release AARs for app size and separate `native-debug-symbols` classifier artifacts for crash symbolication; `just release` merges those upstream symbol artifacts into the final archive and refuses placeholder symbols from stripped packaged `.so` files.
@@ -209,7 +209,7 @@ For GitHub releases, attach `native-debug-symbols-{versionCode}.zip` alongside t
 
 #### Android App Bundle (AAB)
 
-`just release` builds both the mainnet APK and Play Store AAB. AAB is generated in `app/build/outputs/bundle/mainnetRelease/`.
+`just release` builds both the mainnet APK and Play Store AAB. AGP writes the AAB to `app/build/outputs/bundle/mainnetRelease/`, and the release-named copy lands in `app/build/outputs/bitkit/mainnetRelease/`.
 
 ### Build for E2E Testing
 
@@ -218,6 +218,9 @@ Pass `E2E=true` and build any flavor. By default, E2E uses a local Electrum over
 ```sh
 just e2e
 ```
+
+Local E2E builds use `10.0.2.2` for Electrum, Homegate, and Pubky when running in an emulator. Set `E2E_LOCAL_HOST` to the development
+machine's LAN address when running on a physical device.
 
 #### Use Network Electrum (Staging/Mainnet)
 

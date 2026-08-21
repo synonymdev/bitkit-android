@@ -14,6 +14,7 @@ import to.bitkit.appwidget.AppWidgetRefreshReason
 import to.bitkit.appwidget.AppWidgetRefreshScheduler
 import to.bitkit.env.Env
 import to.bitkit.services.BluetoothInit
+import to.bitkit.services.PubkyAuthHandlerRegistrar
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
@@ -27,6 +28,9 @@ internal open class App : Application(), Configuration.Provider {
 
     @Inject
     lateinit var appWidgetRefreshScheduler: AppWidgetRefreshScheduler
+
+    @Inject
+    lateinit var pubkyAuthHandlerRegistrar: PubkyAuthHandlerRegistrar
 
     override val workManagerConfiguration
         get() = Configuration.Builder()
@@ -42,6 +46,7 @@ internal open class App : Application(), Configuration.Provider {
         appWidgetRefreshScheduler.ensureScheduled(AppWidgetRefreshReason.APP_START)
         // Initialize btleplug for Bluetooth support (required before any BLE usage)
         BluetoothInit.ensureInitialized()
+        pubkyAuthHandlerRegistrar.start()
     }
 
     private fun installUncaughtExceptionLogger() {

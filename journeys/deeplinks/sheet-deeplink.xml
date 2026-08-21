@@ -1,0 +1,18 @@
+<journey name="sheet deeplink">
+  <description>Precondition: onboarded dev wallet, dev mode on, node connected.</description>
+  <actions>
+    <action>Run `adb shell am start -W -a android.intent.action.VIEW -d "bitkit://screen/send" to.bitkit.dev`</action>
+    <action>Verify that the Send sheet is visible on the recipient picker, showing "Scan QR", "Contact", "Paste Invoice" and "Enter Manually"</action>
+    <action>Press the device back button</action>
+    <action>Verify that the sheet is dismissed and the wallet overview is visible</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/widgets/price-edit" to.bitkit.dev`</action>
+    <action>Verify that the Bitcoin Price widget editor is visible with the "CURRENCY" and "TIMEFRAME" sections</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/backup" to.bitkit.dev`</action>
+    <action>Verify that the backup intro is visible, not the recovery phrase</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/backup/show-mnemonic" to.bitkit.dev`</action>
+    <action>Verify that the screen does not change and the recovery phrase is never shown</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitkit://screen/send/fee-rate" to.bitkit.dev`</action>
+    <action>Verify that the screen does not change and the app does not crash</action>
+    <action>Verify that logcat contains "Unhandled screen deeplink" for both rejected URIs</action>
+  </actions>
+</journey>

@@ -20,6 +20,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavType
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.navigation
+import to.bitkit.ui.Routes
 import to.bitkit.ui.utils.Transitions.defaultEnterTrans
 import to.bitkit.ui.utils.Transitions.defaultExitTrans
 import to.bitkit.ui.utils.Transitions.defaultPopEnterTrans
@@ -101,6 +102,30 @@ inline fun <reified T : Any> NavGraphBuilder.navigationWithDefaultTransitions(
 inline fun <reified T : Any> NavGraphBuilder.composableWithDefaultTransitions(
     typeMap: Map<KType, NavType<*>> = emptyMap(),
     deepLinks: List<NavDeepLink> = emptyList(),
+    noinline enterTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?)? = defaultEnterTrans,
+    noinline exitTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition?)? = defaultExitTrans,
+    noinline popEnterTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?)? = defaultPopEnterTrans,
+    noinline popExitTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition?)? = defaultPopExitTrans,
+    noinline content: @Composable AnimatedContentScope.(NavBackStackEntry) -> Unit,
+) {
+    composable<T>(
+        typeMap = typeMap,
+        deepLinks = deepLinks,
+        enterTransition = enterTransition,
+        exitTransition = exitTransition,
+        popEnterTransition = popEnterTransition,
+        popExitTransition = popExitTransition,
+        content = content,
+    )
+}
+
+/**
+ * Adds a root screen that may be entered directly by URI, with the default screen transitions.
+ */
+@Suppress("LongParameterList", "MaxLineLength")
+inline fun <reified T : Routes.DeepLinkable> NavGraphBuilder.deepLinkableComposable(
+    typeMap: Map<KType, NavType<*>> = emptyMap(),
+    deepLinks: List<NavDeepLink> = ScreenDeepLinks.linksFor(T::class),
     noinline enterTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?)? = defaultEnterTrans,
     noinline exitTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> ExitTransition?)? = defaultExitTrans,
     noinline popEnterTransition: (AnimatedContentTransitionScope<NavBackStackEntry>.() -> EnterTransition?)? = defaultPopEnterTrans,

@@ -51,7 +51,7 @@ run mode="" logs="":
     set -eu
 
     app_id="to.bitkit.dev"
-    app_dir="app/build/outputs/apk/dev/debug"
+    app_dir="app/build/outputs/bitkit/devDebug"
     mode="{{ mode }}"
     logs="{{ logs }}"
     attach_logs=false
@@ -114,8 +114,6 @@ run mode="" logs="":
     build_env=""
     if [ "$mode" = "docker" ]; then
         echo "Forwarding bitkit-docker ports via adb reverse..."
-        adb -s "$device_id" reverse tcp:60001 tcp:60001  # local Electrum
-        adb -s "$device_id" reverse tcp:6288 tcp:6288     # local homegate
         adb -s "$device_id" reverse tcp:9735 tcp:9735     # local lnd peer
         adb -s "$device_id" reverse tcp:3000 tcp:3000     # local lnurl-server
         build_env="E2E=true"
