@@ -1734,10 +1734,10 @@ class AppViewModel @Inject constructor(
     }
 
     fun openContactPayment(paymentRequest: String, publicKey: String) {
-        synchronized(contactPaymentContextLock) {
-            activeContactPaymentContext = ContactPaymentContext(publicKey)
-        }
-        onScanResult(paymentRequest)
+        onScanResult(
+            paymentRequest,
+            contactPaymentContext = ContactPaymentContext(publicKey),
+        )
     }
 
     fun preserveContactPaymentContext(paymentHash: String) {

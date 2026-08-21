@@ -355,7 +355,6 @@ class WalletViewModelTest : BaseUnitTest() {
             pubkyRepo = pubkyRepo,
             migrationService = migrationService,
             connectivityRepo = connectivityRepo,
-            boltzService = boltzService,
         )
 
         testSut.start()
