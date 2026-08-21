@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.ActivityTags
+import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
@@ -30,6 +31,7 @@ import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.ext.create
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.mock
+import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.services.HwSnapshotResult
@@ -68,6 +70,10 @@ class ActivityRepoTest : BaseUnitTest() {
     private val testActivity = mock<Activity.Lightning> {
         on { v1 } doReturn testActivityV1
     }
+
+    private val backupTags by lazy { ActivityTags(WalletScope.default, "activity1", listOf("daily")) }
+
+    private val backupClosedChannel = mock<ClosedChannelDetails>()
 
     private val baseOnchainActivity = OnchainActivity.create(
         walletId = "wallet0",
@@ -856,6 +862,63 @@ class ActivityRepoTest : BaseUnitTest() {
 
         assertEquals(emptyList(), result)
     }
+
+    @Test
+    fun `restoreFromBackup applies every slice and signals tag changes`() = test {
+        val tagsBefore = sut.activityTagsChanged.value
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity).upsertList(listOf(testActivity))
+        verify(coreService.activity).upsertTags(listOf(backupTags))
+        verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
+        assertTrue(sut.activityTagsChanged.value > tagsBefore)
+    }
+
+    @Test
+    fun `restoreFromBackup applies remaining slices when the tags slice fails`() = test {
+        whenever(coreService.activity.upsertTags(any()))
+            .thenThrow(RuntimeException("Failed to insert tag: FOREIGN KEY constraint failed"))
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        // One unusable tag must not cost the activities or the closed channels.
+        verify(coreService.activity).upsertList(listOf(testActivity))
+        verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
+        // Still a failure, so BackupRepo never rewrites a good backup with partial state.
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `restoreFromBackup applies remaining slices when the activities slice fails`() = test {
+        whenever(coreService.activity.upsertList(any())).thenThrow(RuntimeException("upsert failed"))
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        verify(coreService.activity).upsertTags(listOf(backupTags))
+        verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `restoreFromBackup rethrows cancellation`() = test {
+        val cancellation = CancellationException("cancelled")
+        whenever(coreService.activity.upsertTags(any())).thenThrow(cancellation)
+
+        val thrown = assertFailsWith<CancellationException> {
+            sut.restoreFromBackup(backupPayload())
+        }
+
+        assertEquals(cancellation.message, thrown.message)
+    }
+
+    private fun backupPayload() = ActivityBackupV1(
+        createdAt = 1234567890L,
+        activities = listOf(testActivity),
+        activityTags = listOf(backupTags),
+        closedChannels = listOf(backupClosedChannel),
+    )
 
     private suspend fun stubHardwareTagLookup(activity: Activity.Onchain) {
         whenever { coreService.activity.getAllActivitiesTags() }
