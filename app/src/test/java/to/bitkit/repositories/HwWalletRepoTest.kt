@@ -48,6 +48,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -1476,6 +1477,25 @@ class HwWalletRepoTest : BaseUnitTest() {
         val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
 
         assertTrue(result.isSuccess)
+        verify(hwWalletStore).setPendingName(HARDWARE_WALLET_ID, null)
+    }
+
+    @Test
+    fun `removeDevice keeping backup data keeps the tags of a wallet that was never renamed`() = test {
+        // The name and the tags are kept independently: a wallet is far more likely to carry tags than
+        // a name the user bothered to set, and having no name must not cost it its tags.
+        val tagMetadata = listOf(preActivityMetadata())
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        whenever { activityRepo.getTagMetadataForWallet(HARDWARE_WALLET_ID) }
+            .thenReturn(Result.success(tagMetadata))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+
+        assertTrue(result.isSuccess)
+        assertNull(device.customLabel)
+        verify(preActivityMetadataRepo).upsertPreActivityMetadata(tagMetadata)
         verify(hwWalletStore).setPendingName(HARDWARE_WALLET_ID, null)
     }
 
