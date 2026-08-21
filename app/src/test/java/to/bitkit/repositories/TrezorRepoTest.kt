@@ -28,6 +28,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -113,7 +114,6 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
         whenever { hwWalletStore.loadKnownDevices() }.thenReturn(emptyList())
         whenever { hwWalletStore.loadPendingNames() }.thenReturn(emptyMap())
-        whenever { hwWalletStore.setPendingName(any(), anyOrNull()) }.thenReturn(Unit)
         stubAccountXpubFetch()
     }
 
@@ -241,7 +241,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val result = sut.initialize()
 
         assertTrue(result.isSuccess)
-        verify(hwWalletStore, never()).saveKnownDevices(any())
+        verify(hwWalletStore, never()).saveKnownDevices(any(), anyOrNull())
         assertEquals("", sut.state.value.knownDevices.single().walletId)
     }
 
@@ -721,7 +721,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         val saved = captor.firstValue.single()
         assertEquals(DEVICE_ID, saved.id)
         assertEquals(TransportType.USB, saved.transportType)
@@ -767,7 +767,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         assertEquals(setOf(walletId), captor.firstValue.map { it.walletId }.toSet())
     }
 
@@ -789,7 +789,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         val saved = captor.firstValue
         assertEquals(2, saved.size)
         assertEquals(standard, saved.first())
@@ -828,7 +828,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         val added = captor.firstValue.single { it.id == DEVICE_ID }
         assertEquals("No Pass", added.customLabel)
         assertEquals("standard-wallet", added.walletId)
@@ -859,10 +859,10 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        // Consumed in the same write as the entry that adopted it, so a failed save cannot lose it,
+        // and clearing the name later cannot fall back to it again.
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), eq("standard-wallet"))
         assertEquals("Cold Storage", captor.firstValue.single { it.id == DEVICE_ID }.customLabel)
-        // Consumed, so clearing the name later cannot fall back to it again.
-        verify(hwWalletStore).setPendingName("standard-wallet", null)
     }
 
     @Test
@@ -889,10 +889,9 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
-        assertEquals("Renamed Here", captor.firstValue.single { it.id == DEVICE_ID }.customLabel)
         // The pending name lost, so it is stale: dropping it keeps a later rename from falling back to it.
-        verify(hwWalletStore).setPendingName("standard-wallet", null)
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), eq("standard-wallet"))
+        assertEquals("Renamed Here", captor.firstValue.single { it.id == DEVICE_ID }.customLabel)
     }
 
     @Test
@@ -920,9 +919,8 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), isNull())
         assertNull(captor.firstValue.single { it.id == DEVICE_ID }.customLabel)
-        verify(hwWalletStore, never()).setPendingName(any(), anyOrNull())
     }
 
     @Test
@@ -944,7 +942,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         val saved = captor.firstValue.single()
         assertEquals("new-device-id", saved.trezorDeviceId)
         assertTrue(saved.xpubs.values.none { it == "old-seed-xpub" })
@@ -969,7 +967,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         assertEquals(2, captor.firstValue.size)
         assertEquals(standard, captor.firstValue.first())
     }
@@ -993,7 +991,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         assertFalse(captor.firstValue.single().passphraseProtected)
     }
 
@@ -1017,7 +1015,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         assertTrue(captor.firstValue.single().passphraseProtected)
     }
 
@@ -1035,7 +1033,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         val saved = captor.firstValue.single()
         assertFalse(saved.passphraseProtected)
     }
@@ -1075,7 +1073,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         assertEquals(
             mapOf(
                 "nativeSegwit" to "native-xpub",
@@ -1101,7 +1099,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         assertEquals("Cold Storage", captor.lastValue.single().customLabel)
     }
 
@@ -1230,7 +1228,7 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertEquals(DEVICE_BUSY_MESSAGE, sut.state.value.error)
         assertNull(sut.state.value.connectedDevice())
-        verify(hwWalletStore, never()).saveKnownDevices(any())
+        verify(hwWalletStore, never()).saveKnownDevices(any(), anyOrNull())
     }
 
     @Test
@@ -1277,7 +1275,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         assertNull(sut.state.value.connectedDevice())
-        verify(hwWalletStore, never()).saveKnownDevices(any())
+        verify(hwWalletStore, never()).saveKnownDevices(any(), anyOrNull())
     }
 
     @Test
@@ -1301,7 +1299,7 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertEquals("DeviceDisconnected", sut.state.value.error)
         assertNull(sut.state.value.connectedDevice())
-        verify(hwWalletStore, never()).saveKnownDevices(any())
+        verify(hwWalletStore, never()).saveKnownDevices(any(), anyOrNull())
     }
 
     @Test
@@ -2084,7 +2082,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         assertEquals(emptyList(), captor.lastValue)
         assertTrue(sut.state.value.knownDevices.isEmpty())
     }
@@ -2220,7 +2218,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         assertEquals(listOf(keptWhenStored), captor.lastValue)
     }
 

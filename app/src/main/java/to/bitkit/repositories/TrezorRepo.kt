@@ -1160,12 +1160,10 @@ class TrezorRepo @Inject constructor(
             trezorDeviceId = features.deviceId ?: previous?.trezorDeviceId,
         )
         val updated = knownDevices.filterNot { it.isReplacedBy(known, refreshed = previous) } + known
-        saveKnownDevices(updated)
-        // Consumed, so the name lives on the entry alone: leaving it would resurrect a name the user
-        // later clears, since the entry would then fall back to the pending one again.
-        if (pendingName != null) {
-            hwWalletStore.setPendingName(resolvedWalletId, null)
-        }
+        // The pending name is consumed in the same write as the entry that adopted it, so the name
+        // lives in exactly one place: leaving it pending would resurrect it once the user clears the
+        // entry's own label, and dropping it separately would lose it if saving the entry failed.
+        saveKnownDevices(updated, consumedPendingName = resolvedWalletId.takeIf { pendingName != null })
         _state.update { it.copy(knownDevices = updated.toImmutableList()) }
         return known
     }
@@ -1254,9 +1252,9 @@ class TrezorRepo @Inject constructor(
         Logger.error("Failed to load known devices", it, context = TAG)
     }.getOrDefault(emptyList())
 
-    private suspend fun saveKnownDevices(devices: List<KnownDevice>) {
-        runCatching {
-            hwWalletStore.saveKnownDevices(devices)
+    private suspend fun saveKnownDevices(devices: List<KnownDevice>, consumedPendingName: String? = null) {
+        runSuspendCatching {
+            hwWalletStore.saveKnownDevices(devices, consumedPendingName)
         }.onFailure { Logger.error("Failed to save known devices", it, context = TAG) }
     }
 

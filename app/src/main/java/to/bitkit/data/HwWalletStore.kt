@@ -33,8 +33,23 @@ class HwWalletStore @Inject constructor(
         store.data.first().knownDevices
     }
 
-    suspend fun saveKnownDevices(devices: List<KnownDevice>) = withContext(ioDispatcher) {
-        store.updateData { it.copy(knownDevices = devices) }
+    /**
+     * @param consumedPendingName the wallet whose pending name one of [devices] has just adopted, dropped
+     * in the same write. Splitting the two would let the entry carrying the name fail to save while the
+     * pending copy is deleted anyway, leaving the name nowhere.
+     */
+    suspend fun saveKnownDevices(
+        devices: List<KnownDevice>,
+        consumedPendingName: String? = null,
+    ) = withContext(ioDispatcher) {
+        store.updateData { data ->
+            data.copy(
+                knownDevices = devices,
+                pendingNames = consumedPendingName
+                    ?.let { data.pendingNames - it }
+                    ?: data.pendingNames,
+            )
+        }
         Unit
     }
 
