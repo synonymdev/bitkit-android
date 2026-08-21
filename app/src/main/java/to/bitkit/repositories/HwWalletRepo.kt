@@ -466,8 +466,11 @@ class HwWalletRepo @Inject constructor(
                 // Read before the deletion below, which takes the tags with the activities they are on.
                 val keptName = targets.firstNotNullOfOrNull { it.customLabel?.takeIf(String::isNotBlank) }
                     .takeIf { keepBackupData }
+                // Nothing has been deleted yet, so failing here costs nothing and keeps the choice with
+                // the user: retry, or remove the wallet without keeping its data.
                 val keptTagMetadata = when {
-                    keepBackupData -> activityRepo.getTagMetadataForWallet(walletId).getOrThrow()
+                    keepBackupData -> activityRepo.getTagMetadataForWallet(walletId)
+                        .getOrElse { throw HwBackupDataUnreadableError(it) }
                     else -> emptyList()
                 }
                 activeWatchers.toList()
@@ -889,6 +892,13 @@ class HwPassphraseRequiredError : AppError("Passphrase needed to reopen this wal
 
 /** The entered passphrase opened a different wallet than the one being signed from. */
 class HwPassphraseMismatchError : AppError("Passphrase opened a different wallet")
+
+/**
+ * A removal asked to keep the wallet's backup data, but its tags could not be read. Raised before
+ * anything is deleted, so the wallet is untouched and the removal can be retried or repeated without
+ * keeping the data.
+ */
+class HwBackupDataUnreadableError(cause: Throwable) : AppError("Could not read the backup data", cause)
 
 private data class HwWatcherData(
     val walletId: String,

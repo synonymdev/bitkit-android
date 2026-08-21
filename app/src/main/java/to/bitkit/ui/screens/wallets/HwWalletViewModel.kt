@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.HwWallet
 import to.bitkit.models.Toast
+import to.bitkit.repositories.HwBackupDataUnreadableError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -124,10 +125,16 @@ class HwWalletViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isPendingRemoval = null) }
             hwWalletRepo.removeDevice(walletId, keepBackupData).onFailure {
+                // The wallet is untouched when its backup data could not be read, so say what failed
+                // and point at the way through instead of asking for a retry that repeats it.
+                val description = when (it) {
+                    is HwBackupDataUnreadableError -> R.string.hardware__remove_keep_error
+                    else -> R.string.hardware__remove_error
+                }
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.common__error),
-                    description = context.getString(R.string.hardware__remove_error),
+                    description = context.getString(description),
                 )
             }
         }

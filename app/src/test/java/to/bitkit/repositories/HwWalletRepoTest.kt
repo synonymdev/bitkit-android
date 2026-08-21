@@ -1436,6 +1436,21 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `removeDevice keeping backup data reports unreadable data without touching the wallet`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        whenever { activityRepo.getTagMetadataForWallet(HARDWARE_WALLET_ID) }
+            .thenReturn(Result.failure(AppError("core unavailable")))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+
+        // Raised before anything is deleted, so the wallet survives and the user keeps the choice.
+        assertTrue(result.exceptionOrNull() is HwBackupDataUnreadableError)
+        verify(activityRepo, never()).deleteForWallet(any())
+        verify(trezorRepo, never()).forgetDevice(any(), anyOrNull())
+    }
+
+    @Test
     fun `removeDevice keeping backup data stores the wallet name before forgetting the device`() = test {
         val named = device.copy(customLabel = "Cold Storage")
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(named), emptyList())

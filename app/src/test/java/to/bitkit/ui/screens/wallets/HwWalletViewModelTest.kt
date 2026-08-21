@@ -19,6 +19,7 @@ import to.bitkit.R
 import to.bitkit.models.HwWallet
 import to.bitkit.models.Toast
 import to.bitkit.models.TransportType
+import to.bitkit.repositories.HwBackupDataUnreadableError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
 import to.bitkit.test.BaseUnitTest
@@ -63,6 +64,7 @@ class HwWalletViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.walletsLoaded).thenReturn(MutableStateFlow(true))
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
         whenever(context.getString(R.string.hardware__remove_error)).thenReturn("Could not remove")
+        whenever(context.getString(R.string.hardware__remove_keep_error)).thenReturn("Could not keep the tags")
         whenever(context.getString(R.string.hardware__rename_error)).thenReturn("Could not rename")
     }
 
@@ -158,6 +160,22 @@ class HwWalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(Toast.ToastType.ERROR, toasts.single().type)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `removeDevice explains an unreadable backup data failure`() = test {
+        whenever { hwWalletRepo.removeDevice(any(), any()) }
+            .thenReturn(Result.failure(HwBackupDataUnreadableError(AppError("core unavailable"))))
+        val sut = createSut()
+
+        val toasts = mutableListOf<Toast>()
+        val collectJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        sut.removeDevice("dev1")
+        advanceUntilIdle()
+
+        // The generic retry message would hide that removing without keeping the data still works.
+        assertEquals("Could not keep the tags", toasts.single().description)
         collectJob.cancel()
     }
 
