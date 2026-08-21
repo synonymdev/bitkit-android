@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed native library compatibility on Android devices using 16 KB memory pages. #1107
 - Lightning node shutdown and peer persistence now complete without native crashes or app hangs. #1122
 - Fixed Pubky authorization links opening Bitkit when the feature is unavailable or no local identity can approve them. #1162
+- Fixed the wallet backup failing repeatedly when Paykit state could not be read. #1092
 
 ### Security
 - Lightning no longer automatically starts from outdated channel monitor data after a storage mismatch. #1155

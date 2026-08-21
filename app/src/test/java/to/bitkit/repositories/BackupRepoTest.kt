@@ -40,6 +40,7 @@ import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import javax.inject.Provider
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -109,6 +110,46 @@ class BackupRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         verify(privatePaykitRepo, never()).restoreBackup(any())
         verify(settingsStore, never()).update(any())
+    }
+
+    @Test
+    fun `automatic wallet backup marks failure when Paykit snapshot fails`() = test {
+        whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(3_000))
+        whenever { privatePaykitRepo.backupSnapshot() }
+            .thenReturn(Result.failure(BackupRepoTestError("paykit session missing capabilities")))
+        val backupStatuses = MutableStateFlow(
+            mapOf(
+                BackupCategory.WALLET to BackupItemStatus(
+                    synced = 1_000,
+                    required = 2_000,
+                ),
+            )
+        )
+        val allowWalletClear = CompletableDeferred<Unit>().apply { complete(Unit) }
+        stubBackupStatuses(backupStatuses, allowWalletClear) {}
+        stubBackupObservers()
+
+        try {
+            sut.startObservingBackups()
+            runCurrent()
+            advanceTimeBy(5_000)
+            runCurrent()
+
+            verify(privatePaykitRepo).backupSnapshot()
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+            val status = backupStatuses.value.getValue(BackupCategory.WALLET)
+            assertTrue(status.isRequired)
+            assertFalse(status.running)
+
+            advanceTimeBy(5_000)
+            runCurrent()
+
+            // still one attempt: the failed timestamp suppresses a retry until data changes again
+            verify(privatePaykitRepo, times(1)).backupSnapshot()
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.WALLET.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
     }
 
     @Test
