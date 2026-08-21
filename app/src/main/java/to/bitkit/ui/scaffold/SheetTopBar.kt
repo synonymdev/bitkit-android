@@ -24,8 +24,8 @@ import to.bitkit.ui.theme.AppThemeSurface
 fun SheetTopBar(
     titleText: String?,
     modifier: Modifier = Modifier,
-    onBack: (() -> Unit)? = null,
     action: (@Composable () -> Unit)? = null,
+    onBack: (() -> Unit)? = null,
 ) {
     Box(
         modifier = modifier
