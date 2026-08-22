@@ -246,7 +246,7 @@ class QuickPayCoordinator @Inject constructor(
                 return@withLock
             }
             val match = rows?.let {
-                pickMatch(
+                pickLedgerMatch(
                     QuickPayLedgerRecord(
                         id = invoiceHash,
                         amountCents = 0L,
@@ -511,7 +511,7 @@ class QuickPayCoordinator @Inject constructor(
         record: QuickPayLedgerRecord,
         rows: List<QuickPayReconcileRow>,
     ): AmbiguousApply {
-        val match = pickMatch(record, rows) ?: return AmbiguousApply.UNCHANGED
+        val match = pickLedgerMatch(record, rows) ?: return AmbiguousApply.UNCHANGED
         return when (match.status) {
             QuickPayReconcileRow.Status.PENDING -> AmbiguousApply.UNCHANGED
             QuickPayReconcileRow.Status.SUCCEEDED -> {
@@ -541,29 +541,6 @@ class QuickPayCoordinator @Inject constructor(
             .toSet()
         spend.applyReconcile(rows, live) { record, match ->
             isAttributedFailure(record, opsByKey[record.invoicePaymentHash], match.paymentId, match.invoicePaymentHash)
-        }
-    }
-
-    private fun pickMatch(
-        record: QuickPayLedgerRecord,
-        rows: List<QuickPayReconcileRow>,
-    ): QuickPayReconcileRow? {
-        val matches = rows.filter { row ->
-            row.isOutboundBolt11 && (
-                row.invoicePaymentHash == record.invoicePaymentHash ||
-                    row.paymentId == record.invoicePaymentHash ||
-                    row.paymentId == record.paymentId ||
-                    (record.paymentId != null && row.invoicePaymentHash == record.paymentId)
-                )
-        }
-        if (matches.isEmpty()) return null
-        record.paymentId?.let { pid -> matches.find { it.paymentId == pid } }?.let { return it }
-        return matches.maxBy {
-            when (it.status) {
-                QuickPayReconcileRow.Status.SUCCEEDED -> 2
-                QuickPayReconcileRow.Status.PENDING -> 1
-                QuickPayReconcileRow.Status.FAILED -> 0
-            }
         }
     }
 
@@ -814,7 +791,7 @@ internal class QuickPaySpendStore(
                     remaining.add(record)
                     continue
                 }
-                val match = pickReconcileMatch(record, rows)
+                val match = pickLedgerMatch(record, rows)
                 if (match == null) {
                     remaining.add(record)
                     continue
@@ -991,7 +968,7 @@ private fun releaseRecord(ledger: QuickPayLedger, paymentHash: String): QuickPay
     return ledger.copy(records = remaining, spentCents = spent)
 }
 
-private fun pickReconcileMatch(
+private fun pickLedgerMatch(
     record: QuickPayLedgerRecord,
     rows: List<QuickPayReconcileRow>,
 ): QuickPayReconcileRow? {
