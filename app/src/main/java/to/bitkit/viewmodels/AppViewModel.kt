@@ -1161,7 +1161,12 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentFailed(event: Event.PaymentFailed) {
         event.paymentHash?.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
-            quickPayRepo.release(paymentHash)
+            quickPayRepo.noteTerminal(
+                paymentId = event.paymentId,
+                paymentHash = paymentHash,
+                success = false,
+                failureReason = event.reason,
+            )
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
@@ -1242,40 +1247,48 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handlePaymentSuccessful(event: Event.PaymentSuccessful) {
-        event.paymentHash.let { paymentHash ->
-            activityRepo.handlePaymentEvent(paymentHash)
-            val isQuickPay = quickPayRepo.reservation(paymentHash).getOrNull() != null
-            quickPayRepo.clear(paymentHash)
-            if (pendingPaymentRepo.isPending(paymentHash)) {
-                syncContactForActivity(paymentHash)
-                val amountWithFeeSats = if (isQuickPay) {
-                    val principal = (
-                        activityRepo.findActivityByPaymentId(
-                            paymentHashOrTxId = paymentHash,
-                            type = ActivityFilter.LIGHTNING,
-                            txType = PaymentType.SENT,
-                            retry = true,
-                        ).getOrNull() as? Activity.Lightning
-                        )?.v1?.value
-                    principal?.let {
-                        (it.safe() + msatFloorOf(event.feePaidMsat ?: 0u).safe()).toLong()
-                    }
-                } else {
-                    null
-                }
-                pendingPaymentRepo.resolve(
-                    PendingPaymentResolution.Success(
-                        paymentHash = paymentHash,
-                        amountWithFeeSats = amountWithFeeSats,
-                    ),
-                )
-                if (shouldNotifyPendingResolution(paymentHash)) {
-                    notifyPendingPaymentSucceeded()
-                }
-                return
-            }
+        val paymentHash = event.paymentHash
+        activityRepo.handlePaymentEvent(paymentHash)
+        val isQuickPay = quickPayRepo.noteTerminal(
+            paymentId = event.paymentId,
+            paymentHash = paymentHash,
+            success = true,
+            feePaidMsat = event.feePaidMsat,
+        ).wasQuickPay
+        if (!pendingPaymentRepo.isPending(paymentHash)) {
+            notifyPaymentSentOnLightning(event)
+            return
         }
-        notifyPaymentSentOnLightning(event)
+        syncContactForActivity(paymentHash)
+        val amountWithFeeSats = quickPaySettledAmountSats(paymentHash, isQuickPay, event.feePaidMsat)
+        pendingPaymentRepo.resolve(
+            PendingPaymentResolution.Success(
+                paymentHash = paymentHash,
+                amountWithFeeSats = amountWithFeeSats,
+            ),
+        )
+        if (shouldNotifyPendingResolution(paymentHash)) {
+            notifyPendingPaymentSucceeded()
+        }
+    }
+
+    private suspend fun quickPaySettledAmountSats(
+        paymentHash: String,
+        isQuickPay: Boolean,
+        feePaidMsat: ULong?,
+    ): Long? {
+        if (!isQuickPay) return null
+        val principal = (
+            activityRepo.findActivityByPaymentId(
+                paymentHashOrTxId = paymentHash,
+                type = ActivityFilter.LIGHTNING,
+                txType = PaymentType.SENT,
+                retry = true,
+            ).getOrNull() as? Activity.Lightning
+            )?.v1?.value
+        return principal?.let {
+            (it.safe() + msatFloorOf(feePaidMsat ?: 0u).safe()).toLong()
+        }
     }
 
     // region Notifications
@@ -3481,7 +3494,10 @@ class AppViewModel @Inject constructor(
     fun hideSheet() = hideSheet(shouldFlushDeferredScan = true)
 
     private fun hideSheet(shouldFlushDeferredScan: Boolean) {
-        if (_currentSheet.value is Sheet.Send) resetQuickPay()
+        if (_currentSheet.value is Sheet.Send) {
+            resetQuickPay()
+            quickPayRepo.detachAll()
+        }
         scanResultHandler = null
         receiveSheetContext = null
         sheetTransitionJob?.cancel()

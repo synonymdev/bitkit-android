@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "dayKey": "2026-08-15",
+  "spentCents": 500,
+  "records": [
+    {
+      "id": "rec-android",
+      "amountCents": 250,
+      "dayKey": "2026-08-15",
+      "invoicePaymentHash": "inv-android",
+      "paymentId": "pid-android",
+      "phase": "submitted"
+    },
+    {
+      "id": "rec-android-2",
+      "amountCents": 250,
+      "dayKey": "2026-08-15",
+      "invoicePaymentHash": "inv-android-2",
+      "paymentId": null,
+      "phase": "submitting"
+    }
+  ]
+}

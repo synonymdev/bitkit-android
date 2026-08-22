@@ -17,7 +17,7 @@ import to.bitkit.models.BalanceState
 import to.bitkit.models.FxRate
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.WalletScope
-import to.bitkit.repositories.QuickPaySpendReservation
+import to.bitkit.repositories.QuickPayLedger
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -165,9 +165,7 @@ data class AppCacheData(
     val backgroundReceive: NewTransactionSheetDetails? = null,
     val addressSearchLastUsedReceiveIndexes: Map<String, Int> = mapOf(),
     val addressSearchLastUsedChangeIndexes: Map<String, Int> = mapOf(),
-    val quickPaySpendDayKey: String = "",
-    val quickPaySpentCentsToday: Long = 0L,
-    val quickPayReservations: Map<String, QuickPaySpendReservation> = emptyMap(),
+    val quickPayLedger: QuickPayLedger? = null,
 ) {
     fun isActivityDeleted(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in deletedActivities ||

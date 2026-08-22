@@ -1257,11 +1257,22 @@ class LightningRepo @Inject constructor(
     suspend fun payInvoice(
         bolt11: String,
         sats: ULong? = null,
+    ): Result<PaymentId> = payInvoice(bolt11, sats, onBeforeSend = {})
+
+    suspend fun payInvoice(
+        bolt11: String,
+        sats: ULong? = null,
+        onBeforeSend: suspend () -> Unit,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
         waitForUsableChannels()
+        onBeforeSend()
         runCatching { lightningService.send(bolt11, sats) }.also {
             syncState()
         }
+    }
+
+    suspend fun listPaymentsOrNull(): List<PaymentDetails>? = withContext(bgDispatcher) {
+        lightningService.listPayments()
     }
 
     suspend fun waitForUsableChannels() = withContext(bgDispatcher) {

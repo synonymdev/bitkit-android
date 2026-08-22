@@ -98,7 +98,6 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayRepo
-import to.bitkit.repositories.QuickPaySpendReservation
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.SettledReceiveAddress
 import to.bitkit.repositories.SettledReceiveInvoice
@@ -230,9 +229,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         stubSettingsStore()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever { quickPayRepo.canApply(any<ULong>()) }.thenReturn(Result.success(false))
-        whenever { quickPayRepo.reservation(any()) }.thenReturn(Result.success(null))
-        whenever { quickPayRepo.clear(any()) }.thenReturn(Result.success(Unit))
-        whenever { quickPayRepo.release(any()) }.thenReturn(Result.success(Unit))
+        whenever {
+            quickPayRepo.noteTerminal(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(to.bitkit.repositories.QuickPayTerminalOutcome.None)
         whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
             .thenReturn(Result.failure(Exception("activity not found")))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
@@ -1728,7 +1727,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
         verify(activityRepo).setContact(contactPublicKey = contactKey, forPaymentId = paymentHash)
-        verify(quickPayRepo).clear(paymentHash)
+        verify(quickPayRepo).noteTerminal(
+            paymentId = "payment_id",
+            paymentHash = paymentHash,
+            success = true,
+            feePaidMsat = 10uL,
+            failureReason = null,
+        )
     }
 
     @Test
@@ -1754,7 +1759,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 reason = PaymentFailureReason.RETRIES_EXHAUSTED,
             )
         )
-        verify(quickPayRepo).release(paymentHash)
+        verify(quickPayRepo).noteTerminal(
+            paymentId = "payment_id",
+            paymentHash = paymentHash,
+            success = false,
+            feePaidMsat = null,
+            failureReason = PaymentFailureReason.RETRIES_EXHAUSTED,
+        )
         assertNull(pendingContactPaymentContext(paymentHash))
     }
 
@@ -1772,7 +1783,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(quickPayRepo).release(paymentHash)
+        verify(quickPayRepo).noteTerminal(
+            paymentId = "payment_id",
+            paymentHash = paymentHash,
+            success = false,
+            feePaidMsat = null,
+            failureReason = PaymentFailureReason.RETRIES_EXHAUSTED,
+        )
         verify(pendingPaymentRepo, never()).resolve(any())
     }
 
@@ -1780,8 +1797,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `PaymentSuccessful clears disk reservation when not pending`() = test {
         val paymentHash = "restart_ok"
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(false)
-        whenever { quickPayRepo.reservation(paymentHash) }.thenReturn(
-            Result.success(QuickPaySpendReservation(amountCents = 250L, dayKey = "2026-08-15")),
+        whenever {
+            quickPayRepo.noteTerminal(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(
+            to.bitkit.repositories.QuickPayTerminalOutcome(
+                kind = to.bitkit.repositories.QuickPayTerminalKind.SETTLED_SUCCESS,
+                invoicePaymentHash = paymentHash,
+            ),
         )
 
         emitNodeEvent(
@@ -1794,7 +1816,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(quickPayRepo).clear(paymentHash)
+        verify(quickPayRepo).noteTerminal(
+            paymentId = "payment_id",
+            paymentHash = paymentHash,
+            success = true,
+            feePaidMsat = 10uL,
+            failureReason = null,
+        )
         verify(pendingPaymentRepo, never()).resolve(any())
     }
 
@@ -1803,7 +1831,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val paymentHash = "pending_confirm_hash"
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
         whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
-        whenever { quickPayRepo.reservation(paymentHash) }.thenReturn(Result.success(null))
+        whenever {
+            quickPayRepo.noteTerminal(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(to.bitkit.repositories.QuickPayTerminalOutcome.None)
         advanceUntilIdle()
 
         emitNodeEvent(
@@ -1830,8 +1860,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val activity = mock<com.synonym.bitkitcore.Activity.Lightning> { on { v1 } doReturn activityV1 }
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
         whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
-        whenever { quickPayRepo.reservation(paymentHash) }.thenReturn(
-            Result.success(QuickPaySpendReservation(amountCents = 250L, dayKey = "2026-08-15")),
+        whenever {
+            quickPayRepo.noteTerminal(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(
+            to.bitkit.repositories.QuickPayTerminalOutcome(
+                kind = to.bitkit.repositories.QuickPayTerminalKind.SETTLED_SUCCESS,
+                invoicePaymentHash = paymentHash,
+            ),
         )
         whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
             .thenReturn(Result.success(activity))
@@ -1853,7 +1888,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amountWithFeeSats = 510L,
             ),
         )
-        verify(quickPayRepo).clear(paymentHash)
+        verify(quickPayRepo).noteTerminal(
+            paymentId = "payment_id",
+            paymentHash = paymentHash,
+            success = true,
+            feePaidMsat = 10_000uL,
+            failureReason = null,
+        )
     }
 
     @Test

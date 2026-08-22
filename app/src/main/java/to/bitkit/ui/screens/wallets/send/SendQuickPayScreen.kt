@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -19,6 +21,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.SendFailureDetails
+import to.bitkit.repositories.QuickPaySession
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
@@ -45,10 +48,16 @@ fun SendQuickPayScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lightningState by viewModel.lightningState.collectAsStateWithLifecycle()
+    val session = remember { QuickPaySession() }
+
+    DisposableEffect(session) {
+        viewModel.attach(session)
+        onDispose { viewModel.detach(session) }
+    }
 
     LaunchedEffect(quickPayData, lightningState.nodeLifecycleState) {
         if (lightningState.nodeLifecycleState is NodeLifecycleState.Running) {
-            viewModel.pay(quickPayData)
+            viewModel.pay(session, quickPayData)
         }
     }
 
