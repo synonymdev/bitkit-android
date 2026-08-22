@@ -87,16 +87,7 @@ class QuickPayRepoTest : BaseUnitTest() {
                 locale = Locale.US,
             )
         }
-        sut = QuickPayRepo(
-            cacheStore = cacheStore,
-            settingsStore = settingsStore,
-            currencyRepo = currencyRepo,
-            lightningRepo = lightningRepo,
-            pendingPaymentRepo = pendingPaymentRepo,
-            ioDispatcher = testDispatcher,
-            clock = clock,
-        )
-        sut.invoiceHashParser = { bolt11 -> bolt11.takeIf { it == TEST_BOLT11 }?.let { TEST_HASH } }
+        sut = repo()
     }
 
     @After
@@ -262,15 +253,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     @Test
     fun `fresh repo does not reserve the same recovered hash`() = test {
         assertNotNull(sut.reserveBound("inv", 1000u).getOrThrow())
-        val reloaded = QuickPayRepo(
-            cacheStore = cacheStore,
-            settingsStore = settingsStore,
-            currencyRepo = currencyRepo,
-            lightningRepo = lightningRepo,
-            pendingPaymentRepo = pendingPaymentRepo,
-            ioDispatcher = testDispatcher,
-            clock = clock,
-        )
+        val reloaded = repo()
 
         assertNull(reloaded.reserveBound("inv", 1000u).getOrThrow())
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
@@ -531,7 +514,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     private fun testInvoice(): Pair<String, String> = TEST_BOLT11 to TEST_HASH
 
     private fun repo(): QuickPayRepo {
-        val repo = QuickPayRepo(
+        val coordinator = QuickPayCoordinator(
             cacheStore = cacheStore,
             settingsStore = settingsStore,
             currencyRepo = currencyRepo,
@@ -540,6 +523,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             ioDispatcher = testDispatcher,
             clock = clock,
         )
+        val repo = QuickPayRepo(coordinator)
         repo.invoiceHashParser = { bolt11 -> bolt11.takeIf { it == TEST_BOLT11 }?.let { TEST_HASH } }
         return repo
     }
