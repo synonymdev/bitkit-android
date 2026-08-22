@@ -52,6 +52,47 @@ class QuickPayRepoTest : BaseUnitTest() {
     companion object {
         private const val TEST_BOLT11 = "lnbcrt1quickpay"
         private const val TEST_HASH = "quickpay-invoice-hash"
+        private val IOS_LEDGER_JSON = """
+            {
+              "version": 1,
+              "dayKey": "2026-08-15",
+              "spentCents": 250,
+              "records": [
+                {
+                  "id": "rec-ios",
+                  "amountCents": 250,
+                  "dayKey": "2026-08-15",
+                  "invoicePaymentHash": "inv-ios",
+                  "phase": "submitting"
+                }
+              ]
+            }
+        """.trimIndent()
+        private val ANDROID_LEDGER_JSON = """
+            {
+              "version": 1,
+              "dayKey": "2026-08-15",
+              "spentCents": 500,
+              "records": [
+                {
+                  "id": "rec-android",
+                  "amountCents": 250,
+                  "dayKey": "2026-08-15",
+                  "invoicePaymentHash": "inv-android",
+                  "paymentId": "pid-android",
+                  "phase": "submitted"
+                },
+                {
+                  "id": "rec-android-2",
+                  "amountCents": 250,
+                  "dayKey": "2026-08-15",
+                  "invoicePaymentHash": "inv-android-2",
+                  "paymentId": null,
+                  "phase": "submitting"
+                }
+              ]
+            }
+        """.trimIndent()
     }
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val cacheStore = CacheStore(context)
@@ -263,8 +304,7 @@ class QuickPayRepoTest : BaseUnitTest() {
 
     @Test
     fun `ios ledger fixture decodes`() {
-        val raw = javaClass.getResource("/quickpay/ios-ledger.json")!!.readText()
-        val ledger = json.decodeFromString<QuickPayLedger>(raw)
+        val ledger = json.decodeFromString<QuickPayLedger>(IOS_LEDGER_JSON)
         assertEquals(1, ledger.version)
         assertEquals("inv-ios", ledger.records.single().invoicePaymentHash)
         assertEquals(QuickPayRecordPhase.SUBMITTING, ledger.records.single().phase)
@@ -273,31 +313,7 @@ class QuickPayRepoTest : BaseUnitTest() {
 
     @Test
     fun `android ledger fixture decodes`() {
-        val raw = """{
-  "version": 1,
-  "dayKey": "2026-08-15",
-  "spentCents": 500,
-  "records": [
-    {
-      "id": "rec-android",
-      "amountCents": 250,
-      "dayKey": "2026-08-15",
-      "invoicePaymentHash": "inv-android",
-      "paymentId": "pid-android",
-      "phase": "submitted"
-    },
-    {
-      "id": "rec-android-2",
-      "amountCents": 250,
-      "dayKey": "2026-08-15",
-      "invoicePaymentHash": "inv-android-2",
-      "paymentId": null,
-      "phase": "submitting"
-    }
-  ]
-}
-""".trimIndent()
-        val ledger = json.decodeFromString<QuickPayLedger>(raw)
+        val ledger = json.decodeFromString<QuickPayLedger>(ANDROID_LEDGER_JSON)
         assertEquals("pid-android", ledger.records.first().paymentId)
         assertEquals(QuickPayRecordPhase.SUBMITTED, ledger.records.first().phase)
         assertEquals(QuickPayRecordPhase.SUBMITTING, ledger.records.last().phase)
