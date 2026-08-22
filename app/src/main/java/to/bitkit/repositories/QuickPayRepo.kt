@@ -1,6 +1,5 @@
 package to.bitkit.repositories
 
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
@@ -60,12 +59,18 @@ class QuickPayRepo @Inject constructor(
     companion object {
         private const val TAG = "QuickPayRepo"
         const val LEDGER_VERSION = 1
+
+        private fun hashFromBolt11(bolt11: String): String? {
+            return runCatching { Bolt11Invoice.fromStr(bolt11).paymentHash() }.getOrNull()
+        }
     }
 
     private val scope = appScope(ioDispatcher, TAG)
     private val mutex = Mutex()
     private val opsByKey = mutableMapOf<String, InFlightOp>()
     private val sessionFlows = ConcurrentHashMap<String, MutableSharedFlow<QuickPaySessionEvent>>()
+    internal var invoiceHashParser: (String) -> String? = Companion::hashFromBolt11
+    internal var paymentRows: (() -> List<QuickPayReconcileRow>?)? = null
 
     init {
         scope.launch {
@@ -132,45 +137,8 @@ class QuickPayRepo @Inject constructor(
     ): Result<QuickPayLedgerRecord?> = withContext(ioDispatcher) {
         runSuspendCatching {
             if (paymentHash.isBlank()) return@runSuspendCatching null
-            val settings = settingsStore.data.first()
-            val thresholdSats = currencyRepo.convertFiatToSats(
-                settings.quickPayAmount.toDouble(),
-                USD,
-            ).getOrNull()
-            if (thresholdSats == null || thresholdSats == 0uL || amountSats > thresholdSats) {
-                return@runSuspendCatching null
-            }
-            val converted = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrElse {
-                throw QuickPayConversionError()
-            }
-            val amountCents = quickPayReserveCents(converted.toUsdCents(), settings.quickPayAmount, amountSats)
-            val capCents = quickPayCapCents(settings.quickPayAmount, settings.quickPayDailyLimitMultiplier)
-            mutex.withLock {
-                var reserved: QuickPayLedgerRecord? = null
-                val wrote = writeLedger { ledger, dayKey ->
-                    if (ledger.recordMatching(paymentHash) != null) return@writeLedger ledger
-                    val spend = spendFor(ledger, dayKey)
-                    if (spend.spentCents > Long.MAX_VALUE - amountCents) return@writeLedger ledger
-                    val total = spend.spentCents + amountCents
-                    if (total > capCents) return@writeLedger ledger
-                    var next = ledger.pruned(spend.dayKey)
-                    val record = QuickPayLedgerRecord(
-                        id = UUID.randomUUID().toString(),
-                        amountCents = amountCents,
-                        dayKey = spend.dayKey,
-                        invoicePaymentHash = paymentHash,
-                        paymentId = null,
-                        phase = QuickPayRecordPhase.SUBMITTING,
-                    )
-                    reserved = record
-                    next.copy(
-                        dayKey = spend.dayKey,
-                        spentCents = total,
-                        records = next.records + record,
-                    )
-                }
-                if (!wrote) null else reserved
-            }
+            val prepared = prepareReserve(amountSats) ?: return@runSuspendCatching null
+            mutex.withLock { writeReserveLocked(paymentHash, prepared) }
         }
     }
 
@@ -193,7 +161,7 @@ class QuickPayRepo @Inject constructor(
     }
 
     suspend fun reconcileAgainstLdk() {
-        val rows = lightningRepo.listPaymentsOrNull()?.map { QuickPayReconcileRow(it) }
+        val rows = loadPaymentRows()
         mutex.withLock {
             val live = opsByKey.values
                 .filter { !it.dispatched }
@@ -203,135 +171,175 @@ class QuickPayRepo @Inject constructor(
         }
     }
 
-    @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount", "ThrowsCount")
-    private suspend fun payNow(session: QuickPaySession, request: QuickPayPayRequest) {
+    internal suspend fun payNow(session: QuickPaySession, request: QuickPayPayRequest) {
         val invoice = resolveInvoice(session, request) ?: return
-        val invoiceHash = parseInvoiceHash(invoice.bolt11)
-        if (invoiceHash == null) {
-            emitToSession(
-                session.id,
-                QuickPaySessionEvent.Error(
-                    invoice.parseError ?: QuickPayConversionError(),
-                    invoice.bolt11,
-                ),
-            )
-            return
+        val invoiceHash = invoiceHashOrEmit(session, invoice) ?: return
+        when (preparePay(session, invoice, invoiceHash)) {
+            PreparePayResult.LIVE -> return
+            PreparePayResult.REJECTED -> return
+            PreparePayResult.RECOVERED -> settleRecovered(invoiceHash)
+            PreparePayResult.FRESH -> {
+                dispatchBolt11(invoice, invoiceHash)
+                awaitTerminalOrPending(invoiceHash)
+            }
         }
+    }
 
-        val recovered = mutex.withLock {
+    private fun invoiceHashOrEmit(session: QuickPaySession, invoice: ResolvedInvoice): String? {
+        val invoiceHash = parseInvoiceHash(invoice.bolt11)
+        if (invoiceHash != null) return invoiceHash
+        emitToSession(
+            session.id,
+            QuickPaySessionEvent.Error(
+                invoice.parseError ?: QuickPayConversionError(),
+                invoice.bolt11,
+            ),
+        )
+        return null
+    }
+
+    private suspend fun preparePay(
+        session: QuickPaySession,
+        invoice: ResolvedInvoice,
+        invoiceHash: String,
+    ): PreparePayResult {
+        val prepared = runSuspendCatching { prepareReserve(invoice.amountSats) }.getOrElse {
+            emitToSession(session.id, QuickPaySessionEvent.Error(it, invoice.bolt11))
+            return PreparePayResult.REJECTED
+        }
+        return mutex.withLock {
             val existing = opsByKey[invoiceHash]
             if (existing != null) {
                 existing.sessionId = session.id
-                true
-            } else {
-                val open = currentLedger()?.recordMatching(invoiceHash)
-                if (open != null) {
-                    registerOp(
-                        InFlightOp(
-                            invoiceHash = invoiceHash,
-                            displaySats = invoice.amountSats,
-                            paymentRequest = invoice.bolt11,
-                            dispatched = true,
-                            sessionId = session.id,
-                            job = null,
-                            paymentId = open.paymentId,
-                        ),
-                    )
-                    true
-                } else {
-                    false
-                }
+                return@withLock PreparePayResult.LIVE
             }
-        }
-        if (recovered) {
-            reconcileAgainstLdk()
-            return
-        }
-
-        val reserved = reserveBound(invoiceHash, invoice.amountSats).getOrElse {
-            emitToSession(session.id, QuickPaySessionEvent.Error(it, invoice.bolt11))
-            return
-        }
-        if (reserved == null) {
-            Logger.info("Skipping QuickPay pay: daily spend reserve failed for '${invoice.amountSats}'", context = TAG)
-            emitToSession(session.id, QuickPaySessionEvent.FallBackToConfirm)
-            return
-        }
-
-        val op = InFlightOp(
-            invoiceHash = invoiceHash,
-            displaySats = invoice.amountSats,
-            paymentRequest = invoice.bolt11,
-            dispatched = false,
-            sessionId = session.id,
-            job = null,
-            paymentId = null,
-        )
-        val cancelledBeforeDispatch = mutex.withLock {
+            val open = currentLedger()?.recordMatching(invoiceHash)
+            if (open != null) {
+                registerOp(recoveredOp(session, invoice, invoiceHash, open))
+                return@withLock PreparePayResult.RECOVERED
+            }
+            if (prepared == null || writeReserveLocked(invoiceHash, prepared) == null) {
+                rejectCap(session, invoice)
+                return@withLock PreparePayResult.REJECTED
+            }
             if (sessionFlows[session.id] == null) {
                 writeLedger { ledger, _ -> releaseRecord(ledger, invoiceHash) }
-                true
+                return@withLock PreparePayResult.REJECTED
+            }
+            registerOp(
+                InFlightOp(
+                    invoiceHash = invoiceHash,
+                    displaySats = invoice.amountSats,
+                    paymentRequest = invoice.bolt11,
+                    dispatched = false,
+                    sessionId = session.id,
+                    job = coroutineContext[Job],
+                    paymentId = null,
+                ),
+            )
+            PreparePayResult.FRESH
+        }
+    }
+
+    private suspend fun settleRecovered(invoiceHash: String) {
+        val rows = loadPaymentRows()
+        mutex.withLock {
+            val live = opsByKey.values
+                .filter { !it.dispatched }
+                .map { it.invoiceHash }
+                .toSet()
+            reconcileLocked(rows, live)
+            val op = opsByKey[invoiceHash] ?: return@withLock
+            if (currentLedger()?.recordMatching(invoiceHash) != null) {
+                emitPendingLocked(op)
+                return@withLock
+            }
+            val match = rows?.let {
+                pickMatch(
+                    QuickPayLedgerRecord(
+                        id = invoiceHash,
+                        amountCents = 0L,
+                        dayKey = "",
+                        invoicePaymentHash = invoiceHash,
+                        paymentId = op.paymentId,
+                        phase = QuickPayRecordPhase.SUBMITTED,
+                    ),
+                    it,
+                )
+            }
+            if (match?.status == QuickPayReconcileRow.Status.SUCCEEDED) {
+                emitSuccessLocked(op, feePaidMsat = null)
             } else {
-                op.job = coroutineContext[Job]
-                registerOp(op)
-                false
+                emitErrorLocked(
+                    op,
+                    QuickPayPaymentFailedError(
+                        paymentHash = invoiceHash,
+                        reason = null,
+                        paymentRequest = op.paymentRequest,
+                    ),
+                    op.paymentRequest,
+                )
+            }
+            removeOpLocked(op)
+        }
+    }
+
+    private suspend fun dispatchBolt11(invoice: ResolvedInvoice, invoiceHash: String) {
+        lightningRepo.payInvoice(bolt11 = invoice.bolt11, sats = null) {
+            tryMarkDispatched(invoiceHash)
+        }.fold(
+            onSuccess = { onInvoiceAccepted(invoiceHash, it) },
+            onFailure = { onInvoiceRejected(invoiceHash, invoice.bolt11, it) },
+        )
+    }
+
+    private suspend fun tryMarkDispatched(invoiceHash: String): Boolean = mutex.withLock {
+        val current = opsByKey[invoiceHash] ?: return@withLock false
+        if (current.cancelBeforeDispatch) return@withLock false
+        current.dispatched = true
+        true
+    }
+
+    private suspend fun onInvoiceAccepted(invoiceHash: String, paymentId: String) {
+        markSubmittedLocked(invoiceHash, paymentId)
+        mutex.withLock {
+            val current = opsByKey[invoiceHash] ?: return@withLock
+            current.paymentId = paymentId
+            if (paymentId.isNotBlank() && paymentId != invoiceHash) {
+                opsByKey[paymentId] = current
             }
         }
-        if (cancelledBeforeDispatch) return
+    }
 
-        try {
-            val paid = lightningRepo.payInvoice(bolt11 = invoice.bolt11, sats = null) {
-                mutex.withLock {
-                    val current = opsByKey[invoiceHash]
-                    if (current == null || current.cancelBeforeDispatch) {
-                        throw CancellationException("QuickPay cancelled before send")
-                    }
-                    current.dispatched = true
-                }
-            }
-            paid.onSuccess { paymentId ->
-                markSubmittedLocked(invoiceHash, paymentId)
-                mutex.withLock {
-                    val current = opsByKey[invoiceHash] ?: return@withLock
-                    current.paymentId = paymentId
-                    if (paymentId.isNotBlank() && paymentId != invoiceHash) {
-                        opsByKey[paymentId] = current
-                    }
-                }
-            }.onFailure { error ->
-                if (error is CancellationException) throw error
-                handleDispatchError(invoiceHash, invoice.bolt11, error)
-            }
+    private suspend fun onInvoiceRejected(
+        invoiceHash: String,
+        paymentRequest: String,
+        error: Throwable,
+    ) {
+        if (error is PaymentAbortedBeforeSend) {
+            releaseIfNotDispatched(invoiceHash)
+            return
+        }
+        handleDispatchError(invoiceHash, paymentRequest, error)
+    }
 
-            val current = mutex.withLock { opsByKey[invoiceHash] } ?: return
-            withTimeoutOrNull(LightningRepo.SEND_LN_TIMEOUT) {
-                current.settled.await()
-            }
-            mutex.withLock {
-                val live = opsByKey[invoiceHash] ?: return@withLock
-                if (live.settled.isCompleted || live.emitted) return@withLock
-                val attachedId = live.sessionId
-                if (attachedId != null) {
-                    live.emitted = true
-                    pendingPaymentRepo.track(invoiceHash)
-                    emitToSession(
-                        attachedId,
-                        QuickPaySessionEvent.Pending(
-                            paymentHash = invoiceHash,
-                            amount = invoice.amountSats.toLong(),
-                            paymentRequest = invoice.bolt11,
-                        ),
-                    )
-                }
-            }
-        } catch (e: CancellationException) {
-            mutex.withLock {
-                val current = opsByKey[invoiceHash]
-                if (current == null || current.dispatched) return@withLock
-                writeLedger { ledger, _ -> releaseRecord(ledger, invoiceHash) }
-                removeOpLocked(current)
-            }
-            throw e
+    private suspend fun awaitTerminalOrPending(invoiceHash: String) {
+        val current = mutex.withLock { opsByKey[invoiceHash] } ?: return
+        withTimeoutOrNull(LightningRepo.SEND_LN_TIMEOUT) {
+            current.settled.await()
+        }
+        mutex.withLock {
+            val live = opsByKey[invoiceHash] ?: return@withLock
+            emitPendingLocked(live)
+        }
+    }
+
+    private suspend fun releaseIfNotDispatched(invoiceHash: String) {
+        mutex.withLock {
+            val current = opsByKey[invoiceHash]
+            if (current == null || current.dispatched) return@withLock
+            writeLedger { ledger, _ -> releaseRecord(ledger, invoiceHash) }
+            removeOpLocked(current)
         }
     }
 
@@ -365,9 +373,7 @@ class QuickPayRepo @Inject constructor(
         }
     }
 
-    private fun parseInvoiceHash(bolt11: String): String? {
-        return runCatching { Bolt11Invoice.fromStr(bolt11).paymentHash() }.getOrNull()
-    }
+    private fun parseInvoiceHash(bolt11: String): String? = invoiceHashParser(bolt11)
 
     private suspend fun handleDispatchError(
         invoiceHash: String,
@@ -375,40 +381,54 @@ class QuickPayRepo @Inject constructor(
         error: Throwable,
     ) {
         when (classifyDispatchError(error)) {
-            QuickPayDispatchClass.PRE_DISPATCH_REJECTION,
-            QuickPayDispatchClass.DUPLICATE_PAYMENT,
-            -> {
+            QuickPayDispatchClass.PRE_DISPATCH_REJECTION -> {
                 mutex.withLock {
-                    val outcome = noteTerminalLocked(
+                    noteTerminalLocked(
                         paymentId = null,
                         paymentHash = invoiceHash,
                         success = false,
                     )
-                    emitOutcome(outcome, invoiceHash, error, paymentRequest)
+                    emitOutcome(invoiceHash, error, paymentRequest)
                 }
             }
-            QuickPayDispatchClass.AMBIGUOUS -> {
-                val rows = lightningRepo.listPaymentsOrNull()?.map { QuickPayReconcileRow(it) }
+            QuickPayDispatchClass.DUPLICATE_PAYMENT,
+            QuickPayDispatchClass.AMBIGUOUS,
+            -> {
+                val rows = loadPaymentRows()
                 mutex.withLock {
-                    val record = currentLedger()?.recordMatching(invoiceHash)
-                    if (record != null && rows != null) {
-                        applyAmbiguousLookupLocked(record, rows)
-                    }
-                    val remaining = currentLedger()?.recordMatching(invoiceHash)
-                    val op = opsByKey[invoiceHash]
-                    if (remaining == null) {
-                        op?.let { removeOpLocked(it) }
-                    } else {
-                        op?.dispatched = true
-                    }
-                    emitToSession(
-                        op?.sessionId,
-                        QuickPaySessionEvent.Error(error, paymentRequest),
-                    )
-                    op?.emitted = true
+                    settleAmbiguousLocked(invoiceHash, paymentRequest, error, rows)
                 }
             }
         }
+    }
+
+    private suspend fun settleAmbiguousLocked(
+        invoiceHash: String,
+        paymentRequest: String,
+        error: Throwable,
+        rows: List<QuickPayReconcileRow>?,
+    ) {
+        val record = currentLedger()?.recordMatching(invoiceHash)
+        val applied = if (record != null && rows != null) {
+            applyAmbiguousLookupLocked(record, rows)
+        } else {
+            AmbiguousApply.UNCHANGED
+        }
+        val remaining = currentLedger()?.recordMatching(invoiceHash)
+        val op = opsByKey[invoiceHash]
+        if (remaining != null) {
+            op?.dispatched = true
+            op?.let { emitPendingLocked(it) }
+            return
+        }
+        if (op == null) return
+        when (applied) {
+            AmbiguousApply.SUCCEEDED -> emitSuccessLocked(op, feePaidMsat = null)
+            AmbiguousApply.FAILED,
+            AmbiguousApply.UNCHANGED,
+            -> emitErrorLocked(op, error, paymentRequest)
+        }
+        removeOpLocked(op)
     }
 
     private suspend fun detachSession(sessionId: String) {
@@ -484,16 +504,12 @@ class QuickPayRepo @Inject constructor(
             kind = kind,
             invoicePaymentHash = record.invoicePaymentHash,
         )
-        if (op != null && !op.emitted) {
-            op.emitted = true
-            val event = if (success) {
-                val feeSats = msatFloorOf(feePaidMsat ?: 0u)
-                QuickPaySessionEvent.Success(
-                    paymentHash = record.invoicePaymentHash,
-                    amountWithFee = (op.displaySats.safe() + feeSats.safe()).toLong(),
-                )
+        if (op != null) {
+            if (success) {
+                emitSuccessLocked(op, feePaidMsat)
             } else {
-                QuickPaySessionEvent.Error(
+                emitErrorLocked(
+                    op,
                     QuickPayPaymentFailedError(
                         paymentHash = record.invoicePaymentHash,
                         reason = failureReason,
@@ -502,12 +518,7 @@ class QuickPayRepo @Inject constructor(
                     op.paymentRequest,
                 )
             }
-            emitToSession(op.sessionId, event)
-            op.settled.complete(Unit)
             removeOpLocked(op)
-        } else {
-            op?.settled?.complete(Unit)
-            op?.let { removeOpLocked(it) }
         }
         return outcome
     }
@@ -537,15 +548,16 @@ class QuickPayRepo @Inject constructor(
     private suspend fun applyAmbiguousLookupLocked(
         record: QuickPayLedgerRecord,
         rows: List<QuickPayReconcileRow>,
-    ) {
-        val match = pickMatch(record, rows) ?: return
-        when (match.status) {
-            QuickPayReconcileRow.Status.PENDING -> Unit
+    ): AmbiguousApply {
+        val match = pickMatch(record, rows) ?: return AmbiguousApply.UNCHANGED
+        return when (match.status) {
+            QuickPayReconcileRow.Status.PENDING -> AmbiguousApply.UNCHANGED
             QuickPayReconcileRow.Status.SUCCEEDED -> {
                 writeLedger { ledger, _ ->
                     val index = ledger.recordIndex(record.invoicePaymentHash) ?: return@writeLedger ledger
                     ledger.copy(records = ledger.records.toMutableList().also { it.removeAt(index) })
                 }
+                AmbiguousApply.SUCCEEDED
             }
             QuickPayReconcileRow.Status.FAILED -> {
                 val attributed = isAttributedFailure(
@@ -555,9 +567,10 @@ class QuickPayRepo @Inject constructor(
                     match.invoicePaymentHash,
                 )
                 if (!attributed) {
-                    return
+                    return AmbiguousApply.UNCHANGED
                 }
                 writeLedger { ledger, _ -> releaseRecord(ledger, record.invoicePaymentHash) }
+                AmbiguousApply.FAILED
             }
         }
     }
@@ -651,6 +664,29 @@ class QuickPayRepo @Inject constructor(
         return supported
     }
 
+    private fun recoveredOp(
+        session: QuickPaySession,
+        invoice: ResolvedInvoice,
+        invoiceHash: String,
+        open: QuickPayLedgerRecord,
+    ) = InFlightOp(
+        invoiceHash = invoiceHash,
+        displaySats = invoice.amountSats,
+        paymentRequest = invoice.bolt11,
+        dispatched = true,
+        sessionId = session.id,
+        job = null,
+        paymentId = open.paymentId,
+    )
+
+    private fun rejectCap(session: QuickPaySession, invoice: ResolvedInvoice) {
+        Logger.info(
+            "Skipping QuickPay pay: daily spend reserve failed for '${invoice.amountSats}'",
+            context = TAG,
+        )
+        emitToSession(session.id, QuickPaySessionEvent.FallBackToConfirm)
+    }
+
     private fun registerOp(op: InFlightOp) {
         opsByKey[op.invoiceHash] = op
         op.paymentId?.takeIf { it.isNotBlank() && it != op.invoiceHash }?.let { opsByKey[it] = op }
@@ -661,21 +697,108 @@ class QuickPayRepo @Inject constructor(
     }
 
     private fun emitOutcome(
-        outcome: QuickPayTerminalOutcome,
         invoiceHash: String,
         error: Throwable,
         paymentRequest: String,
     ) {
-        val op = opsByKey[invoiceHash]
-        if (op != null && !op.emitted) {
-            op.emitted = true
-            emitToSession(op.sessionId, QuickPaySessionEvent.Error(error, paymentRequest))
+        val op = opsByKey[invoiceHash] ?: return
+        emitErrorLocked(op, error, paymentRequest)
+        removeOpLocked(op)
+    }
+
+    private fun emitPendingLocked(op: InFlightOp) {
+        if (op.settled.isCompleted || op.emitted) return
+        val sessionId = op.sessionId ?: return
+        op.emitted = true
+        pendingPaymentRepo.track(op.invoiceHash)
+        emitToSession(
+            sessionId,
+            QuickPaySessionEvent.Pending(
+                paymentHash = op.invoiceHash,
+                amount = op.displaySats.toLong(),
+                paymentRequest = op.paymentRequest,
+            ),
+        )
+        op.settled.complete(Unit)
+    }
+
+    private fun emitSuccessLocked(op: InFlightOp, feePaidMsat: ULong?) {
+        if (op.emitted) {
             op.settled.complete(Unit)
+            return
         }
-        op?.let { removeOpLocked(it) }
-        if (outcome == QuickPayTerminalOutcome.None) {
-            emitToSession(op?.sessionId, QuickPaySessionEvent.Error(error, paymentRequest))
+        op.emitted = true
+        val feeSats = msatFloorOf(feePaidMsat ?: 0u)
+        emitToSession(
+            op.sessionId,
+            QuickPaySessionEvent.Success(
+                paymentHash = op.invoiceHash,
+                amountWithFee = (op.displaySats.safe() + feeSats.safe()).toLong(),
+            ),
+        )
+        op.settled.complete(Unit)
+    }
+
+    private fun emitErrorLocked(op: InFlightOp, error: Throwable, paymentRequest: String?) {
+        if (op.emitted) {
+            op.settled.complete(Unit)
+            return
         }
+        op.emitted = true
+        emitToSession(op.sessionId, QuickPaySessionEvent.Error(error, paymentRequest))
+        op.settled.complete(Unit)
+    }
+
+    private suspend fun prepareReserve(amountSats: ULong): PreparedReserve? {
+        val settings = settingsStore.data.first()
+        val thresholdSats = currencyRepo.convertFiatToSats(
+            settings.quickPayAmount.toDouble(),
+            USD,
+        ).getOrNull()
+        if (thresholdSats == null || thresholdSats == 0uL || amountSats > thresholdSats) {
+            return null
+        }
+        val converted = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrElse {
+            throw QuickPayConversionError()
+        }
+        val amountCents = quickPayReserveCents(converted.toUsdCents(), settings.quickPayAmount, amountSats)
+        val capCents = quickPayCapCents(settings.quickPayAmount, settings.quickPayDailyLimitMultiplier)
+        return PreparedReserve(amountCents, capCents)
+    }
+
+    private suspend fun writeReserveLocked(
+        paymentHash: String,
+        prepared: PreparedReserve,
+    ): QuickPayLedgerRecord? {
+        var reserved: QuickPayLedgerRecord? = null
+        val wrote = writeLedger { ledger, dayKey ->
+            if (ledger.recordMatching(paymentHash) != null) return@writeLedger ledger
+            val spend = spendFor(ledger, dayKey)
+            if (spend.spentCents > Long.MAX_VALUE - prepared.amountCents) return@writeLedger ledger
+            val total = spend.spentCents + prepared.amountCents
+            if (total > prepared.capCents) return@writeLedger ledger
+            val next = ledger.pruned(spend.dayKey)
+            val record = QuickPayLedgerRecord(
+                id = UUID.randomUUID().toString(),
+                amountCents = prepared.amountCents,
+                dayKey = spend.dayKey,
+                invoicePaymentHash = paymentHash,
+                paymentId = null,
+                phase = QuickPayRecordPhase.SUBMITTING,
+            )
+            reserved = record
+            next.copy(
+                dayKey = spend.dayKey,
+                spentCents = total,
+                records = next.records + record,
+            )
+        }
+        return if (!wrote) null else reserved
+    }
+
+    private suspend fun loadPaymentRows(): List<QuickPayReconcileRow>? {
+        paymentRows?.let { return it() }
+        return lightningRepo.listPaymentsOrNull()?.map { QuickPayReconcileRow(it) }
     }
 
     private fun emitToSession(sessionId: String?, event: QuickPaySessionEvent) {
@@ -711,12 +834,18 @@ class QuickPayRepo @Inject constructor(
         val supported: Boolean,
         val ledger: QuickPayLedger?,
     )
+
+    private data class PreparedReserve(
+        val amountCents: Long,
+        val capCents: Long,
+    )
+
+    private enum class PreparePayResult { LIVE, RECOVERED, FRESH, REJECTED }
+
+    private enum class AmbiguousApply { UNCHANGED, SUCCEEDED, FAILED }
 }
 
 internal fun classifyDispatchError(error: Throwable): QuickPayDispatchClass {
-    if (PrivatePaykitErrorClassifier.isDuplicatePaymentError(error)) {
-        return QuickPayDispatchClass.DUPLICATE_PAYMENT
-    }
     return when (error.asNodeException()) {
         is NodeException.InvalidInvoice,
         is NodeException.InvalidAmount,

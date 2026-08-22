@@ -3,8 +3,12 @@ package to.bitkit.repositories
 import android.app.Application
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
+import app.cash.turbine.test
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Before
@@ -13,8 +17,10 @@ import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.NodeException
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
@@ -32,15 +38,21 @@ import java.math.BigDecimal
 import java.util.Locale
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Instant
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @Config(application = Application::class, sdk = [34])
 @RunWith(RobolectricTestRunner::class)
 class QuickPayRepoTest : BaseUnitTest() {
+    companion object {
+        private const val TEST_BOLT11 = "lnbcrt1quickpay"
+        private const val TEST_HASH = "quickpay-invoice-hash"
+    }
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val cacheStore = CacheStore(context)
     private val settingsStore: SettingsStore = mock()
@@ -84,6 +96,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             ioDispatcher = testDispatcher,
             clock = clock,
         )
+        sut.invoiceHashParser = { bolt11 -> bolt11.takeIf { it == TEST_BOLT11 }?.let { TEST_HASH } }
     }
 
     @After
@@ -275,7 +288,30 @@ class QuickPayRepoTest : BaseUnitTest() {
 
     @Test
     fun `android ledger fixture decodes`() {
-        val raw = javaClass.getResource("/quickpay/android-ledger.json")!!.readText()
+        val raw = """{
+  "version": 1,
+  "dayKey": "2026-08-15",
+  "spentCents": 500,
+  "records": [
+    {
+      "id": "rec-android",
+      "amountCents": 250,
+      "dayKey": "2026-08-15",
+      "invoicePaymentHash": "inv-android",
+      "paymentId": "pid-android",
+      "phase": "submitted"
+    },
+    {
+      "id": "rec-android-2",
+      "amountCents": 250,
+      "dayKey": "2026-08-15",
+      "invoicePaymentHash": "inv-android-2",
+      "paymentId": null,
+      "phase": "submitting"
+    }
+  ]
+}
+""".trimIndent()
         val ledger = json.decodeFromString<QuickPayLedger>(raw)
         assertEquals("pid-android", ledger.records.first().paymentId)
         assertEquals(QuickPayRecordPhase.SUBMITTED, ledger.records.first().phase)
@@ -354,6 +390,109 @@ class QuickPayRepoTest : BaseUnitTest() {
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
     }
 
+    @Test
+    fun `duplicate payment with pending ldk does not refund`() = test {
+        val (bolt11, hash) = testInvoice()
+        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        sut.paymentRows = { listOf(pendingRow(hash)) }
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            val pending = assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+            assertEquals(hash, pending.paymentHash)
+        }
+        assertEquals(250L, spentCents())
+        assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
+    }
+
+    @Test
+    fun `duplicate payment with succeeded ldk keeps spend and emits success`() = test {
+        val (bolt11, hash) = testInvoice()
+        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        sut.paymentRows = { listOf(succeededRow(hash)) }
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            val success = assertIs<QuickPaySessionEvent.Success>(awaitItem())
+            assertEquals(hash, success.paymentHash)
+        }
+        assertEquals(250L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+    }
+
+    @Test
+    fun `ambiguous pending emits pending and keeps spend`() = test {
+        val (bolt11, hash) = testInvoice()
+        stubPayInvoiceFailure(NodeException.PaymentSendingFailed("send"))
+        sut.paymentRows = { listOf(pendingRow(hash)) }
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            val pending = assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+            assertEquals(hash, pending.paymentHash)
+        }
+        assertEquals(250L, spentCents())
+        verify(pendingPaymentRepo).track(hash)
+    }
+
+    @Test
+    fun `second pay of an in-flight hash does not fall back to confirm`() = test {
+        val (bolt11, _) = testInvoice()
+        val started = CompletableDeferred<Unit>()
+        val hold = CompletableDeferred<Result<String>>()
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer {
+            started.complete(Unit)
+            hold.await()
+        }
+        val session = QuickPaySession()
+        sut.attach(session)
+        backgroundScope.launch {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+        }
+        started.await()
+        sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+
+        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
+        hold.complete(Result.success("pid"))
+    }
+
+    @Test
+    fun `recovered submitting hash emits pending and does not pay`() = test {
+        val (bolt11, hash) = testInvoice()
+        assertNotNull(sut.reserveBound(hash, 500u).getOrThrow())
+        val reloaded = repo()
+        val session = QuickPaySession()
+
+        reloaded.attach(session).test {
+            reloaded.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            val pending = assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+            assertEquals(hash, pending.paymentHash)
+        }
+        assertEquals(250L, spentCents())
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+        verify(pendingPaymentRepo).track(hash)
+    }
+
+    @Test
+    fun `recovered hash that ldk already succeeded emits success`() = test {
+        val (bolt11, hash) = testInvoice()
+        assertNotNull(sut.reserveBound(hash, 500u).getOrThrow())
+        val reloaded = repo()
+        reloaded.paymentRows = { listOf(succeededRow(hash)) }
+        val session = QuickPaySession()
+
+        reloaded.attach(session).test {
+            reloaded.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Success>(awaitItem())
+        }
+        assertEquals(250L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+        verify(lightningRepo, never()).payInvoice(any(), anyOrNull(), any())
+    }
+
     private suspend fun spentCents(): Long =
         cacheStore.data.first().quickPayLedger?.spentCents ?: 0L
 
@@ -368,6 +507,41 @@ class QuickPayRepoTest : BaseUnitTest() {
             val next = ledger.copy(records = ledger.records.toMutableList().also { it[index] = record })
             data.copy(quickPayLedger = next)
         }
+    }
+
+    private suspend fun stubPayInvoiceFailure(error: NodeException) {
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }
+            .thenReturn(Result.failure(LdkError(error)))
+    }
+
+    private fun pendingRow(hash: String) = QuickPayReconcileRow(
+        paymentId = "pid",
+        invoicePaymentHash = hash,
+        isOutboundBolt11 = true,
+        status = QuickPayReconcileRow.Status.PENDING,
+    )
+
+    private fun succeededRow(hash: String) = QuickPayReconcileRow(
+        paymentId = "pid",
+        invoicePaymentHash = hash,
+        isOutboundBolt11 = true,
+        status = QuickPayReconcileRow.Status.SUCCEEDED,
+    )
+
+    private fun testInvoice(): Pair<String, String> = TEST_BOLT11 to TEST_HASH
+
+    private fun repo(): QuickPayRepo {
+        val repo = QuickPayRepo(
+            cacheStore = cacheStore,
+            settingsStore = settingsStore,
+            currencyRepo = currencyRepo,
+            lightningRepo = lightningRepo,
+            pendingPaymentRepo = pendingPaymentRepo,
+            ioDispatcher = testDispatcher,
+            clock = clock,
+        )
+        repo.invoiceHashParser = { bolt11 -> bolt11.takeIf { it == TEST_BOLT11 }?.let { TEST_HASH } }
+        return repo
     }
 
     private fun stubZeroCentConversion(dustSats: Long) {

@@ -1257,15 +1257,15 @@ class LightningRepo @Inject constructor(
     suspend fun payInvoice(
         bolt11: String,
         sats: ULong? = null,
-    ): Result<PaymentId> = payInvoice(bolt11, sats, onBeforeSend = {})
+    ): Result<PaymentId> = payInvoice(bolt11, sats, onBeforeSend = { true })
 
     suspend fun payInvoice(
         bolt11: String,
         sats: ULong? = null,
-        onBeforeSend: suspend () -> Unit,
+        onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
         waitForUsableChannels()
-        onBeforeSend()
+        if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         runCatching { lightningService.send(bolt11, sats) }.also {
             syncState()
         }
@@ -2106,6 +2106,7 @@ class NodeConfigNotAppliedError : AppError("Node already running, requested conf
 class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node to run and execute: '$opName'")
 class GetPaymentsError : AppError("It wasn't possible get the payments")
 class SyncUnhealthyError : AppError("Wallet sync failed before send")
+class PaymentAbortedBeforeSend : AppError("Payment aborted before send")
 class LnurlPayInvoiceMismatchError : AppError("The invoice did not match the requested payment. Payment cancelled.")
 class PaymentRoutingRefreshTimeoutError : AppError("Timeout waiting for payment routing data refresh")
 
