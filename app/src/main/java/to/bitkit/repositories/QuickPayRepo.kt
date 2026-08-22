@@ -50,18 +50,6 @@ class QuickPayRepo @Inject constructor(
         session: QuickPaySession,
         request: QuickPayPayRequest,
     ) = coordinator.payNow(session, request)
-
-    internal var invoiceHashParser: (String) -> String?
-        get() = coordinator.invoiceHashParser
-        set(value) {
-            coordinator.invoiceHashParser = value
-        }
-
-    internal var paymentRows: (() -> List<QuickPayReconcileRow>?)?
-        get() = coordinator.paymentRows
-        set(value) {
-            coordinator.paymentRows = value
-        }
 }
 
 data class QuickPaySession(val id: String = UUID.randomUUID().toString())

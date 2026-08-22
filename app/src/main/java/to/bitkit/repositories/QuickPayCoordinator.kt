@@ -17,7 +17,6 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
@@ -44,6 +43,14 @@ import javax.inject.Singleton
 import kotlin.coroutines.coroutineContext
 import kotlin.time.Clock
 
+fun interface QuickPayInvoiceParser {
+    fun parse(bolt11: String): String?
+}
+
+fun interface QuickPayPaymentLookup {
+    suspend fun rows(): List<QuickPayReconcileRow>?
+}
+
 @Singleton
 class QuickPayCoordinator @Inject constructor(
     cacheStore: CacheStore,
@@ -51,14 +58,13 @@ class QuickPayCoordinator @Inject constructor(
     private val currencyRepo: CurrencyRepo,
     private val lightningRepo: LightningRepo,
     private val pendingPaymentRepo: PendingPaymentRepo,
+    private val invoiceParser: QuickPayInvoiceParser,
+    private val paymentLookup: QuickPayPaymentLookup,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     clock: Clock,
 ) {
     companion object {
         private const val TAG = "QuickPayCoordinator"
-        private fun hashFromBolt11(bolt11: String): String? {
-            return runCatching { Bolt11Invoice.fromStr(bolt11).paymentHash() }.getOrNull()
-        }
     }
 
     private val spend = QuickPaySpendStore(cacheStore, clock)
@@ -66,8 +72,6 @@ class QuickPayCoordinator @Inject constructor(
     private val mutex = Mutex()
     private val opsByKey = mutableMapOf<String, InFlightOp>()
     private val sessionFlows = ConcurrentHashMap<String, MutableSharedFlow<QuickPaySessionEvent>>()
-    internal var invoiceHashParser: (String) -> String? = Companion::hashFromBolt11
-    internal var paymentRows: (() -> List<QuickPayReconcileRow>?)? = null
 
     init {
         scope.launch {
@@ -177,7 +181,7 @@ class QuickPayCoordinator @Inject constructor(
     }
 
     private fun invoiceHashOrEmit(session: QuickPaySession, invoice: ResolvedInvoice): String? {
-        val invoiceHash = invoiceHashParser(invoice.bolt11)
+        val invoiceHash = invoiceParser.parse(invoice.bolt11)
         if (invoiceHash != null) return invoiceHash
         emitToSession(
             session.id,
@@ -665,10 +669,7 @@ class QuickPayCoordinator @Inject constructor(
         return PreparedReserve(amountCents, capCents)
     }
 
-    private suspend fun loadPaymentRows(): List<QuickPayReconcileRow>? {
-        paymentRows?.let { return it() }
-        return lightningRepo.listPaymentsOrNull()?.map { QuickPayReconcileRow(it) }
-    }
+    private suspend fun loadPaymentRows(): List<QuickPayReconcileRow>? = paymentLookup.rows()
 
     private fun emitToSession(sessionId: String?, event: QuickPaySessionEvent) {
         if (sessionId == null) return
