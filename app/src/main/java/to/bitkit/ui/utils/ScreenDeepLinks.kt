@@ -41,9 +41,10 @@ object ScreenDeepLinks {
     fun spendingHwSignLink(uri: Uri): SpendingHwSignLink? {
         if (!isScreenDeepLink(uri)) return null
         val segments = uri.pathSegments.orEmpty()
-        if (segments.size != 3) return null
-        val screenId = kebabId(Routes.SpendingHwSign::class) ?: return null
-        if (!segments[0].equals(screenId, ignoreCase = true)) return null
+        val screenId = kebabId(Routes.SpendingHwSign::class)
+        if (segments.size != 3 || screenId == null || !segments[0].equals(screenId, ignoreCase = true)) {
+            return null
+        }
         val walletId = segments[1]
         val orderId = segments[2]
         if (walletId.isBlank() || orderId.isBlank()) return null
