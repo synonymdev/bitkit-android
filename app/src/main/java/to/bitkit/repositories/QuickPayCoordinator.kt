@@ -52,6 +52,7 @@ fun interface QuickPayPaymentLookup {
 }
 
 @Singleton
+@Suppress("LongParameterList")
 class QuickPayCoordinator @Inject constructor(
     cacheStore: CacheStore,
     private val settingsStore: SettingsStore,
@@ -776,6 +777,7 @@ internal class QuickPaySpendStore(
         }
     }
 
+    @Suppress("LoopWithTooManyJumpStatements")
     suspend fun applyReconcile(
         rows: List<QuickPayReconcileRow>?,
         liveSubmittingHashes: Set<String>,
