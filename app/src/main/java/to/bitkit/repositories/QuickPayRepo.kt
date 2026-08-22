@@ -30,13 +30,13 @@ class QuickPayRepo @Inject constructor(
         amountSats: ULong,
     ): Result<QuickPayLedgerRecord?> = coordinator.reserveBound(paymentHash, amountSats)
 
-    suspend fun noteTerminal(
+    suspend fun signalCompletion(
         paymentId: String?,
         paymentHash: String?,
         success: Boolean,
         feePaidMsat: ULong? = null,
         failureReason: PaymentFailureReason? = null,
-    ): QuickPayTerminalOutcome = coordinator.noteTerminal(
+    ): QuickPayCompletionOutcome = coordinator.signalCompletion(
         paymentId = paymentId,
         paymentHash = paymentHash,
         success = success,
@@ -88,20 +88,20 @@ sealed interface QuickPaySessionEvent {
     ) : QuickPaySessionEvent
 }
 
-enum class QuickPayTerminalKind {
+enum class QuickPayCompletionKind {
     NONE,
     SETTLED_SUCCESS,
     SETTLED_FAILURE,
 }
 
-data class QuickPayTerminalOutcome(
-    val kind: QuickPayTerminalKind = QuickPayTerminalKind.NONE,
+data class QuickPayCompletionOutcome(
+    val kind: QuickPayCompletionKind = QuickPayCompletionKind.NONE,
     val invoicePaymentHash: String? = null,
 ) {
-    val wasQuickPay: Boolean get() = kind != QuickPayTerminalKind.NONE
+    val wasQuickPay: Boolean get() = kind != QuickPayCompletionKind.NONE
 
     companion object {
-        val None = QuickPayTerminalOutcome()
+        val None = QuickPayCompletionOutcome()
     }
 }
 

@@ -143,15 +143,15 @@ class QuickPayCoordinator @Inject constructor(
         }
     }
 
-    suspend fun noteTerminal(
+    suspend fun signalCompletion(
         paymentId: String?,
         paymentHash: String?,
         success: Boolean,
         feePaidMsat: ULong? = null,
         failureReason: PaymentFailureReason? = null,
-    ): QuickPayTerminalOutcome = withContext(ioDispatcher) {
+    ): QuickPayCompletionOutcome = withContext(ioDispatcher) {
         mutex.withLock {
-            noteTerminalLocked(
+            signalCompletionLocked(
                 paymentId = paymentId,
                 paymentHash = paymentHash,
                 success = success,
@@ -175,7 +175,7 @@ class QuickPayCoordinator @Inject constructor(
             PreparePayResult.RECOVERED -> settleRecovered(invoiceHash)
             PreparePayResult.FRESH -> {
                 dispatchBolt11(invoice, invoiceHash)
-                awaitTerminalOrPending(invoiceHash)
+                awaitCompletionOrPending(invoiceHash)
             }
         }
     }
@@ -314,7 +314,7 @@ class QuickPayCoordinator @Inject constructor(
         handleDispatchError(invoiceHash, paymentRequest, error)
     }
 
-    private suspend fun awaitTerminalOrPending(invoiceHash: String) {
+    private suspend fun awaitCompletionOrPending(invoiceHash: String) {
         val current = mutex.withLock { opsByKey[invoiceHash] } ?: return
         withTimeoutOrNull(LightningRepo.SEND_LN_TIMEOUT) {
             current.settled.await()
@@ -372,7 +372,7 @@ class QuickPayCoordinator @Inject constructor(
         when (classifyDispatchError(error)) {
             QuickPayDispatchClass.PRE_DISPATCH_REJECTION -> {
                 mutex.withLock {
-                    noteTerminalLocked(
+                    signalCompletionLocked(
                         paymentId = null,
                         paymentHash = invoiceHash,
                         success = false,
@@ -435,34 +435,34 @@ class QuickPayCoordinator @Inject constructor(
     }
 
     @Suppress("CyclomaticComplexMethod", "ReturnCount")
-    private suspend fun noteTerminalLocked(
+    private suspend fun signalCompletionLocked(
         paymentId: String?,
         paymentHash: String?,
         success: Boolean,
         feePaidMsat: ULong? = null,
         failureReason: PaymentFailureReason? = null,
-    ): QuickPayTerminalOutcome {
+    ): QuickPayCompletionOutcome {
         val keys = listOfNotNull(paymentId, paymentHash).filter { it.isNotBlank() }
-        if (keys.isEmpty()) return QuickPayTerminalOutcome.None
+        if (keys.isEmpty()) return QuickPayCompletionOutcome.None
 
         val snapshot = spend.snapshot()
-        if (!snapshot.supported) return QuickPayTerminalOutcome.None
-        val ledger = snapshot.ledger ?: return QuickPayTerminalOutcome.None
-        val index = keys.firstNotNullOfOrNull { ledger.recordIndex(it) } ?: return QuickPayTerminalOutcome.None
+        if (!snapshot.supported) return QuickPayCompletionOutcome.None
+        val ledger = snapshot.ledger ?: return QuickPayCompletionOutcome.None
+        val index = keys.firstNotNullOfOrNull { ledger.recordIndex(it) } ?: return QuickPayCompletionOutcome.None
         val record = ledger.records[index]
         val op = opsByKey[record.invoicePaymentHash] ?: record.paymentId?.let { opsByKey[it] }
         if (!success && !isAttributedFailure(record, op, paymentId, paymentHash)) {
-            return QuickPayTerminalOutcome.None
+            return QuickPayCompletionOutcome.None
         }
 
         spend.settle(keys, success)
 
         val kind = if (success) {
-            QuickPayTerminalKind.SETTLED_SUCCESS
+            QuickPayCompletionKind.SETTLED_SUCCESS
         } else {
-            QuickPayTerminalKind.SETTLED_FAILURE
+            QuickPayCompletionKind.SETTLED_FAILURE
         }
-        val outcome = QuickPayTerminalOutcome(
+        val outcome = QuickPayCompletionOutcome(
             kind = kind,
             invoicePaymentHash = record.invoicePaymentHash,
         )

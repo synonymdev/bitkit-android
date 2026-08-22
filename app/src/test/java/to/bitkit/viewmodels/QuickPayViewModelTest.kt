@@ -96,7 +96,7 @@ class QuickPayViewModelTest : BaseUnitTest() {
             session,
             QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u),
         )
-        verify(quickPayRepo, never()).noteTerminal(any(), any(), any(), any(), any())
+        verify(quickPayRepo, never()).signalCompletion(any(), any(), any(), any(), any())
     }
 
     @Test
@@ -136,12 +136,12 @@ class QuickPayViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `viewmodel has no settlement methods on the repo besides noteTerminal from events`() = test {
+    fun `viewmodel has no settlement methods on the repo besides signalCompletion from events`() = test {
         val session = QuickPaySession()
         sut.attach(session)
         sut.pay(session, QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test"))
         advanceUntilIdle()
 
-        verify(quickPayRepo, never()).noteTerminal(any(), any(), any(), any(), any())
+        verify(quickPayRepo, never()).signalCompletion(any(), any(), any(), any(), any())
     }
 }

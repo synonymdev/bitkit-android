@@ -133,70 +133,70 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `noteTerminal failure rolls back a reservation`() = test {
+    fun `signalCompletion failure rolls back a reservation`() = test {
         assertNotNull(sut.reserveBound("abc", 1000u).getOrThrow())
         markSubmitted("abc", "pid")
 
-        val outcome = sut.noteTerminal(paymentId = "pid", paymentHash = "abc", success = false)
+        val outcome = sut.signalCompletion(paymentId = "pid", paymentHash = "abc", success = false)
 
-        assertEquals(QuickPayTerminalKind.SETTLED_FAILURE, outcome.kind)
+        assertEquals(QuickPayCompletionKind.SETTLED_FAILURE, outcome.kind)
         assertEquals(0L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
     }
 
     @Test
-    fun `noteTerminal failure on a prior day does not decrement the new day`() = test {
+    fun `signalCompletion failure on a prior day does not decrement the new day`() = test {
         assertNotNull(sut.reserveBound("old", 1000u).getOrThrow())
         markSubmitted("old", "old-pid")
         clock.instant = Instant.parse("2026-08-16T12:00:00Z")
         assertNotNull(sut.reserveBound("new", 800u).getOrThrow())
 
-        sut.noteTerminal(paymentId = "old-pid", paymentHash = "old", success = false)
+        sut.signalCompletion(paymentId = "old-pid", paymentHash = "old", success = false)
 
         assertEquals(400L, spentCents())
     }
 
     @Test
-    fun `noteTerminal success keeps spend`() = test {
+    fun `signalCompletion success keeps spend`() = test {
         assertNotNull(sut.reserveBound("abc", 1000u).getOrThrow())
 
-        val outcome = sut.noteTerminal(paymentId = "pid", paymentHash = "abc", success = true)
+        val outcome = sut.signalCompletion(paymentId = "pid", paymentHash = "abc", success = true)
 
-        assertEquals(QuickPayTerminalKind.SETTLED_SUCCESS, outcome.kind)
+        assertEquals(QuickPayCompletionKind.SETTLED_SUCCESS, outcome.kind)
         assertEquals(500L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
     }
 
     @Test
-    fun `noteTerminal is idempotent`() = test {
+    fun `signalCompletion is idempotent`() = test {
         assertNotNull(sut.reserveBound("abc", 1000u).getOrThrow())
-        sut.noteTerminal(paymentId = null, paymentHash = "abc", success = true)
+        sut.signalCompletion(paymentId = null, paymentHash = "abc", success = true)
 
-        val second = sut.noteTerminal(paymentId = null, paymentHash = "abc", success = true)
+        val second = sut.signalCompletion(paymentId = null, paymentHash = "abc", success = true)
 
-        assertEquals(QuickPayTerminalOutcome.None, second)
+        assertEquals(QuickPayCompletionOutcome.None, second)
         assertEquals(500L, spentCents())
     }
 
     @Test
     fun `dual aliases settle one record`() = test {
         assertNotNull(sut.reserveBound("inv", 1000u).getOrThrow())
-        sut.noteTerminal(paymentId = "pid", paymentHash = "other", success = true)
+        sut.signalCompletion(paymentId = "pid", paymentHash = "other", success = true)
         // paymentId was not stored yet; settle by invoice hash then alias
-        val first = sut.noteTerminal(paymentId = "pid", paymentHash = "inv", success = true)
-        val second = sut.noteTerminal(paymentId = "pid", paymentHash = "inv", success = false)
+        val first = sut.signalCompletion(paymentId = "pid", paymentHash = "inv", success = true)
+        val second = sut.signalCompletion(paymentId = "pid", paymentHash = "inv", success = false)
 
-        assertEquals(QuickPayTerminalKind.SETTLED_SUCCESS, first.kind)
-        assertEquals(QuickPayTerminalOutcome.None, second)
+        assertEquals(QuickPayCompletionKind.SETTLED_SUCCESS, first.kind)
+        assertEquals(QuickPayCompletionOutcome.None, second)
     }
 
     @Test
     fun `unattributable failed event against submitting retains`() = test {
         assertNotNull(sut.reserveBound("inv", 1000u).getOrThrow())
 
-        val outcome = sut.noteTerminal(paymentId = "stale-pid", paymentHash = "other", success = false)
+        val outcome = sut.signalCompletion(paymentId = "stale-pid", paymentHash = "other", success = false)
 
-        assertEquals(QuickPayTerminalOutcome.None, outcome)
+        assertEquals(QuickPayCompletionOutcome.None, outcome)
         assertEquals(500L, spentCents())
         assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
     }

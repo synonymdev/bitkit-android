@@ -1161,7 +1161,7 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentFailed(event: Event.PaymentFailed) {
         event.paymentHash?.let { paymentHash ->
             activityRepo.handlePaymentEvent(paymentHash)
-            quickPayRepo.noteTerminal(
+            quickPayRepo.signalCompletion(
                 paymentId = event.paymentId,
                 paymentHash = paymentHash,
                 success = false,
@@ -1249,7 +1249,7 @@ class AppViewModel @Inject constructor(
     private suspend fun handlePaymentSuccessful(event: Event.PaymentSuccessful) {
         val paymentHash = event.paymentHash
         activityRepo.handlePaymentEvent(paymentHash)
-        val isQuickPay = quickPayRepo.noteTerminal(
+        val isQuickPay = quickPayRepo.signalCompletion(
             paymentId = event.paymentId,
             paymentHash = paymentHash,
             success = true,

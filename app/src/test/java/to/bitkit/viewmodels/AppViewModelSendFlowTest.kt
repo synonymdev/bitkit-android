@@ -230,8 +230,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever { quickPayRepo.canApply(any<ULong>()) }.thenReturn(Result.success(false))
         whenever {
-            quickPayRepo.noteTerminal(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
-        }.thenReturn(to.bitkit.repositories.QuickPayTerminalOutcome.None)
+            quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(to.bitkit.repositories.QuickPayCompletionOutcome.None)
         whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
             .thenReturn(Result.failure(Exception("activity not found")))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
@@ -1727,7 +1727,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
         verify(activityRepo).setContact(contactPublicKey = contactKey, forPaymentId = paymentHash)
-        verify(quickPayRepo).noteTerminal(
+        verify(quickPayRepo).signalCompletion(
             paymentId = "payment_id",
             paymentHash = paymentHash,
             success = true,
@@ -1759,7 +1759,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 reason = PaymentFailureReason.RETRIES_EXHAUSTED,
             )
         )
-        verify(quickPayRepo).noteTerminal(
+        verify(quickPayRepo).signalCompletion(
             paymentId = "payment_id",
             paymentHash = paymentHash,
             success = false,
@@ -1783,7 +1783,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(quickPayRepo).noteTerminal(
+        verify(quickPayRepo).signalCompletion(
             paymentId = "payment_id",
             paymentHash = paymentHash,
             success = false,
@@ -1798,10 +1798,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val paymentHash = "restart_ok"
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(false)
         whenever {
-            quickPayRepo.noteTerminal(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+            quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
         }.thenReturn(
-            to.bitkit.repositories.QuickPayTerminalOutcome(
-                kind = to.bitkit.repositories.QuickPayTerminalKind.SETTLED_SUCCESS,
+            to.bitkit.repositories.QuickPayCompletionOutcome(
+                kind = to.bitkit.repositories.QuickPayCompletionKind.SETTLED_SUCCESS,
                 invoicePaymentHash = paymentHash,
             ),
         )
@@ -1816,7 +1816,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(quickPayRepo).noteTerminal(
+        verify(quickPayRepo).signalCompletion(
             paymentId = "payment_id",
             paymentHash = paymentHash,
             success = true,
@@ -1832,8 +1832,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
         whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
         whenever {
-            quickPayRepo.noteTerminal(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
-        }.thenReturn(to.bitkit.repositories.QuickPayTerminalOutcome.None)
+            quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(to.bitkit.repositories.QuickPayCompletionOutcome.None)
         advanceUntilIdle()
 
         emitNodeEvent(
@@ -1861,10 +1861,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
         whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
         whenever {
-            quickPayRepo.noteTerminal(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+            quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
         }.thenReturn(
-            to.bitkit.repositories.QuickPayTerminalOutcome(
-                kind = to.bitkit.repositories.QuickPayTerminalKind.SETTLED_SUCCESS,
+            to.bitkit.repositories.QuickPayCompletionOutcome(
+                kind = to.bitkit.repositories.QuickPayCompletionKind.SETTLED_SUCCESS,
                 invoicePaymentHash = paymentHash,
             ),
         )
@@ -1888,7 +1888,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amountWithFeeSats = 510L,
             ),
         )
-        verify(quickPayRepo).noteTerminal(
+        verify(quickPayRepo).signalCompletion(
             paymentId = "payment_id",
             paymentHash = paymentHash,
             success = true,
