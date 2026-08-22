@@ -11,7 +11,6 @@ object ScreenDeepLinks {
     const val HOST = "screen"
 
     private const val BASE_URI = "$SCHEME://$HOST"
-    private const val SPENDING_HW_SIGN_ID = "spending-hw-sign"
 
     private val CAMEL_HUMP = Regex("(?<=[a-z0-9])(?=[A-Z])")
 
@@ -43,7 +42,8 @@ object ScreenDeepLinks {
         if (!isScreenDeepLink(uri)) return null
         val segments = uri.pathSegments.orEmpty()
         if (segments.size != 3) return null
-        if (!segments[0].equals(SPENDING_HW_SIGN_ID, ignoreCase = true)) return null
+        val screenId = kebabId(Routes.SpendingHwSign::class) ?: return null
+        if (!segments[0].equals(screenId, ignoreCase = true)) return null
         val walletId = segments[1]
         val orderId = segments[2]
         if (walletId.isBlank() || orderId.isBlank()) return null

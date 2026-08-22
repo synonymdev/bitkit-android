@@ -315,10 +315,10 @@ fun ContentView(
         val uri = pendingScreenDeepLink ?: return@LaunchedEffect
 
         navController.currentBackStackEntryFlow.first()
-        appViewModel.consumeScreenDeepLink()
 
         SheetDeepLinks.sheetFor(uri)?.let {
             appViewModel.showSheet(it)
+            appViewModel.consumeScreenDeepLink()
             return@LaunchedEffect
         }
 
@@ -326,6 +326,7 @@ fun ContentView(
             val prepared = transferViewModel.prepareSpendingHwSign(link.walletId, link.orderId)
             if (!prepared) {
                 Logger.warn("Unhandled screen deeplink '$uri'", context = "ContentView")
+                appViewModel.consumeScreenDeepLink()
                 return@LaunchedEffect
             }
         }
@@ -340,6 +341,7 @@ fun ContentView(
         if (!handled) {
             Logger.warn("Unhandled screen deeplink '$uri'", context = "ContentView")
         }
+        appViewModel.consumeScreenDeepLink()
     }
 
     LaunchedEffect(appViewModel) {
@@ -848,17 +850,16 @@ private fun RootNavHost(
                     viewModel = transferViewModel,
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = {
-                        transferViewModel.spendingUiState.value.order?.id?.let { orderId ->
-                            navController.navigateTo(Routes.SpendingHwSign(walletId, orderId))
-                        }
+                    onOrderCreated = { orderId ->
+                        navController.navigateTo(Routes.SpendingHwSign(walletId, orderId))
                     },
                 )
             }
             deepLinkableComposable<Routes.SpendingHwSign> { entry ->
-                val walletId = entry.toRoute<Routes.SpendingHwSign>().walletId
+                val route = entry.toRoute<Routes.SpendingHwSign>()
                 SpendingHwSignScreen(
-                    walletId = walletId,
+                    walletId = route.walletId,
+                    orderId = route.orderId,
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },

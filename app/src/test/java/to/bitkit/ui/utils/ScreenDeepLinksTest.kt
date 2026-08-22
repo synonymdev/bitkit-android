@@ -58,7 +58,8 @@ class ScreenDeepLinksTest : BaseUnitTest() {
 
     @Test
     fun `spendingHwSignLink reads wallet and order ids from the path`() {
-        val uri = Uri.parse("bitkit://screen/spending-hw-sign/hardware-wallet/order-1")
+        val screenId = ScreenDeepLinks.kebabId(Routes.SpendingHwSign::class)
+        val uri = Uri.parse("bitkit://screen/$screenId/hardware-wallet/order-1")
 
         val link = ScreenDeepLinks.spendingHwSignLink(uri)
 

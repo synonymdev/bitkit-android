@@ -225,7 +225,7 @@ class TransferViewModel @Inject constructor(
                         hwMiningFeeSats = 0uL,
                     )
                 }
-                setTransferEffect(TransferEffect.OnOrderCreated)
+                setTransferEffect(TransferEffect.OnOrderCreated(newOrder.id))
             }.onFailure { e ->
                 setTransferEffect(TransferEffect.ToastException(e))
             }
@@ -582,7 +582,7 @@ class TransferViewModel @Inject constructor(
     private suspend fun onOrderCreated(order: IBtOrder) {
         settingsStore.update { it.copy(lightningSetupStep = 0) }
         adoptSpendingOrder(order)
-        setTransferEffect(TransferEffect.OnOrderCreated)
+        setTransferEffect(TransferEffect.OnOrderCreated(order.id))
     }
 
     suspend fun prepareSpendingHwSign(walletId: String, orderId: String): Boolean {
@@ -1697,7 +1697,7 @@ data class TransferValues(
 )
 
 sealed interface TransferEffect {
-    data object OnOrderCreated : TransferEffect
+    data class OnOrderCreated(val orderId: String) : TransferEffect
     data object OnSpendingFundingPaid : TransferEffect
     data object OnHwTxSigned : TransferEffect
     data class ToastException(val e: Throwable) : TransferEffect
