@@ -322,6 +322,14 @@ fun ContentView(
             return@LaunchedEffect
         }
 
+        ScreenDeepLinks.spendingHwSignLink(uri)?.let { link ->
+            val prepared = transferViewModel.prepareSpendingHwSign(link.walletId, link.orderId)
+            if (!prepared) {
+                Logger.warn("Unhandled screen deeplink '$uri'", context = "ContentView")
+                return@LaunchedEffect
+            }
+        }
+
         val request = Intent(Intent.ACTION_VIEW, uri)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
         val handled = navController.handleDeepLink(request)
@@ -840,10 +848,14 @@ private fun RootNavHost(
                     viewModel = transferViewModel,
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.navigateTo(Routes.SpendingHwSign(walletId)) },
+                    onOrderCreated = {
+                        transferViewModel.spendingUiState.value.order?.id?.let { orderId ->
+                            navController.navigateTo(Routes.SpendingHwSign(walletId, orderId))
+                        }
+                    },
                 )
             }
-            composableWithDefaultTransitions<Routes.SpendingHwSign> { entry ->
+            deepLinkableComposable<Routes.SpendingHwSign> { entry ->
                 val walletId = entry.toRoute<Routes.SpendingHwSign>().walletId
                 SpendingHwSignScreen(
                     walletId = walletId,
@@ -2126,7 +2138,7 @@ sealed interface Routes {
     data class SpendingAmountHw(val walletId: String) : Routes.DeepLinkable
 
     @Serializable
-    data class SpendingHwSign(val walletId: String) : Routes.InternalOnly
+    data class SpendingHwSign(val walletId: String, val orderId: String) : Routes.DeepLinkable
 
     @Serializable
     data object SpendingHwSigned : Routes.InternalOnly

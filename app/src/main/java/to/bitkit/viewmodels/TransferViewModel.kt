@@ -581,6 +581,31 @@ class TransferViewModel @Inject constructor(
 
     private suspend fun onOrderCreated(order: IBtOrder) {
         settingsStore.update { it.copy(lightningSetupStep = 0) }
+        adoptSpendingOrder(order)
+        setTransferEffect(TransferEffect.OnOrderCreated)
+    }
+
+    suspend fun prepareSpendingHwSign(walletId: String, orderId: String): Boolean {
+        if (walletId.isBlank() || orderId.isBlank()) return false
+        if (hwWalletRepo.wallets.value.none { it.id == walletId }) {
+            Logger.warn("Refused spending hw sign deeplink, unknown wallet '$walletId'", context = TAG)
+            return false
+        }
+        val current = _spendingUiState.value.order
+        if (current?.id == orderId) return true
+
+        val order = blocktankRepo.getOrder(orderId, refresh = true).getOrNull()
+        if (order == null) {
+            Logger.warn("Refused spending hw sign deeplink, missing order '$orderId'", context = TAG)
+            return false
+        }
+
+        settingsStore.update { it.copy(lightningSetupStep = 0) }
+        adoptSpendingOrder(order)
+        return true
+    }
+
+    private fun adoptSpendingOrder(order: IBtOrder) {
         pendingHwFundingBroadcast = null
         hwFeeEstimateJob?.cancel()
         hwFeeEstimateJob = null
@@ -593,7 +618,6 @@ class TransferViewModel @Inject constructor(
                 hwMiningFeeSats = 0uL,
             )
         }
-        setTransferEffect(TransferEffect.OnOrderCreated)
     }
 
     private fun updateAvailableAmount() {
