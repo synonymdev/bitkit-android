@@ -35,9 +35,11 @@ class QuickPayViewModel @Inject constructor(
     val lightningState = lightningRepo.lightningState
     private var session: QuickPaySession? = null
     private var resultJob: Job? = null
+    private var isPayRequested = false
 
     fun attach(session: QuickPaySession) {
         this.session = session
+        isPayRequested = false
         resultJob?.cancel()
         resultJob = viewModelScope.launch {
             quickPayRepo.attach(session).collect { event ->
@@ -54,7 +56,8 @@ class QuickPayViewModel @Inject constructor(
     }
 
     fun pay(session: QuickPaySession, data: QuickPayData) {
-        if (_uiState.value.result != null) return
+        if (isPayRequested || _uiState.value.result != null) return
+        isPayRequested = true
         quickPayRepo.pay(session, data.toPayRequest())
     }
 

@@ -113,6 +113,41 @@ class QuickPayViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pay ignores a second call before a result`() = test {
+        val session = QuickPaySession()
+        sut.attach(session)
+        val data = QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test")
+
+        sut.pay(session, data)
+        sut.pay(session, data)
+
+        verify(quickPayRepo, times(1)).pay(
+            session,
+            QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u),
+        )
+    }
+
+    @Test
+    fun `attach resets pay re-entry guard`() = test {
+        val first = QuickPaySession()
+        val second = QuickPaySession()
+        val data = QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test")
+        sut.attach(first)
+        sut.pay(first, data)
+        sut.attach(second)
+        sut.pay(second, data)
+
+        verify(quickPayRepo, times(1)).pay(
+            first,
+            QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u),
+        )
+        verify(quickPayRepo, times(1)).pay(
+            second,
+            QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u),
+        )
+    }
+
+    @Test
     fun `conversion failure uses currency conversion message`() = test {
         val session = QuickPaySession()
         sut.attach(session)
