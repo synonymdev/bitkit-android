@@ -460,6 +460,68 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `rescan of a pending hash replays pending to a new session`() = test {
+        val (bolt11, hash) = testInvoice()
+        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        paymentRows = listOf(pendingRow(hash))
+        val first = QuickPaySession()
+        val second = QuickPaySession()
+
+        sut.attach(first).test {
+            sut.payNow(first, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+        }
+        sut.attach(second).test {
+            sut.payNow(second, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+        }
+        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
+        assertEquals(250L, spentCents())
+        assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
+    }
+
+    @Test
+    fun `rescan pending then success settles once`() = test {
+        val (bolt11, hash) = testInvoice()
+        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        paymentRows = listOf(pendingRow(hash))
+        val first = QuickPaySession()
+        val second = QuickPaySession()
+
+        sut.attach(first).test {
+            sut.payNow(first, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+            sut.attach(second).test {
+                sut.payNow(second, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+                assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+                val outcome = sut.signalCompletion(paymentId = "pid", paymentHash = hash, success = true)
+                assertTrue(outcome.wasQuickPay)
+                expectNoEvents()
+            }
+            expectNoEvents()
+        }
+        assertEquals(250L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+    }
+
+    @Test
+    fun `hasOpen is true for a live op or recovered row`() = test {
+        val (bolt11, hash) = testInvoice()
+        assertFalse(sut.hasOpen(hash))
+        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        paymentRows = listOf(pendingRow(hash))
+        val session = QuickPaySession()
+        sut.attach(session)
+        sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+        assertTrue(sut.hasOpen(hash))
+        val recovered = "recovered-hash"
+        assertNotNull(sut.reserveBound(recovered, 500u).getOrThrow())
+        assertTrue(repo().hasOpen(recovered))
+        sut.signalCompletion(paymentId = null, paymentHash = hash, success = true)
+        assertFalse(sut.hasOpen(hash))
+    }
+
+    @Test
     fun `second pay of an in-flight hash does not fall back to confirm`() = test {
         val (bolt11, _) = testInvoice()
         val started = CompletableDeferred<Unit>()

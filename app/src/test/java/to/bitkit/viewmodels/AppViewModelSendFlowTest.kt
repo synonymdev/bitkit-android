@@ -229,6 +229,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         stubSettingsStore()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever { quickPayRepo.canApply(any<ULong>()) }.thenReturn(Result.success(false))
+        whenever { quickPayRepo.hasOpen(any()) }.thenReturn(false)
         whenever {
             quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
         }.thenReturn(to.bitkit.repositories.QuickPayCompletionOutcome.None)
@@ -2457,6 +2458,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertNull(sut.quickPayData.value)
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lightning scan uses QuickPay when hash is already open`() = test {
+        val bolt11 = "lnbcrt1quickpayopen"
+        enableQuickPay(canApply = false)
+        whenever { quickPayRepo.hasOpen(any()) }.thenReturn(true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
     }
 
     @Test

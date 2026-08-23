@@ -2689,7 +2689,9 @@ class AppViewModel @Inject constructor(
         lnurlPay: LnurlPayData? = null,
         invoice: LightningInvoice? = null,
     ): Boolean {
-        if (!canApplyQuickPay(amountSats)) return false
+        val invoiceHash = invoice?.paymentHash?.toHex()?.takeIf { it.isNotBlank() }
+        val open = invoiceHash != null && quickPayRepo.hasOpen(invoiceHash)
+        if (!open && !canApplyQuickPay(amountSats)) return false
 
         Logger.info("Using QuickPay for '$amountSats' sats", context = TAG)
 

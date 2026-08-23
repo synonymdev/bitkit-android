@@ -233,13 +233,32 @@ class QuickPayRepo @Inject constructor(
         val invoice = resolveInvoice(session, request) ?: return
         val invoiceHash = invoiceHashOrEmit(session, invoice) ?: return
         when (preparePay(session, invoice, invoiceHash)) {
-            PreparePayResult.LIVE -> return
+            PreparePayResult.LIVE -> replayLive(invoiceHash)
             PreparePayResult.REJECTED -> return
             PreparePayResult.RECOVERED -> settleRecovered(invoiceHash)
             PreparePayResult.FRESH -> {
                 dispatchBolt11(invoice, invoiceHash)
                 awaitCompletionOrPending(invoiceHash)
             }
+        }
+    }
+
+    internal suspend fun hasOpen(paymentHash: String): Boolean = mutex.withLock {
+        opsByKey[paymentHash] != null || spend.matching(paymentHash) != null
+    }
+
+    private suspend fun replayLive(invoiceHash: String) {
+        mutex.withLock {
+            val op = opsByKey[invoiceHash] ?: return@withLock
+            if (!op.emitted) return@withLock
+            emitToSession(
+                op.sessionId,
+                QuickPaySessionEvent.Pending(
+                    paymentHash = op.invoiceHash,
+                    amount = op.displaySats.toLong(),
+                    paymentRequest = op.paymentRequest,
+                ),
+            )
         }
     }
 
