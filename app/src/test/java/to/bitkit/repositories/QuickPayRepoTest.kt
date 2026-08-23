@@ -532,7 +532,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     private fun testInvoice(): Pair<String, String> = TEST_BOLT11 to TEST_HASH
 
     private fun repo(): QuickPayRepo {
-        val coordinator = QuickPayCoordinator(
+        return QuickPayRepo(
             cacheStore = cacheStore,
             settingsStore = settingsStore,
             currencyRepo = currencyRepo,
@@ -547,7 +547,6 @@ class QuickPayRepoTest : BaseUnitTest() {
             ioDispatcher = testDispatcher,
             clock = clock,
         )
-        return QuickPayRepo(coordinator)
     }
 
     private fun stubZeroCentConversion(dustSats: Long) {
