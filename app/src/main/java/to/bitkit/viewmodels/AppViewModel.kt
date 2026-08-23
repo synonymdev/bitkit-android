@@ -1159,13 +1159,14 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handlePaymentFailed(event: Event.PaymentFailed) {
-        quickPayRepo.signalCompletion(
+        val outcome = quickPayRepo.signalCompletion(
             paymentId = event.paymentId,
             paymentHash = event.paymentHash,
             success = false,
             failureReason = event.reason,
         )
-        event.paymentHash?.let { paymentHash ->
+        val paymentHash = event.paymentHash ?: outcome.invoicePaymentHash ?: event.paymentId
+        if (paymentHash != null) {
             activityRepo.handlePaymentEvent(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)

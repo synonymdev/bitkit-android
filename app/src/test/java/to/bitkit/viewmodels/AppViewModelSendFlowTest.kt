@@ -1771,6 +1771,37 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `PaymentFailed with null hash still resolves pending`() = test {
+        val paymentHash = "pending_hash"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = paymentHash,
+                paymentHash = null,
+                reason = PaymentFailureReason.RETRIES_EXHAUSTED,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(
+            PendingPaymentResolution.Failure(
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.RETRIES_EXHAUSTED,
+            ),
+        )
+        verify(quickPayRepo).signalCompletion(
+            paymentId = paymentHash,
+            paymentHash = null,
+            success = false,
+            feePaidMsat = null,
+            failureReason = PaymentFailureReason.RETRIES_EXHAUSTED,
+        )
+    }
+
+    @Test
     fun `PaymentFailed releases disk reservation when not pending`() = test {
         val paymentHash = "restart_hash"
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(false)
