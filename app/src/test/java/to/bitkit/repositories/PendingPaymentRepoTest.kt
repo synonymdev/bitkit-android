@@ -98,6 +98,16 @@ class PendingPaymentRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `late collector does not receive a buffered resolution`() = test {
+        sut.track("hash1")
+        sut.resolve(PendingPaymentResolution.Success("hash1"))
+        sut.resolution.test {
+            expectNoEvents()
+        }
+        assertIs<PendingPaymentResolution.Success>(sut.consumeResolution("hash1"))
+    }
+
+    @Test
     fun `consumeResolution returns last resolve for that hash`() = test {
         sut.resolve(PendingPaymentResolution.Success("hash1", amountWithFeeSats = 510L))
 

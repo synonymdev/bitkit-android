@@ -19,7 +19,7 @@ class PendingPaymentRepo @Inject constructor() {
     private val _state = MutableStateFlow(PendingPaymentsState())
     val state = _state.asStateFlow()
 
-    private val _resolution = MutableSharedFlow<PendingPaymentResolution>(extraBufferCapacity = 1)
+    private val _resolution = MutableSharedFlow<PendingPaymentResolution>()
     val resolution = _resolution.asSharedFlow()
     private val lastResolutions = MutableStateFlow<Map<String, PendingPaymentResolution>>(emptyMap())
 
