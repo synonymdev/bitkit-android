@@ -2690,6 +2690,7 @@ class AppViewModel @Inject constructor(
         lnurlPay: LnurlPayData? = null,
         invoice: LightningInvoice? = null,
     ): Boolean {
+        if (hasActiveContactPaymentContext()) return false
         val invoiceHash = invoice?.paymentHash?.toHex()?.takeIf { it.isNotBlank() }
         val open = invoiceHash != null && quickPayRepo.hasOpen(invoiceHash)
         if (!open && !canApplyQuickPay(amountSats)) return false

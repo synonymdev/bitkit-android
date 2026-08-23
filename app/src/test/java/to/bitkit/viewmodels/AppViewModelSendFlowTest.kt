@@ -2813,6 +2813,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `contact lightning payment skips QuickPay even when hash is open`() = test {
+        val bolt11 = "lnbcrt1contactopen"
+        enableQuickPay()
+        whenever { quickPayRepo.hasOpen(any()) }.thenReturn(true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.openContactPayment(paymentRequest = bolt11, publicKey = "pubkycontact")
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
     fun `incoming payment request opens the existing confirm flow with its fixed amount`() = test {
         val request = paymentRequest()
         val bolt11 = "lnbcrt1paymentrequest"
