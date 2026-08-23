@@ -346,6 +346,48 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `lookup throw on duplicate still emits pending`() = test {
+        val (bolt11, _) = testInvoice()
+        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        whenever { lightningRepo.listPaymentsOrNull() }.thenAnswer { error("uniffi") }
+        val session = QuickPaySession()
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+        }
+        assertEquals(250L, spentCents())
+        assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
+    }
+
+    @Test
+    fun `live record survives day prune then settles`() = test {
+        val (bolt11, hash) = testInvoice()
+        val dispatched = CompletableDeferred<Unit>()
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+            if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
+            dispatched.complete(Unit)
+            Result.success("pid")
+        }
+        val session = QuickPaySession()
+        sut.attach(session)
+        backgroundScope.launch {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+        }
+        dispatched.await()
+        clock.instant = Instant.parse("2026-08-16T12:00:00Z")
+        paymentRows = listOf(succeededRow(hash))
+        sut.reconcileAgainstLdk()
+        assertNotNull(sut.reserveBound("other", 200u).getOrThrow())
+        val hashes = cacheStore.data.first().quickPayLedger!!.records.map { it.invoicePaymentHash }
+        assertTrue(hash in hashes)
+        val outcome = sut.signalCompletion(paymentId = "pid", paymentHash = hash, success = true)
+        assertEquals(QuickPayCompletionKind.SETTLED_SUCCESS, outcome.kind)
+        assertTrue(outcome.wasQuickPay)
+        assertFalse(hash in cacheStore.data.first().quickPayLedger!!.records.map { it.invoicePaymentHash })
+    }
+
+    @Test
     fun `day-old unresolved records prune on a later reserve`() = test {
         assertNotNull(sut.reserveBound("old", 1000u).getOrThrow())
         clock.instant = Instant.parse("2026-08-16T12:00:00Z")

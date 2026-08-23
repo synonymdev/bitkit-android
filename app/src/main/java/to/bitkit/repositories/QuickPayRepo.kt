@@ -202,7 +202,14 @@ class QuickPayRepo @Inject constructor(
         runSuspendCatching {
             if (paymentHash.isBlank()) return@runSuspendCatching null
             val prepared = prepareReserve(amountSats) ?: return@runSuspendCatching null
-            mutex.withLock { spend.reserve(paymentHash, prepared.amountCents, prepared.capCents) }
+            mutex.withLock {
+                spend.reserve(
+                    paymentHash,
+                    prepared.amountCents,
+                    prepared.capCents,
+                    opsByKey.values.map { it.invoiceHash }.toSet(),
+                )
+            }
         }
     }
 
@@ -295,7 +302,10 @@ class QuickPayRepo @Inject constructor(
                 registerOp(recoveredOp(session, invoice, invoiceHash, open))
                 return@withLock PreparePayResult.RECOVERED
             }
-            if (prepared == null || spend.reserve(invoiceHash, prepared.amountCents, prepared.capCents) == null) {
+            val keepHashes = opsByKey.values.map { it.invoiceHash }.toSet()
+            if (prepared == null ||
+                spend.reserve(invoiceHash, prepared.amountCents, prepared.capCents, keepHashes) == null
+            ) {
                 rejectCap(session, invoice)
                 return@withLock PreparePayResult.REJECTED
             }
@@ -733,7 +743,8 @@ class QuickPayRepo @Inject constructor(
         return PreparedReserve(amountCents, capCents)
     }
 
-    private suspend fun loadPaymentRows(): List<QuickPayReconcileRow>? = paymentLookup.rows()
+    private suspend fun loadPaymentRows(): List<QuickPayReconcileRow>? =
+        runSuspendCatching { paymentLookup.rows() }.getOrNull()
 
     private fun emitToSession(sessionId: String?, event: QuickPaySessionEvent) {
         if (sessionId == null) return
@@ -796,6 +807,7 @@ internal class QuickPaySpendStore(
         paymentHash: String,
         amountCents: Long,
         capCents: Long,
+        keepHashes: Set<String> = emptySet(),
     ): QuickPayLedgerRecord? {
         var reserved: QuickPayLedgerRecord? = null
         val wrote = writeLedger { ledger, dayKey ->
@@ -804,7 +816,7 @@ internal class QuickPaySpendStore(
             if (spend.spentCents > Long.MAX_VALUE - amountCents) return@writeLedger ledger
             val total = spend.spentCents + amountCents
             if (total > capCents) return@writeLedger ledger
-            val next = ledger.pruned(spend.dayKey)
+            val next = ledger.pruned(spend.dayKey, keepHashes)
             val record = QuickPayLedgerRecord(
                 id = UUID.randomUUID().toString(),
                 amountCents = amountCents,
@@ -871,7 +883,7 @@ internal class QuickPaySpendStore(
     ) {
         if (rows == null) return
         writeLedger { ledger, dayKey ->
-            val next = ledger.pruned(dayKey)
+            val next = ledger.pruned(dayKey, liveSubmittingHashes)
             val remaining = mutableListOf<QuickPayLedgerRecord>()
             var spent = next.spentCents
             for (record in next.records) {
@@ -1032,9 +1044,14 @@ private fun QuickPayLedger.recordIndex(hash: String): Int? =
     records.indexOfFirst { it.invoicePaymentHash == hash || it.paymentId == hash || it.id == hash }
         .takeIf { it >= 0 }
 
-private fun QuickPayLedger.pruned(currentDay: String): QuickPayLedger {
+private fun QuickPayLedger.pruned(
+    currentDay: String,
+    keepHashes: Set<String> = emptySet(),
+): QuickPayLedger {
     if (currentDay.isEmpty()) return this
-    return copy(records = records.filter { it.dayKey >= currentDay })
+    return copy(
+        records = records.filter { it.dayKey >= currentDay || it.invoicePaymentHash in keepHashes },
+    )
 }
 
 private fun spendFor(ledger: QuickPayLedger, dayKey: String): QuickPayDaySpend = when {
