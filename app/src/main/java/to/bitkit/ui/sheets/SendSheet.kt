@@ -326,8 +326,10 @@ fun SendSheet(
                 }
                 composableWithDefaultTransitions<SendRoute.QuickPay> {
                     val quickPayData by appViewModel.quickPayData.collectAsStateWithLifecycle()
+                    val displayedQuickPayData = remember { quickPayData } ?: quickPayData
+                    if (displayedQuickPayData == null) return@composableWithDefaultTransitions
                     SendQuickPayScreen(
-                        quickPayData = requireNotNull(quickPayData),
+                        quickPayData = displayedQuickPayData,
                         onPaymentComplete = { paymentHash, amountWithFee ->
                             appViewModel.onSendSuccess(
                                 NewTransactionSheetDetails(
