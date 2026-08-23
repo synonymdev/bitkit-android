@@ -1,5 +1,6 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.LnurlPayData
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
@@ -63,7 +64,7 @@ sealed interface QuickPayPayRequest {
     ) : QuickPayPayRequest
 
     data class LnurlPay(
-        val data: com.synonym.bitkitcore.LnurlPayData,
+        val data: LnurlPayData,
         override val amountSats: ULong,
     ) : QuickPayPayRequest
 }

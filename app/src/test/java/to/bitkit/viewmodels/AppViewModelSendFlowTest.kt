@@ -9,6 +9,7 @@ import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.core.net.toUri
 import app.cash.turbine.test
+import com.synonym.bitkitcore.Activity as BitkitActivity
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
@@ -1891,7 +1892,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             on { value } doReturn 500u
             on { fee } doReturn 0u
         }
-        val activity = mock<com.synonym.bitkitcore.Activity.Lightning> { on { v1 } doReturn activityV1 }
+        val activity = mock<BitkitActivity.Lightning> { on { v1 } doReturn activityV1 }
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
         whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
         whenever {
