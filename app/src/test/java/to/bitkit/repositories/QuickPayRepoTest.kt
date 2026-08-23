@@ -579,6 +579,19 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `detachAll does not sweep a session attached after snapshot`() = test {
+        val first = QuickPaySession()
+        sut.attach(first)
+        sut.detachAll()
+        stubPayInvoiceFailure(NodeException.InvalidInvoice("bad"))
+        val second = QuickPaySession()
+        sut.attach(second).test {
+            sut.payNow(second, QuickPayPayRequest.Bolt11(bolt11 = testInvoice().first, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Error>(awaitItem())
+        }
+    }
+
+    @Test
     fun `hasOpen is true for a live op or recovered row`() = test {
         val (bolt11, hash) = testInvoice()
         assertFalse(sut.hasOpen(hash))

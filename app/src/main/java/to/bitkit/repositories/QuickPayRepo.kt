@@ -158,8 +158,8 @@ class QuickPayRepo @Inject constructor(
     }
 
     fun detachAll() {
+        val ids = sessionFlows.keys.toList()
         scope.launch {
-            val ids = sessionFlows.keys.toList()
             ids.forEach { detachSession(it) }
         }
     }
