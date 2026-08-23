@@ -425,7 +425,7 @@ class QuickPayRepo @Inject constructor(
         paymentRequest: String,
         error: Throwable,
     ) {
-        when (classifyDispatchError(error)) {
+        when (val kind = classifyDispatchError(error)) {
             QuickPayDispatchClass.PRE_DISPATCH_REJECTION -> {
                 mutex.withLock {
                     signalCompletionLocked(
@@ -441,7 +441,13 @@ class QuickPayRepo @Inject constructor(
             -> {
                 val rows = loadPaymentRows()
                 mutex.withLock {
-                    settleAmbiguousLocked(invoiceHash, paymentRequest, error, rows)
+                    settleAmbiguousLocked(
+                        invoiceHash = invoiceHash,
+                        paymentRequest = paymentRequest,
+                        error = error,
+                        rows = rows,
+                        duplicate = kind == QuickPayDispatchClass.DUPLICATE_PAYMENT,
+                    )
                 }
             }
         }
@@ -452,10 +458,11 @@ class QuickPayRepo @Inject constructor(
         paymentRequest: String,
         error: Throwable,
         rows: List<QuickPayReconcileRow>?,
+        duplicate: Boolean,
     ) {
         val record = spend.matching(invoiceHash)
         val applied = if (record != null && rows != null) {
-            applyAmbiguousLookupLocked(record, rows)
+            applyAmbiguousLookupLocked(record, rows, duplicate)
         } else {
             AmbiguousApply.UNCHANGED
         }
@@ -566,12 +573,20 @@ class QuickPayRepo @Inject constructor(
     private suspend fun applyAmbiguousLookupLocked(
         record: QuickPayLedgerRecord,
         rows: List<QuickPayReconcileRow>,
+        duplicate: Boolean,
     ): AmbiguousApply {
         val match = pickLedgerMatch(record, rows) ?: return AmbiguousApply.UNCHANGED
         return when (match.status) {
             QuickPayReconcileRow.Status.PENDING -> AmbiguousApply.UNCHANGED
             QuickPayReconcileRow.Status.SUCCEEDED -> {
-                spend.drop(record.invoicePaymentHash)
+                if (duplicate &&
+                    record.phase == QuickPayRecordPhase.SUBMITTING &&
+                    record.paymentId == null
+                ) {
+                    spend.release(record.invoicePaymentHash)
+                } else {
+                    spend.drop(record.invoicePaymentHash)
+                }
                 AmbiguousApply.SUCCEEDED
             }
             QuickPayReconcileRow.Status.FAILED -> {

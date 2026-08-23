@@ -408,7 +408,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `duplicate payment with succeeded ldk keeps spend and emits success`() = test {
+    fun `duplicate payment with succeeded ldk refunds a fresh reserve and emits success`() = test {
         val (bolt11, hash) = testInvoice()
         stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
         paymentRows = listOf(succeededRow(hash))
@@ -418,6 +418,24 @@ class QuickPayRepoTest : BaseUnitTest() {
             sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
             val success = assertIs<QuickPaySessionEvent.Success>(awaitItem())
             assertEquals(hash, success.paymentHash)
+        }
+        assertEquals(0L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+    }
+
+    @Test
+    fun `re-pay of a settled hash does not double-count`() = test {
+        val (bolt11, hash) = testInvoice()
+        assertNotNull(sut.reserveBound(hash, 500u).getOrThrow())
+        sut.signalCompletion(paymentId = null, paymentHash = hash, success = true)
+        assertEquals(250L, spentCents())
+        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        paymentRows = listOf(succeededRow(hash))
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Success>(awaitItem())
         }
         assertEquals(250L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
