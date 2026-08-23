@@ -97,6 +97,8 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
+import to.bitkit.repositories.QuickPayCompletionKind
+import to.bitkit.repositories.QuickPayCompletionOutcome
 import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.SettledReceiveAddress
@@ -232,7 +234,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { quickPayRepo.hasOpen(any()) }.thenReturn(false)
         whenever {
             quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
-        }.thenReturn(to.bitkit.repositories.QuickPayCompletionOutcome.None)
+        }.thenReturn(QuickPayCompletionOutcome.None)
         whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
             .thenReturn(Result.failure(Exception("activity not found")))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
@@ -1832,8 +1834,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever {
             quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
         }.thenReturn(
-            to.bitkit.repositories.QuickPayCompletionOutcome(
-                kind = to.bitkit.repositories.QuickPayCompletionKind.SETTLED_SUCCESS,
+            QuickPayCompletionOutcome(
+                kind = QuickPayCompletionKind.SETTLED_SUCCESS,
                 invoicePaymentHash = paymentHash,
             ),
         )
@@ -1865,7 +1867,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
         whenever {
             quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
-        }.thenReturn(to.bitkit.repositories.QuickPayCompletionOutcome.None)
+        }.thenReturn(QuickPayCompletionOutcome.None)
         advanceUntilIdle()
 
         emitNodeEvent(
@@ -1895,8 +1897,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever {
             quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
         }.thenReturn(
-            to.bitkit.repositories.QuickPayCompletionOutcome(
-                kind = to.bitkit.repositories.QuickPayCompletionKind.SETTLED_SUCCESS,
+            QuickPayCompletionOutcome(
+                kind = QuickPayCompletionKind.SETTLED_SUCCESS,
                 invoicePaymentHash = paymentHash,
             ),
         )

@@ -295,21 +295,21 @@ class QuickPayRepo @Inject constructor(
             }
             val open = spend.matching(invoiceHash)
             if (open != null) {
-                registerOp(recoveredOp(session, invoice, invoiceHash, open))
+                registerOpLocked(recoveredOp(session, invoice, invoiceHash, open))
                 return@withLock PreparePayResult.RECOVERED
             }
             val keepHashes = opsByKey.values.map { it.invoiceHash }.toSet()
             if (prepared == null ||
                 spend.reserve(invoiceHash, prepared.amountCents, prepared.capCents, keepHashes) == null
             ) {
-                rejectCap(session, invoice)
+                rejectCapLocked(session, invoice)
                 return@withLock PreparePayResult.REJECTED
             }
             if (sessionFlows[session.id] == null) {
                 spend.release(invoiceHash)
                 return@withLock PreparePayResult.REJECTED
             }
-            registerOp(
+            registerOpLocked(
                 InFlightOp(
                     invoiceHash = invoiceHash,
                     displaySats = invoice.amountSats,
@@ -458,7 +458,7 @@ class QuickPayRepo @Inject constructor(
                         paymentHash = invoiceHash,
                         success = false,
                     )
-                    emitOutcome(invoiceHash, error, paymentRequest)
+                    emitOutcomeLocked(invoiceHash, error, paymentRequest)
                 }
             }
             QuickPayDispatchClass.DUPLICATE_PAYMENT,
@@ -652,7 +652,7 @@ class QuickPayRepo @Inject constructor(
         paymentId = open.paymentId,
     )
 
-    private fun rejectCap(session: QuickPaySession, invoice: ResolvedInvoice) {
+    private fun rejectCapLocked(session: QuickPaySession, invoice: ResolvedInvoice) {
         Logger.info(
             "Skipping QuickPay pay: daily spend reserve failed for '${invoice.amountSats}'",
             context = TAG,
@@ -660,7 +660,7 @@ class QuickPayRepo @Inject constructor(
         emitToSession(session.id, QuickPaySessionEvent.FallBackToConfirm)
     }
 
-    private fun registerOp(op: InFlightOp) {
+    private fun registerOpLocked(op: InFlightOp) {
         opsByKey[op.invoiceHash] = op
         op.paymentId?.takeIf { it.isNotBlank() && it != op.invoiceHash }?.let { opsByKey[it] = op }
     }
@@ -669,7 +669,7 @@ class QuickPayRepo @Inject constructor(
         opsByKey.entries.removeAll { it.value === op }
     }
 
-    private fun emitOutcome(
+    private fun emitOutcomeLocked(
         invoiceHash: String,
         error: Throwable,
         paymentRequest: String,
