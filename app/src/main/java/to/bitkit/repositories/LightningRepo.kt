@@ -278,8 +278,11 @@ class LightningRepo @Inject constructor(
     }.onFailure {
         // Cancellation is expected during pull-to-refresh, rethrow per Kotlin best practices
         if (it is CancellationException) throw it
-
-        Logger.error("Error executing '$operationName'", it, context = TAG)
+        if (it is PaymentAbortedBeforeSend) {
+            Logger.debug("Aborted '$operationName' before dispatch", context = TAG)
+        } else {
+            Logger.error("Error executing '$operationName'", it, context = TAG)
+        }
     }
 
     private suspend fun setup(
