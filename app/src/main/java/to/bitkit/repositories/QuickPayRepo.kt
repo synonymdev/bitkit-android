@@ -195,7 +195,7 @@ class QuickPayRepo @Inject constructor(
         }
     }
 
-    suspend fun reserveBound(
+    internal suspend fun reserveBound(
         paymentHash: String,
         amountSats: ULong,
     ): Result<QuickPayLedgerRecord?> = withContext(ioDispatcher) {
