@@ -240,7 +240,7 @@ class QuickPayRepo @Inject constructor(
         val invoice = resolveInvoice(session, request) ?: return
         val invoiceHash = invoiceHashOrEmit(session, invoice) ?: return
         when (preparePay(session, invoice, invoiceHash)) {
-            PreparePayResult.LIVE -> replayLive(invoiceHash)
+            PreparePayResult.LIVE -> return
             PreparePayResult.REJECTED -> return
             PreparePayResult.RECOVERED -> settleRecovered(invoiceHash)
             PreparePayResult.FRESH -> {
@@ -252,21 +252,6 @@ class QuickPayRepo @Inject constructor(
 
     internal suspend fun hasOpen(paymentHash: String): Boolean = mutex.withLock {
         opsByKey[paymentHash] != null || spend.matching(paymentHash) != null
-    }
-
-    private suspend fun replayLive(invoiceHash: String) {
-        mutex.withLock {
-            val op = opsByKey[invoiceHash] ?: return@withLock
-            if (!op.emitted) return@withLock
-            emitToSession(
-                op.sessionId,
-                QuickPaySessionEvent.Pending(
-                    paymentHash = op.invoiceHash,
-                    amount = op.displaySats.toLong(),
-                    paymentRequest = op.paymentRequest,
-                ),
-            )
-        }
     }
 
     private fun invoiceHashOrEmit(session: QuickPaySession, invoice: ResolvedInvoice): String? {
@@ -295,6 +280,17 @@ class QuickPayRepo @Inject constructor(
             val existing = opsByKey[invoiceHash]
             if (existing != null) {
                 existing.sessionId = session.id
+                when {
+                    existing.emitted -> emitToSession(
+                        session.id,
+                        QuickPaySessionEvent.Pending(
+                            paymentHash = existing.invoiceHash,
+                            amount = existing.displaySats.toLong(),
+                            paymentRequest = existing.paymentRequest,
+                        ),
+                    )
+                    existing.job?.isActive != true -> emitPendingLocked(existing)
+                }
                 return@withLock PreparePayResult.LIVE
             }
             val open = spend.matching(invoiceHash)

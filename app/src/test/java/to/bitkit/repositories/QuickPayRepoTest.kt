@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Before
@@ -544,6 +546,36 @@ class QuickPayRepoTest : BaseUnitTest() {
         }
         assertEquals(250L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+    }
+
+    @Test
+    fun `zombie rescan replays pending after detach timeout`() = test {
+        val (bolt11, hash) = testInvoice()
+        val dispatched = CompletableDeferred<Unit>()
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+            if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
+            dispatched.complete(Unit)
+            Result.success("pid")
+        }
+        val first = QuickPaySession()
+        sut.attach(first)
+        backgroundScope.launch {
+            sut.payNow(first, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+        }
+        dispatched.await()
+        sut.detach(first)
+        advanceTimeBy(LightningRepo.SEND_LN_TIMEOUT)
+        advanceUntilIdle()
+        val second = QuickPaySession()
+        sut.attach(second).test {
+            sut.payNow(second, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Pending>(awaitItem())
+        }
+        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
+        verify(pendingPaymentRepo).track(hash)
+        assertEquals(250L, spentCents())
+        assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
     }
 
     @Test
