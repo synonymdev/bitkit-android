@@ -224,7 +224,7 @@ class QuickPayRepo @Inject constructor(
         }
     }
 
-    private suspend fun reconcileAgainstLdk() {
+    internal suspend fun reconcileAgainstLdk() {
         val rows = loadPaymentRows()
         mutex.withLock { reconcileLocked(rows) }
     }
@@ -302,39 +302,32 @@ class QuickPayRepo @Inject constructor(
     private suspend fun settleRecovered(invoiceHash: String) {
         val rows = loadPaymentRows()
         mutex.withLock {
-            reconcileLocked(rows)
             val op = opsByKey[invoiceHash] ?: return@withLock
-            if (spend.matching(invoiceHash) != null) {
+            val record = spend.matching(invoiceHash) ?: run {
                 emitPendingLocked(op)
                 return@withLock
             }
-            val match = rows?.let {
-                pickLedgerMatch(
-                    QuickPayLedgerRecord(
-                        id = invoiceHash,
-                        amountCents = 0L,
-                        dayKey = "",
-                        invoicePaymentHash = invoiceHash,
-                        paymentId = op.paymentId,
-                        phase = QuickPayRecordPhase.SUBMITTED,
-                    ),
-                    it,
-                )
-            }
-            if (match?.status == QuickPayReconcileRow.Status.SUCCEEDED) {
-                emitSuccessLocked(op, feePaidMsat = null)
-            } else {
-                emitErrorLocked(
-                    op,
-                    QuickPayPaymentFailedError(
+            val match = rows?.let { pickLedgerMatch(record, it) }
+            when (match?.status) {
+                QuickPayReconcileRow.Status.SUCCEEDED -> {
+                    signalCompletionLocked(
+                        paymentId = record.paymentId,
                         paymentHash = invoiceHash,
-                        reason = null,
-                        paymentRequest = op.paymentRequest,
-                    ),
-                    op.paymentRequest,
-                )
+                        success = true,
+                    )
+                }
+                QuickPayReconcileRow.Status.FAILED -> {
+                    val outcome = signalCompletionLocked(
+                        paymentId = record.paymentId,
+                        paymentHash = invoiceHash,
+                        success = false,
+                    )
+                    if (outcome.kind == QuickPayCompletionKind.NONE) {
+                        emitPendingLocked(op)
+                    }
+                }
+                else -> emitPendingLocked(op)
             }
-            removeOpLocked(op)
         }
     }
 
@@ -598,10 +591,7 @@ class QuickPayRepo @Inject constructor(
     }
 
     private suspend fun reconcileLocked(rows: List<QuickPayReconcileRow>?) {
-        val live = opsByKey.values
-            .filter { !it.dispatched }
-            .map { it.invoiceHash }
-            .toSet()
+        val live = opsByKey.values.map { it.invoiceHash }.toSet()
         spend.applyReconcile(rows, live) { record, match ->
             isAttributedFailure(record, opsByKey[record.invoicePaymentHash], match.paymentId, match.invoicePaymentHash)
         }
