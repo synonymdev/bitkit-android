@@ -124,8 +124,7 @@ fun QuickPaySettingsScreenContent(
 
             BodyM(
                 text = stringResource(R.string.settings__quickpay__settings__daily_text)
-                    .replace("{limit}", dailyLimitUsd.toString())
-                    .replace("{multiplier}", quickPayDailyLimitMultiplier.toString()),
+                    .replace("{limit}", dailyLimitUsd.toString()),
                 color = Colors.White64,
             )
 
