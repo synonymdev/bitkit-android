@@ -124,7 +124,9 @@ fun ReceiveSheet(
                     PaymentRequestDetailsScreen(
                         amountInputViewModel = paymentRequestAmountViewModel,
                         initialDraft = paymentRequestDraft,
-                        onBack = { navController.popBackStack() },
+                        onBack = {
+                            if (!navController.popBackStack()) appViewModel.hideSheet()
+                        },
                         onContinue = {
                             paymentRequestDraft = it
                             navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
