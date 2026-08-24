@@ -71,7 +71,7 @@ class CreatePaymentRequestScreenTest {
         composeTestRule.onNodeWithTag("PaymentRequestContact${target.publicKey}").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRecipientSearch").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestEditExpiration").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestRecipientPaste").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestRecipientPaste", useUnmergedTree = true).assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsDisplayed()
 
         composeTestRule.onNodeWithTag("PaymentRequestRecipientSearch").performTextInput("not this contact")
