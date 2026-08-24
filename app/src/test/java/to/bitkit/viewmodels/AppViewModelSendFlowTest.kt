@@ -1975,12 +1975,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `in-flight QuickPay failure does not navigate to confirm error`() = test {
+    fun `in-flight QuickPay failure does not toast or navigate to confirm error`() = test {
         val bolt11 = "lnbcrt1quickpayfail"
         enableQuickPay()
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
         sut.onScanResult(bolt11)
         advanceUntilIdle()
+        clearInvocations(toastManager)
 
         sut.sendEffect.test {
             emitNodeEvent(
@@ -1993,6 +1994,35 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             advanceUntilIdle()
             expectNoEvents()
         }
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `QuickPay failure still toasts after send sheet is hidden`() = test {
+        val bolt11 = "lnbcrt1quickpayhiddenfail"
+        whenever(context.getString(R.string.wallet__toast_payment_failed_title)).thenReturn("Payment failed")
+        whenever(context.getString(R.string.wallet__payment_route_not_found)).thenReturn("no route")
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        sut.hideSheet()
+        clearInvocations(toastManager)
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = "payment_id",
+                paymentHash = "010203",
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("PaymentFailedToast", it.testTag)
+            }
+        )
     }
 
     @Test
