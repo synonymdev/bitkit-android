@@ -93,7 +93,10 @@ import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
+import to.bitkit.repositories.PaykitPaymentProofKind
+import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestCreation
 import to.bitkit.repositories.PaykitPaymentRequestDraft
@@ -189,6 +192,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val publicPaykitRepo = mock<PublicPaykitRepo>()
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val paykitPaymentRequestRepo = mock<PaykitPaymentRequestRepo>()
+    private val paykitPaymentProofRepo = mock<PaykitPaymentProofRepo>()
     private val samRockRepo = mock<SamRockRepo>()
     private val widgetsRepo = mock<WidgetsRepo>()
     private val formatMoneyValue = mock<FormatMoneyValue>()
@@ -296,6 +300,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         whenever(paykitPaymentRequestRepo.isPending(any())).thenReturn(true)
         whenever(paykitPaymentRequestRepo.isProcessing(any())).thenReturn(false)
+        whenever { paykitPaymentProofRepo.prepare(any(), any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { paykitPaymentProofRepo.associateLightningPayment(any(), any()) }.thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.initialLinkBurstStarted).thenReturn(MutableSharedFlow())
         whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
@@ -384,6 +390,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         publicPaykitRepo = publicPaykitRepo,
         privatePaykitRepo = privatePaykitRepo,
         paykitPaymentRequestRepo = paykitPaymentRequestRepo,
+        paykitPaymentProofRepo = paykitPaymentProofRepo,
         refreshContactPaykitReceivers = refreshContactPaykitReceivers,
         samRockRepo = samRockRepo,
         appUpdateSheet = mock(),
@@ -2328,6 +2335,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             feePaidMsat = 10uL,
             failureReason = null,
         )
+        verify(paykitPaymentProofRepo).completeLightningPayment(paymentHash, "preimage")
     }
 
     @Test
@@ -2360,6 +2368,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             feePaidMsat = null,
             failureReason = PaymentFailureReason.RETRIES_EXHAUSTED,
         )
+        verify(paykitPaymentProofRepo).failLightningPayment(paymentHash)
         assertNull(pendingContactPaymentContext(paymentHash))
     }
 
@@ -3993,10 +4002,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         confirmCurrentPayment()
 
-        inOrder(privatePaykitRepo, paykitPaymentRequestRepo).apply {
+        inOrder(paykitPaymentProofRepo, privatePaykitRepo, paykitPaymentRequestRepo).apply {
+            verify(paykitPaymentProofRepo).prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain)
             verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
             verify(paykitPaymentRequestRepo).accept(request)
         }
+        verify(paykitPaymentProofRepo).completeOnchainPayment(request, "txid")
     }
 
     @Test
@@ -4856,7 +4867,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         amountValue = "0.000025",
         amountSats = 2_500uL,
         expiresAt = null,
-        acceptedPaymentEndpointIdentifiers = listOf("lightning_bolt11"),
+        acceptedPaymentEndpointIdentifiers = listOf(MethodId.Bolt11.rawValue, MethodId.P2wpkh.rawValue),
     )
 
     private fun paymentRequestCreation(
