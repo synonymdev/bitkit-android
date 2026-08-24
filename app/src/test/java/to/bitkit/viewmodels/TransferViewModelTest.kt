@@ -234,6 +234,38 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `updateLimits caps spending max at the balance the LSP fee was quoted for`() = test {
+        // Real-world numbers from issue #899: the LSP service fee grows with the client balance, so
+        // the second (cheaper) quote must not be used to derive a larger balance than it priced.
+        val spendable = 265_904uL
+        val miningFee = 178uL
+        val availableAmount = spendable - miningFee
+        val initialLspFees = 4_165uL
+        val balanceAfterLspFee = availableAmount - initialLspFees
+        val finalLspFees = 4_128uL
+        val initialFeeResponse = stubFeeResponse(initialLspFees)
+        val finalFeeResponse = stubFeeResponse(finalLspFees)
+        stubSpendableBalances(spendable)
+        blocktankState.value = BlocktankState(info = null)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(miningFee))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = spendable)))
+        whenever(blocktankRepo.estimateOrderFee(eq(availableAmount), any(), any()))
+            .thenReturn(Result.success(initialFeeResponse))
+        whenever(blocktankRepo.estimateOrderFee(eq(balanceAfterLspFee), any(), any()))
+            .thenReturn(Result.success(finalFeeResponse))
+
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        val maxAllowedToSend = sut.spendingUiState.value.maxAllowedToSend
+        assertEquals(balanceAfterLspFee.toLong(), maxAllowedToSend)
+        // The order the user can build at this max must stay within what they can actually pay.
+        assertTrue(maxAllowedToSend.toULong() + finalLspFees <= availableAmount)
+    }
+
+    @Test
     fun `updateLimits uses percent fallback when fast mining fee estimate fails`() = test {
         val spendable = 100_000uL
         val fallbackMiningFee = (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
@@ -1701,6 +1733,12 @@ class TransferViewModelTest : BaseUnitTest() {
         maxLspBalanceSat = 0uL,
         maxClientBalanceSat = maxClientBalanceSat,
     )
+
+    private fun stubFeeResponse(lspFees: ULong): IBtEstimateFeeResponse2 = mock<IBtEstimateFeeResponse2>().also {
+        whenever(it.feeSat).thenReturn(lspFees)
+        whenever(it.networkFeeSat).thenReturn(lspFees)
+        whenever(it.serviceFeeSat).thenReturn(0uL)
+    }
 
     private fun liquidityOptionsForCreate(maxClientBalanceSat: ULong) = ChannelLiquidityOptions(
         defaultLspBalanceSat = LSP_BALANCE,

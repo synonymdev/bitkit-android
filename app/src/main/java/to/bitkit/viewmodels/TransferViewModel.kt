@@ -675,7 +675,10 @@ class TransferViewModel @Inject constructor(
         ).onSuccess { estimate ->
             maxLspFee = estimate.feeSat
             val lspFees = estimate.networkFeeSat.safe() + estimate.serviceFeeSat.safe()
-            val maxClientBalance = availableAmount.safe() - lspFees.safe()
+            // The fee was quoted for `cappedClientBalance`, and the LSP service fee grows with the
+            // client balance, so a larger balance derived from that quote prices an order costing
+            // more than the user has. Cap at the balance the fee was actually quoted for.
+            val maxClientBalance = minOf(availableAmount.safe() - lspFees.safe(), cappedClientBalance)
             val maxSend = min(
                 liquidity.maxClientBalanceSat.toLong(),
                 maxClientBalance.toLong()
