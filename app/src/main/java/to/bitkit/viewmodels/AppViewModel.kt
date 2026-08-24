@@ -1182,7 +1182,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun shouldNotifyPendingResolution(paymentHash: String): Boolean {
-        if (_quickPayData.value != null) return false
+        if (_quickPayData.value != null) return _currentSheet.value !is Sheet.Send
         return _currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)
     }
 

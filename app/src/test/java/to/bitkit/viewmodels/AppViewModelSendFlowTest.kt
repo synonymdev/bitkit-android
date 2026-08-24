@@ -2029,6 +2029,63 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pending QuickPay failure does not toast while send sheet is open`() = test {
+        val bolt11 = "lnbcrt1quickpaypendingopen"
+        val paymentHash = "010203"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(true)
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `pending QuickPay failure toasts after send sheet is replaced`() = test {
+        val bolt11 = "lnbcrt1quickpaypendingreplaced"
+        val paymentHash = "010203"
+        whenever(context.getString(R.string.wallet__toast_payment_failed_title)).thenReturn("Payment failed")
+        whenever(context.getString(R.string.wallet__toast_payment_failed_description)).thenReturn("failed")
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        sut.showSheet(Sheet.ConnectionClosed)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("PendingPaymentFailedToast", it.testTag)
+            }
+        )
+    }
+
+    @Test
     fun `confirm failure still navigates after QuickPay fallback`() = test {
         val bolt11 = "lnbcrt1quickpayfallback"
         val errorMessage = "Bitkit could not find a route"
