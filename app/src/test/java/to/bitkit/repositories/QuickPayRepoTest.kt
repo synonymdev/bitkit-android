@@ -37,6 +37,7 @@ import to.bitkit.di.json
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.USD
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import java.math.BigDecimal
 import java.util.Locale
@@ -711,6 +712,20 @@ class QuickPayRepoTest : BaseUnitTest() {
         assertEquals(0L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
         verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
+    }
+
+    @Test
+    fun `ambiguous failure before dispatch refunds and errors`() = test {
+        val (bolt11, _) = testInvoice()
+        whenever(lightningRepo.payInvoice(any(), anyOrNull(), any()))
+            .thenReturn(Result.failure(AppError("Cannot execute 'payInvoice'")))
+        val session = QuickPaySession()
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Error>(awaitItem())
+        }
+        assertEquals(0L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
     }
 
     @Test

@@ -495,6 +495,12 @@ class QuickPayRepo @Inject constructor(
         val remaining = spend.matching(invoiceHash)
         val op = opsByKey[invoiceHash]
         if (remaining != null) {
+            if (!duplicate && op != null && !op.dispatched) {
+                spend.release(invoiceHash)
+                emitErrorLocked(op, error, paymentRequest)
+                removeOpLocked(op)
+                return
+            }
             op?.dispatched = true
             op?.let { emitPendingLocked(it) }
             return

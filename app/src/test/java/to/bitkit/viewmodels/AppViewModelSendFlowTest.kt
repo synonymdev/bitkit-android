@@ -1851,13 +1851,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         advanceUntilIdle()
 
-        verify(quickPayRepo).signalCompletion(
-            paymentId = "payment_id",
-            paymentHash = paymentHash,
-            success = true,
-            feePaidMsat = 10uL,
-            failureReason = null,
-        )
+        inOrder(quickPayRepo, activityRepo) {
+            verify(quickPayRepo).signalCompletion(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                success = true,
+                feePaidMsat = 10uL,
+                failureReason = null,
+            )
+            verify(activityRepo).handlePaymentEvent(paymentHash)
+        }
         verify(pendingPaymentRepo, never()).resolve(any())
     }
 

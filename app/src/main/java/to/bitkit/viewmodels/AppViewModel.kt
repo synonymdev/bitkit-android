@@ -1249,13 +1249,13 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handlePaymentSuccessful(event: Event.PaymentSuccessful) {
         val paymentHash = event.paymentHash
-        activityRepo.handlePaymentEvent(paymentHash)
         val isQuickPay = quickPayRepo.signalCompletion(
             paymentId = event.paymentId,
             paymentHash = paymentHash,
             success = true,
             feePaidMsat = event.feePaidMsat,
         ).wasQuickPay
+        activityRepo.handlePaymentEvent(paymentHash)
         if (!pendingPaymentRepo.isPending(paymentHash)) {
             notifyPaymentSentOnLightning(event)
             return
