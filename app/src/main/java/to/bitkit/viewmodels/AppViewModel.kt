@@ -1361,7 +1361,7 @@ class AppViewModel @Inject constructor(
         )
         val paymentHash = event.paymentHash ?: outcome.invoicePaymentHash ?: event.paymentId
         if (paymentHash != null) {
-            paykitPaymentProofRepo.failLightningPayment(paymentHash)
+            viewModelScope.launch { paykitPaymentProofRepo.failLightningPayment(paymentHash) }
             refreshPaymentActivity(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
@@ -1445,7 +1445,9 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handlePaymentSuccessful(event: Event.PaymentSuccessful) {
         val paymentHash = event.paymentHash
-        paykitPaymentProofRepo.completeLightningPayment(paymentHash, event.paymentPreimage)
+        viewModelScope.launch {
+            paykitPaymentProofRepo.completeLightningPayment(paymentHash, event.paymentPreimage)
+        }
         val isQuickPay = quickPayRepo.signalCompletion(
             paymentId = event.paymentId,
             paymentHash = paymentHash,
@@ -3348,13 +3350,13 @@ class AppViewModel @Inject constructor(
         )
 
         consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
-            cancelPaymentProof(preparedPaymentProofRequest)
+            cancelPaymentProofPreparation(preparedPaymentProofRequest)
             handlePaymentPreparationFailure(it)
             return
         }
 
         acceptIncomingPaymentRequestIfNeeded(contactPaymentContext).onFailure {
-            cancelPaymentProof(preparedPaymentProofRequest)
+            cancelPaymentProofPreparation(preparedPaymentProofRequest)
             handlePaymentPreparationFailure(it)
             return
         }
@@ -3375,7 +3377,7 @@ class AppViewModel @Inject constructor(
                     it.copy(decodedInvoice = invoice)
                 }
             }.onFailure {
-                cancelPaymentProof(preparedPaymentProofRequest)
+                cancelPaymentProofPreparation(preparedPaymentProofRequest)
                 val message = getLnurlInvoiceFetchErrorMessage(it)
                 toast(Exception(message))
                 hideSheet()
@@ -3405,7 +3407,7 @@ class AppViewModel @Inject constructor(
                         activityRepo.syncActivities()
                         _successSendUiState.update { it.copy(isLoadingDetails = false) }
                     }.onFailure { e ->
-                        cancelPaymentProof(preparedPaymentProofRequest)
+                        cancelPaymentProofPreparation(preparedPaymentProofRequest)
                         Logger.error("Error sending onchain payment", e, context = TAG)
                         toast(
                             type = Toast.ToastType.ERROR,
@@ -3429,7 +3431,7 @@ class AppViewModel @Inject constructor(
                 // Extract payment hash from invoice for pre-activity metadata
                 val paymentHash = decodedInvoice.paymentHash.toHex()
                 associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
-                    cancelPaymentProof(preparedPaymentProofRequest)
+                    cancelPaymentProofPreparation(preparedPaymentProofRequest)
                     handlePaymentPreparationFailure(it)
                     return
                 }
@@ -3449,7 +3451,6 @@ class AppViewModel @Inject constructor(
 
                 sendLightning(bolt11, paymentAmount).onSuccess { actualPaymentHash ->
                     preparedPaymentProofRequest = null
-                    paykitPaymentProofRepo.reconcile()
                     Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
                     onSendSuccess(
                         NewTransactionSheetDetails(
@@ -3468,7 +3469,8 @@ class AppViewModel @Inject constructor(
                         setSendEffect(SendEffect.NavigateToPending(it.paymentHash, displayAmountSats.toLong()))
                         return@onFailure
                     }
-                    cancelPaymentProof(preparedPaymentProofRequest)
+                    paykitPaymentProofRepo.failLightningPayment(paymentHash)
+                    cancelPaymentProofPreparation(preparedPaymentProofRequest)
                     // Delete pre-activity metadata on failure
                     if (createdMetadataPaymentId != null) {
                         preActivityMetadataRepo.deletePreActivityMetadata(createdMetadataPaymentId)
@@ -3513,8 +3515,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun preparePaymentProof(request: PaykitPaymentRequest?): Result<PaykitPaymentRequest?> {
         if (request == null) return Result.success(null)
-        val preparation = paymentProofPreparation(request)
-            ?: return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+        val preparation = paymentProofPreparation()
         return paykitPaymentProofRepo.prepare(
             request = request,
             paymentEndpointIdentifier = preparation.endpointIdentifier,
@@ -3532,11 +3533,11 @@ class AppViewModel @Inject constructor(
         request?.let { paykitPaymentProofRepo.completeOnchainPayment(it, txId) }
     }
 
-    private suspend fun cancelPaymentProof(request: PaykitPaymentRequest?) {
-        request?.let { paykitPaymentProofRepo.cancel(it) }
+    private suspend fun cancelPaymentProofPreparation(request: PaykitPaymentRequest?) {
+        request?.let { paykitPaymentProofRepo.cancelPreparation(it) }
     }
 
-    private fun paymentProofPreparation(request: PaykitPaymentRequest): PaymentProofPreparation? {
+    private fun paymentProofPreparation(): PaymentProofPreparation {
         val methodId = when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> PublicPaykitRepo.onchainMethodId(_sendUiState.value.address)
             SendMethod.LIGHTNING -> if (_sendUiState.value.lnurl is LnurlParams.LnurlPay) {
@@ -3545,7 +3546,6 @@ class AppViewModel @Inject constructor(
                 MethodId.Bolt11
             }
         }
-        if (methodId.rawValue !in request.acceptedPaymentEndpointIdentifiers) return null
         return PaymentProofPreparation(
             endpointIdentifier = methodId.rawValue,
             kind = if (methodId.isOnchain) PaykitPaymentProofKind.Onchain else PaykitPaymentProofKind.Lightning,

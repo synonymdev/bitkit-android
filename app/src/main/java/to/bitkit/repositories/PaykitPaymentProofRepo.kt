@@ -56,7 +56,6 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     private val operationMutex = Mutex()
-    private var pendingProofs: List<PendingPaykitPaymentProof>? = null
 
     suspend fun prepare(
         request: PaykitPaymentRequest,
@@ -65,14 +64,24 @@ class PaykitPaymentProofRepo @Inject constructor(
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             operationMutex.withLock {
-                require(paymentEndpointIdentifier in request.acceptedPaymentEndpointIdentifiers)
-                require(endpointSupports(paymentEndpointIdentifier, kind))
+                if (
+                    paymentEndpointIdentifier !in request.acceptedPaymentEndpointIdentifiers ||
+                    !endpointSupports(paymentEndpointIdentifier, kind)
+                ) {
+                    throw PaykitPaymentRequestError.RequestUnavailable
+                }
                 val identityStatus = paykitSdkService.identityStatus()
-                check(identityStatus?.liveSessionAvailable == true)
-                val publicKey = checkNotNull(identityStatus.publicKey)
-                val identity = checkNotNull(PubkyPublicKeyFormat.normalized(publicKey))
+                if (identityStatus?.liveSessionAvailable != true) throw PaykitPaymentRequestError.RequestUnavailable
+                val publicKey = identityStatus.publicKey ?: throw PaykitPaymentRequestError.RequestUnavailable
+                val identity = PubkyPublicKeyFormat.normalized(publicKey)
+                    ?: throw PaykitPaymentRequestError.RequestUnavailable
                 val proofs = loadProofs()
-                    .filterNot { PubkyPublicKeyFormat.matches(it.identity, identity) && it.requestId == request.id } +
+                    .filterNot {
+                        PubkyPublicKeyFormat.matches(it.identity, identity) &&
+                            it.requestId == request.id &&
+                            it.paymentIdentifier == null &&
+                            it.proofData == null
+                    } +
                     PendingPaykitPaymentProof(
                         identity = identity,
                         requestId = request.id,
@@ -87,13 +96,16 @@ class PaykitPaymentProofRepo @Inject constructor(
     suspend fun associateLightningPayment(request: PaykitPaymentRequest, paymentHash: String): Result<Unit> =
         withContext(ioDispatcher) {
             runSuspendCatching {
-                require(paymentHash.isHex(HASH_BYTE_COUNT))
+                if (!paymentHash.isHex(HASH_BYTE_COUNT)) throw PaykitPaymentRequestError.RequestUnavailable
                 operationMutex.withLock {
                     val proofs = loadProofs().toMutableList()
-                    val index = proofs.indexOfFirst {
-                        it.requestId == request.id && it.kind == PaykitPaymentProofKind.Lightning
+                    val index = proofs.indexOfLast {
+                        it.requestId == request.id &&
+                            it.kind == PaykitPaymentProofKind.Lightning &&
+                            it.paymentIdentifier == null &&
+                            it.proofData == null
                     }
-                    check(index >= 0)
+                    if (index < 0) throw PaykitPaymentRequestError.RequestUnavailable
                     proofs[index] = proofs[index].copy(paymentIdentifier = paymentHash.lowercase())
                     persist(proofs)
                 }
@@ -115,7 +127,6 @@ class PaykitPaymentProofRepo @Inject constructor(
                         it.paymentIdentifier.equals(paymentHash, ignoreCase = true)
                 }
                 if (matchingProofs.isEmpty()) return@runSuspendCatching
-                val matchingRequestIds = matchingProofs.map { it.requestId }.toSet()
                 val proofs = currentProofs.map {
                     if (
                         it.kind == PaykitPaymentProofKind.Lightning &&
@@ -126,9 +137,11 @@ class PaykitPaymentProofRepo @Inject constructor(
                         it
                     }
                 }
-                persist(proofs)
-                proofs.filter { it.requestId in matchingRequestIds }
-                    .forEach { submitReady(it) }
+                val completedProofs = proofs.filter {
+                    it.kind == PaykitPaymentProofKind.Lightning &&
+                        it.paymentIdentifier.equals(paymentHash, ignoreCase = true)
+                }
+                persistAndSubmit(completedProofs, proofs)
             }.onFailure { Logger.warn("Failed to complete a Paykit Lightning payment proof", it, context = TAG) }
         }
     }
@@ -142,8 +155,11 @@ class PaykitPaymentProofRepo @Inject constructor(
         operationMutex.withLock {
             runSuspendCatching {
                 val proofs = loadProofs().toMutableList()
-                val index = proofs.indexOfFirst {
-                    it.requestId == request.id && it.kind == PaykitPaymentProofKind.Onchain
+                val index = proofs.indexOfLast {
+                    it.requestId == request.id &&
+                        it.kind == PaykitPaymentProofKind.Onchain &&
+                        it.paymentIdentifier == null &&
+                        it.proofData == null
                 }
                 if (index < 0) return@runSuspendCatching
                 val proof = proofs[index].copy(
@@ -151,8 +167,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                     proofData = txid.lowercase(),
                 )
                 proofs[index] = proof
-                persist(proofs)
-                submitReady(proof)
+                persistAndSubmit(listOf(proof), proofs)
             }.onFailure { Logger.warn("Failed to complete a Paykit on-chain payment proof", it, context = TAG) }
         }
     }
@@ -161,7 +176,9 @@ class PaykitPaymentProofRepo @Inject constructor(
         it.kind == PaykitPaymentProofKind.Lightning && it.paymentIdentifier.equals(paymentHash, ignoreCase = true)
     }
 
-    suspend fun cancel(request: PaykitPaymentRequest) = removeProofs { it.requestId == request.id }
+    suspend fun cancelPreparation(request: PaykitPaymentRequest) = removeProofs {
+        it.requestId == request.id && it.paymentIdentifier == null && it.proofData == null
+    }
 
     suspend fun reconcile() = withContext(ioDispatcher) {
         operationMutex.withLock {
@@ -205,8 +222,12 @@ class PaykitPaymentProofRepo @Inject constructor(
                 val preimage = (payment.kind as? PaymentKind.Bolt11)?.preimage
                 if (preimage != null && preimage.matchesPaymentHash(paymentHash)) {
                     val completed = proof.copy(proofData = preimage.lowercase())
-                    replaceProof(completed)
-                    submitReady(completed)
+                    val proofs = loadProofs().toMutableList()
+                    val index = proofs.indexOf(proof)
+                    if (index >= 0) {
+                        proofs[index] = completed
+                        persistAndSubmit(listOf(completed), proofs)
+                    }
                 }
             }
         }
@@ -242,10 +263,18 @@ class PaykitPaymentProofRepo @Inject constructor(
                 proofJson = proofJson,
             )
             Logger.info("Queued a Paykit payment proof for private delivery", context = TAG)
+            runSuspendCatching { paykitSdkService.processPendingPrivateMessages() }
+                .onFailure {
+                    Logger.warn(
+                        "Paykit payment proof remains queued for private delivery",
+                        it,
+                        context = TAG,
+                    )
+                }
         }
-        removeProofsLocked { it == proof }
-        runSuspendCatching { paykitSdkService.processPendingPrivateMessages() }
-            .onFailure { Logger.warn("Paykit payment proof remains queued for private delivery", it, context = TAG) }
+        removeProofsLocked {
+            PubkyPublicKeyFormat.matches(it.identity, proof.identity) && it.requestId == proof.requestId
+        }
     }
 
     private suspend fun removeProofs(predicate: (PendingPaykitPaymentProof) -> Boolean) = withContext(ioDispatcher) {
@@ -261,16 +290,25 @@ class PaykitPaymentProofRepo @Inject constructor(
         if (remaining != current) persist(remaining)
     }
 
-    private suspend fun replaceProof(proof: PendingPaykitPaymentProof) {
-        persist(loadProofs().map { if (it.requestId == proof.requestId) proof else it })
+    private suspend fun persistAndSubmit(
+        completedProofs: List<PendingPaykitPaymentProof>,
+        allProofs: List<PendingPaykitPaymentProof>,
+    ) {
+        runSuspendCatching { persist(allProofs) }
+            .onFailure {
+                Logger.warn(
+                    "Failed to persist a completed Paykit payment proof; attempting immediate delivery",
+                    it,
+                    context = TAG,
+                )
+            }
+        completedProofs.forEach { submitReady(it) }
     }
 
-    private fun loadProofs(): List<PendingPaykitPaymentProof> =
-        pendingProofs ?: store.load().also { pendingProofs = it }
+    private fun loadProofs(): List<PendingPaykitPaymentProof> = store.load()
 
     private suspend fun persist(proofs: List<PendingPaykitPaymentProof>) {
         store.save(proofs)
-        pendingProofs = proofs
     }
 }
 

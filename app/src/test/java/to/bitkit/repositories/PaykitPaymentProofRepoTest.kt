@@ -41,14 +41,20 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val lightningRepo = mock<LightningRepo>()
     private val store = mock<PaykitPaymentProofStore>()
     private var storedProofs = emptyList<PendingPaykitPaymentProof>()
+    private var shouldFailNextSave = false
 
     @Before
     fun setUp() = test {
         storedProofs = emptyList()
+        shouldFailNextSave = false
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
         whenever(store.load()).thenAnswer { storedProofs }
         whenever(store.save(any())).doSuspendableAnswer {
+            if (shouldFailNextSave) {
+                shouldFailNextSave = false
+                error("temporary save failure")
+            }
             storedProofs = it.getArgument(0)
         }
     }
@@ -167,6 +173,57 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertTrue(storedProofs.isEmpty())
     }
 
+    @Test
+    fun `lightning retry preserves earlier payment correlation`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any())).thenReturn(record)
+        val repo = paymentProofRepo()
+
+        repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
+        repo.associateLightningPayment(request, "aa".repeat(32)).getOrThrow()
+
+        repo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
+
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any())
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `cleared store does not restore cached proofs`() = test {
+        val firstRequest = paymentRequest(MethodId.Bolt11.rawValue)
+        val secondRequestId = "550e8400-e29b-41d4-a716-446655440001"
+        val secondRequest = paymentRequest(MethodId.Bolt11.rawValue, secondRequestId)
+        val repo = paymentProofRepo()
+
+        repo.prepare(firstRequest, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
+        storedProofs = emptyList()
+        repo.prepare(secondRequest, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
+
+        assertEquals(1, storedProofs.size)
+        assertEquals(secondRequestId, storedProofs.single().requestId.paymentRequestId)
+    }
+
+    @Test
+    fun `onchain proof submits when completed proof cannot be persisted`() = test {
+        val txid = "ab".repeat(32)
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any())).thenReturn(record)
+        val repo = paymentProofRepo()
+
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        shouldFailNextSave = true
+        repo.completeOnchainPayment(request, txid)
+
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any())
+        assertTrue(storedProofs.isEmpty())
+    }
+
     private fun paymentProofRepo() = PaykitPaymentProofRepo(
         ioDispatcher = testDispatcher,
         paykitSdkService = paykitSdkService,
@@ -174,8 +231,11 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         store = store,
     )
 
-    private fun paymentRequest(endpoint: String) = PaykitPaymentRequest(
-        paymentRequestId = PAYMENT_REQUEST_ID,
+    private fun paymentRequest(
+        endpoint: String,
+        paymentRequestId: String = PAYMENT_REQUEST_ID,
+    ) = PaykitPaymentRequest(
+        paymentRequestId = paymentRequestId,
         counterparty = COUNTERPARTY,
         counterpartyReceiverPath = PaykitReceiverPaths.WALLET,
         amountValue = "0.00001",
