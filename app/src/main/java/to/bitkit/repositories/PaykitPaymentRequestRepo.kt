@@ -145,6 +145,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     @Volatile
     private var activeIdentity: String? = null
+
+    @Volatile
     private var presentedRequestIds = emptySet<PaykitPaymentRequestId>()
 
     suspend fun activate(identity: String) = withContext(ioDispatcher) {
@@ -418,13 +420,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         ?: throw PaykitPaymentRequestError.RequestUnavailable
 
                     operation(current)
+                    processPendingMessages()
                     val updatedRequest = current.copy(lifecycleState = resultingState)
                     _paymentRequestHistory.update { requests ->
                         listOf(updatedRequest) + requests.filterNot { it.id == current.id }
                     }
                     _pendingRequests.update { requests -> requests.filterNot { it.id == current.id } }
                     discardExpiredRequestsLocked()
-                    processPendingMessages()
                     Unit
                 }
             } finally {

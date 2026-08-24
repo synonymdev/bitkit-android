@@ -2,7 +2,6 @@ package to.bitkit.ui.components
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -40,27 +39,6 @@ fun MoneyDisplay(
                 .clickableAlpha(onClick = onClick)
                 .testTag("MoneyText")
         )
-    }
-}
-
-@Composable
-fun MoneyStack(
-    sats: Long,
-    modifier: Modifier = Modifier,
-) {
-    val currencies = LocalCurrencies.current
-    Column(
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = Alignment.Start,
-        modifier = modifier.fillMaxWidth(),
-    ) {
-        MoneySSB(
-            sats = sats,
-            unit = currencies.primaryDisplay.not(),
-            color = Colors.White64,
-            showSymbol = true,
-        )
-        MoneyDisplay(sats = sats, showSymbol = true)
     }
 }
 

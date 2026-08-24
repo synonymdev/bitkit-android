@@ -81,6 +81,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -1371,8 +1372,9 @@ private fun TopBar(
                 if (showPaymentRequests) {
                     val paymentRequestsDescription = stringResource(R.string.wallet__payment_requests)
                     val pendingRequestsDescription = if (pendingPaymentRequestCount > 0) {
-                        stringResource(
-                            R.string.wallet__payment_requests_pending_count,
+                        pluralStringResource(
+                            R.plurals.wallet__payment_requests_pending_count,
+                            pendingPaymentRequestCount,
                             pendingPaymentRequestCount,
                         )
                     } else {

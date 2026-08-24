@@ -178,6 +178,8 @@ fun EditInvoiceContent(
     isLoading: Boolean = false,
     currencies: CurrencyState = LocalCurrencies.current,
 ) {
+    val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
+
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -351,6 +353,7 @@ fun EditInvoiceContent(
                             SecondaryButton(
                                 text = stringResource(R.string.wallet__payment_request_send),
                                 onClick = onClickPaymentRequest,
+                                enabled = amountInputUiState.sats > 0,
                                 modifier = Modifier.testTag("PaymentRequestSendButton"),
                             )
                             VerticalSpacer(12.dp)

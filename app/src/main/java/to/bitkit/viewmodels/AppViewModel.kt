@@ -823,9 +823,7 @@ class AppViewModel @Inject constructor(
         }
 
         return paykitPaymentRequestRepo.automaticPendingRequests().filter { request ->
-            val retryAttempts = paymentRequestPresentationRetryAttempts[request.id] ?: 0
             !paykitPaymentRequestRepo.isProcessing(request) &&
-                retryAttempts <= PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.size &&
                 paymentRequestPresentationRetryJobs[request.id]?.isActive != true
         }.takeIf { it.isNotEmpty() }
     }
@@ -867,16 +865,24 @@ class AppViewModel @Inject constructor(
 
     private fun deferPaymentRequestPresentation(request: PaykitPaymentRequest) {
         val attempt = paymentRequestPresentationRetryAttempts[request.id] ?: 0
-        paymentRequestPresentationRetryAttempts[request.id] = attempt + 1
-        val retryDelay = PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.getOrNull(attempt) ?: run {
-            Logger.warn("Giving up payment request presentation after '${attempt + 1}' attempts", context = TAG)
-            if (requestedPaymentRequestId == request.id) {
+        val retryDelay = PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.getOrNull(attempt)
+            ?: if (requestedPaymentRequestId == request.id) {
+                Logger.warn(
+                    "Giving up requested payment request presentation after '${attempt + 1}' attempts",
+                    context = TAG,
+                )
                 paymentRequestPresentationGeneration++
                 requestedPaymentRequestId = null
                 showSheet(Sheet.PaymentRequests)
+                viewModelScope.launch {
+                    paykitPaymentRequestRepo.markPresented(request)
+                }
+                return
+            } else {
+                PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS.last()
             }
-            return
-        }
+        paymentRequestPresentationRetryAttempts[request.id] =
+            (attempt + 1).coerceAtMost(PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.size)
         if (attempt == 0 && requestedPaymentRequestId == request.id) {
             toast(
                 type = Toast.ToastType.INFO,
@@ -2398,8 +2404,19 @@ class AppViewModel @Inject constructor(
     }
 
     fun clearActiveContactPaymentContext() {
-        synchronized(contactPaymentContextLock) {
+        val interruptedRequest = synchronized(contactPaymentContextLock) {
+            val request = activeContactPaymentContext?.incomingPaymentRequest
             activeContactPaymentContext = null
+            request
+        }
+        if (
+            interruptedRequest != null &&
+            (
+                requestedPaymentRequestId == interruptedRequest.id ||
+                    paykitPaymentRequestRepo.automaticPendingRequests().any { it.id == interruptedRequest.id }
+                )
+        ) {
+            deferPaymentRequestPresentation(interruptedRequest)
         }
     }
 
@@ -3914,7 +3931,10 @@ class AppViewModel @Inject constructor(
 
     fun openIncomingPaymentRequest(id: PaykitPaymentRequestId) {
         val request = paykitPaymentRequestRepo.pendingRequest(id) ?: return
-        if (paykitPaymentRequestRepo.isProcessing(request) || requestedPaymentRequestId != null) return
+        if (paykitPaymentRequestRepo.isProcessing(request) || requestedPaymentRequestId != null) {
+            toast(PaykitPaymentRequestError.OperationInProgress)
+            return
+        }
         invalidatePaymentRequestPresentation()
         requestedPaymentRequestId = id
 
@@ -3934,7 +3954,7 @@ class AppViewModel @Inject constructor(
 
     suspend fun rejectIncomingPaymentRequest(request: PaykitPaymentRequest): Result<Unit> {
         if (requestedPaymentRequestId == request.id) {
-            return Result.failure(PaykitPaymentRequestError.OperationInProgress)
+            return Result.failure<Unit>(PaykitPaymentRequestError.OperationInProgress).onFailure(::toast)
         }
         return paykitPaymentRequestRepo.reject(request).onFailure(::toast)
     }

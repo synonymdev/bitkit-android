@@ -258,6 +258,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `reject removes current request and delivers queued response`() = test {
         val record = paymentRequestRecord()
+        val deliveryStarted = CompletableDeferred<Unit>()
+        val finishDelivery = CompletableDeferred<Unit>()
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(
             paykitSdkService.rejectPaymentRequest(
@@ -268,8 +270,19 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         ).thenReturn(record)
         sut.refresh(emptyList()).getOrThrow()
         clearInvocations(paykitSdkService)
+        whenever(paykitSdkService.processPendingPrivateMessages()).doSuspendableAnswer {
+            deliveryStarted.complete(Unit)
+            finishDelivery.await()
+            emptyList()
+        }
 
-        sut.reject(sut.pendingRequests.value.single()).getOrThrow()
+        val rejection = async { sut.reject(sut.pendingRequests.value.single()) }
+        deliveryStarted.await()
+
+        assertEquals(1, sut.pendingRequests.value.size)
+
+        finishDelivery.complete(Unit)
+        rejection.await().getOrThrow()
 
         assertTrue(sut.pendingRequests.value.isEmpty())
         assertEquals(PaymentRequestLifecycleState.REJECTED, sut.paymentRequestHistory.value.single().lifecycleState)

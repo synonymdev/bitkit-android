@@ -194,7 +194,7 @@ internal fun PaymentRequestsContent(
     canRequestPayment: Boolean,
     onBack: () -> Unit,
     onRequestPayment: () -> Unit,
-    onPay: (to.bitkit.repositories.PaykitPaymentRequestId) -> Unit,
+    onPay: (PaykitPaymentRequestId) -> Unit,
     onReject: suspend (PaykitPaymentRequest) -> Result<Unit>,
 ) {
     val sections = paymentRequestSections(requests, pending, Clock.System.now())
@@ -341,7 +341,7 @@ private fun ActivePaymentRequestCard(
     request: PaykitPaymentRequest,
     isIncoming: Boolean,
     contact: PubkyProfile?,
-    onPay: (to.bitkit.repositories.PaykitPaymentRequestId) -> Unit,
+    onPay: (PaykitPaymentRequestId) -> Unit,
     onReject: suspend (PaykitPaymentRequest) -> Result<Unit>,
 ) {
     if (isIncoming) {

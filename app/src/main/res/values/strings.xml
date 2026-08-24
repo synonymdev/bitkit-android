@@ -1219,7 +1219,10 @@
     <string name="wallet__payment_requests_empty_headline"><![CDATA[No Payment\n<accent>History</accent>]]></string>
     <string name="wallet__payment_requests_earlier">Earlier</string>
     <string name="wallet__payment_requests_not_now">Not Now</string>
-    <string name="wallet__payment_requests_pending_count">%1$d pending payment requests</string>
+    <plurals name="wallet__payment_requests_pending_count">
+        <item quantity="one">%1$d pending payment request</item>
+        <item quantity="other">%1$d pending payment requests</item>
+    </plurals>
     <string name="wallet__payment_requests_review">Review each request, then pay or dismiss.</string>
     <string name="wallet__payment_requests_section">PAYMENT REQUESTS</string>
     <string name="wallet__payment_requests_see_all">See All</string>

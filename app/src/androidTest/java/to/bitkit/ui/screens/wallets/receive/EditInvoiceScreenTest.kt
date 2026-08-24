@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.receive
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import kotlinx.collections.immutable.persistentListOf
@@ -39,6 +40,7 @@ class EditInvoiceScreenTest {
         }
 
         composeTestRule.onNodeWithTag("PaymentRequestSendButton").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestSendButton").assertIsNotEnabled()
         composeTestRule.onNodeWithTag("ShowQrReceive").assertIsDisplayed()
     }
 

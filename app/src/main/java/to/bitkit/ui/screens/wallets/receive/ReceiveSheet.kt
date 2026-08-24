@@ -85,12 +85,6 @@ fun ReceiveSheet(
         wallet.refreshReceiveState()
     }
 
-    LaunchedEffect(startRoute) {
-        if (startRoute != ReceiveRoute.QR) {
-            navController.navigateTo(startRoute)
-        }
-    }
-
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -104,7 +98,7 @@ fun ReceiveSheet(
         ) {
             NavHost(
                 navController = navController,
-                startDestination = ReceiveRoute.QR,
+                startDestination = startRoute,
             ) {
                 composableWithDefaultTransitions<ReceiveRoute.QR> {
                     LaunchedEffect(cjitInvoice.value) {

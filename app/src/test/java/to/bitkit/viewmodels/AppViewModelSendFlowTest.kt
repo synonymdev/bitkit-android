@@ -531,6 +531,35 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failed manual request presentation returns to the request queue`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
+            Result.success(
+                PublicPaykitPaymentResult.Opened(
+                    paymentRequest = "bitcoin:first?lightning=bitcoin:second",
+                    privatePaymentContext = PrivatePaykitPaymentContext("bitkit/server", 8uL),
+                ),
+            )
+        )
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
+        verify(paykitPaymentRequestRepo).markPresented(request)
+        verify(privatePaykitRepo, times(15)).beginPaymentRequest(request)
+    }
+
+    @Test
     fun `latest identity activation blocks retries from the previous payment request queue`() = test {
         val request = paymentRequest()
         val nextIdentity = "pubky8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo"
@@ -665,7 +694,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `unresolvable payment request retries are bounded`() = test {
+    fun `unresolvable automatic request falls back to low frequency retries`() = test {
         val request = paymentRequest()
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.beginPaymentRequest(request))
@@ -678,9 +707,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.startPaykitPaymentRequestPolling()
         advanceTimeBy(30.seconds.inWholeMilliseconds)
         runCurrent()
-        sut.stopPaykitPaymentRequestPolling()
-
         verify(privatePaykitRepo, times(15)).beginPaymentRequest(request)
+
+        advanceTimeBy(120.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        verify(privatePaykitRepo, times(16)).beginPaymentRequest(request)
+        sut.stopPaykitPaymentRequestPolling()
     }
 
     @Test

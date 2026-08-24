@@ -23,6 +23,7 @@ import com.synonym.paykit.PaymentAmountContext
 import com.synonym.paykit.PaymentPayload
 import com.synonym.paykit.PaymentReference
 import com.synonym.paykit.PaymentRequestAmount
+import com.synonym.paykit.PaymentRequestFilter
 import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PaymentTarget
@@ -584,7 +585,7 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         return operationMutex.withLock {
             handle().listPaymentRequests(
-                com.synonym.paykit.PaymentRequestFilter(
+                PaymentRequestFilter(
                     counterparty = null,
                     counterpartyReceiverPath = null,
                     localRole = null,
