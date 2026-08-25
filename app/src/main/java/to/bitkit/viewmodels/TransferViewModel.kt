@@ -149,6 +149,20 @@ class TransferViewModel @Inject constructor(
                 isNodeRunning.first { it }
             }
 
+            if (!canFundOrder(satsAmount.toULong())) {
+                Logger.info("Rejected spending amount '$satsAmount' over funding budget", context = TAG)
+                setTransferEffect(
+                    TransferEffect.ToastError(
+                        title = context.getString(R.string.lightning__spending_amount__error_balance__title),
+                        description = context.getString(
+                            R.string.lightning__spending_amount__error_balance__description
+                        ),
+                    )
+                )
+                _spendingUiState.update { it.copy(isLoading = false) }
+                return@launch
+            }
+
             blocktankRepo.createOrder(
                 spendingBalanceSats = satsAmount.toULong(),
                 receivingBalanceSats = lspBalance,
@@ -735,6 +749,38 @@ class TransferViewModel @Inject constructor(
             context = TAG,
         )
         return fallback
+    }
+
+    /** Order cost the on-chain balance can fund, or null when the balance itself is unreadable. */
+    private suspend fun loadFundingBudget(): ULong? {
+        val spendable = lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats ?: return null
+        val miningFee = lightningRepo.estimateSendAllFee(speed = TransactionSpeed.Fast).getOrElse {
+            Logger.warn("Failed to estimate transfer mining fee reserve", it, context = TAG)
+            (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
+        }
+        return spendable.safe() - miningFee.safe()
+    }
+
+    /**
+     * Whether an order at [clientBalance] still fits what the wallet can fund.
+     *
+     * The advertised max can be a settled estimate rather than a verified one when a re-quote fails
+     * or does not converge, and the balance can move after it was sized, so the order is checked
+     * against a live quote before it is placed. An unknown budget or quote leaves the decision to
+     * the confirm step rather than blocking the user here.
+     */
+    private suspend fun canFundOrder(clientBalance: ULong): Boolean {
+        val budget = loadFundingBudget()
+        if (budget == null) {
+            Logger.warn("Skipped funding check, on-chain balance unavailable", context = TAG)
+            return true
+        }
+        val fee = quoteOrderFee(clientBalance)
+        if (fee == null) {
+            Logger.warn("Skipped funding check, fee quote unavailable", context = TAG)
+            return true
+        }
+        return clientBalance.safe() + fee.safe() <= budget
     }
 
     /**
