@@ -300,6 +300,45 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `updateLimits re-quotes against the channel split the order will actually use`() = test {
+        // Order creation recomputes the LSP balance from the chosen amount, so a re-quote priced
+        // against the earlier balance would verify an order that is never created.
+        val maxChannel = 1_403_872uL
+        val spendable = 266_656uL
+        val miningFee = 178uL
+        val availableAmount = spendable - miningFee // 266_478
+        val quotes = mapOf(266_478uL to 1_798uL, 264_680uL to 1_800uL, 264_678uL to 1_801uL, 264_677uL to 1_801uL)
+        val responses = quotes.mapValues { (_, fee) -> stubFeeResponse(fee) }
+        stubSpendableBalances(spendable)
+        blocktankState.value = BlocktankState(info = null)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(miningFee))
+        responses.forEach { (balance, response) ->
+            // each client balance gets its own LSP side, mirroring maxChannelSize - clientBalance
+            whenever(blocktankRepo.calculateLiquidityOptions(eq(balance))).thenReturn(
+                Result.success(
+                    ChannelLiquidityOptions(
+                        defaultLspBalanceSat = maxChannel - balance,
+                        minLspBalanceSat = maxChannel - balance,
+                        maxLspBalanceSat = maxChannel - balance,
+                        maxClientBalanceSat = spendable,
+                    )
+                )
+            )
+            whenever(blocktankRepo.estimateOrderFee(eq(balance), any(), any()))
+                .thenReturn(Result.success(response))
+        }
+
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        assertEquals(264_677L, sut.spendingUiState.value.maxAllowedToSend)
+        // the re-quote must price 264_678 against its own split, not the one taken at 264_680
+        verify(blocktankRepo).estimateOrderFee(eq(264_678uL), eq(maxChannel - 264_678uL), any())
+        verify(blocktankRepo, never()).estimateOrderFee(eq(264_678uL), eq(maxChannel - 264_680uL), any())
+    }
+
+    @Test
     fun `updateLimits uses percent fallback when fast mining fee estimate fails`() = test {
         val spendable = 100_000uL
         val fallbackMiningFee = (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()

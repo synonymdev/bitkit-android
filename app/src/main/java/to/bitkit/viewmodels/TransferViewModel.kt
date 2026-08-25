@@ -677,7 +677,6 @@ class TransferViewModel @Inject constructor(
             val lspFees = estimate.networkFeeSat.safe() + estimate.serviceFeeSat.safe()
             val maxClientBalance = resolveAffordableClientBalance(
                 availableAmount = availableAmount,
-                receivingAmount = receivingAmount,
                 quotedBalance = cappedClientBalance,
                 quotedFee = lspFees,
             )
@@ -713,7 +712,6 @@ class TransferViewModel @Inject constructor(
      */
     private suspend fun resolveAffordableClientBalance(
         availableAmount: ULong,
-        receivingAmount: ULong,
         quotedBalance: ULong,
         quotedFee: ULong,
     ): ULong {
@@ -722,16 +720,36 @@ class TransferViewModel @Inject constructor(
         repeat(MAX_AFFORDABILITY_ROUNDS) {
             if (candidate.safe() + fee.safe() <= availableAmount) return candidate
             candidate = availableAmount.safe() - fee.safe()
-            fee = blocktankRepo.estimateOrderFee(
-                spendingBalanceSats = candidate,
-                receivingBalanceSats = receivingAmount,
-            ).getOrNull()?.let { it.networkFeeSat.safe() + it.serviceFeeSat.safe() } ?: return candidate
+            fee = quoteOrderFee(candidate) ?: run {
+                Logger.warn(
+                    "Advertising unverified max '$candidate', fee quote unavailable",
+                    context = TAG,
+                )
+                return candidate
+            }
         }
-        return if (candidate.safe() + fee.safe() <= availableAmount) {
-            candidate
-        } else {
-            availableAmount.safe() - fee.safe()
-        }
+        if (candidate.safe() + fee.safe() <= availableAmount) return candidate
+
+        val fallback = availableAmount.safe() - fee.safe()
+        Logger.warn(
+            "Max '$candidate' still over budget '$availableAmount' after " +
+                "'$MAX_AFFORDABILITY_ROUNDS' rounds, advertising unverified '$fallback'",
+            context = TAG,
+        )
+        return fallback
+    }
+
+    /**
+     * LSP fee for an order at [clientBalance], priced against the channel split that order creation
+     * will pick for that same balance, so the settled max is checked against the order it produces.
+     */
+    private suspend fun quoteOrderFee(clientBalance: ULong): ULong? {
+        val liquidity = blocktankRepo.calculateLiquidityOptions(clientBalance).getOrNull() ?: return null
+        val receivingAmount = maxOf(liquidity.defaultLspBalanceSat, liquidity.minLspBalanceSat)
+        return blocktankRepo.estimateOrderFee(
+            spendingBalanceSats = clientBalance,
+            receivingBalanceSats = receivingAmount,
+        ).getOrNull()?.let { it.networkFeeSat.safe() + it.serviceFeeSat.safe() }
     }
 
     fun onUseDefaultLspBalanceClick() {
