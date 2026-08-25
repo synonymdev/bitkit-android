@@ -63,13 +63,13 @@ import to.bitkit.ui.components.MoneySSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.wallets.HwWalletDetailUiState
 import to.bitkit.ui.screens.wallets.HwWalletViewModel
+import to.bitkit.ui.screens.wallets.RemoveHwWalletDialog
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -96,6 +96,7 @@ fun HardwareWalletsSettingsScreen(
         onRemoveClick = viewModel::onRemoveClick,
         onConfirmRemove = { viewModel.removeDevice(it.id) },
         onDismissRemoveDialog = viewModel::onDismissRemoveDialog,
+        onKeepBackupDataChange = viewModel::onKeepBackupDataChange,
         onRenameClick = viewModel::onRenameClick,
         onDismissRenameSheet = viewModel::onDismissRenameSheet,
         onLabelChange = viewModel::onLabelChange,
@@ -112,6 +113,7 @@ private fun Content(
     onRemoveClick: (HwWallet) -> Unit = {},
     onConfirmRemove: (HwWallet) -> Unit = {},
     onDismissRemoveDialog: () -> Unit = {},
+    onKeepBackupDataChange: (Boolean) -> Unit = {},
     onRenameClick: (HwWallet) -> Unit = {},
     onDismissRenameSheet: () -> Unit = {},
     onLabelChange: (String) -> Unit = {},
@@ -178,11 +180,10 @@ private fun Content(
     }
 
     uiState.isPendingRemoval?.let { wallet ->
-        AppAlertDialog(
-            title = stringResource(R.string.hardware__remove_dialog_title, wallet.name),
-            text = stringResource(R.string.hardware__remove_dialog_text),
-            confirmText = stringResource(R.string.common__remove),
-            dismissText = stringResource(R.string.common__cancel),
+        RemoveHwWalletDialog(
+            walletName = wallet.name,
+            keepBackupData = uiState.keepBackupDataOnRemoval,
+            onKeepBackupDataChange = onKeepBackupDataChange,
             onConfirm = { onConfirmRemove(wallet) },
             onDismiss = onDismissRemoveDialog,
         )

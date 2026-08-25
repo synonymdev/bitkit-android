@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -18,6 +19,7 @@ import to.bitkit.R
 import to.bitkit.models.HwWallet
 import to.bitkit.models.Toast
 import to.bitkit.models.TransportType
+import to.bitkit.repositories.HwBackupDataUnreadableError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
 import to.bitkit.test.BaseUnitTest
@@ -62,6 +64,7 @@ class HwWalletViewModelTest : BaseUnitTest() {
         whenever(hwWalletRepo.walletsLoaded).thenReturn(MutableStateFlow(true))
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
         whenever(context.getString(R.string.hardware__remove_error)).thenReturn("Could not remove")
+        whenever(context.getString(R.string.hardware__remove_keep_error)).thenReturn("Could not keep the tags")
         whenever(context.getString(R.string.hardware__rename_error)).thenReturn("Could not rename")
     }
 
@@ -98,20 +101,57 @@ class HwWalletViewModelTest : BaseUnitTest() {
 
     @Test
     fun `removeDevice delegates to the repo and clears the pending device`() = test {
-        whenever { hwWalletRepo.removeDevice("dev1") }.thenReturn(Result.success(Unit))
+        whenever { hwWalletRepo.removeDevice("dev1", true) }.thenReturn(Result.success(Unit))
         val sut = createSut()
         sut.onRemoveClick(wallet)
 
         sut.removeDevice("dev1")
         advanceUntilIdle()
 
-        verify(hwWalletRepo).removeDevice("dev1")
+        verify(hwWalletRepo).removeDevice("dev1", true)
         assertNull(sut.uiState.value.isPendingRemoval)
     }
 
     @Test
+    fun `onRemoveClick offers to keep the backup data`() = test {
+        val sut = createSut()
+
+        sut.onRemoveClick(wallet)
+
+        assertEquals(true, sut.uiState.value.keepBackupDataOnRemoval)
+    }
+
+    @Test
+    fun `onRemoveClick restores the default after a wallet was removed without keeping its data`() = test {
+        whenever { hwWalletRepo.removeDevice(any(), any()) }.thenReturn(Result.success(Unit))
+        val sut = createSut()
+        sut.onRemoveClick(wallet)
+        sut.onKeepBackupDataChange(false)
+        sut.removeDevice("dev1")
+        advanceUntilIdle()
+
+        // Reopening starts from the default rather than from the last choice.
+        sut.onRemoveClick(otherWallet)
+
+        assertEquals(true, sut.uiState.value.keepBackupDataOnRemoval)
+    }
+
+    @Test
+    fun `removeDevice forwards the choice to keep nothing`() = test {
+        whenever { hwWalletRepo.removeDevice("dev1", false) }.thenReturn(Result.success(Unit))
+        val sut = createSut()
+        sut.onRemoveClick(wallet)
+        sut.onKeepBackupDataChange(false)
+
+        sut.removeDevice("dev1")
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).removeDevice("dev1", false)
+    }
+
+    @Test
     fun `removeDevice sends an error toast on failure`() = test {
-        whenever { hwWalletRepo.removeDevice("dev1") }.thenReturn(Result.failure(AppError("nope")))
+        whenever { hwWalletRepo.removeDevice(any(), any()) }.thenReturn(Result.failure(AppError("nope")))
         val sut = createSut()
 
         val toasts = mutableListOf<Toast>()
@@ -120,6 +160,22 @@ class HwWalletViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(Toast.ToastType.ERROR, toasts.single().type)
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `removeDevice explains an unreadable backup data failure`() = test {
+        whenever { hwWalletRepo.removeDevice(any(), any()) }
+            .thenReturn(Result.failure(HwBackupDataUnreadableError(AppError("core unavailable"))))
+        val sut = createSut()
+
+        val toasts = mutableListOf<Toast>()
+        val collectJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        sut.removeDevice("dev1")
+        advanceUntilIdle()
+
+        // The generic retry message would hide that removing without keeping the data still works.
+        assertEquals("Could not keep the tags", toasts.single().description)
         collectJob.cancel()
     }
 
