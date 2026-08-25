@@ -745,6 +745,56 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onSpendingAdvancedContinue rejects an unaffordable capacity without a cached budget`() = test {
+        val clientBalance = 260_000uL
+        val order = previewBtOrder(clientBalanceSat = clientBalance)
+        val response = stubFeeResponse(6_000uL)
+        stubSpendableBalances(265_000uL)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(0uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(order))
+        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), any(), any()))
+            .thenReturn(Result.success(response))
+        sut.onConfirmAmount(clientBalance.toLong())
+        advanceUntilIdle()
+        // deliberately no updateAdvancedFundingBudget call, so the cached budget stays null
+        assertNull(sut.spendingUiState.value.advancedBudgetSats)
+
+        sut.transferEffects.test {
+            sut.onSpendingAdvancedContinue(LSP_BALANCE.toLong())
+            advanceUntilIdle()
+
+            assertIs<TransferEffect.ToastError>(awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `onSpendingAdvancedContinue proceeds when the on-chain balance cannot be read`() = test {
+        val clientBalance = 260_000uL
+        val order = previewBtOrder(clientBalanceSat = clientBalance)
+        val response = stubFeeResponse(6_000uL)
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(order))
+        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), any(), any()))
+            .thenReturn(Result.success(response))
+        sut.onConfirmAmount(clientBalance.toLong())
+        advanceUntilIdle()
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.failure(AppError("node unavailable")))
+
+        sut.onSpendingAdvancedContinue(LSP_BALANCE.toLong())
+        advanceUntilIdle()
+
+        // an unreadable balance must not block the user; confirm stays the authority
+        assertTrue(sut.spendingUiState.value.isAdvanced)
+        verify(blocktankRepo, times(2)).createOrder(any(), any(), any())
+    }
+
+    @Test
     fun `prepareSpendingConfirmFunding exposes real mining fee for confirm UI`() = test {
         val order = previewBtOrder(feeSat = 98_000uL)
         val selected = listOf(stubUtxo(100_000u))

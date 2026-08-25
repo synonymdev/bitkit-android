@@ -199,6 +199,10 @@ class TransferViewModel @Inject constructor(
 
             if (!isValid) return@launch
 
+            if (_spendingUiState.value.advancedBudgetSats == null) {
+                _spendingUiState.update { it.copy(advancedBudgetSats = loadFundingBudget()) }
+            }
+
             val result = blocktankRepo.estimateOrderFee(
                 spendingBalanceSats = _spendingUiState.value.order?.clientBalanceSat ?: 0u,
                 receivingBalanceSats = amount.toULong(),
@@ -221,37 +225,54 @@ class TransferViewModel @Inject constructor(
     }
 
     /**
-     * Refreshes what the on-chain balance can still fund, so the advanced screen can reject a
+     * Order cost the on-chain balance can still fund, or null when the balance itself is unreadable.
+     *
+     * Both reads are local to the node, so this is cheap enough to resolve on demand rather than
+     * relying on a cached value that may be missing or stale.
+     */
+    private suspend fun loadFundingBudget(): ULong? {
+        val spendable = lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats ?: return null
+        val miningFee = lightningRepo.estimateSendAllFee(speed = TransactionSpeed.Fast).getOrElse {
+            Logger.warn("Failed to estimate advanced transfer mining fee reserve", it, context = TAG)
+            (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
+        }
+        return spendable.safe() - miningFee.safe()
+    }
+
+    /**
+     * Refreshes what the on-chain balance can still fund, so the advanced screen can disable a
      * receiving capacity whose liquidity fee the user cannot pay.
      */
     fun updateAdvancedFundingBudget() {
         viewModelScope.launch {
-            val spendable = lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats
-            if (spendable == null) {
-                _spendingUiState.update { it.copy(advancedBudgetSats = null) }
-                return@launch
-            }
-            val miningFee = lightningRepo.estimateSendAllFee(speed = TransactionSpeed.Fast).getOrElse {
-                Logger.warn("Failed to estimate advanced transfer mining fee reserve", it, context = TAG)
-                (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
-            }
-            _spendingUiState.update { it.copy(advancedBudgetSats = spendable.safe() - miningFee.safe()) }
+            _spendingUiState.update { it.copy(advancedBudgetSats = loadFundingBudget()) }
         }
     }
 
     /**
-     * Whether the order for this capacity still fits the funding budget.
+     * Whether the order for this capacity still fits what the wallet can fund.
      *
      * The receiving side is chosen independently of the client balance, and the LSP prices both
-     * sides, so raising it can push the order past what the wallet can pay. An unknown budget or
-     * quote leaves the decision to the confirm step rather than blocking the user here.
+     * sides, so raising it can push the order past what the wallet can pay. The budget is resolved
+     * here rather than read from state, so a cached value that never loaded or went stale while the
+     * screen was open cannot wave an unaffordable order through. Only a balance the node will not
+     * report, or a quote the LSP will not give, defers the decision to the confirm step.
      */
     private suspend fun canFundAdvancedOrder(clientBalance: ULong, receivingAmount: ULong): Boolean {
-        val budget = _spendingUiState.value.advancedBudgetSats ?: return true
+        val budget = loadFundingBudget()
+        if (budget == null) {
+            Logger.warn("Skipped advanced capacity check, on-chain balance unavailable", context = TAG)
+            return true
+        }
+        _spendingUiState.update { it.copy(advancedBudgetSats = budget) }
         val fee = blocktankRepo.estimateOrderFee(
             spendingBalanceSats = clientBalance,
             receivingBalanceSats = receivingAmount,
-        ).getOrNull()?.feeSat ?: return true
+        ).getOrNull()?.feeSat
+        if (fee == null) {
+            Logger.warn("Skipped advanced capacity check, fee quote unavailable", context = TAG)
+            return true
+        }
         return clientBalance.safe() + fee.safe() <= budget
     }
 
