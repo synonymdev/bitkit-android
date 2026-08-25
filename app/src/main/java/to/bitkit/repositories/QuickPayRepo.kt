@@ -22,7 +22,6 @@ import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentKind
 import org.lightningdevkit.ldknode.PaymentStatus
 import to.bitkit.async.appScope
-import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
@@ -717,7 +716,6 @@ class QuickPayRepo @Inject constructor(
 
     private enum class AmbiguousApply { UNCHANGED, SUCCEEDED, FAILED }
 }
-
 
 fun interface QuickPayInvoiceParser {
     fun parse(bolt11: String): String?
