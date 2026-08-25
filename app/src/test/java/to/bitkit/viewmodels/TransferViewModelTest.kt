@@ -692,23 +692,27 @@ class TransferViewModelTest : BaseUnitTest() {
         val clientBalance = 260_000uL
         val order = previewBtOrder(clientBalanceSat = clientBalance)
         val budget = 265_000uL
-        // client balance plus this liquidity fee lands above the budget
-        val response = stubFeeResponse(6_000uL)
+        val raisedCapacity = LSP_BALANCE * 2u
+        // the default capacity is affordable, the raised one is not
+        val affordable = stubFeeResponse(1_000uL)
+        val unaffordable = stubFeeResponse(6_000uL)
         stubSpendableBalances(budget)
         whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(0uL))
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
         whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(order))
-        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), any(), any()))
-            .thenReturn(Result.success(response))
+        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), eq(LSP_BALANCE), any()))
+            .thenReturn(Result.success(affordable))
+        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), eq(raisedCapacity), any()))
+            .thenReturn(Result.success(unaffordable))
         sut.onConfirmAmount(clientBalance.toLong())
         advanceUntilIdle()
         sut.updateAdvancedFundingBudget()
         advanceUntilIdle()
 
         sut.transferEffects.test {
-            sut.onSpendingAdvancedContinue(LSP_BALANCE.toLong())
+            sut.onSpendingAdvancedContinue(raisedCapacity.toLong())
             advanceUntilIdle()
 
             assertIs<TransferEffect.ToastError>(awaitItem())
@@ -748,22 +752,26 @@ class TransferViewModelTest : BaseUnitTest() {
     fun `onSpendingAdvancedContinue rejects an unaffordable capacity without a cached budget`() = test {
         val clientBalance = 260_000uL
         val order = previewBtOrder(clientBalanceSat = clientBalance)
-        val response = stubFeeResponse(6_000uL)
+        val raisedCapacity = LSP_BALANCE * 2u
+        val affordable = stubFeeResponse(1_000uL)
+        val unaffordable = stubFeeResponse(6_000uL)
         stubSpendableBalances(265_000uL)
         whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(0uL))
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
         whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(order))
-        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), any(), any()))
-            .thenReturn(Result.success(response))
+        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), eq(LSP_BALANCE), any()))
+            .thenReturn(Result.success(affordable))
+        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), eq(raisedCapacity), any()))
+            .thenReturn(Result.success(unaffordable))
         sut.onConfirmAmount(clientBalance.toLong())
         advanceUntilIdle()
         // deliberately no updateAdvancedFundingBudget call, so the cached budget stays null
         assertNull(sut.spendingUiState.value.advancedBudgetSats)
 
         sut.transferEffects.test {
-            sut.onSpendingAdvancedContinue(LSP_BALANCE.toLong())
+            sut.onSpendingAdvancedContinue(raisedCapacity.toLong())
             advanceUntilIdle()
 
             assertIs<TransferEffect.ToastError>(awaitItem())

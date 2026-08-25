@@ -225,21 +225,6 @@ class TransferViewModel @Inject constructor(
     }
 
     /**
-     * Order cost the on-chain balance can still fund, or null when the balance itself is unreadable.
-     *
-     * Both reads are local to the node, so this is cheap enough to resolve on demand rather than
-     * relying on a cached value that may be missing or stale.
-     */
-    private suspend fun loadFundingBudget(): ULong? {
-        val spendable = lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats ?: return null
-        val miningFee = lightningRepo.estimateSendAllFee(speed = TransactionSpeed.Fast).getOrElse {
-            Logger.warn("Failed to estimate advanced transfer mining fee reserve", it, context = TAG)
-            (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
-        }
-        return spendable.safe() - miningFee.safe()
-    }
-
-    /**
      * Refreshes what the on-chain balance can still fund, so the advanced screen can disable a
      * receiving capacity whose liquidity fee the user cannot pay.
      */
