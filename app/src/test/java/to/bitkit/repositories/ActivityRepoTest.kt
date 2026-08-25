@@ -7,6 +7,7 @@ import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -855,6 +856,53 @@ class ActivityRepoTest : BaseUnitTest() {
         val result = sut.getHardwareTagsAsPreActivityMetadata().getOrThrow()
 
         assertEquals(emptyList(), result)
+    }
+
+    @Test
+    fun `getTagMetadataForWallet unions the stored and the rendered tag metadata`() = test {
+        stubHardwareTagLookup(hardwareOnchainActivity(txType = PaymentType.SENT))
+        val stored = PreActivityMetadata(
+            walletId = HARDWARE_WALLET_ID,
+            paymentId = "not-yet-seen",
+            tags = listOf("gift"),
+            paymentHash = null,
+            txId = "not-yet-seen",
+            address = null,
+            isReceive = false,
+            feeRate = 0uL,
+            isTransfer = false,
+            channelId = null,
+            createdAt = 1uL,
+        )
+        whenever { coreService.activity.getAllPreActivityMetadata() }.thenReturn(listOf(stored))
+
+        val result = sut.getTagMetadataForWallet(HARDWARE_WALLET_ID).getOrThrow()
+
+        // Core drops both on delete, and only the rendered half comes back from the activity tags.
+        assertEquals(listOf("not-yet-seen", "hw-txid"), result.map { it.paymentId })
+    }
+
+    @Test
+    fun `getTagMetadataForWallet ignores the metadata of other wallets`() = test {
+        stubHardwareTagLookup(hardwareOnchainActivity(txType = PaymentType.SENT))
+        val otherWallet = PreActivityMetadata(
+            walletId = WalletScope.default,
+            paymentId = "default-payment",
+            tags = listOf("daily"),
+            paymentHash = null,
+            txId = null,
+            address = null,
+            isReceive = true,
+            feeRate = 0uL,
+            isTransfer = false,
+            channelId = null,
+            createdAt = 1uL,
+        )
+        whenever { coreService.activity.getAllPreActivityMetadata() }.thenReturn(listOf(otherWallet))
+
+        val result = sut.getTagMetadataForWallet(HARDWARE_WALLET_ID).getOrThrow()
+
+        assertEquals(listOf("hw-txid"), result.map { it.paymentId })
     }
 
     private suspend fun stubHardwareTagLookup(activity: Activity.Onchain) {
