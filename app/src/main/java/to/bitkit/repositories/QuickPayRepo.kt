@@ -98,6 +98,7 @@ enum class QuickPayCompletionKind {
 data class QuickPayCompletionOutcome(
     val kind: QuickPayCompletionKind = QuickPayCompletionKind.NONE,
     val invoicePaymentHash: String? = null,
+    val sessionNotified: Boolean = false,
 ) {
     val wasQuickPay: Boolean get() = kind != QuickPayCompletionKind.NONE
 
@@ -557,12 +558,9 @@ class QuickPayRepo @Inject constructor(
         } else {
             QuickPayCompletionKind.SETTLED_FAILURE
         }
-        val outcome = QuickPayCompletionOutcome(
-            kind = kind,
-            invoicePaymentHash = record.invoicePaymentHash,
-        )
+        var sessionNotified = false
         if (op != null) {
-            if (success) {
+            sessionNotified = if (success) {
                 emitSuccessLocked(op, feePaidMsat)
             } else {
                 emitErrorLocked(
@@ -577,7 +575,11 @@ class QuickPayRepo @Inject constructor(
             }
             removeOpLocked(op)
         }
-        return outcome
+        return QuickPayCompletionOutcome(
+            kind = kind,
+            invoicePaymentHash = record.invoicePaymentHash,
+            sessionNotified = sessionNotified,
+        )
     }
 
     private fun isAttributedFailure(
@@ -702,14 +704,14 @@ class QuickPayRepo @Inject constructor(
         op.settled.complete(Unit)
     }
 
-    private fun emitSuccessLocked(op: InFlightOp, feePaidMsat: ULong?) {
+    private fun emitSuccessLocked(op: InFlightOp, feePaidMsat: ULong?): Boolean {
         if (op.emitted) {
             op.settled.complete(Unit)
-            return
+            return false
         }
         op.emitted = true
         val feeSats = msatFloorOf(feePaidMsat ?: 0u)
-        emitToSession(
+        val notified = emitToSession(
             op.sessionId,
             QuickPaySessionEvent.Success(
                 paymentHash = op.invoiceHash,
@@ -717,16 +719,18 @@ class QuickPayRepo @Inject constructor(
             ),
         )
         op.settled.complete(Unit)
+        return notified
     }
 
-    private fun emitErrorLocked(op: InFlightOp, error: Throwable, paymentRequest: String?) {
+    private fun emitErrorLocked(op: InFlightOp, error: Throwable, paymentRequest: String?): Boolean {
         if (op.emitted) {
             op.settled.complete(Unit)
-            return
+            return false
         }
         op.emitted = true
-        emitToSession(op.sessionId, QuickPaySessionEvent.Error(error, paymentRequest))
+        val notified = emitToSession(op.sessionId, QuickPaySessionEvent.Error(error, paymentRequest))
         op.settled.complete(Unit)
+        return notified
     }
 
     private suspend fun prepareReserve(amountSats: ULong): PreparedReserve? {
@@ -749,9 +753,9 @@ class QuickPayRepo @Inject constructor(
     private suspend fun loadPaymentRows(): List<QuickPayReconcileRow>? =
         runSuspendCatching { paymentLookup.rows() }.getOrNull()
 
-    private fun emitToSession(sessionId: String?, event: QuickPaySessionEvent) {
-        if (sessionId == null) return
-        sessionFlows[sessionId]?.tryEmit(event)
+    private fun emitToSession(sessionId: String?, event: QuickPaySessionEvent): Boolean {
+        if (sessionId == null) return false
+        return sessionFlows[sessionId]?.tryEmit(event) == true
     }
 
     private data class InFlightOp(

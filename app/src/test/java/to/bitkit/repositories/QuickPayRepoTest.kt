@@ -187,8 +187,36 @@ class QuickPayRepoTest : BaseUnitTest() {
         val outcome = sut.signalCompletion(paymentId = "pid", paymentHash = "abc", success = false)
 
         assertEquals(QuickPayCompletionKind.SETTLED_FAILURE, outcome.kind)
+        assertFalse(outcome.sessionNotified)
         assertEquals(0L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+    }
+
+    @Test
+    fun `signalCompletion notifies an attached session`() = test {
+        val (bolt11, hash) = testInvoice()
+        val started = CompletableDeferred<Unit>()
+        val hold = CompletableDeferred<Result<String>>()
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+            if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
+            started.complete(Unit)
+            hold.await()
+        }
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            backgroundScope.launch {
+                sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            }
+            started.await()
+
+            val outcome = sut.signalCompletion(paymentId = null, paymentHash = hash, success = false)
+
+            assertTrue(outcome.sessionNotified)
+            assertIs<QuickPaySessionEvent.Error>(awaitItem())
+        }
+        hold.complete(Result.success("pid"))
     }
 
     @Test

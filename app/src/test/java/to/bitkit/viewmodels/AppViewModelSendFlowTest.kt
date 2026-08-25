@@ -2026,6 +2026,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val bolt11 = "lnbcrt1quickpayfail"
         enableQuickPay()
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever {
+            quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(
+            QuickPayCompletionOutcome(
+                kind = QuickPayCompletionKind.SETTLED_FAILURE,
+                invoicePaymentHash = "010203",
+                sessionNotified = true,
+            ),
+        )
         sut.onScanResult(bolt11)
         advanceUntilIdle()
         clearInvocations(toastManager)
@@ -2035,6 +2044,38 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 Event.PaymentFailed(
                     paymentId = "payment_id",
                     paymentHash = "010203",
+                    reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+                ),
+            )
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `LNURL QuickPay failure with notified session does not toast`() = test {
+        val paymentHash = "lnurlfetchedhash"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(false)
+        whenever {
+            quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(
+            QuickPayCompletionOutcome(
+                kind = QuickPayCompletionKind.SETTLED_FAILURE,
+                invoicePaymentHash = paymentHash,
+                sessionNotified = true,
+            ),
+        )
+        setSendState(SendUiState(payMethod = SendMethod.LIGHTNING))
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        sut.sendEffect.test {
+            emitNodeEvent(
+                Event.PaymentFailed(
+                    paymentId = "payment_id",
+                    paymentHash = paymentHash,
                     reason = PaymentFailureReason.ROUTE_NOT_FOUND,
                 ),
             )
