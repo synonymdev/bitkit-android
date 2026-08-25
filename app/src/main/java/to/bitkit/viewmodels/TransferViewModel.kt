@@ -675,10 +675,12 @@ class TransferViewModel @Inject constructor(
         ).onSuccess { estimate ->
             maxLspFee = estimate.feeSat
             val lspFees = estimate.networkFeeSat.safe() + estimate.serviceFeeSat.safe()
-            // The fee was quoted for `cappedClientBalance`, and the LSP service fee grows with the
-            // client balance, so a larger balance derived from that quote prices an order costing
-            // more than the user has. Cap at the balance the fee was actually quoted for.
-            val maxClientBalance = minOf(availableAmount.safe() - lspFees.safe(), cappedClientBalance)
+            val maxClientBalance = resolveAffordableClientBalance(
+                availableAmount = availableAmount,
+                receivingAmount = receivingAmount,
+                quotedBalance = cappedClientBalance,
+                quotedFee = lspFees,
+            )
             val maxSend = min(
                 liquidity.maxClientBalanceSat.toLong(),
                 maxClientBalance.toLong()
@@ -697,6 +699,38 @@ class TransferViewModel @Inject constructor(
             _spendingUiState.update { it.copy(isLoading = false) }
             Logger.error("Failure", it, context = TAG)
             setTransferEffect(TransferEffect.ToastException(it))
+        }
+    }
+
+    /**
+     * Largest client balance that still covers its own order fee, settled against live quotes.
+     *
+     * [quotedFee] prices [quotedBalance], but the advertised max is usually a different balance, and
+     * the LSP charges the client and LSP sides of the channel at different rates. The fee at that
+     * other balance can therefore be higher, leaving an order the user cannot fund. Each round
+     * re-quotes and steps down by the shortfall; the fee moves by a small fraction of a satoshi per
+     * satoshi of balance, so this settles well within [MAX_AFFORDABILITY_ROUNDS].
+     */
+    private suspend fun resolveAffordableClientBalance(
+        availableAmount: ULong,
+        receivingAmount: ULong,
+        quotedBalance: ULong,
+        quotedFee: ULong,
+    ): ULong {
+        var candidate = quotedBalance
+        var fee = quotedFee
+        repeat(MAX_AFFORDABILITY_ROUNDS) {
+            if (candidate.safe() + fee.safe() <= availableAmount) return candidate
+            candidate = availableAmount.safe() - fee.safe()
+            fee = blocktankRepo.estimateOrderFee(
+                spendingBalanceSats = candidate,
+                receivingBalanceSats = receivingAmount,
+            ).getOrNull()?.let { it.networkFeeSat.safe() + it.serviceFeeSat.safe() } ?: return candidate
+        }
+        return if (candidate.safe() + fee.safe() <= availableAmount) {
+            candidate
+        } else {
+            availableAmount.safe() - fee.safe()
         }
     }
 
@@ -1580,6 +1614,9 @@ class TransferViewModel @Inject constructor(
         private const val MIN_STEP_DELAY_MS = 500L
         private const val POLL_INTERVAL_MS = 2_500L
         private const val MAX_CONSECUTIVE_ERRORS = 5
+
+        /** Live re-quotes allowed while settling the advertised max transfer on an affordable balance. */
+        private const val MAX_AFFORDABILITY_ROUNDS = 2
 
         /** Conservative vbyte reserve for multi-input hardware funding before exact compose runs. */
         private const val HW_FUNDING_TX_VBYTES = 1_200uL

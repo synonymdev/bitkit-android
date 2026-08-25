@@ -266,6 +266,40 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `updateLimits settles the spending max when the LSP fee falls as the client balance rises`() = test {
+        // Live quotes from the staging LSP, which charges the LSP side harder than the client side,
+        // so the second quote is dearer than the first and no ordering assumption can hold.
+        val spendable = 266_656uL
+        val miningFee = 178uL
+        val availableAmount = spendable - miningFee // 266_478
+        val quotes = mapOf(
+            266_478uL to 1_798uL, // f(A)     -> balanceAfterLspFee = 264_680
+            264_680uL to 1_800uL, // f(C)     -> first candidate is unaffordable
+            264_678uL to 1_801uL, // round 1  -> still one sat over
+            264_677uL to 1_801uL, // round 2  -> affordable
+        )
+        stubSpendableBalances(spendable)
+        blocktankState.value = BlocktankState(info = null)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(miningFee))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = spendable)))
+        val responses = quotes.mapValues { (_, fee) -> stubFeeResponse(fee) }
+        responses.forEach { (balance, response) ->
+            whenever(blocktankRepo.estimateOrderFee(eq(balance), any(), any()))
+                .thenReturn(Result.success(response))
+        }
+
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        val maxAllowedToSend = sut.spendingUiState.value.maxAllowedToSend
+        assertEquals(264_677L, maxAllowedToSend)
+        // The settled max must fund its own order rather than merely undercut the first quote.
+        assertTrue(maxAllowedToSend.toULong() + quotes.getValue(maxAllowedToSend.toULong()) <= availableAmount)
+    }
+
+    @Test
     fun `updateLimits uses percent fallback when fast mining fee estimate fails`() = test {
         val spendable = 100_000uL
         val fallbackMiningFee = (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
