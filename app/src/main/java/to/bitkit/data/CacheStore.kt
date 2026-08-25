@@ -16,8 +16,8 @@ import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.BalanceState
 import to.bitkit.models.FxRate
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.QuickPayLedger
 import to.bitkit.models.WalletScope
-import to.bitkit.repositories.QuickPayLedger
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton

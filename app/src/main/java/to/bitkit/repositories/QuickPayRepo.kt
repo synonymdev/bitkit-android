@@ -4,6 +4,7 @@ import com.synonym.bitkitcore.LnurlPayData
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -14,10 +15,6 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
@@ -32,6 +29,9 @@ import to.bitkit.di.IoDispatcher
 import to.bitkit.ext.callbackAmountMsats
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.supportPaymentRequest
+import to.bitkit.models.QuickPayLedger
+import to.bitkit.models.QuickPayLedgerRecord
+import to.bitkit.models.QuickPayRecordPhase
 import to.bitkit.models.USD
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
@@ -42,78 +42,7 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.coroutines.coroutineContext
 import kotlin.time.Clock
-
-fun interface QuickPayInvoiceParser {
-    fun parse(bolt11: String): String?
-}
-
-fun interface QuickPayPaymentLookup {
-    suspend fun rows(): List<QuickPayReconcileRow>?
-}
-
-data class QuickPaySession(val id: String = UUID.randomUUID().toString())
-
-sealed interface QuickPayPayRequest {
-    val amountSats: ULong
-
-    data class Bolt11(
-        val bolt11: String,
-        override val amountSats: ULong,
-    ) : QuickPayPayRequest
-
-    data class LnurlPay(
-        val data: LnurlPayData,
-        override val amountSats: ULong,
-    ) : QuickPayPayRequest
-}
-
-sealed interface QuickPaySessionEvent {
-    data class Success(
-        val paymentHash: String,
-        val amountWithFee: Long,
-    ) : QuickPaySessionEvent
-
-    data class Pending(
-        val paymentHash: String,
-        val amount: Long,
-        val paymentRequest: String,
-    ) : QuickPaySessionEvent
-
-    data object FallBackToConfirm : QuickPaySessionEvent
-
-    data class Error(
-        val error: Throwable,
-        val paymentRequest: String?,
-    ) : QuickPaySessionEvent
-}
-
-enum class QuickPayCompletionKind {
-    NONE,
-    SETTLED_SUCCESS,
-    SETTLED_FAILURE,
-}
-
-data class QuickPayCompletionOutcome(
-    val kind: QuickPayCompletionKind = QuickPayCompletionKind.NONE,
-    val invoicePaymentHash: String? = null,
-    val sessionNotified: Boolean = false,
-) {
-    val wasQuickPay: Boolean get() = kind != QuickPayCompletionKind.NONE
-
-    companion object {
-        val None = QuickPayCompletionOutcome()
-    }
-}
-
-class QuickPayConversionError : AppError("Currency conversion failed")
-
-class QuickPayPaymentFailedError(
-    val paymentHash: String,
-    val reason: PaymentFailureReason?,
-    val paymentRequest: String?,
-) : AppError(reason?.name)
 
 @Singleton
 @Suppress("LongParameterList", "LargeClass")
@@ -318,7 +247,7 @@ class QuickPayRepo @Inject constructor(
                     paymentRequest = invoice.bolt11,
                     dispatched = false,
                     sessionId = session.id,
-                    job = coroutineContext[Job],
+                    job = currentCoroutineContext()[Job],
                     paymentId = null,
                 ),
             )
@@ -739,9 +668,7 @@ class QuickPayRepo @Inject constructor(
             settings.quickPayAmount.toDouble(),
             USD,
         ).getOrNull()
-        if (thresholdSats == null || thresholdSats == 0uL || amountSats > thresholdSats) {
-            return null
-        }
+        if (thresholdSats == null || thresholdSats == 0uL || amountSats > thresholdSats) return null
         val converted = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrElse {
             throw QuickPayConversionError()
         }
@@ -787,156 +714,76 @@ class QuickPayRepo @Inject constructor(
     private enum class AmbiguousApply { UNCHANGED, SUCCEEDED, FAILED }
 }
 
-internal class QuickPaySpendStore(
-    private val cacheStore: CacheStore,
-    private val clock: Clock,
-) {
-    companion object {
-        const val LEDGER_VERSION = 1
-    }
 
-    suspend fun snapshot(): SpendSnapshot {
-        val data = cacheStore.data.first()
-        val (ledger, supported) = data.resolvedLedger()
-        val dayKey = currentDayKey()
-        if (!supported) return SpendSnapshot(0L, supported = false, ledger = ledger)
-        val spend = spendFor(ledger, dayKey)
-        return SpendSnapshot(spend.spentCents, supported = true, ledger = ledger)
-    }
-
-    suspend fun matching(hash: String): QuickPayLedgerRecord? {
-        val (ledger, supported) = cacheStore.data.first().resolvedLedger()
-        if (!supported) return null
-        return ledger.recordMatching(hash)
-    }
-
-    suspend fun reserve(
-        paymentHash: String,
-        amountCents: Long,
-        capCents: Long,
-        keepHashes: Set<String> = emptySet(),
-    ): QuickPayLedgerRecord? {
-        var reserved: QuickPayLedgerRecord? = null
-        val wrote = writeLedger { ledger, dayKey ->
-            if (ledger.recordMatching(paymentHash) != null) return@writeLedger ledger
-            val spend = spendFor(ledger, dayKey)
-            if (spend.spentCents > Long.MAX_VALUE - amountCents) return@writeLedger ledger
-            val total = spend.spentCents + amountCents
-            if (total > capCents) return@writeLedger ledger
-            val next = ledger.pruned(spend.dayKey, keepHashes)
-            val record = QuickPayLedgerRecord(
-                id = UUID.randomUUID().toString(),
-                amountCents = amountCents,
-                dayKey = spend.dayKey,
-                invoicePaymentHash = paymentHash,
-                paymentId = null,
-                phase = QuickPayRecordPhase.SUBMITTING,
-            )
-            reserved = record
-            next.copy(
-                dayKey = spend.dayKey,
-                spentCents = total,
-                records = next.records + record,
-            )
-        }
-        return if (!wrote) null else reserved
-    }
-
-    suspend fun release(paymentHash: String) {
-        writeLedger { ledger, _ -> releaseRecord(ledger, paymentHash) }
-    }
-
-    suspend fun drop(paymentHash: String) {
-        writeLedger { ledger, _ ->
-            val index = ledger.recordIndex(paymentHash) ?: return@writeLedger ledger
-            ledger.copy(records = ledger.records.toMutableList().also { it.removeAt(index) })
-        }
-    }
-
-    suspend fun markSubmitted(invoiceHash: String, paymentId: String) {
-        writeLedger { ledger, _ ->
-            val index = ledger.recordIndex(invoiceHash) ?: return@writeLedger ledger
-            val record = ledger.records[index]
-            ledger.copy(
-                records = ledger.records.toMutableList().also {
-                    it[index] = record.copy(
-                        paymentId = paymentId,
-                        phase = QuickPayRecordPhase.SUBMITTED,
-                    )
-                },
-            )
-        }
-    }
-
-    suspend fun settle(keys: List<String>, success: Boolean) {
-        writeLedger { current, _ ->
-            val i = keys.firstNotNullOfOrNull { current.recordIndex(it) } ?: return@writeLedger current
-            val found = current.records[i]
-            val remaining = current.records.toMutableList().also { it.removeAt(i) }
-            val spent = if (!success && found.dayKey == current.dayKey) {
-                (current.spentCents - found.amountCents).coerceAtLeast(0L)
-            } else {
-                current.spentCents
-            }
-            current.copy(records = remaining, spentCents = spent)
-        }
-    }
-
-    @Suppress("LoopWithTooManyJumpStatements")
-    suspend fun applyReconcile(
-        rows: List<QuickPayReconcileRow>?,
-        liveSubmittingHashes: Set<String>,
-        shouldReleaseFailed: (QuickPayLedgerRecord, QuickPayReconcileRow) -> Boolean,
-    ) {
-        if (rows == null) return
-        writeLedger { ledger, dayKey ->
-            val next = ledger.pruned(dayKey, liveSubmittingHashes)
-            val remaining = mutableListOf<QuickPayLedgerRecord>()
-            var spent = next.spentCents
-            for (record in next.records) {
-                if (liveSubmittingHashes.contains(record.invoicePaymentHash)) {
-                    remaining.add(record)
-                    continue
-                }
-                val match = pickLedgerMatch(record, rows)
-                if (match == null) {
-                    remaining.add(record)
-                    continue
-                }
-                when (match.status) {
-                    QuickPayReconcileRow.Status.PENDING -> remaining.add(record)
-                    QuickPayReconcileRow.Status.SUCCEEDED -> Unit
-                    QuickPayReconcileRow.Status.FAILED -> {
-                        if (!shouldReleaseFailed(record, match)) {
-                            remaining.add(record)
-                        } else if (record.dayKey == next.dayKey) {
-                            spent = (spent - record.amountCents).coerceAtLeast(0L)
-                        }
-                    }
-                }
-            }
-            next.copy(records = remaining, spentCents = spent)
-        }
-    }
-
-    private suspend fun writeLedger(transform: (QuickPayLedger, String) -> QuickPayLedger): Boolean {
-        var supported = true
-        cacheStore.update { data ->
-            val (ledger, ok) = data.resolvedLedger()
-            if (!ok) {
-                supported = false
-                return@update data
-            }
-            val dayKey = currentDayKey()
-            val next = transform(ledger, dayKey)
-            data.copy(quickPayLedger = next)
-        }
-        return supported
-    }
-
-    private fun currentDayKey(): String =
-        clock.now().toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
+fun interface QuickPayInvoiceParser {
+    fun parse(bolt11: String): String?
 }
+
+fun interface QuickPayPaymentLookup {
+    suspend fun rows(): List<QuickPayReconcileRow>?
+}
+
+data class QuickPaySession(val id: String = UUID.randomUUID().toString())
+
+sealed interface QuickPayPayRequest {
+    val amountSats: ULong
+
+    data class Bolt11(
+        val bolt11: String,
+        override val amountSats: ULong,
+    ) : QuickPayPayRequest
+
+    data class LnurlPay(
+        val data: LnurlPayData,
+        override val amountSats: ULong,
+    ) : QuickPayPayRequest
+}
+
+sealed interface QuickPaySessionEvent {
+    data class Success(
+        val paymentHash: String,
+        val amountWithFee: Long,
+    ) : QuickPaySessionEvent
+
+    data class Pending(
+        val paymentHash: String,
+        val amount: Long,
+        val paymentRequest: String,
+    ) : QuickPaySessionEvent
+
+    data object FallBackToConfirm : QuickPaySessionEvent
+
+    data class Error(
+        val error: Throwable,
+        val paymentRequest: String?,
+    ) : QuickPaySessionEvent
+}
+
+enum class QuickPayCompletionKind {
+    NONE,
+    SETTLED_SUCCESS,
+    SETTLED_FAILURE,
+}
+
+data class QuickPayCompletionOutcome(
+    val kind: QuickPayCompletionKind = QuickPayCompletionKind.NONE,
+    val invoicePaymentHash: String? = null,
+    val sessionNotified: Boolean = false,
+) {
+    val wasQuickPay: Boolean get() = kind != QuickPayCompletionKind.NONE
+
+    companion object {
+        val None = QuickPayCompletionOutcome()
+    }
+}
+
+class QuickPayConversionError : AppError("Currency conversion failed")
+
+class QuickPayPaymentFailedError(
+    val paymentHash: String,
+    val reason: PaymentFailureReason?,
+    val paymentRequest: String?,
+) : AppError(reason?.name)
 
 internal data class SpendSnapshot(
     val spentCents: Long,
@@ -986,33 +833,6 @@ data class QuickPayReconcileRow(
     )
 }
 
-@Serializable
-enum class QuickPayRecordPhase {
-    @SerialName("submitting")
-    SUBMITTING,
-
-    @SerialName("submitted")
-    SUBMITTED,
-}
-
-@Serializable
-data class QuickPayLedgerRecord(
-    val id: String,
-    val amountCents: Long,
-    val dayKey: String,
-    val invoicePaymentHash: String,
-    val paymentId: String? = null,
-    val phase: QuickPayRecordPhase,
-)
-
-@Serializable
-data class QuickPayLedger(
-    val version: Int,
-    val dayKey: String,
-    val spentCents: Long,
-    val records: List<QuickPayLedgerRecord> = emptyList(),
-)
-
 private fun quickPayCapCents(thresholdUsd: Int, multiplier: Int): Long =
     thresholdUsd.toLong() * 100L * multiplier.toLong()
 
@@ -1024,80 +844,4 @@ private fun quickPayReserveCents(
     val clamped = minOf(convertedCents, thresholdUsd.toLong() * 100L)
     if (amountSats == 0uL) return clamped
     return maxOf(clamped, 1L)
-}
-
-private data class QuickPayDaySpend(
-    val dayKey: String,
-    val spentCents: Long,
-)
-
-private fun AppCacheData.resolvedLedger(): Pair<QuickPayLedger, Boolean> {
-    val ledger = quickPayLedger
-    if (ledger != null) {
-        return ledger to (ledger.version == QuickPaySpendStore.LEDGER_VERSION)
-    }
-    return QuickPayLedger(
-        version = QuickPaySpendStore.LEDGER_VERSION,
-        dayKey = "",
-        spentCents = 0L,
-        records = emptyList(),
-    ) to true
-}
-
-private fun QuickPayLedger.recordMatching(hash: String): QuickPayLedgerRecord? =
-    records.find { it.invoicePaymentHash == hash || it.paymentId == hash || it.id == hash }
-
-private fun QuickPayLedger.recordIndex(hash: String): Int? =
-    records.indexOfFirst { it.invoicePaymentHash == hash || it.paymentId == hash || it.id == hash }
-        .takeIf { it >= 0 }
-
-private fun QuickPayLedger.pruned(
-    currentDay: String,
-    keepHashes: Set<String> = emptySet(),
-): QuickPayLedger {
-    if (currentDay.isEmpty()) return this
-    return copy(
-        records = records.filter { it.dayKey >= currentDay || it.invoicePaymentHash in keepHashes },
-    )
-}
-
-private fun spendFor(ledger: QuickPayLedger, dayKey: String): QuickPayDaySpend = when {
-    ledger.dayKey.isEmpty() || dayKey > ledger.dayKey -> QuickPayDaySpend(dayKey, 0L)
-    dayKey == ledger.dayKey -> QuickPayDaySpend(dayKey, ledger.spentCents)
-    else -> QuickPayDaySpend(ledger.dayKey, ledger.spentCents)
-}
-
-private fun releaseRecord(ledger: QuickPayLedger, paymentHash: String): QuickPayLedger {
-    val index = ledger.recordIndex(paymentHash) ?: return ledger
-    val record = ledger.records[index]
-    val remaining = ledger.records.toMutableList().also { it.removeAt(index) }
-    val spent = if (record.dayKey == ledger.dayKey) {
-        (ledger.spentCents - record.amountCents).coerceAtLeast(0L)
-    } else {
-        ledger.spentCents
-    }
-    return ledger.copy(records = remaining, spentCents = spent)
-}
-
-private fun pickLedgerMatch(
-    record: QuickPayLedgerRecord,
-    rows: List<QuickPayReconcileRow>,
-): QuickPayReconcileRow? {
-    val matches = rows.filter { row ->
-        row.isOutboundBolt11 && (
-            row.invoicePaymentHash == record.invoicePaymentHash ||
-                row.paymentId == record.invoicePaymentHash ||
-                row.paymentId == record.paymentId ||
-                (record.paymentId != null && row.invoicePaymentHash == record.paymentId)
-            )
-    }
-    if (matches.isEmpty()) return null
-    record.paymentId?.let { pid -> matches.find { it.paymentId == pid } }?.let { return it }
-    return matches.maxBy {
-        when (it.status) {
-            QuickPayReconcileRow.Status.SUCCEEDED -> 2
-            QuickPayReconcileRow.Status.PENDING -> 1
-            QuickPayReconcileRow.Status.FAILED -> 0
-        }
-    }
 }

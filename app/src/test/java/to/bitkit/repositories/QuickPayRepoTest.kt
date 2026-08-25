@@ -35,6 +35,8 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.json
 import to.bitkit.models.ConvertedAmount
+import to.bitkit.models.QuickPayLedger
+import to.bitkit.models.QuickPayRecordPhase
 import to.bitkit.models.USD
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
