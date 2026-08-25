@@ -116,7 +116,6 @@ class TransferViewModel @Inject constructor(
 
     val transferEffects = MutableSharedFlow<TransferEffect>()
     fun setTransferEffect(effect: TransferEffect) = viewModelScope.launch { transferEffects.emit(effect) }
-    var maxLspFee = 0uL
     private var hwTransferSignJob: Job? = null
     private var hwFeeEstimateJob: Job? = null
     private var confirmFeeJob: Job? = null
@@ -673,7 +672,6 @@ class TransferViewModel @Inject constructor(
             spendingBalanceSats = cappedClientBalance,
             receivingBalanceSats = receivingAmount,
         ).onSuccess { estimate ->
-            maxLspFee = estimate.feeSat
             val lspFees = estimate.networkFeeSat.safe() + estimate.serviceFeeSat.safe()
             val maxClientBalance = resolveAffordableClientBalance(
                 availableAmount = availableAmount,
