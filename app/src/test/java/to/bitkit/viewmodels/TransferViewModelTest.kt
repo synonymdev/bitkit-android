@@ -350,7 +350,9 @@ class TransferViewModelTest : BaseUnitTest() {
             .thenReturn(Result.success(0uL))
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
-        whenever(blocktankRepo.estimateOrderFee(eq(amount), any(), any())).thenReturn(Result.success(response))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(response))
+        sut.updateLimits()
+        advanceUntilIdle()
 
         sut.transferEffects.test {
             sut.onConfirmAmount(amount.toLong())
@@ -372,9 +374,11 @@ class TransferViewModelTest : BaseUnitTest() {
             .thenReturn(Result.success(0uL))
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
-        whenever(blocktankRepo.estimateOrderFee(eq(amount), any(), any())).thenReturn(Result.success(response))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(response))
         whenever(blocktankRepo.createOrder(any(), any(), any()))
             .thenReturn(Result.success(previewBtOrder(clientBalanceSat = amount)))
+        sut.updateLimits()
+        advanceUntilIdle()
 
         sut.onConfirmAmount(amount.toLong())
         advanceUntilIdle()
@@ -390,6 +394,9 @@ class TransferViewModelTest : BaseUnitTest() {
             .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
         whenever(blocktankRepo.createOrder(any(), any(), any()))
             .thenReturn(Result.success(previewBtOrder(clientBalanceSat = amount)))
+        sut.updateLimits()
+        advanceUntilIdle()
+        assertNull(sut.spendingUiState.value.fundingBudgetSats)
 
         sut.onConfirmAmount(amount.toLong())
         advanceUntilIdle()
@@ -489,6 +496,37 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(OPTION_MAX_CLIENT_BALANCE.toLong(), sut.spendingUiState.value.maxAllowedToSend)
+    }
+
+    @Test
+    fun `onConfirmAmount funds a hardware transfer from the device balance not the on-chain wallet`() = test {
+        // Regression: the funding check must not read on-chain savings here, or every hardware
+        // transfer is rejected because those funds live on the device.
+        val amount = 100_000uL
+        stubSpendableBalances(0uL) // empty on-chain wallet, as in the hardware e2e
+        blocktankState.value = BlocktankState(info = btInfo(lspMaxClientBalance = LSP_MAX_CLIENT_BALANCE))
+        whenever(hwWalletRepo.getFundingAccount(HARDWARE_WALLET_ID)).thenReturn(
+            Result.success(
+                HwFundingAccount.Trezor(
+                    xpub = XPUB,
+                    addressType = HwFundingAddressType.NATIVE_SEGWIT,
+                    balanceSats = ON_CHAIN_BALANCE,
+                ),
+            ),
+        )
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(1uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(feeResponse))
+        whenever(blocktankRepo.createOrder(any(), any(), any()))
+            .thenReturn(Result.success(previewBtOrder(clientBalanceSat = amount)))
+        sut.updateHwLimits(HARDWARE_WALLET_ID)
+        advanceUntilIdle()
+
+        sut.onConfirmAmount(amount.toLong())
+        advanceUntilIdle()
+
+        verify(blocktankRepo).createOrder(eq(amount), any(), any())
     }
 
     @Test

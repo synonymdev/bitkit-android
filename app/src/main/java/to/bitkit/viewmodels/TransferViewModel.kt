@@ -615,7 +615,9 @@ class TransferViewModel @Inject constructor(
 
             awaitNodeRunning()
 
-            val availableAmount = loadFundingBudget() ?: 0uL
+            val fundingBudget = loadFundingBudget()
+            _spendingUiState.update { it.copy(fundingBudgetSats = fundingBudget) }
+            val availableAmount = fundingBudget ?: 0uL
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
             if (initialLspFees == null) {
@@ -760,14 +762,16 @@ class TransferViewModel @Inject constructor(
      * Whether an order at [clientBalance] still fits what the wallet can fund.
      *
      * The advertised max can be a settled estimate rather than a verified one when a re-quote fails
-     * or does not converge, and the balance can move after it was sized, so the order is checked
-     * against a live quote before it is placed. An unknown budget or quote leaves the decision to
-     * the confirm step rather than blocking the user here.
+     * or does not converge, so the fee is re-quoted live before the order is placed. The budget is
+     * the one the limits were sized against, which is the on-chain balance for a soft wallet and the
+     * device account for a hardware transfer — a fresh on-chain read would reject every hardware
+     * transfer, whose funds never sit in this wallet. A budget that was never sized, or a quote the
+     * LSP will not give, leaves the decision to the confirm step rather than blocking the user here.
      */
     private suspend fun canFundOrder(clientBalance: ULong): Boolean {
-        val budget = loadFundingBudget()
+        val budget = _spendingUiState.value.fundingBudgetSats
         if (budget == null) {
-            Logger.warn("Skipped funding check, on-chain balance unavailable", context = TAG)
+            Logger.warn("Skipped funding check, no sized budget available", context = TAG)
             return true
         }
         val fee = quoteOrderFee(clientBalance)
@@ -855,6 +859,7 @@ class TransferViewModel @Inject constructor(
             updateTransferValues(0uL)
 
             val availableAmount = account.balanceSats.safe() - hwFundingFeeReserve(account.balanceSats).safe()
+            _spendingUiState.update { it.copy(fundingBudgetSats = availableAmount) }
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
             if (initialLspFees == null) {
@@ -1750,6 +1755,8 @@ data class TransferToSpendingUiState(
     val shouldUseSendAll: Boolean = false,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
+    /** Budget the transfer limits were sized against, or null while unknown. */
+    val fundingBudgetSats: ULong? = null,
 )
 
 private data class SpendingConfirmFundingPlan(
