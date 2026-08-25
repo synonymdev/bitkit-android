@@ -3530,7 +3530,13 @@ class AppViewModel @Inject constructor(
         ?: Result.success(Unit)
 
     private suspend fun completeOnchainPaymentProof(request: PaykitPaymentRequest?, txId: String) {
-        request?.let { paykitPaymentProofRepo.completeOnchainPayment(it, txId) }
+        request?.let {
+            paykitPaymentProofRepo.completeOnchainPayment(
+                request = it,
+                txid = txId,
+                paymentEndpointIdentifier = paymentProofPreparation().endpointIdentifier,
+            )
+        }
     }
 
     private suspend fun cancelPaymentProofPreparation(request: PaykitPaymentRequest?) {

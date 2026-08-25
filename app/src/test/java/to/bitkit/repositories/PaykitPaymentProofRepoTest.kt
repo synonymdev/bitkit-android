@@ -12,6 +12,10 @@ import com.synonym.paykit.PrivateJsonObject
 import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
@@ -41,15 +45,23 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val lightningRepo = mock<LightningRepo>()
     private val store = mock<PaykitPaymentProofStore>()
     private var storedProofs = emptyList<PendingPaykitPaymentProof>()
+    private var shouldFailNextLoad = false
     private var shouldFailNextSave = false
 
     @Before
     fun setUp() = test {
         storedProofs = emptyList()
+        shouldFailNextLoad = false
         shouldFailNextSave = false
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
-        whenever(store.load()).thenAnswer { storedProofs }
+        whenever(store.load()).thenAnswer {
+            if (shouldFailNextLoad) {
+                shouldFailNextLoad = false
+                error("temporary load failure")
+            }
+            storedProofs
+        }
         whenever(store.save(any())).doSuspendableAnswer {
             if (shouldFailNextSave) {
                 shouldFailNextSave = false
@@ -93,6 +105,46 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         )
         assertTrue(storedProofs.isEmpty())
         verify(paykitSdkService).processPendingPrivateMessages()
+    }
+
+    @Test
+    fun `associated lightning proof completes after repository restart`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        val paymentKind = mock<PaymentKind.Bolt11> {
+            on { preimage } doReturn PREIMAGE
+        }
+        val payment = mock<PaymentDetails> {
+            on { id } doReturn PAYMENT_HASH
+            on { kind } doReturn paymentKind
+            on { direction } doReturn PaymentDirection.OUTBOUND
+            on { status } doReturn PaymentStatus.SUCCEEDED
+        }
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(listOf(payment)))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any())).thenReturn(record)
+        val firstRepo = paymentProofRepo()
+
+        firstRepo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
+        firstRepo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        assertNull(storedProofs.single().proofData)
+
+        paymentProofRepo().reconcile()
+
+        verify(lightningRepo).getPayments()
+        val proofCaptor = argumentCaptor<String>()
+        verify(paykitSdkService).submitPaymentProof(
+            counterparty = any(),
+            counterpartyReceiverPath = any(),
+            paymentRequestId = any(),
+            paymentEndpointIdentifier = any(),
+            proofJson = proofCaptor.capture(),
+        )
+        assertEquals(
+            """{"data":"$PREIMAGE","type":"${PaykitPaymentProofKind.Lightning.type}"}""",
+            proofCaptor.firstValue,
+        )
+        assertTrue(storedProofs.isEmpty())
     }
 
     @Test
@@ -154,7 +206,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
-        repo.completeOnchainPayment(request, txid)
+        repo.completeOnchainPayment(request, txid, MethodId.P2wpkh.rawValue)
 
         val endpointCaptor = argumentCaptor<String>()
         val proofCaptor = argumentCaptor<String>()
@@ -218,9 +270,40 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
         shouldFailNextSave = true
-        repo.completeOnchainPayment(request, txid)
+        repo.completeOnchainPayment(request, txid, MethodId.P2wpkh.rawValue)
 
         verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any())
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `onchain proof submits when prepared proof cannot be loaded`() = test {
+        val txid = "ab".repeat(32)
+        val endpoint = MethodId.P2wpkh.rawValue
+        val request = paymentRequest(endpoint)
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any())).thenReturn(record)
+        val repo = paymentProofRepo()
+
+        repo.prepare(request, endpoint, PaykitPaymentProofKind.Onchain).getOrThrow()
+        shouldFailNextLoad = true
+        repo.completeOnchainPayment(request, txid, endpoint)
+
+        val endpointCaptor = argumentCaptor<String>()
+        val proofCaptor = argumentCaptor<String>()
+        verify(paykitSdkService).submitPaymentProof(
+            counterparty = any(),
+            counterpartyReceiverPath = any(),
+            paymentRequestId = any(),
+            paymentEndpointIdentifier = endpointCaptor.capture(),
+            proofJson = proofCaptor.capture(),
+        )
+        assertEquals(endpoint, endpointCaptor.firstValue)
+        assertEquals(
+            """{"data":"$txid","type":"${PaykitPaymentProofKind.Onchain.type}"}""",
+            proofCaptor.firstValue,
+        )
         assertTrue(storedProofs.isEmpty())
     }
 
