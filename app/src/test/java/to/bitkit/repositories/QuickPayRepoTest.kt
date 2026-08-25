@@ -222,6 +222,35 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failure racing a detached session does not claim delivery`() = test {
+        val (bolt11, hash) = testInvoice()
+        val started = CompletableDeferred<Unit>()
+        val hold = CompletableDeferred<Result<String>>()
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+            if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
+            started.complete(Unit)
+            hold.await()
+        }
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            backgroundScope.launch {
+                sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            }
+            started.await()
+            // async op cleanup is deliberately not advanced: the completion races the detach
+            sut.detach(session)
+
+            val outcome = sut.signalCompletion(paymentId = null, paymentHash = hash, success = false)
+
+            assertFalse(outcome.sessionNotified)
+            expectNoEvents()
+        }
+        hold.complete(Result.success("pid"))
+    }
+
+    @Test
     fun `signalCompletion failure on a prior day does not decrement the new day`() = test {
         assertNotNull(sut.reserveBound("old", 1000u).getOrThrow())
         markSubmitted("old", "old-pid")

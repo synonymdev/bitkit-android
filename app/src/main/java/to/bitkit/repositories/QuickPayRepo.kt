@@ -85,11 +85,14 @@ class QuickPayRepo @Inject constructor(
     }
 
     fun detach(session: QuickPaySession) {
+        // Remove synchronously so a racing completion cannot claim delivery to a disposed UI
+        sessionFlows.remove(session.id)
         scope.launch { detachSession(session.id) }
     }
 
     fun detachAll() {
         val ids = sessionFlows.keys.toList()
+        ids.forEach { sessionFlows.remove(it) }
         scope.launch {
             ids.forEach { detachSession(it) }
         }
@@ -682,7 +685,8 @@ class QuickPayRepo @Inject constructor(
 
     private fun emitToSession(sessionId: String?, event: QuickPaySessionEvent): Boolean {
         if (sessionId == null) return false
-        return sessionFlows[sessionId]?.tryEmit(event) == true
+        val flow = sessionFlows[sessionId] ?: return false
+        return flow.subscriptionCount.value > 0 && flow.tryEmit(event)
     }
 
     private data class InFlightOp(
