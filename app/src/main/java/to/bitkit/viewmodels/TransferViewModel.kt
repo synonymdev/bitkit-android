@@ -615,17 +615,7 @@ class TransferViewModel @Inject constructor(
 
             awaitNodeRunning()
 
-            // Match iOS: start from raw spendable (not maxSendOnchainSats — that already reserved
-            // a default-tier send-all fee), then subtract exactly one fast mining fee.
-            val spendable = lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats
-                ?: 0uL
-            val miningFee = lightningRepo.estimateSendAllFee(
-                speed = TransactionSpeed.Fast,
-            ).getOrElse {
-                Logger.warn("Failed to estimate transfer mining fee reserve", it, context = TAG)
-                (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
-            }
-            val availableAmount = spendable.safe() - miningFee.safe()
+            val availableAmount = loadFundingBudget() ?: 0uL
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
             if (initialLspFees == null) {
@@ -751,7 +741,12 @@ class TransferViewModel @Inject constructor(
         return fallback
     }
 
-    /** Order cost the on-chain balance can fund, or null when the balance itself is unreadable. */
+    /**
+     * Order cost the on-chain balance can fund, or null when the balance itself is unreadable.
+     *
+     * Matches iOS by starting from raw spendable rather than `maxSendOnchainSats`, which has already
+     * reserved a default-tier send-all fee, and subtracting exactly one fast mining fee.
+     */
     private suspend fun loadFundingBudget(): ULong? {
         val spendable = lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats ?: return null
         val miningFee = lightningRepo.estimateSendAllFee(speed = TransactionSpeed.Fast).getOrElse {
