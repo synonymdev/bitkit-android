@@ -486,6 +486,13 @@ class QuickPayRepo @Inject constructor(
         rows: List<QuickPayReconcileRow>?,
         duplicate: Boolean,
     ) {
+        val op = opsByKey[invoiceHash]
+        if (!duplicate && op != null && !op.dispatched) {
+            spend.release(invoiceHash)
+            emitErrorLocked(op, error, paymentRequest)
+            removeOpLocked(op)
+            return
+        }
         val record = spend.matching(invoiceHash)
         val applied = if (record != null && rows != null) {
             applyAmbiguousLookupLocked(record, rows, duplicate)
@@ -493,14 +500,7 @@ class QuickPayRepo @Inject constructor(
             AmbiguousApply.UNCHANGED
         }
         val remaining = spend.matching(invoiceHash)
-        val op = opsByKey[invoiceHash]
         if (remaining != null) {
-            if (!duplicate && op != null && !op.dispatched) {
-                spend.release(invoiceHash)
-                emitErrorLocked(op, error, paymentRequest)
-                removeOpLocked(op)
-                return
-            }
             op?.dispatched = true
             op?.let { emitPendingLocked(it) }
             return

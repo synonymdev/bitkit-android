@@ -1167,7 +1167,7 @@ class AppViewModel @Inject constructor(
         )
         val paymentHash = event.paymentHash ?: outcome.invoicePaymentHash ?: event.paymentId
         if (paymentHash != null) {
-            activityRepo.handlePaymentEvent(paymentHash)
+            refreshPaymentActivity(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
@@ -1182,12 +1182,13 @@ class AppViewModel @Inject constructor(
     }
 
     private fun shouldNotifyPendingResolution(paymentHash: String): Boolean {
-        if (_quickPayData.value != null) return _currentSheet.value !is Sheet.Send
+        if (isQuickPayHandling(paymentHash)) return false
+        if (_quickPayData.value != null && _currentSheet.value !is Sheet.Send) return true
         return _currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)
     }
 
     private fun closeActiveSendForFailedPayment(paymentHash: String, reason: PaymentFailureReason?): Boolean {
-        if (_quickPayData.value != null && _currentSheet.value is Sheet.Send) return true
+        if (isQuickPayHandling(paymentHash)) return true
         val activePaymentHash = _sendUiState.value.decodedInvoice?.paymentHash?.toHex()
         if (_currentSheet.value !is Sheet.Send || activePaymentHash != paymentHash) return false
 
@@ -1255,7 +1256,7 @@ class AppViewModel @Inject constructor(
             success = true,
             feePaidMsat = event.feePaidMsat,
         ).wasQuickPay
-        activityRepo.handlePaymentEvent(paymentHash)
+        refreshPaymentActivity(paymentHash)
         if (!pendingPaymentRepo.isPending(paymentHash)) {
             notifyPaymentSentOnLightning(event)
             return
@@ -1270,6 +1271,17 @@ class AppViewModel @Inject constructor(
         )
         if (shouldNotifyPendingResolution(paymentHash)) {
             notifyPendingPaymentSucceeded()
+        }
+    }
+
+    private fun isQuickPayHandling(paymentHash: String): Boolean {
+        if (_quickPayData.value == null || _currentSheet.value !is Sheet.Send) return false
+        return _sendUiState.value.decodedInvoice?.paymentHash?.toHex() == paymentHash
+    }
+
+    private suspend fun refreshPaymentActivity(paymentHash: String) {
+        runSuspendCatching { activityRepo.handlePaymentEvent(paymentHash) }.onFailure {
+            Logger.warn("Failed to refresh payment activity for '$paymentHash'", it, context = TAG)
         }
     }
 

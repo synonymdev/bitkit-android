@@ -1865,6 +1865,50 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `pending success still resolves if activity sync fails`() = test {
+        val paymentHash = "pending_sync_fail"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        whenever { activityRepo.handlePaymentEvent(paymentHash) }.thenThrow(RuntimeException("core"))
+
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
+    }
+
+    @Test
+    fun `pending failure still resolves if activity sync fails`() = test {
+        val paymentHash = "pending_sync_fail_err"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        whenever { activityRepo.handlePaymentEvent(paymentHash) }.thenThrow(RuntimeException("core"))
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(
+            PendingPaymentResolution.Failure(
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            )
+        )
+    }
+
+    @Test
     fun `pending confirm lightning success keeps invoice amount`() = test {
         val paymentHash = "pending_confirm_hash"
         whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
@@ -1998,6 +2042,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             expectNoEvents()
         }
         verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `unrelated failure still toasts while QuickPay send is open`() = test {
+        val bolt11 = "lnbcrt1quickpayunrelated"
+        whenever(context.getString(R.string.wallet__toast_payment_failed_title)).thenReturn("Payment failed")
+        whenever(context.getString(R.string.wallet__payment_route_not_found)).thenReturn("no route")
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = "other_id",
+                paymentHash = "deadbeef",
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("PaymentFailedToast", it.testTag)
+            }
+        )
     }
 
     @Test

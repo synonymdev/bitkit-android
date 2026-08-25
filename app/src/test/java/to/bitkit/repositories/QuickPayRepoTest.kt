@@ -729,6 +729,21 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `ambiguous failure before dispatch refunds even with succeeded ldk row`() = test {
+        val (bolt11, hash) = testInvoice()
+        whenever(lightningRepo.payInvoice(any(), anyOrNull(), any()))
+            .thenReturn(Result.failure(AppError("Cannot execute 'payInvoice'")))
+        paymentRows = listOf(succeededRow(hash))
+        val session = QuickPaySession()
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Error>(awaitItem())
+        }
+        assertEquals(0L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+    }
+
+    @Test
     fun `pre-dispatch rejection refunds after dispatch`() = test {
         val (bolt11, _) = testInvoice()
         stubPayInvoiceFailure(NodeException.InvalidInvoice("bad"))
