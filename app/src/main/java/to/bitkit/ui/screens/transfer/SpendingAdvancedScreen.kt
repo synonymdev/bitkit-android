@@ -79,6 +79,7 @@ fun SpendingAdvancedScreen(
 
     LaunchedEffect(order.clientBalanceSat) {
         viewModel.updateTransferValues(order.clientBalanceSat)
+        viewModel.updateAdvancedFundingBudget()
     }
 
     LaunchedEffect(amountUiState.sats) {
@@ -129,10 +130,17 @@ fun SpendingAdvancedScreen(
         }
     }
 
-    val isValid = transferValues.let {
+    val isInRange = transferValues.let {
         val amount = amountUiState.sats.toULong()
         amount > 0u && it.maxLspBalance > 0u && amount in it.minLspBalance..it.maxLspBalance
     }
+    // Max sets the capacity from the LSP's liquidity limit, which ignores what the wallet can pay
+    // for. Until the quote lands the confirm step stays the authority, so continue is left enabled.
+    val budget = state.advancedBudgetSats
+    val fee = state.feeEstimate
+    val isAffordable = budget == null || fee == null ||
+        order.clientBalanceSat.toLong() + fee <= budget.toLong()
+    val isValid = isInRange && isAffordable
 
     Content(
         uiState = state,

@@ -674,6 +674,77 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `updateAdvancedFundingBudget reserves the fast mining fee from spendable`() = test {
+        val spendable = 300_000uL
+        val miningFee = 178uL
+        stubSpendableBalances(spendable)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(miningFee))
+
+        sut.updateAdvancedFundingBudget()
+        advanceUntilIdle()
+
+        assertEquals(spendable - miningFee, sut.spendingUiState.value.advancedBudgetSats)
+    }
+
+    @Test
+    fun `onSpendingAdvancedContinue rejects a receiving capacity the balance cannot fund`() = test {
+        val clientBalance = 260_000uL
+        val order = previewBtOrder(clientBalanceSat = clientBalance)
+        val budget = 265_000uL
+        // client balance plus this liquidity fee lands above the budget
+        val response = stubFeeResponse(6_000uL)
+        stubSpendableBalances(budget)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(0uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(order))
+        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), any(), any()))
+            .thenReturn(Result.success(response))
+        sut.onConfirmAmount(clientBalance.toLong())
+        advanceUntilIdle()
+        sut.updateAdvancedFundingBudget()
+        advanceUntilIdle()
+
+        sut.transferEffects.test {
+            sut.onSpendingAdvancedContinue(LSP_BALANCE.toLong())
+            advanceUntilIdle()
+
+            assertIs<TransferEffect.ToastError>(awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        // only the initial order from onConfirmAmount, no unaffordable one on top of it
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `onSpendingAdvancedContinue creates the order when the capacity fits the budget`() = test {
+        val clientBalance = 260_000uL
+        val order = previewBtOrder(clientBalanceSat = clientBalance)
+        val budget = 265_000uL
+        val response = stubFeeResponse(1_000uL)
+        stubSpendableBalances(budget)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(0uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(order))
+        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), any(), any()))
+            .thenReturn(Result.success(response))
+        sut.onConfirmAmount(clientBalance.toLong())
+        advanceUntilIdle()
+        sut.updateAdvancedFundingBudget()
+        advanceUntilIdle()
+
+        sut.onSpendingAdvancedContinue(LSP_BALANCE.toLong())
+        advanceUntilIdle()
+
+        assertTrue(sut.spendingUiState.value.isAdvanced)
+        verify(blocktankRepo, times(2)).createOrder(any(), any(), any())
+    }
+
+    @Test
     fun `prepareSpendingConfirmFunding exposes real mining fee for confirm UI`() = test {
         val order = previewBtOrder(feeSat = 98_000uL)
         val selected = listOf(stubUtxo(100_000u))

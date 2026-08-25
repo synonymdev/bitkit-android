@@ -220,10 +220,61 @@ class TransferViewModel @Inject constructor(
         }
     }
 
+    /**
+     * Refreshes what the on-chain balance can still fund, so the advanced screen can reject a
+     * receiving capacity whose liquidity fee the user cannot pay.
+     */
+    fun updateAdvancedFundingBudget() {
+        viewModelScope.launch {
+            val spendable = lightningRepo.getBalancesAsync().getOrNull()?.spendableOnchainBalanceSats
+            if (spendable == null) {
+                _spendingUiState.update { it.copy(advancedBudgetSats = null) }
+                return@launch
+            }
+            val miningFee = lightningRepo.estimateSendAllFee(speed = TransactionSpeed.Fast).getOrElse {
+                Logger.warn("Failed to estimate advanced transfer mining fee reserve", it, context = TAG)
+                (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
+            }
+            _spendingUiState.update { it.copy(advancedBudgetSats = spendable.safe() - miningFee.safe()) }
+        }
+    }
+
+    /**
+     * Whether the order for this capacity still fits the funding budget.
+     *
+     * The receiving side is chosen independently of the client balance, and the LSP prices both
+     * sides, so raising it can push the order past what the wallet can pay. An unknown budget or
+     * quote leaves the decision to the confirm step rather than blocking the user here.
+     */
+    private suspend fun canFundAdvancedOrder(clientBalance: ULong, receivingAmount: ULong): Boolean {
+        val budget = _spendingUiState.value.advancedBudgetSats ?: return true
+        val fee = blocktankRepo.estimateOrderFee(
+            spendingBalanceSats = clientBalance,
+            receivingBalanceSats = receivingAmount,
+        ).getOrNull()?.feeSat ?: return true
+        return clientBalance.safe() + fee.safe() <= budget
+    }
+
     fun onSpendingAdvancedContinue(receivingAmountSats: Long) {
         viewModelScope.launch {
             runCatching {
                 val oldOrder = _spendingUiState.value.order ?: return@launch
+                if (!canFundAdvancedOrder(oldOrder.clientBalanceSat, receivingAmountSats.toULong())) {
+                    Logger.info(
+                        "Rejected advanced capacity '$receivingAmountSats' over funding budget " +
+                            "'${_spendingUiState.value.advancedBudgetSats}'",
+                        context = TAG,
+                    )
+                    setTransferEffect(
+                        TransferEffect.ToastError(
+                            title = context.getString(R.string.lightning__spending_advanced__error_balance__title),
+                            description = context.getString(
+                                R.string.lightning__spending_advanced__error_balance__description
+                            ),
+                        )
+                    )
+                    return@launch
+                }
                 val newOrder = blocktankRepo.createOrder(
                     spendingBalanceSats = oldOrder.clientBalanceSat,
                     receivingBalanceSats = receivingAmountSats.toULong(),
@@ -1757,6 +1808,8 @@ data class TransferToSpendingUiState(
     val feeEstimate: Long? = null,
     /** Budget the transfer limits were sized against, or null while unknown. */
     val fundingBudgetSats: ULong? = null,
+    /** Total order cost the on-chain balance can fund, or null while unknown. */
+    val advancedBudgetSats: ULong? = null,
 )
 
 private data class SpendingConfirmFundingPlan(
