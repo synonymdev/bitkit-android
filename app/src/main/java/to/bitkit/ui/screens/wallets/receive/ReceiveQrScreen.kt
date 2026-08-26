@@ -23,6 +23,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -101,6 +102,8 @@ fun ReceiveQrScreen(
     onLoadHardwareAddress: (String) -> Unit = {},
     onRetryHardwareAddress: () -> Unit = {},
     onVerifyHardwareAddress: () -> Unit = {},
+    showPaymentRequestContacts: Boolean = false,
+    onClickPaymentRequestContacts: () -> Unit = {},
 ) {
     SetMaxBrightness()
 
@@ -231,7 +234,26 @@ fun ReceiveQrScreen(
             .navigationBarsPadding()
             .keepScreenOn()
     ) {
-        SheetTopBar(stringResource(R.string.wallet__receive_bitcoin))
+        SheetTopBar(
+            titleText = stringResource(R.string.wallet__receive_bitcoin),
+            action = if (showPaymentRequestContacts) {
+                {
+                    IconButton(
+                        onClick = onClickPaymentRequestContacts,
+                        modifier = Modifier.testTag("ReceivePaymentRequestContacts"),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_users),
+                            contentDescription = stringResource(R.string.wallet__payment_request_choose_recipient),
+                            tint = Colors.White,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+            } else {
+                null
+            },
+        )
         Column {
             VerticalSpacer(16.dp)
 

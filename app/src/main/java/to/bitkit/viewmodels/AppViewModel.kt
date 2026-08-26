@@ -24,6 +24,7 @@ import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.SortDirection
+import com.synonym.paykit.PaymentRequestLifecycleState
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
@@ -54,6 +55,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -67,6 +69,7 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
@@ -145,6 +148,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
+import to.bitkit.repositories.PaykitOnchainPaymentProofResolution
 import to.bitkit.repositories.PaykitPaymentProofKind
 import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.repositories.PaykitPaymentRequest
@@ -154,6 +158,8 @@ import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
+import to.bitkit.repositories.PaykitSubscription
+import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentNotification
 import to.bitkit.repositories.PendingPaymentRepo
@@ -176,6 +182,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.components.SubscriptionRoute
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.ui.shared.toast.ToastQueueManager
 import to.bitkit.ui.sheets.SendRoute
@@ -188,6 +195,7 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
+import to.bitkit.utils.ServiceError
 import to.bitkit.utils.jsonLogOf
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
@@ -327,6 +335,7 @@ class AppViewModel @Inject constructor(
     val isCreatingPaymentRequest = paykitPaymentRequestRepo.isCreatingRequest
     private val _rejectingPaymentRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
     val rejectingPaymentRequestIds = _rejectingPaymentRequestIds.asStateFlow()
+    val subscriptions = paykitPaymentRequestRepo.subscriptions
     val pubkyContacts = pubkyRepo.contacts
     private var sheetTransitionJob: Job? = null
     private var paymentRequestSheetTransitionJob: Job? = null
@@ -346,6 +355,10 @@ class AppViewModel @Inject constructor(
     private val pendingContactPaymentContexts = mutableMapOf<String, ContactPaymentContext>()
     private var requestedPaymentRequestId: PaykitPaymentRequestId? = null
     private var preparedContactPaymentContext: ContactPaymentContext? = null
+    private var requestedPaymentRequestIdentity: String? = null
+    private var requestedPaymentRequestTags: ImmutableList<String> = persistentListOf()
+    private var uncertainOnchainPaymentRequestId: PaykitPaymentRequestId? = null
+    private val initialSubscriptionPaymentRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     private var isPresentingPaymentRequest = false
     private var paymentRequestPresentationGeneration = 0L
     private var activePaymentRequestPresentationGeneration: Long? = null
@@ -490,6 +503,7 @@ class AppViewModel @Inject constructor(
         observePaykitPaymentRequestConnectivity()
         observeInitialPaykitLinkBursts()
         observeIncomingPaykitPaymentRequests()
+        observePaykitOnchainPaymentResolution()
         observeSendEvents()
         viewModelScope.launch {
             checkCriticalAppUpdate()
@@ -630,12 +644,11 @@ class AppViewModel @Inject constructor(
         if (!state.isPaykitEnabled || state.publicKey == null) {
             isPaymentRequestIdentityActivating = true
             lastPrivatePaykitContactKeys = emptySet()
-            invalidatePaymentRequestPresentation(dismissActiveRequest = paymentRequestIdentity != null)
-            clearPaymentRequestPresentationRetries()
+            resetPaykitPresentationState(
+                dismissActiveRequest = paymentRequestIdentity != null,
+                preserveRequestedPaymentRequest = paymentRequestIdentity == null,
+            )
             paymentRequestIdentity = null
-            requestedPaymentRequestId = null
-            paymentRequestSheetTransitionJob?.cancel()
-            paymentRequestSheetTransitionJob = null
             try {
                 paykitPaymentRequestRepo.clear()
             } finally {
@@ -647,11 +660,11 @@ class AppViewModel @Inject constructor(
 
         val identityChanged = !PubkyPublicKeyFormat.matches(paymentRequestIdentity, state.publicKey)
         if (identityChanged) {
-            invalidatePaymentRequestPresentation(dismissActiveRequest = paymentRequestIdentity != null)
-            clearPaymentRequestPresentationRetries()
-            requestedPaymentRequestId = null
-            paymentRequestSheetTransitionJob?.cancel()
-            paymentRequestSheetTransitionJob = null
+            paykitPaymentProofRepo.clearOnchainPaymentResolution()
+            resetPaykitPresentationState(
+                dismissActiveRequest = paymentRequestIdentity != null,
+                preserveRequestedPaymentRequest = paymentRequestIdentity == null,
+            )
         }
 
         isPaymentRequestIdentityActivating = true
@@ -688,6 +701,7 @@ class AppViewModel @Inject constructor(
                 isPaymentRequestIdentityActivating = false
             }
         }
+        presentNextIncomingPaykitPaymentRequest()
     }
 
     private suspend fun refreshPrivatePaykitEndpointsIfEnabled(
@@ -722,6 +736,62 @@ class AppViewModel @Inject constructor(
     private fun observeInitialPaykitLinkBursts() {
         viewModelScope.launch {
             privatePaykitRepo.initialLinkBurstStarted.collect { startInitialPaykitPaymentRequestPolling() }
+        }
+    }
+
+    private fun observePaykitOnchainPaymentResolution() {
+        viewModelScope.launch {
+            paykitPaymentProofRepo.onchainPaymentResolution
+                .filterNotNull()
+                .collect(::handlePaykitOnchainPaymentResolution)
+        }
+    }
+
+    private fun handlePaykitOnchainPaymentResolution(resolution: PaykitOnchainPaymentProofResolution) {
+        if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, resolution.identity)) return
+        paykitPaymentProofRepo.consumeOnchainPaymentResolution(resolution)
+        val resolvesCurrentPayment = uncertainOnchainPaymentRequestId == resolution.requestId
+        if (!resolvesCurrentPayment) {
+            synchronizeResolvedPaykitOnchainPayment(resolution, updateSendDetails = false)
+            return
+        }
+        uncertainOnchainPaymentRequestId = null
+        if (
+            _currentSheet.value !is Sheet.Send ||
+            _sendUiState.value.incomingPaymentRequestId != resolution.requestId
+        ) {
+            synchronizeResolvedPaykitOnchainPayment(resolution, updateSendDetails = false)
+            return
+        }
+        onSendSuccess(
+            NewTransactionSheetDetails(
+                type = NewTransactionSheetType.ONCHAIN,
+                direction = NewTransactionSheetDirection.SENT,
+                paymentHashOrTxId = resolution.transactionId,
+                sats = _sendUiState.value.amount.toLong(),
+                isLoadingDetails = true,
+            )
+        )
+        synchronizeResolvedPaykitOnchainPayment(resolution, updateSendDetails = true)
+    }
+
+    private fun synchronizeResolvedPaykitOnchainPayment(
+        resolution: PaykitOnchainPaymentProofResolution,
+        updateSendDetails: Boolean,
+    ) {
+        viewModelScope.launch {
+            lightningRepo.sync()
+            activityRepo.syncActivities()
+            activityRepo.setContact(
+                contactPublicKey = resolution.requestId.counterparty,
+                forPaymentId = resolution.transactionId,
+                syncLdkPayments = false,
+            ).onFailure {
+                Logger.warn("Failed to associate a resolved Paykit payment with its contact", it, context = TAG)
+            }
+            if (updateSendDetails) {
+                _successSendUiState.update { it.copy(isLoadingDetails = false) }
+            }
         }
     }
 
@@ -764,6 +834,27 @@ class AppViewModel @Inject constructor(
             }
         }
         startInitialPaykitPaymentRequestPolling()
+    }
+
+    fun synchronizeSubscriptionNotifications(enabled: Boolean) {
+        paykitPaymentRequestRepo.synchronizeSubscriptionNotifications(enabled)
+    }
+
+    fun onPaykitSubscriptionNotificationTapped(
+        payerIdentity: String?,
+        requestId: PaykitPaymentRequestId? = null,
+    ) {
+        if (payerIdentity != null && requestId != null) {
+            val currentIdentity = pubkyRepo.publicKey.value
+            if (currentIdentity != null && !PubkyPublicKeyFormat.matches(currentIdentity, payerIdentity)) return
+            invalidatePaymentRequestPresentation()
+            requestedPaymentRequestId = requestId
+            requestedPaymentRequestIdentity = payerIdentity
+            requestedPaymentRequestTags = persistentListOf()
+        }
+        viewModelScope.launch {
+            refreshIncomingPaykitPaymentRequests()
+        }
     }
 
     fun stopPaykitPaymentRequestPolling() {
@@ -812,13 +903,21 @@ class AppViewModel @Inject constructor(
     }
 
     fun onSheetVisible(sheet: Sheet?) {
+        if (sheet is Sheet.Subscription && sheet.route is SubscriptionRoute.Review) {
+            subscription(sheet.route.id)?.let { subscription ->
+                viewModelScope.launch {
+                    paykitPaymentRequestRepo.markSubscriptionProposalPresented(subscription)
+                }
+            }
+            return
+        }
         if (sheet !is Sheet.Send || currentSheet.value !is Sheet.Send) return
         val request = activeIncomingPaymentRequest() ?: return
         viewModelScope.launch {
             if (currentSheet.value !is Sheet.Send || activeIncomingPaymentRequest()?.id != request.id) return@launch
             if (paykitPaymentRequestRepo.markPresented(request)) {
                 paymentRequestPresentationGeneration++
-                requestedPaymentRequestId = null
+                clearRequestedPaymentRequest()
                 clearPaymentRequestPresentationRetry(request.id)
             }
         }
@@ -826,6 +925,12 @@ class AppViewModel @Inject constructor(
 
     private suspend fun presentNextIncomingPaykitPaymentRequest() {
         if (isPresentingPaymentRequest || isPaymentRequestPresentationBlocked()) return
+        if (requestedPaymentRequestId == null) {
+            paykitPaymentRequestRepo.automaticSubscriptionProposals().firstOrNull()?.let {
+                showSheet(Sheet.Subscription(SubscriptionRoute.Review(it.id)))
+                return
+            }
+        }
         val requests = paymentRequestsForPresentation() ?: return
         val generation = paymentRequestPresentationGeneration
         isPresentingPaymentRequest = true
@@ -854,19 +959,32 @@ class AppViewModel @Inject constructor(
 
     private fun paymentRequestsForPresentation(): List<PaykitPaymentRequest>? {
         val requestedId = requestedPaymentRequestId
-        if (requestedId != null && paymentRequestPresentationRetryJobs[requestedId]?.isActive == true) return null
-        if (requestedId != null) {
-            val request = paykitPaymentRequestRepo.pendingRequest(requestedId)
-            if (request != null) return listOf(request)
-            invalidatePaymentRequestPresentation()
-            requestedPaymentRequestId = null
-            return null
+        return if (requestedId == null) {
+            paykitPaymentRequestRepo.automaticPendingRequests().filter { request ->
+                !paykitPaymentRequestRepo.isProcessing(request) &&
+                    paymentRequestPresentationRetryJobs[request.id]?.isActive != true
+            }.takeIf { it.isNotEmpty() }
+        } else {
+            when {
+                !requestedPaymentRequestTargetsCurrentIdentity() -> {
+                    invalidatePaymentRequestPresentation()
+                    clearRequestedPaymentRequest()
+                    null
+                }
+                paymentRequestPresentationRetryJobs[requestedId]?.isActive == true -> null
+                else -> paykitPaymentRequestRepo.pendingRequest(requestedId)?.let(::listOf) ?: run {
+                    invalidatePaymentRequestPresentation()
+                    clearRequestedPaymentRequest()
+                    null
+                }
+            }
         }
+    }
 
-        return paykitPaymentRequestRepo.automaticPendingRequests().filter { request ->
-            !paykitPaymentRequestRepo.isProcessing(request) &&
-                paymentRequestPresentationRetryJobs[request.id]?.isActive != true
-        }.takeIf { it.isNotEmpty() }
+    private fun requestedPaymentRequestTargetsCurrentIdentity(): Boolean {
+        val requestedIdentity = requestedPaymentRequestIdentity ?: return true
+        val currentIdentity = pubkyRepo.publicKey.value ?: return false
+        return PubkyPublicKeyFormat.matches(currentIdentity, requestedIdentity)
     }
 
     private suspend fun presentIncomingPaymentRequestOrStop(
@@ -880,7 +998,7 @@ class AppViewModel @Inject constructor(
         if (!paykitPaymentRequestRepo.isPending(request)) {
             if (requestedPaymentRequestId == request.id) {
                 invalidatePaymentRequestPresentation()
-                requestedPaymentRequestId = null
+                clearRequestedPaymentRequest()
             }
             return false
         }
@@ -894,6 +1012,9 @@ class AppViewModel @Inject constructor(
             publicKey = request.counterparty,
             privatePaymentContext = result.privatePaymentContext,
             incomingPaymentRequest = request,
+            isInitialSubscriptionPayment = initialSubscriptionPaymentRequestIds.remove(request.id),
+            selectedTags = requestedPaymentRequestTags.takeIf { requestedPaymentRequestId == request.id }
+                ?: persistentListOf(),
         )
         return true
     }
@@ -913,7 +1034,7 @@ class AppViewModel @Inject constructor(
                     context = TAG,
                 )
                 paymentRequestPresentationGeneration++
-                requestedPaymentRequestId = null
+                clearRequestedPaymentRequest()
                 showSheet(Sheet.PaymentRequests)
                 viewModelScope.launch {
                     paykitPaymentRequestRepo.markPresented(request)
@@ -942,12 +1063,13 @@ class AppViewModel @Inject constructor(
     private fun retainPaymentRequestPresentationState(requests: List<PaykitPaymentRequest>) {
         val requestIds = requests.mapTo(mutableSetOf()) { it.id }
         paymentRequestPresentationRetryAttempts.keys.retainAll(requestIds)
+        initialSubscriptionPaymentRequestIds.retainAll(requestIds)
         paymentRequestPresentationRetryJobs.keys.filter { it !in requestIds }.forEach {
             paymentRequestPresentationRetryJobs.remove(it)?.cancel()
         }
         if (requestedPaymentRequestId?.let { it !in requestIds } == true) {
             invalidatePaymentRequestPresentation()
-            requestedPaymentRequestId = null
+            clearRequestedPaymentRequest()
         }
     }
 
@@ -960,6 +1082,23 @@ class AppViewModel @Inject constructor(
         paymentRequestPresentationRetryJobs.values.forEach { it.cancel() }
         paymentRequestPresentationRetryJobs.clear()
         paymentRequestPresentationRetryAttempts.clear()
+    }
+
+    private fun resetPaykitPresentationState(
+        dismissActiveRequest: Boolean,
+        preserveRequestedPaymentRequest: Boolean,
+    ) {
+        invalidatePaymentRequestPresentation(dismissActiveRequest)
+        clearPaymentRequestPresentationRetries()
+        if (!preserveRequestedPaymentRequest) clearRequestedPaymentRequest()
+        paymentRequestSheetTransitionJob?.cancel()
+        paymentRequestSheetTransitionJob = null
+    }
+
+    private fun clearRequestedPaymentRequest() {
+        requestedPaymentRequestId = null
+        requestedPaymentRequestIdentity = null
+        requestedPaymentRequestTags = persistentListOf()
     }
 
     private fun invalidatePaymentRequestPresentation(dismissActiveRequest: Boolean = false) {
@@ -1360,7 +1499,10 @@ class AppViewModel @Inject constructor(
         )
         val paymentHash = event.paymentHash ?: outcome.invoicePaymentHash ?: event.paymentId
         if (paymentHash != null) {
-            viewModelScope.launch { paykitPaymentProofRepo.failLightningPayment(paymentHash) }
+            viewModelScope.launch {
+                paykitPaymentProofRepo.failLightningPayment(paymentHash)
+                refreshIncomingPaykitPaymentRequests()
+            }
             refreshPaymentActivity(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
@@ -1446,6 +1588,7 @@ class AppViewModel @Inject constructor(
         val paymentHash = event.paymentHash
         viewModelScope.launch {
             paykitPaymentProofRepo.completeLightningPayment(paymentHash, event.paymentPreimage)
+            refreshIncomingPaykitPaymentRequests()
         }
         val isQuickPay = quickPayRepo.signalCompletion(
             paymentId = event.paymentId,
@@ -1658,6 +1801,8 @@ class AppViewModel @Inject constructor(
                         }
                     }
                     SendEvent.SwipeToPay -> onSwipeToPay()
+                    SendEvent.StartInitialSubscriptionPayment -> onStartInitialSubscriptionPayment()
+                    SendEvent.CancelInitialSubscriptionPayment -> onCancelInitialSubscriptionPayment()
                     is SendEvent.ConfirmAmountWarning -> onConfirmAmountWarning(it.warning)
                     SendEvent.DismissAmountWarning -> onDismissAmountWarning()
                     SendEvent.EstimateMaxRoutingFee -> viewModelScope.launch {
@@ -1926,7 +2071,7 @@ class AppViewModel @Inject constructor(
         routePubkyKeys: Boolean = false,
         contactPaymentContext: ContactPaymentContext? = null,
         preserveUntilComplete: Boolean = false,
-    ) {
+    ): Job? {
         if (!_isAuthenticated.value) {
             enqueueDeferredScan(
                 source = source,
@@ -1935,7 +2080,7 @@ class AppViewModel @Inject constructor(
                 routePubkyKeys = routePubkyKeys,
                 contactPaymentContext = contactPaymentContext,
             )
-            return
+            return null
         }
 
         val normalized = data.removeLightningSchemes()
@@ -1947,12 +2092,12 @@ class AppViewModel @Inject constructor(
             (scheduled.contactPaymentContext == contactPaymentContext || contactPaymentContext == null)
         if (isSameActiveScan) {
             Logger.info("Skipping duplicate scan from '${source.label}': '$scanId'", context = TAG)
-            return
+            return null
         }
 
         if (scheduled?.job?.isActive == true && scheduled.mustComplete) {
             enqueueDeferredScan(source, data, startDelay, routePubkyKeys, contactPaymentContext)
-            return
+            return null
         }
 
         val previousJob = scheduled?.job
@@ -1983,6 +2128,7 @@ class AppViewModel @Inject constructor(
             Logger.info("Cancelling prior scan for new '${source.label}': '$scanId'", context = TAG)
             it.cancel()
         }
+        return nextJob
     }
 
     private fun scanLogId(data: String): String {
@@ -2435,13 +2581,21 @@ class AppViewModel @Inject constructor(
         publicKey: String,
         privatePaymentContext: PrivatePaykitPaymentContext? = null,
         incomingPaymentRequest: PaykitPaymentRequest? = null,
-    ) {
+        isInitialSubscriptionPayment: Boolean = false,
+        selectedTags: ImmutableList<String> = persistentListOf(),
+    ): Job? {
         val context = ContactPaymentContext(
             publicKey = publicKey,
             privatePaymentContext = privatePaymentContext,
             incomingPaymentRequest = incomingPaymentRequest,
+            isInitialSubscriptionPayment = isInitialSubscriptionPayment,
+            selectedTags = selectedTags,
         )
-        onScanResult(paymentRequest, contactPaymentContext = context)
+        return launchScan(
+            source = ScanSource.SCAN_RESULT,
+            data = paymentRequest,
+            contactPaymentContext = context,
+        )
     }
 
     fun preserveContactPaymentContext(paymentHash: String) {
@@ -2460,9 +2614,21 @@ class AppViewModel @Inject constructor(
         routePubkyKeys: Boolean,
     ) = withContext(bgDispatcher) {
         val contactPaymentProfile = activeContactPaymentProfile()
-        val isPaymentRequest = activeIncomingPaymentRequest() != null
+        val incomingPaymentRequest = activeIncomingPaymentRequest()
+        val isPaymentRequest = incomingPaymentRequest != null
         // always reset state on new scan
-        resetSendState(contactPaymentProfile = contactPaymentProfile, isPaymentRequest = isPaymentRequest)
+        resetSendState(
+            contactPaymentProfile = contactPaymentProfile,
+            isPaymentRequest = isPaymentRequest,
+            isSubscriptionPayment = incomingPaymentRequest?.billingPeriod != null,
+            isInitialSubscriptionPayment = synchronized(contactPaymentContextLock) {
+                activeContactPaymentContext?.isInitialSubscriptionPayment == true
+            },
+            incomingPaymentRequestId = incomingPaymentRequest?.id,
+            selectedTags = synchronized(contactPaymentContextLock) {
+                activeContactPaymentContext?.selectedTags ?: persistentListOf()
+            },
+        )
         resetQuickPay()
 
         val fromMainScanner = isMainScanner
@@ -3257,6 +3423,18 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun onStartInitialSubscriptionPayment() {
+        if (!_sendUiState.value.initialSubscriptionPaymentAutoStartPending) return
+        _sendUiState.update { it.copy(initialSubscriptionPaymentAutoStartPending = false) }
+        onSwipeToPay()
+    }
+
+    private fun onCancelInitialSubscriptionPayment() {
+        if (!_sendUiState.value.isInitialSubscriptionPayment) return
+        val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        handlePaymentPreparationFailure(PaykitPaymentRequestError.RequestUnavailable, contactPaymentContext)
+    }
+
     @Suppress("LongMethod", "CyclomaticComplexMethod", "ReturnCount")
     private suspend fun handleSanityChecks(amountSats: ULong) {
         if (_sendUiState.value.showSanityWarningDialog != null) return
@@ -3341,17 +3519,23 @@ class AppViewModel @Inject constructor(
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        var preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).getOrNull()
+        val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).fold(
+            onSuccess = { it },
+            onFailure = {
+                handlePaymentPreparationFailure(it, contactPaymentContext)
+                return
+            },
+        )
 
         consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
-            handlePaymentPreparationFailure(it)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
             return
         }
 
         acceptIncomingPaymentRequestIfNeeded(contactPaymentContext).onFailure {
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
-            handlePaymentPreparationFailure(it)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
             return
         }
 
@@ -3373,111 +3557,177 @@ class AppViewModel @Inject constructor(
             }.onFailure {
                 cancelPaymentProofPreparation(preparedPaymentProofRequest)
                 val message = getLnurlInvoiceFetchErrorMessage(it)
-                toast(Exception(message))
-                hideSheet()
+                handlePaymentPreparationFailure(Exception(message), contactPaymentContext)
                 return
             }
         }
 
         when (_sendUiState.value.payMethod) {
-            SendMethod.ONCHAIN -> {
-                val address = _sendUiState.value.address
-                val tags = _sendUiState.value.selectedTags
-                sendOnchain(address, amount, tags = tags)
-                    .onSuccess { txId ->
-                        preparedPaymentProofRequest = null
-                        completeOnchainPaymentProofInBackground(incomingPaymentRequest, txId)
-                        Logger.info("Onchain send result txid: $txId", context = TAG)
-                        onSendSuccess(
-                            NewTransactionSheetDetails(
-                                type = NewTransactionSheetType.ONCHAIN,
-                                direction = NewTransactionSheetDirection.SENT,
-                                paymentHashOrTxId = txId,
-                                sats = amount.toLong(),
-                                isLoadingDetails = true,
-                            )
-                        )
-                        lightningRepo.sync()
-                        activityRepo.syncActivities()
-                        _successSendUiState.update { it.copy(isLoadingDetails = false) }
-                    }.onFailure { e ->
-                        cancelPaymentProofPreparation(preparedPaymentProofRequest)
-                        Logger.error("Error sending onchain payment", e, context = TAG)
-                        toast(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.wallet__error_sending_title),
-                            description = e.message ?: context.getString(R.string.common__error_body)
-                        )
-                        hideSheet()
-                    }
+            SendMethod.ONCHAIN -> proceedWithOnchainPayment(
+                incomingPaymentRequest,
+                preparedPaymentProofRequest,
+                contactPaymentContext,
+                amount,
+            )
+
+            SendMethod.LIGHTNING -> proceedWithLightningPayment(
+                incomingPaymentRequest,
+                preparedPaymentProofRequest,
+                contactPaymentContext,
+                amount,
+            )
+        }
+    }
+
+    private suspend fun proceedWithOnchainPayment(
+        incomingPaymentRequest: PaykitPaymentRequest?,
+        preparedPaymentProofRequest: PaykitPaymentRequest?,
+        contactPaymentContext: ContactPaymentContext?,
+        amount: ULong,
+    ) {
+        val address = _sendUiState.value.address
+        val tags = _sendUiState.value.selectedTags
+        var proofRequest = preparedPaymentProofRequest
+        var onchainPaymentStarted = false
+        sendOnchain(
+            address = address,
+            amount = amount,
+            tags = tags,
+            beforeSendAttempt = {
+                if (incomingPaymentRequest != null) {
+                    markOnchainPaymentStarted(incomingPaymentRequest, address).getOrThrow()
+                    onchainPaymentStarted = true
+                }
+            },
+            onBroadcast = { txId ->
+                proofRequest = null
+                completeOnchainPaymentProof(incomingPaymentRequest, txId)
+            },
+        ).onSuccess { txId ->
+            Logger.info("Onchain send result txid: $txId", context = TAG)
+            onSendSuccess(
+                NewTransactionSheetDetails(
+                    type = NewTransactionSheetType.ONCHAIN,
+                    direction = NewTransactionSheetDirection.SENT,
+                    paymentHashOrTxId = txId,
+                    sats = amount.toLong(),
+                    isLoadingDetails = true,
+                )
+            )
+            lightningRepo.sync()
+            activityRepo.syncActivities()
+            _successSendUiState.update { it.copy(isLoadingDetails = false) }
+        }.onFailure { error ->
+            handleOnchainPaymentFailure(
+                error = error,
+                paymentStarted = onchainPaymentStarted,
+                incomingPaymentRequest = incomingPaymentRequest,
+                preparedPaymentProofRequest = proofRequest,
+                contactPaymentContext = contactPaymentContext,
+            )
+        }
+    }
+
+    private suspend fun handleOnchainPaymentFailure(
+        error: Throwable,
+        paymentStarted: Boolean,
+        incomingPaymentRequest: PaykitPaymentRequest?,
+        preparedPaymentProofRequest: PaykitPaymentRequest?,
+        contactPaymentContext: ContactPaymentContext?,
+    ) {
+        val amount = _sendUiState.value.amount
+        if (paymentStarted && !error.isDefiniteOnchainPreBroadcastFailure()) {
+            Logger.warn("On-chain payment outcome is uncertain after send started", error, context = TAG)
+            uncertainOnchainPaymentRequestId = incomingPaymentRequest?.id
+            paykitPaymentProofRepo.onchainPaymentResolution.value?.let(::handlePaykitOnchainPaymentResolution)
+            if (uncertainOnchainPaymentRequestId == null) return
+            setSendEffect(
+                SendEffect.NavigateToPending(
+                    paymentHash = incomingPaymentRequest?.paymentRequestId.orEmpty(),
+                    amount = amount.toLong(),
+                    observeResolution = false,
+                )
+            )
+            return
+        }
+        if (paymentStarted) {
+            incomingPaymentRequest?.let { paykitPaymentProofRepo.failOnchainPayment(it) }
+        }
+        cancelPaymentProofPreparation(preparedPaymentProofRequest)
+        Logger.error("Error sending onchain payment", error, context = TAG)
+        if (contactPaymentContext?.isInitialSubscriptionPayment == true) {
+            setSendEffect(SendEffect.NavigateToError(error.toSendFailureDetails(context, _sendUiState.value.address)))
+        } else {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.wallet__error_sending_title),
+                description = error.message ?: context.getString(R.string.common__error_body),
+            )
+            hideSheet()
+        }
+    }
+
+    private suspend fun proceedWithLightningPayment(
+        incomingPaymentRequest: PaykitPaymentRequest?,
+        preparedPaymentProofRequest: PaykitPaymentRequest?,
+        contactPaymentContext: ContactPaymentContext?,
+        amount: ULong,
+    ) {
+        val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
+        val paymentAmount = if (decodedInvoice.amountSatoshis > 0uL) null else amount
+        val displayAmountSats = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: amount
+        var proofRequest = preparedPaymentProofRequest
+        var createdMetadataPaymentId: String? = null
+        val paymentHash = decodedInvoice.paymentHash.toHex()
+        associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
+            cancelPaymentProofPreparation(proofRequest)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
+            return
+        }
+
+        val tags = _sendUiState.value.selectedTags
+        if (tags.isNotEmpty()) {
+            preActivityMetadataRepo.savePreActivityMetadata(
+                id = paymentHash,
+                paymentHash = paymentHash,
+                address = _sendUiState.value.address,
+                isReceive = false,
+                tags = tags,
+            ).onSuccess {
+                createdMetadataPaymentId = paymentHash
             }
+        }
 
-            SendMethod.LIGHTNING -> {
-                val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
-                val bolt11 = decodedInvoice.bolt11
-
-                val paymentAmount = if (decodedInvoice.amountSatoshis > 0uL) null else amount
-                val displayAmountSats = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: amount
-
-                val tags = _sendUiState.value.selectedTags
-                var createdMetadataPaymentId: String? = null
-
-                // Extract payment hash from invoice for pre-activity metadata
-                val paymentHash = decodedInvoice.paymentHash.toHex()
-                associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
-                    cancelPaymentProofPreparation(preparedPaymentProofRequest)
-                    preparedPaymentProofRequest = null
-                }
-
-                // Create pre-activity metadata before sending
-                if (tags.isNotEmpty()) {
-                    preActivityMetadataRepo.savePreActivityMetadata(
-                        id = paymentHash,
-                        paymentHash = paymentHash,
-                        address = _sendUiState.value.address,
-                        isReceive = false,
-                        tags = tags,
-                    ).onSuccess {
-                        createdMetadataPaymentId = paymentHash
-                    }
-                }
-
-                sendLightning(bolt11, paymentAmount).onSuccess { actualPaymentHash ->
-                    preparedPaymentProofRequest = null
-                    Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
-                    onSendSuccess(
-                        NewTransactionSheetDetails(
-                            type = NewTransactionSheetType.LIGHTNING,
-                            direction = NewTransactionSheetDirection.SENT,
-                            paymentHashOrTxId = actualPaymentHash,
-                            sats = displayAmountSats.toLong(), // TODO Add fee when available
-                        ),
-                    )
-                }.onFailure {
-                    if (it is PaymentPendingException) {
-                        preparedPaymentProofRequest = null
-                        Logger.info("Lightning payment pending", context = TAG)
-                        pendingPaymentRepo.track(it.paymentHash)
-                        preserveContactPaymentContext(it.paymentHash)
-                        setSendEffect(SendEffect.NavigateToPending(it.paymentHash, displayAmountSats.toLong()))
-                        return@onFailure
-                    }
-                    paykitPaymentProofRepo.failLightningPayment(paymentHash)
-                    cancelPaymentProofPreparation(preparedPaymentProofRequest)
-                    // Delete pre-activity metadata on failure
-                    if (createdMetadataPaymentId != null) {
-                        preActivityMetadataRepo.deletePreActivityMetadata(createdMetadataPaymentId)
-                    }
-                    Logger.error("Error sending lightning payment", it, context = TAG)
-                    val failure = when (it) {
-                        is LightningPaymentFailedError -> it.reason.toSendFailureDetails(context, it.paymentRequest)
-                        else -> it.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
-                    }
-                    setSendEffect(
-                        SendEffect.NavigateToError(failure)
-                    )
-                }
+        sendLightning(decodedInvoice.bolt11, paymentAmount).onSuccess { actualPaymentHash ->
+            proofRequest = null
+            Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
+            onSendSuccess(
+                NewTransactionSheetDetails(
+                    type = NewTransactionSheetType.LIGHTNING,
+                    direction = NewTransactionSheetDirection.SENT,
+                    paymentHashOrTxId = actualPaymentHash,
+                    sats = displayAmountSats.toLong(),
+                ),
+            )
+        }.onFailure { error ->
+            if (error is PaymentPendingException) {
+                proofRequest = null
+                Logger.info("Lightning payment pending", context = TAG)
+                pendingPaymentRepo.track(error.paymentHash)
+                preserveContactPaymentContext(error.paymentHash)
+                refreshIncomingPaykitPaymentRequests()
+                setSendEffect(SendEffect.NavigateToPending(error.paymentHash, displayAmountSats.toLong()))
+                return@onFailure
             }
+            paykitPaymentProofRepo.failLightningPayment(paymentHash)
+            cancelPaymentProofPreparation(proofRequest)
+            createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
+            Logger.error("Error sending lightning payment", error, context = TAG)
+            val failure = when (error) {
+                is LightningPaymentFailedError -> error.reason.toSendFailureDetails(context, error.paymentRequest)
+                else -> error.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
+            }
+            setSendEffect(SendEffect.NavigateToError(failure))
         }
     }
 
@@ -3527,17 +3777,22 @@ class AppViewModel @Inject constructor(
     }
         ?: Result.success(Unit)
 
-    private fun completeOnchainPaymentProofInBackground(request: PaykitPaymentRequest?, txId: String) {
-        val paymentRequest = request ?: return
-        val endpointIdentifier = paymentProofPreparation().endpointIdentifier
-        viewModelScope.launch {
+    private suspend fun completeOnchainPaymentProof(request: PaykitPaymentRequest?, txId: String) {
+        request?.let {
             paykitPaymentProofRepo.completeOnchainPayment(
-                request = paymentRequest,
+                request = it,
                 txid = txId,
-                paymentEndpointIdentifier = endpointIdentifier,
+                paymentEndpointIdentifier = paymentProofPreparation().endpointIdentifier,
             )
+            if (it.billingPeriod != null) refreshIncomingPaykitPaymentRequests()
         }
     }
+
+    private suspend fun markOnchainPaymentStarted(
+        request: PaykitPaymentRequest?,
+        address: String,
+    ): Result<Unit> = request?.let { paykitPaymentProofRepo.markOnchainPaymentStarted(it, address) }
+        ?: Result.success(Unit)
 
     private suspend fun cancelPaymentProofPreparation(request: PaykitPaymentRequest?) {
         request?.let { paykitPaymentProofRepo.cancelPreparation(it) }
@@ -3728,7 +3983,10 @@ class AppViewModel @Inject constructor(
         address: String,
         amount: ULong,
         tags: List<String> = emptyList(),
+        beforeSendAttempt: suspend () -> Unit = {},
+        onBroadcast: suspend (Txid) -> Unit = {},
     ): Result<Txid> {
+        var broadcastTxId: Txid? = null
         return lightningRepo.sendOnChain(
             address = address,
             sats = amount,
@@ -3737,7 +3995,12 @@ class AppViewModel @Inject constructor(
             isMaxAmount = _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
                 amount == walletRepo.balanceState.value.maxSendOnchainSats,
             tags = tags,
-        )
+            beforeSendAttempt = beforeSendAttempt,
+            onBroadcast = {
+                broadcastTxId = it
+                onBroadcast(it)
+            },
+        ).recoverCatching { broadcastTxId ?: throw it }
     }
 
     private suspend fun sendLightning(
@@ -3947,6 +4210,10 @@ class AppViewModel @Inject constructor(
         contactPaymentProfile: PubkyProfile? = null,
         isPaymentRequest: Boolean = false,
         hardwareWalletId: String? = activeHardwareWalletId,
+        isSubscriptionPayment: Boolean = false,
+        isInitialSubscriptionPayment: Boolean = false,
+        incomingPaymentRequestId: PaykitPaymentRequestId? = null,
+        selectedTags: ImmutableList<String> = persistentListOf(),
     ) {
         addressValidationJob?.cancel()
         val speed = settingsStore.data.first().defaultTransactionSpeed
@@ -3971,6 +4238,11 @@ class AppViewModel @Inject constructor(
                     hardwareEstimatedAvailable(walletId, speed, rates)
                 } ?: 0uL,
                 isFundingSourceLoading = it.isFundingSourceLoading,
+                isSubscriptionPayment = isSubscriptionPayment,
+                isInitialSubscriptionPayment = isInitialSubscriptionPayment,
+                initialSubscriptionPaymentAutoStartPending = isInitialSubscriptionPayment,
+                incomingPaymentRequestId = incomingPaymentRequestId,
+                selectedTags = selectedTags,
             )
         }
     }
@@ -4347,7 +4619,13 @@ class AppViewModel @Inject constructor(
         if (isPreparedContactPayment(contactPaymentContext)) return true
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).getOrNull()
+        val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).fold(
+            onSuccess = { it },
+            onFailure = {
+                handlePaymentPreparationFailure(it)
+                return false
+            },
+        )
         if (!prepareContactPayment(contactPaymentContext)) {
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
             return false
@@ -4355,11 +4633,11 @@ class AppViewModel @Inject constructor(
         return true
     }
 
-    fun completeHardwareContactPayment(txId: String) {
+    suspend fun completeHardwareContactPayment(txId: String) {
         val incomingPaymentRequest = synchronized(contactPaymentContextLock) {
             activeContactPaymentContext?.incomingPaymentRequest
         }
-        completeOnchainPaymentProofInBackground(incomingPaymentRequest, txId)
+        completeOnchainPaymentProof(incomingPaymentRequest, txId)
     }
 
     fun onHardwareSignCancelled() {
@@ -4431,7 +4709,94 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
     }
 
+    fun subscription(id: PaykitSubscriptionId): PaykitSubscription? =
+        paykitPaymentRequestRepo.subscriptions.value.firstOrNull { it.id == id }
+
+    fun subscriptionAcceptedAt(id: PaykitSubscriptionId) =
+        subscription(id)?.let(paykitPaymentRequestRepo::acceptedAt)
+
+    suspend fun acceptSubscriptionAndStartPayment(
+        displayedSubscription: PaykitSubscription,
+    ): Result<Boolean> = runSuspendCatching {
+        val subscription = subscription(displayedSubscription.id)
+            ?.takeIf { it == displayedSubscription }
+            ?: throw PaykitPaymentRequestError.RequestUnavailable
+        val acceptedDueRequest = paykitPaymentRequestRepo.accept(subscription).getOrThrow()
+        if (acceptedDueRequest == null) {
+            val accepted = subscription(displayedSubscription.id)
+            if (accepted?.lifecycleState != PaymentRequestLifecycleState.ACTIVE_RECURRING) {
+                throw PaykitPaymentRequestError.RequestUnavailable
+            }
+            return@runSuspendCatching false
+        }
+
+        val resolution = privatePaykitRepo.beginPaymentRequestWaitingForUpdatedList(acceptedDueRequest)
+            .getOrElse { error ->
+                showInitialSubscriptionPaymentFailure(acceptedDueRequest, error)
+                return@runSuspendCatching true
+            }
+        if (resolution !is PublicPaykitPaymentResult.Opened) {
+            showInitialSubscriptionPaymentFailure(
+                acceptedDueRequest,
+                PaykitPaymentRequestError.RequestUnavailable,
+            )
+            return@runSuspendCatching true
+        }
+        val scanJob = openContactPayment(
+            paymentRequest = resolution.paymentRequest,
+            publicKey = acceptedDueRequest.counterparty,
+            privatePaymentContext = resolution.privatePaymentContext,
+            incomingPaymentRequest = acceptedDueRequest,
+            isInitialSubscriptionPayment = true,
+        )
+        scanJob?.join()
+        if (_currentSheet.value !is Sheet.Send) {
+            paykitPaymentRequestRepo.markPresented(acceptedDueRequest)
+            val error = PaykitPaymentRequestError.RequestUnavailable
+            val failure = error.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
+            showSheet(Sheet.Send(SendRoute.errorFromFailure(failure)))
+        }
+        true
+    }.onFailure(::toast)
+
+    private suspend fun showInitialSubscriptionPaymentFailure(
+        request: PaykitPaymentRequest,
+        error: Throwable,
+    ) {
+        val paymentContext = ContactPaymentContext(
+            publicKey = request.counterparty,
+            incomingPaymentRequest = request,
+            isInitialSubscriptionPayment = true,
+        )
+        setActiveContactPaymentContext(paymentContext)
+        resetSendState(
+            contactPaymentProfile = activeContactPaymentProfile(),
+            isPaymentRequest = true,
+            isSubscriptionPayment = true,
+            isInitialSubscriptionPayment = true,
+            incomingPaymentRequestId = request.id,
+        )
+        paykitPaymentRequestRepo.markPresented(request)
+        showSheet(
+            Sheet.Send(
+                SendRoute.errorFromFailure(
+                    error.toSendFailureDetails(context, paymentRequest = null)
+                )
+            )
+        )
+    }
+
+    suspend fun cancelSubscription(id: PaykitSubscriptionId): Result<Unit> {
+        val subscription = subscription(id) ?: return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+        return paykitPaymentRequestRepo.cancel(subscription)
+            .onFailure(::toast)
+    }
+
     fun openIncomingPaymentRequest(id: PaykitPaymentRequestId) {
+        openIncomingPaymentRequestWithTags(id, emptyList())
+    }
+
+    fun openIncomingPaymentRequestWithTags(id: PaykitPaymentRequestId, tags: List<String>) {
         val request = paykitPaymentRequestRepo.pendingRequest(id) ?: return
         if (paykitPaymentRequestRepo.isProcessing(request) || requestedPaymentRequestId != null) {
             toast(PaykitPaymentRequestError.OperationInProgress)
@@ -4440,8 +4805,13 @@ class AppViewModel @Inject constructor(
         invalidatePaymentRequestPresentation()
         clearPaymentRequestPresentationRetry(id)
         requestedPaymentRequestId = id
+        requestedPaymentRequestTags = tags.filter(String::isNotBlank).distinct().toImmutableList()
 
-        if (_currentSheet.value is Sheet.PaymentRequests) {
+        if (
+            _currentSheet.value is Sheet.PaymentRequests ||
+            _currentSheet.value is Sheet.Subscription ||
+            _currentSheet.value is Sheet.Send
+        ) {
             hideSheet(shouldFlushDeferredScan = false)
             paymentRequestSheetTransitionJob?.cancel()
             val job = viewModelScope.launch {
@@ -4468,6 +4838,24 @@ class AppViewModel @Inject constructor(
                 _rejectingPaymentRequestIds.update { it - request.id }
             }
         }
+    }
+
+    fun retryIncomingPaymentRequest(id: PaykitPaymentRequestId) {
+        if (_sendUiState.value.isInitialSubscriptionPayment) {
+            initialSubscriptionPaymentRequestIds += id
+        }
+        clearActiveContactPaymentContext()
+        viewModelScope.launch {
+            refreshIncomingPaykitPaymentRequests()
+            openIncomingPaymentRequestWithTags(id, _sendUiState.value.selectedTags)
+        }
+    }
+
+    suspend fun dismissIncomingPaymentRequest(request: PaykitPaymentRequest): Result<Unit> {
+        if (requestedPaymentRequestId == request.id) {
+            return Result.failure<Unit>(PaykitPaymentRequestError.OperationInProgress).onFailure(::toast)
+        }
+        return paykitPaymentRequestRepo.dismiss(request).onFailure(::toast)
     }
 
     private suspend fun createPaymentRequest(
@@ -4508,9 +4896,17 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun handlePaymentPreparationFailure(error: Throwable) {
-        toast(error)
-        hideSheet()
+    private fun handlePaymentPreparationFailure(error: Throwable, contactPaymentContext: ContactPaymentContext?) {
+        if (contactPaymentContext?.isInitialSubscriptionPayment == true) {
+            setSendEffect(
+                SendEffect.NavigateToError(
+                    error.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
+                )
+            )
+        } else {
+            toast(error)
+            hideSheet()
+        }
     }
 
     fun handleDeeplinkIntent(intent: Intent) {
@@ -4834,6 +5230,10 @@ data class SendUiState(
     val hardwareWalletId: String? = null,
     val hardwareWalletName: String? = null,
     val hardwareAvailableSats: ULong = 0uL,
+    val isSubscriptionPayment: Boolean = false,
+    val isInitialSubscriptionPayment: Boolean = false,
+    val initialSubscriptionPaymentAutoStartPending: Boolean = false,
+    val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
 )
 
 @Immutable
@@ -4864,6 +5264,8 @@ data class ContactPaymentContext(
     val publicKey: String,
     val privatePaymentContext: PrivatePaykitPaymentContext? = null,
     val incomingPaymentRequest: PaykitPaymentRequest? = null,
+    val isInitialSubscriptionPayment: Boolean = false,
+    val selectedTags: ImmutableList<String> = persistentListOf(),
 )
 
 private data class PaymentProofPreparation(
@@ -4895,7 +5297,11 @@ sealed class SendEffect {
     data object NavigateToComingSoon : SendEffect()
     data object PaymentSuccess : SendEffect()
     data class NavigateToError(val failure: SendFailureDetails) : SendEffect()
-    data class NavigateToPending(val paymentHash: String, val amount: Long) : SendEffect()
+    data class NavigateToPending(
+        val paymentHash: String,
+        val amount: Long,
+        val observeResolution: Boolean = true,
+    ) : SendEffect()
 }
 
 sealed class MainScreenEffect {
@@ -4926,6 +5332,8 @@ sealed interface SendEvent {
     data class CommentChange(val value: String) : SendEvent
 
     data object SwipeToPay : SendEvent
+    data object StartInitialSubscriptionPayment : SendEvent
+    data object CancelInitialSubscriptionPayment : SendEvent
     data object SpeedAndFee : SendEvent
     data object PaymentMethodSwitch : SendEvent
     data class ConfirmAmountWarning(val warning: SanityWarning) : SendEvent
@@ -4942,6 +5350,23 @@ private class LightningPaymentFailedError(
     val reason: PaymentFailureReason?,
     val paymentRequest: String?,
 ) : AppError(reason?.name)
+
+private fun Throwable.isDefiniteOnchainPreBroadcastFailure(): Boolean =
+    generateSequence(this as Throwable?) { it.cause }
+        .any {
+            it is ServiceError.NodeNotSetup ||
+                it is ServiceError.NodeNotStarted ||
+                it is NodeException.NotRunning ||
+                it is NodeException.OnchainTxCreationFailed ||
+                it is NodeException.OnchainTxSigningFailed ||
+                it is NodeException.InvalidAddress ||
+                it is NodeException.InvalidAmount ||
+                it is NodeException.InvalidNetwork ||
+                it is NodeException.InvalidFeeRate ||
+                it is NodeException.InsufficientFunds ||
+                it is NodeException.CoinSelectionFailed ||
+                it is NodeException.NoSpendableOutputs
+        }
 
 sealed interface LnurlParams {
     data class LnurlPay(val data: LnurlPayData) : LnurlParams

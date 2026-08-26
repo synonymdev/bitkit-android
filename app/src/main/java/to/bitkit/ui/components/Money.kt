@@ -45,6 +45,7 @@ fun MoneyDisplay(
 fun MoneyCell(
     sats: Long,
     modifier: Modifier = Modifier,
+    prefix: String = "",
 ) {
     val currencies = LocalCurrencies.current
     Column(
@@ -54,7 +55,7 @@ fun MoneyCell(
     ) {
         rememberMoneyText(sats = sats, unit = currencies.primaryDisplay, showSymbol = true)?.let { text ->
             BodyMSB(
-                text = text.withAccent(accentColor = Colors.White64),
+                text = "$prefix$text".withAccent(accentColor = Colors.White64),
                 modifier = Modifier.testTag("MoneyPrimary"),
             )
         }

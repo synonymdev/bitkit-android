@@ -22,6 +22,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.AmountInputViewModel
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
+import kotlin.test.assertEquals
 
 @ComposeUi
 class CreatePaymentRequestScreenTest {
@@ -29,12 +30,34 @@ class CreatePaymentRequestScreenTest {
     val composeTestRule = createComposeRule()
 
     @Test
-    fun detailsShowsAmountNoteExpiryAndContinue() {
+    fun detailsShowsAmountNoteExpiryAndSend() {
         composeTestRule.setContent {
             AppThemeSurface {
                 PaymentRequestDetailsContent(
+                    initialDraft = draft,
+                    contact = PubkyProfile.placeholder(target.publicKey),
+                    isCreating = false,
+                    onBack = {},
+                    onEditAmount = {},
+                    onSend = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("PaymentRequestNote").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestExpiryWeek").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestNumberPad").assertDoesNotExist()
+    }
+
+    @Test
+    fun amountShowsNumberPadAndContinue() {
+        composeTestRule.setContent {
+            AppThemeSurface {
+                PaymentRequestAmountContent(
                     amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub()),
                     initialDraft = draft,
+                    contact = PubkyProfile.placeholder(target.publicKey),
                     onBack = {},
                     onContinue = {},
                 )
@@ -42,37 +65,32 @@ class CreatePaymentRequestScreenTest {
         }
 
         composeTestRule.onNodeWithTag("PaymentRequestAmountField").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestNote").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestExpiryWeek").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestAmountContinue").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestNumberPad").assertDoesNotExist()
-
-        composeTestRule.onNodeWithTag("PaymentRequestEditAmount").performClick()
-
         composeTestRule.onNodeWithTag("PaymentRequestNumberPad").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestAmountContinue").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestNote").assertDoesNotExist()
     }
 
     @Test
-    fun recipientShowsEligibleContactAndSendAction() {
+    fun recipientShowsEligibleContactAndAdvancesOnSelection() {
+        var selectedTarget: PaykitPaymentRequestTarget? = null
         composeTestRule.setContent {
             AppThemeSurface {
                 PaymentRequestRecipientContent(
                     targets = persistentListOf(target),
                     contacts = persistentListOf(PubkyProfile.placeholder(target.publicKey)),
-                    isCreating = false,
-                    onEditExpiration = {},
+                    onBack = {},
                     onPaste = { target.publicKey },
-                    onSend = {},
+                    onSelected = { selectedTarget = it },
                 )
             }
         }
 
         composeTestRule.onNodeWithTag("PaymentRequestContact${target.publicKey}").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRecipientSearch").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestEditExpiration").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRecipientPaste", useUnmergedTree = true).assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestSend").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("PaymentRequestContact${target.publicKey}").performClick()
+        assertEquals(target, selectedTarget)
 
         composeTestRule.onNodeWithTag("PaymentRequestRecipientSearch").performTextInput("not this contact")
 
@@ -82,11 +100,12 @@ class CreatePaymentRequestScreenTest {
 
     @Test
     fun sentShowsSuccessSurface() {
+        val contact = PubkyProfile.forDisplay(target.publicKey, "Anna", imageUrl = null)
         composeTestRule.setContent {
             AppThemeSurface {
                 PaymentRequestSentContent(
                     request = request.copy(deliveryStatus = PaykitPaymentRequestDeliveryStatus.Sent),
-                    contact = PubkyProfile.placeholder(target.publicKey),
+                    contact = contact,
                     onDone = {},
                 )
             }
@@ -95,7 +114,8 @@ class CreatePaymentRequestScreenTest {
         composeTestRule.onNodeWithTag("PaymentRequestSent").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestSentCheck").assertIsDisplayed()
         composeTestRule.onNodeWithText("PAYMENT REQUESTED").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Waiting for payment").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Anna").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Dinner").assertIsDisplayed()
     }
 
     private val draft = PaykitPaymentRequestDraft(

@@ -47,6 +47,7 @@ import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestDirection
 import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
@@ -63,6 +64,8 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.screens.wallets.activity.components.CircularIcon
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.outerGlow
@@ -85,10 +88,11 @@ fun PaymentRequestsSheet(
     appViewModel: AppViewModel,
     onNotNow: () -> Unit,
     onSeeAll: () -> Unit,
+    onDetails: (PaykitPaymentRequestId) -> Unit,
 ) {
     val requests by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
-    val rejectingRequestIds by appViewModel.rejectingPaymentRequestIds.collectAsStateWithLifecycle()
+    val subscriptions by appViewModel.subscriptions.collectAsStateWithLifecycle()
 
     LaunchedEffect(requests.isEmpty()) {
         if (requests.isEmpty()) onNotNow()
@@ -97,11 +101,12 @@ fun PaymentRequestsSheet(
     PaymentRequestsSheetContent(
         requests = requests.toImmutableList(),
         contacts = contacts.toImmutableList(),
-        rejectingRequestIds = rejectingRequestIds.toImmutableSet(),
+        subscriptions = subscriptions.toImmutableList(),
         onNotNow = onNotNow,
         onSeeAll = onSeeAll,
         onPay = appViewModel::openIncomingPaymentRequest,
-        onReject = appViewModel::rejectIncomingPaymentRequest,
+        onDismiss = appViewModel::dismissIncomingPaymentRequest,
+        onDetails = onDetails,
     )
 }
 
@@ -110,11 +115,12 @@ internal fun PaymentRequestsSheetContent(
     modifier: Modifier = Modifier,
     requests: ImmutableList<PaykitPaymentRequest>,
     contacts: ImmutableList<PubkyProfile>,
-    rejectingRequestIds: ImmutableSet<PaykitPaymentRequestId>,
+    subscriptions: ImmutableList<PaykitSubscription>,
     onNotNow: () -> Unit,
     onSeeAll: () -> Unit,
     onPay: (PaykitPaymentRequestId) -> Unit,
-    onReject: (PaykitPaymentRequest) -> Unit,
+    onDismiss: suspend (PaykitPaymentRequest) -> Result<Unit>,
+    onDetails: (PaykitPaymentRequestId) -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -140,9 +146,10 @@ internal fun PaymentRequestsSheetContent(
                 PaymentRequestCard(
                     request = request,
                     contact = contacts.contactFor(request),
-                    isRejecting = request.id in rejectingRequestIds,
+                    compactSubtitle = subscriptions.nameFor(request),
+                    onClick = { onDetails(request.id) },
                     onPay = { onPay(request.id) },
-                    onReject = { onReject(request) },
+                    onDismiss = { onDismiss(request) },
                 )
             }
         }
@@ -169,23 +176,27 @@ fun PaymentRequestsScreen(
     appViewModel: AppViewModel,
     onBack: () -> Unit,
     onRequestPayment: () -> Unit,
+    onDetails: (PaykitPaymentRequestId) -> Unit,
+    showsNavigationBar: Boolean = true,
 ) {
     val pending by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
     val history by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val targets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
-    val rejectingRequestIds by appViewModel.rejectingPaymentRequestIds.collectAsStateWithLifecycle()
+    val subscriptions by appViewModel.subscriptions.collectAsStateWithLifecycle()
 
     PaymentRequestsContent(
         requests = (pending + history).distinctBy { it.id }.toImmutableList(),
         pending = pending.toImmutableList(),
         contacts = contacts.toImmutableList(),
-        rejectingRequestIds = rejectingRequestIds.toImmutableSet(),
+        subscriptions = subscriptions.toImmutableList(),
         canRequestPayment = targets.isNotEmpty(),
         onBack = onBack,
         onRequestPayment = onRequestPayment,
         onPay = appViewModel::openIncomingPaymentRequest,
-        onReject = appViewModel::rejectIncomingPaymentRequest,
+        onDismiss = appViewModel::dismissIncomingPaymentRequest,
+        onDetails = onDetails,
+        showsNavigationBar = showsNavigationBar,
     )
 }
 
@@ -195,27 +206,36 @@ internal fun PaymentRequestsContent(
     requests: ImmutableList<PaykitPaymentRequest>,
     pending: ImmutableList<PaykitPaymentRequest>,
     contacts: ImmutableList<PubkyProfile>,
-    rejectingRequestIds: ImmutableSet<PaykitPaymentRequestId>,
+    subscriptions: ImmutableList<PaykitSubscription>,
     canRequestPayment: Boolean,
     onBack: () -> Unit,
     onRequestPayment: () -> Unit,
     onPay: (PaykitPaymentRequestId) -> Unit,
-    onReject: (PaykitPaymentRequest) -> Unit,
+    onDismiss: suspend (PaykitPaymentRequest) -> Result<Unit>,
+    onDetails: (PaykitPaymentRequestId) -> Unit,
+    showsNavigationBar: Boolean = true,
 ) {
     val sections = paymentRequestSections(requests, pending, Clock.System.now())
 
     Column(
         modifier = modifier
             .fillMaxSize()
-            .gradientBackground()
-            .navigationBarsPadding()
+            .then(
+                if (showsNavigationBar) {
+                    Modifier.gradientBackground().navigationBarsPadding()
+                } else {
+                    Modifier
+                }
+            )
             .testTag("PaymentRequestsScreen")
     ) {
-        AppTopBar(
-            titleText = stringResource(R.string.wallet__payment_requests),
-            onBackClick = onBack,
-            actions = { DrawerNavIcon() },
-        )
+        if (showsNavigationBar) {
+            AppTopBar(
+                titleText = stringResource(R.string.wallet__payment_requests),
+                onBackClick = onBack,
+                actions = { DrawerNavIcon() },
+            )
+        }
         if (requests.isEmpty()) {
             Column(
                 modifier = Modifier
@@ -264,8 +284,10 @@ internal fun PaymentRequestsContent(
                             isIncoming = pending.any { it.id == request.id },
                             isRejecting = request.id in rejectingRequestIds,
                             contact = contacts.contactFor(request),
+                            subscriptionNote = subscriptions.nameFor(request),
                             onPay = onPay,
-                            onReject = onReject,
+                            onDismiss = onDismiss,
+                            onDetails = onDetails,
                         )
                     }
                 }
@@ -280,7 +302,11 @@ internal fun PaymentRequestsContent(
                         PaymentRequestCard(
                             request = request,
                             contact = contacts.contactFor(request),
-                            compactSubtitle = paymentRequestDate(request),
+                            compactSubtitle = subscriptions.nameFor(request)
+                                ?: request.note?.takeIf(String::isNotBlank)
+                                ?: paymentRequestDate(request),
+                            showSignedAmount = true,
+                            onClick = { onDetails(request.id) },
                         )
                     }
                 }
@@ -312,7 +338,6 @@ private data class PaymentRequestHistorySection(
 
 private enum class PaymentRequestHistoryPeriod {
     Today,
-    Yesterday,
     ThisWeek,
     ThisMonth,
     ThisYear,
@@ -348,22 +373,25 @@ private fun ActivePaymentRequestCard(
     isIncoming: Boolean,
     isRejecting: Boolean,
     contact: PubkyProfile?,
+    subscriptionNote: String?,
     onPay: (PaykitPaymentRequestId) -> Unit,
-    onReject: (PaykitPaymentRequest) -> Unit,
+    onDismiss: suspend (PaykitPaymentRequest) -> Result<Unit>,
+    onDetails: (PaykitPaymentRequestId) -> Unit,
 ) {
     if (isIncoming) {
         PaymentRequestCard(
             request = request,
             contact = contact,
-            compactSubtitle = paymentRequestDateTime(request),
-            isRejecting = isRejecting,
+            compactSubtitle = subscriptionNote,
+            onClick = { onDetails(request.id) },
             onPay = { onPay(request.id) },
-            onReject = { onReject(request) },
+            onDismiss = { onDismiss(request) },
         )
     } else {
         PaymentRequestCard(
             request = request,
             contact = contact,
+            onClick = { onDetails(request.id) },
             compactSubtitle = stringResource(
                 R.string.wallet__payment_request_waiting_for_recipient,
                 contact?.name ?: PubkyProfile.placeholder(request.counterparty).name,
@@ -375,7 +403,6 @@ private fun ActivePaymentRequestCard(
 @Composable
 private fun paymentRequestHistorySectionTitle(period: PaymentRequestHistoryPeriod): String = when (period) {
     PaymentRequestHistoryPeriod.Today -> stringResource(R.string.wallet__payment_requests_today)
-    PaymentRequestHistoryPeriod.Yesterday -> stringResource(R.string.wallet__payment_requests_yesterday)
     PaymentRequestHistoryPeriod.ThisWeek -> stringResource(R.string.wallet__payment_requests_this_week)
     PaymentRequestHistoryPeriod.ThisMonth -> stringResource(R.string.wallet__payment_requests_this_month)
     PaymentRequestHistoryPeriod.ThisYear -> stringResource(R.string.wallet__payment_requests_this_year)
@@ -395,7 +422,6 @@ private fun PaykitPaymentRequest.historyPeriod(
 
     return when {
         date == today -> PaymentRequestHistoryPeriod.Today
-        date == today.minusDays(1) -> PaymentRequestHistoryPeriod.Yesterday
         !date.isBefore(startOfWeek) -> PaymentRequestHistoryPeriod.ThisWeek
         date.year == today.year && date.month == today.month -> PaymentRequestHistoryPeriod.ThisMonth
         date.year == today.year -> PaymentRequestHistoryPeriod.ThisYear
@@ -406,16 +432,6 @@ private fun PaykitPaymentRequest.historyPeriod(
 @Composable
 private fun paymentRequestDate(request: PaykitPaymentRequest): String = request.createdAt?.let {
     uiDateText(it.epochSeconds.toULong(), UiDateStyle.DATE)
-} ?: paymentRequestStatus(request)
-
-@Composable
-private fun paymentRequestDateTime(request: PaykitPaymentRequest): String = request.createdAt?.let {
-    val timestamp = it.epochSeconds.toULong()
-    stringResource(
-        R.string.wallet__payment_request_timestamp,
-        uiDateText(timestamp, UiDateStyle.DATE),
-        uiDateText(timestamp, UiDateStyle.TIME),
-    )
 } ?: paymentRequestStatus(request)
 
 @Composable
@@ -458,18 +474,17 @@ internal fun PaymentRequestCard(
     request: PaykitPaymentRequest,
     contact: PubkyProfile?,
     compactSubtitle: String? = null,
-    isRejecting: Boolean = false,
+    isOutgoingPayment: Boolean = false,
+    showSignedAmount: Boolean = false,
+    onClick: (() -> Unit)? = null,
     onPay: (() -> Unit)? = null,
-    onReject: (() -> Unit)? = null,
+    onDismiss: (suspend () -> Result<Unit>)? = null,
 ) {
+    val scope = rememberCoroutineScope()
+    var isDismissing by remember(request.id) { mutableStateOf(false) }
     val displayContact = contact ?: PubkyProfile.placeholder(request.counterparty)
-    val subtitle = compactSubtitle ?: request.createdAt?.let {
-        val timestamp = it.epochSeconds.toULong()
-        val date = uiDateText(timestamp, UiDateStyle.DATE)
-        val time = uiDateText(timestamp, UiDateStyle.TIME)
-        val formattedTimestamp = stringResource(R.string.wallet__payment_request_timestamp, date, time)
-        stringResource(R.string.wallet__payment_request_contact_timestamp, displayContact.name, formattedTimestamp)
-    } ?: displayContact.name
+    val subtitle = compactSubtitle ?: request.note?.takeIf(String::isNotBlank) ?: paymentRequestDate(request)
+    val amountPrefix = request.amountPrefix(isOutgoingPayment, showSignedAmount)
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Colors.Gray6),
@@ -477,7 +492,7 @@ internal fun PaymentRequestCard(
         modifier = Modifier
             .fillMaxWidth()
             .then(
-                if (onPay != null || onReject != null) {
+                if (onPay != null || onDismiss != null) {
                     Modifier
                         .outerGlow(
                             glowColor = Colors.Brand,
@@ -490,17 +505,27 @@ internal fun PaymentRequestCard(
                     Modifier
                 }
             )
+            .clickableAlpha(enabled = onClick != null) { onClick?.invoke() }
             .testTag("PaymentRequestRow${request.paymentRequestId}"),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.padding(16.dp),
         ) {
-            PubkyContactAvatar(profile = displayContact, size = 40.dp)
+            if (isOutgoingPayment) {
+                CircularIcon(
+                    icon = painterResource(R.drawable.ic_sent),
+                    iconColor = Colors.Brand,
+                    backgroundColor = Colors.Brand16,
+                    size = 40.dp,
+                )
+            } else {
+                PubkyContactAvatar(profile = displayContact, size = 40.dp)
+            }
             Column(modifier = Modifier.weight(1f)) {
                 BodyMSB(
-                    text = request.note ?: stringResource(R.string.wallet__payment_request),
+                    text = displayContact.name,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -513,11 +538,12 @@ internal fun PaymentRequestCard(
             }
             MoneyCell(
                 sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
+                prefix = amountPrefix,
             )
         }
-        if (onPay != null || onReject != null) {
+        if (onPay != null || onDismiss != null) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Colors.Gray5)
@@ -526,11 +552,15 @@ internal fun PaymentRequestCard(
                 SecondaryButton(
                     text = stringResource(R.string.wallet__payment_request_dismiss),
                     onClick = {
-                        if (isRejecting || onReject == null) return@SecondaryButton
-                        onReject()
+                        if (isDismissing || onDismiss == null) return@SecondaryButton
+                        isDismissing = true
+                        scope.launch {
+                            onDismiss()
+                            isDismissing = false
+                        }
                     },
-                    isLoading = isRejecting,
-                    enabled = !isRejecting,
+                    isLoading = isDismissing,
+                    enabled = !isDismissing,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_x),
@@ -544,7 +574,7 @@ internal fun PaymentRequestCard(
                 PrimaryButton(
                     text = stringResource(R.string.wallet__payment_request_pay),
                     onClick = { onPay?.invoke() },
-                    enabled = !isRejecting,
+                    enabled = !isDismissing,
                     icon = {
                         Icon(
                             painter = painterResource(R.drawable.ic_coins),
@@ -560,11 +590,25 @@ internal fun PaymentRequestCard(
     }
 }
 
+private fun PaykitPaymentRequest.amountPrefix(isOutgoingPayment: Boolean, showSignedAmount: Boolean): String = when {
+    isOutgoingPayment -> "-"
+    showSignedAmount && direction == PaykitPaymentRequestDirection.Incoming -> "-"
+    showSignedAmount -> "+"
+    else -> ""
+}
+
 private fun List<PubkyProfile>.contactFor(request: PaykitPaymentRequest): PubkyProfile? =
     firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, request.counterparty) }
 
+@Composable
+private fun List<PaykitSubscription>.nameFor(request: PaykitPaymentRequest): String? {
+    val subscription = firstOrNull(request::belongsTo) ?: return null
+    return subscription.note?.takeIf(String::isNotBlank)
+        ?: stringResource(R.string.subscriptions__subscription)
+}
+
 private val PaykitPaymentRequest.lazyListKey: String
-    get() = "$paymentRequestId|$counterparty|$counterpartyReceiverPath"
+    get() = "$paymentRequestId|$counterparty|$counterpartyReceiverPath|${billingPeriod?.startsAt ?: ""}"
 
 private val previewRequest = PaykitPaymentRequest(
     paymentRequestId = "payment-request",
@@ -586,11 +630,12 @@ private fun PaymentRequestsSheetPreview() {
             PaymentRequestsSheetContent(
                 requests = persistentListOf(previewRequest),
                 contacts = persistentListOf(),
-                rejectingRequestIds = persistentSetOf(),
+                subscriptions = persistentListOf(),
                 onNotNow = {},
                 onSeeAll = {},
                 onPay = {},
-                onReject = {},
+                onDismiss = { Result.success(Unit) },
+                onDetails = {},
             )
         }
     }
@@ -610,12 +655,13 @@ private fun PaymentRequestsPreview() {
             ),
             pending = persistentListOf(previewRequest),
             contacts = persistentListOf(),
-            rejectingRequestIds = persistentSetOf(),
+            subscriptions = persistentListOf(),
             canRequestPayment = true,
             onBack = {},
             onRequestPayment = {},
             onPay = {},
-            onReject = {},
+            onDismiss = { Result.success(Unit) },
+            onDetails = {},
         )
     }
 }

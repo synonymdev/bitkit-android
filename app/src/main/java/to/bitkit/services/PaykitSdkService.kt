@@ -655,12 +655,14 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    @Suppress("LongParameterList")
     suspend fun submitPaymentProof(
         counterparty: String,
         counterpartyReceiverPath: String,
         paymentRequestId: String,
         paymentEndpointIdentifier: String,
         proofJson: String,
+        billingPeriod: to.bitkit.repositories.PaykitBillingPeriod? = null,
     ): PaymentRequestRecord {
         isSetup.await()
         return operationMutex.withLock {
@@ -670,7 +672,7 @@ class PaykitSdkService @Inject constructor(
                     counterpartyReceiverPath,
                     paymentRequestId,
                     PaymentProofSubmission(
-                        billingPeriod = null,
+                        billingPeriod = billingPeriod?.sdkValue,
                         paymentEndpointIdentifier = paymentEndpointIdentifier,
                         proof = PrivateJsonObject(proofJson),
                     ),
@@ -689,6 +691,20 @@ class PaykitSdkService @Inject constructor(
         return operationMutex.withLock {
             withStateRevisionTracking { handle ->
                 handle.rejectPaymentRequest(counterparty, counterpartyReceiverPath, paymentRequestId, reason)
+            }
+        }
+    }
+
+    suspend fun cancelPaymentRequest(
+        counterparty: String,
+        counterpartyReceiverPath: String,
+        paymentRequestId: String,
+        reason: String? = null,
+    ): PaymentRequestRecord {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.cancelPaymentRequest(counterparty, counterpartyReceiverPath, paymentRequestId, reason)
             }
         }
     }

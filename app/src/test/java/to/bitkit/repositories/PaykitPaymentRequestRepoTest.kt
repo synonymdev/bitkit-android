@@ -10,6 +10,7 @@ import com.synonym.paykit.PaymentRequestAmount
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
+import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
 import kotlinx.coroutines.CompletableDeferred
@@ -67,6 +68,9 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val paykitSdkService = mock<PaykitSdkService>()
     private val settingsStore = mock<SettingsStore>()
     private val presentationStore = mock<PaykitPaymentRequestPresentationStore>()
+    private val paymentProofStore = mock<PaykitPaymentProofStore>()
+    private val paymentProofRepo = mock<PaykitPaymentProofRepo>()
+    private val subscriptionNotificationScheduler = mock<PaykitSubscriptionNotificationScheduler>()
     private var schedulerOriginMillis = 0L
     private val clock = object : Clock {
         override fun now(): Instant = START_TIME.plus(
@@ -84,7 +88,23 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(true))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = true)))
         whenever(presentationStore.load(LOCAL_IDENTITY)).thenReturn(emptySet())
-        sut = PaykitPaymentRequestRepo(testDispatcher, paykitSdkService, settingsStore, presentationStore, clock)
+        whenever(
+            presentationStore.loadSubscriptionState(any())
+        ).thenReturn(PaykitSubscriptionPresentationState())
+        whenever(paymentProofStore.completedRequestIdsAwaitingSubmission(LOCAL_IDENTITY)).thenReturn(emptySet())
+        whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(emptySet())
+        whenever(paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(any(), any()))
+            .thenReturn(Result.success(emptySet()))
+        sut = PaykitPaymentRequestRepo(
+            testDispatcher,
+            paykitSdkService,
+            settingsStore,
+            presentationStore,
+            paymentProofStore,
+            paymentProofRepo,
+            subscriptionNotificationScheduler,
+            clock,
+        )
         sut.activate(LOCAL_IDENTITY)
     }
 
@@ -176,7 +196,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         sut.refresh().getOrThrow()
 
-        assertEquals(listOf("incoming"), sut.pendingRequests.value.map { it.paymentRequestId })
+        assertEquals(listOf("incoming", "accepted"), sut.pendingRequests.value.map { it.paymentRequestId })
         assertEquals(
             setOf("incoming", "accepted", "rejected", "expired", "outgoing", "unsupported"),
             sut.paymentRequestHistory.value.map { it.paymentRequestId }.toSet(),
@@ -658,6 +678,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         endpoints: List<String> = listOf(MethodId.Bolt11.rawValue),
         counterparty: String = COUNTERPARTY,
         receiverPath: String = PaykitReceiverPaths.SERVER,
+        recurrence: PaymentRequestRecurrence? = null,
+        metadata: PrivateJsonObject = METADATA,
     ) = PaymentRequestRecord(
         counterparty = counterparty,
         counterpartyReceiverPath = receiverPath,
@@ -672,9 +694,9 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             amount = PaymentRequestAmount(value = amount, asset = "btc"),
             paymentReference = PAYMENT_REFERENCE,
             proposalExpiresAt = expiresAt,
-            recurrence = null,
+            recurrence = recurrence,
             acceptedPaymentEndpointIdentifiers = endpoints,
-            metadata = METADATA,
+            metadata = metadata,
         ),
         acceptedEventId = null,
         acceptedOutboundStatus = null,
