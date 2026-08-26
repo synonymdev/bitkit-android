@@ -2403,18 +2403,27 @@ class AppViewModel @Inject constructor(
         action()
     }
 
-    fun clearActiveContactPaymentContext() {
+    fun clearActiveContactPaymentContext(retryIncomingRequest: Boolean = true) {
         val interruptedRequest = synchronized(contactPaymentContextLock) {
             val request = activeContactPaymentContext?.incomingPaymentRequest
             activeContactPaymentContext = null
             request
         }
+        if (interruptedRequest == null) return
+
+        if (!retryIncomingRequest) {
+            paymentRequestPresentationGeneration++
+            if (requestedPaymentRequestId == interruptedRequest.id) {
+                requestedPaymentRequestId = null
+            }
+            clearPaymentRequestPresentationRetry(interruptedRequest.id)
+            viewModelScope.launch { paykitPaymentRequestRepo.markPresented(interruptedRequest) }
+            return
+        }
+
         if (
-            interruptedRequest != null &&
-            (
-                requestedPaymentRequestId == interruptedRequest.id ||
-                    paykitPaymentRequestRepo.automaticPendingRequests().any { it.id == interruptedRequest.id }
-                )
+            requestedPaymentRequestId == interruptedRequest.id ||
+            paykitPaymentRequestRepo.automaticPendingRequests().any { it.id == interruptedRequest.id }
         ) {
             deferPaymentRequestPresentation(interruptedRequest)
         }
@@ -2538,7 +2547,7 @@ class AppViewModel @Inject constructor(
                         formatMoneyValue(shortfall),
                     ),
                 )
-                clearActiveContactPaymentContext()
+                clearActiveContactPaymentContext(retryIncomingRequest = false)
                 return
             }
 
@@ -2639,7 +2648,6 @@ class AppViewModel @Inject constructor(
 
         lightningRepo.waitForUsableChannels()
         if (!lightningRepo.canSend(amount)) {
-            hideSheet()
             val maxSendLightning = walletRepo.balanceState.value.maxSendLightningSats
             val shortfall = amount.safe() - maxSendLightning.safe()
             toast(
@@ -2649,7 +2657,8 @@ class AppViewModel @Inject constructor(
                     .replace("{amount}", formatMoneyValue(shortfall)),
                 testTag = "InsufficientSpendingToast",
             )
-            clearActiveContactPaymentContext()
+            clearActiveContactPaymentContext(retryIncomingRequest = false)
+            hideSheet()
             return
         }
 
@@ -2693,13 +2702,13 @@ class AppViewModel @Inject constructor(
 
         lightningRepo.waitForUsableChannels()
         if (!lightningRepo.canSend(paymentAmount.coerceAtLeast(1u))) {
-            hideSheet()
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.other__lnurl_pay_error),
                 description = context.getString(R.string.other__lnurl_pay_error_no_capacity),
             )
-            clearActiveContactPaymentContext()
+            clearActiveContactPaymentContext(retryIncomingRequest = false)
+            hideSheet()
             return
         }
 

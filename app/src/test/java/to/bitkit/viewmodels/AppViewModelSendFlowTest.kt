@@ -531,6 +531,37 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `unaffordable request releases manual presentation state`() = test {
+        val request = paymentRequest()
+        whenever { paykitPaymentRequestRepo.reject(request) }.thenReturn(Result.success(Unit))
+        pendingPaykitPaymentRequests.value = listOf(request)
+        surfacedPaykitPaymentRequestIds += request.id
+        setActiveContactPaymentContext(
+            publicKey = testPublicKey,
+            privatePaymentContext = PrivatePaykitPaymentContext("bitkit/server", 7uL),
+            incomingPaymentRequest = request,
+        )
+        setRequestedPaymentRequestId(request.id)
+
+        sut.clearActiveContactPaymentContext(retryIncomingRequest = false)
+        runCurrent()
+
+        assertNull(activeContactPaymentContext())
+        verify(paykitPaymentRequestRepo).markPresented(request)
+
+        val result = sut.rejectIncomingPaymentRequest(request)
+
+        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        verify(paykitPaymentRequestRepo).reject(request)
+        verify(paykitPaymentRequestRepo, never()).accept(any())
+        verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
+
+        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        runCurrent()
+        verify(privatePaykitRepo, never()).beginPaymentRequest(request)
+    }
+
+    @Test
     fun `failed manual request presentation returns to the request queue`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
@@ -4263,6 +4294,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val field = AppViewModel::class.java.getDeclaredField("activeContactPaymentContext")
         field.isAccessible = true
         field.set(sut, ContactPaymentContext(publicKey, privatePaymentContext, incomingPaymentRequest))
+    }
+
+    private fun setRequestedPaymentRequestId(id: PaykitPaymentRequestId?) {
+        val field = AppViewModel::class.java.getDeclaredField("requestedPaymentRequestId")
+        field.isAccessible = true
+        field.set(sut, id)
     }
 
     private fun activeContactPaymentContext(): ContactPaymentContext? {

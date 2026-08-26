@@ -455,7 +455,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
         clearInvocations(paykitSdkService)
-        val result = sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = false)
+        val result = sut.prepareSavedContacts(listOf(CONTACT_KEY), requireImmediatePublication = true)
 
         assertTrue(result.isSuccess, result.exceptionOrNull().toString())
         val captor = argumentCaptor<List<PrivatePaymentListReservationUpdateInput>>()

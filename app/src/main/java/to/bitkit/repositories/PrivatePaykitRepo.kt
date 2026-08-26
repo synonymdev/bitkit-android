@@ -781,7 +781,6 @@ class PrivatePaykitRepo @Inject constructor(
             val linkableReceiverPaths = receiverPathSelection.linkableReceiverPaths
             val publicationReceiverPaths = receiverPathSelection.publishableReceiverPaths
             receiverPathSelection.error?.let {
-                firstError = firstError ?: it
                 logPrivateReceiverPathSelectionFailure(publicKey, reason, it)
             }
             val cleanupReceiverPaths = receiverPathsForPrivateEndpointCleanup(
