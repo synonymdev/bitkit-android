@@ -186,11 +186,6 @@ class TransferViewModel @Inject constructor(
         updateAvailableAmount()
     }
 
-    /**
-     * Re-price the receiving capacity the user typed.
-     * Cancels any in-flight quote so a slower earlier request cannot overwrite a newer one, which
-     * would otherwise leave the fee gating the continue button pinned to an amount already left.
-     */
     fun onReceivingAmountChange(amount: Long) {
         receivingFeeQuoteJob?.cancel()
         receivingFeeQuoteJob = viewModelScope.launch {
@@ -231,25 +226,6 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Refreshes what the on-chain balance can still fund, so the advanced screen can disable a
-     * receiving capacity whose liquidity fee the user cannot pay.
-     */
-    fun updateAdvancedFundingBudget() {
-        viewModelScope.launch {
-            _spendingUiState.update { it.copy(advancedBudgetSats = loadFundingBudget()) }
-        }
-    }
-
-    /**
-     * Whether the order for this capacity still fits what the wallet can fund.
-     *
-     * The receiving side is chosen independently of the client balance, and the LSP prices both
-     * sides, so raising it can push the order past what the wallet can pay. Like the confirm guard,
-     * this checks against [currentFundingBudget] so a hardware transfer is measured against the
-     * device account its funds actually sit in. A budget that was never sized, or a quote the LSP
-     * will not give, defers the decision to the confirm step rather than blocking the user here.
-     */
     private suspend fun canFundAdvancedOrder(clientBalance: ULong, receivingAmount: ULong): Boolean {
         val budget = currentFundingBudget()
         if (budget == null) {
