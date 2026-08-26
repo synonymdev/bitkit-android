@@ -363,6 +363,8 @@
     <string name="lightning__spending_advanced__error_max__title">Receiving Capacity Maximum</string>
     <string name="lightning__spending_advanced__fee">Liquidity fee</string>
     <string name="lightning__spending_advanced__title">Receiving\n&lt;accent&gt;capacity&lt;/accent&gt;</string>
+    <string name="lightning__spending_amount__error_balance__description">Your savings cannot cover this transfer and its fees. Try a smaller amount.</string>
+    <string name="lightning__spending_amount__error_balance__title">Insufficient Savings</string>
     <string name="lightning__spending_amount__error_max__description">The amount you can transfer to your spending balance is currently limited to ₿ {amount}.</string>
     <string name="lightning__spending_amount__error_max__description_zero">Your transfer to the spending balance is limited due to liquidity policy. For details, visit the Help Center.</string>
     <string name="lightning__spending_amount__error_max__title">Spending Balance Maximum</string>
