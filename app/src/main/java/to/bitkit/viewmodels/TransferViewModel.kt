@@ -121,6 +121,7 @@ class TransferViewModel @Inject constructor(
     private var confirmFeeJob: Job? = null
     private var confirmPayJob: Job? = null
     private var receivingFeeQuoteJob: Job? = null
+    private var advancedLimitsJob: Job? = null
     private var spendingConfirmFundingPlan: SpendingConfirmFundingPlan? = null
     private var pendingHwFundingBroadcast: PendingHwFundingBroadcast? = null
     private var activeHwTransferWalletId: String? = null
@@ -232,11 +233,7 @@ class TransferViewModel @Inject constructor(
             Logger.warn("Skipped advanced capacity check, on-chain balance unavailable", context = TAG)
             return true
         }
-        _spendingUiState.update { it.copy(advancedBudgetSats = budget) }
-        val fee = blocktankRepo.estimateOrderFee(
-            spendingBalanceSats = clientBalance,
-            receivingBalanceSats = receivingAmount,
-        ).getOrNull()?.feeSat
+        val fee = quoteAdvancedOrderFee(clientBalance, receivingAmount)
         if (fee == null) {
             Logger.warn("Skipped advanced capacity check, fee quote unavailable", context = TAG)
             return true
@@ -783,6 +780,80 @@ class TransferViewModel @Inject constructor(
         return fallback
     }
 
+    private suspend fun quoteAdvancedOrderFee(clientBalance: ULong, receivingAmount: ULong): ULong? =
+        blocktankRepo.estimateOrderFee(
+            spendingBalanceSats = clientBalance,
+            receivingBalanceSats = receivingAmount,
+        ).getOrNull()?.feeSat
+
+    /**
+     * Largest receiving capacity whose order [clientBalance] can still fund, settled against live quotes.
+     *
+     * The LSP advertises the largest channel it will sell and prices the receiving side on top of
+     * the client balance, so that capacity can cost more than the budget leaves. Unlike the client
+     * balance, a satoshi off the capacity only takes a fraction of a satoshi off the fee, so each
+     * round re-prices through the rate the two bracketing quotes imply rather than stepping down by
+     * the shortfall. Every returned capacity has been priced and found affordable, so the max the
+     * user is offered is one the confirm guard accepts. Null means even [minLspBalance] is out of
+     * reach, leaving that rejection to the confirm step.
+     */
+    private suspend fun resolveAffordableLspBalance(
+        clientBalance: ULong,
+        budget: ULong,
+        minLspBalance: ULong,
+        maxLspBalance: ULong,
+    ): ULong? {
+        val headroom = budget.safe() - clientBalance.safe()
+        val maxFee = quoteAdvancedOrderFee(clientBalance, maxLspBalance) ?: run {
+            Logger.warn("Advertising unsettled max capacity '$maxLspBalance', fee quote unavailable", context = TAG)
+            return maxLspBalance
+        }
+        if (maxFee <= headroom) return maxLspBalance
+
+        val minFee = quoteAdvancedOrderFee(clientBalance, minLspBalance)
+        if (minFee == null || minFee > headroom) return null
+
+        return settleCapacity(
+            clientBalance = clientBalance,
+            headroom = headroom,
+            affordable = minLspBalance,
+            affordableFee = minFee,
+            overBudget = maxLspBalance,
+            overBudgetFee = maxFee,
+        )
+    }
+
+    private suspend fun settleCapacity(
+        clientBalance: ULong,
+        headroom: ULong,
+        affordable: ULong,
+        affordableFee: ULong,
+        overBudget: ULong,
+        overBudgetFee: ULong,
+    ): ULong {
+        var settled = affordable
+        var settledFee = affordableFee
+        var ceiling = overBudget
+        var ceilingFee = overBudgetFee
+        repeat(MAX_AFFORDABILITY_ROUNDS) {
+            val feeSpan = ceilingFee.safe() - settledFee.safe()
+            if (feeSpan == 0uL) return settled
+            val span = ceiling.safe() - settled.safe()
+            val feeHeadroom = headroom.safe() - settledFee.safe()
+            val candidate = settled.safe() + ((span.safe() * feeHeadroom.safe()) / feeSpan).safe()
+            if (candidate <= settled) return settled
+            val candidateFee = quoteAdvancedOrderFee(clientBalance, candidate) ?: return settled
+            if (candidateFee <= headroom) {
+                settled = candidate
+                settledFee = candidateFee
+            } else {
+                ceiling = candidate
+                ceilingFee = candidateFee
+            }
+        }
+        return settled
+    }
+
     /**
      * Order cost the on-chain balance can fund, or null when the balance itself is unreadable.
      *
@@ -1301,6 +1372,44 @@ class TransferViewModel @Inject constructor(
     // endregion
 
     // region Balance Calc
+
+    /**
+     * Size the advanced capacity range for [order], with the max settled on what the wallet can pay.
+     *
+     * The LSP's advertised max ignores the client balance already committed to the order, so it can
+     * price an order the wallet cannot fund. Settling it here means the max button, and the ceiling
+     * the input enforces, land on a capacity that can actually be ordered rather than one the
+     * confirm guard rejects.
+     */
+    fun updateAdvancedTransferValues(order: IBtOrder) {
+        advancedLimitsJob?.cancel()
+        advancedLimitsJob = viewModelScope.launch {
+            _spendingUiState.update { it.copy(isLoading = true) }
+            updateTransferValues(order.clientBalanceSat)
+
+            val values = _transferValues.value
+            val budget = currentFundingBudget()
+            if (values.maxLspBalance == 0uL || budget == null) {
+                _spendingUiState.update { it.copy(isLoading = false) }
+                return@launch
+            }
+
+            val affordableMax = resolveAffordableLspBalance(
+                clientBalance = order.clientBalanceSat,
+                budget = budget,
+                minLspBalance = values.minLspBalance,
+                maxLspBalance = values.maxLspBalance,
+            )
+            if (affordableMax != null && affordableMax < values.maxLspBalance) {
+                Logger.info(
+                    "Settled max capacity '${values.maxLspBalance}' on affordable '$affordableMax'",
+                    context = TAG,
+                )
+                _transferValues.update { it.copy(maxLspBalance = affordableMax) }
+            }
+            _spendingUiState.update { it.copy(isLoading = false) }
+        }
+    }
 
     fun updateTransferValues(clientBalanceSat: ULong) {
         val options = blocktankRepo.calculateLiquidityOptions(clientBalanceSat).getOrNull()

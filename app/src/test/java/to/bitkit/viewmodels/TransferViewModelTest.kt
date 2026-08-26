@@ -805,6 +805,67 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `updateAdvancedTransferValues settles the max on a capacity the balance can fund`() = test {
+        val order = previewBtOrder(clientBalanceSat = ADVANCED_CLIENT_BALANCE)
+        stubSpendableBalances(ADVANCED_BUDGET)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(0uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any())).thenReturn(
+            Result.success(advancedLiquidityOptions(maxLspBalanceSat = 2_000_000uL))
+        )
+        stubCapacityPricedFees()
+
+        sut.updateAdvancedTransferValues(order)
+        advanceUntilIdle()
+
+        // fee is 1_000 + 1% of the capacity, and the budget leaves 10_000 over the client balance
+        assertEquals(900_000uL, sut.transferValues.value.maxLspBalance)
+        assertFalse(sut.spendingUiState.value.isLoading)
+    }
+
+    @Test
+    fun `updateAdvancedTransferValues leaves an affordable max untouched`() = test {
+        val order = previewBtOrder(clientBalanceSat = ADVANCED_CLIENT_BALANCE)
+        stubSpendableBalances(ADVANCED_BUDGET)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(0uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any())).thenReturn(
+            Result.success(advancedLiquidityOptions(maxLspBalanceSat = 400_000uL))
+        )
+        stubCapacityPricedFees()
+
+        sut.updateAdvancedTransferValues(order)
+        advanceUntilIdle()
+
+        assertEquals(400_000uL, sut.transferValues.value.maxLspBalance)
+    }
+
+    @Test
+    fun `updateAdvancedTransferValues holds the loading state while settling the max`() = test {
+        val order = previewBtOrder(clientBalanceSat = ADVANCED_CLIENT_BALANCE)
+        val pendingQuote = CompletableDeferred<Result<IBtEstimateFeeResponse2>>()
+        stubSpendableBalances(ADVANCED_BUDGET)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(0uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any())).thenReturn(
+            Result.success(advancedLiquidityOptions(maxLspBalanceSat = 2_000_000uL))
+        )
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).doSuspendableAnswer {
+            pendingQuote.await()
+        }
+
+        sut.updateAdvancedTransferValues(order)
+        advanceUntilIdle()
+
+        assertTrue(sut.spendingUiState.value.isLoading)
+
+        pendingQuote.complete(Result.failure(AppError("no quote")))
+        advanceUntilIdle()
+
+        assertFalse(sut.spendingUiState.value.isLoading)
+    }
+
+    @Test
     fun `onConfirmAmount rejects an order the balance can no longer fund`() = test {
         val amount = 260_000uL
         val response = stubFeeResponse(1_000uL)
@@ -2208,6 +2269,22 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(it.serviceFeeSat).thenReturn(0uL)
     }
 
+    private fun advancedLiquidityOptions(maxLspBalanceSat: ULong) = ChannelLiquidityOptions(
+        defaultLspBalanceSat = 100_000uL,
+        minLspBalanceSat = 50_000uL,
+        maxLspBalanceSat = maxLspBalanceSat,
+        maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE,
+    )
+
+    /** Prices an order at a flat 1_000 plus 1% of the receiving capacity, as the LSP charges both sides. */
+    private suspend fun stubCapacityPricedFees() {
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).doSuspendableAnswer { invocation ->
+            // ULong params are erased to long across the mock boundary
+            val capacity = invocation.getArgument<Long>(1).toULong()
+            Result.success(stubFeeResponse(1_000uL + capacity / 100uL))
+        }
+    }
+
     private fun liquidityOptionsForCreate(maxClientBalanceSat: ULong) = ChannelLiquidityOptions(
         defaultLspBalanceSat = LSP_BALANCE,
         minLspBalanceSat = LSP_BALANCE,
@@ -2259,6 +2336,8 @@ class TransferViewModelTest : BaseUnitTest() {
         const val LSP_MAX_CLIENT_BALANCE = 1_766_193uL
         const val OPTION_MAX_CLIENT_BALANCE = 1_687_598uL
         const val LSP_BALANCE = 252_368uL
+        const val ADVANCED_CLIENT_BALANCE = 100_000uL
+        const val ADVANCED_BUDGET = 110_000uL
         const val NETWORK_FEE = 2_112uL
         const val SERVICE_FEE = 286uL
         const val LSP_FEE = 2_398uL // NETWORK_FEE + SERVICE_FEE

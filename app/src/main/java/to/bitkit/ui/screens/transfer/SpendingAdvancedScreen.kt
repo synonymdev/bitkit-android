@@ -78,8 +78,7 @@ fun SpendingAdvancedScreen(
     val currentCurrencies by rememberUpdatedState(currencies)
 
     LaunchedEffect(order.clientBalanceSat) {
-        viewModel.updateTransferValues(order.clientBalanceSat)
-        viewModel.updateAdvancedFundingBudget()
+        viewModel.updateAdvancedTransferValues(order)
     }
 
     LaunchedEffect(amountUiState.sats) {
@@ -134,19 +133,13 @@ fun SpendingAdvancedScreen(
         val amount = amountUiState.sats.toULong()
         amount > 0u && it.maxLspBalance > 0u && amount in it.minLspBalance..it.maxLspBalance
     }
-    // Max sets the capacity from the LSP's liquidity limit, which ignores what the wallet can pay
-    // for. Until the quote lands the confirm step stays the authority, so continue is left enabled.
-    val budget = state.advancedBudgetSats
-    val fee = state.feeEstimate
-    val isAffordable = budget == null || fee == null ||
-        order.clientBalanceSat.toLong() + fee <= budget.toLong()
-    val isValid = isInRange && isAffordable
+    val isValid = isInRange && state.canAfford(order.clientBalanceSat)
 
     Content(
         uiState = state,
         transferValues = transferValues,
         isValid = isValid,
-        isLoading = isLoading,
+        isLoading = isLoading || state.isLoading,
         amountInputViewModel = amountInputViewModel,
         currencies = currencies,
         onBack = onBackClick,
@@ -155,6 +148,17 @@ fun SpendingAdvancedScreen(
             viewModel.onSpendingAdvancedContinue(amountUiState.sats)
         },
     )
+}
+
+/**
+ * The max is settled on an affordable capacity before it is offered, so the quote for the typed
+ * amount only has to catch what moves after that. Until it lands the confirm step is the authority,
+ * so continue is left enabled.
+ */
+private fun TransferToSpendingUiState.canAfford(clientBalanceSat: ULong): Boolean {
+    val budget = fundingBudgetSats ?: return true
+    val fee = feeEstimate ?: return true
+    return clientBalanceSat.toLong() + fee <= budget.toLong()
 }
 
 @Suppress("ViewModelForwarding")
@@ -230,18 +234,21 @@ private fun Content(
                 NumberPadActionButton(
                     text = stringResource(R.string.common__min),
                     color = Colors.Purple,
+                    enabled = !isLoading,
                     onClick = { amountInputViewModel.setSats(transferValues.minLspBalance.toLong(), currencies) },
                     modifier = Modifier.testTag("SpendingAdvancedMin")
                 )
                 NumberPadActionButton(
                     text = stringResource(R.string.common__default),
                     color = Colors.Purple,
+                    enabled = !isLoading,
                     onClick = { amountInputViewModel.setSats(transferValues.defaultLspBalance.toLong(), currencies) },
                     modifier = Modifier.testTag("SpendingAdvancedDefault")
                 )
                 NumberPadActionButton(
                     text = stringResource(R.string.common__max),
                     color = Colors.Purple,
+                    enabled = !isLoading,
                     onClick = { amountInputViewModel.setSats(transferValues.maxLspBalance.toLong(), currencies) },
                     modifier = Modifier.testTag("SpendingAdvancedMax")
                 )
@@ -252,6 +259,7 @@ private fun Content(
 
             NumberPad(
                 viewModel = amountInputViewModel,
+                enabled = !isLoading,
                 currencies = currencies,
             )
 
