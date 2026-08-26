@@ -120,6 +120,7 @@ class TransferViewModel @Inject constructor(
     private var hwFeeEstimateJob: Job? = null
     private var confirmFeeJob: Job? = null
     private var confirmPayJob: Job? = null
+    private var receivingFeeQuoteJob: Job? = null
     private var spendingConfirmFundingPlan: SpendingConfirmFundingPlan? = null
     private var pendingHwFundingBroadcast: PendingHwFundingBroadcast? = null
     private var activeHwTransferWalletId: String? = null
@@ -185,8 +186,14 @@ class TransferViewModel @Inject constructor(
         updateAvailableAmount()
     }
 
+    /**
+     * Re-price the receiving capacity the user typed.
+     * Cancels any in-flight quote so a slower earlier request cannot overwrite a newer one, which
+     * would otherwise leave the fee gating the continue button pinned to an amount already left.
+     */
     fun onReceivingAmountChange(amount: Long) {
-        viewModelScope.launch {
+        receivingFeeQuoteJob?.cancel()
+        receivingFeeQuoteJob = viewModelScope.launch {
             _spendingUiState.update { it.copy(receivingAmount = amount, feeEstimate = null) }
 
             if (amount == 0L) return@launch

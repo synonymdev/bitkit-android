@@ -674,17 +674,41 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `updateAdvancedFundingBudget reserves the fast mining fee from spendable`() = test {
-        val spendable = 300_000uL
-        val miningFee = 178uL
-        stubSpendableBalances(spendable)
-        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
-            .thenReturn(Result.success(miningFee))
-
-        sut.updateAdvancedFundingBudget()
+    fun `onReceivingAmountChange discards a slower quote for an amount already left`() = test {
+        val staleAmount = 900_000uL
+        val freshAmount = 300_000uL
+        val staleQuote = CompletableDeferred<Result<IBtEstimateFeeResponse2>>()
+        val staleResponse = stubFeeResponse(6_000uL)
+        val freshResponse = stubFeeResponse(1_000uL)
+        whenever(blocktankRepo.calculateLiquidityOptions(any())).thenReturn(
+            Result.success(
+                ChannelLiquidityOptions(
+                    defaultLspBalanceSat = LSP_BALANCE,
+                    minLspBalanceSat = LSP_BALANCE,
+                    maxLspBalanceSat = 1_000_000uL,
+                    maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE,
+                )
+            )
+        )
+        whenever(blocktankRepo.estimateOrderFee(any(), eq(staleAmount), any()))
+            .doSuspendableAnswer { staleQuote.await() }
+        whenever(blocktankRepo.estimateOrderFee(any(), eq(freshAmount), any()))
+            .thenReturn(Result.success(freshResponse))
+        sut.updateLimits()
         advanceUntilIdle()
 
-        assertEquals(spendable - miningFee, sut.spendingUiState.value.advancedBudgetSats)
+        sut.onReceivingAmountChange(staleAmount.toLong())
+        runCurrent()
+        sut.onReceivingAmountChange(freshAmount.toLong())
+        advanceUntilIdle()
+
+        assertEquals(1_000L, sut.spendingUiState.value.feeEstimate)
+
+        staleQuote.complete(Result.success(staleResponse))
+        advanceUntilIdle()
+
+        assertEquals(1_000L, sut.spendingUiState.value.feeEstimate)
+        assertEquals(freshAmount.toLong(), sut.spendingUiState.value.receivingAmount)
     }
 
     @Test
