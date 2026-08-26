@@ -263,8 +263,8 @@ class TransferViewModel @Inject constructor(
 
     fun onSpendingAdvancedContinue(receivingAmountSats: Long) {
         viewModelScope.launch {
-            runCatching {
-                val oldOrder = _spendingUiState.value.order ?: return@launch
+            runSuspendCatching {
+                val oldOrder = _spendingUiState.value.order ?: return@runSuspendCatching
                 if (!canFundAdvancedOrder(oldOrder.clientBalanceSat, receivingAmountSats.toULong())) {
                     Logger.info(
                         "Rejected advanced capacity '$receivingAmountSats' over funding budget " +
@@ -279,7 +279,7 @@ class TransferViewModel @Inject constructor(
                             ),
                         )
                     )
-                    return@launch
+                    return@runSuspendCatching
                 }
                 val newOrder = blocktankRepo.createOrder(
                     spendingBalanceSats = oldOrder.clientBalanceSat,
