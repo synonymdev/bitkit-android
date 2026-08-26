@@ -437,20 +437,30 @@ class TransferViewModelTest : BaseUnitTest() {
         val spendable = 266_656uL
         val miningFee = 178uL
         val availableAmount = spendable - miningFee // 266_478
+        // the fee rises as fast as the balance steps down, so no candidate ever becomes affordable
+        val quotes = mapOf(
+            266_478uL to 1_800uL, // f(A)     -> balanceAfterLspFee = 264_678
+            264_678uL to 2_000uL, // f(C)     -> 266_678, over budget
+            264_478uL to 2_200uL, // round 1  -> 266_678, still over
+            264_278uL to 2_400uL, // round 2  -> 266_678, rounds exhausted
+        )
         stubSpendableBalances(spendable)
         blocktankState.value = BlocktankState(info = null)
         whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(miningFee))
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = spendable)))
-        // every quote stays 1_800, so no candidate ever becomes affordable and both rounds are used
-        val flat = stubFeeResponse(1_800uL)
-        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(flat))
+        val responses = quotes.mapValues { (_, fee) -> stubFeeResponse(fee) }
+        responses.forEach { (balance, response) ->
+            whenever(blocktankRepo.estimateOrderFee(eq(balance), any(), any()))
+                .thenReturn(Result.success(response))
+        }
 
         sut.updateLimits()
         advanceUntilIdle()
 
-        assertEquals((availableAmount - 1_800uL).toLong(), sut.spendingUiState.value.maxAllowedToSend)
+        // the exhausted loop advertises availableAmount minus the last quote, not the last candidate
+        assertEquals((availableAmount - 2_400uL).toLong(), sut.spendingUiState.value.maxAllowedToSend)
     }
 
     @Test
