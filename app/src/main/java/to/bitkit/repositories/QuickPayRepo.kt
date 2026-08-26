@@ -696,9 +696,14 @@ class QuickPayRepo @Inject constructor(
         }
         op.emitted = true
         val sessionId = op.sessionId
-        val notified = emitToSession(sessionId, QuickPaySessionEvent.Error(error, paymentRequest))
-        if (notified && sessionId != null) {
+        // Register before delivery so a collector resumed inside tryEmit cannot acknowledge
+        // ahead of the insertion, which would leave a stale entry flushing a duplicate toast.
+        if (sessionId != null) {
             unackedFailures[sessionId] = error
+        }
+        val notified = emitToSession(sessionId, QuickPaySessionEvent.Error(error, paymentRequest))
+        if (!notified && sessionId != null) {
+            unackedFailures.remove(sessionId)
         }
         op.settled.complete(Unit)
         return notified

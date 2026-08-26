@@ -5,6 +5,8 @@ import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,7 +15,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -282,6 +286,35 @@ class QuickPayRepoTest : BaseUnitTest() {
             expectNoEvents()
         }
         hold.complete(Result.success("pid"))
+    }
+
+    @Test
+    fun `acknowledge during delivery clears the unacked failure`() = test {
+        val (bolt11, _) = testInvoice()
+        stubPayInvoiceFailure(NodeException.InvalidInvoice("bad"))
+        val session = QuickPaySession()
+        val flushed = mutableListOf<Throwable>()
+        val flushJob = launch { sut.unhandledFailures.collect { flushed += it } }
+        runCurrent()
+
+        val events = sut.attach(session)
+        // an unconfined collector resumed on a real dispatcher acknowledges synchronously
+        // inside tryEmit, before the emitter's post-delivery code has run
+        val collectJob = launch(Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+            events.collect {
+                if (it is QuickPaySessionEvent.Error) sut.acknowledge(session)
+            }
+        }
+        withContext(Dispatchers.Default) {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+        }
+        collectJob.cancel()
+        sut.detach(session)
+        // suspend so the unconfined event loop runs the async detach and any flush delivery
+        repeat(3) { yield() }
+
+        assertTrue(flushed.isEmpty())
+        flushJob.cancel()
     }
 
     @Test
