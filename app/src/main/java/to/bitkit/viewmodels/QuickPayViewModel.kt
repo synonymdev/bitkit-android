@@ -40,6 +40,7 @@ class QuickPayViewModel @Inject constructor(
     fun attach(session: QuickPaySession) {
         this.session = session
         isPayRequested = false
+        _uiState.update { QuickPayUiState() }
         resultJob?.cancel()
         resultJob = viewModelScope.launch {
             quickPayRepo.attach(session).collect { event ->

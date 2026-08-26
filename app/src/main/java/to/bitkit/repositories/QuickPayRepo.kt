@@ -69,6 +69,9 @@ class QuickPayRepo @Inject constructor(
     private val sessionFlows = ConcurrentHashMap<String, MutableSharedFlow<QuickPaySessionEvent>>()
     private val unackedFailures = ConcurrentHashMap<String, Throwable>()
 
+    /** Hashes whose failure was already surfaced locally while the ledger record awaits the LDK terminal event. */
+    private val reportedFailureHashes = mutableSetOf<String>()
+
     private val _unhandledFailures = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
 
     /** Failures delivered to a session but never handled by its UI before detach. */
@@ -443,6 +446,13 @@ class QuickPayRepo @Inject constructor(
         } else {
             AmbiguousApply.UNCHANGED
         }
+        if (applied == AmbiguousApply.FAILED) {
+            val current = op ?: return
+            val notified = emitErrorLocked(current, error, paymentRequest)
+            if (!duplicate && notified) reportedFailureHashes.add(invoiceHash)
+            removeOpLocked(current)
+            return
+        }
         val remaining = spend.matching(invoiceHash)
         if (remaining != null) {
             op?.dispatched = true
@@ -452,9 +462,8 @@ class QuickPayRepo @Inject constructor(
         if (op == null) return
         when (applied) {
             AmbiguousApply.SUCCEEDED -> emitSuccessLocked(op, feePaidMsat = null)
-            AmbiguousApply.FAILED,
-            AmbiguousApply.UNCHANGED,
-            -> emitErrorLocked(op, error, paymentRequest)
+            AmbiguousApply.UNCHANGED -> emitErrorLocked(op, error, paymentRequest)
+            AmbiguousApply.FAILED -> Unit
         }
         removeOpLocked(op)
     }
@@ -496,6 +505,7 @@ class QuickPayRepo @Inject constructor(
         }
 
         spend.settle(keys, success)
+        val reportedEarlier = reportedFailureHashes.remove(record.invoicePaymentHash)
 
         val kind = if (success) {
             QuickPayCompletionKind.SETTLED_SUCCESS
@@ -522,7 +532,7 @@ class QuickPayRepo @Inject constructor(
         return QuickPayCompletionOutcome(
             kind = kind,
             invoicePaymentHash = record.invoicePaymentHash,
-            sessionNotified = sessionNotified,
+            sessionNotified = sessionNotified || (!success && reportedEarlier),
         )
     }
 
@@ -577,7 +587,14 @@ class QuickPayRepo @Inject constructor(
                 if (!attributed) {
                     return AmbiguousApply.UNCHANGED
                 }
-                spend.release(record.invoicePaymentHash)
+                if (duplicate) {
+                    spend.release(record.invoicePaymentHash)
+                } else {
+                    // This dispatch just failed the LDK row, so a PaymentFailed event is still queued.
+                    // Keep the reservation bound to this attempt so the stale event settles it instead
+                    // of releasing a newer retry's reservation.
+                    spend.markSubmitted(record.invoicePaymentHash, match.paymentId)
+                }
                 AmbiguousApply.FAILED
             }
         }

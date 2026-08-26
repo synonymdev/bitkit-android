@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -325,50 +326,56 @@ fun SendSheet(
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.QuickPay> {
-                    val quickPayData by appViewModel.quickPayData.collectAsStateWithLifecycle()
-                    val displayedQuickPayData = remember { quickPayData } ?: quickPayData
-                    if (displayedQuickPayData == null) return@composableWithDefaultTransitions
-                    SendQuickPayScreen(
-                        quickPayData = displayedQuickPayData,
-                        onPaymentComplete = { paymentHash, amountWithFee ->
-                            appViewModel.onSendSuccess(
-                                NewTransactionSheetDetails(
-                                    type = NewTransactionSheetType.LIGHTNING,
-                                    direction = NewTransactionSheetDirection.SENT,
-                                    paymentHashOrTxId = paymentHash,
-                                    sats = amountWithFee,
-                                ),
-                            )
-                        },
-                        onPaymentPending = { paymentHash, amount, paymentRequest ->
-                            appViewModel.preserveContactPaymentContext(paymentHash)
-                            navController.navigateTo(
-                                SendRoute.Pending(
-                                    paymentHash = paymentHash,
-                                    amount = amount,
-                                    retryRoute = SendRetryRoute.QuickPay,
-                                    paymentRequest = paymentRequest,
+                    val quickPayRequest by appViewModel.quickPayData.collectAsStateWithLifecycle()
+                    var displayedRequest by remember { mutableStateOf(quickPayRequest) }
+                    LaunchedEffect(quickPayRequest) {
+                        if (quickPayRequest != null) displayedRequest = quickPayRequest
+                    }
+                    val request = displayedRequest ?: return@composableWithDefaultTransitions
+                    key(request.id) {
+                        SendQuickPayScreen(
+                            quickPayData = request.data,
+                            onPaymentComplete = { paymentHash, amountWithFee ->
+                                appViewModel.onSendSuccess(
+                                    NewTransactionSheetDetails(
+                                        type = NewTransactionSheetType.LIGHTNING,
+                                        direction = NewTransactionSheetDirection.SENT,
+                                        paymentHashOrTxId = paymentHash,
+                                        sats = amountWithFee,
+                                    ),
+                                    allowDuplicateHash = true,
                                 )
-                            ) {
-                                popUpTo(startDestination) { inclusive = true }
-                            }
-                        },
-                        onFallBackToConfirm = {
-                            appViewModel.resetQuickPay()
-                            navController.navigateTo(SendRoute.Confirm) {
-                                popUpTo<SendRoute.QuickPay> { inclusive = true }
-                            }
-                        },
-                        onShowError = { failure ->
-                            appViewModel.clearActiveContactPaymentContext()
-                            navController.navigateTo(
-                                SendRoute.errorFromFailure(
-                                    failure = failure,
-                                    retryRoute = SendRetryRoute.QuickPay,
+                            },
+                            onPaymentPending = { paymentHash, amount, paymentRequest ->
+                                appViewModel.preserveContactPaymentContext(paymentHash)
+                                navController.navigateTo(
+                                    SendRoute.Pending(
+                                        paymentHash = paymentHash,
+                                        amount = amount,
+                                        retryRoute = SendRetryRoute.QuickPay,
+                                        paymentRequest = paymentRequest,
+                                    )
+                                ) {
+                                    popUpTo(startDestination) { inclusive = true }
+                                }
+                            },
+                            onFallBackToConfirm = {
+                                appViewModel.resetQuickPay()
+                                navController.navigateTo(SendRoute.Confirm) {
+                                    popUpTo<SendRoute.QuickPay> { inclusive = true }
+                                }
+                            },
+                            onShowError = { failure ->
+                                appViewModel.clearActiveContactPaymentContext()
+                                navController.navigateTo(
+                                    SendRoute.errorFromFailure(
+                                        failure = failure,
+                                        retryRoute = SendRetryRoute.QuickPay,
+                                    )
                                 )
-                            )
-                        }
-                    )
+                            }
+                        )
+                    }
                 }
                 composableWithDefaultTransitions<SendRoute.Pending> {
                     val route = it.toRoute<SendRoute.Pending>()

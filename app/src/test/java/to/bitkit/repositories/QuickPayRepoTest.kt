@@ -628,6 +628,52 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `dispatched failure with failed ldk row retains reservation until the event settles`() = test {
+        val (bolt11, hash) = testInvoice()
+        stubPayInvoiceFailure(NodeException.PaymentSendingFailed("send"))
+        paymentRows = listOf(failedRow(hash))
+        val session = QuickPaySession()
+
+        sut.attach(session).test {
+            sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Error>(awaitItem())
+        }
+        assertEquals(250L, spentCents())
+        assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
+
+        val outcome = sut.signalCompletion(paymentId = "pid", paymentHash = hash, success = false)
+        assertEquals(QuickPayCompletionKind.SETTLED_FAILURE, outcome.kind)
+        assertTrue(outcome.sessionNotified)
+        assertEquals(0L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+    }
+
+    @Test
+    fun `stale failure event cannot release a retry reservation`() = test {
+        val (bolt11, hash) = testInvoice()
+        stubPayInvoiceFailure(NodeException.PaymentSendingFailed("send"))
+        paymentRows = listOf(failedRow(hash))
+        val first = QuickPaySession()
+        val second = QuickPaySession()
+
+        sut.attach(first).test {
+            sut.payNow(first, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Error>(awaitItem())
+        }
+        sut.attach(second).test {
+            sut.payNow(second, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            assertIs<QuickPaySessionEvent.Error>(awaitItem())
+        }
+        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
+        assertEquals(0L, spentCents())
+        assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+
+        val stale = sut.signalCompletion(paymentId = "pid", paymentHash = hash, success = false)
+        assertEquals(QuickPayCompletionKind.NONE, stale.kind)
+        assertEquals(0L, spentCents())
+    }
+
+    @Test
     fun `rescan of a pending hash replays pending to a new session`() = test {
         val (bolt11, hash) = testInvoice()
         stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
@@ -957,6 +1003,13 @@ class QuickPayRepoTest : BaseUnitTest() {
         invoicePaymentHash = hash,
         isOutboundBolt11 = true,
         status = QuickPayReconcileRow.Status.SUCCEEDED,
+    )
+
+    private fun failedRow(hash: String) = QuickPayReconcileRow(
+        paymentId = "pid",
+        invoicePaymentHash = hash,
+        isOutboundBolt11 = true,
+        status = QuickPayReconcileRow.Status.FAILED,
     )
 
     private fun testInvoice(): Pair<String, String> = TEST_BOLT11 to TEST_HASH

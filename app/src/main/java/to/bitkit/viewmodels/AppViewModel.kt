@@ -189,6 +189,7 @@ import to.bitkit.utils.timedsheets.sheets.HighBalanceTimedSheet
 import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import java.math.BigDecimal
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
@@ -259,7 +260,8 @@ class AppViewModel @Inject constructor(
     private val _sendUiState = MutableStateFlow(SendUiState())
     val sendUiState = _sendUiState.asStateFlow()
 
-    private val _quickPayData = MutableStateFlow<QuickPayData?>(null)
+    private val quickPayRequestIds = AtomicLong(0L)
+    private val _quickPayData = MutableStateFlow<QuickPayRequest?>(null)
     val quickPayData = _quickPayData.asStateFlow()
 
     private val scanMutex = Mutex()
@@ -2729,7 +2731,9 @@ class AppViewModel @Inject constructor(
             }
         }
 
-        _quickPayData.update { quickPayData }
+        _quickPayData.update {
+            QuickPayRequest(id = quickPayRequestIds.incrementAndGet(), data = quickPayData)
+        }
 
         if (lnurlPay != null) {
             _sendUiState.update {
@@ -3713,16 +3717,18 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun onSendSuccess(details: NewTransactionSheetDetails) {
+    fun onSendSuccess(details: NewTransactionSheetDetails, allowDuplicateHash: Boolean = false) {
         details.paymentHashOrTxId?.let {
             val isNewPayment = synchronized(processedPaymentsLock) {
                 processedPayments.add(it)
             }
-            if (!isNewPayment) {
-                Logger.debug("Skipped duplicate processed payment '$it'", context = TAG)
-                return
+            when {
+                isNewPayment -> syncContactForActivity(it)
+                !allowDuplicateHash -> {
+                    Logger.debug("Skipped duplicate processed payment '$it'", context = TAG)
+                    return
+                }
             }
-            syncContactForActivity(it)
         }
 
         _successSendUiState.update { details }
@@ -4193,6 +4199,12 @@ sealed interface QuickPayData {
     @Stable
     data class LnurlPay(override val sats: ULong, val data: LnurlPayData) : QuickPayData
 }
+
+@Stable
+data class QuickPayRequest(
+    val id: Long,
+    val data: QuickPayData,
+)
 // endregion
 
 internal fun resolvePastedPubkyRoute(

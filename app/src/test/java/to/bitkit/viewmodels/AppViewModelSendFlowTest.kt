@@ -130,6 +130,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -2641,7 +2642,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onScannerSheetResult(bolt11)
         advanceUntilIdle()
 
-        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
         assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
         assertEquals(bolt11, sut.sendUiState.value.decodedInvoice?.bolt11)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
@@ -2656,7 +2657,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onScanResult(bolt11)
         advanceUntilIdle()
 
-        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
         assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
         assertEquals(bolt11, sut.sendUiState.value.decodedInvoice?.bolt11)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
@@ -2689,7 +2690,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onScanResult(bolt11)
         advanceUntilIdle()
 
-        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
     }
 
@@ -2704,7 +2705,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onScanResult(bolt11)
         advanceUntilIdle()
 
-        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
     }
 
@@ -2733,8 +2734,46 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onScanResult(bolt11)
         advanceUntilIdle()
 
-        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `rescan issues a new QuickPay request`() = test {
+        val bolt11 = "lnbcrt1quickpayrescan"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        val first = assertNotNull(sut.quickPayData.value)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        val second = assertNotNull(sut.quickPayData.value)
+
+        assertEquals(first.data, second.data)
+        assertNotEquals(first.id, second.id)
+    }
+
+    @Test
+    fun `send success replays presentation when duplicates are allowed`() = test {
+        val details = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.LIGHTNING,
+            direction = NewTransactionSheetDirection.SENT,
+            paymentHashOrTxId = "replayed-hash",
+            sats = 500L,
+        )
+        sut.sendEffect.test {
+            sut.onSendSuccess(details)
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+
+            sut.onSendSuccess(details)
+            expectNoEvents()
+
+            sut.onSendSuccess(details, allowDuplicateHash = true)
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+        }
     }
 
     @Test
@@ -2757,7 +2796,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setIsAuthenticated(true)
         advanceUntilIdle()
 
-        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
         verify(coreService).decode(bolt11)
     }

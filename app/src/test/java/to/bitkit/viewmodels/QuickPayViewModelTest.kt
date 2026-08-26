@@ -28,6 +28,7 @@ import to.bitkit.repositories.QuickPaySessionEvent
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 
 @OptIn(ExperimentalCoroutinesApi::class)
 @RunWith(RobolectricTestRunner::class)
@@ -141,6 +142,39 @@ class QuickPayViewModelTest : BaseUnitTest() {
             first,
             QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u),
         )
+        verify(quickPayRepo, times(1)).pay(
+            second,
+            QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u),
+        )
+    }
+
+    @Test
+    fun `attach clears a previous result`() = test {
+        val first = QuickPaySession()
+        val second = QuickPaySession()
+        sut.attach(first)
+        events.emit(QuickPaySessionEvent.Success(paymentHash = "hash1", amountWithFee = 501L))
+        advanceUntilIdle()
+        assertIs<QuickPayResult.Success>(sut.uiState.value.result)
+
+        sut.attach(second)
+
+        assertNull(sut.uiState.value.result)
+    }
+
+    @Test
+    fun `pay is allowed for a new session after a previous result`() = test {
+        val first = QuickPaySession()
+        val second = QuickPaySession()
+        val data = QuickPayData.Bolt11(sats = 500u, bolt11 = "lnbcrt1test")
+        sut.attach(first)
+        sut.pay(first, data)
+        events.emit(QuickPaySessionEvent.Error(QuickPayConversionError(), null))
+        advanceUntilIdle()
+
+        sut.attach(second)
+        sut.pay(second, data)
+
         verify(quickPayRepo, times(1)).pay(
             second,
             QuickPayPayRequest.Bolt11(bolt11 = "lnbcrt1test", amountSats = 500u),
