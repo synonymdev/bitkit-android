@@ -406,6 +406,34 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onConfirmAmount proceeds when the confirm-time fee estimate fails`() = test {
+        val amount = 260_000uL
+        val response = stubFeeResponse(1_000uL)
+        stubSpendableBalances(265_000uL)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(0uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(response))
+        whenever(blocktankRepo.createOrder(any(), any(), any()))
+            .thenReturn(Result.success(previewBtOrder(clientBalanceSat = amount)))
+        sut.updateLimits()
+        advanceUntilIdle()
+        // the budget is sized, so this is the failed-quote path rather than the unset-budget one
+        assertNotNull(sut.spendingUiState.value.fundingBudgetSats)
+
+        // the LSP stops quoting only after the limits were sized
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any()))
+            .thenReturn(Result.failure(AppError("lsp unreachable")))
+
+        sut.onConfirmAmount(amount.toLong())
+        advanceUntilIdle()
+
+        // a quote the LSP will not give must not block the user; confirm stays the authority
+        verify(blocktankRepo).createOrder(eq(amount), any(), any())
+    }
+
+    @Test
     fun `updateLimits keeps the last candidate when a re-quote fails`() = test {
         val spendable = 266_656uL
         val miningFee = 178uL
