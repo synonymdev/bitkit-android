@@ -1,0 +1,31 @@
+# btleplug (droidplug) JNI types constructed from native. Local AAR ships no consumer rules.
+-keep class com.nonpolynomial.btleplug.android.impl.Adapter {
+    <init>(...);
+    *;
+}
+-keep class com.nonpolynomial.btleplug.android.impl.Adapter$* {
+    <init>(...);
+    *;
+}
+-keep class com.nonpolynomial.btleplug.android.impl.Peripheral {
+    <init>(...);
+    *;
+}
+-keep class com.nonpolynomial.btleplug.android.impl.Peripheral$* {
+    <init>(...);
+    *;
+}
+-keep class com.nonpolynomial.btleplug.android.impl.ScanFilter {
+    <init>(...);
+    *;
+}
+-keep class com.nonpolynomial.btleplug.android.impl.*Exception {
+    <init>(...);
+    *;
+}
+
+# jni-utils JNI glue used by btleplug. Local JAR ships no consumer rules.
+-keep class io.github.gedgygedgy.rust.** {
+    <init>(...);
+    *;
+}
