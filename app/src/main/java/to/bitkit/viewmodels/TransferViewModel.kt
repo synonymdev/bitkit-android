@@ -245,13 +245,13 @@ class TransferViewModel @Inject constructor(
      * Whether the order for this capacity still fits what the wallet can fund.
      *
      * The receiving side is chosen independently of the client balance, and the LSP prices both
-     * sides, so raising it can push the order past what the wallet can pay. The budget is resolved
-     * here rather than read from state, so a cached value that never loaded or went stale while the
-     * screen was open cannot wave an unaffordable order through. Only a balance the node will not
-     * report, or a quote the LSP will not give, defers the decision to the confirm step.
+     * sides, so raising it can push the order past what the wallet can pay. Like the confirm guard,
+     * this checks against [currentFundingBudget] so a hardware transfer is measured against the
+     * device account its funds actually sit in. A budget that was never sized, or a quote the LSP
+     * will not give, defers the decision to the confirm step rather than blocking the user here.
      */
     private suspend fun canFundAdvancedOrder(clientBalance: ULong, receivingAmount: ULong): Boolean {
-        val budget = loadFundingBudget()
+        val budget = currentFundingBudget()
         if (budget == null) {
             Logger.warn("Skipped advanced capacity check, on-chain balance unavailable", context = TAG)
             return true
@@ -265,7 +265,11 @@ class TransferViewModel @Inject constructor(
             Logger.warn("Skipped advanced capacity check, fee quote unavailable", context = TAG)
             return true
         }
-        return clientBalance.safe() + fee.safe() <= budget
+        val canFund = clientBalance.safe() + fee.safe() <= budget
+        if (!canFund) {
+            Logger.info("Priced advanced capacity '$receivingAmount' over funding budget '$budget'", context = TAG)
+        }
+        return canFund
     }
 
     fun onSpendingAdvancedContinue(receivingAmountSats: Long) {
@@ -273,11 +277,7 @@ class TransferViewModel @Inject constructor(
             runSuspendCatching {
                 val oldOrder = _spendingUiState.value.order ?: return@runSuspendCatching
                 if (!canFundAdvancedOrder(oldOrder.clientBalanceSat, receivingAmountSats.toULong())) {
-                    Logger.info(
-                        "Rejected advanced capacity '$receivingAmountSats' over funding budget " +
-                            "'${_spendingUiState.value.advancedBudgetSats}'",
-                        context = TAG,
-                    )
+                    Logger.info("Rejected advanced capacity '$receivingAmountSats' over funding budget", context = TAG)
                     setTransferEffect(
                         TransferEffect.ToastError(
                             title = context.getString(R.string.lightning__spending_advanced__error_balance__title),
@@ -680,7 +680,7 @@ class TransferViewModel @Inject constructor(
             awaitNodeRunning()
 
             val fundingBudget = loadFundingBudget()
-            _spendingUiState.update { it.copy(fundingBudgetSats = fundingBudget) }
+            _spendingUiState.update { it.copy(fundingBudgetSats = fundingBudget, isHwFundingBudget = false) }
             val availableAmount = fundingBudget ?: 0uL
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
@@ -822,18 +822,23 @@ class TransferViewModel @Inject constructor(
         return spendable.safe() - miningFee.safe()
     }
 
+    private suspend fun currentFundingBudget(): ULong? {
+        val sizedBudget = _spendingUiState.value.fundingBudgetSats
+        if (_spendingUiState.value.isHwFundingBudget) return sizedBudget
+        return loadFundingBudget() ?: sizedBudget
+    }
+
     /**
      * Whether an order at [clientBalance] still fits what the wallet can fund.
      *
      * The advertised max can be a settled estimate rather than a verified one when a re-quote fails
-     * or does not converge, so the fee is re-quoted live before the order is placed. The budget is
-     * the one the limits were sized against, which is the on-chain balance for a soft wallet and the
-     * device account for a hardware transfer — a fresh on-chain read would reject every hardware
-     * transfer, whose funds never sit in this wallet. A budget that was never sized, or a quote the
-     * LSP will not give, leaves the decision to the confirm step rather than blocking the user here.
+     * or does not converge, so both sides are taken fresh before the order is placed: the fee is
+     * re-quoted and the budget comes from [currentFundingBudget]. A budget that was never sized, or
+     * a quote the LSP will not give, leaves the decision to the confirm step rather than blocking
+     * the user here.
      */
     private suspend fun canFundOrder(clientBalance: ULong): Boolean {
-        val budget = _spendingUiState.value.fundingBudgetSats
+        val budget = currentFundingBudget()
         if (budget == null) {
             Logger.warn("Skipped funding check, no sized budget available", context = TAG)
             return true
@@ -923,7 +928,7 @@ class TransferViewModel @Inject constructor(
             updateTransferValues(0uL)
 
             val availableAmount = account.balanceSats.safe() - hwFundingFeeReserve(account.balanceSats).safe()
-            _spendingUiState.update { it.copy(fundingBudgetSats = availableAmount) }
+            _spendingUiState.update { it.copy(fundingBudgetSats = availableAmount, isHwFundingBudget = true) }
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
             if (initialLspFees == null) {
@@ -1821,8 +1826,8 @@ data class TransferToSpendingUiState(
     val feeEstimate: Long? = null,
     /** Budget the transfer limits were sized against, or null while unknown. */
     val fundingBudgetSats: ULong? = null,
-    /** Total order cost the on-chain balance can fund, or null while unknown. */
-    val advancedBudgetSats: ULong? = null,
+    /** Whether the sized budget came from a hardware device account rather than this wallet. */
+    val isHwFundingBudget: Boolean = false,
 )
 
 private data class SpendingConfirmFundingPlan(
