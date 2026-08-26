@@ -86,7 +86,11 @@ fun SpendingAdvancedScreen(
     }
 
     LaunchedEffect(transferValues.maxLspBalance) {
-        amountInputViewModel.setMaxAmount(transferValues.maxLspBalance.toLong())
+        amountInputViewModel.applyMaxLspBalance(
+            maxLspBalance = transferValues.maxLspBalance.toLong(),
+            enteredSats = amountUiState.sats,
+            currencies = currentCurrencies,
+        )
     }
 
     LaunchedEffect(Unit) {
@@ -148,6 +152,21 @@ fun SpendingAdvancedScreen(
             viewModel.onSpendingAdvancedContinue(amountUiState.sats)
         },
     )
+}
+
+/**
+ * Settling the max can land it below what is already entered, so the amount comes down with it
+ * rather than leaving a capacity that no longer exists selected.
+ */
+private fun AmountInputViewModel.applyMaxLspBalance(
+    maxLspBalance: Long,
+    enteredSats: Long,
+    currencies: CurrencyState,
+) {
+    setMaxAmount(maxLspBalance)
+    if (maxLspBalance in 1..<enteredSats) {
+        setSats(maxLspBalance, currencies)
+    }
 }
 
 /**
@@ -234,21 +253,18 @@ private fun Content(
                 NumberPadActionButton(
                     text = stringResource(R.string.common__min),
                     color = Colors.Purple,
-                    enabled = !isLoading,
                     onClick = { amountInputViewModel.setSats(transferValues.minLspBalance.toLong(), currencies) },
                     modifier = Modifier.testTag("SpendingAdvancedMin")
                 )
                 NumberPadActionButton(
                     text = stringResource(R.string.common__default),
                     color = Colors.Purple,
-                    enabled = !isLoading,
                     onClick = { amountInputViewModel.setSats(transferValues.defaultLspBalance.toLong(), currencies) },
                     modifier = Modifier.testTag("SpendingAdvancedDefault")
                 )
                 NumberPadActionButton(
                     text = stringResource(R.string.common__max),
                     color = Colors.Purple,
-                    enabled = !isLoading,
                     onClick = { amountInputViewModel.setSats(transferValues.maxLspBalance.toLong(), currencies) },
                     modifier = Modifier.testTag("SpendingAdvancedMax")
                 )
