@@ -426,6 +426,7 @@ class QuickPayRepo @Inject constructor(
         }
     }
 
+    @Suppress("CyclomaticComplexMethod")
     private suspend fun settleAmbiguousLocked(
         invoiceHash: String,
         paymentRequest: String,
