@@ -70,7 +70,10 @@ fun SendQuickPayScreen(
                 onPaymentPending(result.paymentHash, result.amount, result.paymentRequest)
             }
             is QuickPayResult.FallBackToConfirm -> onFallBackToConfirm()
-            is QuickPayResult.Error -> onShowError(result.failure)
+            is QuickPayResult.Error -> {
+                viewModel.acknowledge(session)
+                onShowError(result.failure)
+            }
             null -> Unit // continue showing loading state
         }
     }

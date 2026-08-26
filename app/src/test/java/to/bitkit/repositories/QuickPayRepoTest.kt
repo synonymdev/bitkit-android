@@ -222,6 +222,69 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `unacked session failure flushes to unhandled on detach`() = test {
+        val (bolt11, hash) = testInvoice()
+        val started = CompletableDeferred<Unit>()
+        val hold = CompletableDeferred<Result<String>>()
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+            if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
+            started.complete(Unit)
+            hold.await()
+        }
+        val session = QuickPaySession()
+
+        sut.unhandledFailures.test {
+            sut.attach(session).test {
+                backgroundScope.launch {
+                    sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+                }
+                started.await()
+                // completion is delivered to the live session BEFORE detach, but never acknowledged
+                val outcome = sut.signalCompletion(paymentId = null, paymentHash = hash, success = false)
+                assertTrue(outcome.sessionNotified)
+                assertIs<QuickPaySessionEvent.Error>(awaitItem())
+            }
+            sut.detach(session)
+            advanceUntilIdle()
+
+            assertIs<QuickPayPaymentFailedError>(awaitItem())
+        }
+        hold.complete(Result.success("pid"))
+    }
+
+    @Test
+    fun `acknowledged failure does not flush on detach`() = test {
+        val (bolt11, hash) = testInvoice()
+        val started = CompletableDeferred<Unit>()
+        val hold = CompletableDeferred<Result<String>>()
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+            if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
+            started.complete(Unit)
+            hold.await()
+        }
+        val session = QuickPaySession()
+
+        sut.unhandledFailures.test {
+            sut.attach(session).test {
+                backgroundScope.launch {
+                    sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+                }
+                started.await()
+                sut.signalCompletion(paymentId = null, paymentHash = hash, success = false)
+                assertIs<QuickPaySessionEvent.Error>(awaitItem())
+            }
+            sut.acknowledge(session)
+            sut.detach(session)
+            advanceUntilIdle()
+
+            expectNoEvents()
+        }
+        hold.complete(Result.success("pid"))
+    }
+
+    @Test
     fun `failure racing a detached session does not claim delivery`() = test {
         val (bolt11, hash) = testInvoice()
         val started = CompletableDeferred<Unit>()

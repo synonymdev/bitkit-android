@@ -157,6 +157,7 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
+import to.bitkit.repositories.QuickPayPaymentFailedError
 import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.TransferRepo
@@ -374,6 +375,11 @@ class AppViewModel @Inject constructor(
         }
         viewModelScope.launch {
             lightningRepo.updateGeoBlockState()
+        }
+        viewModelScope.launch {
+            quickPayRepo.unhandledFailures.collect {
+                notifyPaymentFailed((it as? QuickPayPaymentFailedError)?.reason)
+            }
         }
         viewModelScope.launch {
             hwWalletRepo.receivedTxs.collect { tx ->

@@ -99,6 +99,7 @@ import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.repositories.QuickPayCompletionKind
 import to.bitkit.repositories.QuickPayCompletionOutcome
+import to.bitkit.repositories.QuickPayPaymentFailedError
 import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.SettledReceiveAddress
@@ -163,6 +164,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val notifyChannelReadyHandler = mock<NotifyChannelReadyHandler>()
     private val cacheStore = mock<CacheStore>()
     private val quickPayRepo = mock<QuickPayRepo>()
+    private val quickPayUnhandledFailures = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
     private val transferRepo = mock<TransferRepo>()
     private val migrationService = mock<MigrationService>()
     private val coreService = mock<CoreService>()
@@ -233,6 +235,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
         whenever { quickPayRepo.canApply(any<ULong>()) }.thenReturn(Result.success(false))
         whenever { quickPayRepo.hasOpen(any()) }.thenReturn(false)
+        whenever(quickPayRepo.unhandledFailures).thenReturn(quickPayUnhandledFailures)
         whenever {
             quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
         }.thenReturn(QuickPayCompletionOutcome.None)
@@ -2083,6 +2086,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             expectNoEvents()
         }
         verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `unhandled QuickPay session failure flushes to a toast`() = test {
+        whenever(context.getString(R.string.wallet__toast_payment_failed_title)).thenReturn("Payment failed")
+        whenever(context.getString(R.string.wallet__payment_route_not_found)).thenReturn("no route")
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        quickPayUnhandledFailures.emit(
+            QuickPayPaymentFailedError(
+                paymentHash = "unhandledhash",
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+                paymentRequest = "lnbcrt1unhandled",
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("PaymentFailedToast", it.testTag)
+            }
+        )
     }
 
     @Test

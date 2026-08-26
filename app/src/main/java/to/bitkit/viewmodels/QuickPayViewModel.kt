@@ -55,6 +55,8 @@ class QuickPayViewModel @Inject constructor(
         }
     }
 
+    fun acknowledge(session: QuickPaySession) = quickPayRepo.acknowledge(session)
+
     fun pay(session: QuickPaySession, data: QuickPayData) {
         if (isPayRequested || _uiState.value.result != null) return
         isPayRequested = true

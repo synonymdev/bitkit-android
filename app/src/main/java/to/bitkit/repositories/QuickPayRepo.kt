@@ -7,6 +7,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -65,6 +67,12 @@ class QuickPayRepo @Inject constructor(
     private val mutex = Mutex()
     private val opsByKey = mutableMapOf<String, InFlightOp>()
     private val sessionFlows = ConcurrentHashMap<String, MutableSharedFlow<QuickPaySessionEvent>>()
+    private val unackedFailures = ConcurrentHashMap<String, Throwable>()
+
+    private val _unhandledFailures = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
+
+    /** Failures delivered to a session but never handled by its UI before detach. */
+    val unhandledFailures: SharedFlow<Throwable> = _unhandledFailures.asSharedFlow()
 
     init {
         scope.launch {
@@ -95,6 +103,10 @@ class QuickPayRepo @Inject constructor(
         scope.launch {
             ids.forEach { detachSession(it) }
         }
+    }
+
+    fun acknowledge(session: QuickPaySession) {
+        unackedFailures.remove(session.id)
     }
 
     fun pay(session: QuickPaySession, request: QuickPayPayRequest) {
@@ -450,6 +462,7 @@ class QuickPayRepo @Inject constructor(
     private suspend fun detachSession(sessionId: String) {
         mutex.withLock {
             sessionFlows.remove(sessionId)
+            unackedFailures.remove(sessionId)?.let { _unhandledFailures.tryEmit(it) }
             val op = opsByKey.values.firstOrNull { it.sessionId == sessionId } ?: return@withLock
             if (op.sessionId != sessionId) return@withLock
             op.sessionId = null
@@ -659,7 +672,11 @@ class QuickPayRepo @Inject constructor(
             return false
         }
         op.emitted = true
-        val notified = emitToSession(op.sessionId, QuickPaySessionEvent.Error(error, paymentRequest))
+        val sessionId = op.sessionId
+        val notified = emitToSession(sessionId, QuickPaySessionEvent.Error(error, paymentRequest))
+        if (notified && sessionId != null) {
+            unackedFailures[sessionId] = error
+        }
         op.settled.complete(Unit)
         return notified
     }
