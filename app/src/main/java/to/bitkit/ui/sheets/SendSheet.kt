@@ -335,6 +335,7 @@ fun SendSheet(
                     key(request.id) {
                         SendQuickPayScreen(
                             quickPayData = request.data,
+                            isRequestActive = quickPayRequest?.id == request.id,
                             onPaymentComplete = { paymentHash, amountWithFee ->
                                 appViewModel.onSendSuccess(
                                     NewTransactionSheetDetails(

@@ -628,7 +628,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `dispatched failure with failed ldk row retains reservation until the event settles`() = test {
+    fun `sync dispatch failure with failed ldk row refunds immediately`() = test {
         val (bolt11, hash) = testInvoice()
         stubPayInvoiceFailure(NodeException.PaymentSendingFailed("send"))
         paymentRows = listOf(failedRow(hash))
@@ -638,39 +638,48 @@ class QuickPayRepoTest : BaseUnitTest() {
             sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
             assertIs<QuickPaySessionEvent.Error>(awaitItem())
         }
-        assertEquals(250L, spentCents())
-        assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
-
-        val outcome = sut.signalCompletion(paymentId = "pid", paymentHash = hash, success = false)
-        assertEquals(QuickPayCompletionKind.SETTLED_FAILURE, outcome.kind)
-        assertTrue(outcome.sessionNotified)
         assertEquals(0L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
+
+        // ldk-node never enqueues an event for this row; a late duplicate signal must be a no-op
+        val late = sut.signalCompletion(paymentId = "pid", paymentHash = hash, success = false)
+        assertEquals(QuickPayCompletionKind.NONE, late.kind)
+        assertEquals(0L, spentCents())
     }
 
     @Test
-    fun `stale failure event cannot release a retry reservation`() = test {
+    fun `stale failure event does not settle a dispatch the ldk row shows pending`() = test {
         val (bolt11, hash) = testInvoice()
-        stubPayInvoiceFailure(NodeException.PaymentSendingFailed("send"))
-        paymentRows = listOf(failedRow(hash))
-        val first = QuickPaySession()
-        val second = QuickPaySession()
+        val dispatched = CompletableDeferred<Unit>()
+        val hold = CompletableDeferred<Result<String>>()
+        whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
+            val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
+            if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
+            dispatched.complete(Unit)
+            hold.await()
+        }
+        paymentRows = listOf(pendingRow(hash))
+        val session = QuickPaySession()
 
-        sut.attach(first).test {
-            sut.payNow(first, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
-            assertIs<QuickPaySessionEvent.Error>(awaitItem())
+        sut.attach(session).test {
+            backgroundScope.launch {
+                sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
+            }
+            dispatched.await()
+
+            // a replayed failure event for an older same-hash attempt lands mid-dispatch
+            val stale = sut.signalCompletion(paymentId = hash, paymentHash = hash, success = false)
+            assertEquals(QuickPayCompletionKind.NONE, stale.kind)
+            assertEquals(250L, spentCents())
+            expectNoEvents()
+
+            hold.complete(Result.success("pid"))
+            val outcome = sut.signalCompletion(paymentId = "pid", paymentHash = hash, success = true)
+            assertEquals(QuickPayCompletionKind.SETTLED_SUCCESS, outcome.kind)
+            assertIs<QuickPaySessionEvent.Success>(awaitItem())
         }
-        sut.attach(second).test {
-            sut.payNow(second, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
-            assertIs<QuickPaySessionEvent.Error>(awaitItem())
-        }
-        verify(lightningRepo, times(1)).payInvoice(any(), anyOrNull(), any())
-        assertEquals(0L, spentCents())
+        assertEquals(250L, spentCents())
         assertTrue(cacheStore.data.first().quickPayLedger!!.records.isEmpty())
-
-        val stale = sut.signalCompletion(paymentId = "pid", paymentHash = hash, success = false)
-        assertEquals(QuickPayCompletionKind.NONE, stale.kind)
-        assertEquals(0L, spentCents())
     }
 
     @Test

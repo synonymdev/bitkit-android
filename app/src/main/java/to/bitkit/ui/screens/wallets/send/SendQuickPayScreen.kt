@@ -40,6 +40,7 @@ import to.bitkit.viewmodels.QuickPayViewModel
 @Composable
 fun SendQuickPayScreen(
     quickPayData: QuickPayData,
+    isRequestActive: Boolean,
     onPaymentComplete: (String, Long) -> Unit,
     onPaymentPending: (String, Long, String) -> Unit,
     onFallBackToConfirm: () -> Unit,
@@ -55,13 +56,16 @@ fun SendQuickPayScreen(
         onDispose { viewModel.detach(session) }
     }
 
-    LaunchedEffect(quickPayData, lightningState.nodeLifecycleState) {
-        if (lightningState.nodeLifecycleState is NodeLifecycleState.Running) {
+    LaunchedEffect(quickPayData, lightningState.nodeLifecycleState, isRequestActive) {
+        if (isRequestActive && lightningState.nodeLifecycleState is NodeLifecycleState.Running) {
             viewModel.pay(session, quickPayData)
         }
     }
 
-    LaunchedEffect(uiState.result) {
+    LaunchedEffect(uiState.result, isRequestActive) {
+        // A superseded request keeps rendering only for the exit transition; its results must not
+        // navigate. An unacknowledged error is flushed to a toast when the session detaches.
+        if (!isRequestActive) return@LaunchedEffect
         when (val result = uiState.result) {
             is QuickPayResult.Success -> {
                 onPaymentComplete(result.paymentHash, result.amountWithFee)

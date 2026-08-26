@@ -69,9 +69,6 @@ class QuickPayRepo @Inject constructor(
     private val sessionFlows = ConcurrentHashMap<String, MutableSharedFlow<QuickPaySessionEvent>>()
     private val unackedFailures = ConcurrentHashMap<String, Throwable>()
 
-    /** Hashes whose failure was already surfaced locally while the ledger record awaits the LDK terminal event. */
-    private val reportedFailureHashes = mutableSetOf<String>()
-
     private val _unhandledFailures = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
 
     /** Failures delivered to a session but never handled by its UI before detach. */
@@ -168,6 +165,9 @@ class QuickPayRepo @Inject constructor(
         feePaidMsat: ULong? = null,
         failureReason: PaymentFailureReason? = null,
     ): QuickPayCompletionOutcome = withContext(ioDispatcher) {
+        val keys = listOfNotNull(paymentId, paymentHash).filter { it.isNotBlank() }
+        val hasRecord = keys.any { spend.matching(it) != null }
+        val rows = if (!success && hasRecord) loadPaymentRows() else null
         mutex.withLock {
             signalCompletionLocked(
                 paymentId = paymentId,
@@ -175,6 +175,7 @@ class QuickPayRepo @Inject constructor(
                 success = success,
                 feePaidMsat = feePaidMsat,
                 failureReason = failureReason,
+                rows = rows,
             )
         }
     }
@@ -294,6 +295,7 @@ class QuickPayRepo @Inject constructor(
                         paymentId = record.paymentId,
                         paymentHash = invoiceHash,
                         success = false,
+                        rows = rows,
                     )
                     if (outcome.kind == QuickPayCompletionKind.NONE) {
                         emitPendingLocked(op)
@@ -426,7 +428,6 @@ class QuickPayRepo @Inject constructor(
         }
     }
 
-    @Suppress("CyclomaticComplexMethod")
     private suspend fun settleAmbiguousLocked(
         invoiceHash: String,
         paymentRequest: String,
@@ -447,13 +448,6 @@ class QuickPayRepo @Inject constructor(
         } else {
             AmbiguousApply.UNCHANGED
         }
-        if (applied == AmbiguousApply.FAILED) {
-            val current = op ?: return
-            val notified = emitErrorLocked(current, error, paymentRequest)
-            if (!duplicate && notified) reportedFailureHashes.add(invoiceHash)
-            removeOpLocked(current)
-            return
-        }
         val remaining = spend.matching(invoiceHash)
         if (remaining != null) {
             op?.dispatched = true
@@ -463,8 +457,9 @@ class QuickPayRepo @Inject constructor(
         if (op == null) return
         when (applied) {
             AmbiguousApply.SUCCEEDED -> emitSuccessLocked(op, feePaidMsat = null)
-            AmbiguousApply.UNCHANGED -> emitErrorLocked(op, error, paymentRequest)
-            AmbiguousApply.FAILED -> Unit
+            AmbiguousApply.FAILED,
+            AmbiguousApply.UNCHANGED,
+            -> emitErrorLocked(op, error, paymentRequest)
         }
         removeOpLocked(op)
     }
@@ -491,6 +486,7 @@ class QuickPayRepo @Inject constructor(
         success: Boolean,
         feePaidMsat: ULong? = null,
         failureReason: PaymentFailureReason? = null,
+        rows: List<QuickPayReconcileRow>? = null,
     ): QuickPayCompletionOutcome {
         val keys = listOfNotNull(paymentId, paymentHash).filter { it.isNotBlank() }
         if (keys.isEmpty()) return QuickPayCompletionOutcome.None
@@ -501,12 +497,14 @@ class QuickPayRepo @Inject constructor(
         val index = keys.firstNotNullOfOrNull { ledger.recordIndex(it) } ?: return QuickPayCompletionOutcome.None
         val record = ledger.records[index]
         val op = opsByKey[record.invoicePaymentHash] ?: record.paymentId?.let { opsByKey[it] }
+        if (!success && isFailureContradictedByLdk(record, rows)) {
+            return QuickPayCompletionOutcome.None
+        }
         if (!success && !isAttributedFailure(record, op, paymentId, paymentHash)) {
             return QuickPayCompletionOutcome.None
         }
 
         spend.settle(keys, success)
-        val reportedEarlier = reportedFailureHashes.remove(record.invoicePaymentHash)
 
         val kind = if (success) {
             QuickPayCompletionKind.SETTLED_SUCCESS
@@ -533,8 +531,19 @@ class QuickPayRepo @Inject constructor(
         return QuickPayCompletionOutcome(
             kind = kind,
             invoicePaymentHash = record.invoicePaymentHash,
-            sessionNotified = sessionNotified || (!success && reportedEarlier),
+            sessionNotified = sessionNotified,
         )
+    }
+
+    private fun isFailureContradictedByLdk(
+        record: QuickPayLedgerRecord,
+        rows: List<QuickPayReconcileRow>?,
+    ): Boolean {
+        // ldk-node keys outbound bolt11 payments by invoice hash, so a delayed failure event from an
+        // older same-hash attempt is indistinguishable by payload. Trust the current LDK row instead:
+        // if it is pending or succeeded, this failure signal is stale and must not settle the record.
+        val match = rows?.let { pickLedgerMatch(record, it) } ?: return false
+        return match.status != QuickPayReconcileRow.Status.FAILED
     }
 
     private fun isAttributedFailure(
@@ -588,14 +597,10 @@ class QuickPayRepo @Inject constructor(
                 if (!attributed) {
                     return AmbiguousApply.UNCHANGED
                 }
-                if (duplicate) {
-                    spend.release(record.invoicePaymentHash)
-                } else {
-                    // This dispatch just failed the LDK row, so a PaymentFailed event is still queued.
-                    // Keep the reservation bound to this attempt so the stale event settles it instead
-                    // of releasing a newer retry's reservation.
-                    spend.markSubmitted(record.invoicePaymentHash, match.paymentId)
-                }
+                // ldk-node inserts the row as FAILED and returns PaymentSendingFailed without
+                // enqueueing a public PaymentFailed event, so release right away: no follow-up
+                // event will ever settle this record.
+                spend.release(record.invoicePaymentHash)
                 AmbiguousApply.FAILED
             }
         }
