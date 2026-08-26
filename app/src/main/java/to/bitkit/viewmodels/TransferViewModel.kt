@@ -782,17 +782,6 @@ class TransferViewModel @Inject constructor(
             receivingBalanceSats = receivingAmount,
         ).getOrNull()?.feeSat
 
-    /**
-     * Largest receiving capacity whose order [clientBalance] can still fund, settled against live quotes.
-     *
-     * The LSP advertises the largest channel it will sell and prices the receiving side on top of
-     * the client balance, so that capacity can cost more than the budget leaves. Unlike the client
-     * balance, a satoshi off the capacity only takes a fraction of a satoshi off the fee, so each
-     * round re-prices through the rate the two bracketing quotes imply rather than stepping down by
-     * the shortfall. Every returned capacity has been priced and found affordable, so the max the
-     * user is offered is one the confirm guard accepts. Null means even [minLspBalance] is out of
-     * reach, leaving that rejection to the confirm step.
-     */
     private suspend fun resolveAffordableLspBalance(
         clientBalance: ULong,
         budget: ULong,
@@ -1375,14 +1364,6 @@ class TransferViewModel @Inject constructor(
 
     // region Balance Calc
 
-    /**
-     * Size the advanced capacity range for [order], with the max settled on what the wallet can pay.
-     *
-     * The LSP's advertised max ignores the client balance already committed to the order, so it can
-     * price an order the wallet cannot fund. Settling it here means the max button, and the ceiling
-     * the input enforces, land on a capacity that can actually be ordered rather than one the
-     * confirm guard rejects.
-     */
     fun updateAdvancedTransferValues(order: IBtOrder) {
         advancedLimitsJob?.cancel()
         advancedLimitsJob = viewModelScope.launch {
