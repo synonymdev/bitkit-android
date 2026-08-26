@@ -46,7 +46,7 @@ import javax.inject.Singleton
 import kotlin.time.Clock
 
 @Singleton
-@Suppress("LongParameterList", "LargeClass")
+@Suppress("LongParameterList", "LargeClass", "TooManyFunctions")
 class QuickPayRepo @Inject constructor(
     cacheStore: CacheStore,
     private val settingsStore: SettingsStore,
