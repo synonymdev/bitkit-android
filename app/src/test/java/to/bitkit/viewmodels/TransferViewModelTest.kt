@@ -1,6 +1,7 @@
 package to.bitkit.viewmodels
 
 import android.content.Context
+import app.cash.turbine.test
 import com.synonym.bitkitcore.BoltzPairInfo
 import com.synonym.bitkitcore.BoltzSwapEvent
 import com.synonym.bitkitcore.BroadcastException
@@ -82,6 +83,7 @@ import to.bitkit.utils.AppError
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -234,6 +236,262 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `updateLimits caps spending max at the balance the LSP fee was quoted for`() = test {
+        // Real-world numbers from issue #899: the LSP service fee grows with the client balance, so
+        // the second (cheaper) quote must not be used to derive a larger balance than it priced.
+        val spendable = 265_904uL
+        val miningFee = 178uL
+        val availableAmount = spendable - miningFee
+        val initialLspFees = 4_165uL
+        val balanceAfterLspFee = availableAmount - initialLspFees
+        val finalLspFees = 4_128uL
+        val initialFeeResponse = stubFeeResponse(initialLspFees)
+        val finalFeeResponse = stubFeeResponse(finalLspFees)
+        stubSpendableBalances(spendable)
+        blocktankState.value = BlocktankState(info = null)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(miningFee))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = spendable)))
+        whenever(blocktankRepo.estimateOrderFee(eq(availableAmount), any(), any()))
+            .thenReturn(Result.success(initialFeeResponse))
+        whenever(blocktankRepo.estimateOrderFee(eq(balanceAfterLspFee), any(), any()))
+            .thenReturn(Result.success(finalFeeResponse))
+
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        val maxAllowedToSend = sut.spendingUiState.value.maxAllowedToSend
+        assertEquals(balanceAfterLspFee.toLong(), maxAllowedToSend)
+        // The order the user can build at this max must stay within what they can actually pay.
+        assertTrue(maxAllowedToSend.toULong() + finalLspFees <= availableAmount)
+    }
+
+    @Test
+    fun `updateLimits settles the spending max when the LSP fee falls as the client balance rises`() = test {
+        // Live quotes from the staging LSP, which charges the LSP side harder than the client side,
+        // so the second quote is dearer than the first and no ordering assumption can hold.
+        val spendable = 266_656uL
+        val miningFee = 178uL
+        val availableAmount = spendable - miningFee // 266_478
+        val quotes = mapOf(
+            266_478uL to 1_798uL, // f(A)     -> balanceAfterLspFee = 264_680
+            264_680uL to 1_800uL, // f(C)     -> first candidate is unaffordable
+            264_678uL to 1_801uL, // round 1  -> still one sat over
+            264_677uL to 1_801uL, // round 2  -> affordable
+        )
+        stubSpendableBalances(spendable)
+        blocktankState.value = BlocktankState(info = null)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(miningFee))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = spendable)))
+        val responses = quotes.mapValues { (_, fee) -> stubFeeResponse(fee) }
+        responses.forEach { (balance, response) ->
+            whenever(blocktankRepo.estimateOrderFee(eq(balance), any(), any()))
+                .thenReturn(Result.success(response))
+        }
+
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        val maxAllowedToSend = sut.spendingUiState.value.maxAllowedToSend
+        assertEquals(264_677L, maxAllowedToSend)
+        // The settled max must fund its own order rather than merely undercut the first quote.
+        assertTrue(maxAllowedToSend.toULong() + quotes.getValue(maxAllowedToSend.toULong()) <= availableAmount)
+    }
+
+    @Test
+    fun `updateLimits re-quotes against the channel split the order will actually use`() = test {
+        // Order creation recomputes the LSP balance from the chosen amount, so a re-quote priced
+        // against the earlier balance would verify an order that is never created.
+        val maxChannel = 1_403_872uL
+        val spendable = 266_656uL
+        val miningFee = 178uL
+        val availableAmount = spendable - miningFee // 266_478
+        val quotes = mapOf(266_478uL to 1_798uL, 264_680uL to 1_800uL, 264_678uL to 1_801uL, 264_677uL to 1_801uL)
+        val responses = quotes.mapValues { (_, fee) -> stubFeeResponse(fee) }
+        stubSpendableBalances(spendable)
+        blocktankState.value = BlocktankState(info = null)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(miningFee))
+        responses.forEach { (balance, response) ->
+            // each client balance gets its own LSP side, mirroring maxChannelSize - clientBalance
+            whenever(blocktankRepo.calculateLiquidityOptions(eq(balance))).thenReturn(
+                Result.success(
+                    ChannelLiquidityOptions(
+                        defaultLspBalanceSat = maxChannel - balance,
+                        minLspBalanceSat = maxChannel - balance,
+                        maxLspBalanceSat = maxChannel - balance,
+                        maxClientBalanceSat = spendable,
+                    )
+                )
+            )
+            whenever(blocktankRepo.estimateOrderFee(eq(balance), any(), any()))
+                .thenReturn(Result.success(response))
+        }
+
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        assertEquals(264_677L, sut.spendingUiState.value.maxAllowedToSend)
+        // the re-quote must price 264_678 against its own split, not the one taken at 264_680
+        verify(blocktankRepo).estimateOrderFee(eq(264_678uL), eq(maxChannel - 264_678uL), any())
+        verify(blocktankRepo, never()).estimateOrderFee(eq(264_678uL), eq(maxChannel - 264_680uL), any())
+    }
+
+    @Test
+    fun `onConfirmAmount refuses to create an order the balance cannot fund`() = test {
+        val amount = 260_000uL
+        val budget = 265_000uL
+        val response = stubFeeResponse(6_000uL) // 260_000 + 6_000 is over the budget
+        stubSpendableBalances(budget)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(0uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(response))
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        sut.transferEffects.test {
+            sut.onConfirmAmount(amount.toLong())
+            advanceUntilIdle()
+
+            assertIs<TransferEffect.ToastError>(awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        verify(blocktankRepo, never()).createOrder(any(), any(), any())
+        assertFalse(sut.spendingUiState.value.isLoading)
+    }
+
+    @Test
+    fun `onConfirmAmount creates the order when it fits the funding budget`() = test {
+        val amount = 260_000uL
+        val response = stubFeeResponse(1_000uL)
+        stubSpendableBalances(265_000uL)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(0uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(response))
+        whenever(blocktankRepo.createOrder(any(), any(), any()))
+            .thenReturn(Result.success(previewBtOrder(clientBalanceSat = amount)))
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        sut.onConfirmAmount(amount.toLong())
+        advanceUntilIdle()
+
+        verify(blocktankRepo).createOrder(eq(amount), any(), any())
+    }
+
+    @Test
+    fun `onConfirmAmount proceeds when the on-chain balance cannot be read`() = test {
+        val amount = 260_000uL
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.failure(AppError("node unavailable")))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.createOrder(any(), any(), any()))
+            .thenReturn(Result.success(previewBtOrder(clientBalanceSat = amount)))
+        sut.updateLimits()
+        advanceUntilIdle()
+        assertNull(sut.spendingUiState.value.fundingBudgetSats)
+
+        sut.onConfirmAmount(amount.toLong())
+        advanceUntilIdle()
+
+        // an unreadable balance must not block the flow; confirm stays the authority
+        verify(blocktankRepo).createOrder(eq(amount), any(), any())
+    }
+
+    @Test
+    fun `onConfirmAmount proceeds when the confirm-time fee estimate fails`() = test {
+        val amount = 260_000uL
+        val response = stubFeeResponse(1_000uL)
+        stubSpendableBalances(265_000uL)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(0uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(response))
+        whenever(blocktankRepo.createOrder(any(), any(), any()))
+            .thenReturn(Result.success(previewBtOrder(clientBalanceSat = amount)))
+        sut.updateLimits()
+        advanceUntilIdle()
+        // the budget is sized, so this is the failed-quote path rather than the unset-budget one
+        assertNotNull(sut.spendingUiState.value.fundingBudgetSats)
+
+        // the LSP stops quoting only after the limits were sized
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any()))
+            .thenReturn(Result.failure(AppError("lsp unreachable")))
+
+        sut.onConfirmAmount(amount.toLong())
+        advanceUntilIdle()
+
+        // a quote the LSP will not give must not block the user; confirm stays the authority
+        verify(blocktankRepo).createOrder(eq(amount), any(), any())
+    }
+
+    @Test
+    fun `updateLimits keeps the last candidate when a re-quote fails`() = test {
+        val spendable = 266_656uL
+        val miningFee = 178uL
+        val availableAmount = spendable - miningFee // 266_478
+        stubSpendableBalances(spendable)
+        blocktankState.value = BlocktankState(info = null)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(miningFee))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = spendable)))
+        val first = stubFeeResponse(1_798uL)
+        val second = stubFeeResponse(1_800uL)
+        whenever(blocktankRepo.estimateOrderFee(eq(availableAmount), any(), any()))
+            .thenReturn(Result.success(first))
+        whenever(blocktankRepo.estimateOrderFee(eq(264_680uL), any(), any()))
+            .thenReturn(Result.success(second))
+        whenever(blocktankRepo.estimateOrderFee(eq(264_678uL), any(), any()))
+            .thenReturn(Result.failure(AppError("lsp unreachable")))
+
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        // the step-down candidate is still published rather than the unaffordable quoted balance
+        assertEquals(264_678L, sut.spendingUiState.value.maxAllowedToSend)
+    }
+
+    @Test
+    fun `updateLimits falls back to the shortfall balance when rounds are exhausted`() = test {
+        val spendable = 266_656uL
+        val miningFee = 178uL
+        val availableAmount = spendable - miningFee // 266_478
+        // the fee rises as fast as the balance steps down, so no candidate ever becomes affordable
+        val quotes = mapOf(
+            266_478uL to 1_800uL, // f(A)     -> balanceAfterLspFee = 264_678
+            264_678uL to 2_000uL, // f(C)     -> 266_678, over budget
+            264_478uL to 2_200uL, // round 1  -> 266_678, still over
+            264_278uL to 2_400uL, // round 2  -> 266_678, rounds exhausted
+        )
+        stubSpendableBalances(spendable)
+        blocktankState.value = BlocktankState(info = null)
+        whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(miningFee))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptions(maxClientBalanceSat = spendable)))
+        val responses = quotes.mapValues { (_, fee) -> stubFeeResponse(fee) }
+        responses.forEach { (balance, response) ->
+            whenever(blocktankRepo.estimateOrderFee(eq(balance), any(), any()))
+                .thenReturn(Result.success(response))
+        }
+
+        sut.updateLimits()
+        advanceUntilIdle()
+
+        // the exhausted loop advertises availableAmount minus the last quote, not the last candidate
+        assertEquals((availableAmount - 2_400uL).toLong(), sut.spendingUiState.value.maxAllowedToSend)
+    }
+
+    @Test
     fun `updateLimits uses percent fallback when fast mining fee estimate fails`() = test {
         val spendable = 100_000uL
         val fallbackMiningFee = (spendable.toDouble() * Defaults.fallbackFeePercent).toULong()
@@ -276,6 +534,37 @@ class TransferViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(OPTION_MAX_CLIENT_BALANCE.toLong(), sut.spendingUiState.value.maxAllowedToSend)
+    }
+
+    @Test
+    fun `onConfirmAmount funds a hardware transfer from the device balance not the on-chain wallet`() = test {
+        // Regression: the funding check must not read on-chain savings here, or every hardware
+        // transfer is rejected because those funds live on the device.
+        val amount = 100_000uL
+        stubSpendableBalances(0uL) // empty on-chain wallet, as in the hardware e2e
+        blocktankState.value = BlocktankState(info = btInfo(lspMaxClientBalance = LSP_MAX_CLIENT_BALANCE))
+        whenever(hwWalletRepo.getFundingAccount(HARDWARE_WALLET_ID)).thenReturn(
+            Result.success(
+                HwFundingAccount.Trezor(
+                    xpub = XPUB,
+                    addressType = HwFundingAddressType.NATIVE_SEGWIT,
+                    balanceSats = ON_CHAIN_BALANCE,
+                ),
+            ),
+        )
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(1uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(feeResponse))
+        whenever(blocktankRepo.createOrder(any(), any(), any()))
+            .thenReturn(Result.success(previewBtOrder(clientBalanceSat = amount)))
+        sut.updateHwLimits(HARDWARE_WALLET_ID)
+        advanceUntilIdle()
+
+        sut.onConfirmAmount(amount.toLong())
+        advanceUntilIdle()
+
+        verify(blocktankRepo).createOrder(eq(amount), any(), any())
     }
 
     @Test
@@ -1701,6 +1990,12 @@ class TransferViewModelTest : BaseUnitTest() {
         maxLspBalanceSat = 0uL,
         maxClientBalanceSat = maxClientBalanceSat,
     )
+
+    private fun stubFeeResponse(lspFees: ULong): IBtEstimateFeeResponse2 = mock<IBtEstimateFeeResponse2>().also {
+        whenever(it.feeSat).thenReturn(lspFees)
+        whenever(it.networkFeeSat).thenReturn(lspFees)
+        whenever(it.serviceFeeSat).thenReturn(0uL)
+    }
 
     private fun liquidityOptionsForCreate(maxClientBalanceSat: ULong) = ChannelLiquidityOptions(
         defaultLspBalanceSat = LSP_BALANCE,
