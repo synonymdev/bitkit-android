@@ -202,10 +202,6 @@ class TransferViewModel @Inject constructor(
 
             if (!isValid) return@launch
 
-            if (_spendingUiState.value.advancedBudgetSats == null) {
-                _spendingUiState.update { it.copy(advancedBudgetSats = loadFundingBudget()) }
-            }
-
             val result = blocktankRepo.estimateOrderFee(
                 spendingBalanceSats = _spendingUiState.value.order?.clientBalanceSat ?: 0u,
                 receivingBalanceSats = amount.toULong(),
@@ -230,7 +226,7 @@ class TransferViewModel @Inject constructor(
     private suspend fun canFundAdvancedOrder(clientBalance: ULong, receivingAmount: ULong): Boolean {
         val budget = currentFundingBudget()
         if (budget == null) {
-            Logger.warn("Skipped advanced capacity check, on-chain balance unavailable", context = TAG)
+            Logger.warn("Skipped advanced capacity check, no sized budget available", context = TAG)
             return true
         }
         val fee = quoteAdvancedOrderFee(clientBalance, receivingAmount)
@@ -653,7 +649,7 @@ class TransferViewModel @Inject constructor(
             awaitNodeRunning()
 
             val fundingBudget = loadFundingBudget()
-            _spendingUiState.update { it.copy(fundingBudgetSats = fundingBudget, isHwFundingBudget = false) }
+            _spendingUiState.update { it.copy(fundingBudgetSats = fundingBudget, hwFundingWalletId = null) }
             val availableAmount = fundingBudget ?: 0uL
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
@@ -871,8 +867,14 @@ class TransferViewModel @Inject constructor(
 
     private suspend fun currentFundingBudget(): ULong? {
         val sizedBudget = _spendingUiState.value.fundingBudgetSats
-        if (_spendingUiState.value.isHwFundingBudget) return sizedBudget
-        return loadFundingBudget() ?: sizedBudget
+        val hwWalletId = _spendingUiState.value.hwFundingWalletId
+        val liveBudget = if (hwWalletId != null) loadHwFundingBudget(hwWalletId) else loadFundingBudget()
+        return liveBudget ?: sizedBudget
+    }
+
+    private suspend fun loadHwFundingBudget(walletId: String): ULong? {
+        val balance = hwWalletRepo.getFundingAccount(walletId).getOrNull()?.balanceSats ?: return null
+        return balance.safe() - hwFundingFeeReserve(balance).safe()
     }
 
     /**
@@ -975,7 +977,7 @@ class TransferViewModel @Inject constructor(
             updateTransferValues(0uL)
 
             val availableAmount = account.balanceSats.safe() - hwFundingFeeReserve(account.balanceSats).safe()
-            _spendingUiState.update { it.copy(fundingBudgetSats = availableAmount, isHwFundingBudget = true) }
+            _spendingUiState.update { it.copy(fundingBudgetSats = availableAmount, hwFundingWalletId = walletId) }
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
             if (initialLspFees == null) {
@@ -1911,8 +1913,8 @@ data class TransferToSpendingUiState(
     val feeEstimate: Long? = null,
     /** Budget the transfer limits were sized against, or null while unknown. */
     val fundingBudgetSats: ULong? = null,
-    /** Whether the sized budget came from a hardware device account rather than this wallet. */
-    val isHwFundingBudget: Boolean = false,
+    /** Hardware wallet the budget was sized from, or null when it came from this wallet's savings. */
+    val hwFundingWalletId: String? = null,
 )
 
 private data class SpendingConfirmFundingPlan(

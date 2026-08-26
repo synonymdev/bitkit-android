@@ -726,13 +726,12 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
         whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(order))
-        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), eq(LSP_BALANCE), any()))
-            .thenReturn(Result.success(affordable))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(affordable))
         whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), eq(raisedCapacity), any()))
             .thenReturn(Result.success(unaffordable))
-        sut.onConfirmAmount(clientBalance.toLong())
+        sut.updateLimits()
         advanceUntilIdle()
-        sut.updateAdvancedFundingBudget()
+        sut.onConfirmAmount(clientBalance.toLong())
         advanceUntilIdle()
 
         sut.transferEffects.test {
@@ -758,11 +757,10 @@ class TransferViewModelTest : BaseUnitTest() {
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
         whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(order))
-        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), any(), any()))
-            .thenReturn(Result.success(response))
-        sut.onConfirmAmount(clientBalance.toLong())
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(response))
+        sut.updateLimits()
         advanceUntilIdle()
-        sut.updateAdvancedFundingBudget()
+        sut.onConfirmAmount(clientBalance.toLong())
         advanceUntilIdle()
 
         sut.onSpendingAdvancedContinue(LSP_BALANCE.toLong())
@@ -773,35 +771,59 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `onSpendingAdvancedContinue rejects an unaffordable capacity without a cached budget`() = test {
+    fun `onSpendingAdvancedContinue proceeds when no budget was sized`() = test {
+        val clientBalance = 260_000uL
+        val order = previewBtOrder(clientBalanceSat = clientBalance)
+        val raisedCapacity = LSP_BALANCE * 2u
+        // a capacity the sized budget would have rejected, had the limits ever been sized
+        val unaffordable = stubFeeResponse(6_000uL)
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(order))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(unaffordable))
+        // deliberately no updateLimits call, so the budget stays unsized
+        sut.onConfirmAmount(clientBalance.toLong())
+        advanceUntilIdle()
+        assertNull(sut.spendingUiState.value.fundingBudgetSats)
+
+        sut.onSpendingAdvancedContinue(raisedCapacity.toLong())
+        advanceUntilIdle()
+
+        // an unsized budget must not block the user; confirm stays the authority
+        assertTrue(sut.spendingUiState.value.isAdvanced)
+        verify(blocktankRepo, times(2)).createOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `onSpendingAdvancedContinue proceeds when the capacity fee quote fails`() = test {
         val clientBalance = 260_000uL
         val order = previewBtOrder(clientBalanceSat = clientBalance)
         val raisedCapacity = LSP_BALANCE * 2u
         val affordable = stubFeeResponse(1_000uL)
-        val unaffordable = stubFeeResponse(6_000uL)
         stubSpendableBalances(265_000uL)
         whenever { lightningRepo.estimateSendAllFee(anyOrNull(), anyOrNull(), anyOrNull()) }
             .thenReturn(Result.success(0uL))
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
         whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(order))
-        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), eq(LSP_BALANCE), any()))
-            .thenReturn(Result.success(affordable))
-        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), eq(raisedCapacity), any()))
-            .thenReturn(Result.success(unaffordable))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(affordable))
+        sut.updateLimits()
+        advanceUntilIdle()
         sut.onConfirmAmount(clientBalance.toLong())
         advanceUntilIdle()
-        // deliberately no updateAdvancedFundingBudget call, so the cached budget stays null
-        assertNull(sut.spendingUiState.value.advancedBudgetSats)
+        // the budget is sized, so this is the failed-quote path rather than the unsized one
+        assertNotNull(sut.spendingUiState.value.fundingBudgetSats)
 
-        sut.transferEffects.test {
-            sut.onSpendingAdvancedContinue(raisedCapacity.toLong())
-            advanceUntilIdle()
+        // the LSP stops quoting only after the limits were sized
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any()))
+            .thenReturn(Result.failure(AppError("lsp unreachable")))
 
-            assertIs<TransferEffect.ToastError>(awaitItem())
-            cancelAndIgnoreRemainingEvents()
-        }
-        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+        sut.onSpendingAdvancedContinue(raisedCapacity.toLong())
+        advanceUntilIdle()
+
+        // a quote the LSP will not give must not block the user; confirm stays the authority
+        assertTrue(sut.spendingUiState.value.isAdvanced)
+        verify(blocktankRepo, times(2)).createOrder(any(), any(), any())
     }
 
     @Test
@@ -922,25 +944,62 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onSpendingAdvancedContinue rejects a capacity the drained device account cannot fund`() = test {
+        val clientBalance = 100_000uL
+        val order = previewBtOrder(clientBalanceSat = clientBalance)
+        val raisedCapacity = LSP_BALANCE * 2u
+        val response = stubFeeResponse(6_000uL)
+        stubSpendableBalances(0uL) // empty on-chain wallet, as in the hardware e2e
+        blocktankState.value = BlocktankState(info = btInfo(lspMaxClientBalance = LSP_MAX_CLIENT_BALANCE))
+        stubHwFundingAccount(balanceSats = ON_CHAIN_BALANCE)
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(1uL))
+        whenever(blocktankRepo.calculateLiquidityOptions(any()))
+            .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
+        whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(order))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(response))
+        sut.updateHwLimits(HARDWARE_WALLET_ID)
+        advanceUntilIdle()
+        sut.onConfirmAmount(clientBalance.toLong())
+        advanceUntilIdle()
+        // the device account is spent from elsewhere after the limits were sized
+        stubHwFundingAccount(balanceSats = 50_000uL)
+
+        sut.transferEffects.test {
+            sut.onSpendingAdvancedContinue(raisedCapacity.toLong())
+            advanceUntilIdle()
+
+            assertIs<TransferEffect.ToastError>(awaitItem())
+            cancelAndIgnoreRemainingEvents()
+        }
+        // only the initial order, no raised one on top of it
+        verify(blocktankRepo, times(1)).createOrder(any(), any(), any())
+    }
+
+    @Test
     fun `onSpendingAdvancedContinue funds a hardware transfer from the device balance`() = test {
         // Regression: the capacity check must not read on-chain savings here, or every hardware
         // transfer is rejected because those funds live on the device.
         val clientBalance = 100_000uL
         val order = previewBtOrder(clientBalanceSat = clientBalance)
-        val response = stubFeeResponse(6_000uL)
+        val raisedCapacity = LSP_BALANCE * 2u
+        // a fee the empty on-chain wallet could never cover, but the device account easily can
+        val deviceAffordable = stubFeeResponse(6_000uL)
+        stubSpendableBalances(0uL) // empty on-chain wallet, as in the hardware e2e
+        blocktankState.value = BlocktankState(info = btInfo(lspMaxClientBalance = LSP_MAX_CLIENT_BALANCE))
+        stubHwFundingAccount(balanceSats = ON_CHAIN_BALANCE)
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(1uL))
         whenever(blocktankRepo.calculateLiquidityOptions(any()))
             .thenReturn(Result.success(liquidityOptionsForCreate(maxClientBalanceSat = OPTION_MAX_CLIENT_BALANCE)))
         whenever(blocktankRepo.createOrder(any(), any(), any())).thenReturn(Result.success(order))
-        whenever(blocktankRepo.estimateOrderFee(eq(clientBalance), any(), any()))
-            .thenReturn(Result.success(response))
+        whenever(blocktankRepo.estimateOrderFee(any(), any(), any())).thenReturn(Result.success(deviceAffordable))
+        sut.updateHwLimits(HARDWARE_WALLET_ID)
+        advanceUntilIdle()
         sut.onConfirmAmount(clientBalance.toLong())
         advanceUntilIdle()
-        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.failure(AppError("node unavailable")))
 
-        sut.onSpendingAdvancedContinue(LSP_BALANCE.toLong())
+        sut.onSpendingAdvancedContinue(raisedCapacity.toLong())
         advanceUntilIdle()
 
-        // an unreadable balance must not block the user; confirm stays the authority
         assertTrue(sut.spendingUiState.value.isAdvanced)
         verify(blocktankRepo, times(2)).createOrder(any(), any(), any())
     }
@@ -2296,6 +2355,18 @@ class TransferViewModelTest : BaseUnitTest() {
         val options = mock<IBtInfoOptions>()
         whenever(options.maxClientBalanceSat).thenReturn(lspMaxClientBalance)
         return mock<IBtInfo>().also { whenever(it.options).thenReturn(options) }
+    }
+
+    private suspend fun stubHwFundingAccount(balanceSats: ULong) {
+        whenever(hwWalletRepo.getFundingAccount(HARDWARE_WALLET_ID)).thenReturn(
+            Result.success(
+                HwFundingAccount.Trezor(
+                    xpub = XPUB,
+                    addressType = HwFundingAddressType.NATIVE_SEGWIT,
+                    balanceSats = balanceSats,
+                ),
+            ),
+        )
     }
 
     private suspend fun stubSpendableBalances(spendable: ULong) {
