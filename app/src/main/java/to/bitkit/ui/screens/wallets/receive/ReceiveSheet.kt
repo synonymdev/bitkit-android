@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +36,7 @@ import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestDetailsScreen
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestRecipientScreen
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestSentScreen
+import to.bitkit.ui.screens.transfer.hardware.HwPassphrasePromptSheet
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.utils.ScreenDeepLinks
@@ -56,9 +58,11 @@ fun ReceiveSheet(
     walletState: WalletState,
     isOffline: Boolean,
     startRoute: ReceiveRoute = ReceiveRoute.QR,
+    hardwareWalletId: String? = null,
     editInvoiceAmountViewModel: AmountInputViewModel = hiltViewModel(),
     paymentRequestAmountViewModel: AmountInputViewModel = hiltViewModel(key = "PaymentRequestAmount"),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
+    hwReceiveViewModel: HwReceiveViewModel = hiltViewModel(),
 ) {
     val wallet = requireNotNull(walletViewModel)
     val navController = rememberNavController()
@@ -70,6 +74,7 @@ fun ReceiveSheet(
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
     val showCreateCjit = remember { mutableStateOf(false) }
     val cjitEntryDetails = remember { mutableStateOf<CjitEntryDetails?>(null) }
+    val isEditingHardwareInvoice = remember { mutableStateOf(false) }
     val lightningState: LightningState by wallet.lightningState.collectAsStateWithLifecycle()
     val paymentRequestTargets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
     var paymentRequestDraft by remember {
@@ -82,6 +87,13 @@ fun ReceiveSheet(
         )
     }
     var createdPaymentRequest by remember { mutableStateOf<PaykitPaymentRequest?>(null) }
+    val hardwareWallets by hwReceiveViewModel.wallets.collectAsStateWithLifecycle()
+    val hwReceiveState by hwReceiveViewModel.uiState.collectAsStateWithLifecycle()
+    val selectedHardwareWalletId = hardwareWalletId ?: hardwareWallets.singleOrNull()?.id
+
+    DisposableEffect(hwReceiveViewModel) {
+        onDispose(hwReceiveViewModel::cancel)
+    }
 
     LaunchedEffect(Unit) {
         wallet.resetPreActivityMetadataTagsForCurrentInvoice()
@@ -120,7 +132,20 @@ fun ReceiveSheet(
                                 navController.navigateTo(ReceiveRoute.Amount)
                             }
                         },
-                        onClickEditInvoice = { navController.navigateTo(ReceiveRoute.EditInvoice) },
+                        onClickEditInvoice = {
+                            isEditingHardwareInvoice.value = false
+                            navController.navigateTo(ReceiveRoute.EditInvoice)
+                        },
+                        onClickHardwareEditInvoice = {
+                            isEditingHardwareInvoice.value = true
+                            navController.navigateTo(ReceiveRoute.EditInvoice)
+                        },
+                        initialTab = if (hardwareWalletId != null) ReceiveTab.TREZOR else null,
+                        hardwareWalletId = selectedHardwareWalletId,
+                        hardwareReceiveState = hwReceiveState,
+                        onLoadHardwareAddress = hwReceiveViewModel::loadAddress,
+                        onRetryHardwareAddress = hwReceiveViewModel::retryAddress,
+                        onVerifyHardwareAddress = hwReceiveViewModel::verifyAddress,
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestDetails> {
@@ -278,6 +303,8 @@ fun ReceiveSheet(
                             cjitEntryDetails.value = entry
                             navController.navigateTo(ReceiveRoute.ConfirmIncreaseInbound)
                         },
+                        onchainOnly = isEditingHardwareInvoice.value,
+                        updateOnchainInvoice = wallet::setBip21AmountSats,
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.AddTag> {
@@ -294,6 +321,14 @@ fun ReceiveSheet(
                     )
                 }
             }
+        }
+
+        if (hwReceiveState.isPassphraseRequired) {
+            HwPassphrasePromptSheet(
+                isVerifying = hwReceiveState.isVerifyingPassphrase,
+                onSubmit = hwReceiveViewModel::submitPassphrase,
+                onDismiss = hwReceiveViewModel::dismissPassphrase,
+            )
         }
 
         AnimatedVisibility(

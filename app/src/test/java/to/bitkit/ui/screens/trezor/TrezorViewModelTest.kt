@@ -33,6 +33,12 @@ import com.synonym.bitkitcore.Network as BitkitCoreNetwork
 @OptIn(ExperimentalCoroutinesApi::class)
 class TrezorViewModelTest : BaseUnitTest() {
 
+    private val watcherReceiveAddress = AddressInfo(
+        address = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8",
+        path = "m/84'/1'/0'/0/0",
+        transfers = 0u,
+    )
+
     private val trezorRepo: TrezorRepo = mock()
     private val trezorStateFlow = MutableStateFlow(TrezorState())
     private val needsPinEntryFlow = MutableStateFlow(false)
@@ -413,7 +419,7 @@ class TrezorViewModelTest : BaseUnitTest() {
                 txCount = 3u,
                 blockHeight = 850_000u,
                 accountType = TrezorPreviewData.sampleTransactionHistoryResult.accountType,
-                nextUnusedExternalAddress = unusedAddress(),
+                nextUnusedExternalAddress = watcherReceiveAddress,
             ),
         )
         advanceUntilIdle()
@@ -442,7 +448,7 @@ class TrezorViewModelTest : BaseUnitTest() {
                 txCount = 3u,
                 blockHeight = 850_000u,
                 accountType = TrezorPreviewData.sampleTransactionHistoryResult.accountType,
-                nextUnusedExternalAddress = unusedAddress(),
+                nextUnusedExternalAddress = watcherReceiveAddress,
             ),
         )
         advanceUntilIdle()
@@ -498,12 +504,6 @@ class TrezorViewModelTest : BaseUnitTest() {
     }
 
     // endregion
-
-    private fun unusedAddress() = AddressInfo(
-        address = "bc1qtestunused",
-        path = "m/84'/0'/0'/0/0",
-        transfers = 0u,
-    )
 
     private fun createViewModel() = TrezorViewModel(
         bgDispatcher = testDispatcher,

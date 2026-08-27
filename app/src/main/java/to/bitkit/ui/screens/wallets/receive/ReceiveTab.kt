@@ -10,7 +10,8 @@ import to.bitkit.ui.theme.Colors
 enum class ReceiveTab : TabItem {
     SAVINGS,
     AUTO,
-    SPENDING;
+    SPENDING,
+    TREZOR;
 
     override val uiText: String
         @Composable
@@ -18,6 +19,7 @@ enum class ReceiveTab : TabItem {
             SAVINGS -> stringResource(R.string.wallet__receive_tab_savings)
             AUTO -> stringResource(R.string.wallet__receive_tab_auto)
             SPENDING -> stringResource(R.string.wallet__receive_tab_spending)
+            TREZOR -> stringResource(R.string.hardware__device_model_trezor)
         }
 
     val accentColor: Color
@@ -25,5 +27,6 @@ enum class ReceiveTab : TabItem {
             SAVINGS -> Colors.Brand
             AUTO -> Colors.Brand
             SPENDING -> Colors.Purple
+            TREZOR -> Colors.Blue
         }
 }

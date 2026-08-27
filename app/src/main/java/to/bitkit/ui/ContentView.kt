@@ -512,6 +512,7 @@ fun ContentView(
                             ReceiveSheet(
                                 appViewModel = appViewModel,
                                 startRoute = sheet.route,
+                                hardwareWalletId = sheet.hardwareWalletId,
                                 walletState = walletState,
                                 isOffline = connectivityState != ConnectivityState.CONNECTED,
                                 navigateToExternalConnection = {
@@ -666,7 +667,9 @@ fun ContentView(
                             onSendClick = {
                                 appViewModel.showSheet(Sheet.Send(hardwareWalletId = currentHardwareWalletId))
                             },
-                            onReceiveClick = { appViewModel.showSheet(Sheet.Receive()) },
+                            onReceiveClick = {
+                                appViewModel.showSheet(Sheet.Receive(hardwareWalletId = currentHardwareWalletId))
+                            },
                             onScanClick = { appViewModel.showScannerSheet() },
                         )
                     }

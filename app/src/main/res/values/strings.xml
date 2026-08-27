@@ -203,6 +203,7 @@
     <string name="hardware__passphrase_paired_text">Bitkit found funds behind a passphrase, and added these to your wallet balance.</string>
     <string name="hardware__passphrase_text">If you have funds protected by a passphrase, enter it below to add these funds to your wallet balance as well.</string>
     <string name="hardware__passphrase_title">Passphrase</string>
+    <string name="hardware__receive_address_error">Could not load the hardware wallet address.</string>
     <string name="hardware__remove_button">Remove %1$s</string>
     <string name="hardware__remove_dialog_keep">Keep name and tags in backup</string>
     <string name="hardware__remove_dialog_text">Don\'t worry, your funds are safe and your coins won\'t be deleted. Bitkit will simply stop displaying the amounts in the wallet.</string>
@@ -216,6 +217,8 @@
     <string name="hardware__send_onchain_only_title">Bitcoin address required</string>
     <string name="hardware__send_open_connect">Open Trezor Connect</string>
     <string name="hardware__send_sign_title">Sign With Device</string>
+    <string name="hardware__verify_address">Verify on Device</string>
+    <string name="hardware__verify_address_error">Address verification failed. Check the address on your device and try again.</string>
     <string name="lightning__availability__text">Funds transfer to savings is usually instant, but settlement may take up to &lt;accent&gt;14 days&lt;/accent&gt; under certain network conditions.</string>
     <string name="lightning__availability__title">Funds\n&lt;accent&gt;availability&lt;/accent&gt;</string>
     <string name="lightning__balance">Balance</string>
