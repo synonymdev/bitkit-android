@@ -2,12 +2,14 @@ package to.bitkit.ui.screens.wallets.receive
 
 import android.content.Context
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
@@ -95,6 +97,30 @@ class HwReceiveViewModelTest : BaseUnitTest() {
 
         assertEquals(NEXT_RECEIVE_ADDRESS, sut.uiState.value.address)
         assertFalse(sut.uiState.value.addressLoadFailed)
+    }
+
+    @Test
+    fun `watcher address change cancels active verification`() = test {
+        val verificationStarted = CompletableDeferred<Unit>()
+        val verificationResult = CompletableDeferred<Result<Unit>>()
+        whenever(hwWalletRepo.getReceiveAddress(WALLET_ID)).thenReturn(Result.success(RECEIVE_ADDRESS))
+        whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
+        whenever(hwWalletRepo.verifyReceiveAddress(WALLET_ID, RECEIVE_ADDRESS)).doSuspendableAnswer {
+            verificationStarted.complete(Unit)
+            verificationResult.await()
+        }
+        sut.loadAddress(WALLET_ID)
+        advanceUntilIdle()
+
+        sut.verifyAddress()
+        verificationStarted.await()
+        assertTrue(sut.uiState.value.isVerifyingAddress)
+
+        receiveAddress.value = NEXT_RECEIVE_ADDRESS
+        advanceUntilIdle()
+
+        assertEquals(NEXT_RECEIVE_ADDRESS, sut.uiState.value.address)
+        assertFalse(sut.uiState.value.isVerifyingAddress)
     }
 
     private companion object {

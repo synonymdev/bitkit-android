@@ -148,13 +148,10 @@ fun EditInvoiceScreen(
             }
         },
         onContinueKeyboard = { keyboardVisible = false },
-        onContinueGeneral = {
-            if (onchainOnly) {
-                updateOnchainInvoice(amountInputUiState.sats.toULong())
-                onBack()
-            } else {
-                editInvoiceVM.onClickContinue()
-            }
+        onContinueGeneral = editInvoiceVM::onClickContinue,
+        onContinueOnchain = { amountSats ->
+            updateOnchainInvoice(amountSats)
+            onBack()
         },
         isLoading = isLoading,
         onClickAddTag = onClickAddTag,
@@ -164,7 +161,7 @@ fun EditInvoiceScreen(
         onClickPaymentRequest = {
             onClickPaymentRequest(amountInputUiState.sats.toULong(), walletUiState.bip21Description)
         },
-        allowsTags = !onchainOnly,
+        onchainOnly = onchainOnly,
     )
 }
 
@@ -174,13 +171,14 @@ fun EditInvoiceContent(
     amountInputViewModel: AmountInputViewModel,
     noteText: String,
     isSoftKeyboardVisible: Boolean,
-    allowsTags: Boolean = true,
+    onchainOnly: Boolean = false,
     keyboardVisible: Boolean,
     tags: ImmutableList<String>,
     onBack: () -> Unit,
     onContinueKeyboard: () -> Unit,
     onClickBalance: () -> Unit,
     onContinueGeneral: () -> Unit,
+    onContinueOnchain: (ULong) -> Unit = {},
     onClickAddTag: () -> Unit,
     onTextChanged: (String) -> Unit,
     onClickTag: (String) -> Unit,
@@ -326,7 +324,7 @@ fun EditInvoiceContent(
                         )
 
                         VerticalSpacer(16.dp)
-                        if (allowsTags) {
+                        if (!onchainOnly) {
                             Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
                             VerticalSpacer(8.dp)
 
@@ -375,7 +373,13 @@ fun EditInvoiceContent(
 
                         PrimaryButton(
                             text = stringResource(R.string.wallet__receive_show_qr),
-                            onClick = onContinueGeneral,
+                            onClick = {
+                                if (onchainOnly) {
+                                    onContinueOnchain(amountInputViewModel.uiState.value.sats.toULong())
+                                } else {
+                                    onContinueGeneral()
+                                }
+                            },
                             isLoading = isLoading,
                             modifier = Modifier.testTag("ShowQrReceive")
                         )

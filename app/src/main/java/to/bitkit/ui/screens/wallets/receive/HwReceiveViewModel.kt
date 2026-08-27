@@ -56,6 +56,9 @@ class HwReceiveViewModel @Inject constructor(
         addressUpdatesJob = viewModelScope.launch {
             hwWalletRepo.observeReceiveAddress(walletId).collect { address ->
                 if (address != null && _uiState.value.walletId == walletId) {
+                    if (_uiState.value.address != null && _uiState.value.address != address) {
+                        invalidateVerification()
+                    }
                     _uiState.update {
                         it.copy(address = address, isLoadingAddress = false, addressLoadFailed = false)
                     }
@@ -159,6 +162,12 @@ class HwReceiveViewModel @Inject constructor(
         verifyJob = null
         passphraseJob = null
         _uiState.update { HwReceiveUiState() }
+    }
+
+    private fun invalidateVerification() {
+        verifyJob?.cancel()
+        passphraseJob?.cancel()
+        _uiState.update { it.copy(isPassphraseRequired = false) }
     }
 
     private suspend fun handleVerifyFailure(error: Throwable) {

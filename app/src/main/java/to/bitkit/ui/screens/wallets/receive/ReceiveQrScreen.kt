@@ -300,6 +300,7 @@ fun ReceiveQrScreen(
                                     onClickEditInvoice = onClickEditInvoice,
                                     onClickHardwareEditInvoice = onClickHardwareEditInvoice,
                                     hardwareAddress = hardwareReceiveState.address?.address,
+                                    hardwareInvoice = invoicesByTab[ReceiveTab.TREZOR].orEmpty(),
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -570,6 +571,7 @@ private fun ReceiveDetailsView(
     onClickEditInvoice: () -> Unit,
     onClickHardwareEditInvoice: () -> Unit = onClickEditInvoice,
     hardwareAddress: String? = null,
+    hardwareInvoice: String = "",
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -647,7 +649,8 @@ private fun ReceiveDetailsView(
                     hardwareAddress?.let { address ->
                         CopyAddressCard(
                             title = stringResource(R.string.wallet__receive_bitcoin_invoice),
-                            address = address,
+                            address = hardwareInvoice.ifBlank { address },
+                            body = address,
                             type = CopyAddressType.ONCHAIN,
                             onClickEditInvoice = onClickHardwareEditInvoice,
                             accentColor = Colors.Blue,
