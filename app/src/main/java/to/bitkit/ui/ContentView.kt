@@ -469,6 +469,9 @@ fun ContentView(
         val hwSendUiState by hwSendViewModel.uiState.collectAsStateWithLifecycle()
         val canDismissSheet = currentSheet !is Sheet.Send ||
             (!hwSendUiState.isSigning && !hwSendUiState.isBroadcastUnresolved)
+        val isAcceptingSubscription by appViewModel.isAcceptingSubscription.collectAsStateWithLifecycle()
+        val isRetryingInitialSubscriptionPayment by
+            appViewModel.isRetryingInitialSubscriptionPayment.collectAsStateWithLifecycle()
         var homeWalletPageRequest by remember { mutableIntStateOf(0) }
         var homeWidgetsPageRequest by remember { mutableIntStateOf(0) }
         val navigateToHomeWallet = {
@@ -494,7 +497,10 @@ fun ContentView(
                 onDismiss = { appViewModel.hideSheet() },
                 visibilityKey = currentSheet,
                 onVisible = { appViewModel.onSheetVisible(currentSheet) },
-                dismissEnabled = !isCreatingPaymentRequest && canDismissSheet,
+                dismissEnabled = !isCreatingPaymentRequest &&
+                    !isAcceptingSubscription &&
+                    !isRetryingInitialSubscriptionPayment &&
+                    canDismissSheet,
                 sheetHandlePlacement = when (currentSheet) {
                     is Sheet.Widgets -> SheetHandlePlacement.ContentOverlay
                     else -> SheetHandlePlacement.ScaffoldSlot

@@ -333,6 +333,7 @@ fun SendSheet(
                     if (sendUiState.isInitialSubscriptionPayment) {
                         SubscriptionSuccess(
                             onClose = appViewModel::hideSheet,
+                            paymentType = sendDetail.type,
                             modifier = Modifier.gradientBackground(),
                         )
                     } else {
@@ -497,6 +498,8 @@ fun SendSheet(
                     val route = it.toRoute<SendRoute.Error>()
                     val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
                     val isRetrying by walletViewModel.isRetryingLightningPayment.collectAsStateWithLifecycle()
+                    val isRetryingInitialSubscriptionPayment by
+                        appViewModel.isRetryingInitialSubscriptionPayment.collectAsStateWithLifecycle()
                     val scope = rememberCoroutineScope()
                     SendErrorScreen(
                         title = if (sendUiState.isInitialSubscriptionPayment) {
@@ -509,7 +512,7 @@ fun SendSheet(
                         } else {
                             route.message
                         },
-                        isRetrying = isRetrying,
+                        isRetrying = isRetrying || isRetryingInitialSubscriptionPayment,
                         retryText = stringResource(R.string.subscriptions__retry_payment)
                             .takeIf { sendUiState.isInitialSubscriptionPayment },
                         secondaryText = stringResource(R.string.wallet__payment_requests_not_now)

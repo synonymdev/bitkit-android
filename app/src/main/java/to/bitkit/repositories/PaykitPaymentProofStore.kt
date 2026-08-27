@@ -33,9 +33,11 @@ class PaykitPaymentProofStore @Inject constructor(
             }
     }
 
-    fun completedRequestIdsAwaitingSubmission(identity: String): Set<PaykitPaymentRequestId> = load()
+    fun completedRequestProofKindsAwaitingSubmission(
+        identity: String,
+    ): Map<PaykitPaymentRequestId, PaykitPaymentProofKind> = load()
         .filter { PubkyPublicKeyFormat.matches(it.identity, identity) && it.proofData != null }
-        .mapTo(mutableSetOf()) { it.requestId }
+        .associate { it.requestId to it.kind }
 
     fun inFlightRequestIds(identity: String): Set<PaykitPaymentRequestId> = load()
         .filter { PubkyPublicKeyFormat.matches(it.identity, identity) && it.paymentStarted }

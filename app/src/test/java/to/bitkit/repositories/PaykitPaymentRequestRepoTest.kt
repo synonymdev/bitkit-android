@@ -5,6 +5,7 @@ package to.bitkit.repositories
 import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
+import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentReference
 import com.synonym.paykit.PaymentRequestAmount
 import com.synonym.paykit.PaymentRequestLifecycleState
@@ -91,7 +92,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(
             presentationStore.loadSubscriptionState(any())
         ).thenReturn(PaykitSubscriptionPresentationState())
-        whenever(paymentProofStore.completedRequestIdsAwaitingSubmission(LOCAL_IDENTITY)).thenReturn(emptySet())
+        whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY)).thenReturn(emptyMap())
         whenever(paymentProofStore.inFlightRequestIds(LOCAL_IDENTITY)).thenReturn(emptySet())
         whenever(paymentProofRepo.protectedRequestIdsForSubscriptionCancellation(any(), any()))
             .thenReturn(Result.success(emptySet()))
@@ -209,6 +210,44 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             PaykitPaymentRequestDirection.Outgoing,
             sut.paymentRequestHistory.value.first { it.paymentRequestId == "outgoing" }.direction,
         )
+    }
+
+    @Test
+    fun `completed one time payment retains its local payment rail`() = test {
+        val record = paymentRequestRecord()
+        val requestId = PaykitPaymentRequestId(
+            paymentRequestId = PAYMENT_REQUEST_ID,
+            counterparty = COUNTERPARTY,
+            counterpartyReceiverPath = PaykitReceiverPaths.SERVER,
+        )
+        whenever(paymentProofStore.completedRequestProofKindsAwaitingSubmission(LOCAL_IDENTITY))
+            .thenReturn(mapOf(requestId to PaykitPaymentProofKind.Onchain))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+
+        sut.refresh().getOrThrow()
+
+        val request = sut.paymentRequestHistory.value.single()
+        assertEquals(PaymentRequestLifecycleState.PROOF_SUBMITTED, request.lifecycleState)
+        assertEquals(PaykitPaymentProofKind.Onchain, request.paymentProofKind)
+    }
+
+    @Test
+    fun `completed one time payment retains its SDK payment rail`() = test {
+        val proof = mock<PaymentProofRecord> {
+            on { paymentEndpointIdentifier } doReturn MethodId.Bolt11.rawValue
+        }
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(
+                paymentRequestRecord(
+                    state = PaymentRequestLifecycleState.PROOF_SUBMITTED,
+                    paymentProofs = listOf(proof),
+                ),
+            ),
+        )
+
+        sut.refresh().getOrThrow()
+
+        assertEquals(PaykitPaymentProofKind.Lightning, sut.paymentRequestHistory.value.single().paymentProofKind)
     }
 
     @Test
@@ -680,6 +719,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         receiverPath: String = PaykitReceiverPaths.SERVER,
         recurrence: PaymentRequestRecurrence? = null,
         metadata: PrivateJsonObject = METADATA,
+        paymentProofs: List<PaymentProofRecord> = emptyList(),
     ) = PaymentRequestRecord(
         counterparty = counterparty,
         counterpartyReceiverPath = receiverPath,
@@ -704,7 +744,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         rejectedOutboundStatus = null,
         canceledEventId = null,
         canceledOutboundStatus = null,
-        paymentProofs = emptyList(),
+        paymentProofs = paymentProofs,
         lastStreamItemId = 1uL,
         lastOutboundMessageId = null,
         lastOutboundStatus = null,

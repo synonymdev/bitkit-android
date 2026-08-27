@@ -335,6 +335,10 @@ class AppViewModel @Inject constructor(
     val isCreatingPaymentRequest = paykitPaymentRequestRepo.isCreatingRequest
     private val _rejectingPaymentRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
     val rejectingPaymentRequestIds = _rejectingPaymentRequestIds.asStateFlow()
+    private val _isAcceptingSubscription = MutableStateFlow(false)
+    val isAcceptingSubscription = _isAcceptingSubscription.asStateFlow()
+    private val _isRetryingInitialSubscriptionPayment = MutableStateFlow(false)
+    val isRetryingInitialSubscriptionPayment = _isRetryingInitialSubscriptionPayment.asStateFlow()
     val subscriptions = paykitPaymentRequestRepo.subscriptions
     val pubkyContacts = pubkyRepo.contacts
     private var sheetTransitionJob: Job? = null
@@ -3736,11 +3740,11 @@ class AppViewModel @Inject constructor(
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return false
 
         consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
-            handlePaymentPreparationFailure(it)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
             return false
         }
         acceptIncomingPaymentRequestIfNeeded(contactPaymentContext).onFailure {
-            handlePaymentPreparationFailure(it)
+            handlePaymentPreparationFailure(it, contactPaymentContext)
             return false
         }
         synchronized(contactPaymentContextLock) {
@@ -4378,6 +4382,17 @@ class AppViewModel @Inject constructor(
     }
 
     fun showSheet(sheetType: Sheet) {
+        val replacesInitialSubscriptionInPlace = _currentSheet.value is Sheet.Subscription &&
+            sheetType is Sheet.Send &&
+            _sendUiState.value.isInitialSubscriptionPayment
+        if (replacesInitialSubscriptionInPlace) {
+            sheetTransitionJob?.cancel()
+            sheetTransitionJob = null
+            receiveSheetContext = null
+            _currentSheet.update { sheetType }
+            return
+        }
+
         val previousJob = sheetTransitionJob
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             receiveSheetContext = null
@@ -4717,47 +4732,60 @@ class AppViewModel @Inject constructor(
 
     suspend fun acceptSubscriptionAndStartPayment(
         displayedSubscription: PaykitSubscription,
-    ): Result<Boolean> = runSuspendCatching {
-        val subscription = subscription(displayedSubscription.id)
-            ?.takeIf { it == displayedSubscription }
-            ?: throw PaykitPaymentRequestError.RequestUnavailable
-        val acceptedDueRequest = paykitPaymentRequestRepo.accept(subscription).getOrThrow()
-        if (acceptedDueRequest == null) {
-            val accepted = subscription(displayedSubscription.id)
-            if (accepted?.lifecycleState != PaymentRequestLifecycleState.ACTIVE_RECURRING) {
-                throw PaykitPaymentRequestError.RequestUnavailable
-            }
-            return@runSuspendCatching false
+    ): Result<Boolean> {
+        if (!_isAcceptingSubscription.compareAndSet(false, true)) {
+            return Result.failure<Boolean>(PaykitPaymentRequestError.OperationInProgress).onFailure(::toast)
         }
 
-        val resolution = privatePaykitRepo.beginPaymentRequestWaitingForUpdatedList(acceptedDueRequest)
-            .getOrElse { error ->
-                showInitialSubscriptionPaymentFailure(acceptedDueRequest, error)
-                return@runSuspendCatching true
-            }
-        if (resolution !is PublicPaykitPaymentResult.Opened) {
-            showInitialSubscriptionPaymentFailure(
-                acceptedDueRequest,
-                PaykitPaymentRequestError.RequestUnavailable,
-            )
-            return@runSuspendCatching true
+        return try {
+            runSuspendCatching {
+                val subscription = subscription(displayedSubscription.id)
+                    ?.takeIf { it == displayedSubscription }
+                    ?: throw PaykitPaymentRequestError.RequestUnavailable
+                val acceptedDueRequest = paykitPaymentRequestRepo.accept(subscription).getOrThrow()
+                if (acceptedDueRequest == null) {
+                    val accepted = subscription(displayedSubscription.id)
+                    if (accepted?.lifecycleState != PaymentRequestLifecycleState.ACTIVE_RECURRING) {
+                        throw PaykitPaymentRequestError.RequestUnavailable
+                    }
+                    return@runSuspendCatching false
+                }
+
+                val resolution = privatePaykitRepo.beginPaymentRequestWaitingForUpdatedList(acceptedDueRequest)
+                    .getOrElse { error ->
+                        showInitialSubscriptionPaymentFailure(acceptedDueRequest, error)
+                        return@runSuspendCatching true
+                    }
+                if (resolution !is PublicPaykitPaymentResult.Opened) {
+                    showInitialSubscriptionPaymentFailure(
+                        acceptedDueRequest,
+                        PaykitPaymentRequestError.RequestUnavailable,
+                    )
+                    return@runSuspendCatching true
+                }
+                val scanJob = openContactPayment(
+                    paymentRequest = resolution.paymentRequest,
+                    publicKey = acceptedDueRequest.counterparty,
+                    privatePaymentContext = resolution.privatePaymentContext,
+                    incomingPaymentRequest = acceptedDueRequest,
+                    isInitialSubscriptionPayment = true,
+                )
+                scanJob?.join()
+                if (_currentSheet.value !is Sheet.Send) {
+                    paykitPaymentRequestRepo.markPresented(acceptedDueRequest)
+                    val error = PaykitPaymentRequestError.RequestUnavailable
+                    val failure = error.toSendFailureDetails(
+                        context,
+                        _sendUiState.value.currentLightningPaymentRequest()
+                    )
+                    showSheet(Sheet.Send(SendRoute.errorFromFailure(failure)))
+                }
+                true
+            }.onFailure(::toast)
+        } finally {
+            _isAcceptingSubscription.update { false }
         }
-        val scanJob = openContactPayment(
-            paymentRequest = resolution.paymentRequest,
-            publicKey = acceptedDueRequest.counterparty,
-            privatePaymentContext = resolution.privatePaymentContext,
-            incomingPaymentRequest = acceptedDueRequest,
-            isInitialSubscriptionPayment = true,
-        )
-        scanJob?.join()
-        if (_currentSheet.value !is Sheet.Send) {
-            paykitPaymentRequestRepo.markPresented(acceptedDueRequest)
-            val error = PaykitPaymentRequestError.RequestUnavailable
-            val failure = error.toSendFailureDetails(context, _sendUiState.value.currentLightningPaymentRequest())
-            showSheet(Sheet.Send(SendRoute.errorFromFailure(failure)))
-        }
-        true
-    }.onFailure(::toast)
+    }
 
     private suspend fun showInitialSubscriptionPaymentFailure(
         request: PaykitPaymentRequest,
@@ -4777,13 +4805,12 @@ class AppViewModel @Inject constructor(
             incomingPaymentRequestId = request.id,
         )
         paykitPaymentRequestRepo.markPresented(request)
-        showSheet(
-            Sheet.Send(
-                SendRoute.errorFromFailure(
-                    error.toSendFailureDetails(context, paymentRequest = null)
-                )
-            )
-        )
+        val failure = error.toSendFailureDetails(context, paymentRequest = null)
+        if (_currentSheet.value is Sheet.Send) {
+            setSendEffect(SendEffect.NavigateToError(failure))
+        } else {
+            showSheet(Sheet.Send(SendRoute.errorFromFailure(failure)))
+        }
     }
 
     suspend fun cancelSubscription(id: PaykitSubscriptionId): Result<Unit> {
@@ -4841,8 +4868,9 @@ class AppViewModel @Inject constructor(
     }
 
     fun retryIncomingPaymentRequest(id: PaykitPaymentRequestId) {
-        if (_sendUiState.value.isInitialSubscriptionPayment) {
-            initialSubscriptionPaymentRequestIds += id
+        if (_sendUiState.value.isInitialSubscriptionPayment && _currentSheet.value is Sheet.Send) {
+            retryInitialSubscriptionPaymentInCurrentSheet(id, _sendUiState.value.selectedTags)
+            return
         }
         clearActiveContactPaymentContext()
         viewModelScope.launch {
@@ -4851,11 +4879,55 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private fun retryInitialSubscriptionPaymentInCurrentSheet(
+        id: PaykitPaymentRequestId,
+        tags: ImmutableList<String>,
+    ) {
+        if (!_isRetryingInitialSubscriptionPayment.compareAndSet(false, true)) {
+            toast(PaykitPaymentRequestError.OperationInProgress)
+            return
+        }
+        clearActiveContactPaymentContext()
+        viewModelScope.launch {
+            try {
+                refreshIncomingPaykitPaymentRequests()
+                val request = paykitPaymentRequestRepo.pendingRequest(id) ?: run {
+                    toast(PaykitPaymentRequestError.RequestUnavailable)
+                    return@launch
+                }
+                val resolution = privatePaykitRepo.beginPaymentRequestWaitingForUpdatedList(request).getOrElse {
+                    showInitialSubscriptionPaymentFailure(request, it)
+                    return@launch
+                }
+                if (resolution !is PublicPaykitPaymentResult.Opened) {
+                    showInitialSubscriptionPaymentFailure(request, PaykitPaymentRequestError.RequestUnavailable)
+                    return@launch
+                }
+                val scanJob = openContactPayment(
+                    paymentRequest = resolution.paymentRequest,
+                    publicKey = request.counterparty,
+                    privatePaymentContext = resolution.privatePaymentContext,
+                    incomingPaymentRequest = request,
+                    isInitialSubscriptionPayment = true,
+                    selectedTags = tags,
+                )
+                scanJob?.join()
+            } finally {
+                _isRetryingInitialSubscriptionPayment.update { false }
+            }
+        }
+    }
+
     suspend fun dismissIncomingPaymentRequest(request: PaykitPaymentRequest): Result<Unit> {
-        if (requestedPaymentRequestId == request.id) {
+        if (requestedPaymentRequestId == request.id || request.id in _rejectingPaymentRequestIds.value) {
             return Result.failure<Unit>(PaykitPaymentRequestError.OperationInProgress).onFailure(::toast)
         }
-        return paykitPaymentRequestRepo.dismiss(request).onFailure(::toast)
+        _rejectingPaymentRequestIds.update { it + request.id }
+        return try {
+            paykitPaymentRequestRepo.dismiss(request).onFailure(::toast)
+        } finally {
+            _rejectingPaymentRequestIds.update { it - request.id }
+        }
     }
 
     private suspend fun createPaymentRequest(

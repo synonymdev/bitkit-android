@@ -45,6 +45,7 @@ class PaymentRequestsScreenTest {
                     requests = persistentListOf(request),
                     contacts = persistentListOf(),
                     subscriptions = persistentListOf(),
+                    dismissingRequestIds = persistentSetOf(),
                     onNotNow = {},
                     onSeeAll = {},
                     onPay = {},
@@ -59,6 +60,30 @@ class PaymentRequestsScreenTest {
         composeTestRule.onNodeWithTag("MoneySecondary").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestsSeeAll").assertIsDisplayed()
         composeTestRule.onNodeWithText("Dismiss").assertIsDisplayed()
+    }
+
+    @Test
+    fun queueDisablesActionsWhileRequestIsDismissing() {
+        val request = request(id = "dismissing")
+
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                PaymentRequestsSheetContent(
+                    requests = persistentListOf(request),
+                    contacts = persistentListOf(),
+                    subscriptions = persistentListOf(),
+                    dismissingRequestIds = persistentSetOf(request.id),
+                    onNotNow = {},
+                    onSeeAll = {},
+                    onPay = {},
+                    onDismiss = { Result.success(Unit) },
+                    onDetails = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Dismiss").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Pay").assertIsNotEnabled()
     }
 
     @Test
@@ -79,6 +104,7 @@ class PaymentRequestsScreenTest {
                     requests = persistentListOf(recurringRequest),
                     contacts = persistentListOf(contact),
                     subscriptions = persistentListOf(subscription),
+                    dismissingRequestIds = persistentSetOf(),
                     onNotNow = {},
                     onSeeAll = {},
                     onPay = {},
@@ -112,6 +138,7 @@ class PaymentRequestsScreenTest {
                     pending = persistentListOf(),
                     contacts = persistentListOf(),
                     subscriptions = persistentListOf(),
+                    dismissingRequestIds = persistentSetOf(),
                     canRequestPayment = true,
                     onBack = {},
                     onRequestPayment = {},
@@ -139,6 +166,7 @@ class PaymentRequestsScreenTest {
                     pending = persistentListOf(),
                     contacts = persistentListOf(),
                     subscriptions = persistentListOf(),
+                    dismissingRequestIds = persistentSetOf(),
                     canRequestPayment = true,
                     onBack = {},
                     onRequestPayment = {},
@@ -166,6 +194,7 @@ class PaymentRequestsScreenTest {
                     pending = persistentListOf(),
                     contacts = persistentListOf(),
                     subscriptions = persistentListOf(),
+                    dismissingRequestIds = persistentSetOf(),
                     canRequestPayment = false,
                     onBack = {},
                     onRequestPayment = {},

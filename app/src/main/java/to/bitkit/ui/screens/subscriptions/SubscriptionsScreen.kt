@@ -2,6 +2,7 @@
 
 package to.bitkit.ui.screens.subscriptions
 
+import androidx.annotation.RawRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -53,6 +54,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.dateTimeFormatterOf
+import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.safe
@@ -546,6 +548,7 @@ fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRout
     var previousRoute by remember(initialRoute) { mutableStateOf<SubscriptionRoute?>(null) }
     var isProcessing by remember(initialRoute) { mutableStateOf(false) }
     val subscriptions by appViewModel.subscriptions.collectAsStateWithLifecycle()
+    val isAccepting by appViewModel.isAcceptingSubscription.collectAsStateWithLifecycle()
     val subscription = subscriptions.firstOrNull { it.id == route.id }
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val now = rememberSubscriptionNow(listOfNotNull(subscription))
@@ -582,8 +585,10 @@ fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRout
                     now = now,
                     contact = contacts.contactFor(subscription),
                     onDetails = {
-                        previousRoute = route
-                        route = SubscriptionRoute.Details(subscription.id)
+                        if (!isAccepting) {
+                            previousRoute = route
+                            route = SubscriptionRoute.Details(subscription.id)
+                        }
                     },
                     onSubscribe = {
                         isProcessing = true
@@ -604,7 +609,10 @@ fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRout
                         )
                     },
                 )
-                is SubscriptionRoute.Success -> SubscriptionSuccess(onClose = appViewModel::hideSheet)
+                is SubscriptionRoute.Success -> SubscriptionSuccess(
+                    onClose = appViewModel::hideSheet,
+                    paymentType = null,
+                )
                 is SubscriptionRoute.Details -> SubscriptionMoreInfo(
                     subscription = subscription,
                     contact = contacts.contactFor(subscription),
@@ -753,6 +761,7 @@ private fun SubscriptionProviderCard(
 @Composable
 fun SubscriptionSuccess(
     onClose: () -> Unit,
+    paymentType: NewTransactionSheetType?,
     modifier: Modifier = Modifier,
 ) {
     Box(
@@ -760,7 +769,9 @@ fun SubscriptionSuccess(
             .fillMaxSize()
             .navigationBarsPadding()
     ) {
-        val composition by rememberLottieComposition(LottieCompositionSpec.RawRes(R.raw.confetti_purple))
+        val composition by rememberLottieComposition(
+            LottieCompositionSpec.RawRes(subscriptionConfettiResource(paymentType))
+        )
         LottieAnimation(
             composition = composition,
             contentScale = ContentScale.Crop,
@@ -785,6 +796,10 @@ fun SubscriptionSuccess(
         }
     }
 }
+
+@RawRes
+internal fun subscriptionConfettiResource(paymentType: NewTransactionSheetType?): Int =
+    if (paymentType == NewTransactionSheetType.ONCHAIN) R.raw.confetti_orange else R.raw.confetti_purple
 
 @Composable
 private fun SubscriptionMoreInfo(

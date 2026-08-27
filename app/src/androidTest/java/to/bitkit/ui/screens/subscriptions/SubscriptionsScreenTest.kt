@@ -7,6 +7,7 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.test.annotations.ComposeUi
@@ -41,6 +42,7 @@ class SubscriptionsScreenTest {
                             pending = persistentListOf(),
                             contacts = persistentListOf(),
                             subscriptions = persistentListOf(),
+                            dismissingRequestIds = persistentSetOf(),
                             canRequestPayment = true,
                             onBack = {},
                             onRequestPayment = { requestedPayment = true },

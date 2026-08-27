@@ -32,7 +32,14 @@ import javax.inject.Singleton
 @Serializable
 enum class PaykitPaymentProofKind(val type: String) {
     Lightning("bitcoin-bolt11-preimage"),
-    Onchain("bitcoin-onchain-txid"),
+    Onchain("bitcoin-onchain-txid");
+
+    companion object {
+        fun fromPaymentEndpointIdentifier(identifier: String): PaykitPaymentProofKind? {
+            val method = MethodId.fromRawValue(identifier) ?: return null
+            return if (method.isOnchain) Onchain else Lightning
+        }
+    }
 }
 
 @Serializable

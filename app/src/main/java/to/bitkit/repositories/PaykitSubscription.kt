@@ -171,6 +171,7 @@ data class PaykitSubscription(
     val acceptedPaymentEndpointIdentifiers: List<String>,
     val lifecycleState: PaymentRequestLifecycleState,
     val paidPeriods: List<PaykitBillingPeriod>,
+    val paymentProofKinds: Map<PaykitBillingPeriod, PaykitPaymentProofKind> = emptyMap(),
 ) {
     val id: PaykitSubscriptionId
         get() = PaykitSubscriptionId(paymentRequestId, counterparty, counterpartyReceiverPath)
@@ -222,6 +223,7 @@ data class PaykitSubscription(
                     PaymentRequestLifecycleState.ACTIVE_RECURRING
                 },
                 billingPeriod = period,
+                paymentProofKind = paymentProofKinds[period],
             )
         }
 
@@ -255,6 +257,14 @@ internal fun PaymentRequestRecord.toPaykitSubscription(): PaykitSubscription? {
         .filter { MethodId.fromRawValue(it) != null }
         .distinct()
     val metadataObject = requestTerms.metadata.subscriptionMetadata()
+    val payments = paymentProofs.mapNotNull { proof ->
+        val period = proof.billingPeriod ?: return@mapNotNull null
+        val periodStart = period.startsAt.parseInstant() ?: return@mapNotNull null
+        val periodEnd = period.endsAt.parseInstant() ?: return@mapNotNull null
+        val billingPeriod = PaykitBillingPeriod(periodStart, periodEnd).takeIf { periodStart < periodEnd }
+            ?: return@mapNotNull null
+        billingPeriod to PaykitPaymentProofKind.fromPaymentEndpointIdentifier(proof.paymentEndpointIdentifier)
+    }
     return PaykitSubscription(
         paymentRequestId = paymentRequestId,
         counterparty = counterparty,
@@ -274,12 +284,8 @@ internal fun PaymentRequestRecord.toPaykitSubscription(): PaykitSubscription? {
         metadata = metadataObject,
         acceptedPaymentEndpointIdentifiers = endpoints,
         lifecycleState = state,
-        paidPeriods = paymentProofs.mapNotNull { proof ->
-            val period = proof.billingPeriod ?: return@mapNotNull null
-            val periodStart = period.startsAt.parseInstant() ?: return@mapNotNull null
-            val periodEnd = period.endsAt.parseInstant() ?: return@mapNotNull null
-            PaykitBillingPeriod(periodStart, periodEnd).takeIf { periodStart < periodEnd }
-        },
+        paidPeriods = payments.map { it.first },
+        paymentProofKinds = payments.mapNotNull { (period, kind) -> kind?.let { period to it } }.toMap(),
     )
 }
 

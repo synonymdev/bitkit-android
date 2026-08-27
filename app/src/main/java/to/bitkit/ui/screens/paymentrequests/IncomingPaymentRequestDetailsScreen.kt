@@ -29,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.UiDateStyle
@@ -148,18 +149,7 @@ private fun IncomingPaymentRequestDetailsContent(
                         text = "${request.detailsAmountPrefix()}$it".withAccent(accentColor = Colors.White64),
                     )
                     FillWidth()
-                    CircularIcon(
-                        icon = painterResource(
-                            if (request.direction == PaykitPaymentRequestDirection.Incoming) {
-                                R.drawable.ic_received
-                            } else {
-                                R.drawable.ic_sent
-                            }
-                        ),
-                        iconColor = Colors.Purple,
-                        backgroundColor = Colors.Purple16,
-                        size = 48.dp,
-                    )
+                    PaymentRequestDetailsIcon(request)
                 }
             }
             VerticalSpacer(24.dp)
@@ -293,6 +283,28 @@ private fun PaymentRequestTags(
 
 private fun PaykitPaymentRequest.detailsAmountPrefix(): String =
     if (direction == PaykitPaymentRequestDirection.Incoming) "-" else "+"
+
+@Composable
+private fun PaymentRequestDetailsIcon(request: PaykitPaymentRequest) {
+    val isCompleted = request.lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED
+    val isIncomingRequest = request.direction == PaykitPaymentRequestDirection.Incoming
+    CircularIcon(
+        icon = painterResource(
+            if (isCompleted == isIncomingRequest) R.drawable.ic_sent else R.drawable.ic_received
+        ),
+        iconColor = when {
+            isCompleted -> request.paymentRailIconColor
+            isIncomingRequest -> Colors.Purple
+            else -> Colors.Brand
+        },
+        backgroundColor = when {
+            isCompleted -> request.paymentRailBackgroundColor
+            isIncomingRequest -> Colors.Purple16
+            else -> Colors.Brand16
+        },
+        size = 48.dp,
+    )
+}
 
 @Composable
 private fun RequestDetailCell(

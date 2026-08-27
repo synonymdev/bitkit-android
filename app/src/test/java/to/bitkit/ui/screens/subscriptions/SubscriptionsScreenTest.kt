@@ -4,6 +4,8 @@ package to.bitkit.ui.screens.subscriptions
 
 import com.synonym.paykit.PaymentRequestLifecycleState
 import org.junit.Test
+import to.bitkit.R
+import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionMetadata
@@ -54,6 +56,19 @@ class SubscriptionsScreenTest {
 
         assertTrue(openEnded.canCancel(now))
         assertFalse(fixedEnd.canCancel(now))
+    }
+
+    @Test
+    fun `subscription payment confetti follows the settled rail`() {
+        assertEquals(
+            R.raw.confetti_purple,
+            subscriptionConfettiResource(NewTransactionSheetType.LIGHTNING),
+        )
+        assertEquals(
+            R.raw.confetti_orange,
+            subscriptionConfettiResource(NewTransactionSheetType.ONCHAIN),
+        )
+        assertEquals(R.raw.confetti_purple, subscriptionConfettiResource(null))
     }
 
     private fun subscription(unit: PaykitRecurrenceUnit) = PaykitSubscription(

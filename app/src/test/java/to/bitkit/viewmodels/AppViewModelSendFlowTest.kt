@@ -72,6 +72,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
+import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.models.BalanceState
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.FeeRate
@@ -166,8 +167,8 @@ import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
-import com.synonym.bitkitcore.Activity as BitkitActivity
 import kotlin.time.Instant
+import com.synonym.bitkitcore.Activity as BitkitActivity
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 @RunWith(RobolectricTestRunner::class)
@@ -321,7 +322,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentProofRepo.onchainPaymentResolution).thenReturn(onchainPaymentResolution)
         whenever { paykitPaymentProofRepo.prepare(any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever { paykitPaymentProofRepo.associateLightningPayment(any(), any()) }.thenReturn(Result.success(Unit))
-        whenever { activityRepo.setContact(any(), any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { activityRepo.setContact(any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.initialLinkBurstStarted).thenReturn(MutableSharedFlow())
         whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), any()) }
             .thenReturn(Result.success(Unit))
@@ -595,7 +596,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertTrue(sut.rejectingPaymentRequestIds.value.isEmpty())
         verify(paykitPaymentRequestRepo).reject(request)
-        verify(paykitPaymentRequestRepo, never()).accept(any())
+        verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
 
         advanceTimeBy(30.seconds.inWholeMilliseconds)
@@ -681,7 +682,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 endsAt = Instant.parse("2026-09-01T12:00:00Z"),
             ),
         )
-        whenever(paykitPaymentRequestRepo.refresh(emptyList())).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.beginPaymentRequest(targetRequest)).thenReturn(
             Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
         )
@@ -713,7 +714,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 endsAt = Instant.parse("2026-09-01T12:00:00Z"),
             ),
         )
-        whenever(paykitPaymentRequestRepo.refresh(emptyList())).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.beginPaymentRequest(targetRequest)).thenReturn(
             Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
         )
@@ -4457,7 +4458,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         enablePaykitUi()
         balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
-        whenever(paykitPaymentRequestRepo.refresh(emptyList())).thenReturn(Result.success(Unit))
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
         stubSuccessfulOnchainSend(address, request.amountSats)
@@ -4475,7 +4476,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         confirmCurrentPayment()
 
         verify(paykitPaymentProofRepo).completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue)
-        verify(paykitPaymentRequestRepo).refresh(emptyList())
+        verify(paykitPaymentRequestRepo).refresh()
     }
 
     @Test
@@ -4484,6 +4485,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         setSendState(
             SendUiState(
                 amount = 1_000u,
+                isAmountInputValid = true,
                 isInitialSubscriptionPayment = true,
                 initialSubscriptionPaymentAutoStartPending = true,
             )
@@ -4519,6 +4521,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(privatePaykitRepo.beginPaymentRequestWaitingForUpdatedList(dueRequest)).thenReturn(
             Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
         )
+        sut.showSheet(Sheet.Subscription(SubscriptionRoute.Review(subscription.id)))
+        advanceUntilIdle()
 
         val startedPayment = sut.acceptSubscriptionAndStartPayment(subscription).getOrThrow()
 
@@ -4527,6 +4531,54 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertTrue(sut.currentSheet.value is Sheet.Send)
         assertTrue(sut.sendUiState.value.isInitialSubscriptionPayment)
         assertEquals(dueRequest.id, sut.sendUiState.value.incomingPaymentRequestId)
+        assertFalse(sut.isAcceptingSubscription.value)
+    }
+
+    @Test
+    fun `initial subscription send replaces review without hiding the sheet`() = test {
+        val subscription = subscriptionStartingAt(Clock.System.now())
+        val destination = Sheet.Send(SendRoute.Confirm)
+        sut.showSheet(Sheet.Subscription(SubscriptionRoute.Review(subscription.id)))
+        advanceUntilIdle()
+        setSendState(SendUiState(isInitialSubscriptionPayment = true))
+
+        sut.showSheet(destination)
+        runCurrent()
+
+        assertEquals(destination, sut.currentSheet.value)
+    }
+
+    @Test
+    fun `initial subscription retry keeps the send sheet presented`() = test {
+        val request = paymentRequest()
+        pendingPaykitPaymentRequests.value = listOf(request)
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.beginPaymentRequestWaitingForUpdatedList(request)).thenReturn(
+            Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
+        )
+        val sendSheet = Sheet.Send(
+            SendRoute.errorFromFailure(
+                IllegalStateException("failed").toSendFailureDetails(context, paymentRequest = null)
+            )
+        )
+        setSendState(
+            SendUiState(
+                isPaymentRequest = true,
+                isSubscriptionPayment = true,
+                isInitialSubscriptionPayment = true,
+                incomingPaymentRequestId = request.id,
+            )
+        )
+        sut.showSheet(sendSheet)
+        advanceUntilIdle()
+
+        sut.retryIncomingPaymentRequest(request.id)
+        runCurrent()
+
+        assertTrue(sut.currentSheet.value is Sheet.Send)
+        advanceUntilIdle()
+        assertTrue(sut.currentSheet.value is Sheet.Send)
+        assertFalse(sut.isRetryingInitialSubscriptionPayment.value)
     }
 
     @Test

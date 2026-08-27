@@ -82,6 +82,7 @@ data class PaykitPaymentRequest(
     val direction: PaykitPaymentRequestDirection = PaykitPaymentRequestDirection.Incoming,
     val lifecycleState: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROPOSED,
     val billingPeriod: PaykitBillingPeriod? = null,
+    val paymentProofKind: PaykitPaymentProofKind? = null,
 ) {
     val id: PaykitPaymentRequestId
         get() = PaykitPaymentRequestId(
@@ -546,7 +547,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 presentedRequestIds = emptySet()
                 presentedSubscriptionProposalIds = emptySet()
                 dismissedSubscriptionPaymentIds = emptySet()
-                savedContactPublicKeys = emptyList()
             }
         }
     }
@@ -560,9 +560,10 @@ class PaykitPaymentRequestRepo @Inject constructor(
         paykitSdkService.receivePrivateMessagesFromLinkedPeers().also(::logIntakeFailures)
         val now = clock.now()
         val records = paykitSdkService.paymentRequests()
-        val locallyCompletedRequestIds = expectedIdentity
-            ?.let(paymentProofStore::completedRequestIdsAwaitingSubmission)
+        val locallyCompletedProofKinds = expectedIdentity
+            ?.let(paymentProofStore::completedRequestProofKindsAwaitingSubmission)
             .orEmpty()
+        val locallyCompletedRequestIds = locallyCompletedProofKinds.keys
         val locallyInFlightRequestIds = expectedIdentity
             ?.let(paymentProofStore::inFlightRequestIds)
             .orEmpty()
@@ -605,6 +606,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 request.lifecycleState == PaymentRequestLifecycleState.PROOF_SUBMITTED -> request
                 request.id in locallyCompletedRequestIds -> request.copy(
                     lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED,
+                    paymentProofKind = locallyCompletedProofKinds[request.id],
                 )
                 else -> null
             }
@@ -613,7 +615,14 @@ class PaykitPaymentRequestRepo @Inject constructor(
             it.toPaykitPaymentRequest(PaymentRequestLocalRole.PAYER, now)
         }.filter { it.id !in locallyCompletedRequestIds && it.id !in locallyInFlightRequestIds }
         val incoming = (dueRequests + oneTimeIncoming).sortedBy { it.createdAt }
-        val history = (recurringHistory + records.mapNotNull { it.toPaykitPaymentRequestHistory(now) })
+        val oneTimeHistory = records.mapNotNull { it.toPaykitPaymentRequestHistory(now) }.map { request ->
+            val proofKind = locallyCompletedProofKinds[request.id] ?: return@map request
+            request.copy(
+                lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED,
+                paymentProofKind = proofKind,
+            )
+        }
+        val history = (recurringHistory + oneTimeHistory)
             .sortedByDescending { it.createdAt }
         if (
             stateGeneration.get() != generation ||
@@ -1025,6 +1034,9 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(
             PaymentRequestLifecycleState.PROPOSAL_EXPIRED
         } else {
             state
+        },
+        paymentProofKind = paymentProofs.lastOrNull()?.let {
+            PaykitPaymentProofKind.fromPaymentEndpointIdentifier(it.paymentEndpointIdentifier)
         },
     )
 }
