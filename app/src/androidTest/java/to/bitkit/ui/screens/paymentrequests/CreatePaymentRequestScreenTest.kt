@@ -77,6 +77,7 @@ class CreatePaymentRequestScreenTest {
         composeTestRule.onNodeWithTag("PaymentRequestRecipientSearch").performTextInput("not this contact")
 
         composeTestRule.onNodeWithTag("PaymentRequestContact${target.publicKey}").assertDoesNotExist()
+        composeTestRule.onNodeWithText("No matching saved contact with a private connection.").assertIsDisplayed()
     }
 
     @Test

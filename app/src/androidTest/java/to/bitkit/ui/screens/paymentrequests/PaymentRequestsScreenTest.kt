@@ -6,11 +6,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.repositories.PaykitPaymentRequest
@@ -36,10 +38,11 @@ class PaymentRequestsScreenTest {
                 PaymentRequestsSheetContent(
                     requests = persistentListOf(request),
                     contacts = persistentListOf(),
+                    rejectingRequestIds = persistentSetOf(),
                     onNotNow = {},
                     onSeeAll = {},
                     onPay = {},
-                    onReject = { Result.success(Unit) },
+                    onReject = {},
                 )
             }
         }
@@ -49,6 +52,28 @@ class PaymentRequestsScreenTest {
         composeTestRule.onNodeWithTag("MoneySecondary").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestsSeeAll").assertIsDisplayed()
         composeTestRule.onNodeWithText("Dismiss").assertIsDisplayed()
+    }
+
+    @Test
+    fun queueDisablesActionsWhileRequestIsRejecting() {
+        val request = request(id = "rejecting")
+
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                PaymentRequestsSheetContent(
+                    requests = persistentListOf(request),
+                    contacts = persistentListOf(),
+                    rejectingRequestIds = persistentSetOf(request.id),
+                    onNotNow = {},
+                    onSeeAll = {},
+                    onPay = {},
+                    onReject = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Dismiss").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Pay").assertIsNotEnabled()
     }
 
     @Test
@@ -70,11 +95,12 @@ class PaymentRequestsScreenTest {
                     requests = persistentListOf(outgoing, accepted),
                     pending = persistentListOf(),
                     contacts = persistentListOf(),
+                    rejectingRequestIds = persistentSetOf(),
                     canRequestPayment = true,
                     onBack = {},
                     onRequestPayment = {},
                     onPay = {},
-                    onReject = { Result.success(Unit) },
+                    onReject = {},
                 )
             }
         }
@@ -95,11 +121,12 @@ class PaymentRequestsScreenTest {
                     requests = persistentListOf(),
                     pending = persistentListOf(),
                     contacts = persistentListOf(),
+                    rejectingRequestIds = persistentSetOf(),
                     canRequestPayment = true,
                     onBack = {},
                     onRequestPayment = {},
                     onPay = {},
-                    onReject = { Result.success(Unit) },
+                    onReject = {},
                 )
             }
         }
@@ -120,11 +147,12 @@ class PaymentRequestsScreenTest {
                     requests = persistentListOf(),
                     pending = persistentListOf(),
                     contacts = persistentListOf(),
+                    rejectingRequestIds = persistentSetOf(),
                     canRequestPayment = false,
                     onBack = {},
                     onRequestPayment = {},
                     onPay = {},
-                    onReject = { Result.success(Unit) },
+                    onReject = {},
                 )
             }
         }

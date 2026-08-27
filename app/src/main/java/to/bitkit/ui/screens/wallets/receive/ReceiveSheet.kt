@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
@@ -61,8 +62,10 @@ fun ReceiveSheet(
 ) {
     val wallet = requireNotNull(walletViewModel)
     val navController = rememberNavController()
+    val rootRoute = startRoute.rootRoute()
 
     LaunchedEffect(Unit) { editInvoiceAmountViewModel.clearInput() }
+    LaunchedEffect(startRoute) { navController.navigateToReceiveStart(startRoute) }
 
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
     val showCreateCjit = remember { mutableStateOf(false) }
@@ -98,7 +101,7 @@ fun ReceiveSheet(
         ) {
             NavHost(
                 navController = navController,
-                startDestination = startRoute,
+                startDestination = rootRoute,
             ) {
                 composableWithDefaultTransitions<ReceiveRoute.QR> {
                     LaunchedEffect(cjitInvoice.value) {
@@ -153,7 +156,7 @@ fun ReceiveSheet(
                         },
                         onSent = {
                             createdPaymentRequest = it
-                            navController.navigateTo(ReceiveRoute.PaymentRequestSent)
+                            navController.navigateToPaymentRequestSent()
                         },
                     )
                 }
@@ -358,5 +361,17 @@ sealed interface ReceiveRoute {
 
         fun fromDeepLink(path: String): DeepLinkStart? =
             ScreenDeepLinks.matchStart(path, QR, DEEP_LINK_STARTS)
+    }
+}
+
+internal fun ReceiveRoute.rootRoute(): ReceiveRoute = if (this is ReceiveRoute.DeepLinkStart) ReceiveRoute.QR else this
+
+internal fun NavController.navigateToReceiveStart(startRoute: ReceiveRoute) {
+    if (startRoute != startRoute.rootRoute()) navigateTo(startRoute)
+}
+
+internal fun NavController.navigateToPaymentRequestSent() {
+    navigateTo(ReceiveRoute.PaymentRequestSent) {
+        popUpTo(graph.id) { inclusive = true }
     }
 }

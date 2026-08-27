@@ -29,9 +29,8 @@ import java.math.BigDecimal
 fun MoneyDisplay(
     sats: Long,
     onClick: (() -> Unit)? = null,
-    showSymbol: Boolean? = null,
 ) {
-    val text = if (showSymbol == null) rememberMoneyText(sats) else rememberMoneyText(sats, showSymbol = showSymbol)
+    val text = rememberMoneyText(sats)
     text?.let {
         Display(
             text = it.withAccent(accentColor = Colors.White64),

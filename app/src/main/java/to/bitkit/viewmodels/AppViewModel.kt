@@ -301,6 +301,8 @@ class AppViewModel @Inject constructor(
     val paymentRequestHistory = paykitPaymentRequestRepo.paymentRequestHistory
     val eligiblePaymentRequestTargets = paykitPaymentRequestRepo.eligibleTargets
     val isCreatingPaymentRequest = paykitPaymentRequestRepo.isCreatingRequest
+    private val _rejectingPaymentRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
+    val rejectingPaymentRequestIds = _rejectingPaymentRequestIds.asStateFlow()
     val pubkyContacts = pubkyRepo.contacts
     private var sheetTransitionJob: Job? = null
     private var paymentRequestSheetTransitionJob: Job? = null
@@ -654,6 +656,7 @@ class AppViewModel @Inject constructor(
             privatePaykitRepo.startInitialLinkBurst(state.contactKeys, "contact sync")
             if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) return
             refreshIncomingPaykitPaymentRequests()
+            refreshPaymentRequestTargets(force = true)
             lastPrivatePaykitContactKeys = state.contactKeys
         } finally {
             if (PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, state.publicKey)) {
@@ -679,6 +682,7 @@ class AppViewModel @Inject constructor(
         privatePaykitRepo.refreshKnownSavedContactEndpoints(reason, forceRefreshLightning = forceRefreshLightning)
         privatePaykitRepo.startInitialLinkBurst(contactKeys, reason)
         refreshIncomingPaykitPaymentRequests()
+        refreshPaymentRequestTargets(force = true)
     }
 
     private fun observePaykitPaymentRequestConnectivity() {
@@ -699,13 +703,20 @@ class AppViewModel @Inject constructor(
     private suspend fun refreshIncomingPaykitPaymentRequests(): Boolean {
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return false
         val previousRequests = paykitPaymentRequestRepo.pendingRequests.value
-        val savedPublicKeys = pubkyRepo.contacts.value.map { it.publicKey }
-        return paykitPaymentRequestRepo.refresh(savedPublicKeys).fold(
+        return paykitPaymentRequestRepo.refresh().fold(
             onSuccess = {
                 presentNextIncomingPaykitPaymentRequest()
                 paykitPaymentRequestRepo.pendingRequests.value != previousRequests
             },
             onFailure = { false },
+        )
+    }
+
+    private suspend fun refreshPaymentRequestTargets(force: Boolean = false) {
+        if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return
+        paykitPaymentRequestRepo.refreshEligibleTargets(
+            savedPublicKeys = pubkyRepo.contacts.value.map { it.publicKey },
+            force = force,
         )
     }
 
@@ -717,7 +728,9 @@ class AppViewModel @Inject constructor(
             while (true) {
                 delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS[refreshIntervalIndex])
                 privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
-                refreshIntervalIndex = if (refreshIncomingPaykitPaymentRequests()) {
+                val requestsChanged = refreshIncomingPaykitPaymentRequests()
+                refreshPaymentRequestTargets(force = true)
+                refreshIntervalIndex = if (requestsChanged) {
                     0
                 } else {
                     (refreshIntervalIndex + 1).coerceAtMost(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS.lastIndex)
@@ -740,9 +753,11 @@ class AppViewModel @Inject constructor(
         initialPaykitPaymentRequestPollingJob?.cancel()
         initialPaykitPaymentRequestPollingJob = viewModelScope.launch {
             refreshIncomingPaykitPaymentRequests()
+            refreshPaymentRequestTargets()
             INITIAL_PAYKIT_SYNC_RETRY_DELAYS.forEach {
                 delay(it)
                 refreshIncomingPaykitPaymentRequests()
+                refreshPaymentRequestTargets()
             }
         }
     }
@@ -3936,6 +3951,7 @@ class AppViewModel @Inject constructor(
 
     fun showPaymentRequests() {
         showSheet(Sheet.PaymentRequests)
+        viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
     }
 
     fun openIncomingPaymentRequest(id: PaykitPaymentRequestId) {
@@ -3945,6 +3961,7 @@ class AppViewModel @Inject constructor(
             return
         }
         invalidatePaymentRequestPresentation()
+        clearPaymentRequestPresentationRetry(id)
         requestedPaymentRequestId = id
 
         if (_currentSheet.value is Sheet.PaymentRequests) {
@@ -3961,11 +3978,19 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    suspend fun rejectIncomingPaymentRequest(request: PaykitPaymentRequest): Result<Unit> {
-        if (requestedPaymentRequestId == request.id) {
-            return Result.failure<Unit>(PaykitPaymentRequestError.OperationInProgress).onFailure(::toast)
+    fun rejectIncomingPaymentRequest(request: PaykitPaymentRequest) {
+        if (requestedPaymentRequestId == request.id || request.id in _rejectingPaymentRequestIds.value) {
+            toast(PaykitPaymentRequestError.OperationInProgress)
+            return
         }
-        return paykitPaymentRequestRepo.reject(request).onFailure(::toast)
+        _rejectingPaymentRequestIds.update { it + request.id }
+        viewModelScope.launch {
+            try {
+                paykitPaymentRequestRepo.reject(request).onFailure(::toast)
+            } finally {
+                _rejectingPaymentRequestIds.update { it - request.id }
+            }
+        }
     }
 
     private suspend fun createPaymentRequest(
@@ -4200,7 +4225,10 @@ class AppViewModel @Inject constructor(
     fun onHomeResumed() {
         checkTimedSheets()
         hwWalletRepo.onAppForegrounded()
-        viewModelScope.launch { refreshIncomingPaykitPaymentRequests() }
+        viewModelScope.launch {
+            refreshIncomingPaykitPaymentRequests()
+            refreshPaymentRequestTargets(force = true)
+        }
     }
 
     fun onLeftHome() = timedSheetManager.onHomeScreenExited()

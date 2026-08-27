@@ -270,6 +270,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.paymentRequestHistory).thenReturn(paykitPaymentRequestHistory)
         whenever(paykitPaymentRequestRepo.eligibleTargets).thenReturn(MutableStateFlow(emptyList()))
         whenever(paykitPaymentRequestRepo.isCreatingRequest).thenReturn(MutableStateFlow(false))
+        whenever { paykitPaymentRequestRepo.refreshEligibleTargets(any(), any()) }.thenReturn(Result.success(Unit))
         whenever(paykitPaymentRequestRepo.automaticPendingRequests()).thenAnswer {
             pendingPaykitPaymentRequests.value.filterNot { it.id in surfacedPaykitPaymentRequestIds }
         }
@@ -549,9 +550,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertNull(activeContactPaymentContext())
         verify(paykitPaymentRequestRepo).markPresented(request)
 
-        val result = sut.rejectIncomingPaymentRequest(request)
+        sut.rejectIncomingPaymentRequest(request)
+        runCurrent()
 
-        assertTrue(result.isSuccess, result.exceptionOrNull().toString())
+        assertTrue(sut.rejectingPaymentRequestIds.value.isEmpty())
         verify(paykitPaymentRequestRepo).reject(request)
         verify(paykitPaymentRequestRepo, never()).accept(any())
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
@@ -559,6 +561,31 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceTimeBy(30.seconds.inWholeMilliseconds)
         runCurrent()
         verify(privatePaykitRepo, never()).beginPaymentRequest(request)
+    }
+
+    @Test
+    fun `duplicate rejection is ignored while request is rejecting`() = test {
+        val request = paymentRequest()
+        val rejectionStarted = CompletableDeferred<Unit>()
+        val finishRejection = CompletableDeferred<Unit>()
+        whenever { paykitPaymentRequestRepo.reject(request) }.doSuspendableAnswer {
+            rejectionStarted.complete(Unit)
+            finishRejection.await()
+            Result.success(Unit)
+        }
+
+        sut.rejectIncomingPaymentRequest(request)
+        rejectionStarted.await()
+
+        assertTrue(request.id in sut.rejectingPaymentRequestIds.value)
+        sut.rejectIncomingPaymentRequest(request)
+        verify(paykitPaymentRequestRepo).reject(request)
+
+        finishRejection.complete(Unit)
+        runCurrent()
+
+        assertTrue(sut.rejectingPaymentRequestIds.value.isEmpty())
+        verify(paykitPaymentRequestRepo).reject(request)
     }
 
     @Test
@@ -744,6 +771,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         runCurrent()
 
         verify(privatePaykitRepo, times(16)).beginPaymentRequest(request)
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        advanceTimeBy(2.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        verify(privatePaykitRepo, times(18)).beginPaymentRequest(request)
         sut.stopPaykitPaymentRequestPolling()
     }
 

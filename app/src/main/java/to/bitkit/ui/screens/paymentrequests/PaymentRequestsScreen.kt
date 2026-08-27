@@ -23,10 +23,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
@@ -38,9 +34,11 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentSetOf
 import kotlinx.collections.immutable.toImmutableList
-import kotlinx.coroutines.launch
+import kotlinx.collections.immutable.toImmutableSet
 import to.bitkit.R
 import to.bitkit.ext.UiDateStyle
 import to.bitkit.models.PubkyProfile
@@ -90,6 +88,7 @@ fun PaymentRequestsSheet(
 ) {
     val requests by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
+    val rejectingRequestIds by appViewModel.rejectingPaymentRequestIds.collectAsStateWithLifecycle()
 
     LaunchedEffect(requests.isEmpty()) {
         if (requests.isEmpty()) onNotNow()
@@ -98,6 +97,7 @@ fun PaymentRequestsSheet(
     PaymentRequestsSheetContent(
         requests = requests.toImmutableList(),
         contacts = contacts.toImmutableList(),
+        rejectingRequestIds = rejectingRequestIds.toImmutableSet(),
         onNotNow = onNotNow,
         onSeeAll = onSeeAll,
         onPay = appViewModel::openIncomingPaymentRequest,
@@ -110,10 +110,11 @@ internal fun PaymentRequestsSheetContent(
     modifier: Modifier = Modifier,
     requests: ImmutableList<PaykitPaymentRequest>,
     contacts: ImmutableList<PubkyProfile>,
+    rejectingRequestIds: ImmutableSet<PaykitPaymentRequestId>,
     onNotNow: () -> Unit,
     onSeeAll: () -> Unit,
     onPay: (PaykitPaymentRequestId) -> Unit,
-    onReject: suspend (PaykitPaymentRequest) -> Result<Unit>,
+    onReject: (PaykitPaymentRequest) -> Unit,
 ) {
     Column(
         modifier = modifier
@@ -139,6 +140,7 @@ internal fun PaymentRequestsSheetContent(
                 PaymentRequestCard(
                     request = request,
                     contact = contacts.contactFor(request),
+                    isRejecting = request.id in rejectingRequestIds,
                     onPay = { onPay(request.id) },
                     onReject = { onReject(request) },
                 )
@@ -172,11 +174,13 @@ fun PaymentRequestsScreen(
     val history by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val targets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
+    val rejectingRequestIds by appViewModel.rejectingPaymentRequestIds.collectAsStateWithLifecycle()
 
     PaymentRequestsContent(
         requests = (pending + history).distinctBy { it.id }.toImmutableList(),
         pending = pending.toImmutableList(),
         contacts = contacts.toImmutableList(),
+        rejectingRequestIds = rejectingRequestIds.toImmutableSet(),
         canRequestPayment = targets.isNotEmpty(),
         onBack = onBack,
         onRequestPayment = onRequestPayment,
@@ -191,11 +195,12 @@ internal fun PaymentRequestsContent(
     requests: ImmutableList<PaykitPaymentRequest>,
     pending: ImmutableList<PaykitPaymentRequest>,
     contacts: ImmutableList<PubkyProfile>,
+    rejectingRequestIds: ImmutableSet<PaykitPaymentRequestId>,
     canRequestPayment: Boolean,
     onBack: () -> Unit,
     onRequestPayment: () -> Unit,
     onPay: (PaykitPaymentRequestId) -> Unit,
-    onReject: suspend (PaykitPaymentRequest) -> Result<Unit>,
+    onReject: (PaykitPaymentRequest) -> Unit,
 ) {
     val sections = paymentRequestSections(requests, pending, Clock.System.now())
 
@@ -257,6 +262,7 @@ internal fun PaymentRequestsContent(
                         ActivePaymentRequestCard(
                             request = request,
                             isIncoming = pending.any { it.id == request.id },
+                            isRejecting = request.id in rejectingRequestIds,
                             contact = contacts.contactFor(request),
                             onPay = onPay,
                             onReject = onReject,
@@ -340,15 +346,17 @@ private fun paymentRequestSections(
 private fun ActivePaymentRequestCard(
     request: PaykitPaymentRequest,
     isIncoming: Boolean,
+    isRejecting: Boolean,
     contact: PubkyProfile?,
     onPay: (PaykitPaymentRequestId) -> Unit,
-    onReject: suspend (PaykitPaymentRequest) -> Result<Unit>,
+    onReject: (PaykitPaymentRequest) -> Unit,
 ) {
     if (isIncoming) {
         PaymentRequestCard(
             request = request,
             contact = contact,
             compactSubtitle = paymentRequestDateTime(request),
+            isRejecting = isRejecting,
             onPay = { onPay(request.id) },
             onReject = { onReject(request) },
         )
@@ -450,11 +458,10 @@ internal fun PaymentRequestCard(
     request: PaykitPaymentRequest,
     contact: PubkyProfile?,
     compactSubtitle: String? = null,
+    isRejecting: Boolean = false,
     onPay: (() -> Unit)? = null,
-    onReject: (suspend () -> Result<Unit>)? = null,
+    onReject: (() -> Unit)? = null,
 ) {
-    val scope = rememberCoroutineScope()
-    var isRejecting by remember(request.id) { mutableStateOf(false) }
     val displayContact = contact ?: PubkyProfile.placeholder(request.counterparty)
     val subtitle = compactSubtitle ?: request.createdAt?.let {
         val timestamp = it.epochSeconds.toULong()
@@ -520,11 +527,7 @@ internal fun PaymentRequestCard(
                     text = stringResource(R.string.wallet__payment_request_dismiss),
                     onClick = {
                         if (isRejecting || onReject == null) return@SecondaryButton
-                        isRejecting = true
-                        scope.launch {
-                            onReject()
-                            isRejecting = false
-                        }
+                        onReject()
                     },
                     isLoading = isRejecting,
                     enabled = !isRejecting,
@@ -583,10 +586,11 @@ private fun PaymentRequestsSheetPreview() {
             PaymentRequestsSheetContent(
                 requests = persistentListOf(previewRequest),
                 contacts = persistentListOf(),
+                rejectingRequestIds = persistentSetOf(),
                 onNotNow = {},
                 onSeeAll = {},
                 onPay = {},
-                onReject = { Result.success(Unit) },
+                onReject = {},
             )
         }
     }
@@ -606,11 +610,12 @@ private fun PaymentRequestsPreview() {
             ),
             pending = persistentListOf(previewRequest),
             contacts = persistentListOf(),
+            rejectingRequestIds = persistentSetOf(),
             canRequestPayment = true,
             onBack = {},
             onRequestPayment = {},
             onPay = {},
-            onReject = { Result.success(Unit) },
+            onReject = {},
         )
     }
 }

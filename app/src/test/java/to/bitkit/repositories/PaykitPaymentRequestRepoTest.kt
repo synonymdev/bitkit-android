@@ -30,6 +30,7 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
@@ -97,7 +98,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val record = paymentRequestRecord(expiresAt = clock.now().plus(60.seconds).toString())
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
 
-        sut.refresh(emptyList()).getOrThrow()
+        sut.refresh().getOrThrow()
 
         val request = sut.pendingRequests.value.single()
         assertEquals(100_000uL, request.amountSats)
@@ -116,7 +117,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             ),
         )
 
-        sut.refresh(emptyList()).getOrThrow()
+        sut.refresh().getOrThrow()
 
         assertEquals(listOf("millisatoshi-safe-max"), sut.pendingRequests.value.map { it.paymentRequestId })
         assertEquals(listOf(ULong.MAX_VALUE / 1000uL), sut.pendingRequests.value.map { it.amountSats })
@@ -150,7 +151,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             ),
         )
 
-        sut.refresh(emptyList()).getOrThrow()
+        sut.refresh().getOrThrow()
 
         assertTrue(sut.pendingRequests.value.isEmpty())
     }
@@ -173,7 +174,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             ),
         )
 
-        sut.refresh(emptyList()).getOrThrow()
+        sut.refresh().getOrThrow()
 
         assertEquals(listOf("incoming"), sut.pendingRequests.value.map { it.paymentRequestId })
         assertEquals(
@@ -195,7 +196,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.paymentRequests()).thenReturn(
             listOf(paymentRequestRecord(expiresAt = clock.now().plus(10.seconds).toString())),
         )
-        sut.refresh(emptyList()).getOrThrow()
+        sut.refresh().getOrThrow()
 
         advanceTimeBy(9_999)
         runCurrent()
@@ -220,7 +221,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 ),
             ),
         )
-        sut.refresh(emptyList()).getOrThrow()
+        sut.refresh().getOrThrow()
 
         advanceTimeBy(9_999)
         runCurrent()
@@ -245,7 +246,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 PAYMENT_REQUEST_ID,
             ),
         ).thenReturn(record)
-        sut.refresh(emptyList()).getOrThrow()
+        sut.refresh().getOrThrow()
         clearInvocations(paykitSdkService)
 
         sut.accept(sut.pendingRequests.value.single()).getOrThrow()
@@ -268,7 +269,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
                 PAYMENT_REQUEST_ID,
             ),
         ).thenReturn(record)
-        sut.refresh(emptyList()).getOrThrow()
+        sut.refresh().getOrThrow()
         clearInvocations(paykitSdkService)
         whenever(paykitSdkService.processPendingPrivateMessages()).doSuspendableAnswer {
             deliveryStarted.complete(Unit)
@@ -292,7 +293,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `surfaced request stays pending and is excluded from automatic presentation`() = test {
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
-        sut.refresh(emptyList()).getOrThrow()
+        sut.refresh().getOrThrow()
         val request = sut.pendingRequests.value.single()
 
         assertTrue(sut.markPresented(request))
@@ -305,7 +306,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     @Test
     fun `switching identity clears request state and restores only that identity suppression`() = test {
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
-        sut.refresh(emptyList()).getOrThrow()
+        sut.refresh().getOrThrow()
         val request = sut.pendingRequests.value.single()
         sut.markPresented(request)
         whenever(presentationStore.load(SECOND_IDENTITY)).thenReturn(setOf(request.id))
@@ -329,14 +330,14 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
         whenever(presentationStore.load(SECOND_IDENTITY)).thenReturn(emptySet())
 
-        val refresh = async { sut.refresh(emptyList()) }
+        val refresh = async { sut.refresh() }
         runCurrent()
         refreshStarted.await()
         val activation = async { sut.activate(SECOND_IDENTITY) }
         runCurrent()
         resumeRefresh.complete(Unit)
 
-        refresh.await()
+        refresh.await().getOrThrow()
         activation.await()
 
         assertTrue(sut.pendingRequests.value.isEmpty())
@@ -398,6 +399,46 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `proposal revalidates only the selected saved contact`() = test {
+        val target = PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)
+        val stalledDiscovery = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(
+                linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER),
+                linkedPeer(SECOND_IDENTITY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER),
+            ),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+            listOf(PaykitReceiverPaths.SERVER),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(SECOND_IDENTITY)).doSuspendableAnswer {
+            stalledDiscovery.await()
+            listOf(PaykitReceiverPaths.SERVER)
+        }
+        whenever(paykitSdkService.proposePaymentRequest(any(), any(), any(), eq(LOCAL_IDENTITY))).thenReturn(
+            paymentRequestRecord(
+                role = PaymentRequestLocalRole.PAYEE,
+                counterparty = COUNTERPARTY,
+                receiverPath = PaykitReceiverPaths.SERVER,
+            ),
+        )
+
+        val proposal = async {
+            sut.propose(
+                draft = PaykitPaymentRequestDraft(1uL, "Lunch", clock.now().plus(60.seconds)),
+                target = target,
+                savedPublicKeys = listOf(SECOND_IDENTITY, COUNTERPARTY),
+            )
+        }
+        runCurrent()
+
+        assertTrue(proposal.isCompleted)
+        proposal.await().getOrThrow()
+        verifyBlocking(paykitSdkService, never()) { paymentRequestReceiverPaths(SECOND_IDENTITY) }
+    }
+
+    @Test
     fun `identity switch keeps a committed proposal out of the replacement identity state`() = test {
         val target = PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)
         val proposalStarted = CompletableDeferred<Unit>()
@@ -437,6 +478,103 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `incoming refresh does not wait for recipient discovery`() = test {
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+
+        sut.refresh().getOrThrow()
+
+        assertEquals(1, sut.pendingRequests.value.size)
+        verifyBlocking(paykitSdkService, never()) { paymentRequestReceiverPaths(any()) }
+    }
+
+    @Test
+    fun `recipient discovery reuses unchanged link state`() = test {
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).thenReturn(
+            listOf(PaykitReceiverPaths.SERVER),
+        )
+
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+
+        assertEquals(
+            listOf(PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)),
+            sut.eligibleTargets.value,
+        )
+        verifyBlocking(paykitSdkService, times(1)) { paymentRequestReceiverPaths(COUNTERPARTY) }
+    }
+
+    @Test
+    fun `recipient discovery retries capabilities that are not published yet`() = test {
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY))
+            .thenReturn(emptyList(), listOf(PaykitReceiverPaths.SERVER))
+
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+
+        assertEquals(
+            listOf(PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)),
+            sut.eligibleTargets.value,
+        )
+        verifyBlocking(paykitSdkService, times(2)) { paymentRequestReceiverPaths(COUNTERPARTY) }
+    }
+
+    @Test
+    fun `recipient discovery retains a known target while capability refresh fails`() = test {
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY))
+            .thenReturn(listOf(PaykitReceiverPaths.SERVER))
+            .thenThrow(IllegalStateException("marker unavailable"))
+
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY), force = true).getOrThrow()
+
+        assertEquals(
+            listOf(PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)),
+            sut.eligibleTargets.value,
+        )
+        verifyBlocking(paykitSdkService, times(2)) { paymentRequestReceiverPaths(COUNTERPARTY) }
+    }
+
+    @Test
+    fun `recipient discovery bounds a stalled capability lookup`() = test {
+        val discoveryStarted = CompletableDeferred<Unit>()
+        val stalledDiscovery = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY)).doSuspendableAnswer {
+            discoveryStarted.complete(Unit)
+            stalledDiscovery.await()
+            listOf(PaykitReceiverPaths.SERVER)
+        }
+
+        val targetRefresh = async { sut.refreshEligibleTargets(listOf(COUNTERPARTY)) }
+        discoveryStarted.await()
+        advanceTimeBy(5.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        assertTrue(targetRefresh.isCompleted)
+        targetRefresh.await().getOrThrow()
+        assertTrue(sut.eligibleTargets.value.isEmpty())
+    }
+
+    @Test
     fun `outgoing requests require private payment publication`() = test {
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = false)))
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
@@ -447,7 +585,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             listOf(PaykitReceiverPaths.SERVER),
         )
 
-        sut.refresh(listOf(COUNTERPARTY)).getOrThrow()
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
 
         assertTrue(sut.eligibleTargets.value.isEmpty())
         verifyBlocking(paykitSdkService, never()) { proposePaymentRequest(any(), any(), any(), any()) }
@@ -463,7 +601,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             listOf(PaykitReceiverPaths.SERVER),
         )
 
-        sut.refresh(listOf(COUNTERPARTY)).getOrThrow()
+        sut.refreshEligibleTargets(listOf(COUNTERPARTY)).getOrThrow()
 
         assertTrue(sut.eligibleTargets.value.isEmpty())
         verifyBlocking(paykitSdkService, never()) { proposePaymentRequest(any(), any(), any(), any()) }
@@ -487,7 +625,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     fun `expired request cannot be accepted`() = test {
         val record = paymentRequestRecord(expiresAt = clock.now().plus(1.seconds).toString())
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
-        sut.refresh(emptyList()).getOrThrow()
+        sut.refresh().getOrThrow()
         val request = sut.pendingRequests.value.single()
         advanceTimeBy(1_000)
 
@@ -503,7 +641,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     fun `expired request is no longer pending before the expiration job runs`() = test {
         val record = paymentRequestRecord(expiresAt = clock.now().plus(1.seconds).toString())
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
-        sut.refresh(emptyList()).getOrThrow()
+        sut.refresh().getOrThrow()
         val request = sut.pendingRequests.value.single()
         advanceTimeBy(1_000)
 

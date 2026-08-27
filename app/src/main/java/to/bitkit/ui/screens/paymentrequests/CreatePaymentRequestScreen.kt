@@ -361,6 +361,25 @@ internal fun PaymentRequestRecipientContent(
         VerticalSpacer(8.dp)
         HorizontalDivider(color = Colors.White10)
         LazyColumn(modifier = Modifier.weight(1f)) {
+            if (recipients.isEmpty()) {
+                item {
+                    BodyM(
+                        text = stringResource(
+                            if (query.isBlank()) {
+                                R.string.wallet__payment_request_recipient_unavailable
+                            } else {
+                                R.string.wallet__payment_request_recipient_no_match
+                            }
+                        ),
+                        color = Colors.White64,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 24.dp)
+                            .testTag("PaymentRequestRecipientUnavailable"),
+                    )
+                }
+            }
             items(
                 items = recipients,
                 key = { (target, _) -> "${target.publicKey}|${target.receiverPath}" },

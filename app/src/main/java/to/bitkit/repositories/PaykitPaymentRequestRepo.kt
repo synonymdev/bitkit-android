@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -49,6 +50,7 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
@@ -108,6 +110,16 @@ data class PaykitPaymentRequestCreation(
     val wasPublishedToActiveState: Boolean,
 )
 
+private data class PaykitPaymentRequestTargetContext(
+    val savedPublicKeys: List<String>,
+    val linkedReceiverPaths: Map<String, Set<String>>,
+)
+
+private data class PaykitPaymentRequestTargetDiscovery(
+    val targets: List<PaykitPaymentRequestTarget>,
+    val isComplete: Boolean,
+)
+
 sealed class PaykitPaymentRequestError(message: String) : AppError(message) {
     data object RequestUnavailable : PaykitPaymentRequestError("Payment request is unavailable")
     data object RequestExpired : PaykitPaymentRequestError("Payment request has expired")
@@ -125,15 +137,18 @@ class PaykitPaymentRequestRepo @Inject constructor(
 ) {
     companion object {
         private const val TAG = "PaykitPaymentRequestRepo"
+        private val TARGET_DISCOVERY_TIMEOUT = 5.seconds
     }
 
     private val operationMutex = Mutex()
+    private val targetDiscoveryMutex = Mutex()
     private val creationMutex = Mutex()
     private val processingLock = Any()
     private val processingRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     private val stateGeneration = AtomicLong()
     private val repoScope = appScope(ioDispatcher, TAG)
     private var expirationJob: Job? = null
+    private var cachedTargetContext: PaykitPaymentRequestTargetContext? = null
     private val _pendingRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     val pendingRequests: StateFlow<List<PaykitPaymentRequest>> = _pendingRequests.asStateFlow()
     private val _paymentRequestHistory = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
@@ -181,7 +196,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
     }
 
-    suspend fun refresh(savedPublicKeys: List<String> = emptyList()): Result<Unit> {
+    suspend fun refresh(): Result<Unit> {
         val generation = stateGeneration.get()
         val expectedIdentity = activeIdentity
         return withContext(ioDispatcher) {
@@ -191,12 +206,48 @@ class PaykitPaymentRequestRepo @Inject constructor(
                         clearStateLocked()
                         return@withLock
                     }
-                    runSuspendCatching { synchronizeLocked(generation, savedPublicKeys, expectedIdentity) }
+                    runSuspendCatching { synchronizeLocked(generation, expectedIdentity) }
                         .onFailure { discardExpiredRequestsLocked() }
                         .getOrThrow()
                 }
             }.onFailure {
                 Logger.warn("Failed to refresh incoming Paykit payment requests", it, context = TAG)
+            }
+        }
+    }
+
+    suspend fun refreshEligibleTargets(
+        savedPublicKeys: List<String>,
+        force: Boolean = false,
+    ): Result<Unit> {
+        val generation = stateGeneration.get()
+        val expectedIdentity = activeIdentity
+        return withContext(ioDispatcher) {
+            runSuspendCatching {
+                targetDiscoveryMutex.withLock discovery@{
+                    if (!isAvailable() || expectedIdentity == null) {
+                        operationMutex.withLock operation@{
+                            if (stateGeneration.get() != generation || activeIdentity != expectedIdentity) {
+                                return@operation
+                            }
+                            cachedTargetContext = null
+                            _eligibleTargets.update { emptyList() }
+                        }
+                        return@discovery
+                    }
+                    val context = targetContext(savedPublicKeys, expectedIdentity)
+                    if (!force && context == cachedTargetContext) return@discovery
+                    val previousTargets = _eligibleTargets.value.associateBy { it.publicKey }
+                    val discovery = context?.let { eligibleTargets(it, previousTargets) }
+                        ?: PaykitPaymentRequestTargetDiscovery(emptyList(), isComplete = true)
+                    operationMutex.withLock operation@{
+                        if (!isCurrentState(generation, expectedIdentity)) return@operation
+                        cachedTargetContext = context.takeIf { discovery.isComplete }
+                        _eligibleTargets.update { discovery.targets }
+                    }
+                }
+            }.onFailure {
+                Logger.warn("Failed to refresh Paykit payment request recipients", it, context = TAG)
             }
         }
     }
@@ -217,7 +268,12 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     if (draft.amountSats == 0uL || !isAvailable()) throw PaykitPaymentRequestError.RequestUnavailable
                     if (draft.expiresAt <= proposalDate) throw PaykitPaymentRequestError.RequestExpired
 
-                    val targets = eligibleTargets(savedPublicKeys, expectedIdentity)
+                    val selectedSavedKey = savedPublicKeys.firstOrNull {
+                        PubkyPublicKeyFormat.matches(it, target.publicKey)
+                    }
+                    val targets = selectedSavedKey?.let {
+                        targetContext(listOf(it), expectedIdentity)
+                    }?.let { eligibleTargets(it).targets }.orEmpty()
                     if (target !in targets) throw PaykitPaymentRequestError.RequestUnavailable
                     val settings = settingsStore.data.first()
                     if (!settings.sharesPrivatePaykitEndpoints) throw PaykitPaymentRequestError.RequestUnavailable
@@ -321,7 +377,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     private suspend fun synchronizeLocked(
         generation: Long,
-        savedPublicKeys: List<String>,
         expectedIdentity: String?,
     ) {
         processPendingMessages()
@@ -331,7 +386,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val incoming = records.mapNotNull { it.toPaykitPaymentRequest(PaymentRequestLocalRole.PAYER, now) }
         val history = records.mapNotNull { it.toPaykitPaymentRequestHistory(now) }
             .sortedByDescending { it.createdAt }
-        val targets = expectedIdentity?.let { eligibleTargets(savedPublicKeys, it) }.orEmpty()
         if (
             stateGeneration.get() != generation ||
             !PubkyPublicKeyFormat.matches(activeIdentity, expectedIdentity)
@@ -340,7 +394,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
         _pendingRequests.update { incoming }
         _paymentRequestHistory.update { history }
-        _eligibleTargets.update { targets }
         prunePresentedRequestIds(incoming)
         scheduleExpirationLocked()
     }
@@ -348,14 +401,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private fun isCurrentState(generation: Long, expectedIdentity: String?): Boolean =
         stateGeneration.get() == generation && PubkyPublicKeyFormat.matches(activeIdentity, expectedIdentity)
 
-    private suspend fun eligibleTargets(
+    private suspend fun targetContext(
         savedPublicKeys: List<String>,
         expectedIdentity: String,
-    ): List<PaykitPaymentRequestTarget> {
+    ): PaykitPaymentRequestTargetContext? {
         val settings = settingsStore.data.first()
-        if (!settings.sharesPrivatePaykitEndpoints || acceptedPaymentEndpointIdentifiers(settings).isEmpty()) {
-            return emptyList()
-        }
+        val endpointIdentifiers = acceptedPaymentEndpointIdentifiers(settings)
+        if (!settings.sharesPrivatePaykitEndpoints || endpointIdentifiers.isEmpty()) return null
         val savedKeys = savedPublicKeys.mapNotNull(PubkyPublicKeyFormat::normalized).distinct()
         val identityStatus = paykitSdkService.identityStatus()
         if (
@@ -363,7 +415,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             identityStatus?.liveSessionAvailable != true ||
             !PubkyPublicKeyFormat.matches(identityStatus.publicKey, expectedIdentity)
         ) {
-            return emptyList()
+            return null
         }
         val linkedPaths = mutableMapOf<String, MutableSet<String>>()
         paykitSdkService.linkedPeers()
@@ -375,21 +427,53 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 }
             }
 
-        return savedKeys.mapNotNull { publicKey ->
-            val linked = linkedPaths[publicKey] ?: return@mapNotNull null
-            val capable = runSuspendCatching { paykitSdkService.paymentRequestReceiverPaths(publicKey) }
+        return PaykitPaymentRequestTargetContext(
+            savedPublicKeys = savedKeys,
+            linkedReceiverPaths = linkedPaths.mapValues { it.value.toSet() },
+        )
+    }
+
+    private suspend fun eligibleTargets(
+        context: PaykitPaymentRequestTargetContext,
+        previousTargets: Map<String, PaykitPaymentRequestTarget> = emptyMap(),
+    ): PaykitPaymentRequestTargetDiscovery {
+        var isComplete = true
+        val targets = context.savedPublicKeys.mapNotNull { publicKey ->
+            val linked = context.linkedReceiverPaths[publicKey] ?: return@mapNotNull null
+            val lookup = withTimeoutOrNull(TARGET_DISCOVERY_TIMEOUT) {
+                runSuspendCatching { paykitSdkService.paymentRequestReceiverPaths(publicKey) }
+            }
+            if (lookup == null) {
+                isComplete = false
+                Logger.warn(
+                    "Timed out inspecting payment request support for '${PubkyPublicKeyFormat.redacted(publicKey)}'",
+                    context = TAG,
+                )
+                return@mapNotNull previousTargets[publicKey]?.takeIf { it.receiverPath in linked }
+            }
+            val capable = lookup
                 .onFailure {
+                    isComplete = false
                     Logger.warn(
                         "Failed to inspect payment request support for '${PubkyPublicKeyFormat.redacted(publicKey)}'",
                         it,
                         context = TAG,
                     )
                 }
-                .getOrDefault(emptyList())
+                .getOrElse {
+                    return@mapNotNull previousTargets[publicKey]?.takeIf { it.receiverPath in linked }
+                }
             val receiverPath = PaykitReceiverPaths.ordered.firstOrNull { it in linked && it in capable }
-                ?: return@mapNotNull null
+                ?: run {
+                    isComplete = false
+                    return@mapNotNull null
+                }
             PaykitPaymentRequestTarget(publicKey, receiverPath)
         }
+        return PaykitPaymentRequestTargetDiscovery(
+            targets = targets,
+            isComplete = isComplete,
+        )
     }
 
     private fun acceptedPaymentEndpointIdentifiers(settings: SettingsData): List<String> = buildList {
@@ -495,6 +579,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
         _pendingRequests.update { emptyList() }
         _paymentRequestHistory.update { emptyList() }
         _eligibleTargets.update { emptyList() }
+        cachedTargetContext = null
     }
 
     private fun scheduleExpirationLocked() {

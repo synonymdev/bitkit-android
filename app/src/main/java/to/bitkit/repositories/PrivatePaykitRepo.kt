@@ -175,17 +175,11 @@ class PrivatePaykitRepo @Inject constructor(
 
     suspend fun enableSharingAndPrepareSavedContacts(
         publicKeys: Collection<String>,
-        requireImmediatePublication: Boolean = false,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
             val wasCleanupPending = isContactSharingCleanupPending()
-            if (wasCleanupPending && !canPublishPrivateEndpoints()) {
-                if (requireImmediatePublication) throw PrivatePaykitError.PrivateUnavailable
-                return@runSuspendCatching
-            }
-
             updateContactSharingCleanupPending(false)
-            prepareSavedContacts(publicKeys, requireImmediatePublication).onFailure {
+            prepareSavedContacts(publicKeys).onFailure {
                 if (wasCleanupPending) {
                     runSuspendCatching { updateContactSharingCleanupPending(true) }.onFailure(it::addSuppressed)
                 }
@@ -265,7 +259,11 @@ class PrivatePaykitRepo @Inject constructor(
         savedPublicKeys: Collection<String>,
     ): Result<Unit> = withContext(serializedDispatcher) {
         runSuspendCatching {
-            if (isContactSharingCleanupPending()) {
+            val settings = settingsStore.data.first()
+            val hasDisabledPublications = !settings.sharesPrivatePaykitEndpoints && hasPublishedPrivateEndpoints()
+            val cleanupPending = isContactSharingCleanupPending()
+            if (cleanupPending || hasDisabledPublications) {
+                if (!cleanupPending) updateContactSharingCleanupPending(true)
                 removePublishedEndpoints().getOrThrow()
                 clearUnsavedContactState(savedPublicKeys).getOrThrow()
                 updateContactSharingCleanupPending(false)
@@ -316,7 +314,7 @@ class PrivatePaykitRepo @Inject constructor(
                         removalError,
                         context = TAG,
                     )
-                    throw removalError
+                    return@runSuspendCatching
                 }
 
                 clearUnsavedContactState(savedPublicKeys).getOrThrow()
@@ -762,6 +760,8 @@ class PrivatePaykitRepo @Inject constructor(
         forceRefreshLightning: Boolean,
     ): PrivatePublicationPreparation {
         var firstError: Throwable? = null
+        var receiverPathSelectionError: Throwable? = null
+        var hasPublicationUpdate = false
         val updates = mutableListOf<PrivatePaymentListReservationUpdateInput>()
         val linkRetryKeys = mutableListOf<PrivateMessageDrainRetryKey>()
         val linkedReceiverPathsSnapshot = linkedReceiverPathsSnapshot(reason)
@@ -782,6 +782,7 @@ class PrivatePaykitRepo @Inject constructor(
             val publicationReceiverPaths = receiverPathSelection.publishableReceiverPaths
             receiverPathSelection.error?.let {
                 logPrivateReceiverPathSelectionFailure(publicKey, reason, it)
+                receiverPathSelectionError = receiverPathSelectionError ?: it
             }
             val cleanupReceiverPaths = receiverPathsForPrivateEndpointCleanup(
                 publicKey = publicKey,
@@ -804,6 +805,7 @@ class PrivatePaykitRepo @Inject constructor(
                     privatePaymentListUpdate(publicKey, receiverPath, forceRefreshLightning)
                 }.onSuccess {
                     updates += it
+                    hasPublicationUpdate = true
                 }.onFailure {
                     firstError = firstError ?: it
                     logPrivatePublicationPreparationFailure(publicKey, reason, it)
@@ -811,6 +813,7 @@ class PrivatePaykitRepo @Inject constructor(
             }
         }
 
+        if (!hasPublicationUpdate) firstError = firstError ?: receiverPathSelectionError
         return PrivatePublicationPreparation(updates, linkRetryKeys.distinct(), firstError)
     }
 
@@ -1630,6 +1633,9 @@ class PrivatePaykitRepo @Inject constructor(
 
     private suspend fun isContactSharingCleanupPending(): Boolean =
         cacheStore.data.first().cleanupPending
+
+    private suspend fun hasPublishedPrivateEndpoints(): Boolean =
+        ensureState().contacts.values.any { it.publishedPrivatePaymentReceiverPaths.isNotEmpty() }
 
     private suspend fun updateContactSharingCleanupPending(isPending: Boolean) {
         cacheStore.update { it.copy(cleanupPending = isPending) }
