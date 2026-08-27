@@ -213,7 +213,7 @@ fun SendAmountContent(
     }
 }
 
-@Suppress("ViewModelForwarding")
+@Suppress("ViewModelForwarding", "CyclomaticComplexMethod")
 @Composable
 private fun SendAmountNodeRunning(
     amountInputViewModel: AmountInputViewModel,
@@ -230,6 +230,7 @@ private fun SendAmountNodeRunning(
 
         val availableAmount = when {
             isLnurlWithdraw -> uiState.lnurl.data.maxWithdrawableSat().toLong()
+            uiState.hardwareWalletId != null -> uiState.hardwareAvailableSats.toLong()
             uiState.payMethod == SendMethod.ONCHAIN -> balances.maxSendOnchainSats.toLong()
             else -> {
                 val maxLightning = balances.maxSendLightningSats
@@ -263,6 +264,7 @@ private fun SendAmountNodeRunning(
 
             val textAvailable = when {
                 uiState.lnurl is LnurlParams.LnurlWithdraw -> R.string.wallet__lnurl_w_max
+                uiState.hardwareWalletId != null -> R.string.wallet__send_available
                 uiState.isUnified -> R.string.wallet__send_available
                 uiState.payMethod == SendMethod.ONCHAIN -> R.string.wallet__send_available_savings
                 uiState.payMethod == SendMethod.LIGHTNING -> R.string.wallet__send_available_spending
@@ -342,23 +344,27 @@ private fun PaymentMethodButton(
     uiState: SendUiState,
     onClick: () -> Unit,
 ) {
+    val isHardware = uiState.hardwareWalletId != null
     val testId = when {
-        uiState.isUnified -> "switch"
+        uiState.canSwitchFundingSource -> "switch"
+        isHardware -> "trezor"
         uiState.payMethod == SendMethod.ONCHAIN -> "savings"
         else -> "spending"
     }
     NumberPadActionButton(
-        text = when (uiState.payMethod) {
-            SendMethod.ONCHAIN -> stringResource(R.string.wallet__savings__title)
-            SendMethod.LIGHTNING -> stringResource(R.string.wallet__spending__title)
+        text = when {
+            isHardware -> uiState.hardwareWalletName ?: stringResource(R.string.hardware__device_model_trezor)
+            uiState.payMethod == SendMethod.ONCHAIN -> stringResource(R.string.wallet__savings__title)
+            else -> stringResource(R.string.wallet__spending__title)
         },
-        color = when (uiState.payMethod) {
-            SendMethod.ONCHAIN -> Colors.Brand
-            SendMethod.LIGHTNING -> Colors.Purple
+        color = when {
+            isHardware -> Colors.Blue
+            uiState.payMethod == SendMethod.ONCHAIN -> Colors.Brand
+            else -> Colors.Purple
         },
-        icon = if (uiState.isUnified) R.drawable.ic_transfer else null,
+        icon = if (uiState.canSwitchFundingSource) R.drawable.ic_transfer else null,
         onClick = onClick,
-        enabled = uiState.isUnified,
+        enabled = uiState.canSwitchFundingSource && !uiState.isLoading,
         modifier = Modifier
             .height(28.dp)
             .testTag("AssetButton-$testId")

@@ -1233,6 +1233,44 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onTransferToSpendingHwConfirm reconnects and retries after THP channel failure`() = test {
+        val order = previewBtOrder()
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE.toFloat(),
+            totalSpent = order.feeSat + MINING_FEE,
+            satsPerVByte = FEE_RATE,
+        )
+        val signed = signedFunding(funding)
+        val broadcast = HwFundingBroadcastResult(
+            txId = TXID,
+            miningFeeSats = MINING_FEE,
+            feeRate = FEE_RATE,
+            totalSpent = funding.totalSpent,
+        )
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(HARDWARE_WALLET_ID, connected = true))))
+        whenever(hwWalletRepo.ensureConnected(HARDWARE_WALLET_ID))
+            .thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(lightningRepo.getFeeRateForSpeed(any(), anyOrNull())).thenReturn(Result.success(FEE_RATE))
+        whenever(hwWalletRepo.composeFundingTransaction(any(), any(), any(), any())).thenReturn(Result.success(funding))
+        whenever(hwWalletRepo.signFunding(HARDWARE_WALLET_ID, funding)).thenReturn(
+            Result.failure(AppError(TrezorException.ProtocolException("THP decryption error: aead::Error"))),
+            Result.success(signed),
+        )
+        whenever(hwWalletRepo.broadcastFunding(signed)).thenReturn(Result.success(broadcast))
+
+        sut.onTransferToSpendingHwConfirm(order, HARDWARE_WALLET_ID)
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(2)).ensureConnected(HARDWARE_WALLET_ID)
+        verify(hwWalletRepo, times(2)).signFunding(HARDWARE_WALLET_ID, funding)
+        verify(hwWalletRepo).broadcastFunding(signed)
+        verify(cacheStore).addPaidOrder(order.id, TXID)
+    }
+
+    @Test
     fun `onTransferToSpendingHwConfirm asks for the passphrase when the hidden wallet session is gone`() = test {
         val order = previewBtOrder()
         whenever(hwWalletRepo.wallets)

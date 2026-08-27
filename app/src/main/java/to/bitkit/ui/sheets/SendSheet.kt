@@ -31,6 +31,7 @@ import androidx.navigation.toRoute
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
+import to.bitkit.ext.getSatsPerVByteFor
 import to.bitkit.ext.supportPaymentRequest
 import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.models.NewTransactionSheetDetails
@@ -43,6 +44,9 @@ import to.bitkit.ui.components.SyncNodeView
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.screens.scanner.QrScanningScreen
 import to.bitkit.ui.screens.wallets.send.AddTagScreen
+import to.bitkit.ui.screens.wallets.send.HARDWARE_SIGN_CANCELLED_RESULT_KEY
+import to.bitkit.ui.screens.wallets.send.HwSendSignScreen
+import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.ui.screens.wallets.send.PIN_CHECK_RESULT_KEY
 import to.bitkit.ui.screens.wallets.send.SendAddressScreen
 import to.bitkit.ui.screens.wallets.send.SendAmountScreen
@@ -75,31 +79,35 @@ import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import to.bitkit.viewmodels.WalletViewModel
 
+private const val HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE = 3uL
+
 @Suppress("CyclomaticComplexMethod")
 @Composable
 fun SendSheet(
     appViewModel: AppViewModel,
     walletViewModel: WalletViewModel,
+    hwSendViewModel: HwSendViewModel,
     startDestination: SendRoute = SendRoute.Recipient,
+    hardwareWalletId: String? = null,
 ) {
     val context = LocalContext.current
     val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
     val isOffline by remember { derivedStateOf { connectivityState != ConnectivityState.CONNECTED } }
     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
+    val sendUiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
     var routingCacheResetAttempted by rememberSaveable(startDestination) { mutableStateOf(false) }
 
-    val shouldShowSyncOverlay by remember {
-        derivedStateOf {
-            if (!lightningState.nodeLifecycleState.isRunning()) return@derivedStateOf true
-            val hasAnyChannels = lightningState.channels.isNotEmpty()
-            hasAnyChannels && lightningState.channels.none { it.isUsable }
-        }
+    val shouldShowSyncOverlay = run {
+        if (sendUiState.hardwareWalletId != null) return@run false
+        if (!lightningState.nodeLifecycleState.isRunning()) return@run true
+        val hasAnyChannels = lightningState.channels.isNotEmpty()
+        hasAnyChannels && lightningState.channels.none { it.isUsable }
     }
 
     LaunchedEffect(startDestination) {
         // always reset state on new user-initiated send
         if (startDestination == SendRoute.Recipient) {
-            appViewModel.resetSendState()
+            appViewModel.resetSendState(hardwareWalletId = hardwareWalletId)
             appViewModel.resetQuickPay()
             routingCacheResetAttempted = false
         }
@@ -116,6 +124,26 @@ fun SendSheet(
                 .testTag("SendSheet"),
         ) {
             val navController = rememberNavController()
+            LaunchedEffect(hwSendViewModel, navController) {
+                hwSendViewModel.results.collect { result ->
+                    appViewModel.onSendSuccess(
+                        details = NewTransactionSheetDetails(
+                            type = NewTransactionSheetType.ONCHAIN,
+                            direction = NewTransactionSheetDirection.SENT,
+                            paymentHashOrTxId = result.txId,
+                            activityWalletId = result.walletId,
+                            sats = result.amountSats.toLong(),
+                        ),
+                        walletId = result.walletId,
+                        navigate = false,
+                    )
+                    appViewModel.clearClipboardForAutoRead()
+                    navController.navigateTo(SendRoute.Success) {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                    }
+                    hwSendViewModel.completeBroadcast()
+                }
+            }
             LaunchedEffect(appViewModel, navController) {
                 appViewModel.sendEffect.collect {
                     when (it) {
@@ -124,6 +152,7 @@ fun SendSheet(
                         is SendEffect.NavigateToScan -> navController.navigateTo(SendRoute.QrScanner)
                         is SendEffect.NavigateToCoinSelection -> navController.navigateTo(SendRoute.CoinSelection)
                         is SendEffect.NavigateToConfirm -> navController.navigateTo(SendRoute.Confirm)
+                        is SendEffect.NavigateToHardwareSign -> navController.navigateTo(SendRoute.HardwareSign)
                         is SendEffect.PopBack -> navController.popBackStack(it.route, inclusive = false)
                         is SendEffect.PaymentSuccess -> {
                             appViewModel.clearClipboardForAutoRead()
@@ -187,7 +216,11 @@ fun SendSheet(
                     val lightningState by walletViewModel.lightningState.collectAsStateWithLifecycle()
                     SendAmountScreen(
                         uiState = uiState,
-                        nodeLifecycleState = lightningState.nodeLifecycleState,
+                        nodeLifecycleState = if (uiState.hardwareWalletId != null) {
+                            to.bitkit.models.NodeLifecycleState.Running
+                        } else {
+                            lightningState.nodeLifecycleState
+                        },
                         canGoBack = startDestination != SendRoute.Amount,
                         onBack = {
                             if (!navController.popBackStack()) {
@@ -249,7 +282,8 @@ fun SendSheet(
                     SendConfirmScreen(
                         savedStateHandle = it.savedStateHandle,
                         uiState = uiState,
-                        isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
+                        isNodeRunning = uiState.hardwareWalletId != null ||
+                            lightningState.nodeLifecycleState.isRunning(),
                         canGoBack = startDestination != SendRoute.Confirm,
                         onBack = {
                             val didPopToAmount = navController.popBackStack(SendRoute.Amount, inclusive = false)
@@ -261,6 +295,32 @@ fun SendSheet(
                         onClickAddTag = { navController.navigateTo(SendRoute.AddTag) },
                         onClickTag = { tag -> appViewModel.removeTag(tag) },
                         onNavigateToPin = { navController.navigateTo(SendRoute.PinCheck) },
+                    )
+                }
+                composableWithDefaultTransitions<SendRoute.HardwareSign> {
+                    val uiState by appViewModel.sendUiState.collectAsStateWithLifecycle()
+                    val walletId = uiState.hardwareWalletId ?: run {
+                        navController.popBackStack()
+                        return@composableWithDefaultTransitions
+                    }
+                    val satsPerVByte = uiState.feeRates
+                        ?.getSatsPerVByteFor(uiState.speed)
+                        ?.toULong()
+                        ?.takeIf { rate -> rate > 0uL }
+                        ?: HARDWARE_SEND_FALLBACK_SATS_PER_VBYTE
+                    HwSendSignScreen(
+                        walletId = walletId,
+                        sendUiState = uiState,
+                        satsPerVByte = satsPerVByte,
+                        viewModel = hwSendViewModel,
+                        prepareContactPayment = appViewModel::prepareHardwareContactPayment,
+                        onBack = {
+                            navController.previousBackStackEntry
+                                ?.savedStateHandle
+                                ?.set(HARDWARE_SIGN_CANCELLED_RESULT_KEY, true)
+                            appViewModel.onHardwareSignCancelled()
+                            navController.popBackStack()
+                        },
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.Success> {
@@ -540,6 +600,9 @@ sealed interface SendRoute {
 
     @Serializable
     data object Confirm : InternalOnly
+
+    @Serializable
+    data object HardwareSign : InternalOnly
 
     @Serializable
     data object Success : InternalOnly

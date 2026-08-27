@@ -103,6 +103,7 @@ import kotlin.time.Duration.Companion.seconds
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
 private const val SWIPE_ROTATION_DEGREES = 14f
 private const val IMAGE_FILL_PERCENTAGE = 0.8f
+const val HARDWARE_SIGN_CANCELLED_RESULT_KEY = "HARDWARE_SIGN_CANCELLED_RESULT_KEY"
 
 @Suppress("MagicNumber")
 @Composable
@@ -135,6 +136,15 @@ fun SendConfirmScreen(
             .collect { isSuccess ->
                 isLoading = isSuccess
                 savedStateHandle.remove<Boolean>(PIN_CHECK_RESULT_KEY)
+            }
+    }
+
+    LaunchedEffect(savedStateHandle) {
+        savedStateHandle.getStateFlow(HARDWARE_SIGN_CANCELLED_RESULT_KEY, false)
+            .collect {
+                if (!it) return@collect
+                isLoading = false
+                savedStateHandle.remove<Boolean>(HARDWARE_SIGN_CANCELLED_RESULT_KEY)
             }
     }
 
@@ -497,10 +507,16 @@ private fun OnChainDetails(
                 modifier = Modifier.weight(1f)
             ) {
                 NumberPadActionButton(
-                    text = stringResource(R.string.wallet__savings__title),
-                    color = Colors.Brand,
-                    enabled = uiState.canSwitchWallet,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchWallet },
+                    text = if (uiState.hardwareWalletId != null) {
+                        uiState.hardwareWalletName ?: stringResource(R.string.hardware__device_model_trezor)
+                    } else {
+                        stringResource(R.string.wallet__savings__title)
+                    },
+                    color = if (uiState.hardwareWalletId != null) Colors.Blue else Colors.Brand,
+                    enabled = uiState.canSwitchFundingSource,
+                    icon = R.drawable.ic_transfer.takeIf {
+                        uiState.canSwitchFundingSource
+                    },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
@@ -623,8 +639,8 @@ private fun LightningDetails(
                 NumberPadActionButton(
                     text = stringResource(R.string.wallet__spending__title),
                     color = Colors.Purple,
-                    enabled = uiState.canSwitchWallet,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchWallet },
+                    enabled = uiState.canSwitchFundingSource,
+                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
@@ -710,7 +726,7 @@ private fun LightningDetails(
                             tint = Colors.Purple,
                             modifier = Modifier.size(16.dp)
                         )
-                        val timestampSeconds = uiState.decodedInvoice?.timestampSeconds ?: 0uL
+                        val timestampSeconds = uiState.decodedInvoice.timestampSeconds
                         val invoiceExpiryText by produceState("", timestampSeconds, expirySeconds) {
                             val expiryMoment = timestampSeconds + expirySeconds
                             while (true) {

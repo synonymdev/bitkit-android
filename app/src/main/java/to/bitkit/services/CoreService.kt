@@ -240,6 +240,7 @@ class CoreService @Inject constructor(
 
 // region Activity
 private const val CHUNK_SIZE = 50
+private const val HW_PENDING_SEND_GRACE_PERIOD_SECONDS = 86_400L
 
 /**
  * Outcome of replacing a hardware wallet's on-chain snapshot.
@@ -261,6 +262,9 @@ internal data class HwSnapshotMerge(
 /**
  * Builds the delete/upsert plan for a hardware wallet's on-chain snapshot.
  *
+ * Recent pending sends remain during the watcher's eventual-consistency window. Their persisted
+ * creation timestamp keeps that protection across process restarts.
+ *
  * @param transferChannelIdsByFundingTxId funding tx id to channel id for transfers Bitkit recorded
  * itself. Re-pairing a wallet that was removed leaves nothing to carry forward, because removal
  * deleted its activities, and [to.bitkit.repositories.TransferRepo.syncTransferStates] only re-marks
@@ -271,10 +275,15 @@ internal data class HwSnapshotMerge(
 internal fun mergeHwSnapshot(
     existing: List<Activity.Onchain>,
     incoming: List<Activity>,
+    currentTimestamp: ULong,
     transferChannelIdsByFundingTxId: Map<String, String>,
 ): HwSnapshotMerge {
     val incomingIds = incoming.map { it.rawId() }.toSet()
-    val toDelete = existing.filter { !it.v1.isTransfer && it.v1.id !in incomingIds }
+    val toDelete = existing.filter {
+        !it.v1.isTransfer &&
+            !it.v1.isRecentPendingSend(currentTimestamp) &&
+            it.v1.id !in incomingIds
+    }
     val existingByTxId = existing.associateBy { it.v1.txId }
     val toUpsert = incoming.map { activity ->
         val onchain = activity as? Activity.Onchain ?: return@map activity
@@ -286,12 +295,20 @@ internal fun mergeHwSnapshot(
     return HwSnapshotMerge(toDelete = toDelete, toUpsert = toUpsert)
 }
 
+private fun OnchainActivity.isRecentPendingSend(currentTimestamp: ULong): Boolean {
+    val createdAt = createdAt ?: return false
+    if (txType != PaymentType.SENT || confirmed || !doesExist) return false
+    val age = (currentTimestamp.toLong() - createdAt.toLong()).coerceAtLeast(0)
+    return age <= HW_PENDING_SEND_GRACE_PERIOD_SECONDS
+}
+
 private fun OnchainActivity.mergedWith(stored: OnchainActivity?): OnchainActivity = when (stored) {
     null -> this
     else -> copy(
         isTransfer = isTransfer || stored.isTransfer,
         channelId = channelId ?: stored.channelId,
         transferTxId = transferTxId ?: stored.transferTxId,
+        contact = contact ?: stored.contact,
     )
 }
 
@@ -380,6 +397,7 @@ class ActivityService(
         val merge = mergeHwSnapshot(
             existing = existingActivities,
             incoming = activities,
+            currentTimestamp = nowTimestamp().epochSecond.toULong(),
             transferChannelIdsByFundingTxId = transferChannelIdsByFundingTxId,
         )
         merge.toDelete.forEach {
@@ -389,7 +407,6 @@ class ActivityService(
 
         if (merge.toUpsert.isNotEmpty()) upsertActivities(merge.toUpsert)
         if (transactionDetails.isNotEmpty()) upsertTransactionDetails(transactionDetails)
-
         HwSnapshotResult(
             activities = getActivities(
                 walletId = walletId,

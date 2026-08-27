@@ -220,6 +220,7 @@ class ActivityDetailViewModel @Inject constructor(
             activityRepo.clearContact(
                 forPaymentId = id,
                 syncLdkPayments = false,
+                walletId = currentActivity.walletId(),
             ).onSuccess {
                 reloadActivity(id, currentActivity.walletId())
             }.onFailure {

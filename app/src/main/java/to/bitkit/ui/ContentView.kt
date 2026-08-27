@@ -152,6 +152,7 @@ import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.screens.wallets.receive.ReceiveSheet
+import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
@@ -454,6 +455,10 @@ fun ContentView(
         val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
         val isCreatingPaymentRequest by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
+        val hwSendViewModel = hiltViewModel<HwSendViewModel>()
+        val hwSendUiState by hwSendViewModel.uiState.collectAsStateWithLifecycle()
+        val canDismissSheet = currentSheet !is Sheet.Send ||
+            (!hwSendUiState.isSigning && !hwSendUiState.isBroadcastUnresolved)
         var homeWalletPageRequest by remember { mutableIntStateOf(0) }
         var homeWidgetsPageRequest by remember { mutableIntStateOf(0) }
         val navigateToHomeWallet = {
@@ -479,7 +484,7 @@ fun ContentView(
                 onDismiss = { appViewModel.hideSheet() },
                 visibilityKey = currentSheet,
                 onVisible = { appViewModel.onSheetVisible(currentSheet) },
-                dismissEnabled = !isCreatingPaymentRequest,
+                dismissEnabled = !isCreatingPaymentRequest && canDismissSheet,
                 sheetHandlePlacement = when (currentSheet) {
                     is Sheet.Widgets -> SheetHandlePlacement.ContentOverlay
                     else -> SheetHandlePlacement.ScaffoldSlot
@@ -496,6 +501,8 @@ fun ContentView(
                                 appViewModel = appViewModel,
                                 walletViewModel = walletViewModel,
                                 startDestination = sheet.route,
+                                hardwareWalletId = sheet.hardwareWalletId,
+                                hwSendViewModel = hwSendViewModel,
                             )
                         }
 
@@ -634,6 +641,10 @@ fun ContentView(
 
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
+                    val currentHardwareWalletId = navBackStackEntry
+                        ?.takeIf { it.destination.hasRoute<Routes.HardwareWallet>() }
+                        ?.toRoute<Routes.HardwareWallet>()
+                        ?.walletId
                     val showTabBar = currentRoute in listOf(
                         Routes.Home::class.qualifiedName,
                         Routes.AllActivity::class.qualifiedName,
@@ -652,7 +663,9 @@ fun ContentView(
                     if (showTabBar) {
                         TabBar(
                             isVisible = !hideTabBarForCalculator,
-                            onSendClick = { appViewModel.showSheet(Sheet.Send()) },
+                            onSendClick = {
+                                appViewModel.showSheet(Sheet.Send(hardwareWalletId = currentHardwareWalletId))
+                            },
                             onReceiveClick = { appViewModel.showSheet(Sheet.Receive()) },
                             onScanClick = { appViewModel.showScannerSheet() },
                         )
