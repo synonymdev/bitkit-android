@@ -78,7 +78,7 @@ fun SpendingAdvancedScreen(
     val currentCurrencies by rememberUpdatedState(currencies)
 
     LaunchedEffect(order.clientBalanceSat) {
-        viewModel.updateTransferValues(order.clientBalanceSat)
+        viewModel.updateAdvancedTransferValues(order)
     }
 
     LaunchedEffect(amountUiState.sats) {
@@ -86,7 +86,11 @@ fun SpendingAdvancedScreen(
     }
 
     LaunchedEffect(transferValues.maxLspBalance) {
-        amountInputViewModel.setMaxAmount(transferValues.maxLspBalance.toLong())
+        amountInputViewModel.applyMaxLspBalance(
+            maxLspBalance = transferValues.maxLspBalance.toLong(),
+            enteredSats = amountUiState.sats,
+            currencies = currentCurrencies,
+        )
     }
 
     LaunchedEffect(Unit) {
@@ -129,16 +133,17 @@ fun SpendingAdvancedScreen(
         }
     }
 
-    val isValid = transferValues.let {
+    val isInRange = transferValues.let {
         val amount = amountUiState.sats.toULong()
         amount > 0u && it.maxLspBalance > 0u && amount in it.minLspBalance..it.maxLspBalance
     }
+    val isValid = isInRange && state.canAfford(order.clientBalanceSat)
 
     Content(
         uiState = state,
         transferValues = transferValues,
         isValid = isValid,
-        isLoading = isLoading,
+        isLoading = isLoading || state.isLoading,
         amountInputViewModel = amountInputViewModel,
         currencies = currencies,
         onBack = onBackClick,
@@ -147,6 +152,32 @@ fun SpendingAdvancedScreen(
             viewModel.onSpendingAdvancedContinue(amountUiState.sats)
         },
     )
+}
+
+/**
+ * Settling the max can land it below what is already entered, so the amount comes down with it
+ * rather than leaving a capacity that no longer exists selected.
+ */
+private fun AmountInputViewModel.applyMaxLspBalance(
+    maxLspBalance: Long,
+    enteredSats: Long,
+    currencies: CurrencyState,
+) {
+    setMaxAmount(maxLspBalance)
+    if (maxLspBalance in 1..<enteredSats) {
+        setSats(maxLspBalance, currencies)
+    }
+}
+
+/**
+ * The max is settled on an affordable capacity before it is offered, so the quote for the typed
+ * amount only has to catch what moves after that. Until it lands the confirm step is the authority,
+ * so continue is left enabled.
+ */
+private fun TransferToSpendingUiState.canAfford(clientBalanceSat: ULong): Boolean {
+    val budget = fundingBudgetSats ?: return true
+    val fee = feeEstimate ?: return true
+    return clientBalanceSat.toLong() + fee <= budget.toLong()
 }
 
 @Suppress("ViewModelForwarding")
@@ -244,6 +275,7 @@ private fun Content(
 
             NumberPad(
                 viewModel = amountInputViewModel,
+                enabled = !isLoading,
                 currencies = currencies,
             )
 

@@ -359,6 +359,8 @@
     <string name="lightning__setting_up_text">Please wait, your funds transfer is in progress. This should take &lt;accent&gt;±10 minutes.&lt;/accent&gt;</string>
     <string name="lightning__spendable_onchain">Spendable Onchain</string>
     <string name="lightning__spending">Spending</string>
+    <string name="lightning__spending_advanced__error_balance__description">Your savings cannot cover the liquidity fee for this receiving capacity. Choose a smaller amount.</string>
+    <string name="lightning__spending_advanced__error_balance__title">Not Enough Funds</string>
     <string name="lightning__spending_advanced__error_max__description">The receiving capacity is currently limited to ₿ {amount}.</string>
     <string name="lightning__spending_advanced__error_max__title">Receiving Capacity Maximum</string>
     <string name="lightning__spending_advanced__fee">Liquidity fee</string>

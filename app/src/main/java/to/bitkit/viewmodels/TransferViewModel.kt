@@ -120,6 +120,8 @@ class TransferViewModel @Inject constructor(
     private var hwFeeEstimateJob: Job? = null
     private var confirmFeeJob: Job? = null
     private var confirmPayJob: Job? = null
+    private var receivingFeeQuoteJob: Job? = null
+    private var advancedLimitsJob: Job? = null
     private var spendingConfirmFundingPlan: SpendingConfirmFundingPlan? = null
     private var pendingHwFundingBroadcast: PendingHwFundingBroadcast? = null
     private var activeHwTransferWalletId: String? = null
@@ -186,7 +188,8 @@ class TransferViewModel @Inject constructor(
     }
 
     fun onReceivingAmountChange(amount: Long) {
-        viewModelScope.launch {
+        receivingFeeQuoteJob?.cancel()
+        receivingFeeQuoteJob = viewModelScope.launch {
             _spendingUiState.update { it.copy(receivingAmount = amount, feeEstimate = null) }
 
             if (amount == 0L) return@launch
@@ -220,10 +223,40 @@ class TransferViewModel @Inject constructor(
         }
     }
 
+    private suspend fun canFundAdvancedOrder(clientBalance: ULong, receivingAmount: ULong): Boolean {
+        val budget = currentFundingBudget()
+        if (budget == null) {
+            Logger.warn("Skipped advanced capacity check, no sized budget available", context = TAG)
+            return true
+        }
+        val fee = quoteAdvancedOrderFee(clientBalance, receivingAmount)
+        if (fee == null) {
+            Logger.warn("Skipped advanced capacity check, fee quote unavailable", context = TAG)
+            return true
+        }
+        val canFund = clientBalance.safe() + fee.safe() <= budget
+        if (!canFund) {
+            Logger.info("Priced advanced capacity '$receivingAmount' over funding budget '$budget'", context = TAG)
+        }
+        return canFund
+    }
+
     fun onSpendingAdvancedContinue(receivingAmountSats: Long) {
         viewModelScope.launch {
-            runCatching {
-                val oldOrder = _spendingUiState.value.order ?: return@launch
+            runSuspendCatching {
+                val oldOrder = _spendingUiState.value.order ?: return@runSuspendCatching
+                if (!canFundAdvancedOrder(oldOrder.clientBalanceSat, receivingAmountSats.toULong())) {
+                    Logger.info("Rejected advanced capacity '$receivingAmountSats' over funding budget", context = TAG)
+                    setTransferEffect(
+                        TransferEffect.ToastError(
+                            title = context.getString(R.string.lightning__spending_advanced__error_balance__title),
+                            description = context.getString(
+                                R.string.lightning__spending_advanced__error_balance__description
+                            ),
+                        )
+                    )
+                    return@runSuspendCatching
+                }
                 val newOrder = blocktankRepo.createOrder(
                     spendingBalanceSats = oldOrder.clientBalanceSat,
                     receivingBalanceSats = receivingAmountSats.toULong(),
@@ -616,7 +649,7 @@ class TransferViewModel @Inject constructor(
             awaitNodeRunning()
 
             val fundingBudget = loadFundingBudget()
-            _spendingUiState.update { it.copy(fundingBudgetSats = fundingBudget) }
+            _spendingUiState.update { it.copy(fundingBudgetSats = fundingBudget, hwFundingWalletId = null) }
             val availableAmount = fundingBudget ?: 0uL
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
@@ -743,6 +776,69 @@ class TransferViewModel @Inject constructor(
         return fallback
     }
 
+    private suspend fun quoteAdvancedOrderFee(clientBalance: ULong, receivingAmount: ULong): ULong? =
+        blocktankRepo.estimateOrderFee(
+            spendingBalanceSats = clientBalance,
+            receivingBalanceSats = receivingAmount,
+        ).getOrNull()?.feeSat
+
+    private suspend fun resolveAffordableLspBalance(
+        clientBalance: ULong,
+        budget: ULong,
+        minLspBalance: ULong,
+        maxLspBalance: ULong,
+    ): ULong? {
+        val headroom = budget.safe() - clientBalance.safe()
+        val maxFee = quoteAdvancedOrderFee(clientBalance, maxLspBalance) ?: run {
+            Logger.warn("Advertising unsettled max capacity '$maxLspBalance', fee quote unavailable", context = TAG)
+            return maxLspBalance
+        }
+        if (maxFee <= headroom) return maxLspBalance
+
+        val minFee = quoteAdvancedOrderFee(clientBalance, minLspBalance)
+        if (minFee == null || minFee > headroom) return null
+
+        return settleCapacity(
+            clientBalance = clientBalance,
+            headroom = headroom,
+            affordable = minLspBalance,
+            affordableFee = minFee,
+            overBudget = maxLspBalance,
+            overBudgetFee = maxFee,
+        )
+    }
+
+    private suspend fun settleCapacity(
+        clientBalance: ULong,
+        headroom: ULong,
+        affordable: ULong,
+        affordableFee: ULong,
+        overBudget: ULong,
+        overBudgetFee: ULong,
+    ): ULong {
+        var settled = affordable
+        var settledFee = affordableFee
+        var ceiling = overBudget
+        var ceilingFee = overBudgetFee
+        repeat(MAX_AFFORDABILITY_ROUNDS) {
+            val feeSpan = ceilingFee.safe() - settledFee.safe()
+            if (feeSpan == 0uL) return settled
+            val span = ceiling.safe() - settled.safe()
+            val feeHeadroom = headroom.safe() - settledFee.safe()
+            val candidate = settled.safe() + ((span.safe() * feeHeadroom.safe()) / feeSpan).safe()
+            if (candidate <= settled) return settled
+            val candidateFee = quoteAdvancedOrderFee(clientBalance, candidate) ?: return settled
+            if (candidateFee <= headroom) {
+                settled = candidate
+                settledFee = candidateFee
+            } else {
+                ceiling = candidate
+                ceilingFee = candidateFee
+            }
+        }
+        return settled
+    }
+
     /**
      * Order cost the on-chain balance can fund, or null when the balance itself is unreadable.
      *
@@ -758,18 +854,29 @@ class TransferViewModel @Inject constructor(
         return spendable.safe() - miningFee.safe()
     }
 
+    private suspend fun currentFundingBudget(): ULong? {
+        val sizedBudget = _spendingUiState.value.fundingBudgetSats
+        val hwWalletId = _spendingUiState.value.hwFundingWalletId
+        val liveBudget = if (hwWalletId != null) loadHwFundingBudget(hwWalletId) else loadFundingBudget()
+        return liveBudget ?: sizedBudget
+    }
+
+    private suspend fun loadHwFundingBudget(walletId: String): ULong? {
+        val balance = hwWalletRepo.getFundingAccount(walletId).getOrNull()?.balanceSats ?: return null
+        return balance.safe() - hwFundingFeeReserve(balance).safe()
+    }
+
     /**
      * Whether an order at [clientBalance] still fits what the wallet can fund.
      *
      * The advertised max can be a settled estimate rather than a verified one when a re-quote fails
-     * or does not converge, so the fee is re-quoted live before the order is placed. The budget is
-     * the one the limits were sized against, which is the on-chain balance for a soft wallet and the
-     * device account for a hardware transfer — a fresh on-chain read would reject every hardware
-     * transfer, whose funds never sit in this wallet. A budget that was never sized, or a quote the
-     * LSP will not give, leaves the decision to the confirm step rather than blocking the user here.
+     * or does not converge, so both sides are taken fresh before the order is placed: the fee is
+     * re-quoted and the budget comes from [currentFundingBudget]. A budget that was never sized, or
+     * a quote the LSP will not give, leaves the decision to the confirm step rather than blocking
+     * the user here.
      */
     private suspend fun canFundOrder(clientBalance: ULong): Boolean {
-        val budget = _spendingUiState.value.fundingBudgetSats
+        val budget = currentFundingBudget()
         if (budget == null) {
             Logger.warn("Skipped funding check, no sized budget available", context = TAG)
             return true
@@ -859,7 +966,7 @@ class TransferViewModel @Inject constructor(
             updateTransferValues(0uL)
 
             val availableAmount = account.balanceSats.safe() - hwFundingFeeReserve(account.balanceSats).safe()
-            _spendingUiState.update { it.copy(fundingBudgetSats = availableAmount) }
+            _spendingUiState.update { it.copy(fundingBudgetSats = availableAmount, hwFundingWalletId = walletId) }
 
             val initialLspFees = estimateInitialLspFees(availableAmount)
             if (initialLspFees == null) {
@@ -1256,6 +1363,36 @@ class TransferViewModel @Inject constructor(
     // endregion
 
     // region Balance Calc
+
+    fun updateAdvancedTransferValues(order: IBtOrder) {
+        advancedLimitsJob?.cancel()
+        advancedLimitsJob = viewModelScope.launch {
+            _spendingUiState.update { it.copy(isLoading = true) }
+            updateTransferValues(order.clientBalanceSat)
+
+            val values = _transferValues.value
+            val budget = currentFundingBudget()
+            if (values.maxLspBalance == 0uL || budget == null) {
+                _spendingUiState.update { it.copy(isLoading = false) }
+                return@launch
+            }
+
+            val affordableMax = resolveAffordableLspBalance(
+                clientBalance = order.clientBalanceSat,
+                budget = budget,
+                minLspBalance = values.minLspBalance,
+                maxLspBalance = values.maxLspBalance,
+            )
+            if (affordableMax != null && affordableMax < values.maxLspBalance) {
+                Logger.info(
+                    "Settled max capacity '${values.maxLspBalance}' on affordable '$affordableMax'",
+                    context = TAG,
+                )
+                _transferValues.update { it.copy(maxLspBalance = affordableMax) }
+            }
+            _spendingUiState.update { it.copy(isLoading = false) }
+        }
+    }
 
     fun updateTransferValues(clientBalanceSat: ULong) {
         val options = blocktankRepo.calculateLiquidityOptions(clientBalanceSat).getOrNull()
@@ -1757,6 +1894,8 @@ data class TransferToSpendingUiState(
     val feeEstimate: Long? = null,
     /** Budget the transfer limits were sized against, or null while unknown. */
     val fundingBudgetSats: ULong? = null,
+    /** Hardware wallet the budget was sized from, or null when it came from this wallet's savings. */
+    val hwFundingWalletId: String? = null,
 )
 
 private data class SpendingConfirmFundingPlan(
