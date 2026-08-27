@@ -44,7 +44,7 @@ fun getInvoiceForTab(
         ReceiveTab.TREZOR -> hardwareAddress.takeIf(String::isNotBlank)?.let { address ->
             Bip21Utils.buildBip21Url(
                 bitcoinAddress = address,
-                amountSats = hardwareAmountSats,
+                amountSats = hardwareAmountSats?.takeUnless { it == 0uL },
                 message = hardwareMessage,
             )
         }.orEmpty()

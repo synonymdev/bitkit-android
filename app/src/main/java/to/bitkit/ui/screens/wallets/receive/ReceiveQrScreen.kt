@@ -68,6 +68,7 @@ import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.QrCodeImage
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.Tooltip
 import to.bitkit.ui.components.VerticalSpacer
@@ -299,8 +300,6 @@ fun ReceiveQrScreen(
                                     onClickEditInvoice = onClickEditInvoice,
                                     onClickHardwareEditInvoice = onClickHardwareEditInvoice,
                                     hardwareAddress = hardwareReceiveState.address?.address,
-                                    isVerifyingHardwareAddress = hardwareReceiveState.isVerifyingAddress,
-                                    onVerifyHardwareAddress = onVerifyHardwareAddress,
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -371,22 +370,35 @@ fun ReceiveQrScreen(
                             .testTag("ShowDetails")
                     )
 
-                    BottomButtonVariant.SHOW_QR -> PrimaryButton(
-                        text = stringResource(R.string.wallet__receive_show_qr),
-                        icon = {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_qr_purple),
-                                tint = Colors.White,
-                                contentDescription = null,
-                                modifier = Modifier.size(16.dp)
+                    BottomButtonVariant.SHOW_QR -> Column(
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    ) {
+                        if (selectedTab == ReceiveTab.TREZOR) {
+                            SecondaryButton(
+                                text = stringResource(R.string.hardware__verify_address),
+                                enabled = hardwareReceiveState.address != null,
+                                isLoading = hardwareReceiveState.isVerifyingAddress,
+                                onClick = onVerifyHardwareAddress,
+                                modifier = Modifier.testTag("HardwareVerifyAddress")
                             )
-                        },
-                        onClick = { showDetails = false },
-                        fullWidth = true,
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .testTag("QRCode")
-                    )
+                        }
+
+                        PrimaryButton(
+                            text = stringResource(R.string.wallet__receive_show_qr),
+                            icon = {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_qr_purple),
+                                    tint = Colors.White,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            },
+                            onClick = { showDetails = false },
+                            fullWidth = true,
+                            modifier = Modifier.testTag("QRCode")
+                        )
+                    }
 
                     BottomButtonVariant.SHOW_DETAILS -> TertiaryButton(
                         text = stringResource(R.string.wallet__receive_show_details),
@@ -558,8 +570,6 @@ private fun ReceiveDetailsView(
     onClickEditInvoice: () -> Unit,
     onClickHardwareEditInvoice: () -> Unit = onClickEditInvoice,
     hardwareAddress: String? = null,
-    isVerifyingHardwareAddress: Boolean = false,
-    onVerifyHardwareAddress: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Card(
@@ -644,18 +654,6 @@ private fun ReceiveDetailsView(
                             testTag = "ReceiveHardwareAddress",
                         )
                     }
-                    VerticalSpacer(16.dp)
-                    PrimaryButton(
-                        text = stringResource(R.string.hardware__verify_address),
-                        enabled = hardwareAddress != null,
-                        isLoading = isVerifyingHardwareAddress,
-                        onClick = onVerifyHardwareAddress,
-                        color = Colors.Blue,
-                        enableGradient = false,
-                        modifier = Modifier
-                            .padding(horizontal = 16.dp)
-                            .testTag("HardwareVerifyAddress")
-                    )
                 }
             }
         }
