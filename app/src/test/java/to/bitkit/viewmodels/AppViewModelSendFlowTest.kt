@@ -11,6 +11,7 @@ import androidx.core.net.toUri
 import app.cash.turbine.test
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.persistentListOf
@@ -2052,6 +2053,73 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertEquals(48_000uL, sut.sendUiState.value.hardwareAvailableSats)
         assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+    }
+
+    @Test
+    fun `invalid funding source cannot start confirmation`() = test {
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000uL,
+                isAmountInputValid = false,
+                hardwareWalletId = HARDWARE_WALLET_ID,
+                hardwareAvailableSats = 100_000uL,
+                payMethod = SendMethod.ONCHAIN,
+            )
+        )
+
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
+    fun `hardware send rejects scanned non-onchain payment requests`() = test {
+        val scans = nonOnchainPaymentScans()
+        whenever(context.getString(R.string.hardware__send_onchain_only_title)).thenReturn("On-chain only")
+        scans.forEach { (input, scan) ->
+            whenever { coreService.decode(input) }.thenReturn(scan)
+        }
+        sut.showSheet(Sheet.Send(hardwareWalletId = HARDWARE_WALLET_ID))
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        scans.forEach { (input, _) ->
+            sut.onScanResult(input)
+            advanceUntilIdle()
+
+            assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+            assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        }
+        verify(toastManager, times(scans.size)).enqueue(check { assertEquals("On-chain only", it.title) })
+    }
+
+    @Test
+    fun `hardware send rejects pasted non-onchain payment requests`() = test {
+        val scans = nonOnchainPaymentScans()
+        whenever(context.getString(R.string.hardware__send_onchain_only_title)).thenReturn("On-chain only")
+        scans.forEach { (input, scan) ->
+            whenever { coreService.decode(input) }.thenReturn(scan)
+        }
+        sut.showSheet(Sheet.Send(hardwareWalletId = HARDWARE_WALLET_ID))
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        scans.forEach { (input, _) ->
+            val clipData = mock<ClipData>()
+            val item = mock<ClipData.Item>()
+            whenever(item.text).thenReturn(input)
+            whenever(clipData.getItemAt(0)).thenReturn(item)
+            whenever(clipboardManager.primaryClip).thenReturn(clipData)
+
+            sut.setSendEvent(SendEvent.Paste)
+            advanceUntilIdle()
+
+            assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+            assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        }
+        verify(toastManager, times(scans.size)).enqueue(check { assertEquals("On-chain only", it.title) })
     }
 
     @Test
@@ -4323,6 +4391,22 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             .thenReturn(Scanner.Lightning(lightningInvoice(bolt11, amountSats)))
         whenever(lightningRepo.canSend(amountSats)).thenReturn(true)
     }
+
+    private fun nonOnchainPaymentScans() = listOf(
+        "lnbcrt1hardware" to Scanner.Lightning(lightningInvoice("lnbcrt1hardware", 1_000uL)),
+        "lnurl1hardware" to Scanner.LnurlPay(
+            LnurlPayData(
+                uri = "lnurl1hardware",
+                callback = "https://example.com/callback",
+                minSendable = 1_000uL,
+                maxSendable = 100_000uL,
+                metadataStr = "[]",
+                commentAllowed = null,
+                allowsNostr = false,
+                nostrPubkey = null,
+            )
+        ),
+    )
 
     private suspend fun stubOpenedPaymentRequest(
         request: PaykitPaymentRequest,

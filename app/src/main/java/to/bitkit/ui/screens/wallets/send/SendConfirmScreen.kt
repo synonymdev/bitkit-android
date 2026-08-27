@@ -389,6 +389,7 @@ private fun ContentRunning(
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
             color = accentColor,
+            enabled = uiState.isAmountInputValid,
             loading = isLoading,
             confirmed = isLoading,
             progress = swipeProgress,

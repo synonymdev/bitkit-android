@@ -234,6 +234,38 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `unchanged watcher snapshot reevaluates a retained pending send`() = test {
+        val retainedPendingSend = watcherActivity(
+            amount = 100uL,
+            txType = PaymentType.SENT,
+            blockHeight = null,
+            confirmations = 0u,
+        )
+        val event = transactionsChanged(total = 0uL)
+        whenever {
+            activityRepo.persistHwSnapshot(
+                HARDWARE_WALLET_ID,
+                event.activities,
+                event.transactionDetails,
+            )
+        }.thenReturn(
+            Result.success(listOf(retainedPendingSend)),
+            Result.success(emptyList()),
+        )
+        val sut = createRepo()
+
+        watcherEvents.emit("hardware-wallet|nativeSegwit" to event)
+        watcherEvents.emit("hardware-wallet|nativeSegwit" to event)
+
+        assertTrue(sut.activities.value.isEmpty())
+        verify(activityRepo, times(2)).persistHwSnapshot(
+            walletId = HARDWARE_WALLET_ID,
+            activities = event.activities,
+            transactionDetails = event.transactionDetails,
+        )
+    }
+
+    @Test
     fun `pending timestamp changes reuse snapshot until confirmation`() = test {
         val pendingActivity = watcherActivity(
             amount = 100uL,

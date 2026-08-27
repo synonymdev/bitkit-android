@@ -3211,6 +3211,7 @@ class AppViewModel @Inject constructor(
 
     private fun onSwipeToPay() {
         Logger.debug("Swipe to pay event, checking send confirmation conditions", context = TAG)
+        if (!_sendUiState.value.isAmountInputValid) return
         viewModelScope.launch {
             val amount = _sendUiState.value.amount
 

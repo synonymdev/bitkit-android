@@ -137,6 +137,16 @@ class CoreServiceTest {
     }
 
     @Test
+    fun `merge hw snapshot keeps stored seen timestamp`() {
+        val result = mergePlan(
+            existing = listOf(Activity.Onchain(activity(id = "tx").v1.copy(seenAt = 42uL))),
+            incoming = listOf(activity(id = "tx")),
+        )
+
+        assertEquals(42uL, result.upserted("tx")?.seenAt)
+    }
+
+    @Test
     fun `merge hw snapshot fills missing channel id on stored transfer`() {
         val result = mergePlan(
             existing = listOf(activity(id = "fundingTx", isTransfer = false, channelId = null)),

@@ -309,6 +309,7 @@ private fun OnchainActivity.mergedWith(stored: OnchainActivity?): OnchainActivit
         channelId = channelId ?: stored.channelId,
         transferTxId = transferTxId ?: stored.transferTxId,
         contact = contact ?: stored.contact,
+        seenAt = seenAt ?: stored.seenAt,
     )
 }
 

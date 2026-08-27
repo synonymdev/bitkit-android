@@ -665,7 +665,7 @@ class HwWalletRepo @Inject constructor(
                     )
                     val snapshotCacheKey = snapshot.toCacheKey()
                     lastPersistedHwSnapshots[walletId]
-                        ?.takeIf { it.source == snapshotCacheKey }
+                        ?.takeIf { it.source == snapshotCacheKey && !it.hasRetainedPendingSend() }
                         ?.let {
                             _watcherData.update { data ->
                                 data + (watcherId to watcher.copy(activities = it.activities))
@@ -989,3 +989,15 @@ private data class PersistedHwSnapshot(
     val source: HwSnapshot,
     val activities: ImmutableList<Activity>,
 )
+
+private fun PersistedHwSnapshot.hasRetainedPendingSend(): Boolean {
+    val sourceIds = source.activities.map { it.scopedId() }.toSet()
+    return activities.any {
+        val activity = (it as? Activity.Onchain)?.v1 ?: return@any false
+        it.scopedId() !in sourceIds &&
+            activity.txType == PaymentType.SENT &&
+            !activity.confirmed &&
+            !activity.isTransfer &&
+            activity.doesExist
+    }
+}

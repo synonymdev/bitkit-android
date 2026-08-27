@@ -37,6 +37,7 @@ import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.SendFailureDetails
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.ui.components.ConnectionIssuesView
@@ -217,7 +218,7 @@ fun SendSheet(
                     SendAmountScreen(
                         uiState = uiState,
                         nodeLifecycleState = if (uiState.hardwareWalletId != null) {
-                            to.bitkit.models.NodeLifecycleState.Running
+                            NodeLifecycleState.Running
                         } else {
                             lightningState.nodeLifecycleState
                         },
