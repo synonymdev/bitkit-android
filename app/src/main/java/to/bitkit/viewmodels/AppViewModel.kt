@@ -286,11 +286,23 @@ class AppViewModel @Inject constructor(
 
     private val sendEvents = MutableSharedFlow<SendEvent>()
     private var amountContinuePending = false
+    private var fundingSourceSwitchPending = false
+    private var onchainSendRefreshJob: Job? = null
 
     fun setSendEvent(event: SendEvent) {
-        if (event == SendEvent.AmountContinue) {
-            if (amountContinuePending) return
-            amountContinuePending = true
+        when (event) {
+            SendEvent.AmountContinue -> {
+                if (amountContinuePending) return
+                amountContinuePending = true
+            }
+
+            SendEvent.PaymentMethodSwitch -> {
+                if (fundingSourceSwitchPending) return
+                fundingSourceSwitchPending = true
+                _sendUiState.update { it.copy(isSwitchingFundingSource = true) }
+            }
+
+            else -> Unit
         }
         viewModelScope.launch { sendEvents.emit(event) }
     }
@@ -1616,7 +1628,12 @@ class AppViewModel @Inject constructor(
                     } finally {
                         amountContinuePending = false
                     }
-                    SendEvent.PaymentMethodSwitch -> onPaymentMethodSwitch()
+                    SendEvent.PaymentMethodSwitch -> try {
+                        onPaymentMethodSwitch()
+                    } finally {
+                        fundingSourceSwitchPending = false
+                        _sendUiState.update { state -> state.copy(isSwitchingFundingSource = false) }
+                    }
 
                     is SendEvent.CoinSelectionContinue -> onCoinSelectionContinue(it.utxos)
 
@@ -2149,6 +2166,7 @@ class AppViewModel @Inject constructor(
         val current = _sendUiState.value
         val sources = availableFundingSources(current)
         if (sources.size < 2) return
+        onchainSendRefreshJob?.cancel()
         val selected = current.selectedFundingSource()
         val selectedIndex = sources.indexOf(selected).takeIf { it >= 0 } ?: 0
         when (val nextSource = sources[(selectedIndex + 1) % sources.size]) {
@@ -2174,11 +2192,12 @@ class AppViewModel @Inject constructor(
                         hardwareWalletId = null,
                         hardwareWalletName = null,
                         hardwareAvailableSats = 0uL,
+                        fee = null,
                         selectedUtxos = null,
                         confirmedWarnings = persistentListOf(),
                     )
                 }
-                refreshOnchainSendIfNeeded()
+                refreshOnchainSendIfNeeded()?.join()
             }
 
             is SendFundingSource.Hardware -> selectHardwareFundingSource(nextSource.walletId, current)
@@ -2201,6 +2220,7 @@ class AppViewModel @Inject constructor(
                 hardwareWalletName = walletName,
                 hardwareAvailableSats = initialAvailable,
                 isAmountInputValid = it.amount > Defaults.dustLimit.toULong() && it.amount <= initialAvailable,
+                fee = null,
                 selectedUtxos = null,
                 confirmedWarnings = persistentListOf(),
             )
@@ -2210,7 +2230,7 @@ class AppViewModel @Inject constructor(
             if (it.hardwareWalletId != walletId) return@update it
             it.copy(hardwareAvailableSats = available)
         }
-        refreshOnchainSendIfNeeded()
+        refreshOnchainSendIfNeeded()?.join()
     }
 
     private suspend fun selectHardwareFundingSourceForAmount(amount: ULong): Boolean {
@@ -3687,17 +3707,17 @@ class AppViewModel @Inject constructor(
     }
 
     /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
-    private fun refreshOnchainSendIfNeeded() {
+    private fun refreshOnchainSendIfNeeded(): Job? {
         val currentState = _sendUiState.value
         if (currentState.payMethod != SendMethod.ONCHAIN ||
             currentState.amount == 0uL ||
             currentState.address.isEmpty()
         ) {
-            return
+            return null
         }
 
-        // refresh in background
-        viewModelScope.launch(bgDispatcher) {
+        onchainSendRefreshJob?.cancel()
+        val job = viewModelScope.launch(bgDispatcher, start = CoroutineStart.LAZY) {
             // preselect utxos for deterministic fee estimation
             if (
                 currentState.hardwareWalletId == null &&
@@ -3717,6 +3737,12 @@ class AppViewModel @Inject constructor(
             }
             refreshFeeEstimates()
         }
+        onchainSendRefreshJob = job
+        job.invokeOnCompletion {
+            if (onchainSendRefreshJob === job) onchainSendRefreshJob = null
+        }
+        job.start()
+        return job
     }
 
     private suspend fun refreshFeeEstimates() = withContext(bgDispatcher) {
@@ -3857,6 +3883,7 @@ class AppViewModel @Inject constructor(
                 hardwareAvailableSats = hardwareWalletId?.let { walletId ->
                     hardwareEstimatedAvailable(walletId, speed, rates)
                 } ?: 0uL,
+                isSwitchingFundingSource = fundingSourceSwitchPending,
             )
         }
     }
@@ -4683,6 +4710,7 @@ data class SendUiState(
     val isUnified: Boolean = false,
     val canSwitchWallet: Boolean = false,
     val canSwitchFundingSource: Boolean = false,
+    val isSwitchingFundingSource: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
     val selectedTags: ImmutableList<String> = persistentListOf(),
     val decodedInvoice: LightningInvoice? = null,

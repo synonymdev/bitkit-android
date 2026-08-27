@@ -105,4 +105,22 @@ class SendAmountContentTest {
 
         composeTestRule.onNodeWithTag("ContinueAmount").assertIsNotEnabled()
     }
+
+    @Test
+    fun whenFundingSourceSwitching_sourceAndContinueButtonsShouldBeDisabled() {
+        composeTestRule.setContent {
+            SendAmountContent(
+                nodeLifecycleState = nodeLifecycleState,
+                uiState = uiState.copy(
+                    isAmountInputValid = true,
+                    canSwitchFundingSource = true,
+                    isSwitchingFundingSource = true,
+                ),
+                amountInputViewModel = previewAmountInputViewModel(),
+            )
+        }
+
+        composeTestRule.onNodeWithTag("AssetButton-switch").assertIsNotEnabled()
+        composeTestRule.onNodeWithTag("ContinueAmount").assertIsNotEnabled()
+    }
 }

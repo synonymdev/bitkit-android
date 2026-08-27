@@ -9,6 +9,7 @@ import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.core.net.toUri
 import app.cash.turbine.test
+import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlPayData
@@ -2020,12 +2021,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `normal onchain send can switch from savings to Trezor`() = test {
         val exactAvailableStarted = CompletableDeferred<Unit>()
         val finishExactAvailable = CompletableDeferred<Unit>()
+        val feeEstimateStarted = CompletableDeferred<Unit>()
+        val finishFeeEstimate = CompletableDeferred<Unit>()
         hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
         whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
             .doSuspendableAnswer {
                 exactAvailableStarted.complete(Unit)
                 finishExactAvailable.await()
                 Result.success(48_000uL)
+            }
+        whenever { hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()) }
+            .doSuspendableAnswer {
+                feeEstimateStarted.complete(Unit)
+                finishFeeEstimate.await()
+                Result.success(250uL)
             }
         balanceState.value = BalanceState(maxSendOnchainSats = 10_000uL)
         setSendState(
@@ -2034,6 +2043,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = 1_000uL,
                 payMethod = SendMethod.ONCHAIN,
                 speed = TransactionSpeed.Medium,
+                feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
             )
         )
         sut.setSendEvent(SendEvent.AmountChange(1_000uL))
@@ -2044,15 +2054,24 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setSendEvent(SendEvent.PaymentMethodSwitch)
         exactAvailableStarted.await()
 
+        assertTrue(sut.sendUiState.value.isSwitchingFundingSource)
         assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
         assertEquals("Trezor", sut.sendUiState.value.hardwareWalletName)
         assertEquals(46_400uL, sut.sendUiState.value.hardwareAvailableSats)
 
+        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
         finishExactAvailable.complete(Unit)
+        feeEstimateStarted.await()
+
+        assertTrue(sut.sendUiState.value.isSwitchingFundingSource)
+
+        finishFeeEstimate.complete(Unit)
         advanceUntilIdle()
 
+        assertFalse(sut.sendUiState.value.isSwitchingFundingSource)
         assertEquals(48_000uL, sut.sendUiState.value.hardwareAvailableSats)
         assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        verify(hwWalletRepo, times(1)).maxSpendableFunding(any(), any(), any())
     }
 
     @Test

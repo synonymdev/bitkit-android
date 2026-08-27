@@ -389,7 +389,7 @@ private fun ContentRunning(
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
             color = accentColor,
-            enabled = uiState.isAmountInputValid,
+            enabled = uiState.isAmountInputValid && !uiState.isSwitchingFundingSource,
             loading = isLoading,
             confirmed = isLoading,
             progress = swipeProgress,
@@ -515,6 +515,7 @@ private fun OnChainDetails(
                     },
                     color = if (uiState.hardwareWalletId != null) Colors.Blue else Colors.Brand,
                     enabled = uiState.canSwitchFundingSource,
+                    isLoading = uiState.isSwitchingFundingSource,
                     icon = R.drawable.ic_transfer.takeIf {
                         uiState.canSwitchFundingSource
                     },
@@ -641,6 +642,7 @@ private fun LightningDetails(
                     text = stringResource(R.string.wallet__spending__title),
                     color = Colors.Purple,
                     enabled = uiState.canSwitchFundingSource,
+                    isLoading = uiState.isSwitchingFundingSource,
                     icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")

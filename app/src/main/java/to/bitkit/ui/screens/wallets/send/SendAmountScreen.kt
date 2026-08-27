@@ -266,7 +266,7 @@ private fun SendAmountNodeRunning(
                 uiState.lnurl is LnurlParams.LnurlWithdraw -> R.string.wallet__lnurl_w_max
                 uiState.hardwareWalletId != null -> R.string.wallet__send_available
                 uiState.isUnified -> R.string.wallet__send_available
-                uiState.payMethod == SendMethod.ONCHAIN -> R.string.wallet__send_available_savings
+                uiState.payMethod == SendMethod.ONCHAIN -> R.string.wallet__send_available
                 uiState.payMethod == SendMethod.LIGHTNING -> R.string.wallet__send_available_spending
                 else -> R.string.wallet__send_available
             }
@@ -328,7 +328,7 @@ private fun SendAmountNodeRunning(
 
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
-                enabled = uiState.isAmountInputValid,
+                enabled = uiState.isAmountInputValid && !uiState.isSwitchingFundingSource,
                 isLoading = uiState.isLoading,
                 onClick = onContinue,
                 modifier = Modifier.testTag("ContinueAmount")
@@ -365,6 +365,7 @@ private fun PaymentMethodButton(
         icon = if (uiState.canSwitchFundingSource) R.drawable.ic_transfer else null,
         onClick = onClick,
         enabled = uiState.canSwitchFundingSource && !uiState.isLoading,
+        isLoading = uiState.isSwitchingFundingSource,
         modifier = Modifier
             .height(28.dp)
             .testTag("AssetButton-$testId")

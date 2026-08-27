@@ -33,15 +33,17 @@ fun NumberPadActionButton(
     modifier: Modifier = Modifier,
     color: Color = Colors.Brand,
     enabled: Boolean = true,
+    isLoading: Boolean = false,
     @DrawableRes icon: Int? = null,
 ) {
     val contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp)
     val height = 28.dp
     val buttonShape = RoundedCornerShape(8.dp)
 
-    if (enabled) {
+    if (enabled || isLoading) {
         Button(
             onClick = onClick,
+            enabled = enabled && !isLoading,
             colors = AppButtonDefaults.primaryColors.copy(
                 containerColor = Color.Transparent,
                 disabledContainerColor = Color.Transparent
@@ -51,27 +53,34 @@ fun NumberPadActionButton(
             modifier = modifier
                 .requiredHeight(height)
                 .primaryButtonStyle(
-                    isEnabled = true,
+                    isEnabled = enabled && !isLoading,
                     shape = buttonShape,
                 )
-                .alphaFeedback(enabled = enabled)
+                .alphaFeedback(enabled = enabled && !isLoading)
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                if (icon != null) {
-                    Icon(
-                        painter = painterResource(icon),
-                        contentDescription = text,
-                        tint = color,
-                        modifier = Modifier.size(16.dp)
+            if (isLoading) {
+                GradientCircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(16.dp)
+                )
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    if (icon != null) {
+                        Icon(
+                            painter = painterResource(icon),
+                            contentDescription = text,
+                            tint = color,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                    Caption13Up(
+                        text = text,
+                        color = color,
                     )
                 }
-                Caption13Up(
-                    text = text,
-                    color = color,
-                )
             }
         }
     } else {
