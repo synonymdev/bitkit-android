@@ -15,6 +15,7 @@ import to.bitkit.ext.toCompactFailureType
 import to.bitkit.ext.toSendFailureDetails
 import to.bitkit.models.SendFailureDetails
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.QuickPayAlreadyPaidError
 import to.bitkit.repositories.QuickPayConversionError
 import to.bitkit.repositories.QuickPayPayRequest
 import to.bitkit.repositories.QuickPayPaymentFailedError
@@ -85,6 +86,12 @@ class QuickPayViewModel @Inject constructor(
 
     private fun Throwable.toUiFailure(paymentRequest: String?): SendFailureDetails {
         return when (this) {
+            is QuickPayAlreadyPaidError -> SendFailureDetails(
+                message = context.getString(R.string.wallet__send_quickpay__already_paid),
+                failureType = toCompactFailureType(),
+                resetRoutingCachesOnRetry = false,
+                paymentRequest = paymentRequest,
+            )
             is QuickPayConversionError -> SendFailureDetails(
                 message = context.getString(R.string.wallet__send_quickpay__currency_conversion),
                 failureType = toCompactFailureType(),

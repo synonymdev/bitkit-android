@@ -20,6 +20,7 @@ import to.bitkit.R
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.QuickPayAlreadyPaidError
 import to.bitkit.repositories.QuickPayConversionError
 import to.bitkit.repositories.QuickPayPayRequest
 import to.bitkit.repositories.QuickPayRepo
@@ -44,6 +45,7 @@ class QuickPayViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(context.getString(any())).thenReturn("error")
+        whenever(context.getString(R.string.wallet__send_quickpay__already_paid)).thenReturn("already paid")
         whenever(context.getString(R.string.wallet__send_quickpay__currency_conversion)).thenReturn("conversion")
         whenever(lightningRepo.lightningState).thenReturn(
             MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)),
@@ -190,6 +192,18 @@ class QuickPayViewModelTest : BaseUnitTest() {
 
         val error = assertIs<QuickPayResult.Error>(sut.uiState.value.result)
         assertEquals("conversion", error.failure.message)
+    }
+
+    @Test
+    fun `already paid failure uses localized message`() = test {
+        val session = QuickPaySession()
+        sut.attach(session)
+        events.emit(QuickPaySessionEvent.Error(QuickPayAlreadyPaidError(), "lnbcrt1test"))
+        advanceUntilIdle()
+
+        val error = assertIs<QuickPayResult.Error>(sut.uiState.value.result)
+        assertEquals("already paid", error.failure.message)
+        assertEquals("lnbcrt1test", error.failure.paymentRequest)
     }
 
     @Test

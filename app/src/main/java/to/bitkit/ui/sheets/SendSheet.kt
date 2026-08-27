@@ -373,7 +373,9 @@ fun SendSheet(
                                         failure = failure,
                                         retryRoute = SendRetryRoute.QuickPay,
                                     )
-                                )
+                                ) {
+                                    popUpTo<SendRoute.QuickPay> { inclusive = true }
+                                }
                             }
                         )
                     }

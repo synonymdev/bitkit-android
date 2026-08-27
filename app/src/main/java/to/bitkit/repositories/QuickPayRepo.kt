@@ -457,6 +457,7 @@ class QuickPayRepo @Inject constructor(
         if (op == null) return
         when (applied) {
             AmbiguousApply.SUCCEEDED -> emitSuccessLocked(op, feePaidMsat = null)
+            AmbiguousApply.ALREADY_PAID -> emitErrorLocked(op, QuickPayAlreadyPaidError(), paymentRequest)
             AmbiguousApply.FAILED,
             AmbiguousApply.UNCHANGED,
             -> emitErrorLocked(op, error, paymentRequest)
@@ -577,15 +578,16 @@ class QuickPayRepo @Inject constructor(
         return when (match.status) {
             QuickPayReconcileRow.Status.PENDING -> AmbiguousApply.UNCHANGED
             QuickPayReconcileRow.Status.SUCCEEDED -> {
-                if (duplicate &&
+                val isFreshDuplicate = duplicate &&
                     record.phase == QuickPayRecordPhase.SUBMITTING &&
                     record.paymentId == null
-                ) {
+                if (isFreshDuplicate) {
                     spend.release(record.invoicePaymentHash)
+                    AmbiguousApply.ALREADY_PAID
                 } else {
                     spend.drop(record.invoicePaymentHash)
+                    AmbiguousApply.SUCCEEDED
                 }
-                AmbiguousApply.SUCCEEDED
             }
             QuickPayReconcileRow.Status.FAILED -> {
                 val attributed = isAttributedFailure(
@@ -759,7 +761,7 @@ class QuickPayRepo @Inject constructor(
 
     private enum class PreparePayResult { LIVE, RECOVERED, FRESH, REJECTED }
 
-    private enum class AmbiguousApply { UNCHANGED, SUCCEEDED, FAILED }
+    private enum class AmbiguousApply { UNCHANGED, SUCCEEDED, ALREADY_PAID, FAILED }
 }
 
 fun interface QuickPayInvoiceParser {
@@ -825,6 +827,8 @@ data class QuickPayCompletionOutcome(
 }
 
 class QuickPayConversionError : AppError("Currency conversion failed")
+
+class QuickPayAlreadyPaidError : AppError("Invoice already paid")
 
 class QuickPayPaymentFailedError(
     val paymentHash: String,

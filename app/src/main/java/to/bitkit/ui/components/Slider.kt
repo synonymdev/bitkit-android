@@ -145,6 +145,7 @@ fun Slider(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .systemGestureExclusion()
                     .height(KNOB_SIZE_DP.dp)
             ) {
                 Canvas(
