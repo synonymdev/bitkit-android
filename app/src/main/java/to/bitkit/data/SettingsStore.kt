@@ -128,6 +128,7 @@ data class SettingsData(
     val bgPaymentsIntroSeen: Boolean = false,
     val isQuickPayEnabled: Boolean = false,
     val quickPayAmount: Int = 5,
+    val quickPayDailyLimitMultiplier: Int = 5,
     val lightningSetupStep: Int = 0,
     val isPinEnabled: Boolean = false,
     val isBiometricEnabled: Boolean = false,

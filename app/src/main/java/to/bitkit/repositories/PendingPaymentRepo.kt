@@ -19,10 +19,12 @@ class PendingPaymentRepo @Inject constructor() {
     private val _state = MutableStateFlow(PendingPaymentsState())
     val state = _state.asStateFlow()
 
-    private val _resolution = MutableSharedFlow<PendingPaymentResolution>(extraBufferCapacity = 1)
+    private val _resolution = MutableSharedFlow<PendingPaymentResolution>()
     val resolution = _resolution.asSharedFlow()
+    private val lastResolutions = MutableStateFlow<Map<String, PendingPaymentResolution>>(emptyMap())
 
     fun track(paymentHash: String) {
+        lastResolutions.update { it - paymentHash }
         _state.update { it.copy(pendingPayments = it.pendingPayments + paymentHash) }
     }
 
@@ -30,7 +32,14 @@ class PendingPaymentRepo @Inject constructor() {
 
     suspend fun resolve(resolution: PendingPaymentResolution) {
         _state.update { it.copy(pendingPayments = it.pendingPayments - resolution.paymentHash) }
+        lastResolutions.update { it + (resolution.paymentHash to resolution) }
         _resolution.emit(resolution)
+    }
+
+    fun consumeResolution(paymentHash: String): PendingPaymentResolution? {
+        val taken = lastResolutions.value[paymentHash] ?: return null
+        lastResolutions.update { it - paymentHash }
+        return taken
     }
 
     fun setActiveHash(hash: String?) = _state.update { it.copy(activeHash = hash) }
@@ -48,7 +57,11 @@ class PaymentPendingException(val paymentHash: String) : AppError("Payment pendi
 sealed interface PendingPaymentResolution {
     val paymentHash: String
 
-    data class Success(override val paymentHash: String) : PendingPaymentResolution
+    data class Success(
+        override val paymentHash: String,
+        val amountWithFeeSats: Long? = null,
+    ) : PendingPaymentResolution
+
     data class Failure(
         override val paymentHash: String,
         val reason: PaymentFailureReason? = null,

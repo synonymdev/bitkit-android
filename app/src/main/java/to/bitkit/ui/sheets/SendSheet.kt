@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -325,42 +326,59 @@ fun SendSheet(
                     )
                 }
                 composableWithDefaultTransitions<SendRoute.QuickPay> {
-                    val quickPayData by appViewModel.quickPayData.collectAsStateWithLifecycle()
-                    SendQuickPayScreen(
-                        quickPayData = requireNotNull(quickPayData),
-                        onPaymentComplete = { paymentHash, amountWithFee ->
-                            appViewModel.onSendSuccess(
-                                NewTransactionSheetDetails(
-                                    type = NewTransactionSheetType.LIGHTNING,
-                                    direction = NewTransactionSheetDirection.SENT,
-                                    paymentHashOrTxId = paymentHash,
-                                    sats = amountWithFee,
-                                ),
-                            )
-                        },
-                        onPaymentPending = { paymentHash, amount, paymentRequest ->
-                            appViewModel.preserveContactPaymentContext(paymentHash)
-                            navController.navigateTo(
-                                SendRoute.Pending(
-                                    paymentHash = paymentHash,
-                                    amount = amount,
-                                    retryRoute = SendRetryRoute.QuickPay,
-                                    paymentRequest = paymentRequest,
+                    val quickPayRequest by appViewModel.quickPayData.collectAsStateWithLifecycle()
+                    var displayedRequest by remember { mutableStateOf(quickPayRequest) }
+                    LaunchedEffect(quickPayRequest) {
+                        if (quickPayRequest != null) displayedRequest = quickPayRequest
+                    }
+                    val request = displayedRequest ?: return@composableWithDefaultTransitions
+                    key(request.id) {
+                        SendQuickPayScreen(
+                            quickPayData = request.data,
+                            isRequestActive = quickPayRequest?.id == request.id,
+                            onPaymentComplete = { paymentHash, amountWithFee ->
+                                appViewModel.onSendSuccess(
+                                    NewTransactionSheetDetails(
+                                        type = NewTransactionSheetType.LIGHTNING,
+                                        direction = NewTransactionSheetDirection.SENT,
+                                        paymentHashOrTxId = paymentHash,
+                                        sats = amountWithFee,
+                                    ),
+                                    allowDuplicateHash = true,
                                 )
-                            ) {
-                                popUpTo(startDestination) { inclusive = true }
+                            },
+                            onPaymentPending = { paymentHash, amount, paymentRequest ->
+                                appViewModel.preserveContactPaymentContext(paymentHash)
+                                navController.navigateTo(
+                                    SendRoute.Pending(
+                                        paymentHash = paymentHash,
+                                        amount = amount,
+                                        retryRoute = SendRetryRoute.QuickPay,
+                                        paymentRequest = paymentRequest,
+                                    )
+                                ) {
+                                    popUpTo(startDestination) { inclusive = true }
+                                }
+                            },
+                            onFallBackToConfirm = {
+                                appViewModel.resetQuickPay()
+                                navController.navigateTo(SendRoute.Confirm) {
+                                    popUpTo<SendRoute.QuickPay> { inclusive = true }
+                                }
+                            },
+                            onShowError = { failure ->
+                                appViewModel.clearActiveContactPaymentContext()
+                                navController.navigateTo(
+                                    SendRoute.errorFromFailure(
+                                        failure = failure,
+                                        retryRoute = SendRetryRoute.QuickPay,
+                                    )
+                                ) {
+                                    popUpTo<SendRoute.QuickPay> { inclusive = true }
+                                }
                             }
-                        },
-                        onShowError = { failure ->
-                            appViewModel.clearActiveContactPaymentContext()
-                            navController.navigateTo(
-                                SendRoute.errorFromFailure(
-                                    failure = failure,
-                                    retryRoute = SendRetryRoute.QuickPay,
-                                )
-                            )
-                        }
-                    )
+                        )
+                    }
                 }
                 composableWithDefaultTransitions<SendRoute.Pending> {
                     val route = it.toRoute<SendRoute.Pending>()
@@ -368,13 +386,13 @@ fun SendSheet(
                     SendPendingScreen(
                         paymentHash = route.paymentHash,
                         amount = route.amount,
-                        onPaymentSuccess = { paymentHash ->
+                        onPaymentSuccess = { paymentHash, amountWithFee ->
                             appViewModel.onSendSuccess(
                                 NewTransactionSheetDetails(
                                     type = NewTransactionSheetType.LIGHTNING,
                                     direction = NewTransactionSheetDirection.SENT,
                                     paymentHashOrTxId = paymentHash,
-                                    sats = route.amount,
+                                    sats = amountWithFee,
                                 ),
                             )
                         },

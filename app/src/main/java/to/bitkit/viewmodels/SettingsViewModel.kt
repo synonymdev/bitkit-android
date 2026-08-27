@@ -348,6 +348,15 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    val quickPayDailyLimitMultiplier = settingsStore.data.map { it.quickPayDailyLimitMultiplier }
+        .asStateFlow(initialValue = 5)
+
+    fun setQuickPayDailyLimitMultiplier(value: Int) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(quickPayDailyLimitMultiplier = value) }
+        }
+    }
+
     val enableSwipeToHideBalance = settingsStore.data.map { it.enableSwipeToHideBalance }
         .asStateFlow(initialValue = true)
 

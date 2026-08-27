@@ -76,6 +76,8 @@ data class ConvertedAmount(
     val sats: Long,
     val locale: Locale = Locale.getDefault(),
 ) {
+    fun toUsdCents(): Long = value.movePointRight(2).setScale(0, RoundingMode.HALF_UP).toLong()
+
     val isSymbolSuffix: Boolean get() = currency in SUFFIX_SYMBOL_CURRENCIES
 
     data class BitcoinDisplayComponents(

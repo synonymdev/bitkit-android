@@ -125,6 +125,7 @@ import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
+import to.bitkit.models.USD
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
 import to.bitkit.models.sanitizedDeeplinkLogValue
@@ -156,6 +157,8 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
+import to.bitkit.repositories.QuickPayPaymentFailedError
+import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.TransferRepo
 import to.bitkit.repositories.WalletRepo
@@ -186,6 +189,7 @@ import to.bitkit.utils.timedsheets.sheets.HighBalanceTimedSheet
 import to.bitkit.utils.timedsheets.sheets.NotificationsTimedSheet
 import to.bitkit.utils.timedsheets.sheets.QuickPayTimedSheet
 import java.math.BigDecimal
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import kotlin.coroutines.cancellation.CancellationException
 import kotlin.time.Duration
@@ -220,6 +224,7 @@ class AppViewModel @Inject constructor(
     private val notifyPaymentReceivedHandler: NotifyPaymentReceivedHandler,
     private val notifyChannelReadyHandler: NotifyChannelReadyHandler,
     private val cacheStore: CacheStore,
+    private val quickPayRepo: QuickPayRepo,
     private val transferRepo: TransferRepo,
     private val migrationService: MigrationService,
     private val coreService: CoreService,
@@ -255,7 +260,8 @@ class AppViewModel @Inject constructor(
     private val _sendUiState = MutableStateFlow(SendUiState())
     val sendUiState = _sendUiState.asStateFlow()
 
-    private val _quickPayData = MutableStateFlow<QuickPayData?>(null)
+    private val quickPayRequestIds = AtomicLong(0L)
+    private val _quickPayData = MutableStateFlow<QuickPayRequest?>(null)
     val quickPayData = _quickPayData.asStateFlow()
 
     private val scanMutex = Mutex()
@@ -371,6 +377,11 @@ class AppViewModel @Inject constructor(
         }
         viewModelScope.launch {
             lightningRepo.updateGeoBlockState()
+        }
+        viewModelScope.launch {
+            quickPayRepo.unhandledFailures.collect {
+                notifyPaymentFailed((it as? QuickPayPaymentFailedError)?.reason)
+            }
         }
         viewModelScope.launch {
             hwWalletRepo.receivedTxs.collect { tx ->
@@ -1156,19 +1167,33 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handlePaymentFailed(event: Event.PaymentFailed) {
-        event.paymentHash?.let { paymentHash ->
-            activityRepo.handlePaymentEvent(paymentHash)
+        val outcome = quickPayRepo.signalCompletion(
+            paymentId = event.paymentId,
+            paymentHash = event.paymentHash,
+            success = false,
+            failureReason = event.reason,
+        )
+        val paymentHash = event.paymentHash ?: outcome.invoicePaymentHash ?: event.paymentId
+        if (paymentHash != null) {
+            refreshPaymentActivity(paymentHash)
             if (pendingPaymentRepo.isPending(paymentHash)) {
                 clearPendingContactPaymentContext(paymentHash)
                 pendingPaymentRepo.resolve(PendingPaymentResolution.Failure(paymentHash, event.reason))
-                if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
+                if (shouldNotifyPendingResolution(paymentHash)) {
                     notifyPendingPaymentFailed()
                 }
                 return
             }
+            if (outcome.sessionNotified) return
             if (closeActiveSendForFailedPayment(paymentHash, event.reason)) return
         }
         notifyPaymentFailed(event.reason)
+    }
+
+    private fun shouldNotifyPendingResolution(paymentHash: String): Boolean {
+        if (isQuickPayHandling(paymentHash)) return false
+        if (_quickPayData.value != null && _currentSheet.value !is Sheet.Send) return true
+        return _currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)
     }
 
     private fun closeActiveSendForFailedPayment(paymentHash: String, reason: PaymentFailureReason?): Boolean {
@@ -1232,18 +1257,59 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handlePaymentSuccessful(event: Event.PaymentSuccessful) {
-        event.paymentHash.let { paymentHash ->
-            activityRepo.handlePaymentEvent(paymentHash)
-            if (pendingPaymentRepo.isPending(paymentHash)) {
-                syncContactForActivity(paymentHash)
-                pendingPaymentRepo.resolve(PendingPaymentResolution.Success(paymentHash))
-                if (_currentSheet.value !is Sheet.Send || !pendingPaymentRepo.isActive(paymentHash)) {
-                    notifyPendingPaymentSucceeded()
-                }
-                return
-            }
+        val paymentHash = event.paymentHash
+        val isQuickPay = quickPayRepo.signalCompletion(
+            paymentId = event.paymentId,
+            paymentHash = paymentHash,
+            success = true,
+            feePaidMsat = event.feePaidMsat,
+        ).wasQuickPay
+        refreshPaymentActivity(paymentHash)
+        if (!pendingPaymentRepo.isPending(paymentHash)) {
+            notifyPaymentSentOnLightning(event)
+            return
         }
-        notifyPaymentSentOnLightning(event)
+        syncContactForActivity(paymentHash)
+        val amountWithFeeSats = quickPaySettledAmountSats(paymentHash, isQuickPay, event.feePaidMsat)
+        pendingPaymentRepo.resolve(
+            PendingPaymentResolution.Success(
+                paymentHash = paymentHash,
+                amountWithFeeSats = amountWithFeeSats,
+            ),
+        )
+        if (shouldNotifyPendingResolution(paymentHash)) {
+            notifyPendingPaymentSucceeded()
+        }
+    }
+
+    private fun isQuickPayHandling(paymentHash: String): Boolean {
+        if (_quickPayData.value == null || _currentSheet.value !is Sheet.Send) return false
+        return _sendUiState.value.decodedInvoice?.paymentHash?.toHex() == paymentHash
+    }
+
+    private suspend fun refreshPaymentActivity(paymentHash: String) {
+        runSuspendCatching { activityRepo.handlePaymentEvent(paymentHash) }.onFailure {
+            Logger.warn("Failed to refresh payment activity for '$paymentHash'", it, context = TAG)
+        }
+    }
+
+    private suspend fun quickPaySettledAmountSats(
+        paymentHash: String,
+        isQuickPay: Boolean,
+        feePaidMsat: ULong?,
+    ): Long? {
+        if (!isQuickPay) return null
+        val principal = (
+            activityRepo.findActivityByPaymentId(
+                paymentHashOrTxId = paymentHash,
+                type = ActivityFilter.LIGHTNING,
+                txType = PaymentType.SENT,
+                retry = true,
+            ).getOrNull() as? Activity.Lightning
+            )?.v1?.value
+        return principal?.let {
+            (it.safe() + msatFloorOf(feePaidMsat ?: 0u).safe()).toLong()
+        }
     }
 
     // region Notifications
@@ -2645,39 +2711,59 @@ class AppViewModel @Inject constructor(
         invoice: LightningInvoice? = null,
     ): Boolean {
         if (hasActiveContactPaymentContext()) return false
+        val invoiceHash = invoice?.paymentHash?.toHex()?.takeIf { it.isNotBlank() }
+        val open = invoiceHash != null && quickPayRepo.hasOpen(invoiceHash)
+        if (!open && !canApplyQuickPay(amountSats)) return false
 
-        val settings = settingsStore.data.first()
-        if (!settings.isQuickPayEnabled || amountSats == 0uL) return false
+        Logger.info("Using QuickPay for '$amountSats' sats", context = TAG)
 
-        val quickPayAmountSats = currencyRepo.convertFiatToSats(settings.quickPayAmount.toDouble(), "USD").getOrNull()
-            ?: return false
-
-        if (amountSats <= quickPayAmountSats) {
-            Logger.info("Using QuickPay: $amountSats sats <= $quickPayAmountSats sats threshold", context = TAG)
-
-            val quickPayData: QuickPayData = when {
-                lnurlPay != null -> {
-                    QuickPayData.LnurlPay(
-                        sats = amountSats,
-                        data = lnurlPay,
-                    )
-                }
-
-                else -> {
-                    val decodedInvoice = requireNotNull(invoice)
-                    QuickPayData.Bolt11(sats = amountSats, bolt11 = decodedInvoice.bolt11)
-                }
+        val quickPayData: QuickPayData = when {
+            lnurlPay != null -> {
+                QuickPayData.LnurlPay(
+                    sats = amountSats,
+                    data = lnurlPay,
+                )
             }
 
-            _quickPayData.update { quickPayData }
-
-            Logger.debug("QuickPayData: $quickPayData", context = TAG)
-
-            navigateToSendRoute(fromMainScanner, SendRoute.QuickPay, SendEffect.NavigateToQuickPay)
-            return true
+            else -> {
+                val decodedInvoice = requireNotNull(invoice)
+                QuickPayData.Bolt11(sats = amountSats, bolt11 = decodedInvoice.bolt11)
+            }
         }
 
-        return false
+        _quickPayData.update {
+            QuickPayRequest(id = quickPayRequestIds.incrementAndGet(), data = quickPayData)
+        }
+
+        if (lnurlPay != null) {
+            _sendUiState.update {
+                it.copy(
+                    amount = amountSats,
+                    payMethod = SendMethod.LIGHTNING,
+                    lnurl = LnurlParams.LnurlPay(lnurlPay),
+                )
+            }
+        } else if (invoice != null) {
+            _sendUiState.update {
+                it.copy(
+                    amount = amountSats,
+                    addressInput = invoice.bolt11,
+                    isAddressInputValid = true,
+                    decodedInvoice = invoice,
+                    payMethod = SendMethod.LIGHTNING,
+                )
+            }
+        }
+
+        Logger.debug("QuickPayData: $quickPayData", context = TAG)
+
+        navigateToSendRoute(fromMainScanner, SendRoute.QuickPay, SendEffect.NavigateToQuickPay)
+        return true
+    }
+
+    private suspend fun canApplyQuickPay(amountSats: ULong): Boolean {
+        if (hasActiveContactPaymentContext()) return false
+        return quickPayRepo.canApply(amountSats).getOrDefault(false)
     }
 
     private fun resetAmountInput() {
@@ -2721,7 +2807,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val amountInUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), "USD").getOrNull() ?: return
+        val amountInUsd = currencyRepo.convertSatsToFiat(amountSats.toLong(), USD).getOrNull() ?: return
         if (
             amountInUsd.value > BigDecimal(SEND_AMOUNT_WARNING_THRESHOLD) &&
             settings.enableSendAmountWarning &&
@@ -2754,7 +2840,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        val feeInUsd = currencyRepo.convertSatsToFiat(totalFee.toLong(), "USD").getOrNull() ?: return
+        val feeInUsd = currencyRepo.convertSatsToFiat(totalFee.toLong(), USD).getOrNull() ?: return
         if (
             feeInUsd.value > BigDecimal(TEN_USD) &&
             SanityWarning.FEE_OVER_10_USD !in _sendUiState.value.confirmedWarnings
@@ -3434,6 +3520,10 @@ class AppViewModel @Inject constructor(
     fun hideSheet() = hideSheet(shouldFlushDeferredScan = true)
 
     private fun hideSheet(shouldFlushDeferredScan: Boolean) {
+        if (_currentSheet.value is Sheet.Send) {
+            resetQuickPay()
+            quickPayRepo.detachAll()
+        }
         scanResultHandler = null
         receiveSheetContext = null
         sheetTransitionJob?.cancel()
@@ -3627,16 +3717,18 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun onSendSuccess(details: NewTransactionSheetDetails) {
+    fun onSendSuccess(details: NewTransactionSheetDetails, allowDuplicateHash: Boolean = false) {
         details.paymentHashOrTxId?.let {
             val isNewPayment = synchronized(processedPaymentsLock) {
                 processedPayments.add(it)
             }
-            if (!isNewPayment) {
-                Logger.debug("Skipped duplicate processed payment '$it'", context = TAG)
-                return
+            when {
+                isNewPayment -> syncContactForActivity(it)
+                !allowDuplicateHash -> {
+                    Logger.debug("Skipped duplicate processed payment '$it'", context = TAG)
+                    return
+                }
             }
-            syncContactForActivity(it)
         }
 
         _successSendUiState.update { details }
@@ -4107,6 +4199,12 @@ sealed interface QuickPayData {
     @Stable
     data class LnurlPay(override val sats: ULong, val data: LnurlPayData) : QuickPayData
 }
+
+@Stable
+data class QuickPayRequest(
+    val id: Long,
+    val data: QuickPayData,
+)
 // endregion
 
 internal fun resolvePastedPubkyRoute(

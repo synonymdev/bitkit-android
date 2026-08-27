@@ -9,6 +9,7 @@ import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.core.net.toUri
 import app.cash.turbine.test
+import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
@@ -41,6 +42,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.check
 import org.mockito.kotlin.clearInvocations
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
@@ -95,6 +97,10 @@ import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
+import to.bitkit.repositories.QuickPayCompletionKind
+import to.bitkit.repositories.QuickPayCompletionOutcome
+import to.bitkit.repositories.QuickPayPaymentFailedError
+import to.bitkit.repositories.QuickPayRepo
 import to.bitkit.repositories.SamRockRepo
 import to.bitkit.repositories.SettledReceiveAddress
 import to.bitkit.repositories.SettledReceiveInvoice
@@ -124,12 +130,14 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
+import com.synonym.bitkitcore.Activity as BitkitActivity
 
 @OptIn(ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 @RunWith(RobolectricTestRunner::class)
@@ -156,6 +164,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val notifyPaymentReceivedHandler = mock<NotifyPaymentReceivedHandler>()
     private val notifyChannelReadyHandler = mock<NotifyChannelReadyHandler>()
     private val cacheStore = mock<CacheStore>()
+    private val quickPayRepo = mock<QuickPayRepo>()
+    private val quickPayUnhandledFailures = MutableSharedFlow<Throwable>(extraBufferCapacity = 8)
     private val transferRepo = mock<TransferRepo>()
     private val migrationService = mock<MigrationService>()
     private val coreService = mock<CoreService>()
@@ -224,6 +234,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(backupRepo.isRestoring).thenReturn(MutableStateFlow(false))
         stubSettingsStore()
         whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
+        whenever { quickPayRepo.canApply(any<ULong>()) }.thenReturn(Result.success(false))
+        whenever { quickPayRepo.hasOpen(any()) }.thenReturn(false)
+        whenever(quickPayRepo.unhandledFailures).thenReturn(quickPayUnhandledFailures)
+        whenever {
+            quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(QuickPayCompletionOutcome.None)
+        whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
+            .thenReturn(Result.failure(Exception("activity not found")))
         whenever(transferRepo.activeTransfers).thenReturn(flowOf(emptyList()))
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState()))
         whenever { blocktankRepo.refreshInfo() }.thenReturn(Result.success(Unit))
@@ -322,6 +340,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         notifyPaymentReceivedHandler = notifyPaymentReceivedHandler,
         notifyChannelReadyHandler = notifyChannelReadyHandler,
         cacheStore = cacheStore,
+        quickPayRepo = quickPayRepo,
         transferRepo = transferRepo,
         migrationService = migrationService,
         coreService = coreService,
@@ -1716,6 +1735,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
         verify(activityRepo).setContact(contactPublicKey = contactKey, forPaymentId = paymentHash)
+        verify(quickPayRepo).signalCompletion(
+            paymentId = "payment_id",
+            paymentHash = paymentHash,
+            success = true,
+            feePaidMsat = 10uL,
+            failureReason = null,
+        )
     }
 
     @Test
@@ -1741,7 +1767,220 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 reason = PaymentFailureReason.RETRIES_EXHAUSTED,
             )
         )
+        verify(quickPayRepo).signalCompletion(
+            paymentId = "payment_id",
+            paymentHash = paymentHash,
+            success = false,
+            feePaidMsat = null,
+            failureReason = PaymentFailureReason.RETRIES_EXHAUSTED,
+        )
         assertNull(pendingContactPaymentContext(paymentHash))
+    }
+
+    @Test
+    fun `PaymentFailed with null hash still resolves pending`() = test {
+        val paymentHash = "pending_hash"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = paymentHash,
+                paymentHash = null,
+                reason = PaymentFailureReason.RETRIES_EXHAUSTED,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(
+            PendingPaymentResolution.Failure(
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.RETRIES_EXHAUSTED,
+            ),
+        )
+        verify(quickPayRepo).signalCompletion(
+            paymentId = paymentHash,
+            paymentHash = null,
+            success = false,
+            feePaidMsat = null,
+            failureReason = PaymentFailureReason.RETRIES_EXHAUSTED,
+        )
+    }
+
+    @Test
+    fun `PaymentFailed releases disk reservation when not pending`() = test {
+        val paymentHash = "restart_hash"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(false)
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.RETRIES_EXHAUSTED,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(quickPayRepo).signalCompletion(
+            paymentId = "payment_id",
+            paymentHash = paymentHash,
+            success = false,
+            feePaidMsat = null,
+            failureReason = PaymentFailureReason.RETRIES_EXHAUSTED,
+        )
+        verify(pendingPaymentRepo, never()).resolve(any())
+    }
+
+    @Test
+    fun `PaymentSuccessful clears disk reservation when not pending`() = test {
+        val paymentHash = "restart_ok"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(false)
+        whenever {
+            quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(
+            QuickPayCompletionOutcome(
+                kind = QuickPayCompletionKind.SETTLED_SUCCESS,
+                invoicePaymentHash = paymentHash,
+            ),
+        )
+
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        inOrder(quickPayRepo, activityRepo) {
+            verify(quickPayRepo).signalCompletion(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                success = true,
+                feePaidMsat = 10uL,
+                failureReason = null,
+            )
+            verify(activityRepo).handlePaymentEvent(paymentHash)
+        }
+        verify(pendingPaymentRepo, never()).resolve(any())
+    }
+
+    @Test
+    fun `pending success still resolves if activity sync fails`() = test {
+        val paymentHash = "pending_sync_fail"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        whenever { activityRepo.handlePaymentEvent(paymentHash) }.thenThrow(RuntimeException("core"))
+
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
+    }
+
+    @Test
+    fun `pending failure still resolves if activity sync fails`() = test {
+        val paymentHash = "pending_sync_fail_err"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        whenever { activityRepo.handlePaymentEvent(paymentHash) }.thenThrow(RuntimeException("core"))
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(
+            PendingPaymentResolution.Failure(
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            )
+        )
+    }
+
+    @Test
+    fun `pending confirm lightning success keeps invoice amount`() = test {
+        val paymentHash = "pending_confirm_hash"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        whenever {
+            quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(QuickPayCompletionOutcome.None)
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(PendingPaymentResolution.Success(paymentHash))
+        verify(activityRepo, never()).findActivityByPaymentId(any(), any(), any(), any())
+    }
+
+    @Test
+    fun `pending quickpay lightning success includes settled amount`() = test {
+        val paymentHash = "pending_quickpay_hash"
+        val activityV1 = mock<LightningActivity> {
+            on { value } doReturn 500u
+            on { fee } doReturn 0u
+        }
+        val activity = mock<BitkitActivity.Lightning> { on { v1 } doReturn activityV1 }
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        whenever {
+            quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(
+            QuickPayCompletionOutcome(
+                kind = QuickPayCompletionKind.SETTLED_SUCCESS,
+                invoicePaymentHash = paymentHash,
+            ),
+        )
+        whenever { activityRepo.findActivityByPaymentId(any(), any(), any(), any()) }
+            .thenReturn(Result.success(activity))
+        advanceUntilIdle()
+
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10_000uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(pendingPaymentRepo).resolve(
+            PendingPaymentResolution.Success(
+                paymentHash = paymentHash,
+                amountWithFeeSats = 510L,
+            ),
+        )
+        verify(quickPayRepo).signalCompletion(
+            paymentId = "payment_id",
+            paymentHash = paymentHash,
+            success = true,
+            feePaidMsat = 10_000uL,
+            failureReason = null,
+        )
     }
 
     @Test
@@ -1772,6 +2011,239 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
             advanceUntilIdle()
 
+            assertEquals(
+                SendEffect.NavigateToError(
+                    SendFailureDetails(
+                        message = errorMessage,
+                        failureType = "routeNotFound",
+                        resetRoutingCachesOnRetry = true,
+                        paymentRequest = bolt11,
+                    )
+                ),
+                awaitItem(),
+            )
+        }
+    }
+
+    @Test
+    fun `in-flight QuickPay failure does not toast or navigate to confirm error`() = test {
+        val bolt11 = "lnbcrt1quickpayfail"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        whenever {
+            quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(
+            QuickPayCompletionOutcome(
+                kind = QuickPayCompletionKind.SETTLED_FAILURE,
+                invoicePaymentHash = "010203",
+                sessionNotified = true,
+            ),
+        )
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        sut.sendEffect.test {
+            emitNodeEvent(
+                Event.PaymentFailed(
+                    paymentId = "payment_id",
+                    paymentHash = "010203",
+                    reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+                ),
+            )
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `LNURL QuickPay failure with notified session does not toast`() = test {
+        val paymentHash = "lnurlfetchedhash"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(false)
+        whenever {
+            quickPayRepo.signalCompletion(anyOrNull(), anyOrNull(), any(), anyOrNull(), anyOrNull())
+        }.thenReturn(
+            QuickPayCompletionOutcome(
+                kind = QuickPayCompletionKind.SETTLED_FAILURE,
+                invoicePaymentHash = paymentHash,
+                sessionNotified = true,
+            ),
+        )
+        setSendState(SendUiState(payMethod = SendMethod.LIGHTNING))
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        sut.sendEffect.test {
+            emitNodeEvent(
+                Event.PaymentFailed(
+                    paymentId = "payment_id",
+                    paymentHash = paymentHash,
+                    reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+                ),
+            )
+            advanceUntilIdle()
+            expectNoEvents()
+        }
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `unhandled QuickPay session failure flushes to a toast`() = test {
+        whenever(context.getString(R.string.wallet__toast_payment_failed_title)).thenReturn("Payment failed")
+        whenever(context.getString(R.string.wallet__payment_route_not_found)).thenReturn("no route")
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        quickPayUnhandledFailures.emit(
+            QuickPayPaymentFailedError(
+                paymentHash = "unhandledhash",
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+                paymentRequest = "lnbcrt1unhandled",
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("PaymentFailedToast", it.testTag)
+            }
+        )
+    }
+
+    @Test
+    fun `unrelated failure still toasts while QuickPay send is open`() = test {
+        val bolt11 = "lnbcrt1quickpayunrelated"
+        whenever(context.getString(R.string.wallet__toast_payment_failed_title)).thenReturn("Payment failed")
+        whenever(context.getString(R.string.wallet__payment_route_not_found)).thenReturn("no route")
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = "other_id",
+                paymentHash = "deadbeef",
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("PaymentFailedToast", it.testTag)
+            }
+        )
+    }
+
+    @Test
+    fun `QuickPay failure still toasts after send sheet is hidden`() = test {
+        val bolt11 = "lnbcrt1quickpayhiddenfail"
+        whenever(context.getString(R.string.wallet__toast_payment_failed_title)).thenReturn("Payment failed")
+        whenever(context.getString(R.string.wallet__payment_route_not_found)).thenReturn("no route")
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        sut.hideSheet()
+        clearInvocations(toastManager)
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = "payment_id",
+                paymentHash = "010203",
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("PaymentFailedToast", it.testTag)
+            }
+        )
+    }
+
+    @Test
+    fun `pending QuickPay failure does not toast while send sheet is open`() = test {
+        val bolt11 = "lnbcrt1quickpaypendingopen"
+        val paymentHash = "010203"
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(true)
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `pending QuickPay failure toasts after send sheet is replaced`() = test {
+        val bolt11 = "lnbcrt1quickpaypendingreplaced"
+        val paymentHash = "010203"
+        whenever(context.getString(R.string.wallet__toast_payment_failed_title)).thenReturn("Payment failed")
+        whenever(context.getString(R.string.wallet__toast_payment_failed_description)).thenReturn("failed")
+        whenever(pendingPaymentRepo.isPending(paymentHash)).thenReturn(true)
+        whenever(pendingPaymentRepo.isActive(paymentHash)).thenReturn(false)
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        sut.showSheet(Sheet.ConnectionClosed)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        emitNodeEvent(
+            Event.PaymentFailed(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("PendingPaymentFailedToast", it.testTag)
+            }
+        )
+    }
+
+    @Test
+    fun `confirm failure still navigates after QuickPay fallback`() = test {
+        val bolt11 = "lnbcrt1quickpayfallback"
+        val errorMessage = "Bitkit could not find a route"
+        whenever(context.getString(R.string.wallet__payment_route_not_found)).thenReturn(errorMessage)
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        sut.resetQuickPay()
+
+        sut.sendEffect.test {
+            emitNodeEvent(
+                Event.PaymentFailed(
+                    paymentId = "payment_id",
+                    paymentHash = "010203",
+                    reason = PaymentFailureReason.ROUTE_NOT_FOUND,
+                ),
+            )
+            advanceUntilIdle()
             assertEquals(
                 SendEffect.NavigateToError(
                     SendFailureDetails(
@@ -2163,38 +2635,51 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `main scanner lightning scan opens QuickPay when enabled`() = test {
         val bolt11 = "lnbcrt1scannerquickpay"
-        enableQuickPay(thresholdSats = 1000u)
+        enableQuickPay()
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
 
         sut.showScannerSheet()
         sut.onScannerSheetResult(bolt11)
         advanceUntilIdle()
 
-        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
-        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
-        assertNull(sut.sendUiState.value.decodedInvoice)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(bolt11, sut.sendUiState.value.decodedInvoice?.bolt11)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
     }
 
     @Test
     fun `lightning scan uses QuickPay when enabled`() = test {
         val bolt11 = "lnbcrt1quickpay"
-        enableQuickPay(thresholdSats = 1000u)
+        enableQuickPay()
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
 
         sut.onScanResult(bolt11)
         advanceUntilIdle()
 
-        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
-        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
-        assertNull(sut.sendUiState.value.decodedInvoice)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
+        assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
+        assertEquals(bolt11, sut.sendUiState.value.decodedInvoice?.bolt11)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
     }
 
     @Test
-    fun `lightning scan uses QuickPay when PIN is required for payments`() = test {
+    fun `hiding send sheet clears quickPayData`() = test {
+        val bolt11 = "lnbcrt1quickpayhide"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        sut.hideSheet()
+
+        assertNull(sut.quickPayData.value)
+    }
+
+    @Test
+    fun `lightning scan uses QuickPay when PIN is required for payments under daily cap`() = test {
         val bolt11 = "lnbcrt1quickpaypin"
-        enableQuickPay(thresholdSats = 1000u)
+        enableQuickPay()
         settingsData.value = settingsData.value.copy(
             isPinEnabled = true,
             isPinForPaymentsEnabled = true,
@@ -2205,14 +2690,96 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onScanResult(bolt11)
         advanceUntilIdle()
 
-        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lightning scan uses QuickPay when PIN is on without PIN for payments`() = test {
+        val bolt11 = "lnbcrt1quickpayunlocked"
+        enableQuickPay()
+        settingsData.value = settingsData.value.copy(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lightning scan skips QuickPay when daily spend cap is exceeded`() = test {
+        val bolt11 = "lnbcrt1quickpaycap"
+        enableQuickPay(canApply = false)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lightning scan uses QuickPay when hash is already open`() = test {
+        val bolt11 = "lnbcrt1quickpayopen"
+        enableQuickPay(canApply = false)
+        whenever { quickPayRepo.hasOpen(any()) }.thenReturn(true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        sut.setIsAuthenticated(true)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
+        assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `rescan issues a new QuickPay request`() = test {
+        val bolt11 = "lnbcrt1quickpayrescan"
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        val first = assertNotNull(sut.quickPayData.value)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        val second = assertNotNull(sut.quickPayData.value)
+
+        assertEquals(first.data, second.data)
+        assertNotEquals(first.id, second.id)
+    }
+
+    @Test
+    fun `send success replays presentation when duplicates are allowed`() = test {
+        val details = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.LIGHTNING,
+            direction = NewTransactionSheetDirection.SENT,
+            paymentHashOrTxId = "replayed-hash",
+            sats = 500L,
+        )
+        sut.sendEffect.test {
+            sut.onSendSuccess(details)
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+
+            sut.onSendSuccess(details)
+            expectNoEvents()
+
+            sut.onSendSuccess(details, allowDuplicateHash = true)
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+        }
     }
 
     @Test
     fun `QuickPay eligible scan remains deferred until authenticated`() = test {
         val bolt11 = "lnbcrt1lockedscan"
-        enableQuickPay(thresholdSats = 1_000u)
+        enableQuickPay()
         settingsData.value = settingsData.value.copy(
             isPinEnabled = true,
             isPinForPaymentsEnabled = true,
@@ -2229,7 +2796,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setIsAuthenticated(true)
         advanceUntilIdle()
 
-        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value)
+        assertEquals(QuickPayData.Bolt11(sats = 500u, bolt11 = bolt11), sut.quickPayData.value?.data)
         assertEquals(Sheet.Send(SendRoute.QuickPay), sut.currentSheet.value)
         verify(coreService).decode(bolt11)
     }
@@ -2505,7 +3072,21 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `contact lightning payment skips QuickPay and opens confirm`() = test {
         val bolt11 = "lnbcrt1contact"
-        enableQuickPay(thresholdSats = 1000u)
+        enableQuickPay()
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+
+        sut.openContactPayment(paymentRequest = bolt11, publicKey = "pubkycontact")
+        advanceUntilIdle()
+
+        assertNull(sut.quickPayData.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `contact lightning payment skips QuickPay even when hash is open`() = test {
+        val bolt11 = "lnbcrt1contactopen"
+        enableQuickPay()
+        whenever { quickPayRepo.hasOpen(any()) }.thenReturn(true)
         stubLightningScan(bolt11 = bolt11, amountSats = 500u)
 
         sut.openContactPayment(paymentRequest = bolt11, publicKey = "pubkycontact")
@@ -3216,9 +3797,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
     }
 
-    private fun enableQuickPay(thresholdSats: ULong) {
+    private fun enableQuickPay(canApply: Boolean = true) {
         settingsData.value = SettingsData(isQuickPayEnabled = true, quickPayAmount = 5)
-        whenever(currencyRepo.convertFiatToSats(5.0, "USD")).thenReturn(Result.success(thresholdSats))
+        whenever { quickPayRepo.canApply(any<ULong>()) }.thenReturn(Result.success(canApply))
     }
 
     private suspend fun stubLightningScan(bolt11: String, amountSats: ULong) {

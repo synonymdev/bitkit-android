@@ -60,7 +60,7 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
             }?.let { "LDK Build error: $it" }
         }
 
-        class Node(exception: NodeException) : LdkException {
+        class Node(val exception: NodeException) : LdkException {
             override val compactType = exception::class.simpleName
             override val message = when (exception) {
                 is NodeException.AlreadyRunning -> "The node is already running."
@@ -125,6 +125,14 @@ class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.")
             }?.let { "LDK Node error: $it" }
         }
     }
+
+    fun nodeExceptionOrNull(): NodeException? = (inner as? LdkException.Node)?.exception
+}
+
+fun Throwable.asNodeException(): NodeException? = when (this) {
+    is NodeException -> this
+    is LdkError -> nodeExceptionOrNull()
+    else -> cause?.asNodeException()
 }
 // endregion
 
