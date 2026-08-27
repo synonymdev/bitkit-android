@@ -247,12 +247,9 @@ android {
             }
         }
         release {
-            isMinifyEnabled = false
-            isShrinkResources = false
-            proguardFiles(
-                getDefaultProguardFile("proguard-android-optimize.txt"),
-                "proguard-rules.pro",
-            )
+            optimization {
+                enable = true
+            }
             signingConfig = signingConfigs.getByName("release")
             ndk {
                 debugSymbolLevel = "FULL"
@@ -306,11 +303,7 @@ android {
 kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_11
-        freeCompilerArgs.addAll(
-            listOf(
-                "-XXLanguage:+PropertyParamAnnotationDefaultTargetMode",
-            )
-        )
+        freeCompilerArgs.add("-Xannotation-default-target=param-property")
     }
 }
 

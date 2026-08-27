@@ -20,9 +20,4 @@
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
 
-# btleplug (droidplug) Android Bluetooth support
-# These classes are loaded via JNI from Rust code
--keep class com.nonpolynomial.btleplug.** { *; }
-
-# jni-utils support library for btleplug
--keep class io.github.gedgygedgy.rust.** { *; }
+# App keep rules live in src/main/keepRules/*.keep (AGP 9.3 optimization DSL).

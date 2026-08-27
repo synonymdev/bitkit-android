@@ -1,0 +1,3 @@
+# Crypto replaces Android's BC provider with the app's BouncyCastleProvider.
+# The provider registers SPI classes by name, including KeyStore.BKS used by Conscrypt.
+-keep class org.bouncycastle.** { *; }
