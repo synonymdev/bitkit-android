@@ -83,6 +83,7 @@ val geoEnv = envFlag("GEO", default = true)
 val paykitUiDisabledEnv = envFlag("PAYKIT_UI_DISABLED", default = false)
 val trezorBridgeEnv = localProp("TREZOR_BRIDGE").map { it.toBoolean().toString() }.orElse("false")
 val trezorBridgeUrlEnv = localProp("TREZOR_BRIDGE_URL").orElse("http://10.0.2.2:21325")
+val trezorElectrumUrlEnv = localProp("TREZOR_ELECTRUM_URL").orElse("")
 val networkPerFlavor = mapOf("dev" to "REGTEST", "mainnet" to "BITCOIN", "tnet" to "TESTNET")
 val requestedNdkVersion = providers.environmentVariable("NDK_VERSION").orNull?.takeIf { it.isNotBlank() }
 val androidTestAnnotationPackage = "to.bitkit.test.annotations"
@@ -325,6 +326,7 @@ androidComponents {
         buildConfigFields.put("E2E_HOMEGATE_URL", e2eHomegateUrlEnv.stringField())
         buildConfigFields.put("TREZOR_BRIDGE", trezorBridgeEnv.booleanField())
         buildConfigFields.put("TREZOR_BRIDGE_URL", trezorBridgeUrlEnv.stringField())
+        buildConfigFields.put("TREZOR_ELECTRUM_URL", trezorElectrumUrlEnv.stringField())
         buildConfigFields.put("GEO", geoEnv.booleanField())
         buildConfigFields.put("FEATURE_PAYKIT_UI_DISABLED", paykitUiDisabledEnv.booleanField())
         buildConfigFields.put("LOCALES", provider { bcp47Locales.joinToString(",") }.stringField())

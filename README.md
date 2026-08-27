@@ -67,9 +67,10 @@ When testing the Trezor Bridge emulator from bitkit-docker through Android Studi
 ```properties
 TREZOR_BRIDGE=true
 TREZOR_BRIDGE_URL=http://10.0.2.2:21325
+TREZOR_ELECTRUM_URL=tcp://10.0.2.2:60001
 ```
 
-CLI builds can still pass the same values as environment variables.
+CLI builds can still pass the same values as environment variables. See [docs/trezor-emulator.md](docs/trezor-emulator.md) for the full emulator setup.
 
 ### Lint
 
