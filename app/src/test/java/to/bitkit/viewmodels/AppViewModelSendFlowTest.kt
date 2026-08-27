@@ -2075,6 +2075,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `fixed lightning invoice has valid amount`() = test {
+        val bolt11 = "lnbcrt1fixedamount"
+        stubLightningScan(bolt11 = bolt11, amountSats = 1_000uL)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `fixed LNURL payment has valid amount`() = test {
+        val lnurl = "lnurl1fixedamount"
+        whenever { coreService.decode(lnurl) }.thenReturn(
+            Scanner.LnurlPay(
+                LnurlPayData(
+                    uri = lnurl,
+                    callback = "https://example.com/callback",
+                    minSendable = 1_000_000uL,
+                    maxSendable = 1_000_000uL,
+                    metadataStr = "[]",
+                    commentAllowed = null,
+                    allowsNostr = false,
+                    nostrPubkey = null,
+                )
+            )
+        )
+        whenever(lightningRepo.canSend(1_000uL)).thenReturn(true)
+
+        sut.onScanResult(lnurl)
+        advanceUntilIdle()
+
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
     fun `hardware send rejects scanned non-onchain payment requests`() = test {
         val scans = nonOnchainPaymentScans()
         whenever(context.getString(R.string.hardware__send_onchain_only_title)).thenReturn("On-chain only")

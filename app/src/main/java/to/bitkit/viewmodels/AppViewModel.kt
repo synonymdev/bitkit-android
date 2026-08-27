@@ -2771,6 +2771,7 @@ class AppViewModel @Inject constructor(
 
         val lnAmountSats = lnInvoice?.amountSatoshis ?: 0u
         if (lnAmountSats > 0u) {
+            _sendUiState.update { it.copy(isAmountInputValid = true) }
             Logger.info("Found amount in unified invoice, checking QuickPay conditions", context = TAG)
 
             val quickPayHandled = handleQuickPayIfApplicable(
@@ -2938,6 +2939,7 @@ class AppViewModel @Inject constructor(
                 amount = amount,
                 addressInput = scanResult,
                 isAddressInputValid = true,
+                isAmountInputValid = true,
                 decodedInvoice = invoice,
                 payMethod = SendMethod.LIGHTNING,
             )
@@ -2988,6 +2990,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update {
             it.copy(
                 amount = initialAmount,
+                isAmountInputValid = initialAmount > 0uL,
                 payMethod = SendMethod.LIGHTNING,
                 lnurl = LnurlParams.LnurlPay(data),
             )
