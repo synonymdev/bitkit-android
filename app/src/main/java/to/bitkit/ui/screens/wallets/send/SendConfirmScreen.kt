@@ -95,9 +95,9 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.LnurlParams
+import to.bitkit.viewmodels.OnchainFeeUi
 import to.bitkit.viewmodels.SanityWarning
 import to.bitkit.viewmodels.SendEvent
-import to.bitkit.viewmodels.SendFee
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
 import kotlin.time.Duration.Companion.milliseconds
@@ -497,9 +497,7 @@ private fun OnChainDetails(
     onEvent: (SendEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val feeRate = remember(uiState.speed) { FeeRate.fromSpeed(uiState.speed) }
-    val feeSat = (uiState.fee as? SendFee.OnChain)?.value?.takeIf { it > 0 }
-    val feeSatUi = feeSat ?: uiState.fees[feeRate]?.takeIf { it > 0 }
+    val feeUi = uiState.onchainFeeUi
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = modifier.fillMaxWidth()
@@ -562,32 +560,31 @@ private fun OnChainDetails(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        val isFeeLoading = feeSat == null
-                        if (isFeeLoading) {
+                        if (feeUi.isLoading) {
                             GradientCircularProgressIndicator(
-                                tint = feeRate.color,
+                                tint = feeUi.rate.color,
                                 modifier = Modifier
                                     .size(16.dp)
                                     .padding(3.dp),
                             )
                         } else {
                             Icon(
-                                painterResource(feeRate.icon),
+                                painterResource(feeUi.rate.icon),
                                 contentDescription = null,
-                                tint = feeRate.color,
+                                tint = feeUi.rate.color,
                                 modifier = Modifier.size(16.dp)
                             )
                         }
                         val feeTextModifier = Modifier.animateContentSize(animationSpec = tween(200))
-                        if (feeSatUi == null) {
+                        if (feeUi.sats == null) {
                             BodySSB(
-                                text = stringResource(feeRate.title),
+                                text = stringResource(feeUi.rate.title),
                                 modifier = feeTextModifier
                             )
                         } else {
                             val feeText = let {
-                                val prefix = stringResource(feeRate.title)
-                                val value = rememberMoneyText(feeSatUi, showSymbol = true)
+                                val prefix = stringResource(feeUi.rate.title)
+                                val value = rememberMoneyText(feeUi.sats, showSymbol = true)
                                 "$prefix ($value)"
                             }
                             BodySSB(
@@ -619,7 +616,7 @@ private fun OnChainDetails(
                         tint = Colors.Brand,
                         modifier = Modifier.size(16.dp)
                     )
-                    BodySSB(stringResource(feeRate.description))
+                    BodySSB(stringResource(feeUi.rate.description))
                 }
             }
         }
@@ -707,7 +704,7 @@ private fun LightningDetails(
                             tint = Colors.Purple,
                             modifier = Modifier.size(16.dp)
                         )
-                        (uiState.fee as? SendFee.Lightning)?.value
+                        uiState.lightningFeeSats
                             ?.takeIf { it > 0 }
                             ?.let { feeSat ->
                                 val feeText = let {
@@ -835,7 +832,7 @@ private fun LnurlPayDetails(
                     tint = Colors.Purple,
                     modifier = Modifier.size(16.dp)
                 )
-                (uiState.fee as? SendFee.Lightning)?.value
+                uiState.lightningFeeSats
                     ?.takeIf { it > 0 }
                     ?.let { feeSat ->
                         val feeText = let {
@@ -883,8 +880,11 @@ private fun PreviewOnChain() {
             Content(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
-                    fee = SendFee.OnChain(1_234),
                     speed = TransactionSpeed.Medium,
+                    onchainFeeUi = OnchainFeeUi(
+                        rate = FeeRate.NORMAL,
+                        sats = 1_234,
+                    ),
                 ),
                 isNodeRunning = true,
                 isLoading = false,
@@ -904,8 +904,11 @@ private fun PreviewOnChainDetails() {
             Content(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
-                    fee = SendFee.OnChain(1_234),
                     speed = TransactionSpeed.Medium,
+                    onchainFeeUi = OnchainFeeUi(
+                        rate = FeeRate.NORMAL,
+                        sats = 1_234,
+                    ),
                 ),
                 isNodeRunning = true,
                 isLoading = false,
@@ -928,7 +931,7 @@ private fun PreviewLightningDetails() {
                     amount = 6_543u,
                     payMethod = SendMethod.LIGHTNING,
                     selectedTags = persistentListOf("coffee"),
-                    fee = SendFee.Lightning(43),
+                    lightningFeeSats = 43,
                 ),
                 isNodeRunning = true,
                 isLoading = false,
@@ -950,8 +953,11 @@ private fun PreviewOnChainLongFeeSmallScreen() {
                 uiState = sendUiState().copy(
                     amount = 2_345_678u,
                     selectedTags = persistentListOf("car", "house", "uber"),
-                    fee = SendFee.OnChain(654_321),
                     speed = TransactionSpeed.Custom(12_345u),
+                    onchainFeeUi = OnchainFeeUi(
+                        rate = FeeRate.CUSTOM,
+                        sats = 654_321,
+                    ),
                 ),
                 isNodeRunning = true,
                 isLoading = false,
@@ -970,7 +976,7 @@ private fun PreviewOnChainFeeLoading() {
             Content(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
-                    fee = null,
+                    onchainFeeUi = OnchainFeeUi(isLoading = true),
                 ),
                 isNodeRunning = true,
                 isLoading = false,
@@ -992,7 +998,7 @@ private fun PreviewLightning() {
                     amount = 6_543u,
                     payMethod = SendMethod.LIGHTNING,
                     selectedTags = persistentListOf(),
-                    fee = SendFee.Lightning(43),
+                    lightningFeeSats = 43,
                 ),
                 isNodeRunning = true,
                 isLoading = false,
@@ -1043,7 +1049,7 @@ private fun PreviewLnurlDetails() {
                 uiState = sendUiState().copy(
                     amount = 5_000u,
                     payMethod = SendMethod.LIGHTNING,
-                    fee = SendFee.Lightning(12),
+                    lightningFeeSats = 12,
                     lnurl = LnurlParams.LnurlPay(
                         data = LnurlPayData(
                             uri = "veryLongLnurlPayUri12345677890123456789012345678901234567890",

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -1639,9 +1640,9 @@ class AppViewModel @Inject constructor(
                     is SendEvent.CommentChange -> onCommentChange(it.value)
 
                     SendEvent.SpeedAndFee -> {
-                        if (_sendUiState.value.fees.isEmpty()) {
+                        if (_sendUiState.value.onchainFeeUi.estimates.isEmpty()) {
                             viewModelScope.launch {
-                                refreshFeeEstimates()
+                                refreshOnchainFeeUi()
                                 setSendEffect(SendEffect.NavigateToFee)
                             }
                         } else {
@@ -2123,19 +2124,6 @@ class AppViewModel @Inject constructor(
                     selectedUtxos = if (shouldResetUtxos) null else it.selectedUtxos,
                 )
             }
-            val fee = when (speed is TransactionSpeed.Custom) {
-                true -> getFeeEstimate(speed)
-                else -> if (state.hardwareWalletId != null) {
-                    getFeeEstimate(speed)
-                } else {
-                    state.fees.getOrDefault(FeeRate.fromSpeed(speed), 0)
-                }
-            }
-            _sendUiState.update {
-                it.copy(
-                    fee = SendFee.OnChain(fee),
-                )
-            }
             updateCanSwitchWallet()
             refreshOnchainSendIfNeeded()
             setSendEffect(SendEffect.PopBack(SendRoute.Confirm))
@@ -2180,7 +2168,7 @@ class AppViewModel @Inject constructor(
                         hardwareWalletId = null,
                         hardwareWalletName = null,
                         hardwareAvailableSats = 0uL,
-                        fee = SendFee.Lightning(0),
+                        lightningFeeSats = 0,
                         selectedUtxos = null,
                         confirmedWarnings = persistentListOf(),
                         isAmountInputValid = validateAmount(it.amount, SendMethod.LIGHTNING),
@@ -2196,7 +2184,6 @@ class AppViewModel @Inject constructor(
                         hardwareWalletId = null,
                         hardwareWalletName = null,
                         hardwareAvailableSats = 0uL,
-                        fee = null,
                         selectedUtxos = null,
                         confirmedWarnings = persistentListOf(),
                     )
@@ -2224,7 +2211,6 @@ class AppViewModel @Inject constructor(
                 hardwareWalletName = walletName,
                 hardwareAvailableSats = initialAvailable,
                 isAmountInputValid = it.amount > Defaults.dustLimit.toULong() && it.amount <= initialAvailable,
-                fee = null,
                 selectedUtxos = null,
                 confirmedWarnings = persistentListOf(),
             )
@@ -2268,7 +2254,7 @@ class AppViewModel @Inject constructor(
                     hardwareWalletId = null,
                     hardwareWalletName = null,
                     hardwareAvailableSats = 0uL,
-                    fee = SendFee.Lightning(0),
+                    lightningFeeSats = 0,
                     isAmountInputValid = validateAmount(it.amount, SendMethod.LIGHTNING),
                     confirmedWarnings = persistentListOf(),
                 )
@@ -2343,7 +2329,13 @@ class AppViewModel @Inject constructor(
             toast(error)
             return false
         }
-        _sendUiState.update { it.copy(fee = SendFee.OnChain(miningFeeSats.toLong())) }
+        updateOnchainFeeUi {
+            it.copy(
+                rate = FeeRate.fromSpeed(state.speed),
+                sats = miningFeeSats.toLong(),
+                isLoading = false,
+            )
+        }
         return true
     }
 
@@ -2351,7 +2343,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update {
             it.copy(selectedUtxos = utxos.toImmutableList())
         }
-        refreshFeeEstimates()
+        refreshOnchainFeeUi()
         setSendEffect(SendEffect.NavigateToConfirm)
     }
 
@@ -3288,7 +3280,7 @@ class AppViewModel @Inject constructor(
         if (_sendUiState.value.payMethod != SendMethod.ONCHAIN) return
 
         val totalFee = if (_sendUiState.value.hardwareWalletId != null) {
-            (_sendUiState.value.fee as? SendFee.OnChain)?.value?.toULong() ?: return
+            _sendUiState.value.onchainFeeUi.sats?.toULong() ?: return
         } else {
             lightningRepo.calculateTotalFee(
                 amountSats = amountSats,
@@ -3720,6 +3712,7 @@ class AppViewModel @Inject constructor(
             return null
         }
 
+        updateOnchainFeeUi { it.copy(isLoading = true) }
         onchainSendRefreshJob?.cancel()
         val job = viewModelScope.launch(bgDispatcher, start = CoroutineStart.LAZY) {
             // preselect utxos for deterministic fee estimation
@@ -3739,7 +3732,7 @@ class AppViewModel @Inject constructor(
                         _sendUiState.update { it.copy(selectedUtxos = utxos?.toImmutableList()) }
                     }
             }
-            refreshFeeEstimates()
+            refreshOnchainFeeUi()
         }
         onchainSendRefreshJob = job
         job.invokeOnCompletion {
@@ -3749,8 +3742,9 @@ class AppViewModel @Inject constructor(
         return job
     }
 
-    private suspend fun refreshFeeEstimates() = withContext(bgDispatcher) {
+    private suspend fun refreshOnchainFeeUi() = withContext(bgDispatcher) {
         val currentState = _sendUiState.value
+        updateOnchainFeeUi { it.copy(isLoading = true) }
 
         val speeds = listOf(
             TransactionSpeed.Fast,
@@ -3762,27 +3756,30 @@ class AppViewModel @Inject constructor(
             }
         )
 
-        var currentFee = 0L
-        val feesMap = coroutineScope {
+        val estimates = coroutineScope {
             speeds.map { speed ->
                 async {
                     val rate = FeeRate.fromSpeed(speed)
                     val fee = if (currentState.feeRates?.getSatsPerVByteFor(speed) != 0u) getFeeEstimate(speed) else 0
-
-                    if (speed == currentState.speed) {
-                        currentFee = fee
-                    }
-
                     rate to fee
                 }
             }.awaitAll().toMap()
         }
+        val rate = FeeRate.fromSpeed(currentState.speed)
 
-        _sendUiState.update {
-            it.copy(
-                fees = feesMap.toImmutableMap(),
-                fee = if (it.payMethod == SendMethod.ONCHAIN) SendFee.OnChain(currentFee) else it.fee,
+        updateOnchainFeeUi {
+            OnchainFeeUi(
+                rate = rate,
+                sats = estimates[rate]?.takeIf { sats -> sats > 0 },
+                estimates = estimates.toImmutableMap(),
+                isLoading = false,
             )
+        }
+    }
+
+    private fun updateOnchainFeeUi(transform: (OnchainFeeUi) -> OnchainFeeUi) {
+        _sendUiState.update {
+            it.copy(onchainFeeUi = transform(it.onchainFeeUi))
         }
     }
 
@@ -3800,7 +3797,7 @@ class AppViewModel @Inject constructor(
         feeResult.onSuccess { fee ->
             _sendUiState.update {
                 it.copy(
-                    fee = SendFee.Lightning(fee.toLong()),
+                    lightningFeeSats = fee.toLong(),
                     lastLightningFee = fee.toLong(),
                 )
             }
@@ -3878,6 +3875,7 @@ class AppViewModel @Inject constructor(
             SendUiState(
                 speed = speed,
                 feeRates = rates,
+                onchainFeeUi = OnchainFeeUi(rate = FeeRate.fromSpeed(speed)),
                 contactPaymentProfile = contactPaymentProfile,
                 isPaymentRequest = isPaymentRequest,
                 hardwareWalletId = hardwareWalletId,
@@ -4727,8 +4725,8 @@ data class SendUiState(
     val speed: TransactionSpeed = TransactionSpeed.default(),
     val comment: String = "",
     val feeRates: FeeRates? = null,
-    val fee: SendFee? = null,
-    val fees: ImmutableMap<FeeRate, Long> = persistentMapOf(),
+    val onchainFeeUi: OnchainFeeUi = OnchainFeeUi(),
+    val lightningFeeSats: Long? = null,
     val estimatedRoutingFee: ULong = 0uL,
     val lastLightningFee: Long = 0L,
     val contactPaymentProfile: PubkyProfile? = null,
@@ -4738,17 +4736,20 @@ data class SendUiState(
     val hardwareAvailableSats: ULong = 0uL,
 )
 
+@Immutable
+data class OnchainFeeUi(
+    val rate: FeeRate = FeeRate.fromSpeed(TransactionSpeed.default()),
+    val sats: Long? = null,
+    val estimates: ImmutableMap<FeeRate, Long> = persistentMapOf(),
+    val isLoading: Boolean = false,
+)
+
 enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
     VALUE_OVER_100_USD(R.string.wallet__send_dialog1, "SendDialog1"),
     OVER_HALF_BALANCE(R.string.wallet__send_dialog2, "SendDialog2"),
     FEE_OVER_HALF_VALUE(R.string.wallet__send_dialog3, "SendDialog3"),
     FEE_OVER_10_USD(R.string.wallet__send_dialog4, "SendDialog4"),
     // TODO SendDialog5 https://github.com/synonymdev/bitkit/blob/master/src/screens/Wallets/Send/ReviewAndSend.tsx#L457-L466
-}
-
-sealed class SendFee(open val value: Long) {
-    data class OnChain(override val value: Long) : SendFee(value)
-    data class Lightning(override val value: Long) : SendFee(value)
 }
 
 enum class SendMethod { ONCHAIN, LIGHTNING }

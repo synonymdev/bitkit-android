@@ -16,6 +16,7 @@ import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -66,6 +67,7 @@ import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.BalanceState
+import to.bitkit.models.FeeRate
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.NewTransactionSheetDetails
@@ -1990,7 +1992,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `switch from onchain to lightning sets fee to Lightning zero`() = test {
+    fun `switch from onchain to lightning resets lightning fee`() = test {
         balanceState.value = BalanceState(
             maxSendOnchainSats = 100_000u,
             maxSendLightningSats = 100_000u,
@@ -2003,7 +2005,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
-        assertEquals(SendFee.Lightning(0), sut.sendUiState.value.fee)
+        assertEquals(0, sut.sendUiState.value.lightningFeeSats)
     }
 
     @Test
@@ -4339,16 +4341,54 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `refreshFeeEstimates preserves lightning fee when payMethod is LIGHTNING`() = test {
-        val lightningFee = SendFee.Lightning(42)
-        setUnifiedState(amount = 1000u, payMethod = SendMethod.LIGHTNING, fee = lightningFee)
+    fun `refreshing onchain fees preserves lightning fee`() = test {
+        setUnifiedState(amount = 1000u, payMethod = SendMethod.LIGHTNING, lightningFeeSats = 42)
         advanceUntilIdle()
 
         sut.setSendEvent(SendEvent.SpeedAndFee)
         advanceUntilIdle()
 
-        val currentFee = sut.sendUiState.value.fee
-        assertEquals(lightningFee, currentFee)
+        assertEquals(42, sut.sendUiState.value.lightningFeeSats)
+    }
+
+    @Test
+    fun `changing speed keeps previous onchain fee while estimates refresh`() = test {
+        val feeEstimateStarted = CompletableDeferred<Unit>()
+        val finishFeeEstimate = CompletableDeferred<Unit>()
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                feeEstimateStarted.complete(Unit)
+                finishFeeEstimate.await()
+                Result.success(200uL)
+            }
+        val previousFeeUi = OnchainFeeUi(
+            rate = FeeRate.FAST,
+            sats = 100,
+            estimates = persistentMapOf(FeeRate.FAST to 100L),
+        )
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000u,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Fast,
+                feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
+                onchainFeeUi = previousFeeUi,
+            )
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Slow)
+        feeEstimateStarted.await()
+
+        assertEquals(TransactionSpeed.Slow, sut.sendUiState.value.speed)
+        assertEquals(previousFeeUi.copy(isLoading = true), sut.sendUiState.value.onchainFeeUi)
+
+        finishFeeEstimate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(FeeRate.SLOW, sut.sendUiState.value.onchainFeeUi.rate)
+        assertEquals(200, sut.sendUiState.value.onchainFeeUi.sats)
+        assertFalse(sut.sendUiState.value.onchainFeeUi.isLoading)
     }
 
     @Test
@@ -4360,7 +4400,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         setUnifiedState(
             amount = 1000u,
             payMethod = SendMethod.LIGHTNING,
-            fee = SendFee.Lightning(42),
+            lightningFeeSats = 42,
             lastLightningFee = 42L,
         )
         advanceUntilIdle()
@@ -4667,7 +4707,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private fun setUnifiedState(
         amount: ULong = 0u,
         payMethod: SendMethod = SendMethod.LIGHTNING,
-        fee: SendFee? = null,
+        lightningFeeSats: Long? = null,
         lastLightningFee: Long = 0L,
     ) {
         setSendState(
@@ -4676,7 +4716,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = amount,
                 isUnified = true,
                 payMethod = payMethod,
-                fee = fee,
+                lightningFeeSats = lightningFeeSats,
                 lastLightningFee = lastLightningFee,
                 confirmedWarnings = persistentListOf(),
                 speed = TransactionSpeed.Medium,
