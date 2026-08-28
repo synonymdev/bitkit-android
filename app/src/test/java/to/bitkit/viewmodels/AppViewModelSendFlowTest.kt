@@ -38,6 +38,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
@@ -4390,6 +4391,35 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             finishMax.complete(Unit)
             cancelAndIgnoreRemainingEvents()
         }
+    }
+
+    @Test
+    fun `changing speed resets selected utxos from previous rate`() = test {
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(200uL))
+        whenever { lightningRepo.determineUtxosToSpend(any(), any()) }
+            .thenReturn(null)
+        val selectedUtxos = persistentListOf(mock<SpendableUtxo>())
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000u,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
+                selectedUtxos = selectedUtxos,
+                onchainFeeUi = OnchainFeeUi(
+                    rate = FeeRate.NORMAL,
+                    sats = 141,
+                    estimates = persistentMapOf(FeeRate.NORMAL to 141L),
+                ),
+            )
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertNull(sut.sendUiState.value.selectedUtxos)
     }
 
     @Test
