@@ -2098,35 +2098,40 @@ class AppViewModel @Inject constructor(
     }
 
     fun setTransactionSpeed(speed: TransactionSpeed) {
+        val previous = _sendUiState.value
+        _sendUiState.update {
+            it.copy(
+                payMethod = SendMethod.ONCHAIN,
+                speed = speed,
+                onchainFeeUi = it.onchainFeeUi.copy(isLoading = true),
+            )
+        }
+        setSendEffect(SendEffect.PopBack(SendRoute.Confirm))
         viewModelScope.launch {
-            val state = _sendUiState.value
             val shouldResetUtxos = when (settingsStore.data.first().coinSelectAuto) {
                 true -> {
-                    val currentSatsPerVByte = state.feeRates?.getSatsPerVByteFor(state.speed)
-                    val newSatsPerVByte = state.feeRates?.getSatsPerVByteFor(speed)
+                    val currentSatsPerVByte = previous.feeRates?.getSatsPerVByteFor(previous.speed)
+                    val newSatsPerVByte = previous.feeRates?.getSatsPerVByteFor(speed)
                     currentSatsPerVByte != newSatsPerVByte
                 }
 
                 else -> false
             }
-            val wasHardwareMax = state.hardwareWalletId != null &&
-                state.amount > 0uL &&
-                state.amount == state.hardwareAvailableSats
-            val hardwareAvailableSats = state.hardwareWalletId?.let { walletId ->
-                hardwareMaxSpendable(walletId, state.address, speed)
-            } ?: state.hardwareAvailableSats
+            val wasHardwareMax = previous.hardwareWalletId != null &&
+                previous.amount > 0uL &&
+                previous.amount == previous.hardwareAvailableSats
+            val hardwareAvailableSats = previous.hardwareWalletId?.let { walletId ->
+                hardwareMaxSpendable(walletId, previous.address, speed)
+            } ?: previous.hardwareAvailableSats
             _sendUiState.update {
                 it.copy(
-                    payMethod = SendMethod.ONCHAIN,
-                    speed = speed,
                     amount = if (wasHardwareMax) hardwareAvailableSats else it.amount,
                     hardwareAvailableSats = hardwareAvailableSats,
                     selectedUtxos = if (shouldResetUtxos) null else it.selectedUtxos,
                 )
             }
             updateCanSwitchWallet()
-            refreshOnchainSendIfNeeded()
-            setSendEffect(SendEffect.PopBack(SendRoute.Confirm))
+            refreshOnchainSendIfNeeded() ?: updateOnchainFeeUi { it.copy(isLoading = false) }
         }
     }
 
@@ -2213,6 +2218,7 @@ class AppViewModel @Inject constructor(
                 isAmountInputValid = it.amount > Defaults.dustLimit.toULong() && it.amount <= initialAvailable,
                 selectedUtxos = null,
                 confirmedWarnings = persistentListOf(),
+                onchainFeeUi = it.onchainFeeUi.copy(isLoading = true),
             )
         }
         val available = hardwareMaxSpendable(walletId, current.address, current.speed)

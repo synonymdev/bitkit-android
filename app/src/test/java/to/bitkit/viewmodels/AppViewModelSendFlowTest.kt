@@ -2058,6 +2058,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         exactAvailableStarted.await()
 
         assertTrue(sut.sendUiState.value.isFundingSourceLoading)
+        assertTrue(sut.sendUiState.value.onchainFeeUi.isLoading)
         assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
         assertEquals("Trezor", sut.sendUiState.value.hardwareWalletName)
         assertEquals(46_400uL, sut.sendUiState.value.hardwareAvailableSats)
@@ -4349,6 +4350,46 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(42, sut.sendUiState.value.lightningFeeSats)
+    }
+
+    @Test
+    fun `selecting speed pops before hardware max spendable finishes`() = test {
+        val maxStarted = CompletableDeferred<Unit>()
+        val finishMax = CompletableDeferred<Unit>()
+        whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
+            .doSuspendableAnswer {
+                maxStarted.complete(Unit)
+                finishMax.await()
+                Result.success(48_000uL)
+            }
+        val previousFeeUi = OnchainFeeUi(
+            rate = FeeRate.NORMAL,
+            sats = 141,
+            estimates = persistentMapOf(FeeRate.NORMAL to 141L),
+        )
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000u,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                hardwareWalletId = HARDWARE_WALLET_ID,
+                hardwareWalletName = "Trezor",
+                hardwareAvailableSats = 50_000uL,
+                feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
+                onchainFeeUi = previousFeeUi,
+            )
+        )
+
+        sut.sendEffect.test {
+            sut.setTransactionSpeed(TransactionSpeed.Fast)
+            assertEquals(SendEffect.PopBack(SendRoute.Confirm), awaitItem())
+            assertEquals(TransactionSpeed.Fast, sut.sendUiState.value.speed)
+            assertEquals(previousFeeUi.copy(isLoading = true), sut.sendUiState.value.onchainFeeUi)
+            maxStarted.await()
+            finishMax.complete(Unit)
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 
     @Test
