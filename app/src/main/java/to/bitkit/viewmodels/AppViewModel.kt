@@ -2199,7 +2199,6 @@ class AppViewModel @Inject constructor(
                         fee = null,
                         selectedUtxos = null,
                         confirmedWarnings = persistentListOf(),
-                        isAmountInputValid = false,
                     )
                 }
                 refreshOnchainSendIfNeeded()?.join()

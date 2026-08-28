@@ -2076,7 +2076,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `source switch from hw wallet does not show loader`() = test {
+    fun `source switch from hw wallet keeps valid state while refreshing`() = test {
         val feeEstimateStarted = CompletableDeferred<Unit>()
         val finishFeeEstimate = CompletableDeferred<Unit>()
         hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
@@ -2105,7 +2105,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertNull(sut.sendUiState.value.hardwareWalletId)
         assertFalse(sut.sendUiState.value.isFundingSourceLoading)
-        assertFalse(sut.sendUiState.value.isAmountInputValid)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
 
         finishFeeEstimate.complete(Unit)
         advanceUntilIdle()
