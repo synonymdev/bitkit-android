@@ -30,12 +30,4 @@
     *;
 }
 
-# libjnidispatch looks up Pointer.peer and other JNA members by JNI name.
-# net.java.dev.jna ships no consumer keep rules.
--keep class com.sun.jna.** { *; }
-
-# JNA reads @Structure.FieldOrder and constructs ByValue/ByReference reflectively.
-# Library consumer rules use -keepclassmembers, which does not keep the annotation.
--keep @com.sun.jna.Structure$FieldOrder class * { *; }
--keep class * extends com.sun.jna.Structure { *; }
--keep class * implements com.sun.jna.Callback { *; }
+# JNA JNI names are kept by UniFFI AAR consumer rules.

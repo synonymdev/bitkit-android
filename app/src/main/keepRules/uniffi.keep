@@ -1,6 +1,1 @@
-# UniFFI JNA bindings. Library consumer rules keep members but still allow
-# R8 to rename UniffiLib/FfiConverter types, which ClassCastExceptions on load.
--keep class com.synonym.vssclient.** { *; }
--keep class com.synonym.bitkitcore.** { *; }
--keep class com.synonym.paykit.** { *; }
--keep class org.lightningdevkit.ldknode.** { *; }
+# UniFFI JNA bindings now ship consumer keep rules in their AARs.
