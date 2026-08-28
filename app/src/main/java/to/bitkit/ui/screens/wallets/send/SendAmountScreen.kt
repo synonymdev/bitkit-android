@@ -364,8 +364,9 @@ private fun PaymentMethodButton(
         },
         icon = if (uiState.canSwitchFundingSource) R.drawable.ic_transfer else null,
         onClick = onClick,
-        enabled = uiState.canSwitchFundingSource && !uiState.isLoading,
+        enabled = uiState.canSwitchFundingSource,
         isLoading = uiState.isFundingSourceLoading,
+        clickable = !uiState.isLoading,
         modifier = Modifier
             .height(28.dp)
             .testTag("AssetButton-$testId")

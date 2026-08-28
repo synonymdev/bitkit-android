@@ -34,6 +34,7 @@ fun NumberPadActionButton(
     color: Color = Colors.Brand,
     enabled: Boolean = true,
     isLoading: Boolean = false,
+    clickable: Boolean = true,
     @DrawableRes icon: Int? = null,
 ) {
     val contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp)
@@ -51,7 +52,7 @@ fun NumberPadActionButton(
                     shape = buttonShape,
                 )
                 .animateContentSize(animationSpec = tween(durationMillis = 200))
-                .clickableAlpha(enabled = enabled && !isLoading, onClick = onClick)
+                .clickableAlpha(enabled = enabled && clickable && !isLoading, onClick = onClick)
                 .padding(contentPadding)
         ) {
             if (isLoading) {
