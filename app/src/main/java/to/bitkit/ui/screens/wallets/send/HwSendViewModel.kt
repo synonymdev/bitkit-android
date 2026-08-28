@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -77,11 +78,11 @@ class HwSendViewModel @Inject constructor(
         _uiState.update { it.copy(isSigning = true) }
         signingJob = viewModelScope.launch {
             try {
-                runSuspendCatching {
+                runCatching {
                     var pending = pendingBroadcast?.takeIf { it.matches(request) }
                     if (pending == null && hwWalletRepo.needsPassphrase(request.walletId)) {
                         _uiState.update { it.copy(isPassphraseRequired = true) }
-                        return@runSuspendCatching
+                        return@runCatching
                     }
                     if (pending == null) {
                         val signedTx = prepareSignedTransaction(
@@ -96,7 +97,7 @@ class HwSendViewModel @Inject constructor(
                     }
                     var payment = checkNotNull(pending) { "Hardware payment was not prepared" }
                     if (payment.isPreparedForBroadcast.not()) {
-                        if (!beforeBroadcast()) return@runSuspendCatching
+                        if (!beforeBroadcast()) return@runCatching
                         payment = payment.copy(isPreparedForBroadcast = true)
                         pendingBroadcast = payment
                     }
@@ -108,6 +109,7 @@ class HwSendViewModel @Inject constructor(
                         .onFailure { Logger.error("Failed to persist hardware send result", it, context = TAG) }
                     pendingResult.update { HwSendResult(request.walletId, result.txId, request.amountSats) }
                 }.onFailure {
+                    if (it is CancellationException && it !is TimeoutCancellationException) throw it
                     handleFailure(it, request.walletId)
                 }
             } finally {

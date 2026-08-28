@@ -107,7 +107,7 @@ fun SwipeToConfirm(
             .requiredHeight(CircleSize + Padding * 2)
             .clip(CircleShape)
             .primaryButtonStyle(
-                isEnabled = enabled && !loading,
+                isEnabled = !loading,
                 shape = CircleShape,
             )
             .alpha(if (enabled || loading) 1f else 0.5f)
