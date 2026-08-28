@@ -107,14 +107,14 @@ class SendAmountContentTest {
     }
 
     @Test
-    fun whenFundingSourceSwitching_sourceAndContinueButtonsShouldBeDisabled() {
+    fun whenFundingSourceLoading_sourceAndContinueButtonsShouldBeDisabled() {
         composeTestRule.setContent {
             SendAmountContent(
                 nodeLifecycleState = nodeLifecycleState,
                 uiState = uiState.copy(
                     isAmountInputValid = true,
                     canSwitchFundingSource = true,
-                    isSwitchingFundingSource = true,
+                    isFundingSourceLoading = true,
                 ),
                 amountInputViewModel = previewAmountInputViewModel(),
             )

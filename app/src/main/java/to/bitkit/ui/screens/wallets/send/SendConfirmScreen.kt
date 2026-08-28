@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -19,7 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,6 +73,7 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
@@ -98,6 +100,7 @@ import to.bitkit.viewmodels.SendEvent
 import to.bitkit.viewmodels.SendFee
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
@@ -176,7 +179,7 @@ fun SendConfirmScreen(
         onSwipeToConfirm = {
             scope.launch {
                 isLoading = true
-                delay(300)
+                delay(300.milliseconds)
                 onEvent(SendEvent.SwipeToPay)
             }
         },
@@ -389,7 +392,7 @@ private fun ContentRunning(
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
             color = accentColor,
-            enabled = uiState.isAmountInputValid && !uiState.isSwitchingFundingSource,
+            enabled = uiState.isAmountInputValid && !uiState.isFundingSourceLoading,
             loading = isLoading,
             confirmed = isLoading,
             progress = swipeProgress,
@@ -435,7 +438,7 @@ private fun TagsSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            uiState.selectedTags.map { tagText ->
+            uiState.selectedTags.forEach { tagText ->
                 TagButton(
                     text = tagText,
                     displayIconClose = true,
@@ -494,7 +497,9 @@ private fun OnChainDetails(
     onEvent: (SendEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val fee = remember(uiState.speed) { FeeRate.fromSpeed(uiState.speed) }
+    val feeRate = remember(uiState.speed) { FeeRate.fromSpeed(uiState.speed) }
+    val feeSat = (uiState.fee as? SendFee.OnChain)?.value?.takeIf { it > 0 }
+    val feeSatUi = feeSat ?: uiState.fees[feeRate]?.takeIf { it > 0 }
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = modifier.fillMaxWidth()
@@ -515,10 +520,8 @@ private fun OnChainDetails(
                     },
                     color = if (uiState.hardwareWalletId != null) Colors.Blue else Colors.Brand,
                     enabled = uiState.canSwitchFundingSource,
-                    isLoading = uiState.isSwitchingFundingSource,
-                    icon = R.drawable.ic_transfer.takeIf {
-                        uiState.canSwitchFundingSource
-                    },
+                    isLoading = uiState.isFundingSourceLoading,
+                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
@@ -559,27 +562,41 @@ private fun OnChainDetails(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Icon(
-                            painterResource(fee.icon),
-                            contentDescription = null,
-                            tint = fee.color,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        (uiState.fee as? SendFee.OnChain)?.value
-                            ?.takeIf { it > 0 }
-                            ?.let { feeSat ->
-                                val feeText = let {
-                                    val prefix = stringResource(fee.title)
-                                    val value = rememberMoneyText(feeSat, showSymbol = true)
-                                    "$prefix ($value)"
-                                }
-                                BodySSB(
-                                    text = feeText.withAccent(accentColor = Colors.White),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.MiddleEllipsis,
-                                )
+                        val isFeeLoading = feeSat == null
+                        if (isFeeLoading) {
+                            GradientCircularProgressIndicator(
+                                tint = feeRate.color,
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .padding(3.dp),
+                            )
+                        } else {
+                            Icon(
+                                painterResource(feeRate.icon),
+                                contentDescription = null,
+                                tint = feeRate.color,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        val feeTextModifier = Modifier.animateContentSize(animationSpec = tween(200))
+                        if (feeSatUi == null) {
+                            BodySSB(
+                                text = stringResource(feeRate.title),
+                                modifier = feeTextModifier
+                            )
+                        } else {
+                            val feeText = let {
+                                val prefix = stringResource(feeRate.title)
+                                val value = rememberMoneyText(feeSatUi, showSymbol = true)
+                                "$prefix ($value)"
                             }
-                            ?: CircularProgressIndicator(Modifier.size(14.dp), Colors.White64, 2.dp)
+                            BodySSB(
+                                text = feeText.withAccent(accentColor = Colors.White),
+                                maxLines = 1,
+                                overflow = TextOverflow.MiddleEllipsis,
+                                modifier = feeTextModifier
+                            )
+                        }
                         Icon(
                             painterResource(R.drawable.ic_pencil_simple),
                             contentDescription = null,
@@ -602,7 +619,7 @@ private fun OnChainDetails(
                         tint = Colors.Brand,
                         modifier = Modifier.size(16.dp)
                     )
-                    BodySSB(stringResource(fee.description))
+                    BodySSB(stringResource(feeRate.description))
                 }
             }
         }
@@ -642,7 +659,7 @@ private fun LightningDetails(
                     text = stringResource(R.string.wallet__spending__title),
                     color = Colors.Purple,
                     enabled = uiState.canSwitchFundingSource,
-                    isLoading = uiState.isSwitchingFundingSource,
+                    isLoading = uiState.isFundingSourceLoading,
                     icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
@@ -841,7 +858,6 @@ private fun LnurlPayDetails(
     }
 }
 
-@Suppress("SpellCheckingInspection")
 private fun sendUiState() = SendUiState(
     amount = 2_345u,
     address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",

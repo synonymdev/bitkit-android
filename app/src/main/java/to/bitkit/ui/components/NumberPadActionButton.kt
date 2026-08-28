@@ -57,7 +57,10 @@ fun NumberPadActionButton(
             if (isLoading) {
                 GradientCircularProgressIndicator(
                     strokeWidth = 2.dp,
-                    modifier = Modifier.size(16.dp)
+                    tint = color,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .padding(3.dp)
                 )
             } else if (icon != null) {
                 Icon(

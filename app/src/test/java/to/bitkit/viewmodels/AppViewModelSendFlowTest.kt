@@ -1999,6 +1999,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        assertFalse(sut.sendUiState.value.isFundingSourceLoading)
         advanceUntilIdle()
 
         assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
@@ -2054,7 +2055,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setSendEvent(SendEvent.PaymentMethodSwitch)
         exactAvailableStarted.await()
 
-        assertTrue(sut.sendUiState.value.isSwitchingFundingSource)
+        assertTrue(sut.sendUiState.value.isFundingSourceLoading)
         assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
         assertEquals("Trezor", sut.sendUiState.value.hardwareWalletName)
         assertEquals(46_400uL, sut.sendUiState.value.hardwareAvailableSats)
@@ -2063,15 +2064,54 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         finishExactAvailable.complete(Unit)
         feeEstimateStarted.await()
 
-        assertTrue(sut.sendUiState.value.isSwitchingFundingSource)
+        assertTrue(sut.sendUiState.value.isFundingSourceLoading)
 
         finishFeeEstimate.complete(Unit)
         advanceUntilIdle()
 
-        assertFalse(sut.sendUiState.value.isSwitchingFundingSource)
+        assertFalse(sut.sendUiState.value.isFundingSourceLoading)
         assertEquals(48_000uL, sut.sendUiState.value.hardwareAvailableSats)
         assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
         verify(hwWalletRepo, times(1)).maxSpendableFunding(any(), any(), any())
+    }
+
+    @Test
+    fun `source switch from hw wallet does not show loader`() = test {
+        val feeEstimateStarted = CompletableDeferred<Unit>()
+        val finishFeeEstimate = CompletableDeferred<Unit>()
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                feeEstimateStarted.complete(Unit)
+                finishFeeEstimate.await()
+                Result.success(100uL)
+            }
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000uL,
+                isAmountInputValid = true,
+                hardwareWalletId = HARDWARE_WALLET_ID,
+                hardwareWalletName = "Trezor",
+                hardwareAvailableSats = 50_000uL,
+                payMethod = SendMethod.ONCHAIN,
+                feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
+            )
+        )
+
+        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        feeEstimateStarted.await()
+
+        assertNull(sut.sendUiState.value.hardwareWalletId)
+        assertFalse(sut.sendUiState.value.isFundingSourceLoading)
+        assertFalse(sut.sendUiState.value.isAmountInputValid)
+
+        finishFeeEstimate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isFundingSourceLoading)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
     }
 
     @Test

@@ -299,7 +299,6 @@ class AppViewModel @Inject constructor(
             SendEvent.PaymentMethodSwitch -> {
                 if (fundingSourceSwitchPending) return
                 fundingSourceSwitchPending = true
-                _sendUiState.update { it.copy(isSwitchingFundingSource = true) }
             }
 
             else -> Unit
@@ -1632,7 +1631,7 @@ class AppViewModel @Inject constructor(
                         onPaymentMethodSwitch()
                     } finally {
                         fundingSourceSwitchPending = false
-                        _sendUiState.update { state -> state.copy(isSwitchingFundingSource = false) }
+                        _sendUiState.update { state -> state.copy(isFundingSourceLoading = false) }
                     }
 
                     is SendEvent.CoinSelectionContinue -> onCoinSelectionContinue(it.utxos)
@@ -2169,7 +2168,11 @@ class AppViewModel @Inject constructor(
         onchainSendRefreshJob?.cancel()
         val selected = current.selectedFundingSource()
         val selectedIndex = sources.indexOf(selected).takeIf { it >= 0 } ?: 0
-        when (val nextSource = sources[(selectedIndex + 1) % sources.size]) {
+        val nextSource = sources[(selectedIndex + 1) % sources.size]
+        _sendUiState.update {
+            it.copy(isFundingSourceLoading = nextSource is SendFundingSource.Hardware)
+        }
+        when (nextSource) {
             SendFundingSource.Spending -> {
                 _sendUiState.update {
                     it.copy(
@@ -2180,6 +2183,7 @@ class AppViewModel @Inject constructor(
                         fee = SendFee.Lightning(0),
                         selectedUtxos = null,
                         confirmedWarnings = persistentListOf(),
+                        isAmountInputValid = validateAmount(it.amount, SendMethod.LIGHTNING),
                     )
                 }
                 estimateLightningRoutingFeesIfNeeded()
@@ -2195,6 +2199,7 @@ class AppViewModel @Inject constructor(
                         fee = null,
                         selectedUtxos = null,
                         confirmedWarnings = persistentListOf(),
+                        isAmountInputValid = false,
                     )
                 }
                 refreshOnchainSendIfNeeded()?.join()
@@ -3883,7 +3888,7 @@ class AppViewModel @Inject constructor(
                 hardwareAvailableSats = hardwareWalletId?.let { walletId ->
                     hardwareEstimatedAvailable(walletId, speed, rates)
                 } ?: 0uL,
-                isSwitchingFundingSource = fundingSourceSwitchPending,
+                isFundingSourceLoading = it.isFundingSourceLoading,
             )
         }
     }
@@ -4710,7 +4715,7 @@ data class SendUiState(
     val isUnified: Boolean = false,
     val canSwitchWallet: Boolean = false,
     val canSwitchFundingSource: Boolean = false,
-    val isSwitchingFundingSource: Boolean = false,
+    val isFundingSourceLoading: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
     val selectedTags: ImmutableList<String> = persistentListOf(),
     val decodedInvoice: LightningInvoice? = null,
