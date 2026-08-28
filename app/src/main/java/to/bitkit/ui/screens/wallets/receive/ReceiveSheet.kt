@@ -140,7 +140,11 @@ fun ReceiveSheet(
                             isEditingHardwareInvoice.value = true
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
-                        initialTab = if (hardwareWalletId != null) ReceiveTab.TREZOR else null,
+                        initialTab = if (hardwareWalletId != null || isEditingHardwareInvoice.value) {
+                            ReceiveTab.TREZOR
+                        } else {
+                            null
+                        },
                         hardwareWalletId = selectedHardwareWalletId,
                         hardwareReceiveState = hwReceiveState,
                         onLoadHardwareAddress = hwReceiveViewModel::loadAddress,
@@ -328,6 +332,7 @@ fun ReceiveSheet(
                 isVerifying = hwReceiveState.isVerifyingPassphrase,
                 onSubmit = hwReceiveViewModel::submitPassphrase,
                 onDismiss = hwReceiveViewModel::dismissPassphrase,
+                bodyText = stringResource(R.string.hardware__passphrase_verify_address_text),
             )
         }
 

@@ -11,6 +11,7 @@ import org.junit.Test
 import org.mockito.kotlin.any
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.HwFundingAddressType
@@ -18,6 +19,7 @@ import to.bitkit.models.HwReceiveAddress
 import to.bitkit.models.HwWallet
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -49,6 +51,27 @@ class HwReceiveViewModelTest : BaseUnitTest() {
         assertEquals(RECEIVE_ADDRESS, sut.uiState.value.address)
         assertFalse(sut.uiState.value.isLoadingAddress)
         assertFalse(sut.uiState.value.addressLoadFailed)
+    }
+
+    @Test
+    fun `retry loads the hardware address after a failure`() = test {
+        whenever(hwWalletRepo.getReceiveAddress(WALLET_ID)).thenReturn(
+            Result.failure(AppError("address unavailable")),
+            Result.success(RECEIVE_ADDRESS),
+        )
+
+        sut.loadAddress(WALLET_ID)
+        advanceUntilIdle()
+
+        assertTrue(sut.uiState.value.addressLoadFailed)
+
+        sut.retryAddress()
+        advanceUntilIdle()
+
+        assertEquals(RECEIVE_ADDRESS, sut.uiState.value.address)
+        assertFalse(sut.uiState.value.isLoadingAddress)
+        assertFalse(sut.uiState.value.addressLoadFailed)
+        verify(hwWalletRepo, times(2)).getReceiveAddress(WALLET_ID)
     }
 
     @Test
