@@ -29,6 +29,7 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.lightningdevkit.ldknode.Bolt11Invoice
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsData
@@ -45,6 +46,10 @@ import to.bitkit.models.WidgetsBackupV1
 import to.bitkit.models.widget.CalculatorValues
 import to.bitkit.repositories.AmountInputHandler
 import to.bitkit.repositories.CurrencyRepo
+import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.QuickPayInvoiceParser
+import to.bitkit.repositories.QuickPayPaymentLookup
+import to.bitkit.repositories.QuickPayReconcileRow
 import to.bitkit.repositories.WidgetsRepo
 import to.bitkit.test.annotations.CalculatorWidget
 import to.bitkit.test.annotations.DeviceIntegration
@@ -309,5 +314,14 @@ class CalculatorWidgetInputTest {
         @Named("enablePolling")
         @Suppress("FunctionOnlyReturningConstant")
         fun provideEnablePolling(): Boolean = false
+
+        @Provides
+        fun provideQuickPayInvoiceParser(): QuickPayInvoiceParser = QuickPayInvoiceParser { bolt11 ->
+            runCatching { Bolt11Invoice.fromStr(bolt11).paymentHash() }.getOrNull()
+        }
+
+        @Provides
+        fun provideQuickPayPaymentLookup(lightningRepo: LightningRepo): QuickPayPaymentLookup =
+            QuickPayPaymentLookup { lightningRepo.listPaymentsOrNull()?.map { QuickPayReconcileRow(it) } }
     }
 }
