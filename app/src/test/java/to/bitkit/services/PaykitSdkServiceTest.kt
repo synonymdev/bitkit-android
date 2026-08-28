@@ -144,6 +144,27 @@ class PaykitSdkServiceTest {
         assertNull(provider.loadLocalSecretKey())
     }
 
+    @Test
+    fun `stale session can be deferred until sdk initialization completes`() {
+        val keychain = mock<Keychain>()
+        val provider = PaykitSdkSessionProvider(keychain)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved-session")
+
+        assertTrue(provider.canDeferStaleSession("import Pubky session from platform provider"))
+        provider.suspendStoredSessionAccess()
+        assertNull(provider.loadSessionAccess())
+    }
+
+    @Test
+    fun `missing session or unrelated identity failures are not deferred`() {
+        val keychain = mock<Keychain>()
+        val provider = PaykitSdkSessionProvider(keychain)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
+
+        assertTrue(!provider.canDeferStaleSession("import Pubky session from platform provider"))
+        assertTrue(!provider.canDeferStaleSession("local Pubky secret key does not match session public key"))
+    }
+
     private fun keyStore(
         loadBytes: () -> ByteArray?,
         upsertBytes: (ByteArray) -> Unit = {},

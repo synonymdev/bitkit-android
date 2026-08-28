@@ -7,6 +7,7 @@ import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.ContactUpdate
 import com.synonym.paykit.CounterpartyReceiver
 import com.synonym.paykit.EndpointSyncReport
+import com.synonym.paykit.IdentityStatus
 import com.synonym.paykit.LinkedPeerRecord
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateCounterpartySendReport
@@ -20,9 +21,14 @@ import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitSdkDefaults
 import com.synonym.paykit.PaymentAmountContext
 import com.synonym.paykit.PaymentPayload
+import com.synonym.paykit.PaymentReference
+import com.synonym.paykit.PaymentRequestAmount
+import com.synonym.paykit.PaymentRequestFilter
 import com.synonym.paykit.PaymentRequestRecord
+import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PaymentTarget
 import com.synonym.paykit.PrivateContactPaymentResolution
+import com.synonym.paykit.PrivateJsonObject
 import com.synonym.paykit.PrivatePaymentEndpointCandidate
 import com.synonym.paykit.PrivatePaymentEndpointReservationCancellation
 import com.synonym.paykit.PrivatePaymentEndpointSelectionRequest
@@ -107,6 +113,14 @@ data class PaykitResolvedPaymentEndpoint(
     val payload: String,
 )
 
+data class PaykitPaymentRequestProposalTerms(
+    val amountValue: String,
+    val paymentReference: String,
+    val proposalExpiresAt: String,
+    val acceptedPaymentEndpointIdentifiers: List<String>,
+    val metadataJson: String,
+)
+
 data class PaykitPrivateReceiverPathSelection(
     val linkableReceiverPaths: List<String>,
     val publishableReceiverPaths: List<String>,
@@ -119,7 +133,8 @@ internal object PaykitReceiverPaths {
     const val SERVER = "bitkit/server"
 
     /** Current Bitkit flows only route its own receivers; cross-wallet routing can broaden this allowlist. */
-    val supported = setOf(WALLET, SERVER)
+    val ordered = listOf(WALLET, SERVER)
+    val supported = ordered.toSet()
 }
 
 @Singleton
@@ -154,8 +169,26 @@ class PaykitSdkService @Inject constructor(
             try {
                 PaykitAndroid.initializeOrThrow(context)
                 operationMutex.withLock {
-                    val handle = handle()
-                    handle.initialize()
+                    var handle = handle()
+                    try {
+                        handle.initialize()
+                    } catch (e: PaykitException.Identity) {
+                        if (!sessionProvider.canDeferStaleSession(e.context)) throw e
+
+                        Logger.warn(
+                            "Deferring stale Paykit session restoration until SDK setup completes",
+                            e,
+                            context = TAG,
+                        )
+                        sessionProvider.suspendStoredSessionAccess()
+                        resetRuntime()
+                        try {
+                            handle = handle()
+                            handle.initialize()
+                        } finally {
+                            sessionProvider.resumeStoredSessionAccess()
+                        }
+                    }
                     publishReceiverMarkerIfLiveSessionAvailable(handle)
                 }
                 isSetup.complete(Unit)
@@ -179,7 +212,7 @@ class PaykitSdkService @Inject constructor(
     suspend fun hasPrivatePaymentAccess(): Boolean {
         isSetup.await()
         return operationMutex.withLock {
-            sessionProvider.hasSessionAccess()
+            handle().identityStatus()?.liveSessionAvailable == true
         }
     }
 
@@ -474,7 +507,7 @@ class PaykitSdkService @Inject constructor(
                     return@withStateRevisionTracking
                 }
 
-                handle.publishPaykitReceiverMarker(receiverCapabilities())
+                handle.publishPaykitReceiverMarker(receiverCapabilities(handle))
             }
         }
     }
@@ -548,10 +581,63 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun actionableReceivedPaymentRequests(): List<PaymentRequestRecord> {
+    suspend fun paymentRequests(): List<PaymentRequestRecord> {
         isSetup.await()
         return operationMutex.withLock {
-            handle().actionableReceivedPaymentRequests()
+            handle().listPaymentRequests(
+                PaymentRequestFilter(
+                    counterparty = null,
+                    counterpartyReceiverPath = null,
+                    localRole = null,
+                    states = emptyList(),
+                    recurring = null,
+                    receivedOnly = false,
+                )
+            )
+        }
+    }
+
+    suspend fun identityStatus(): IdentityStatus? {
+        isSetup.await()
+        return operationMutex.withLock {
+            handle().identityStatus()
+        }
+    }
+
+    suspend fun paymentRequestReceiverPaths(publicKey: String): List<String> {
+        isSetup.await()
+        return operationMutex.withLock {
+            val handle = handle()
+            handle.paykitReceiverPaths(publicKey)
+                .filter { it in PaykitReceiverPaths.supported }
+                .filter { handle.paykitReceiverMarker(publicKey, it)?.capabilities?.paymentRequests == true }
+        }
+    }
+
+    suspend fun proposePaymentRequest(
+        counterparty: String,
+        counterpartyReceiverPath: String,
+        proposal: PaykitPaymentRequestProposalTerms,
+        expectedIdentity: String,
+    ): PaymentRequestRecord {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                val identityStatus = handle.identityStatus()
+                check(
+                    identityStatus?.liveSessionAvailable == true &&
+                        PubkyPublicKeyFormat.matches(identityStatus.publicKey, expectedIdentity)
+                ) { "Paykit identity changed before proposing the payment request" }
+                val terms = PaymentRequestTerms(
+                    amount = PaymentRequestAmount(proposal.amountValue, "btc"),
+                    paymentReference = PaymentReference(proposal.paymentReference),
+                    proposalExpiresAt = proposal.proposalExpiresAt,
+                    recurrence = null,
+                    acceptedPaymentEndpointIdentifiers = proposal.acceptedPaymentEndpointIdentifiers,
+                    metadata = PrivateJsonObject(proposal.metadataJson),
+                )
+                handle.proposePaymentRequest(counterparty, counterpartyReceiverPath, terms)
+            }
         }
     }
 
@@ -564,6 +650,20 @@ class PaykitSdkService @Inject constructor(
         return operationMutex.withLock {
             withStateRevisionTracking { handle ->
                 handle.acceptPaymentRequest(counterparty, counterpartyReceiverPath, paymentRequestId)
+            }
+        }
+    }
+
+    suspend fun rejectPaymentRequest(
+        counterparty: String,
+        counterpartyReceiverPath: String,
+        paymentRequestId: String,
+        reason: String? = null,
+    ): PaymentRequestRecord {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.rejectPaymentRequest(counterparty, counterpartyReceiverPath, paymentRequestId, reason)
             }
         }
     }
@@ -743,7 +843,7 @@ class PaykitSdkService @Inject constructor(
 
     private suspend fun publishReceiverMarkerIfLiveSessionAvailable(handle: PaykitSdk) {
         runSuspendCatching {
-            val capabilities = receiverCapabilities()
+            val capabilities = receiverCapabilities(handle)
             if (capabilities.privatePayments) {
                 handle.publishPaykitReceiverMarker(capabilities)
             }
@@ -752,8 +852,8 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    private fun receiverCapabilities(): PaykitReceiverCapabilities {
-        val hasPrivatePaymentAccess = sessionProvider.hasSessionAccess()
+    private suspend fun receiverCapabilities(handle: PaykitSdk): PaykitReceiverCapabilities {
+        val hasPrivatePaymentAccess = handle.identityStatus()?.liveSessionAvailable == true
         return PaykitReceiverCapabilities(
             privatePayments = hasPrivatePaymentAccess,
             paymentRequests = hasPrivatePaymentAccess,
@@ -906,6 +1006,7 @@ internal class PaykitSdkSessionProvider(
     private val lock = Any()
     private val receiverNoiseKeyStore = PaykitReceiverNoiseKeyStore(keychain)
     private var liveSessionAccess: PubkySessionAccess? = null
+    private var isStoredSessionAccessSuspended = false
 
     fun setLiveSessionAccess(access: PubkySessionAccess) = synchronized(lock) {
         liveSessionAccess = access
@@ -916,21 +1017,22 @@ internal class PaykitSdkSessionProvider(
     }
 
     override fun loadSessionAccess(): PubkySessionAccess? {
-        val sessionSecret = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
-            ?.takeIf { it.isNotBlank() }
-            ?: return null
+        return synchronized(lock) {
+            if (isStoredSessionAccessSuspended) return null
 
-        synchronized(lock) {
+            val sessionSecret = keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
+                ?.takeIf { it.isNotBlank() }
+                ?: return null
             liveSessionAccess
                 ?.takeIf { it.exportSessionSecret() == sessionSecret }
                 ?.let { return it }
-        }
 
-        return PubkySessionAccess(
-            sessionSecret = sessionSecret,
-            localSecretKey = loadLocalSecretKey(),
-            receiverNoiseSecretKey = loadOrDeriveReceiverNoiseSecretKey(),
-        )
+            PubkySessionAccess(
+                sessionSecret = sessionSecret,
+                localSecretKey = loadLocalSecretKey(),
+                receiverNoiseSecretKey = loadOrDeriveReceiverNoiseSecretKey(),
+            )
+        }
     }
 
     override fun publicStorageAvailable(): Boolean = true
@@ -938,12 +1040,28 @@ internal class PaykitSdkSessionProvider(
     fun hasSessionAccess(): Boolean =
         keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)?.isNotBlank() == true
 
+    fun canDeferStaleSession(errorContext: String): Boolean =
+        errorContext == STALE_SESSION_IMPORT_CONTEXT && hasSessionAccess()
+
+    fun suspendStoredSessionAccess() = synchronized(lock) {
+        liveSessionAccess = null
+        isStoredSessionAccessSuspended = true
+    }
+
+    fun resumeStoredSessionAccess() = synchronized(lock) {
+        isStoredSessionAccessSuspended = false
+    }
+
     override fun clearSessionAccess() {
         clearLiveSessionAccess()
         keychain.accessBlocking {
             delete(Keychain.Key.PAYKIT_SESSION.name)
             delete(Keychain.Key.PUBKY_SECRET_KEY.name)
         }
+    }
+
+    private companion object {
+        const val STALE_SESSION_IMPORT_CONTEXT = "import Pubky session from platform provider"
     }
 
     fun loadLocalSecretKey(): PubkyLocalSecretKey? {

@@ -185,6 +185,7 @@ fun DrawerMenu(
                 onBeforeNavigate(Routes.Home)
                 onOpenWalletHome()
             },
+            showPaymentRequests = isPaykitEnabled,
             onBeforeNavigate = onBeforeNavigate,
         )
     }
@@ -199,6 +200,7 @@ private fun Menu(
     onClickContacts: () -> Unit,
     onClickProfile: () -> Unit,
     onClickWallet: () -> Unit,
+    showPaymentRequests: Boolean,
     onBeforeNavigate: (Routes?) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -232,6 +234,19 @@ private fun Menu(
             },
             modifier = Modifier.testTag("DrawerActivity")
         )
+
+        if (showPaymentRequests) {
+            DrawerItem(
+                label = stringResource(R.string.wallet__drawer__payment_requests),
+                iconRes = R.drawable.ic_file_text,
+                onClick = {
+                    onBeforeNavigate(Routes.PaymentRequests)
+                    rootNavController.navigateIfNotCurrent(Routes.PaymentRequests)
+                    scope.launch { drawerState.close() }
+                },
+                modifier = Modifier.testTag("DrawerPaymentRequests")
+            )
+        }
 
         DrawerItem(
             label = stringResource(R.string.wallet__drawer__contacts),
