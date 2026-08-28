@@ -9,8 +9,10 @@ import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.core.net.toUri
 import app.cash.turbine.test
+import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.persistentListOf
@@ -64,6 +66,7 @@ import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.BalanceState
+import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -189,6 +192,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private val balanceState = MutableStateFlow(BalanceState())
     private val hwReceivedTxs = MutableSharedFlow<HwWalletReceivedTx>()
+    private val hwWallets = MutableStateFlow(persistentListOf<HwWallet>())
     private val needsPairingCode = MutableStateFlow(false)
     private val pairingCodeRequestId = MutableStateFlow<Long?>(null)
     private val settingsData = MutableStateFlow(SettingsData())
@@ -211,6 +215,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         timedSheetType.value = null
         paykitPaymentRequestHistory.value = emptyList()
         surfacedPaykitPaymentRequestIds.clear()
+        hwWallets.value = persistentListOf()
         stubRepositories()
         sut = createViewModel()
     }
@@ -231,6 +236,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(lightningRepo.nodeEventUpdates).thenReturn(nodeEventUpdates)
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEventUpdates.map { it.event })
         whenever(hwWalletRepo.receivedTxs).thenReturn(hwReceivedTxs)
+        whenever(hwWalletRepo.wallets).thenReturn(hwWallets)
         whenever(hwWalletRepo.needsPairingCode).thenReturn(needsPairingCode)
         whenever(hwWalletRepo.pairingCodeRequestId).thenReturn(pairingCodeRequestId)
         whenever(coreService.activity).thenReturn(activityService)
@@ -2012,6 +2018,205 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `normal onchain send can switch from savings to Trezor`() = test {
+        val exactAvailableStarted = CompletableDeferred<Unit>()
+        val finishExactAvailable = CompletableDeferred<Unit>()
+        val feeEstimateStarted = CompletableDeferred<Unit>()
+        val finishFeeEstimate = CompletableDeferred<Unit>()
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
+        whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
+            .doSuspendableAnswer {
+                exactAvailableStarted.complete(Unit)
+                finishExactAvailable.await()
+                Result.success(48_000uL)
+            }
+        whenever { hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()) }
+            .doSuspendableAnswer {
+                feeEstimateStarted.complete(Unit)
+                finishFeeEstimate.await()
+                Result.success(250uL)
+            }
+        balanceState.value = BalanceState(maxSendOnchainSats = 10_000uL)
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000uL,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
+            )
+        )
+        sut.setSendEvent(SendEvent.AmountChange(1_000uL))
+        advanceUntilIdle()
+
+        assertTrue(sut.sendUiState.value.canSwitchFundingSource)
+
+        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        exactAvailableStarted.await()
+
+        assertTrue(sut.sendUiState.value.isSwitchingFundingSource)
+        assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+        assertEquals("Trezor", sut.sendUiState.value.hardwareWalletName)
+        assertEquals(46_400uL, sut.sendUiState.value.hardwareAvailableSats)
+
+        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        finishExactAvailable.complete(Unit)
+        feeEstimateStarted.await()
+
+        assertTrue(sut.sendUiState.value.isSwitchingFundingSource)
+
+        finishFeeEstimate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isSwitchingFundingSource)
+        assertEquals(48_000uL, sut.sendUiState.value.hardwareAvailableSats)
+        assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        verify(hwWalletRepo, times(1)).maxSpendableFunding(any(), any(), any())
+    }
+
+    @Test
+    fun `invalid funding source cannot start confirmation`() = test {
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000uL,
+                isAmountInputValid = false,
+                hardwareWalletId = HARDWARE_WALLET_ID,
+                hardwareAvailableSats = 100_000uL,
+                payMethod = SendMethod.ONCHAIN,
+            )
+        )
+
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
+    fun `fixed lightning invoice has valid amount`() = test {
+        val bolt11 = "lnbcrt1fixedamount"
+        stubLightningScan(bolt11 = bolt11, amountSats = 1_000uL)
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `fixed LNURL payment has valid amount`() = test {
+        val lnurl = "lnurl1fixedamount"
+        whenever { coreService.decode(lnurl) }.thenReturn(
+            Scanner.LnurlPay(
+                LnurlPayData(
+                    uri = lnurl,
+                    callback = "https://example.com/callback",
+                    minSendable = 1_000_000uL,
+                    maxSendable = 1_000_000uL,
+                    metadataStr = "[]",
+                    commentAllowed = null,
+                    allowsNostr = false,
+                    nostrPubkey = null,
+                )
+            )
+        )
+        whenever(lightningRepo.canSend(1_000uL)).thenReturn(true)
+
+        sut.onScanResult(lnurl)
+        advanceUntilIdle()
+
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+    }
+
+    @Test
+    fun `hardware send rejects scanned non-onchain payment requests`() = test {
+        val scans = nonOnchainPaymentScans()
+        whenever(context.getString(R.string.hardware__send_onchain_only_title)).thenReturn("On-chain only")
+        scans.forEach { (input, scan) ->
+            whenever { coreService.decode(input) }.thenReturn(scan)
+        }
+        sut.showSheet(Sheet.Send(hardwareWalletId = HARDWARE_WALLET_ID))
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        scans.forEach { (input, _) ->
+            sut.onScanResult(input)
+            advanceUntilIdle()
+
+            assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+            assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        }
+        verify(toastManager, times(scans.size)).enqueue(check { assertEquals("On-chain only", it.title) })
+    }
+
+    @Test
+    fun `hardware send rejects pasted non-onchain payment requests`() = test {
+        val scans = nonOnchainPaymentScans()
+        whenever(context.getString(R.string.hardware__send_onchain_only_title)).thenReturn("On-chain only")
+        scans.forEach { (input, scan) ->
+            whenever { coreService.decode(input) }.thenReturn(scan)
+        }
+        sut.showSheet(Sheet.Send(hardwareWalletId = HARDWARE_WALLET_ID))
+        advanceUntilIdle()
+        clearInvocations(toastManager)
+
+        scans.forEach { (input, _) ->
+            val clipData = mock<ClipData>()
+            val item = mock<ClipData.Item>()
+            whenever(item.text).thenReturn(input)
+            whenever(clipData.getItemAt(0)).thenReturn(item)
+            whenever(clipboardManager.primaryClip).thenReturn(clipData)
+
+            sut.setSendEvent(SendEvent.Paste)
+            advanceUntilIdle()
+
+            assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
+            assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+        }
+        verify(toastManager, times(scans.size)).enqueue(check { assertEquals("On-chain only", it.title) })
+    }
+
+    @Test
+    fun `amount continue shows loading and ignores duplicate request`() = test {
+        val estimateStarted = CompletableDeferred<Unit>()
+        val finishEstimate = CompletableDeferred<Unit>()
+        whenever { hwWalletRepo.estimateFundingMiningFee(any(), any(), any(), any()) }.doSuspendableAnswer {
+            estimateStarted.complete(Unit)
+            finishEstimate.await()
+            Result.success(250uL)
+        }
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000uL,
+                isAmountInputValid = true,
+                hardwareWalletId = HARDWARE_WALLET_ID,
+                hardwareAvailableSats = 50_000uL,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+            )
+        )
+
+        sut.setSendEvent(SendEvent.AmountContinue)
+        sut.setSendEvent(SendEvent.AmountContinue)
+        estimateStarted.await()
+
+        assertTrue(sut.sendUiState.value.isLoading)
+
+        finishEstimate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isLoading)
+        verify(hwWalletRepo, times(1)).estimateFundingMiningFee(
+            HARDWARE_WALLET_ID,
+            REGTEST_ADDRESS,
+            1_000uL,
+            3uL,
+        )
+    }
+
+    @Test
     fun `pending contact lightning success tags activity`() = test {
         val contactKey = "pubkycontact"
         val paymentHash = "pending_hash"
@@ -3712,6 +3917,44 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `approved hardware payment request preparation is idempotent`() = test {
+        val request = paymentRequest()
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = "bcrt1qpaymentrequest",
+                amount = request.amountSats,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+            )
+        )
+
+        assertTrue(sut.prepareHardwareContactPayment())
+        assertTrue(sut.prepareHardwareContactPayment())
+
+        verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
+        verify(paykitPaymentRequestRepo).accept(request)
+    }
+
+    @Test
+    fun `private hardware contact preparation is idempotent`() = test {
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        setActiveContactPaymentContext(testPublicKey, privateContext)
+
+        assertTrue(sut.prepareHardwareContactPayment())
+        assertTrue(sut.prepareHardwareContactPayment())
+
+        verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
+    }
+
+    @Test
     fun `incoming payment request is not accepted when private list consumption fails`() = test {
         val address = "bcrt1qpaymentrequest"
         val request = paymentRequest()
@@ -4204,6 +4447,22 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(lightningRepo.canSend(amountSats)).thenReturn(true)
     }
 
+    private fun nonOnchainPaymentScans() = listOf(
+        "lnbcrt1hardware" to Scanner.Lightning(lightningInvoice("lnbcrt1hardware", 1_000uL)),
+        "lnurl1hardware" to Scanner.LnurlPay(
+            LnurlPayData(
+                uri = "lnurl1hardware",
+                callback = "https://example.com/callback",
+                minSendable = 1_000uL,
+                maxSendable = 100_000uL,
+                metadataStr = "[]",
+                commentAllowed = null,
+                allowsNostr = false,
+                nostrPubkey = null,
+            )
+        ),
+    )
+
     private suspend fun stubOpenedPaymentRequest(
         request: PaykitPaymentRequest,
         paymentRequest: String,
@@ -4389,6 +4648,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         method.invoke(sut)
     }
 
+    private fun hardwareWallet(fundingBalanceSats: ULong) = HwWallet(
+        id = HARDWARE_WALLET_ID,
+        name = "Trezor",
+        model = "Safe 7",
+        transportType = TransportType.USB,
+        isConnected = false,
+        balanceSats = fundingBalanceSats,
+        activities = persistentListOf(),
+        fundingBalanceSats = fundingBalanceSats,
+    )
+
     private fun paymentRequest() = PaykitPaymentRequest(
         paymentRequestId = "request-id",
         counterparty = testPublicKey,
@@ -4411,3 +4681,5 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
 private const val SAMROCK_SETUP_URL =
     "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
+private const val HARDWARE_WALLET_ID = "trezor:wallet"
+private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"

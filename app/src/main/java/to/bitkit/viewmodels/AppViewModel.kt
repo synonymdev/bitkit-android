@@ -126,6 +126,7 @@ import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
 import to.bitkit.models.TransportType
 import to.bitkit.models.USD
+import to.bitkit.models.WalletScope
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
 import to.bitkit.models.sanitizedDeeplinkLogValue
@@ -284,7 +285,27 @@ class AppViewModel @Inject constructor(
     private fun mainScreenEffect(effect: MainScreenEffect) = viewModelScope.launch { _mainScreenEffect.emit(effect) }
 
     private val sendEvents = MutableSharedFlow<SendEvent>()
-    fun setSendEvent(event: SendEvent) = viewModelScope.launch { sendEvents.emit(event) }
+    private var amountContinuePending = false
+    private var fundingSourceSwitchPending = false
+    private var onchainSendRefreshJob: Job? = null
+
+    fun setSendEvent(event: SendEvent) {
+        when (event) {
+            SendEvent.AmountContinue -> {
+                if (amountContinuePending) return
+                amountContinuePending = true
+            }
+
+            SendEvent.PaymentMethodSwitch -> {
+                if (fundingSourceSwitchPending) return
+                fundingSourceSwitchPending = true
+                _sendUiState.update { it.copy(isSwitchingFundingSource = true) }
+            }
+
+            else -> Unit
+        }
+        viewModelScope.launch { sendEvents.emit(event) }
+    }
 
     private val _isAuthenticated = MutableStateFlow(false)
     val isAuthenticated = _isAuthenticated.asStateFlow()
@@ -321,6 +342,7 @@ class AppViewModel @Inject constructor(
     private var activeContactPaymentContext: ContactPaymentContext? = null
     private val pendingContactPaymentContexts = mutableMapOf<String, ContactPaymentContext>()
     private var requestedPaymentRequestId: PaykitPaymentRequestId? = null
+    private var preparedContactPaymentContext: ContactPaymentContext? = null
     private var isPresentingPaymentRequest = false
     private var paymentRequestPresentationGeneration = 0L
     private var activePaymentRequestPresentationGeneration: Long? = null
@@ -1601,8 +1623,17 @@ class AppViewModel @Inject constructor(
 
                     is SendEvent.AmountChange -> onAmountChange(it.amount)
                     SendEvent.AmountReset -> resetAmountInput()
-                    SendEvent.AmountContinue -> onAmountContinue()
-                    SendEvent.PaymentMethodSwitch -> onPaymentMethodSwitch()
+                    SendEvent.AmountContinue -> try {
+                        onAmountContinue()
+                    } finally {
+                        amountContinuePending = false
+                    }
+                    SendEvent.PaymentMethodSwitch -> try {
+                        onPaymentMethodSwitch()
+                    } finally {
+                        fundingSourceSwitchPending = false
+                        _sendUiState.update { state -> state.copy(isSwitchingFundingSource = false) }
+                    }
 
                     is SendEvent.CoinSelectionContinue -> onCoinSelectionContinue(it.utxos)
 
@@ -1638,6 +1669,9 @@ class AppViewModel @Inject constructor(
     }
 
     private val isMainScanner get() = currentSheet.value !is Sheet.Send
+
+    private val activeHardwareWalletId: String?
+        get() = (currentSheet.value as? Sheet.Send)?.hardwareWalletId
 
     private fun onEnterManuallyClick() {
         clearActiveContactPaymentContext()
@@ -1711,9 +1745,17 @@ class AppViewModel @Inject constructor(
         }
 
         when (val decoded = scanResult.getOrNull()) {
-            is Scanner.Lightning -> validateLightningInvoice(decoded.invoice)
             is Scanner.OnChain -> validateOnChainAddress(decoded.invoice)
-            else -> _sendUiState.update { it.copy(isAddressInputValid = true) }
+            is Scanner.Lightning -> if (activeHardwareWalletId == null) {
+                validateLightningInvoice(decoded.invoice)
+            } else {
+                showHardwareOnchainOnlyValidationError()
+            }
+            else -> if (activeHardwareWalletId == null) {
+                _sendUiState.update { it.copy(isAddressInputValid = true) }
+            } else {
+                showHardwareOnchainOnlyValidationError()
+            }
         }
     }
 
@@ -1765,20 +1807,26 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        extractViableLightningInvoice(invoice.params)?.let { lnInvoice ->
-            _sendUiState.update {
-                it.copy(
-                    isAddressInputValid = true,
-                    isUnified = true,
-                    decodedInvoice = lnInvoice,
-                    payMethod = SendMethod.LIGHTNING,
-                )
+        val hardwareWalletId = activeHardwareWalletId
+        if (hardwareWalletId == null) {
+            extractViableLightningInvoice(invoice.params)?.let { lnInvoice ->
+                _sendUiState.update {
+                    it.copy(
+                        isAddressInputValid = true,
+                        isUnified = true,
+                        decodedInvoice = lnInvoice,
+                        payMethod = SendMethod.LIGHTNING,
+                    )
+                }
+                updateCanSwitchWallet()
+                return
             }
-            updateCanSwitchWallet()
-            return
         }
 
-        val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
+        val selectedMaxSendOnchain = hardwareWalletId?.let {
+            hardwareMaxSpendable(it, invoice.address, _sendUiState.value.speed)
+        } ?: walletRepo.balanceState.value.maxSendOnchainSats
+        val maxSendOnchain = maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
 
         if (maxSendOnchain == 0uL) {
             showAddressValidationError(
@@ -1801,6 +1849,14 @@ class AppViewModel @Inject constructor(
         }
 
         _sendUiState.update { it.copy(isAddressInputValid = true) }
+    }
+
+    private fun showHardwareOnchainOnlyValidationError() {
+        showAddressValidationError(
+            titleRes = R.string.hardware__send_onchain_only_title,
+            descriptionRes = R.string.hardware__send_onchain_only_text,
+            testTag = "HardwareOnchainOnlyToast",
+        )
     }
 
     private suspend fun extractViableLightningInvoice(params: Map<String, String>?): LightningInvoice? =
@@ -2053,16 +2109,32 @@ class AppViewModel @Inject constructor(
 
                 else -> false
             }
-            val fee = when (speed is TransactionSpeed.Custom) {
-                true -> getFeeEstimate(speed)
-                else -> state.fees.getOrDefault(FeeRate.fromSpeed(speed), 0)
-            }
+            val wasHardwareMax = state.hardwareWalletId != null &&
+                state.amount > 0uL &&
+                state.amount == state.hardwareAvailableSats
+            val hardwareAvailableSats = state.hardwareWalletId?.let { walletId ->
+                hardwareMaxSpendable(walletId, state.address, speed)
+            } ?: state.hardwareAvailableSats
             _sendUiState.update {
                 it.copy(
                     payMethod = SendMethod.ONCHAIN,
                     speed = speed,
-                    fee = SendFee.OnChain(fee),
+                    amount = if (wasHardwareMax) hardwareAvailableSats else it.amount,
+                    hardwareAvailableSats = hardwareAvailableSats,
                     selectedUtxos = if (shouldResetUtxos) null else it.selectedUtxos,
+                )
+            }
+            val fee = when (speed is TransactionSpeed.Custom) {
+                true -> getFeeEstimate(speed)
+                else -> if (state.hardwareWalletId != null) {
+                    getFeeEstimate(speed)
+                } else {
+                    state.fees.getOrDefault(FeeRate.fromSpeed(speed), 0)
+                }
+            }
+            _sendUiState.update {
+                it.copy(
+                    fee = SendFee.OnChain(fee),
                 )
             }
             updateCanSwitchWallet()
@@ -2073,44 +2145,115 @@ class AppViewModel @Inject constructor(
 
     private fun updateCanSwitchWallet() {
         val state = _sendUiState.value
-        if (!state.isUnified) {
-            _sendUiState.update { it.copy(canSwitchWallet = false) }
-            return
+        val canSwitchWallet = if (state.hardwareWalletId != null || !state.isUnified) {
+            false
+        } else {
+            val amount = state.amount
+            val balance = walletRepo.balanceState.value
+            amount > Defaults.dustLimit.toULong() &&
+                amount <= balance.maxSendOnchainSats &&
+                amount <= balance.maxSendLightningSats
         }
-        val amount = state.amount
-        val balance = walletRepo.balanceState.value
-        val canSwitch = amount > Defaults.dustLimit.toULong() &&
-            amount <= balance.maxSendOnchainSats &&
-            amount <= balance.maxSendLightningSats
-        _sendUiState.update { it.copy(canSwitchWallet = canSwitch) }
+        _sendUiState.update {
+            it.copy(
+                canSwitchWallet = canSwitchWallet,
+                canSwitchFundingSource = availableFundingSources(state).size > 1,
+            )
+        }
     }
 
     private suspend fun onPaymentMethodSwitch() {
         val current = _sendUiState.value
-        if (!current.isUnified) return
+        val sources = availableFundingSources(current)
+        if (sources.size < 2) return
+        onchainSendRefreshJob?.cancel()
+        val selected = current.selectedFundingSource()
+        val selectedIndex = sources.indexOf(selected).takeIf { it >= 0 } ?: 0
+        when (val nextSource = sources[(selectedIndex + 1) % sources.size]) {
+            SendFundingSource.Spending -> {
+                _sendUiState.update {
+                    it.copy(
+                        payMethod = SendMethod.LIGHTNING,
+                        hardwareWalletId = null,
+                        hardwareWalletName = null,
+                        hardwareAvailableSats = 0uL,
+                        fee = SendFee.Lightning(0),
+                        selectedUtxos = null,
+                        confirmedWarnings = persistentListOf(),
+                    )
+                }
+                estimateLightningRoutingFeesIfNeeded()
+            }
 
-        val nextMethod = when (current.payMethod) {
-            SendMethod.ONCHAIN -> SendMethod.LIGHTNING
-            SendMethod.LIGHTNING -> SendMethod.ONCHAIN
+            SendFundingSource.Savings -> {
+                _sendUiState.update {
+                    it.copy(
+                        payMethod = SendMethod.ONCHAIN,
+                        hardwareWalletId = null,
+                        hardwareWalletName = null,
+                        hardwareAvailableSats = 0uL,
+                        fee = null,
+                        selectedUtxos = null,
+                        confirmedWarnings = persistentListOf(),
+                    )
+                }
+                refreshOnchainSendIfNeeded()?.join()
+            }
+
+            is SendFundingSource.Hardware -> selectHardwareFundingSource(nextSource.walletId, current)
         }
         _sendUiState.update {
             it.copy(
-                payMethod = nextMethod,
-                isAmountInputValid = validateAmount(it.amount, nextMethod),
+                isAmountInputValid = validateAmount(it.amount),
+            )
+        }
+        updateCanSwitchWallet()
+    }
+
+    private suspend fun selectHardwareFundingSource(walletId: String, current: SendUiState) {
+        val initialAvailable = hardwareEstimatedAvailable(walletId, current.speed)
+        val walletName = hwWalletRepo.wallets.value.find { it.id == walletId }?.name
+        _sendUiState.update {
+            it.copy(
+                payMethod = SendMethod.ONCHAIN,
+                hardwareWalletId = walletId,
+                hardwareWalletName = walletName,
+                hardwareAvailableSats = initialAvailable,
+                isAmountInputValid = it.amount > Defaults.dustLimit.toULong() && it.amount <= initialAvailable,
+                fee = null,
+                selectedUtxos = null,
                 confirmedWarnings = persistentListOf(),
             )
         }
-        when (nextMethod) {
-            SendMethod.ONCHAIN -> {
-                val defaultSpeed = settingsStore.data.first().defaultTransactionSpeed
-                _sendUiState.update { it.copy(speed = defaultSpeed) }
-                refreshFeeEstimates()
-            }
-            SendMethod.LIGHTNING -> {
-                _sendUiState.update { it.copy(fee = SendFee.Lightning(0)) }
-                estimateLightningRoutingFeesIfNeeded()
-            }
+        val available = hardwareMaxSpendable(walletId, current.address, current.speed)
+        _sendUiState.update {
+            if (it.hardwareWalletId != walletId) return@update it
+            it.copy(hardwareAvailableSats = available)
         }
+        refreshOnchainSendIfNeeded()?.join()
+    }
+
+    private suspend fun selectHardwareFundingSourceForAmount(amount: ULong): Boolean {
+        val state = _sendUiState.value
+        for (wallet in hwWalletRepo.wallets.value) {
+            val available = hardwareMaxSpendable(wallet.id, state.address, state.speed)
+            if (amount > available) continue
+            _sendUiState.update {
+                it.copy(
+                    payMethod = SendMethod.ONCHAIN,
+                    hardwareWalletId = wallet.id,
+                    hardwareWalletName = wallet.name,
+                    hardwareAvailableSats = available,
+                    isAmountInputValid = true,
+                    selectedUtxos = null,
+                    confirmedWarnings = persistentListOf(),
+                )
+            }
+            updateCanSwitchWallet()
+            refreshOnchainSendIfNeeded()
+            return true
+        }
+        return false
     }
 
     fun switchToLightning() {
@@ -2118,6 +2261,9 @@ class AppViewModel @Inject constructor(
             _sendUiState.update {
                 it.copy(
                     payMethod = SendMethod.LIGHTNING,
+                    hardwareWalletId = null,
+                    hardwareWalletName = null,
+                    hardwareAvailableSats = 0uL,
                     fee = SendFee.Lightning(0),
                     isAmountInputValid = validateAmount(it.amount, SendMethod.LIGHTNING),
                     confirmedWarnings = persistentListOf(),
@@ -2128,13 +2274,18 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun onAmountContinue() {
+        if (_sendUiState.value.isLoading) return
         _sendUiState.update {
             it.copy(
                 selectedUtxos = null,
             )
         }
 
-        if (_sendUiState.value.payMethod != SendMethod.LIGHTNING && !settingsStore.data.first().coinSelectAuto) {
+        if (
+            _sendUiState.value.hardwareWalletId == null &&
+            _sendUiState.value.payMethod != SendMethod.LIGHTNING &&
+            !settingsStore.data.first().coinSelectAuto
+        ) {
             setSendEffect(SendEffect.NavigateToCoinSelection)
             return
         }
@@ -2159,12 +2310,37 @@ class AppViewModel @Inject constructor(
         }
 
         _sendUiState.update { it.copy(isLoading = true) }
-        refreshOnchainSendIfNeeded()
-        estimateLightningRoutingFeesIfNeeded()
-        _sendUiState.update { it.copy(isLoading = false) }
+        try {
+            if (!prepareHardwareSendFee()) return
+            refreshOnchainSendIfNeeded()
+            estimateLightningRoutingFeesIfNeeded()
+        } finally {
+            _sendUiState.update { it.copy(isLoading = false) }
+        }
         updateCanSwitchWallet()
 
         setSendEffect(SendEffect.NavigateToConfirm)
+    }
+
+    private suspend fun prepareHardwareSendFee(): Boolean {
+        val state = _sendUiState.value
+        val walletId = state.hardwareWalletId ?: return true
+        val satsPerVByte = state.feeRates
+            ?.getSatsPerVByteFor(state.speed)
+            ?.toULong()
+            ?.takeIf { it > 0uL }
+            ?: HW_SEND_FALLBACK_SATS_PER_VBYTE
+        val miningFeeSats = hwWalletRepo.estimateFundingMiningFee(
+            walletId = walletId,
+            address = state.address,
+            sats = state.amount,
+            satsPerVByte = satsPerVByte,
+        ).getOrElse { error ->
+            toast(error)
+            return false
+        }
+        _sendUiState.update { it.copy(fee = SendFee.OnChain(miningFeeSats.toLong())) }
+        return true
     }
 
     private suspend fun onCoinSelectionContinue(utxos: List<SpendableUtxo>) {
@@ -2195,7 +2371,9 @@ class AppViewModel @Inject constructor(
             }
 
             SendMethod.ONCHAIN -> {
-                val maxSendable = walletRepo.balanceState.value.maxSendOnchainSats
+                val maxSendable = _sendUiState.value.hardwareAvailableSats
+                    .takeIf { _sendUiState.value.hardwareWalletId != null }
+                    ?: walletRepo.balanceState.value.maxSendOnchainSats
                 amount > Defaults.dustLimit.toULong() && amount <= maxSendable
             }
         }
@@ -2357,27 +2535,39 @@ class AppViewModel @Inject constructor(
         scan: Scanner?,
         input: String,
         fromMainScanner: Boolean,
-    ) = when (scan) {
-        is Scanner.OnChain -> onScanOnchain(scan.invoice, input, fromMainScanner)
-        is Scanner.Lightning -> onScanLightning(scan.invoice, input, fromMainScanner)
-        is Scanner.LnurlPay -> onScanLnurlPay(scan.data, fromMainScanner)
-        is Scanner.LnurlWithdraw -> handleNonPaymentScan { onScanLnurlWithdraw(scan.data, fromMainScanner) }
-        is Scanner.LnurlAuth -> handleNonPaymentScan { onScanLnurlAuth(scan.data, fromMainScanner) }
-        is Scanner.LnurlChannel -> handleNonPaymentScan { onScanLnurlChannel(scan.data) }
-        is Scanner.NodeId -> handleNonPaymentScan { onScanNodeId(scan) }
-        is Scanner.Gift -> handleNonPaymentScan { onScanGift(scan.code, scan.amount) }
-        else -> {
-            hideSheet()
-            Logger.warn(
-                if (scan == null) "Failed to decode scan data" else "Received unhandled scan data '$scan'",
-                context = TAG,
-            )
+    ) {
+        if (activeHardwareWalletId != null && scan != null && scan !is Scanner.OnChain) {
             toast(
                 type = Toast.ToastType.WARNING,
-                title = context.getString(R.string.other__qr_error_header),
-                description = context.getString(R.string.other__qr_error_text),
+                title = context.getString(R.string.hardware__send_onchain_only_title),
+                description = context.getString(R.string.hardware__send_onchain_only_text),
             )
             clearActiveContactPaymentContext()
+            return
+        }
+
+        when (scan) {
+            is Scanner.OnChain -> onScanOnchain(scan.invoice, input, fromMainScanner)
+            is Scanner.Lightning -> onScanLightning(scan.invoice, input, fromMainScanner)
+            is Scanner.LnurlPay -> onScanLnurlPay(scan.data, fromMainScanner)
+            is Scanner.LnurlWithdraw -> handleNonPaymentScan { onScanLnurlWithdraw(scan.data, fromMainScanner) }
+            is Scanner.LnurlAuth -> handleNonPaymentScan { onScanLnurlAuth(scan.data, fromMainScanner) }
+            is Scanner.LnurlChannel -> handleNonPaymentScan { onScanLnurlChannel(scan.data) }
+            is Scanner.NodeId -> handleNonPaymentScan { onScanNodeId(scan) }
+            is Scanner.Gift -> handleNonPaymentScan { onScanGift(scan.code, scan.amount) }
+            else -> {
+                hideSheet()
+                Logger.warn(
+                    if (scan == null) "Failed to decode scan data" else "Received unhandled scan data '$scan'",
+                    context = TAG,
+                )
+                toast(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.other__qr_error_header),
+                    description = context.getString(R.string.other__qr_error_text),
+                )
+                clearActiveContactPaymentContext()
+            }
         }
     }
 
@@ -2422,6 +2612,7 @@ class AppViewModel @Inject constructor(
         val interruptedRequest = synchronized(contactPaymentContextLock) {
             val request = activeContactPaymentContext?.incomingPaymentRequest
             activeContactPaymentContext = null
+            preparedContactPaymentContext = null
             request
         }
         if (interruptedRequest == null) return
@@ -2442,10 +2633,12 @@ class AppViewModel @Inject constructor(
         ) {
             deferPaymentRequestPresentation(interruptedRequest)
         }
+        isSubmittingPaymentRequest = false
     }
 
     private fun setActiveContactPaymentContext(context: ContactPaymentContext?) {
         synchronized(contactPaymentContextLock) {
+            if (activeContactPaymentContext != context) preparedContactPaymentContext = null
             activeContactPaymentContext = context
         }
     }
@@ -2505,11 +2698,21 @@ class AppViewModel @Inject constructor(
             clearActiveContactPaymentContext()
             return
         }
-        val maxSendOnchain = walletRepo.balanceState.value.maxSendOnchainSats
+        val hardwareWalletId = activeHardwareWalletId
+        val selectedMaxSendOnchain = if (hardwareWalletId != null) {
+            hardwareMaxSpendable(hardwareWalletId, invoice.address, _sendUiState.value.speed)
+        } else {
+            walletRepo.balanceState.value.maxSendOnchainSats
+        }
+        val maxSendOnchain = maximumAvailableOnchainSats(selectedMaxSendOnchain, hardwareWalletId)
 
         val incomingPaymentRequest = activeIncomingPaymentRequest()
-        val lnInvoice = extractViableLightningInvoice(invoice.params)?.takeIf {
-            incomingPaymentRequest?.acceptsLightningInvoiceAmountSats(it.amountSatoshis) != false
+        val lnInvoice = if (hardwareWalletId == null) {
+            extractViableLightningInvoice(invoice.params)?.takeIf {
+                incomingPaymentRequest?.acceptsLightningInvoiceAmountSats(it.amountSatoshis) != false
+            }
+        } else {
+            null
         }
         val amount = incomingPaymentRequest?.amountSats
             ?: lnInvoice?.amountSatoshis?.takeIf { it > 0uL }
@@ -2520,9 +2723,16 @@ class AppViewModel @Inject constructor(
                 addressInput = scanResult,
                 isAddressInputValid = true,
                 amount = amount,
-                isUnified = lnInvoice != null && amount <= maxSendOnchain && maxSendOnchain > 0u,
+                isUnified = hardwareWalletId == null && lnInvoice != null &&
+                    amount <= maxSendOnchain && maxSendOnchain > 0u,
                 decodedInvoice = lnInvoice,
-                payMethod = lnInvoice?.let { SendMethod.LIGHTNING } ?: SendMethod.ONCHAIN,
+                payMethod = if (hardwareWalletId != null) {
+                    SendMethod.ONCHAIN
+                } else {
+                    lnInvoice?.let { SendMethod.LIGHTNING } ?: SendMethod.ONCHAIN
+                },
+                hardwareWalletId = hardwareWalletId,
+                hardwareAvailableSats = selectedMaxSendOnchain.takeIf { hardwareWalletId != null } ?: 0uL,
             )
         }
         updateCanSwitchWallet()
@@ -2534,12 +2744,19 @@ class AppViewModel @Inject constructor(
                     _sendUiState.update { it.copy(payMethod = SendMethod.ONCHAIN) }
                 }
             }
+            if (
+                !validateAmount(amount) &&
+                _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
+                _sendUiState.value.hardwareWalletId == null
+            ) {
+                selectHardwareFundingSourceForAmount(amount)
+            }
             if (!validateAmount(amount)) {
                 val isLightning = _sendUiState.value.payMethod == SendMethod.LIGHTNING
                 val maxSendable = if (isLightning) {
                     walletRepo.balanceState.value.maxSendLightningSats
                 } else {
-                    walletRepo.balanceState.value.maxSendOnchainSats
+                    maxSendOnchain
                 }
                 val shortfall = amount.safe() - maxSendable.safe()
                 toast(
@@ -2574,6 +2791,7 @@ class AppViewModel @Inject constructor(
 
         val lnAmountSats = lnInvoice?.amountSatoshis ?: 0u
         if (lnAmountSats > 0u) {
+            _sendUiState.update { it.copy(isAmountInputValid = true) }
             Logger.info("Found amount in unified invoice, checking QuickPay conditions", context = TAG)
 
             val quickPayHandled = handleQuickPayIfApplicable(
@@ -2630,6 +2848,65 @@ class AppViewModel @Inject constructor(
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
     }
 
+    private suspend fun hardwareMaxSpendable(
+        walletId: String,
+        address: String,
+        speed: TransactionSpeed,
+    ): ULong {
+        val satsPerVByte = hardwareSatsPerVByte(speed)
+        return hwWalletRepo.maxSpendableFunding(
+            walletId = walletId,
+            address = address,
+            satsPerVByte = satsPerVByte,
+        ).getOrElse {
+            hardwareEstimatedAvailable(walletId, speed)
+        }
+    }
+
+    private fun hardwareEstimatedAvailable(
+        walletId: String,
+        speed: TransactionSpeed,
+        feeRates: FeeRates? = _sendUiState.value.feeRates,
+    ): ULong {
+        val balance = hwWalletRepo.wallets.value.find { it.id == walletId }?.fundingBalanceSats ?: 0uL
+        val reserve = HW_SEND_FALLBACK_TX_VBYTES.safe() * hardwareSatsPerVByte(speed, feeRates).safe()
+        return balance.safe() - reserve.safe()
+    }
+
+    private fun hardwareSatsPerVByte(
+        speed: TransactionSpeed,
+        feeRates: FeeRates? = _sendUiState.value.feeRates,
+    ): ULong =
+        feeRates
+            ?.getSatsPerVByteFor(speed)
+            ?.toULong()
+            ?.takeIf { it > 0uL }
+            ?: HW_SEND_FALLBACK_SATS_PER_VBYTE
+
+    private fun maximumHardwareFundingBalanceSats(): ULong =
+        hwWalletRepo.wallets.value.maxOfOrNull { it.fundingBalanceSats } ?: 0uL
+
+    private fun maximumAvailableOnchainSats(selectedMax: ULong, hardwareWalletId: String?): ULong =
+        if (hardwareWalletId == null) maxOf(selectedMax, maximumHardwareFundingBalanceSats()) else selectedMax
+
+    private fun availableFundingSources(state: SendUiState): List<SendFundingSource> = buildList {
+        if (state.isUnified || state.decodedInvoice != null) add(SendFundingSource.Spending)
+        if (state.address.isNotEmpty()) {
+            add(SendFundingSource.Savings)
+            hwWalletRepo.wallets.value.forEach { wallet ->
+                if (wallet.fundingBalanceSats > 0uL || wallet.id == state.hardwareWalletId) {
+                    add(SendFundingSource.Hardware(wallet.id))
+                }
+            }
+        }
+    }
+
+    private fun SendUiState.selectedFundingSource(): SendFundingSource = when {
+        hardwareWalletId != null -> SendFundingSource.Hardware(hardwareWalletId)
+        payMethod == SendMethod.LIGHTNING -> SendFundingSource.Spending
+        else -> SendFundingSource.Savings
+    }
+
     private suspend fun onScanLightning(
         invoice: LightningInvoice,
         scanResult: String,
@@ -2682,6 +2959,7 @@ class AppViewModel @Inject constructor(
                 amount = amount,
                 addressInput = scanResult,
                 isAddressInputValid = true,
+                isAmountInputValid = true,
                 decodedInvoice = invoice,
                 payMethod = SendMethod.LIGHTNING,
             )
@@ -2732,6 +3010,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update {
             it.copy(
                 amount = initialAmount,
+                isAmountInputValid = initialAmount > 0uL,
                 payMethod = SendMethod.LIGHTNING,
                 lnurl = LnurlParams.LnurlPay(data),
             )
@@ -2955,6 +3234,7 @@ class AppViewModel @Inject constructor(
 
     private fun onSwipeToPay() {
         Logger.debug("Swipe to pay event, checking send confirmation conditions", context = TAG)
+        if (!_sendUiState.value.isAmountInputValid) return
         viewModelScope.launch {
             val amount = _sendUiState.value.amount
 
@@ -2971,7 +3251,11 @@ class AppViewModel @Inject constructor(
 
         val settings = settingsStore.data.first()
         val balanceToCheck = when (_sendUiState.value.payMethod) {
-            SendMethod.ONCHAIN -> walletRepo.balanceState.value.maxSendOnchainSats
+            SendMethod.ONCHAIN -> {
+                _sendUiState.value.hardwareAvailableSats
+                    .takeIf { _sendUiState.value.hardwareWalletId != null }
+                    ?: walletRepo.balanceState.value.maxSendOnchainSats
+            }
             SendMethod.LIGHTNING -> walletRepo.balanceState.value.maxSendLightningSats
         }
         if (
@@ -2999,12 +3283,16 @@ class AppViewModel @Inject constructor(
 
         if (_sendUiState.value.payMethod != SendMethod.ONCHAIN) return
 
-        val totalFee = lightningRepo.calculateTotalFee(
-            amountSats = amountSats,
-            address = _sendUiState.value.address,
-            speed = _sendUiState.value.speed,
-            utxosToSpend = _sendUiState.value.selectedUtxos,
-        ).getOrNull() ?: return
+        val totalFee = if (_sendUiState.value.hardwareWalletId != null) {
+            (_sendUiState.value.fee as? SendFee.OnChain)?.value?.toULong() ?: return
+        } else {
+            lightningRepo.calculateTotalFee(
+                amountSats = amountSats,
+                address = _sendUiState.value.address,
+                speed = _sendUiState.value.speed,
+                utxosToSpend = _sendUiState.value.selectedUtxos,
+            ).getOrNull() ?: return
+        }
 
         if (
             totalFee > BigDecimal.valueOf(
@@ -3108,7 +3396,7 @@ class AppViewModel @Inject constructor(
                 val bolt11 = decodedInvoice.bolt11
 
                 val paymentAmount = if (decodedInvoice.amountSatoshis > 0uL) null else amount
-                val displayAmountSats = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: amount ?: 0uL
+                val displayAmountSats = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: amount
 
                 val tags = _sendUiState.value.selectedTags
                 var createdMetadataPaymentId: String? = null
@@ -3162,6 +3450,31 @@ class AppViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    private suspend fun prepareContactPayment(contactPaymentContext: ContactPaymentContext?): Boolean {
+        if (
+            contactPaymentContext != null &&
+            synchronized(contactPaymentContextLock) { preparedContactPaymentContext == contactPaymentContext }
+        ) {
+            return true
+        }
+        if (!validateIncomingPaymentRequest(contactPaymentContext)) return false
+
+        consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
+            handlePaymentPreparationFailure(it)
+            return false
+        }
+        acceptIncomingPaymentRequestIfNeeded(contactPaymentContext).onFailure {
+            handlePaymentPreparationFailure(it)
+            return false
+        }
+        synchronized(contactPaymentContextLock) {
+            if (activeContactPaymentContext == contactPaymentContext) {
+                preparedContactPaymentContext = contactPaymentContext
+            }
+        }
+        return true
     }
 
     private suspend fun hasMismatchedIncomingPaymentRequest(contactPaymentContext: ContactPaymentContext?): Boolean {
@@ -3282,13 +3595,15 @@ class AppViewModel @Inject constructor(
         val activityType = _transactionSheet.value.type.toActivityFilter()
         val txType = _transactionSheet.value.direction.toTxType()
         val paymentHashOrTxId = _transactionSheet.value.paymentHashOrTxId ?: return
+        val activityWalletId = _transactionSheet.value.activityWalletId ?: WalletScope.default
         _transactionSheet.update { it.copy(isLoadingDetails = true) }
         viewModelScope.launch {
             activityRepo.findActivityByPaymentId(
                 paymentHashOrTxId = paymentHashOrTxId,
                 type = activityType,
                 txType = txType,
-                retry = true
+                retry = activityWalletId == WalletScope.default,
+                walletId = activityWalletId,
             ).onSuccess { activity ->
                 hideNewTransactionSheet()
                 _transactionSheet.update { it.copy(isLoadingDetails = false) }
@@ -3306,13 +3621,15 @@ class AppViewModel @Inject constructor(
         val activityType = _successSendUiState.value.type.toActivityFilter()
         val txType = _successSendUiState.value.direction.toTxType()
         val paymentHashOrTxId = _successSendUiState.value.paymentHashOrTxId ?: return
+        val activityWalletId = _successSendUiState.value.activityWalletId ?: WalletScope.default
         _successSendUiState.update { it.copy(isLoadingDetails = true) }
         viewModelScope.launch {
             activityRepo.findActivityByPaymentId(
                 paymentHashOrTxId = paymentHashOrTxId,
                 type = activityType,
                 txType = txType,
-                retry = true
+                retry = activityWalletId == WalletScope.default,
+                walletId = activityWalletId,
             ).onSuccess { activity ->
                 hideSheet()
                 _successSendUiState.update { it.copy(isLoadingDetails = false) }
@@ -3390,19 +3707,23 @@ class AppViewModel @Inject constructor(
     }
 
     /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
-    private fun refreshOnchainSendIfNeeded() {
+    private fun refreshOnchainSendIfNeeded(): Job? {
         val currentState = _sendUiState.value
         if (currentState.payMethod != SendMethod.ONCHAIN ||
             currentState.amount == 0uL ||
             currentState.address.isEmpty()
         ) {
-            return
+            return null
         }
 
-        // refresh in background
-        viewModelScope.launch(bgDispatcher) {
+        onchainSendRefreshJob?.cancel()
+        val job = viewModelScope.launch(bgDispatcher, start = CoroutineStart.LAZY) {
             // preselect utxos for deterministic fee estimation
-            if (settingsStore.data.first().coinSelectAuto && currentState.selectedUtxos == null) {
+            if (
+                currentState.hardwareWalletId == null &&
+                settingsStore.data.first().coinSelectAuto &&
+                currentState.selectedUtxos == null
+            ) {
                 lightningRepo.getFeeRateForSpeed(currentState.speed, currentState.feeRates)
                     .mapCatching { satsPerVByte ->
                         lightningRepo.determineUtxosToSpend(
@@ -3416,6 +3737,12 @@ class AppViewModel @Inject constructor(
             }
             refreshFeeEstimates()
         }
+        onchainSendRefreshJob = job
+        job.invokeOnCompletion {
+            if (onchainSendRefreshJob === job) onchainSendRefreshJob = null
+        }
+        job.start()
+        return job
     }
 
     private suspend fun refreshFeeEstimates() = withContext(bgDispatcher) {
@@ -3509,6 +3836,18 @@ class AppViewModel @Inject constructor(
 
     private suspend fun getFeeEstimate(speed: TransactionSpeed? = null): Long {
         val currentState = _sendUiState.value
+        val hardwareWalletId = currentState.hardwareWalletId
+        if (hardwareWalletId != null) {
+            val selectedSpeed = speed ?: currentState.speed
+            val satsPerVByte = currentState.feeRates?.getSatsPerVByteFor(selectedSpeed) ?: 0u
+            if (satsPerVByte == 0u) return 0
+            return hwWalletRepo.estimateFundingMiningFee(
+                walletId = hardwareWalletId,
+                address = currentState.address,
+                sats = currentState.amount,
+                satsPerVByte = satsPerVByte.toULong(),
+            ).getOrNull()?.toLong() ?: 0
+        }
         return lightningRepo.calculateTotalFee(
             amountSats = currentState.amount,
             address = currentState.address,
@@ -3521,6 +3860,7 @@ class AppViewModel @Inject constructor(
     suspend fun resetSendState(
         contactPaymentProfile: PubkyProfile? = null,
         isPaymentRequest: Boolean = false,
+        hardwareWalletId: String? = activeHardwareWalletId,
     ) {
         addressValidationJob?.cancel()
         val speed = settingsStore.data.first().defaultTransactionSpeed
@@ -3536,6 +3876,14 @@ class AppViewModel @Inject constructor(
                 feeRates = rates,
                 contactPaymentProfile = contactPaymentProfile,
                 isPaymentRequest = isPaymentRequest,
+                hardwareWalletId = hardwareWalletId,
+                hardwareWalletName = hardwareWalletId?.let { walletId ->
+                    hwWalletRepo.wallets.value.find { it.id == walletId }?.name
+                },
+                hardwareAvailableSats = hardwareWalletId?.let { walletId ->
+                    hardwareEstimatedAvailable(walletId, speed, rates)
+                } ?: 0uL,
+                isSwitchingFundingSource = fundingSourceSwitchPending,
             )
         }
     }
@@ -3892,6 +4240,11 @@ class AppViewModel @Inject constructor(
         }
 
         isSubmittingPaymentRequest = contactPaymentContext?.incomingPaymentRequest != null
+        if (_sendUiState.value.hardwareWalletId != null) {
+            _sendUiState.update { it.copy(shouldConfirmPay = false) }
+            setSendEffect(SendEffect.NavigateToHardwareSign)
+            return
+        }
         viewModelScope.launch {
             try {
                 _sendUiState.update { it.copy(shouldConfirmPay = false) }
@@ -3902,13 +4255,27 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    fun onSendSuccess(details: NewTransactionSheetDetails, allowDuplicateHash: Boolean = false) {
+    suspend fun prepareHardwareContactPayment(): Boolean {
+        val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
+        return prepareContactPayment(contactPaymentContext)
+    }
+
+    fun onHardwareSignCancelled() {
+        isSubmittingPaymentRequest = false
+    }
+
+    fun onSendSuccess(
+        details: NewTransactionSheetDetails,
+        allowDuplicateHash: Boolean = false,
+        walletId: String = WalletScope.default,
+        navigate: Boolean = true,
+    ) {
         details.paymentHashOrTxId?.let {
             val isNewPayment = synchronized(processedPaymentsLock) {
                 processedPayments.add(it)
             }
             when {
-                isNewPayment -> syncContactForActivity(it)
+                isNewPayment -> syncContactForActivity(it, walletId)
                 !allowDuplicateHash -> {
                     Logger.debug("Skipped duplicate processed payment '$it'", context = TAG)
                     return
@@ -3917,23 +4284,31 @@ class AppViewModel @Inject constructor(
         }
 
         _successSendUiState.update { details }
-        setSendEffect(SendEffect.PaymentSuccess)
+        if (navigate) setSendEffect(SendEffect.PaymentSuccess)
     }
 
-    private fun syncContactForActivity(paymentHashOrTxId: String) {
+    private fun syncContactForActivity(
+        paymentHashOrTxId: String,
+        walletId: String = WalletScope.default,
+    ) {
         val contactContext = synchronized(contactPaymentContextLock) {
             val pendingContext = pendingContactPaymentContexts.remove(paymentHashOrTxId)
             val context = pendingContext ?: activeContactPaymentContext
             if (pendingContext == null && context != null) {
                 activeContactPaymentContext = null
             }
+            if (preparedContactPaymentContext == context) preparedContactPaymentContext = null
             context
-        } ?: return
+        }
+        isSubmittingPaymentRequest = false
+        contactContext ?: return
 
         viewModelScope.launch {
             activityRepo.setContact(
                 contactPublicKey = contactContext.publicKey,
                 forPaymentId = paymentHashOrTxId,
+                syncLdkPayments = walletId == WalletScope.default,
+                walletId = walletId,
             )
         }
     }
@@ -4267,6 +4642,8 @@ class AppViewModel @Inject constructor(
         private const val TEN_USD = 10
         private const val MAX_BALANCE_FRACTION = 0.5
         private const val MAX_FEE_AMOUNT_RATIO = 0.5
+        private const val HW_SEND_FALLBACK_TX_VBYTES = 1_200uL
+        private const val HW_SEND_FALLBACK_SATS_PER_VBYTE = 3uL
         private val SCREEN_TRANSITION_DELAY = TRANSITION_SCREEN_MS.milliseconds
         private const val MIGRATION_LOADING_TIMEOUT_MS = 120_000L
         private const val POST_RESTORE_PRUNE_DELAY_MS = 30_000L
@@ -4332,6 +4709,8 @@ data class SendUiState(
     val isAmountInputValid: Boolean = false,
     val isUnified: Boolean = false,
     val canSwitchWallet: Boolean = false,
+    val canSwitchFundingSource: Boolean = false,
+    val isSwitchingFundingSource: Boolean = false,
     val payMethod: SendMethod = SendMethod.ONCHAIN,
     val selectedTags: ImmutableList<String> = persistentListOf(),
     val decodedInvoice: LightningInvoice? = null,
@@ -4350,6 +4729,9 @@ data class SendUiState(
     val lastLightningFee: Long = 0L,
     val contactPaymentProfile: PubkyProfile? = null,
     val isPaymentRequest: Boolean = false,
+    val hardwareWalletId: String? = null,
+    val hardwareWalletName: String? = null,
+    val hardwareAvailableSats: ULong = 0uL,
 )
 
 enum class SanityWarning(@StringRes val message: Int, val testTag: String) {
@@ -4366,6 +4748,12 @@ sealed class SendFee(open val value: Long) {
 }
 
 enum class SendMethod { ONCHAIN, LIGHTNING }
+
+private sealed interface SendFundingSource {
+    data object Spending : SendFundingSource
+    data object Savings : SendFundingSource
+    data class Hardware(val walletId: String) : SendFundingSource
+}
 
 data class ContactPaymentContext(
     val publicKey: String,
@@ -4386,6 +4774,7 @@ sealed class SendEffect {
     data object NavigateToAmount : SendEffect()
     data object NavigateToScan : SendEffect()
     data object NavigateToConfirm : SendEffect()
+    data object NavigateToHardwareSign : SendEffect()
     data object NavigateToWithdrawConfirm : SendEffect()
     data object NavigateToWithdrawError : SendEffect()
     data object NavigateToCoinSelection : SendEffect()

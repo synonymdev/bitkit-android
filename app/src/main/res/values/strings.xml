@@ -198,7 +198,7 @@
     <string name="hardware__passphrase_error">Could not open the passphrase wallet. Make sure your hardware device is unlocked and try again.</string>
     <string name="hardware__passphrase_header">Enter &lt;accent&gt;passphrase&lt;/accent&gt;</string>
     <string name="hardware__passphrase_mismatch">That passphrase opens a different wallet. Enter the one you paired this wallet with.</string>
-    <string name="hardware__passphrase_sign_text">Enter the passphrase of this wallet so your hardware device can sign the transfer.</string>
+    <string name="hardware__passphrase_sign_text">Enter the passphrase of this wallet so your hardware device can sign the transaction.</string>
     <string name="hardware__passphrase_paired_header">Passphrase &lt;accent&gt;funds found&lt;/accent&gt;</string>
     <string name="hardware__passphrase_paired_text">Bitkit found funds behind a passphrase, and added these to your wallet balance.</string>
     <string name="hardware__passphrase_text">If you have funds protected by a passphrase, enter it below to add these funds to your wallet balance as well.</string>
@@ -211,6 +211,11 @@
     <string name="hardware__remove_keep_error">Could not keep this wallet\'s tags in your backup. Try again, or remove it without keeping them.</string>
     <string name="hardware__rename_error">Could not rename the hardware wallet. Please try again.</string>
     <string name="hardware__search_error">Could not search for hardware wallets. Check your connection and try again.</string>
+    <string name="hardware__send_confirm_address">TO ADDRESS (CONFIRM ON DEVICE)</string>
+    <string name="hardware__send_onchain_only_text">Trezor can only send to a Bitcoin address from this wallet.</string>
+    <string name="hardware__send_onchain_only_title">Bitcoin address required</string>
+    <string name="hardware__send_open_connect">Open Trezor Connect</string>
+    <string name="hardware__send_sign_title">Sign With Device</string>
     <string name="lightning__availability__text">Funds transfer to savings is usually instant, but settlement may take up to &lt;accent&gt;14 days&lt;/accent&gt; under certain network conditions.</string>
     <string name="lightning__availability__title">Funds\n&lt;accent&gt;availability&lt;/accent&gt;</string>
     <string name="lightning__balance">Balance</string>

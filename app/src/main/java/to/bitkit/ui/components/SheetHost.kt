@@ -54,7 +54,10 @@ enum class SheetHandlePlacement {
 
 @Stable
 sealed interface Sheet {
-    data class Send(val route: SendRoute = SendRoute.Recipient) : Sheet
+    data class Send(
+        val route: SendRoute = SendRoute.Recipient,
+        val hardwareWalletId: String? = null,
+    ) : Sheet
     data class Receive(val route: ReceiveRoute = ReceiveRoute.QR) : Sheet
     data object PaymentRequests : Sheet
     data class Pin(val route: PinRoute = PinRoute.Prompt()) : Sheet

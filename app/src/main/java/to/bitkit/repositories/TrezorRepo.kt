@@ -507,24 +507,70 @@ class TrezorRepo @Inject constructor(
             awaitSetup()
             ensureConnected()
             val fingerprint = trezorService.getDeviceFingerprint()
-            val params = ComposeParams(
-                wallet = WalletParams(
-                    extendedKey = extendedKey,
-                    electrumUrl = currentElectrumUrl(),
-                    fingerprint = fingerprint,
-                    network = network,
-                    accountType = accountType,
-                ),
+            composeTransaction(
+                extendedKey = extendedKey,
                 outputs = outputs,
                 feeRates = feeRates,
+                network = network,
+                accountType = accountType,
                 coinSelection = coinSelection,
+                fingerprint = fingerprint,
             )
-            trezorService.composeTransaction(params)
         }.onFailure {
             Logger.error("Trezor composeTransaction failed", it, context = TAG)
             _state.update { s -> s.copy(error = trezorErrorMessage(it)) }
         }
     }
+
+    /** Composes from a public account key without opening a hardware-device session. */
+    @Suppress("LongParameterList")
+    suspend fun composeTransactionOffline(
+        extendedKey: String,
+        outputs: List<ComposeOutput>,
+        feeRates: List<Float>,
+        network: BitkitCoreNetwork,
+        accountType: AccountType?,
+        coinSelection: CoinSelection,
+    ): Result<List<ComposeResult>> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            awaitSetup()
+            composeTransaction(
+                extendedKey = extendedKey,
+                outputs = outputs,
+                feeRates = feeRates,
+                network = network,
+                accountType = accountType,
+                coinSelection = coinSelection,
+                fingerprint = null,
+            )
+        }.onFailure {
+            Logger.error("Trezor offline composeTransaction failed", it, context = TAG)
+        }
+    }
+
+    @Suppress("LongParameterList")
+    private suspend fun composeTransaction(
+        extendedKey: String,
+        outputs: List<ComposeOutput>,
+        feeRates: List<Float>,
+        network: BitkitCoreNetwork,
+        accountType: AccountType?,
+        coinSelection: CoinSelection,
+        fingerprint: String?,
+    ): List<ComposeResult> = trezorService.composeTransaction(
+        ComposeParams(
+            wallet = WalletParams(
+                extendedKey = extendedKey,
+                electrumUrl = currentElectrumUrl(),
+                fingerprint = fingerprint,
+                network = network,
+                accountType = accountType,
+            ),
+            outputs = outputs,
+            feeRates = feeRates,
+            coinSelection = coinSelection,
+        )
+    )
 
     suspend fun signTxFromPsbt(
         psbtBase64: String,
@@ -1334,8 +1380,9 @@ class TrezorRepo @Inject constructor(
                 TrezorDebugLog.log("THPRetry", "Error not retryable, throwing")
                 throw e
             }
-            TrezorDebugLog.log("THPRetry", "Error is retryable, attempting second connect...")
+            TrezorDebugLog.log("THPRetry", "Error is retryable, resetting the session before reconnecting...")
             Logger.warn("Failed to connect to '$deviceId', retrying", e, context = TAG)
+            disconnectStaleSession(deviceId)
             logCredentialFileState(deviceId, "BEFORE 2nd attempt")
             val result = runSuspendCatching {
                 connectDevice(deviceId, selection, requestUsbPermission)
@@ -1355,8 +1402,11 @@ class TrezorRepo @Inject constructor(
                 return@withContext Result.success(Unit)
             }
             val result = runSuspendCatching {
-                trezorService.disconnect()
-                disconnectTransportDevice(deviceId)
+                try {
+                    trezorService.disconnect()
+                } finally {
+                    disconnectTransportDevice(deviceId)
+                }
             }
                 .onFailure {
                     Logger.warn("Failed to disconnect stale Trezor session for '$deviceId'", it, context = TAG)

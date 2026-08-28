@@ -48,6 +48,7 @@ import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.isBroadcastConnectivityFailure
 import to.bitkit.ext.isTrezorDeviceBusy
 import to.bitkit.ext.isTrezorFirmwareError
+import to.bitkit.ext.isTrezorSessionFailure
 import to.bitkit.ext.isTrezorUserCancellation
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toUserMessage
@@ -1197,26 +1198,36 @@ class TransferViewModel @Inject constructor(
         throw HardwareFundingError(it)
     }
 
-    @Suppress("ThrowsCount")
     private suspend fun signHardwareFunding(
         walletId: String,
         funding: HwFundingTransaction,
     ): HwFundingSignedTx {
-        return runCatching {
-            withTimeout(HW_SIGN_TIMEOUT) {
-                hwWalletRepo.signFunding(
-                    walletId = walletId,
-                    funding = funding,
-                ).getOrThrow()
-            }
-        }.getOrElse {
-            it.rethrowIfCancellation()
-            if (it is TimeoutCancellationException) {
-                hwWalletRepo.disconnectStaleSession(walletId)
-                throw HardwareSigningTimeoutError(it)
-            }
-            throw it
+        val firstAttempt = runSuspendCatching { signHardwareFundingOnce(walletId, funding) }
+        val error = firstAttempt.exceptionOrNull() ?: return firstAttempt.getOrThrow()
+        if (!error.isTrezorSessionFailure()) throw error
+
+        ensureHardwareConnected(walletId)
+        return signHardwareFundingOnce(walletId, funding)
+    }
+
+    @Suppress("ThrowsCount")
+    private suspend fun signHardwareFundingOnce(
+        walletId: String,
+        funding: HwFundingTransaction,
+    ): HwFundingSignedTx = runCatching {
+        withTimeout(HW_SIGN_TIMEOUT) {
+            hwWalletRepo.signFunding(
+                walletId = walletId,
+                funding = funding,
+            ).getOrThrow()
         }
+    }.getOrElse {
+        it.rethrowIfCancellation()
+        if (it is TimeoutCancellationException) {
+            hwWalletRepo.disconnectStaleSession(walletId)
+            throw HardwareSigningTimeoutError(it)
+        }
+        throw it
     }
 
     private suspend fun broadcastHardwareFunding(

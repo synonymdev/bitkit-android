@@ -37,7 +37,7 @@ import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
-import to.bitkit.ext.isTrezorUserCancellation
+import to.bitkit.ext.isTrezorSessionFailure
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.scopedId
 import to.bitkit.ext.timestamp
@@ -73,7 +73,7 @@ import kotlin.time.Duration.Companion.seconds
  * Built on top of [TrezorRepo], which owns the device list, connect orchestration
  * and the underlying watcher transport.
  */
-@Suppress("TooManyFunctions")
+@Suppress("LargeClass", "TooManyFunctions")
 @Singleton
 class HwWalletRepo @Inject constructor(
     private val trezorRepo: TrezorRepo,
@@ -89,7 +89,7 @@ class HwWalletRepo @Inject constructor(
         private val WATCHER_START_RETRY_DELAY = 30.seconds
         const val DEVICE_LABEL_MAX_LENGTH = 50
 
-        /** Trezor v1 (2.4.0) tracks native segwit only; multi-type HW support is follow-up work. */
+        /** Trezor v1 (2.4.0) tracks native SegWit accounts. */
         private val SUPPORTED_WATCHER_ADDRESS_TYPES = setOf(HwFundingAddressType.NATIVE_SEGWIT.settingsKey)
     }
 
@@ -373,6 +373,59 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
+    /** Estimates the exact funding fee from the public account key without opening the device. */
+    suspend fun estimateFundingMiningFee(
+        walletId: String,
+        address: String,
+        sats: ULong,
+        satsPerVByte: ULong,
+    ): Result<ULong> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            composeFundingOffline(
+                walletId = walletId,
+                output = ComposeOutput.Payment(address = address, amountSats = sats),
+                satsPerVByte = satsPerVByte,
+            ).fee
+        }
+    }
+
+    /** Exact amount available after the coin-selection fee, computed offline from the account xpub. */
+    suspend fun maxSpendableFunding(
+        walletId: String,
+        address: String,
+        satsPerVByte: ULong,
+    ): Result<ULong> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            val success = composeFundingOffline(
+                walletId = walletId,
+                output = ComposeOutput.SendMax(address = address),
+                satsPerVByte = satsPerVByte,
+            )
+            success.totalSpent.safe() - success.fee.safe()
+        }
+    }
+
+    private suspend fun composeFundingOffline(
+        walletId: String,
+        output: ComposeOutput,
+        satsPerVByte: ULong,
+    ): ComposeResult.Success {
+        val account = getFundingAccount(walletId).getOrThrow()
+        val composed = trezorRepo.composeTransactionOffline(
+            extendedKey = account.xpub,
+            outputs = listOf(output),
+            feeRates = listOf(satsPerVByte.toFloat()),
+            network = Env.network.toCoreNetwork(),
+            accountType = account.accountType,
+            coinSelection = CoinSelection.BRANCH_AND_BOUND,
+        ).getOrThrow()
+        return composed.filterIsInstance<ComposeResult.Success>().firstOrNull()
+            ?: throw AppError(
+                composed.filterIsInstance<ComposeResult.Error>().firstOrNull()?.error
+                    ?: "Failed to compose hardware wallet payment"
+            )
+    }
+
     /** Signs a composed funding payment on the Trezor. */
     suspend fun signFunding(
         walletId: String,
@@ -388,7 +441,7 @@ class HwWalletRepo @Inject constructor(
                 psbtBase64 = funding.psbt,
                 network = Env.network.toTrezorCoinType(),
             ).getOrElse {
-                if (!it.isTrezorUserCancellation()) {
+                if (it.isTrezorSessionFailure()) {
                     transportDeviceIdOrNull(walletId)?.let { deviceId -> trezorRepo.disconnectStaleSession(deviceId) }
                 }
                 throw it
@@ -612,7 +665,7 @@ class HwWalletRepo @Inject constructor(
                     )
                     val snapshotCacheKey = snapshot.toCacheKey()
                     lastPersistedHwSnapshots[walletId]
-                        ?.takeIf { it.source == snapshotCacheKey }
+                        ?.takeIf { it.source == snapshotCacheKey && !it.hasRetainedPendingSend() }
                         ?.let {
                             _watcherData.update { data ->
                                 data + (watcherId to watcher.copy(activities = it.activities))
@@ -936,3 +989,15 @@ private data class PersistedHwSnapshot(
     val source: HwSnapshot,
     val activities: ImmutableList<Activity>,
 )
+
+private fun PersistedHwSnapshot.hasRetainedPendingSend(): Boolean {
+    val sourceIds = source.activities.map { it.scopedId() }.toSet()
+    return activities.any {
+        val activity = (it as? Activity.Onchain)?.v1 ?: return@any false
+        it.scopedId() !in sourceIds &&
+            activity.txType == PaymentType.SENT &&
+            !activity.confirmed &&
+            !activity.isTransfer &&
+            activity.doesExist
+    }
+}

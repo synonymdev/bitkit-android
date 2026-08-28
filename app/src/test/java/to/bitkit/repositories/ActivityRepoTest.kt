@@ -432,7 +432,7 @@ class ActivityRepoTest : BaseUnitTest() {
         whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(setOf(replacedTxId))
         whenever(
             coreService.activity.get(
-                walletId = WalletScope.default,
+                walletId = null,
                 filter = ActivityFilter.ALL,
                 txType = null,
                 tags = null,

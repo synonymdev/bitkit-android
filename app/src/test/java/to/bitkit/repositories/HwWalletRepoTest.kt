@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
@@ -226,6 +227,38 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertTrue((sut.activities.value.single() as Activity.Onchain).v1.isTransfer)
         verify(activityRepo).persistHwSnapshot(
+            walletId = HARDWARE_WALLET_ID,
+            activities = event.activities,
+            transactionDetails = event.transactionDetails,
+        )
+    }
+
+    @Test
+    fun `unchanged watcher snapshot reevaluates a retained pending send`() = test {
+        val retainedPendingSend = watcherActivity(
+            amount = 100uL,
+            txType = PaymentType.SENT,
+            blockHeight = null,
+            confirmations = 0u,
+        )
+        val event = transactionsChanged(total = 0uL)
+        whenever {
+            activityRepo.persistHwSnapshot(
+                HARDWARE_WALLET_ID,
+                event.activities,
+                event.transactionDetails,
+            )
+        }.thenReturn(
+            Result.success(listOf(retainedPendingSend)),
+            Result.success(emptyList()),
+        )
+        val sut = createRepo()
+
+        watcherEvents.emit("hardware-wallet|nativeSegwit" to event)
+        watcherEvents.emit("hardware-wallet|nativeSegwit" to event)
+
+        assertTrue(sut.activities.value.isEmpty())
+        verify(activityRepo, times(2)).persistHwSnapshot(
             walletId = HARDWARE_WALLET_ID,
             activities = event.activities,
             transactionDetails = event.transactionDetails,
@@ -1739,6 +1772,41 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `maxSpendableFunding subtracts the fee from a send-max compose`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        whenever(
+            trezorRepo.composeTransactionOffline(
+                extendedKey = any(),
+                outputs = eq(listOf(ComposeOutput.SendMax(address = "bc1qtest"))),
+                feeRates = eq(listOf(2.0f)),
+                network = any(),
+                accountType = anyOrNull(),
+                coinSelection = any(),
+            )
+        ).thenReturn(
+            Result.success(
+                listOf(
+                    ComposeResult.Success(
+                        psbt = "psbt",
+                        fee = 1_250uL,
+                        feeRate = 2.0f,
+                        totalSpent = 26_250uL,
+                    )
+                )
+            )
+        )
+        val sut = createRepo()
+
+        val result = sut.maxSpendableFunding(
+            walletId = HARDWARE_WALLET_ID,
+            address = "bc1qtest",
+            satsPerVByte = 2uL,
+        )
+
+        assertEquals(25_000uL, result.getOrThrow())
+    }
+
+    @Test
     fun `composeFundingTransaction does not sign when compose fails`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
         whenever(
@@ -1834,7 +1902,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `signFunding disconnects stale session when sign fails`() = test {
+    fun `signFunding disconnects stale session when THP channel fails`() = test {
         val funding = HwFundingTransaction(
             psbt = "psbt",
             miningFeeSats = 1_250uL,
@@ -1843,7 +1911,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             satsPerVByte = 2uL,
         )
         whenever(trezorRepo.signTxFromPsbt("psbt", Env.network.toTrezorCoinType()))
-            .thenReturn(Result.failure(AppError("sign failed")))
+            .thenReturn(Result.failure(TrezorException.ProtocolException("THP decryption error: aead::Error")))
         whenever(trezorRepo.disconnectStaleSession("dev1")).thenReturn(Result.success(Unit))
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
         val sut = createRepo()
@@ -1853,6 +1921,26 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(true, result.isFailure)
         verify(trezorRepo).disconnectStaleSession("dev1")
         verify(trezorRepo, never()).broadcastRawTx(any())
+    }
+
+    @Test
+    fun `signFunding keeps session for non-session signing error`() = test {
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = 1_250uL,
+            feeRate = 2.0f,
+            totalSpent = 26_250uL,
+            satsPerVByte = 2uL,
+        )
+        whenever(trezorRepo.signTxFromPsbt("psbt", Env.network.toTrezorCoinType()))
+            .thenReturn(Result.failure(AppError("invalid PSBT")))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val sut = createRepo()
+
+        val result = sut.signFunding(HARDWARE_WALLET_ID, funding)
+
+        assertEquals(true, result.isFailure)
+        verify(trezorRepo, never()).disconnectStaleSession(any())
     }
 
     @Test

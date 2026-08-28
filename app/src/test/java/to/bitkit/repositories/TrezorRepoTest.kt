@@ -1109,7 +1109,11 @@ class TrezorRepoTest : BaseUnitTest() {
         val features = mockFeatures()
         val device = mockDeviceInfo()
         whenever(trezorService.connect(eq(DEVICE_ID), any()))
-            .thenThrow(RuntimeException("thp timeout"))
+            .thenAnswer {
+                throw TrezorException.ProtocolException(
+                    "THP decryption error: Channel mismatch: expected [73, cb], got [73, ca]"
+                )
+            }
             .thenReturn(features)
         whenever(trezorService.scan()).thenReturn(listOf(device))
         sut = createSut()
@@ -1120,6 +1124,8 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals(features, result.getOrNull())
         verify(trezorService, times(2)).connect(eq(DEVICE_ID), any())
+        verify(trezorService).disconnect()
+        verify(trezorTransport).disconnectDevice(DEVICE_ID)
     }
 
     @Test
@@ -1134,7 +1140,8 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertNull(sut.state.value.connected)
         verify(trezorService, times(2)).connect(eq(DEVICE_ID), any())
-        verify(trezorService).disconnect()
+        verify(trezorService, times(2)).disconnect()
+        verify(trezorTransport, times(2)).disconnectDevice(DEVICE_ID)
     }
 
     @Test
@@ -1604,6 +1611,27 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(electrumServer, params.firstValue.wallet.electrumUrl)
     }
 
+    @Test
+    fun `offline compose should not read the device fingerprint`() = test {
+        whenever(trezorService.composeTransaction(any())).thenReturn(emptyList())
+        sut = createSut()
+
+        val result = sut.composeTransactionOffline(
+            extendedKey = "vpub",
+            outputs = listOf(ComposeOutput.Payment(address = TEST_ADDRESS, amountSats = 100uL)),
+            feeRates = listOf(1f),
+            network = Env.network.toCoreNetwork(),
+            accountType = null,
+            coinSelection = CoinSelection.BRANCH_AND_BOUND,
+        )
+
+        val params = argumentCaptor<ComposeParams>()
+        assertTrue(result.isSuccess)
+        verify(trezorService, never()).getDeviceFingerprint()
+        verify(trezorService).composeTransaction(params.capture())
+        assertNull(params.firstValue.wallet.fingerprint)
+    }
+
     // endregion
 
     // region hasKnownDevices
@@ -1758,6 +1786,17 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals(otherDeviceId, sut.state.value.connectedDeviceId())
         verify(trezorService, never()).disconnect()
+    }
+
+    @Test
+    fun `disconnectStaleSession should close transport when core disconnect fails`() = test {
+        whenever(trezorService.disconnect()).thenThrow(RuntimeException("disconnect failed"))
+        sut = createSut()
+
+        val result = sut.disconnectStaleSession(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        verify(trezorTransport).disconnectDevice(DEVICE_ID)
     }
 
     @Test

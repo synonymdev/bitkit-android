@@ -51,6 +51,43 @@ class CoreServiceTest {
     }
 
     @Test
+    fun `merge hw snapshot keeps locally created pending send until watcher reports it`() {
+        val pendingSend = activity(id = "pendingSend").let {
+            Activity.Onchain(
+                it.v1.copy(
+                    txType = PaymentType.SENT,
+                    confirmed = false,
+                    createdAt = 100_000uL,
+                )
+            )
+        }
+
+        val result = mergePlan(
+            existing = listOf(pendingSend),
+            incoming = emptyList(),
+        )
+
+        assertTrue(result.toDelete.isEmpty())
+    }
+
+    @Test
+    fun `merge hw snapshot deletes expired pending send missing from snapshot`() {
+        val pendingSend = activity(id = "pendingSend").let {
+            Activity.Onchain(
+                it.v1.copy(
+                    txType = PaymentType.SENT,
+                    confirmed = false,
+                    createdAt = 1uL,
+                )
+            )
+        }
+
+        val result = mergePlan(existing = listOf(pendingSend), incoming = emptyList())
+
+        assertEquals(listOf(pendingSend), result.toDelete)
+    }
+
+    @Test
     fun `merge hw snapshot recovers transfer from known funding tx when no stored row remains`() {
         val result = mergePlan(
             existing = emptyList(),
@@ -87,6 +124,26 @@ class CoreServiceTest {
         val merged = result.upserted("fundingTx")
         assertEquals(true, merged?.isTransfer)
         assertEquals("stored-channel", merged?.channelId)
+    }
+
+    @Test
+    fun `merge hw snapshot keeps stored contact`() {
+        val result = mergePlan(
+            existing = listOf(activityWithContact(id = "tx", contact = "pubky-contact")),
+            incoming = listOf(activity(id = "tx")),
+        )
+
+        assertEquals("pubky-contact", result.upserted("tx")?.contact)
+    }
+
+    @Test
+    fun `merge hw snapshot keeps stored seen timestamp`() {
+        val result = mergePlan(
+            existing = listOf(Activity.Onchain(activity(id = "tx").v1.copy(seenAt = 42uL))),
+            incoming = listOf(activity(id = "tx")),
+        )
+
+        assertEquals(42uL, result.upserted("tx")?.seenAt)
     }
 
     @Test
@@ -140,10 +197,12 @@ class CoreServiceTest {
     private fun mergePlan(
         existing: List<Activity.Onchain>,
         incoming: List<Activity>,
+        currentTimestamp: ULong = 100_000uL,
         transferChannelIdsByFundingTxId: Map<String, String> = emptyMap(),
     ) = mergeHwSnapshot(
         existing = existing,
         incoming = incoming,
+        currentTimestamp = currentTimestamp,
         transferChannelIdsByFundingTxId = transferChannelIdsByFundingTxId,
     )
 
@@ -170,6 +229,10 @@ class CoreServiceTest {
             channelId = channelId,
             transferTxId = transferTxId,
         )
+    )
+
+    private fun activityWithContact(id: String, contact: String) = Activity.Onchain(
+        activity(id).v1.copy(contact = contact)
     )
 
     private fun lightningActivity(id: String) = Activity.Lightning(

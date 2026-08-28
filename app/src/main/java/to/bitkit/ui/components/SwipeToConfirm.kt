@@ -70,6 +70,7 @@ fun SwipeToConfirm(
     icon: ImageVector = Icons.AutoMirrored.Default.ArrowForward,
     @DrawableRes endIcon: Int = R.drawable.ic_check,
     endIconTint: Color = Colors.Black,
+    enabled: Boolean = true,
     loading: Boolean = false,
     confirmed: Boolean = false,
     progress: MutableFloatState? = null,
@@ -109,6 +110,7 @@ fun SwipeToConfirm(
                 isEnabled = !loading,
                 shape = CircleShape,
             )
+            .alpha(if (enabled || loading) 1f else 0.5f)
             .padding(Padding)
     ) {
         Box(
@@ -141,8 +143,8 @@ fun SwipeToConfirm(
                 modifier = Modifier
                     .offset { IntOffset(x = (panX.value.toDp() - InvisibleBorder).toPx().roundToInt(), y = 0) }
                     .size(GrabSize)
-                    .pointerInput(loading, confirmed) {
-                        if (!loading && !confirmed) {
+                    .pointerInput(enabled, loading, confirmed) {
+                        if (enabled && !loading && !confirmed) {
                             detectHorizontalDragGestures(
                                 onDragStart = { },
                                 onHorizontalDrag = { _, dragAmount ->
