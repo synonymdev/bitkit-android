@@ -294,6 +294,7 @@ private fun ContentRunning(
     var showDetails by rememberSaveable { mutableStateOf(initialShowDetails) }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
     val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
+    val isHardwareFeeLoading = uiState.hardwareWalletId != null && uiState.onchainFeeUi.isLoading
 
     val accentColor = when (uiState.payMethod) {
         SendMethod.ONCHAIN -> Colors.Brand
@@ -323,7 +324,11 @@ private fun ContentRunning(
         } else if (showDetails) {
             when (uiState.payMethod) {
                 SendMethod.ONCHAIN -> {
-                    OnChainDetails(uiState = uiState, onEvent = onEvent)
+                    OnChainDetails(
+                        uiState = uiState,
+                        interactionsEnabled = !isHardwareFeeLoading,
+                        onEvent = onEvent,
+                    )
                     VerticalSpacer(16.dp)
                     TagsSection(uiState, onClickTag, onClickAddTag)
                 }
@@ -392,7 +397,9 @@ private fun ContentRunning(
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
             color = accentColor,
-            enabled = uiState.isAmountInputValid && !uiState.isFundingSourceLoading,
+            enabled = uiState.isAmountInputValid &&
+                !uiState.isFundingSourceLoading &&
+                !isHardwareFeeLoading,
             loading = isLoading,
             confirmed = isLoading,
             progress = swipeProgress,
@@ -494,6 +501,7 @@ private fun AddTagButton(
 @Composable
 private fun OnChainDetails(
     uiState: SendUiState,
+    interactionsEnabled: Boolean,
     onEvent: (SendEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -519,6 +527,7 @@ private fun OnChainDetails(
                     color = if (uiState.hardwareWalletId != null) Colors.Blue else Colors.Brand,
                     enabled = uiState.canSwitchFundingSource,
                     isLoading = uiState.isFundingSourceLoading,
+                    clickable = interactionsEnabled,
                     icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
@@ -553,7 +562,7 @@ private fun OnChainDetails(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .clickableAlpha { onEvent(SendEvent.SpeedAndFee) }
+                    .clickableAlpha(enabled = interactionsEnabled) { onEvent(SendEvent.SpeedAndFee) }
             ) {
                 SendCell(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
                     Row(

@@ -288,6 +288,7 @@ class AppViewModel @Inject constructor(
     private val sendEvents = MutableSharedFlow<SendEvent>()
     private var amountContinuePending = false
     private var fundingSourceSwitchPending = false
+    private var speedPreparationJob: Job? = null
     private var onchainSendRefreshJob: Job? = null
 
     fun setSendEvent(event: SendEvent) {
@@ -2098,6 +2099,8 @@ class AppViewModel @Inject constructor(
     }
 
     fun setTransactionSpeed(speed: TransactionSpeed) {
+        speedPreparationJob?.cancel()
+        onchainSendRefreshJob?.cancel()
         val previous = _sendUiState.value
         _sendUiState.update {
             it.copy(
@@ -2107,7 +2110,7 @@ class AppViewModel @Inject constructor(
             )
         }
         setSendEffect(SendEffect.PopBack(SendRoute.Confirm))
-        viewModelScope.launch {
+        val job = viewModelScope.launch {
             val shouldResetUtxos = when (settingsStore.data.first().coinSelectAuto) {
                 true -> {
                     val currentSatsPerVByte = previous.feeRates?.getSatsPerVByteFor(previous.speed)
@@ -2132,6 +2135,10 @@ class AppViewModel @Inject constructor(
             }
             updateCanSwitchWallet()
             refreshOnchainSendIfNeeded() ?: updateOnchainFeeUi { it.copy(isLoading = false) }
+        }
+        speedPreparationJob = job
+        job.invokeOnCompletion {
+            if (speedPreparationJob === job) speedPreparationJob = null
         }
     }
 
