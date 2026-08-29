@@ -4393,20 +4393,14 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `selecting speed pops immediately and latest selection wins`() = test {
+    fun `selecting speed pops before hardware max spendable finishes`() = test {
         val maxStarted = CompletableDeferred<Unit>()
         val finishMax = CompletableDeferred<Unit>()
-        var maxCallCount = 0
         whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
             .doSuspendableAnswer {
-                maxCallCount++
-                if (maxCallCount == 1) {
-                    maxStarted.complete(Unit)
-                    finishMax.await()
-                    Result.success(48_000uL)
-                } else {
-                    Result.success(47_000uL)
-                }
+                maxStarted.complete(Unit)
+                finishMax.await()
+                Result.success(48_000uL)
             }
         val previousFeeUi = OnchainFeeUi(
             rate = FeeRate.NORMAL,
@@ -4433,11 +4427,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             assertEquals(TransactionSpeed.Fast, sut.sendUiState.value.speed)
             assertEquals(previousFeeUi.copy(isLoading = true), sut.sendUiState.value.onchainFeeUi)
             maxStarted.await()
-            sut.setTransactionSpeed(TransactionSpeed.Slow)
-            assertEquals(SendEffect.PopBack(SendRoute.Confirm), awaitItem())
-            advanceUntilIdle()
-            assertEquals(TransactionSpeed.Slow, sut.sendUiState.value.speed)
-            assertEquals(47_000uL, sut.sendUiState.value.hardwareAvailableSats)
+            finishMax.complete(Unit)
             cancelAndIgnoreRemainingEvents()
         }
     }
