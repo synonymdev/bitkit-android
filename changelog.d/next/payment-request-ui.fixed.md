@@ -1,0 +1,1 @@
+Payment request screens now follow the same spacing, contact rows, amount keypad, and success layout as the rest of Bitkit.

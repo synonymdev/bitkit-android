@@ -280,7 +280,8 @@ internal fun PaymentRequestsContent(
                         PaymentRequestCard(
                             request = request,
                             contact = contacts.contactFor(request),
-                            compactSubtitle = paymentRequestDate(request),
+                            compactSubtitle = request.note?.takeIf { it.isNotBlank() }
+                                ?: paymentRequestDate(request),
                         )
                     }
                 }
@@ -355,7 +356,6 @@ private fun ActivePaymentRequestCard(
         PaymentRequestCard(
             request = request,
             contact = contact,
-            compactSubtitle = paymentRequestDateTime(request),
             isRejecting = isRejecting,
             onPay = { onPay(request.id) },
             onReject = { onReject(request) },
@@ -409,16 +409,6 @@ private fun paymentRequestDate(request: PaykitPaymentRequest): String = request.
 } ?: paymentRequestStatus(request)
 
 @Composable
-private fun paymentRequestDateTime(request: PaykitPaymentRequest): String = request.createdAt?.let {
-    val timestamp = it.epochSeconds.toULong()
-    stringResource(
-        R.string.wallet__payment_request_timestamp,
-        uiDateText(timestamp, UiDateStyle.DATE),
-        uiDateText(timestamp, UiDateStyle.TIME),
-    )
-} ?: paymentRequestStatus(request)
-
-@Composable
 private fun paymentRequestStatus(request: PaykitPaymentRequest): String {
     if (request.lifecycleState == PaymentRequestLifecycleState.PROPOSED && request.isExpired(Clock.System.now())) {
         return stringResource(R.string.wallet__payment_request_status_expired)
@@ -463,13 +453,17 @@ internal fun PaymentRequestCard(
     onReject: (() -> Unit)? = null,
 ) {
     val displayContact = contact ?: PubkyProfile.placeholder(request.counterparty)
-    val subtitle = compactSubtitle ?: request.createdAt?.let {
-        val timestamp = it.epochSeconds.toULong()
-        val date = uiDateText(timestamp, UiDateStyle.DATE)
-        val time = uiDateText(timestamp, UiDateStyle.TIME)
-        val formattedTimestamp = stringResource(R.string.wallet__payment_request_timestamp, date, time)
-        stringResource(R.string.wallet__payment_request_contact_timestamp, displayContact.name, formattedTimestamp)
-    } ?: displayContact.name
+    val subtitle = compactSubtitle
+        ?: request.note?.takeIf { it.isNotBlank() }
+        ?: request.createdAt?.let {
+            val timestamp = it.epochSeconds.toULong()
+            stringResource(
+                R.string.wallet__payment_request_timestamp,
+                uiDateText(timestamp, UiDateStyle.DATE),
+                uiDateText(timestamp, UiDateStyle.TIME),
+            )
+        }
+        ?: displayContact.name
 
     Card(
         colors = CardDefaults.cardColors(containerColor = Colors.Gray6),
@@ -494,13 +488,13 @@ internal fun PaymentRequestCard(
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.padding(16.dp),
         ) {
-            PubkyContactAvatar(profile = displayContact, size = 40.dp)
+            PubkyContactAvatar(profile = displayContact)
             Column(modifier = Modifier.weight(1f)) {
                 BodyMSB(
-                    text = request.note ?: stringResource(R.string.wallet__payment_request),
+                    text = displayContact.name,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
