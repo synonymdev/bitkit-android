@@ -129,12 +129,12 @@ internal fun PaymentRequestsSheetContent(
         BodyM(
             text = stringResource(R.string.wallet__payment_requests_review),
             color = Colors.White64,
-            modifier = Modifier.align(Alignment.CenterHorizontally),
+            modifier = Modifier.align(Alignment.CenterHorizontally)
         )
         VerticalSpacer(24.dp)
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier.weight(1f)
         ) {
             items(requests.take(3), key = { it.lazyListKey }) { request ->
                 PaymentRequestCard(
@@ -150,7 +150,7 @@ internal fun PaymentRequestsSheetContent(
             SecondaryButton(
                 text = stringResource(R.string.wallet__payment_requests_not_now),
                 onClick = onNotNow,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             )
             PrimaryButton(
                 text = stringResource(R.string.wallet__payment_requests_see_all),
@@ -489,7 +489,7 @@ internal fun PaymentRequestCard(
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(16.dp),
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(16.dp)
         ) {
             PubkyContactAvatar(profile = displayContact)
             Column(modifier = Modifier.weight(1f)) {
@@ -529,11 +529,11 @@ internal fun PaymentRequestCard(
                         Icon(
                             painter = painterResource(R.drawable.ic_x),
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(16.dp)
                         )
                     },
                     size = ButtonSize.Small,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
                 )
                 PrimaryButton(
                     text = stringResource(R.string.wallet__payment_request_pay),
@@ -543,11 +543,11 @@ internal fun PaymentRequestCard(
                         Icon(
                             painter = painterResource(R.drawable.ic_coins),
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(16.dp)
                         )
                     },
                     size = ButtonSize.Small,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
                 )
             }
         }

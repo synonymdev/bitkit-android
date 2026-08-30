@@ -169,12 +169,12 @@ internal fun PaymentRequestDetailsContent(
                     FillHeight(min = 12.dp)
                     Row(
                         verticalAlignment = Alignment.Bottom,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         FillWidth()
                         UnitButton(
                             onClick = { amountInputViewModel.switchUnit(currencies) },
-                            modifier = Modifier.testTag("PaymentRequestNumberPadUnit"),
+                            modifier = Modifier.testTag("PaymentRequestNumberPadUnit")
                         )
                     }
                     VerticalSpacer(16.dp)
@@ -183,12 +183,12 @@ internal fun PaymentRequestDetailsContent(
                         viewModel = amountInputViewModel,
                         currencies = currencies,
                         availableHeight = maxHeight,
-                        modifier = Modifier.testTag("PaymentRequestNumberPad"),
+                        modifier = Modifier.testTag("PaymentRequestNumberPad")
                     )
                     PrimaryButton(
                         text = stringResource(R.string.common__continue),
                         onClick = { isEditingAmount = false },
-                        modifier = Modifier.testTag("PaymentRequestAmountDone"),
+                        modifier = Modifier.testTag("PaymentRequestAmountDone")
                     )
                 } else {
                     Caption13Up(
@@ -199,7 +199,7 @@ internal fun PaymentRequestDetailsContent(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         NumberPadTextField(
                             viewModel = amountInputViewModel,
@@ -218,7 +218,7 @@ internal fun PaymentRequestDetailsContent(
                                 painter = painterResource(R.drawable.ic_pencil_simple),
                                 contentDescription = stringResource(R.string.common__edit),
                                 tint = Colors.White,
-                                modifier = Modifier.size(24.dp),
+                                modifier = Modifier.size(24.dp)
                             )
                         }
                     }
@@ -283,7 +283,7 @@ internal fun PaymentRequestDetailsContent(
                                 )
                             )
                         },
-                        modifier = Modifier.testTag("PaymentRequestAmountContinue"),
+                        modifier = Modifier.testTag("PaymentRequestAmountContinue")
                     )
                 }
                 VerticalSpacer(16.dp)
@@ -356,13 +356,13 @@ internal fun PaymentRequestRecipientContent(
                 IconButton(
                     onClick = onEditExpiration,
                     enabled = !isCreating,
-                    modifier = Modifier.testTag("PaymentRequestEditExpiration"),
+                    modifier = Modifier.testTag("PaymentRequestEditExpiration")
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_timer),
                         contentDescription = stringResource(R.string.wallet__payment_request_edit_expiration),
                         tint = Colors.White,
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             },
@@ -392,7 +392,7 @@ internal fun PaymentRequestRecipientContent(
                             painter = painterResource(R.drawable.ic_clipboard_text),
                             contentDescription = null,
                             tint = Colors.White,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(24.dp)
                         )
                         BodyMSB(text = stringResource(R.string.wallet__payment_request_paste))
                     }
@@ -406,7 +406,7 @@ internal fun PaymentRequestRecipientContent(
         Caption13Up(
             text = stringResource(R.string.contacts__contacts_header),
             color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
         )
         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
         LazyColumn(modifier = Modifier.weight(1f)) {
@@ -571,7 +571,7 @@ private fun PaymentRequestDetailsPreview() {
                 initialDraft = previewDraft,
                 onBack = {},
                 onContinue = {},
-                modifier = Modifier.sheetHeight(),
+                modifier = Modifier.sheetHeight()
             )
         }
     }
@@ -589,7 +589,7 @@ private fun PaymentRequestRecipientPreview() {
                 onEditExpiration = {},
                 onPaste = { "" },
                 onSend = {},
-                modifier = Modifier.sheetHeight(),
+                modifier = Modifier.sheetHeight()
             )
         }
     }
@@ -604,7 +604,7 @@ private fun PaymentRequestSentPreview() {
                 request = previewCreatedRequest,
                 contact = PubkyProfile.placeholder(previewTarget.publicKey),
                 onDone = {},
-                modifier = Modifier.sheetHeight(),
+                modifier = Modifier.sheetHeight()
             )
         }
     }
