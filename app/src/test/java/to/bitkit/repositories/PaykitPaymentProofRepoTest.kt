@@ -53,6 +53,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         storedProofs = emptyList()
         shouldFailNextLoad = false
         shouldFailNextSave = false
+        whenever(store.hasPendingProofs()).thenReturn(true)
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
         whenever(store.load()).thenAnswer {
@@ -69,6 +70,26 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             }
             storedProofs = it.getArgument(0)
         }
+    }
+
+    @Test
+    fun `reconcile avoids Paykit and proof loading without persisted proofs`() = test {
+        whenever(store.hasPendingProofs()).thenReturn(false)
+
+        paymentProofRepo().reconcile()
+
+        verify(store, never()).load()
+        verify(paykitSdkService, never()).identityStatus()
+        verify(lightningRepo, never()).getPayments()
+    }
+
+    @Test
+    fun `reconcile removes persisted empty proof state without using Paykit`() = test {
+        paymentProofRepo().reconcile()
+
+        verify(store).load()
+        verify(store).save(emptyList())
+        verify(paykitSdkService, never()).identityStatus()
     }
 
     @Test

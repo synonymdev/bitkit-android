@@ -5,6 +5,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -12,20 +13,32 @@ import javax.inject.Singleton
 class PaykitPaymentProofStore @Inject constructor(
     private val keychain: Keychain,
 ) {
+    companion object {
+        private const val TAG = "PaykitPaymentProofStore"
+        private val KEY = Keychain.Key.PAYKIT_PENDING_PAYMENT_PROOFS.name
+    }
+
     @Serializable
     private data class State(
         val proofs: List<PendingPaykitPaymentProof> = emptyList(),
     )
 
     fun load(): List<PendingPaykitPaymentProof> {
-        val value = keychain.loadString(Keychain.Key.PAYKIT_PENDING_PAYMENT_PROOFS.name) ?: return emptyList()
-        return Json.decodeFromString<State>(value).proofs
+        val value = keychain.loadString(KEY) ?: return emptyList()
+        return runCatching { Json.decodeFromString<State>(value).proofs }
+            .getOrElse {
+                Logger.warn("Discarded corrupt pending Paykit payment proof state", it, context = TAG)
+                emptyList()
+            }
     }
 
     suspend fun save(proofs: List<PendingPaykitPaymentProof>) {
-        keychain.upsertString(
-            Keychain.Key.PAYKIT_PENDING_PAYMENT_PROOFS.name,
-            Json.encodeToString(State(proofs)),
-        )
+        if (proofs.isEmpty()) {
+            keychain.delete(KEY)
+        } else {
+            keychain.upsertString(KEY, Json.encodeToString(State(proofs)))
+        }
     }
+
+    fun hasPendingProofs(): Boolean = keychain.exists(KEY)
 }

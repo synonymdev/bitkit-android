@@ -186,13 +186,20 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     suspend fun reconcile() = withContext(ioDispatcher) {
+        if (!store.hasPendingProofs()) return@withContext
+
         operationMutex.withLock {
             runSuspendCatching {
+                val storedProofs = loadProofs()
+                if (storedProofs.isEmpty()) {
+                    persist(emptyList())
+                    return@runSuspendCatching
+                }
                 val identityStatus = paykitSdkService.identityStatus()
                 if (identityStatus?.liveSessionAvailable != true) return@runSuspendCatching
                 val publicKey = identityStatus.publicKey ?: return@runSuspendCatching
                 val identity = PubkyPublicKeyFormat.normalized(publicKey) ?: return@runSuspendCatching
-                val proofs = loadProofs().filter { PubkyPublicKeyFormat.matches(it.identity, identity) }
+                val proofs = storedProofs.filter { PubkyPublicKeyFormat.matches(it.identity, identity) }
                 val payments = if (proofs.any { it.kind == PaykitPaymentProofKind.Lightning && it.proofData == null }) {
                     lightningRepo.getPayments().getOrDefault(emptyList())
                 } else {
