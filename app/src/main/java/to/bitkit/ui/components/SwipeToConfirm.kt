@@ -83,6 +83,7 @@ fun SwipeToConfirm(
 
     val panX = remember { Animatable(0f) }
     val loadingOpacity = remember { Animatable(0f) }
+    val contentAlpha = if (enabled || loading) 1f else 0.5f
 
     LaunchedEffect(loading) {
         loadingOpacity.animateTo(
@@ -110,12 +111,12 @@ fun SwipeToConfirm(
                 isEnabled = !loading,
                 shape = CircleShape,
             )
-            .alpha(if (enabled || loading) 1f else 0.5f)
             .padding(Padding)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
+                .alpha(contentAlpha)
                 .onSizeChanged { size ->
                     swiperWidth = size.width.toFloat()
                 }

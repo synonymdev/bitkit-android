@@ -16,6 +16,7 @@ import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.Scanner
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -37,6 +38,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
@@ -66,6 +68,8 @@ import to.bitkit.domain.commands.NotifyChannelReadyHandler
 import to.bitkit.domain.commands.NotifyPaymentReceived
 import to.bitkit.domain.commands.NotifyPaymentReceivedHandler
 import to.bitkit.models.BalanceState
+import to.bitkit.models.ConvertedAmount
+import to.bitkit.models.FeeRate
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.NewTransactionSheetDetails
@@ -77,6 +81,7 @@ import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.SendFailureDetails
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransportType
+import to.bitkit.models.USD
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
@@ -133,6 +138,7 @@ import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import to.bitkit.utils.AppError
 import to.bitkit.utils.timedsheets.TimedSheetManager
+import java.math.BigDecimal
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import kotlin.test.assertEquals
@@ -1990,7 +1996,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `switch from onchain to lightning sets fee to Lightning zero`() = test {
+    fun `switch from onchain to lightning resets lightning fee`() = test {
         balanceState.value = BalanceState(
             maxSendOnchainSats = 100_000u,
             maxSendLightningSats = 100_000u,
@@ -1999,10 +2005,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        assertFalse(sut.sendUiState.value.isFundingSourceLoading)
         advanceUntilIdle()
 
         assertEquals(SendMethod.LIGHTNING, sut.sendUiState.value.payMethod)
-        assertEquals(SendFee.Lightning(0), sut.sendUiState.value.fee)
+        assertEquals(0, sut.sendUiState.value.lightningFeeSats)
     }
 
     @Test
@@ -2054,7 +2061,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.setSendEvent(SendEvent.PaymentMethodSwitch)
         exactAvailableStarted.await()
 
-        assertTrue(sut.sendUiState.value.isSwitchingFundingSource)
+        assertTrue(sut.sendUiState.value.isFundingSourceLoading)
+        assertTrue(sut.sendUiState.value.onchainFeeUi.isLoading)
         assertEquals(HARDWARE_WALLET_ID, sut.sendUiState.value.hardwareWalletId)
         assertEquals("Trezor", sut.sendUiState.value.hardwareWalletName)
         assertEquals(46_400uL, sut.sendUiState.value.hardwareAvailableSats)
@@ -2063,15 +2071,54 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         finishExactAvailable.complete(Unit)
         feeEstimateStarted.await()
 
-        assertTrue(sut.sendUiState.value.isSwitchingFundingSource)
+        assertTrue(sut.sendUiState.value.isFundingSourceLoading)
 
         finishFeeEstimate.complete(Unit)
         advanceUntilIdle()
 
-        assertFalse(sut.sendUiState.value.isSwitchingFundingSource)
+        assertFalse(sut.sendUiState.value.isFundingSourceLoading)
         assertEquals(48_000uL, sut.sendUiState.value.hardwareAvailableSats)
         assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
         verify(hwWalletRepo, times(1)).maxSpendableFunding(any(), any(), any())
+    }
+
+    @Test
+    fun `source switch from hw wallet keeps valid state while refreshing`() = test {
+        val feeEstimateStarted = CompletableDeferred<Unit>()
+        val finishFeeEstimate = CompletableDeferred<Unit>()
+        hwWallets.value = persistentListOf(hardwareWallet(fundingBalanceSats = 50_000uL))
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                feeEstimateStarted.complete(Unit)
+                finishFeeEstimate.await()
+                Result.success(100uL)
+            }
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000uL)
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000uL,
+                isAmountInputValid = true,
+                hardwareWalletId = HARDWARE_WALLET_ID,
+                hardwareWalletName = "Trezor",
+                hardwareAvailableSats = 50_000uL,
+                payMethod = SendMethod.ONCHAIN,
+                feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
+            )
+        )
+
+        sut.setSendEvent(SendEvent.PaymentMethodSwitch)
+        feeEstimateStarted.await()
+
+        assertNull(sut.sendUiState.value.hardwareWalletId)
+        assertFalse(sut.sendUiState.value.isFundingSourceLoading)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
+
+        finishFeeEstimate.complete(Unit)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.isFundingSourceLoading)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
     }
 
     @Test
@@ -2091,6 +2138,42 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
+    fun `missing hardware fee does not block confirmation`() = test {
+        whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(
+            Result.success(
+                ConvertedAmount(
+                    value = BigDecimal.ZERO,
+                    formatted = "0.00",
+                    symbol = "$",
+                    currency = USD,
+                    flag = "",
+                    sats = 1_000,
+                )
+            )
+        )
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000uL,
+                isAmountInputValid = true,
+                hardwareWalletId = HARDWARE_WALLET_ID,
+                hardwareAvailableSats = 100_000uL,
+                payMethod = SendMethod.ONCHAIN,
+                onchainFeeUi = OnchainFeeUi(sats = null),
+            )
+        )
+
+        sut.setSendEvent(SendEvent.SwipeToPay)
+        advanceUntilIdle()
+
+        assertTrue(sut.sendUiState.value.shouldConfirmPay)
+        sut.sendEffect.test {
+            sut.setSendEvent(SendEvent.PayConfirmed)
+            assertEquals(SendEffect.NavigateToHardwareSign, awaitItem())
+        }
     }
 
     @Test
@@ -4299,16 +4382,123 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `refreshFeeEstimates preserves lightning fee when payMethod is LIGHTNING`() = test {
-        val lightningFee = SendFee.Lightning(42)
-        setUnifiedState(amount = 1000u, payMethod = SendMethod.LIGHTNING, fee = lightningFee)
+    fun `refreshing onchain fees preserves lightning fee`() = test {
+        setUnifiedState(amount = 1000u, payMethod = SendMethod.LIGHTNING, lightningFeeSats = 42)
         advanceUntilIdle()
 
         sut.setSendEvent(SendEvent.SpeedAndFee)
         advanceUntilIdle()
 
-        val currentFee = sut.sendUiState.value.fee
-        assertEquals(lightningFee, currentFee)
+        assertEquals(42, sut.sendUiState.value.lightningFeeSats)
+    }
+
+    @Test
+    fun `selecting speed pops before hardware max spendable finishes`() = test {
+        val maxStarted = CompletableDeferred<Unit>()
+        val finishMax = CompletableDeferred<Unit>()
+        whenever { hwWalletRepo.maxSpendableFunding(any(), any(), any()) }
+            .doSuspendableAnswer {
+                maxStarted.complete(Unit)
+                finishMax.await()
+                Result.success(48_000uL)
+            }
+        val previousFeeUi = OnchainFeeUi(
+            rate = FeeRate.NORMAL,
+            sats = 141,
+            estimates = persistentMapOf(FeeRate.NORMAL to 141L),
+        )
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000u,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                hardwareWalletId = HARDWARE_WALLET_ID,
+                hardwareWalletName = "Trezor",
+                hardwareAvailableSats = 50_000uL,
+                feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
+                onchainFeeUi = previousFeeUi,
+            )
+        )
+
+        sut.sendEffect.test {
+            sut.setTransactionSpeed(TransactionSpeed.Fast)
+            assertEquals(SendEffect.PopBack(SendRoute.Confirm), awaitItem())
+            assertEquals(TransactionSpeed.Fast, sut.sendUiState.value.speed)
+            assertEquals(previousFeeUi.copy(isLoading = true), sut.sendUiState.value.onchainFeeUi)
+            maxStarted.await()
+            finishMax.complete(Unit)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `changing speed resets selected utxos from previous rate`() = test {
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.success(200uL))
+        whenever { lightningRepo.determineUtxosToSpend(any(), any()) }
+            .thenReturn(null)
+        val selectedUtxos = persistentListOf(mock<SpendableUtxo>())
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000u,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
+                selectedUtxos = selectedUtxos,
+                onchainFeeUi = OnchainFeeUi(
+                    rate = FeeRate.NORMAL,
+                    sats = 141,
+                    estimates = persistentMapOf(FeeRate.NORMAL to 141L),
+                ),
+            )
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Fast)
+        advanceUntilIdle()
+
+        assertNull(sut.sendUiState.value.selectedUtxos)
+    }
+
+    @Test
+    fun `changing speed keeps previous onchain fee while estimates refresh`() = test {
+        val feeEstimateStarted = CompletableDeferred<Unit>()
+        val finishFeeEstimate = CompletableDeferred<Unit>()
+        whenever { lightningRepo.calculateTotalFee(any(), anyOrNull(), any(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                feeEstimateStarted.complete(Unit)
+                finishFeeEstimate.await()
+                Result.success(200uL)
+            }
+        val previousFeeUi = OnchainFeeUi(
+            rate = FeeRate.FAST,
+            sats = 100,
+            estimates = persistentMapOf(FeeRate.FAST to 100L),
+        )
+        setSendState(
+            SendUiState(
+                address = REGTEST_ADDRESS,
+                amount = 1_000u,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Fast,
+                feeRates = FeeRates(fast = 5u, mid = 3u, slow = 1u),
+                onchainFeeUi = previousFeeUi,
+            )
+        )
+
+        sut.setTransactionSpeed(TransactionSpeed.Slow)
+        feeEstimateStarted.await()
+
+        assertEquals(TransactionSpeed.Slow, sut.sendUiState.value.speed)
+        assertEquals(previousFeeUi.copy(isLoading = true), sut.sendUiState.value.onchainFeeUi)
+
+        finishFeeEstimate.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(FeeRate.SLOW, sut.sendUiState.value.onchainFeeUi.rate)
+        assertEquals(200, sut.sendUiState.value.onchainFeeUi.sats)
+        assertFalse(sut.sendUiState.value.onchainFeeUi.isLoading)
     }
 
     @Test
@@ -4320,7 +4510,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         setUnifiedState(
             amount = 1000u,
             payMethod = SendMethod.LIGHTNING,
-            fee = SendFee.Lightning(42),
+            lightningFeeSats = 42,
             lastLightningFee = 42L,
         )
         advanceUntilIdle()
@@ -4627,7 +4817,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private fun setUnifiedState(
         amount: ULong = 0u,
         payMethod: SendMethod = SendMethod.LIGHTNING,
-        fee: SendFee? = null,
+        lightningFeeSats: Long? = null,
         lastLightningFee: Long = 0L,
     ) {
         setSendState(
@@ -4636,7 +4826,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 amount = amount,
                 isUnified = true,
                 payMethod = payMethod,
-                fee = fee,
+                lightningFeeSats = lightningFeeSats,
                 lastLightningFee = lastLightningFee,
                 confirmedWarnings = persistentListOf(),
                 speed = TransactionSpeed.Medium,

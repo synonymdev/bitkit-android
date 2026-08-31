@@ -328,7 +328,7 @@ private fun SendAmountNodeRunning(
 
             PrimaryButton(
                 text = stringResource(R.string.common__continue),
-                enabled = uiState.isAmountInputValid && !uiState.isSwitchingFundingSource,
+                enabled = uiState.isAmountInputValid && !uiState.isFundingSourceLoading,
                 isLoading = uiState.isLoading,
                 onClick = onContinue,
                 modifier = Modifier.testTag("ContinueAmount")
@@ -364,8 +364,9 @@ private fun PaymentMethodButton(
         },
         icon = if (uiState.canSwitchFundingSource) R.drawable.ic_transfer else null,
         onClick = onClick,
-        enabled = uiState.canSwitchFundingSource && !uiState.isLoading,
-        isLoading = uiState.isSwitchingFundingSource,
+        enabled = uiState.canSwitchFundingSource,
+        isLoading = uiState.isFundingSourceLoading,
+        clickable = !uiState.isLoading,
         modifier = Modifier
             .height(28.dp)
             .testTag("AssetButton-$testId")

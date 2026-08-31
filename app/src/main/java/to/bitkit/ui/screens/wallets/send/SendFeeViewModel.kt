@@ -51,8 +51,8 @@ class SendFeeViewModel @Inject constructor(
     fun init(sendUiState: SendUiState) {
         this.sendUiState = sendUiState
         this.maxFee = getFeeLimit()
-        val selected = FeeRate.fromSpeed(sendUiState.speed)
-        val fees = sendUiState.fees
+        val selected = sendUiState.onchainFeeUi.rate
+        val fees = sendUiState.onchainFeeUi.estimates
 
         viewModelScope.launch {
             val custom = when (val speed = sendUiState.speed) {
