@@ -677,6 +677,10 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `signOut should preserve local state when grant revocation fails`() = test {
         authenticateForTesting()
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+        )
         whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Server error") }
 
         val result = sut.signOut()
@@ -685,6 +689,9 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
         verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
         assertTrue(sut.isAuthenticated.value)
+        assertTrue(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertTrue(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
     }
 
     @Test

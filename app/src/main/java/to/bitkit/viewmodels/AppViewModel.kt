@@ -996,23 +996,18 @@ class AppViewModel @Inject constructor(
     private suspend fun retryPendingPaykitEndpointRemoval(contactKeys: Collection<String>, reason: String) {
         val settings = settingsStore.data.first()
         if (settings.publicPaykitCleanupPending) {
-            if (settings.sharesPublicPaykitEndpoints) {
-                publicPaykitRepo.syncCurrentPublishedEndpoints()
-                    .onSuccess {
-                        settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
-                    }
-                    .onFailure {
-                        Logger.warn("Failed to retry public Paykit endpoint sync for '$reason'", it, context = TAG)
-                    }
-            } else {
-                publicPaykitRepo.syncPublishedEndpoints(publish = false)
-                    .onSuccess {
-                        settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
-                    }
-                    .onFailure {
-                        Logger.warn("Failed to retry public Paykit endpoint removal for '$reason'", it, context = TAG)
-                    }
+            val reconciliationResult = when {
+                settings.sharesPublicPaykitEndpoints -> publicPaykitRepo.syncCurrentPublishedEndpoints()
+                settings.sharesPrivatePaykitEndpoints -> publicPaykitRepo.syncLocalReceiverMarker()
+                else -> publicPaykitRepo.syncPublishedEndpoints(publish = false)
             }
+            reconciliationResult
+                .onSuccess {
+                    settingsStore.update { it.copy(publicPaykitCleanupPending = false) }
+                }
+                .onFailure {
+                    Logger.warn("Failed to reconcile public Paykit state for '$reason'", it, context = TAG)
+                }
         }
 
         privatePaykitRepo.retryPendingEndpointRemoval(contactKeys)

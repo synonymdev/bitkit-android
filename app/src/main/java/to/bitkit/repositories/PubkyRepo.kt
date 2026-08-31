@@ -535,7 +535,7 @@ class PubkyRepo @Inject constructor(
         tags: List<String>,
         avatarBytes: ByteArray?,
     ): Result<Unit> {
-        var didActivateSession = false
+        var shouldRevokeSessionOnFailure = false
         return try {
             val result = runSuspendCatching {
                 withContext(ioDispatcher) {
@@ -544,23 +544,23 @@ class PubkyRepo @Inject constructor(
                     val signupDetails: Pair<String, String?> = Env.e2eHomeserverPubky?.let { it to null }
                         ?: fetchHomegateSignupCode().let { it.homeserverPubky to it.signupCode }
 
+                    shouldRevokeSessionOnFailure = true
                     runSuspendCatching {
                         pubkyService.signUp(secretKeyHex, signupDetails.first, signupDetails.second)
                     }.getOrElse {
                         Logger.warn("Retrying sign in after sign up failed", it, context = TAG)
                         pubkyService.signIn(secretKeyHex)
                     }
-                    didActivateSession = true
 
                     val imageUrl = avatarBytes?.let { uploadAvatar(it).getOrNull() }
                     writeProfile(name, bio, links, tags, imageUrl)
                     finishIdentityCreation(publicKeyZ32, name, bio, links, tags, imageUrl)
                 }
             }
-            if (result.isFailure) revokeIncompleteIdentitySessionIfNeeded(didActivateSession)
+            if (result.isFailure) revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
             result
         } catch (error: CancellationException) {
-            revokeIncompleteIdentitySessionIfNeeded(didActivateSession)
+            revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
             throw error
         }
     }
@@ -592,8 +592,8 @@ class PubkyRepo @Inject constructor(
         loadContacts()
     }
 
-    private suspend fun revokeIncompleteIdentitySessionIfNeeded(didActivateSession: Boolean) {
-        if (!didActivateSession) return
+    private suspend fun revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSession: Boolean) {
+        if (!shouldRevokeSession) return
         runSuspendCatching {
             withContext(NonCancellable + ioDispatcher) {
                 pubkyService.signOut()
@@ -1079,7 +1079,16 @@ class PubkyRepo @Inject constructor(
             withContext(ioDispatcher) { pubkyService.signOut() }
         }.onFailure { Logger.error("Failed to revoke Pubky session during sign out", it, context = TAG) }
 
-        if (result.isFailure) return result
+        if (result.isFailure) {
+            if (hadPaykitState) {
+                runSuspendCatching {
+                    settingsStore.update { it.copy(publicPaykitCleanupPending = true) }
+                }.onFailure {
+                    Logger.warn("Failed to mark Paykit state for reconciliation", it, context = TAG)
+                }
+            }
+            return result
+        }
 
         clearLocalState(publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPaykitState)
         return result
