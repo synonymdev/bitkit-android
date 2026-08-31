@@ -7,6 +7,7 @@ import android.os.Bundle
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -34,6 +35,7 @@ import kotlin.time.Instant
 class PaykitSubscriptionNotificationScheduler @Inject constructor(
     @ApplicationContext private val context: Context,
     private val clock: Clock,
+    private val workClient: PaykitSubscriptionWorkClient,
 ) {
     private companion object {
         const val MAX_NOTIFICATIONS = 32
@@ -55,9 +57,8 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
         payerIdentity: String,
         notificationsEnabled: Boolean,
     ) {
-        val workManager = WorkManager.getInstance(context)
         if (!notificationsEnabled) {
-            if (notificationsWereEnabled != false) workManager.cancelAllWorkByTag(WORK_TAG)
+            if (notificationsWereEnabled != false) workClient.cancelAllWorkByTag(WORK_TAG)
             updateScheduledWorkNames(emptySet())
             notificationsWereEnabled = false
             return
@@ -102,11 +103,11 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
             }
         }
         val desiredWorkNames = scheduledWork.keys + scheduledWorkNames.intersect(pendingWorkNames)
-        (scheduledWorkNames - desiredWorkNames).forEach(workManager::cancelUniqueWork)
+        (scheduledWorkNames - desiredWorkNames).forEach(workClient::cancelUniqueWork)
         scheduledWork
             .filterKeys { it !in scheduledWorkNames }
             .forEach { (workName, work) ->
-                workManager.enqueueUniqueWork(workName, ExistingWorkPolicy.KEEP, work)
+                workClient.enqueueUniqueWork(workName, ExistingWorkPolicy.KEEP, work)
             }
         updateScheduledWorkNames(desiredWorkNames)
         notificationsWereEnabled = true
@@ -114,7 +115,7 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
 
     @Synchronized
     fun cancel() {
-        WorkManager.getInstance(context).cancelAllWorkByTag(WORK_TAG)
+        workClient.cancelAllWorkByTag(WORK_TAG)
         updateScheduledWorkNames(emptySet())
         notificationsWereEnabled = false
     }
@@ -122,6 +123,27 @@ class PaykitSubscriptionNotificationScheduler @Inject constructor(
     private fun updateScheduledWorkNames(workNames: Set<String>) {
         scheduledWorkNames = workNames
         preferences.edit().putStringSet(SCHEDULED_WORK_NAMES_KEY, workNames).apply()
+    }
+}
+
+@Singleton
+class PaykitSubscriptionWorkClient @Inject constructor(
+    @ApplicationContext private val context: Context,
+) {
+    fun enqueueUniqueWork(
+        uniqueWorkName: String,
+        existingWorkPolicy: ExistingWorkPolicy,
+        request: OneTimeWorkRequest,
+    ) {
+        WorkManager.getInstance(context).enqueueUniqueWork(uniqueWorkName, existingWorkPolicy, request)
+    }
+
+    fun cancelUniqueWork(uniqueWorkName: String) {
+        WorkManager.getInstance(context).cancelUniqueWork(uniqueWorkName)
+    }
+
+    fun cancelAllWorkByTag(tag: String) {
+        WorkManager.getInstance(context).cancelAllWorkByTag(tag)
     }
 }
 

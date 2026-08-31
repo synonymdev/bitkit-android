@@ -13,9 +13,10 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Instant
 
 data class PaykitSubscriptionPresentationState(
-    val acceptedAt: Map<PaykitSubscriptionId, kotlin.time.Instant> = emptyMap(),
+    val acceptedAt: Map<PaykitSubscriptionId, Instant> = emptyMap(),
     val presentedProposalIds: Set<PaykitSubscriptionId> = emptySet(),
     val dismissedPaymentIds: Set<PaykitPaymentRequestId> = emptySet(),
 )
@@ -74,7 +75,7 @@ class PaykitPaymentRequestPresentationStore @Inject constructor(
         val state = decode(value).subscriptionStatesByIdentity[normalizedIdentity]
             ?: return PaykitSubscriptionPresentationState()
         val acceptedAt = state.acceptances.mapNotNull { acceptance ->
-            runCatching { kotlin.time.Instant.parse(acceptance.acceptedAt) }
+            runCatching { Instant.parse(acceptance.acceptedAt) }
                 .getOrNull()
                 ?.let { acceptance.id to it }
         }

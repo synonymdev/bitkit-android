@@ -83,6 +83,7 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.Endpoint
+import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -662,7 +663,7 @@ class PaykitSdkService @Inject constructor(
         paymentRequestId: String,
         paymentEndpointIdentifier: String,
         proofJson: String,
-        billingPeriod: to.bitkit.repositories.PaykitBillingPeriod? = null,
+        billingPeriod: PaykitBillingPeriod? = null,
     ): PaymentRequestRecord {
         isSetup.await()
         return operationMutex.withLock {

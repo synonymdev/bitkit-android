@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
@@ -72,6 +73,7 @@ import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.MoneyCell
 import to.bitkit.ui.components.MoneyDisplay
+import to.bitkit.ui.components.MoneyMSB
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SecondaryButton
@@ -93,6 +95,7 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
+import java.time.ZoneId
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -223,7 +226,7 @@ internal fun SubscriptionsContent(
     }
 }
 
-private fun androidx.compose.foundation.lazy.LazyListScope.subscriptionSection(
+private fun LazyListScope.subscriptionSection(
     @androidx.annotation.StringRes titleRes: Int,
     subscriptions: List<PaykitSubscription>,
     contacts: ImmutableList<PubkyProfile>,
@@ -311,7 +314,7 @@ private fun SubscriptionMetrics(dueSats: Long, activeCount: Int) {
             VerticalSpacer(8.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(painterResource(R.drawable.ic_calendar), contentDescription = null, tint = Colors.Purple)
-                to.bitkit.ui.components.MoneyMSB(sats = dueSats)
+                MoneyMSB(sats = dueSats)
             }
         }
         Spacer(Modifier.size(width = 1.dp, height = 50.dp).background(Colors.White16))
@@ -993,7 +996,7 @@ private fun rememberSubscriptionNow(subscriptions: List<PaykitSubscription>): In
 internal fun nextSubscriptionTransition(
     subscriptions: List<PaykitSubscription>,
     now: Instant,
-    zoneId: java.time.ZoneId = java.time.ZoneId.systemDefault(),
+    zoneId: ZoneId = ZoneId.systemDefault(),
 ): Instant? {
     val activeSubscriptions = subscriptions.filter { it.isActive(now) }
     val dates = subscriptions.flatMap {

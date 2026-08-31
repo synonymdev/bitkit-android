@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.paykit.BillingPeriod
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,6 +33,7 @@ import to.bitkit.utils.Logger
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Instant
 
 @Serializable
 enum class PaykitPaymentProofKind(val type: String) {
@@ -582,11 +584,11 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 }
 
-private fun com.synonym.paykit.BillingPeriod?.matches(period: PaykitBillingPeriod?): Boolean = when {
+private fun BillingPeriod?.matches(period: PaykitBillingPeriod?): Boolean = when {
     this == null && period == null -> true
     this == null || period == null -> false
     else -> runCatching {
-        kotlin.time.Instant.parse(startsAt) == period.startsAt && kotlin.time.Instant.parse(endsAt) == period.endsAt
+        Instant.parse(startsAt) == period.startsAt && Instant.parse(endsAt) == period.endsAt
     }.getOrDefault(false)
 }
 

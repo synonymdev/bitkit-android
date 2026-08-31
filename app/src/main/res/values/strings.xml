@@ -1240,7 +1240,6 @@
     <string name="wallet__payment_request_amount">Amount</string>
     <string name="wallet__payment_request_choose_recipient">Choose Recipient</string>
     <string name="wallet__payment_request_contact">Contact</string>
-    <string name="wallet__payment_request_contact_timestamp">%1$s - %2$s</string>
     <string name="wallet__payment_request_dismiss">Dismiss</string>
     <string name="wallet__payment_request_date">Date</string>
     <string name="wallet__payment_request_enter_pubky">Enter pubky</string>

@@ -6,6 +6,7 @@ import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
+import com.synonym.paykit.PrivateJsonObject
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -289,7 +290,7 @@ internal fun PaymentRequestRecord.toPaykitSubscription(): PaykitSubscription? {
     )
 }
 
-private fun com.synonym.paykit.PrivateJsonObject.subscriptionMetadata(): PaykitSubscriptionMetadata = runCatching {
+private fun PrivateJsonObject.subscriptionMetadata(): PaykitSubscriptionMetadata = runCatching {
     val subscription = Json.parseToJsonElement(exportText()).jsonObject["subscription"]?.jsonObject
         ?: return@runCatching PaykitSubscriptionMetadata(null, emptyList())
     if (subscription["version"]?.jsonPrimitive?.contentOrNull != "1") {
