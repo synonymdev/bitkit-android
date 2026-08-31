@@ -2795,6 +2795,7 @@ class AppViewModel @Inject constructor(
                 return
             }
 
+            _sendUiState.update { it.copy(isAmountInputValid = validateAmount(amount)) }
             navigateToSendRoute(fromMainScanner, SendRoute.Confirm, SendEffect.NavigateToConfirm)
             refreshOnchainSendIfNeeded()
             estimateLightningRoutingFeesIfNeeded()

@@ -3711,6 +3711,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         assertEquals(request.amountSats, sut.sendUiState.value.amount)
+        assertTrue(sut.sendUiState.value.isAmountInputValid)
         assertTrue(sut.sendUiState.value.isPaymentRequest)
         assertEquals(
             ContactPaymentContext(testPublicKey, privateContext, request),
