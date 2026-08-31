@@ -746,6 +746,7 @@ private fun RootNavHost(
                     appViewModel = appViewModel,
                     onBack = { navController.popBackStack() },
                     onRequestPayment = {
+                        navController.popBackStack()
                         appViewModel.showSheet(Sheet.Receive(route = ReceiveRoute.PaymentRequestDetails))
                     },
                 )

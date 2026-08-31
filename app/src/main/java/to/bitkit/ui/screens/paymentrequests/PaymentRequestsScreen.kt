@@ -157,7 +157,7 @@ internal fun PaymentRequestsSheetContent(
                 onClick = onSeeAll,
                 modifier = Modifier
                     .weight(1f)
-                    .testTag("PaymentRequestsSeeAll"),
+                    .testTag("PaymentRequestsSeeAll")
             )
         }
         VerticalSpacer(16.dp)
@@ -207,7 +207,6 @@ internal fun PaymentRequestsContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .gradientBackground()
             .navigationBarsPadding()
             .testTag("PaymentRequestsScreen")
     ) {
@@ -220,7 +219,7 @@ internal fun PaymentRequestsContent(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp)
             ) {
                 FillHeight()
                 Image(
@@ -229,7 +228,7 @@ internal fun PaymentRequestsContent(
                     modifier = Modifier
                         .size(256.dp)
                         .align(Alignment.CenterHorizontally)
-                        .testTag("PaymentRequestsEmptyIllustration"),
+                        .testTag("PaymentRequestsEmptyIllustration")
                 )
                 FillHeight()
                 Display(
@@ -249,23 +248,39 @@ internal fun PaymentRequestsContent(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
                     .weight(1f)
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp)
             ) {
-                if (sections.active.isNotEmpty()) {
+                if (sections.incoming.isNotEmpty()) {
                     item {
                         Caption13Up(
-                            text = stringResource(R.string.wallet__payment_requests_section),
+                            text = stringResource(R.string.wallet__payment_requests_incoming),
                             color = Colors.White64,
                         )
                     }
-                    items(sections.active, key = { it.lazyListKey }) { request ->
-                        ActivePaymentRequestCard(
+                    items(sections.incoming, key = { it.lazyListKey }) { request ->
+                        PaymentRequestCard(
                             request = request,
-                            isIncoming = pending.any { it.id == request.id },
-                            isRejecting = request.id in rejectingRequestIds,
                             contact = contacts.contactFor(request),
-                            onPay = onPay,
-                            onReject = onReject,
+                            isRejecting = request.id in rejectingRequestIds,
+                            onPay = { onPay(request.id) },
+                            onReject = { onReject(request) },
+                        )
+                    }
+                }
+                if (sections.outgoing.isNotEmpty()) {
+                    item {
+                        Caption13Up(
+                            text = stringResource(R.string.wallet__payment_requests_outgoing),
+                            color = Colors.White64,
+                        )
+                    }
+                    items(sections.outgoing, key = { it.lazyListKey }) { request ->
+                        PaymentRequestCard(
+                            request = request,
+                            contact = contacts.contactFor(request),
+                            compactSubtitle = request.note?.takeIf { it.isNotBlank() }
+                                ?: paymentRequestStatus(request),
+                            secondaryText = stringResource(R.string.wallet__payment_request_pending),
                         )
                     }
                 }
@@ -294,15 +309,15 @@ internal fun PaymentRequestsContent(
                 onClick = onRequestPayment,
                 modifier = Modifier
                     .padding(horizontal = 16.dp)
-                    .testTag("PaymentRequestCreate"),
+                    .testTag("PaymentRequestCreate")
             )
-            VerticalSpacer(16.dp)
         }
     }
 }
 
 private data class PaymentRequestSections(
-    val active: List<PaykitPaymentRequest>,
+    val incoming: List<PaykitPaymentRequest>,
+    val outgoing: List<PaykitPaymentRequest>,
     val history: List<PaymentRequestHistorySection>,
 )
 
@@ -326,13 +341,14 @@ private fun paymentRequestSections(
     now: Instant,
 ): PaymentRequestSections {
     val pendingIds = pending.mapTo(mutableSetOf()) { it.id }
-    val active = requests.filter { request ->
-        request.id in pendingIds ||
-            request.direction == PaykitPaymentRequestDirection.Outgoing &&
+    val incoming = requests.filter { it.id in pendingIds }
+    val outgoing = requests.filter { request ->
+        request.direction == PaykitPaymentRequestDirection.Outgoing &&
             request.lifecycleState == PaymentRequestLifecycleState.PROPOSED &&
-            !request.isExpired(now)
+            !request.isExpired(now) &&
+            request.id !in pendingIds
     }
-    val activeIds = active.mapTo(mutableSetOf()) { it.id }
+    val activeIds = (incoming + outgoing).mapTo(mutableSetOf()) { it.id }
     val groupedHistory = requests
         .filterNot { it.id in activeIds }
         .sortedWith { first, second -> compareValues(second.createdAt, first.createdAt) }
@@ -340,36 +356,7 @@ private fun paymentRequestSections(
     val history = PaymentRequestHistoryPeriod.entries.mapNotNull { period ->
         groupedHistory[period]?.let { PaymentRequestHistorySection(period, it) }
     }
-    return PaymentRequestSections(active, history)
-}
-
-@Composable
-private fun ActivePaymentRequestCard(
-    request: PaykitPaymentRequest,
-    isIncoming: Boolean,
-    isRejecting: Boolean,
-    contact: PubkyProfile?,
-    onPay: (PaykitPaymentRequestId) -> Unit,
-    onReject: (PaykitPaymentRequest) -> Unit,
-) {
-    if (isIncoming) {
-        PaymentRequestCard(
-            request = request,
-            contact = contact,
-            isRejecting = isRejecting,
-            onPay = { onPay(request.id) },
-            onReject = { onReject(request) },
-        )
-    } else {
-        PaymentRequestCard(
-            request = request,
-            contact = contact,
-            compactSubtitle = stringResource(
-                R.string.wallet__payment_request_waiting_for_recipient,
-                contact?.name ?: PubkyProfile.placeholder(request.counterparty).name,
-            ),
-        )
-    }
+    return PaymentRequestSections(incoming, outgoing, history)
 }
 
 @Composable
@@ -448,6 +435,7 @@ internal fun PaymentRequestCard(
     request: PaykitPaymentRequest,
     contact: PubkyProfile?,
     compactSubtitle: String? = null,
+    secondaryText: String? = null,
     isRejecting: Boolean = false,
     onPay: (() -> Unit)? = null,
     onReject: (() -> Unit)? = null,
@@ -476,7 +464,7 @@ internal fun PaymentRequestCard(
                         .outerGlow(
                             glowColor = Colors.Brand,
                             glowOpacity = 0.16f,
-                            glowRadius = 64.dp,
+                            glowRadius = 16.dp,
                             cornerRadius = 16.dp,
                         )
                         .border(1.dp, Colors.Brand.copy(alpha = 0.5f), MaterialTheme.shapes.medium)
@@ -484,7 +472,7 @@ internal fun PaymentRequestCard(
                     Modifier
                 }
             )
-            .testTag("PaymentRequestRow${request.paymentRequestId}"),
+            .testTag("PaymentRequestRow${request.paymentRequestId}")
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -507,6 +495,7 @@ internal fun PaymentRequestCard(
             }
             MoneyCell(
                 sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
+                secondaryText = secondaryText,
             )
         }
         if (onPay != null || onReject != null) {
@@ -515,7 +504,7 @@ internal fun PaymentRequestCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(Colors.Gray5)
-                    .padding(16.dp),
+                    .padding(16.dp)
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.wallet__payment_request_dismiss),

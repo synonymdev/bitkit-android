@@ -1199,6 +1199,7 @@
     <string name="wallet__payment_request_note_placeholder">What is this payment for?</string>
     <string name="wallet__payment_request_paste">Paste</string>
     <string name="wallet__payment_request_pay">Pay</string>
+    <string name="wallet__payment_request_pending">pending</string>
     <string name="wallet__payment_request_queued_description">Your payment request is queued and will send automatically</string>
     <string name="wallet__payment_request_recipient">RECIPIENT</string>
     <string name="wallet__payment_request_recipient_no_match">No matching saved contact with a private connection.</string>
@@ -1220,18 +1221,18 @@
     <string name="wallet__payment_request_timestamp">%1$s at %2$s</string>
     <string name="wallet__payment_request_waiting">Waiting for payment</string>
     <string name="wallet__payment_request_waiting_for_details">Waiting for updated private payment details. Bitkit will retry automatically.</string>
-    <string name="wallet__payment_request_waiting_for_recipient">Waiting for %1$s to pay</string>
     <string name="wallet__payment_requests">Payment Requests</string>
     <string name="wallet__payment_requests_earlier">Earlier</string>
     <string name="wallet__payment_requests_empty_description">You have not made any payments to providers and don’t have any payment requests yet.</string>
     <string name="wallet__payment_requests_empty_headline"><![CDATA[No Payment\n<accent>History</accent>]]></string>
+    <string name="wallet__payment_requests_incoming">Incoming</string>
     <string name="wallet__payment_requests_not_now">Not Now</string>
+    <string name="wallet__payment_requests_outgoing">Outgoing</string>
     <plurals name="wallet__payment_requests_pending_count">
         <item quantity="one">%1$d pending payment request</item>
         <item quantity="other">%1$d pending payment requests</item>
     </plurals>
     <string name="wallet__payment_requests_review">Review each request, then pay or dismiss.</string>
-    <string name="wallet__payment_requests_section">PAYMENT REQUESTS</string>
     <string name="wallet__payment_requests_see_all">See All</string>
     <string name="wallet__payment_requests_this_month">This Month</string>
     <string name="wallet__payment_requests_this_week">This Week</string>

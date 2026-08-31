@@ -54,6 +54,25 @@ class CreatePaymentRequestScreenTest {
     }
 
     @Test
+    fun detailsWithRecipientShowsCardAndSendRequest() {
+        composeTestRule.setContent {
+            AppThemeSurface {
+                PaymentRequestDetailsContent(
+                    amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub()),
+                    initialDraft = draft,
+                    onBack = {},
+                    onContinue = {},
+                    recipient = PubkyProfile.placeholder(target.publicKey),
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Send Request").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestAmountContinue").assertDoesNotExist()
+    }
+
+    @Test
     fun recipientShowsEligibleContactAndSendAction() {
         composeTestRule.setContent {
             AppThemeSurface {
@@ -61,6 +80,7 @@ class CreatePaymentRequestScreenTest {
                     targets = persistentListOf(target),
                     contacts = persistentListOf(PubkyProfile.placeholder(target.publicKey)),
                     isCreating = false,
+                    onBack = {},
                     onEditExpiration = {},
                     onPaste = { target.publicKey },
                     onSend = {},
@@ -95,7 +115,7 @@ class CreatePaymentRequestScreenTest {
         composeTestRule.onNodeWithTag("PaymentRequestSent").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestSentCheck").assertIsDisplayed()
         composeTestRule.onNodeWithText("PAYMENT REQUESTED").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Waiting for payment").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Dinner").assertIsDisplayed()
     }
 
     private val draft = PaykitPaymentRequestDraft(

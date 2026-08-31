@@ -45,25 +45,34 @@ fun MoneyDisplay(
 fun MoneyCell(
     sats: Long,
     modifier: Modifier = Modifier,
+    secondaryText: String? = null,
 ) {
     val currencies = LocalCurrencies.current
     Column(
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(2.dp),
-        modifier = modifier,
+        modifier = modifier
     ) {
         rememberMoneyText(sats = sats, unit = currencies.primaryDisplay, showSymbol = true)?.let { text ->
             BodyMSB(
                 text = text.withAccent(accentColor = Colors.White64),
-                modifier = Modifier.testTag("MoneyPrimary"),
+                modifier = Modifier.testTag("MoneyPrimary")
             )
         }
-        rememberMoneyText(sats = sats, unit = currencies.primaryDisplay.not(), showSymbol = true)?.let { text ->
+        if (secondaryText != null) {
             CaptionB(
-                text = text.withAccent(accentColor = Colors.White64),
+                text = secondaryText,
                 color = Colors.White64,
-                modifier = Modifier.testTag("MoneySecondary"),
+                modifier = Modifier.testTag("MoneySecondary")
             )
+        } else {
+            rememberMoneyText(sats = sats, unit = currencies.primaryDisplay.not(), showSymbol = true)?.let { text ->
+                CaptionB(
+                    text = text.withAccent(accentColor = Colors.White64),
+                    color = Colors.White64,
+                    modifier = Modifier.testTag("MoneySecondary")
+                )
+            }
         }
     }
 }
