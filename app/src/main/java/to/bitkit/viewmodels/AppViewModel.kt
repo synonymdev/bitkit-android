@@ -3489,12 +3489,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun prepareContactPayment(contactPaymentContext: ContactPaymentContext?): Boolean {
-        if (
-            contactPaymentContext != null &&
-            synchronized(contactPaymentContextLock) { preparedContactPaymentContext == contactPaymentContext }
-        ) {
-            return true
-        }
+        if (isPreparedContactPayment(contactPaymentContext)) return true
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return false
 
         consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
@@ -3512,6 +3507,10 @@ class AppViewModel @Inject constructor(
         }
         return true
     }
+
+    private fun isPreparedContactPayment(contactPaymentContext: ContactPaymentContext?): Boolean =
+        contactPaymentContext != null &&
+            synchronized(contactPaymentContextLock) { preparedContactPaymentContext == contactPaymentContext }
 
     private suspend fun preparePaymentProof(request: PaykitPaymentRequest?): Result<PaykitPaymentRequest?> {
         if (request == null) return Result.success(null)
@@ -4344,7 +4343,28 @@ class AppViewModel @Inject constructor(
 
     suspend fun prepareHardwareContactPayment(): Boolean {
         val contactPaymentContext = synchronized(contactPaymentContextLock) { activeContactPaymentContext }
-        return prepareContactPayment(contactPaymentContext)
+        if (isPreparedContactPayment(contactPaymentContext)) return true
+
+        val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
+        val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).fold(
+            onSuccess = { it },
+            onFailure = {
+                handlePaymentPreparationFailure(it)
+                return false
+            },
+        )
+        if (!prepareContactPayment(contactPaymentContext)) {
+            cancelPaymentProofPreparation(preparedPaymentProofRequest)
+            return false
+        }
+        return true
+    }
+
+    suspend fun completeHardwareContactPayment(txId: String) {
+        val incomingPaymentRequest = synchronized(contactPaymentContextLock) {
+            activeContactPaymentContext?.incomingPaymentRequest
+        }
+        completeOnchainPaymentProof(incomingPaymentRequest, txId)
     }
 
     fun onHardwareSignCancelled() {
