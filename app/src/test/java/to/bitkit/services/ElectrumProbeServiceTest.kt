@@ -123,6 +123,30 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
     }
 
     @Test
+    fun `probe rejects a server that streams an oversized response line`() = test {
+        val port = startOversizedLineServer()
+
+        val result = sut.probe(serverAt(port), network = Network.REGTEST)
+
+        assertIs<ElectrumProbeError.NotElectrum>(result.exceptionOrNull())
+    }
+
+    @Test
+    fun `probe keeps the oversized-line cap in the rejection cause`() = test {
+        val port = startOversizedLineServer()
+
+        val error = sut.probe(serverAt(port), network = Network.REGTEST).exceptionOrNull()
+
+        assertIs<ElectrumProbeError.NotElectrum>(error)
+        val cause = error.cause?.message.orEmpty()
+        assertTrue("server.version" in cause, "cause should name the request, was '$cause'")
+        assertTrue(
+            "${ElectrumProbeService.MAX_RESPONSE_LINE_BYTES}" in cause,
+            "cause should report the line cap, was '$cause'",
+        )
+    }
+
+    @Test
     fun `probe rejects a host that never answers the electrum handshake`() = test {
         val port = startSilentServer()
 
@@ -229,6 +253,23 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
         synchronized(received) { received += request }
         writer.write(response() + "\n")
         writer.flush()
+    }
+
+    private fun startOversizedLineServer(): Int {
+        val socket = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).also { server = it }
+        thread(isDaemon = true) {
+            runCatching {
+                socket.accept().use { client ->
+                    val reader = client.getInputStream().bufferedReader()
+                    reader.readLine() ?: return@use
+                    val payload = ByteArray(ElectrumProbeService.MAX_RESPONSE_LINE_BYTES + 1) { 'x'.code.toByte() }
+                    client.getOutputStream().write(payload)
+                    client.getOutputStream().flush()
+                    client.getInputStream().read()
+                }
+            }
+        }
+        return socket.localPort
     }
 
     /** Accepts the connection but never speaks electrum, like a non-electrum service on the port. */
