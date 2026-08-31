@@ -296,6 +296,7 @@ private fun Content(
 }
 
 @Composable
+@Suppress("CyclomaticComplexMethod")
 private fun ContentRunning(
     uiState: SendUiState,
     isLoading: Boolean,

@@ -3795,7 +3795,8 @@ class AppViewModel @Inject constructor(
     private suspend fun markOnchainPaymentStarted(
         request: PaykitPaymentRequest?,
         address: String,
-    ): Result<Unit> = request?.let { paykitPaymentProofRepo.markOnchainPaymentStarted(it, address) }
+        walletId: String = WalletScope.default,
+    ): Result<Unit> = request?.let { paykitPaymentProofRepo.markOnchainPaymentStarted(it, address, walletId) }
         ?: Result.success(Unit)
 
     private suspend fun cancelPaymentProofPreparation(request: PaykitPaymentRequest?) {
@@ -4637,13 +4638,24 @@ class AppViewModel @Inject constructor(
         val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).fold(
             onSuccess = { it },
             onFailure = {
-                handlePaymentPreparationFailure(it)
+                handlePaymentPreparationFailure(it, contactPaymentContext)
                 return false
             },
         )
         if (!prepareContactPayment(contactPaymentContext)) {
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
             return false
+        }
+        if (incomingPaymentRequest != null) {
+            val walletId = _sendUiState.value.hardwareWalletId ?: WalletScope.default
+            markOnchainPaymentStarted(incomingPaymentRequest, _sendUiState.value.address, walletId).onFailure {
+                synchronized(contactPaymentContextLock) {
+                    if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
+                }
+                cancelPaymentProofPreparation(preparedPaymentProofRequest)
+                handlePaymentPreparationFailure(it, contactPaymentContext)
+                return false
+            }
         }
         return true
     }

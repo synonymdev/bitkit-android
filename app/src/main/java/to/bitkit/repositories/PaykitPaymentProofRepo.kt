@@ -1,5 +1,8 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.ActivityFilter
+import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +26,7 @@ import to.bitkit.ext.fromHex
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.models.WalletScope
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.Logger
 import java.security.MessageDigest
@@ -54,6 +58,7 @@ data class PendingPaykitPaymentProof(
     val billingPeriod: PaykitBillingPeriod? = null,
     val onchainAddress: String? = null,
     val onchainAmountSats: ULong? = null,
+    val onchainWalletId: String = WalletScope.default,
     val onchainMatchingTransactionIdsBeforeAttempt: Set<String> = emptySet(),
 )
 
@@ -65,32 +70,32 @@ data class PaykitOnchainPaymentProofResolution(
 
 @Singleton
 class PaykitOnchainPaymentProofLookup @Inject constructor(
-    private val lightningRepo: LightningRepo,
     private val activityRepo: ActivityRepo,
 ) {
-    suspend fun existingTransactionIds(address: String, amountSats: ULong): Set<String> =
-        matchingTransactionIds(address, amountSats).mapTo(mutableSetOf(), String::lowercase)
+    suspend fun existingTransactionIds(
+        address: String,
+        amountSats: ULong,
+        walletId: String = WalletScope.default,
+    ): Set<String> = matchingTransactionIds(address, amountSats, walletId).mapTo(mutableSetOf(), String::lowercase)
 
-    suspend fun transactionId(address: String, amountSats: ULong, excluding: Set<String>): String? =
-        matchingTransactionIds(address, amountSats).lastOrNull { it.lowercase() !in excluding }
+    suspend fun transactionId(
+        address: String,
+        amountSats: ULong,
+        excluding: Set<String>,
+        walletId: String = WalletScope.default,
+    ): String? = matchingTransactionIds(address, amountSats, walletId).lastOrNull { it.lowercase() !in excluding }
 
-    private suspend fun matchingTransactionIds(address: String, amountSats: ULong): List<String> = buildList {
-        lightningRepo.getPayments().getOrThrow().forEach { payment ->
-            val transactionId = payment.onchainTransactionIdForProofLookup() ?: return@forEach
-            val details = activityRepo.getTransactionDetails(transactionId).getOrNull()
-            if (details?.outputs?.any {
-                    it.scriptpubkeyAddress == address && it.value >= 0 && it.value.toULong() == amountSats
-                } == true
-            ) {
-                add(transactionId)
+    private suspend fun matchingTransactionIds(address: String, amountSats: ULong, walletId: String): List<String> =
+        activityRepo.getActivities(
+            walletId = walletId,
+            filter = ActivityFilter.ONCHAIN,
+            txType = PaymentType.SENT,
+        ).getOrThrow().mapNotNull { activity ->
+            val onchain = (activity as? Activity.Onchain)?.v1 ?: return@mapNotNull null
+            onchain.txId.takeIf {
+                onchain.doesExist && onchain.address == address && onchain.value == amountSats
             }
         }
-    }
-
-    private fun PaymentDetails.onchainTransactionIdForProofLookup(): String? {
-        if (direction != PaymentDirection.OUTBOUND || status == PaymentStatus.FAILED) return null
-        return (kind as? PaymentKind.Onchain)?.txid
-    }
 }
 
 @Singleton
@@ -159,10 +164,15 @@ class PaykitPaymentProofRepo @Inject constructor(
     suspend fun markOnchainPaymentStarted(
         request: PaykitPaymentRequest,
         address: String,
+        walletId: String = WalletScope.default,
     ): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val identity = currentIdentity() ?: throw PaykitPaymentRequestError.RequestUnavailable
-            val existingTransactionIds = onchainPaymentLookup.existingTransactionIds(address, request.amountSats)
+            val existingTransactionIds = onchainPaymentLookup.existingTransactionIds(
+                address,
+                request.amountSats,
+                walletId,
+            )
             operationMutex.withLock {
                 val proofs = loadProofs().toMutableList()
                 val index = proofs.indexOfLast {
@@ -178,6 +188,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                     paymentStarted = true,
                     onchainAddress = address,
                     onchainAmountSats = request.amountSats,
+                    onchainWalletId = walletId,
                     onchainMatchingTransactionIdsBeforeAttempt = existingTransactionIds,
                 )
                 persist(proofs)
@@ -420,6 +431,7 @@ class PaykitPaymentProofRepo @Inject constructor(
             address,
             amountSats,
             excluding = proof.onchainMatchingTransactionIdsBeforeAttempt,
+            walletId = proof.onchainWalletId,
         ) ?: return
         if (!txid.isHex(HASH_BYTE_COUNT)) return
 

@@ -322,6 +322,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentProofRepo.onchainPaymentResolution).thenReturn(onchainPaymentResolution)
         whenever { paykitPaymentProofRepo.prepare(any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever { paykitPaymentProofRepo.associateLightningPayment(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever {
+            paykitPaymentProofRepo.markOnchainPaymentStarted(any(), any(), any())
+        }.thenReturn(Result.success(Unit))
         whenever { activityRepo.setContact(any(), any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.initialLinkBurstStarted).thenReturn(MutableSharedFlow())
         whenever { privatePaykitRepo.prepareSavedContacts(any<Collection<String>>(), any()) }
@@ -4355,6 +4358,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 payMethod = SendMethod.ONCHAIN,
                 speed = TransactionSpeed.Medium,
                 isPaymentRequest = true,
+                hardwareWalletId = "hardware-wallet",
             )
         )
 
@@ -4365,6 +4369,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(paykitPaymentProofRepo).prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain)
             verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
             verify(paykitPaymentRequestRepo).accept(request)
+            verify(paykitPaymentProofRepo).markOnchainPaymentStarted(
+                request,
+                "bcrt1qpaymentrequest",
+                "hardware-wallet",
+            )
         }
     }
 

@@ -24,6 +24,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.models.WalletScope
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
@@ -58,7 +59,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(store.hasPendingProofs()).thenReturn(true)
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
-        whenever(onchainPaymentLookup.existingTransactionIds(any(), any())).thenReturn(emptySet())
+        whenever(onchainPaymentLookup.existingTransactionIds(any(), any(), any())).thenReturn(emptySet())
         whenever(store.load()).thenAnswer {
             if (shouldFailNextLoad) {
                 shouldFailNextLoad = false
@@ -404,7 +405,14 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
         whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull())).thenReturn(record)
-        whenever(onchainPaymentLookup.transactionId(ONCHAIN_ADDRESS, request.amountSats, emptySet())).thenReturn(txid)
+        whenever(
+            onchainPaymentLookup.transactionId(
+                ONCHAIN_ADDRESS,
+                request.amountSats,
+                emptySet(),
+                WalletScope.default,
+            )
+        ).thenReturn(txid)
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
@@ -430,12 +438,13 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val record = paymentRequestRecord()
         val request = paymentRequest(MethodId.P2wpkh.rawValue)
         whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
-        whenever(onchainPaymentLookup.existingTransactionIds(any(), any())).thenReturn(setOf(oldTransactionId))
+        whenever(onchainPaymentLookup.existingTransactionIds(any(), any(), any())).thenReturn(setOf(oldTransactionId))
         whenever(
             onchainPaymentLookup.transactionId(
                 ONCHAIN_ADDRESS,
                 request.amountSats,
                 setOf(oldTransactionId),
+                WalletScope.default,
             )
         ).thenReturn(null)
         val repo = paymentProofRepo()
