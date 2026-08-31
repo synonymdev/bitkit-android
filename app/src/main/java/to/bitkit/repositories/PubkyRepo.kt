@@ -309,7 +309,7 @@ class PubkyRepo @Inject constructor(
             }
 
             if (result.isFailure) {
-                clearCompletedAuthSessionIfNeeded(didCompleteAuth)
+                revokeCompletedAuthSessionIfNeeded(didCompleteAuth)
                 if (_activeAuthAttemptId.value == attemptId) {
                     _activeAuthAttemptId.update { null }
                 }
@@ -333,7 +333,7 @@ class PubkyRepo @Inject constructor(
                 loadContacts()
             }.map { }
         } catch (e: CancellationException) {
-            clearCompletedAuthSessionIfNeeded(didCompleteAuth)
+            revokeCompletedAuthSessionIfNeeded(didCompleteAuth)
             if (_activeAuthAttemptId.value == attemptId) {
                 _activeAuthAttemptId.update { null }
             }
@@ -345,14 +345,14 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    private suspend fun clearCompletedAuthSessionIfNeeded(didCompleteAuth: Boolean) {
+    private suspend fun revokeCompletedAuthSessionIfNeeded(didCompleteAuth: Boolean) {
         if (!didCompleteAuth) return
         runSuspendCatching {
             withContext(NonCancellable + ioDispatcher) {
-                pubkyService.clearSessionAccess()
+                pubkyService.signOut()
             }
         }.onFailure {
-            Logger.warn("Failed to clear canceled Pubky auth session", it, context = TAG)
+            Logger.warn("Failed to revoke canceled Pubky auth session", it, context = TAG)
         }
     }
 
@@ -534,40 +534,72 @@ class PubkyRepo @Inject constructor(
         links: List<PubkyProfileLink>,
         tags: List<String>,
         avatarBytes: ByteArray?,
-    ): Result<Unit> = runSuspendCatching {
-        withContext(ioDispatcher) {
-            val (publicKeyZ32, secretKeyHex) = deriveKeys().getOrThrow()
+    ): Result<Unit> {
+        var didActivateSession = false
+        return try {
+            val result = runSuspendCatching {
+                withContext(ioDispatcher) {
+                    val (publicKeyZ32, secretKeyHex) = deriveKeys().getOrThrow()
 
-            val signupDetails: Pair<String, String?> = Env.e2eHomeserverPubky?.let { it to null }
-                ?: fetchHomegateSignupCode().let { it.homeserverPubky to it.signupCode }
+                    val signupDetails: Pair<String, String?> = Env.e2eHomeserverPubky?.let { it to null }
+                        ?: fetchHomegateSignupCode().let { it.homeserverPubky to it.signupCode }
 
-            runSuspendCatching {
-                pubkyService.signUp(secretKeyHex, signupDetails.first, signupDetails.second)
-            }.getOrElse {
-                Logger.warn("Retrying sign in after sign up failed", it, context = TAG)
-                pubkyService.signIn(secretKeyHex)
+                    runSuspendCatching {
+                        pubkyService.signUp(secretKeyHex, signupDetails.first, signupDetails.second)
+                    }.getOrElse {
+                        Logger.warn("Retrying sign in after sign up failed", it, context = TAG)
+                        pubkyService.signIn(secretKeyHex)
+                    }
+                    didActivateSession = true
+
+                    val imageUrl = avatarBytes?.let { uploadAvatar(it).getOrNull() }
+                    writeProfile(name, bio, links, tags, imageUrl)
+                    finishIdentityCreation(publicKeyZ32, name, bio, links, tags, imageUrl)
+                }
             }
+            if (result.isFailure) revokeIncompleteIdentitySessionIfNeeded(didActivateSession)
+            result
+        } catch (error: CancellationException) {
+            revokeIncompleteIdentitySessionIfNeeded(didActivateSession)
+            throw error
+        }
+    }
 
-            val imageUrl = avatarBytes?.let { uploadAvatar(it).getOrNull() }
-            writeProfile(name, bio, links, tags, imageUrl)
+    private suspend fun finishIdentityCreation(
+        publicKey: String,
+        name: String,
+        bio: String,
+        links: List<PubkyProfileLink>,
+        tags: List<String>,
+        imageUrl: String?,
+    ) {
+        val createdProfile = PubkyProfile(
+            publicKey = publicKey,
+            name = name,
+            bio = bio,
+            imageUrl = imageUrl,
+            links = links,
+            tags = tags,
+            status = null,
+        )
+        _publicKey.update { publicKey }
+        _authState.update { PubkyAuthState.Authenticated }
+        _profile.update { createdProfile }
+        cacheMetadata(createdProfile)
+        notifyBackupStateChanged()
+        Logger.info("Created identity for '${redacted(publicKey)}'", context = TAG)
+        loadProfile()
+        loadContacts()
+    }
 
-            val createdProfile = PubkyProfile(
-                publicKey = publicKeyZ32,
-                name = name,
-                bio = bio,
-                imageUrl = imageUrl,
-                links = links,
-                tags = tags,
-                status = null,
-            )
-            _publicKey.update { publicKeyZ32 }
-            _authState.update { PubkyAuthState.Authenticated }
-            _profile.update { createdProfile }
-            cacheMetadata(createdProfile)
-            notifyBackupStateChanged()
-            Logger.info("Created identity for '${redacted(publicKeyZ32)}'", context = TAG)
-            loadProfile()
-            loadContacts()
+    private suspend fun revokeIncompleteIdentitySessionIfNeeded(didActivateSession: Boolean) {
+        if (!didActivateSession) return
+        runSuspendCatching {
+            withContext(NonCancellable + ioDispatcher) {
+                pubkyService.signOut()
+            }
+        }.onFailure {
+            Logger.warn("Failed to revoke incomplete Pubky profile session", it, context = TAG)
         }
     }
 
@@ -975,7 +1007,7 @@ class PubkyRepo @Inject constructor(
             ensureServiceInitialized()
 
             initializeMutex.withLock {
-                pubkyService.clearSessionAccess()
+                pubkyService.forgetSessionAccess()
                 clearAuthenticatedState()
                 runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
                 runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
@@ -1045,19 +1077,20 @@ class PubkyRepo @Inject constructor(
 
         val result = runSuspendCatching {
             withContext(ioDispatcher) { pubkyService.signOut() }
-        }.fold(
-            onSuccess = { Result.success(it) },
-            onFailure = {
-                Logger.warn("Forcing local sign out after server sign out failed", it, context = TAG)
-                runSuspendCatching { withContext(ioDispatcher) { pubkyService.forceSignOut() } }
-            },
-        )
+        }.onFailure { Logger.error("Failed to revoke Pubky session during sign out", it, context = TAG) }
+
+        if (result.isFailure) return result
 
         clearLocalState(publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPaykitState)
         return result
     }
 
     suspend fun wipeLocalState() {
+        runSuspendCatching {
+            withContext(ioDispatcher) { pubkyService.forgetSessionAccess() }
+        }.onFailure {
+            Logger.warn("Failed to forget local Pubky session access", it, context = TAG)
+        }
         clearLocalState()
     }
 

@@ -37,12 +37,8 @@ class PubkyService @Inject constructor(
         paykitSdkService.signOut()
     }
 
-    suspend fun forceSignOut() = ServiceQueue.CORE.background {
-        paykitSdkService.forceSignOut()
-    }
-
-    suspend fun clearSessionAccess() = ServiceQueue.CORE.background {
-        paykitSdkService.clearSessionAccess()
+    suspend fun forgetSessionAccess() = ServiceQueue.CORE.background {
+        paykitSdkService.forgetSessionAccess()
     }
 
     suspend fun removeBitkitPaymentEndpoints() = ServiceQueue.CORE.background {

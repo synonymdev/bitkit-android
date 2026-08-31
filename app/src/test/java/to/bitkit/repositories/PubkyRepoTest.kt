@@ -233,7 +233,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `completeAuthentication should clear session when auth is canceled after completion`() = test {
+    fun `completeAuthentication should revoke session when auth is canceled after completion`() = test {
         whenever(pubkyService.startAuth()).thenReturn("auth_uri")
         whenever(pubkyService.completeAuth()).thenAnswer {
             runBlocking { sut.cancelAuthentication() }
@@ -245,7 +245,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val result = sut.completeAuthentication()
 
         assertTrue(result.isFailure)
-        verifyBlocking(pubkyService) { clearSessionAccess() }
+        verifyBlocking(pubkyService) { signOut() }
     }
 
     @Test
@@ -635,7 +635,6 @@ class PubkyRepoTest : BaseUnitTest() {
         authenticateForTesting()
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
         whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Sign out failed") }
-        whenever(pubkyService.forceSignOut()).thenAnswer { throw TestAppError("Force sign out failed") }
 
         val result = sut.deleteProfile()
 
@@ -676,15 +675,16 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `signOut should force sign out when server sign out fails`() = test {
+    fun `signOut should preserve local state when grant revocation fails`() = test {
         authenticateForTesting()
         whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Server error") }
 
         val result = sut.signOut()
 
-        assertTrue(result.isSuccess)
-        verifyBlocking(pubkyService) { forceSignOut() }
-        assertFalse(sut.isAuthenticated.value)
+        assertTrue(result.isFailure)
+        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        assertTrue(sut.isAuthenticated.value)
     }
 
     @Test
@@ -909,7 +909,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `restoreSessionBackupState should clear current session when backup has no pubky state`() = test {
+    fun `restoreSessionBackupState should forget current session when backup has no pubky state`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         clearInvocations(pubkyService, keychain)
 
@@ -918,7 +918,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertFalse(sut.isAuthenticated.value)
         assertNull(sut.publicKey.value)
-        verifyBlocking(pubkyService) { clearSessionAccess() }
+        verifyBlocking(pubkyService) { forgetSessionAccess() }
         verifyBlocking(keychain) { delete(Keychain.Key.PAYKIT_SESSION.name) }
         verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
     }
@@ -1247,6 +1247,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(sut.contacts.value.isEmpty())
         assertFalse(sut.isAuthenticated.value)
         verify(pubkyService, never()).signOut()
+        verifyBlocking(pubkyService) { forgetSessionAccess() }
         verifyBlocking(pubkyStore) { reset() }
     }
 

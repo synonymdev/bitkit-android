@@ -66,7 +66,7 @@ class ProfileViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `signOut clears local Paykit state when Pubky sign out fails`() = test {
+    fun `signOut preserves local Paykit state when Pubky sign out fails`() = test {
         val sut = createSut()
         whenever(pubkyRepo.signOut()).thenReturn(Result.failure(ProfileTestAppError("sign out failed")))
         advanceUntilIdle()
@@ -74,7 +74,7 @@ class ProfileViewModelTest : BaseUnitTest() {
         sut.signOut()
         advanceUntilIdle()
 
-        verify(privatePaykitRepo).closeAndClear()
+        verify(privatePaykitRepo, never()).closeAndClear()
     }
 
     @Test

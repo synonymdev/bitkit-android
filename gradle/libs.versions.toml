@@ -22,7 +22,7 @@ appcompat = { module = "androidx.appcompat:appcompat", version = "1.7.1" }
 barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version = "17.3.0" }
 biometric = { module = "androidx.biometric:biometric", version = "1.4.0-alpha05" }
 bitkit-core = { module = "com.synonym:bitkit-core-android", version = "0.5.14" }
-paykit = { module = "com.synonym:paykit-android", version = "0.1.0-rc46" }
+paykit = { module = "com.synonym:paykit-android", version = "0.1.0-rc50" }
 bouncycastle-provider-jdk = { module = "org.bouncycastle:bcprov-jdk18on", version = "1.83" }
 camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camera" }
 camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camera" }

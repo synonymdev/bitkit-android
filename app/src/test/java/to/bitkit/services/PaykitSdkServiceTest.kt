@@ -21,10 +21,12 @@ class PaykitSdkServiceTest {
     private val basePubkyClientConfig = PubkyClientConfig(
         requestTimeoutSecs = 30uL,
         localTestnetHost = null,
+        authRelayUrl = null,
     )
 
     @Test
     fun `config scopes public endpoint sync to Bitkit managed endpoints`() {
+        assertEquals(BitkitPaykitSdkConfig.profileNamespace, BitkitPaykitSdkConfig.clientId)
         assertEquals(EndpointManagementScope.MANAGED_ONLY, BitkitPaykitSdkConfig.endpointManagementScope)
         assertEquals(PublicContactSharingPolicy.LOCAL_ONLY, BitkitPaykitSdkConfig.publicContactSharing)
         assertEquals(EncryptedLinkRecoveryMarkerPolicy.ENABLED, BitkitPaykitSdkConfig.encryptedLinkRecoveryMarkers)

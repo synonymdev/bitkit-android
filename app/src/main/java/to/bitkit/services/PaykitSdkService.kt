@@ -792,26 +792,14 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun forceSignOut() {
+    suspend fun forgetSessionAccess() {
+        isSetup.await()
         operationMutex.withLock {
-            clearSessionAccessLocked()
-            clearStateLocked()
+            withStateRevisionTracking { handle ->
+                handle.forgetSessionAccess()
+            }
+            resetRuntime()
         }
-    }
-
-    suspend fun clearSessionAccess() {
-        operationMutex.withLock {
-            clearSessionAccessLocked()
-            notifyBackupStateChanged()
-        }
-    }
-
-    private suspend fun clearSessionAccessLocked() {
-        sessionProvider.clearLiveSessionAccess()
-        keychain.delete(Keychain.Key.PAYKIT_SESSION.name)
-        keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name)
-        activeAuthRequest = null
-        resetRuntime()
     }
 
     suspend fun clearState() {
@@ -923,7 +911,10 @@ class PaykitSdkService @Inject constructor(
         ).also { sdk = it }
     }
 
-    private fun bootstrap() = PubkySessionBootstrap.withPubkyClientConfig(pubkyClientConfig)
+    private fun bootstrap() = PubkySessionBootstrap.withPubkyClientConfig(
+        clientId = BitkitPaykitSdkConfig.clientId,
+        pubkyClient = pubkyClientConfig,
+    )
 
     private fun resetRuntime() {
         sdk = null
@@ -962,6 +953,8 @@ class PaykitSdkService @Inject constructor(
 }
 
 internal object BitkitPaykitSdkConfig {
+    val clientId: String
+        get() = profileNamespace
     val profileNamespace: String
         get() = if (Env.network == Network.BITCOIN) "bitkit.to" else "staging.bitkit.to"
     val endpointManagementScope = PaykitSdkDefaults.DEFAULT_ENDPOINT_MANAGEMENT_SCOPE
@@ -1053,6 +1046,7 @@ internal class PaykitSdkSessionProvider(
                 ?.let { return it }
 
             PubkySessionAccess(
+                clientId = BitkitPaykitSdkConfig.clientId,
                 sessionSecret = sessionSecret,
                 localSecretKey = loadLocalSecretKey(),
                 receiverNoiseSecretKey = loadOrDeriveReceiverNoiseSecretKey(),
@@ -1080,8 +1074,8 @@ internal class PaykitSdkSessionProvider(
     override fun clearSessionAccess() {
         clearLiveSessionAccess()
         keychain.accessBlocking {
-            delete(Keychain.Key.PAYKIT_SESSION.name)
             delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+            delete(Keychain.Key.PAYKIT_SESSION.name)
         }
     }
 
