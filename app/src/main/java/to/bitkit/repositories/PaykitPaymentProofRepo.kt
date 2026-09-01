@@ -206,7 +206,16 @@ class PaykitPaymentProofRepo @Inject constructor(
                     emptyList()
                 }
 
-                proofs.forEach { reconcileProof(it, payments) }
+                proofs.forEach { proof ->
+                    runSuspendCatching { reconcileProof(proof, payments) }
+                        .onFailure {
+                            Logger.warn(
+                                "Failed to reconcile a pending Paykit payment proof",
+                                it,
+                                context = TAG,
+                            )
+                        }
+                }
             }.onFailure { Logger.warn("Failed to reconcile pending Paykit payment proofs", it, context = TAG) }
         }
     }

@@ -129,6 +129,37 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `failed proof reconciliation does not stop later proofs`() = test {
+        val secondPaymentRequestId = "550e8400-e29b-41d4-a716-446655440001"
+        storedProofs = listOf(
+            readyLightningProof(PAYMENT_REQUEST_ID),
+            readyLightningProof(secondPaymentRequestId),
+        )
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(
+                paymentRequestRecord(paymentRequestId = PAYMENT_REQUEST_ID),
+                paymentRequestRecord(paymentRequestId = secondPaymentRequestId),
+            ),
+        )
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any()))
+            .thenThrow(IllegalStateException("temporary failure"))
+            .thenReturn(paymentRequestRecord(paymentRequestId = secondPaymentRequestId))
+
+        paymentProofRepo().reconcile()
+
+        val paymentRequestIdCaptor = argumentCaptor<String>()
+        verify(paykitSdkService, times(2)).submitPaymentProof(
+            counterparty = any(),
+            counterpartyReceiverPath = any(),
+            paymentRequestId = paymentRequestIdCaptor.capture(),
+            paymentEndpointIdentifier = any(),
+            proofJson = any(),
+        )
+        assertEquals(listOf(PAYMENT_REQUEST_ID, secondPaymentRequestId), paymentRequestIdCaptor.allValues)
+        assertEquals(listOf(PAYMENT_REQUEST_ID), storedProofs.map { it.requestId.paymentRequestId })
+    }
+
+    @Test
     fun `associated lightning proof completes after repository restart`() = test {
         val record = paymentRequestRecord()
         val request = paymentRequest(MethodId.Bolt11.rawValue)
@@ -348,10 +379,26 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         acceptedPaymentEndpointIdentifiers = listOf(endpoint),
     )
 
-    private fun paymentRequestRecord(paymentProofs: List<PaymentProofRecord> = emptyList()) = PaymentRequestRecord(
+    private fun readyLightningProof(paymentRequestId: String) = PendingPaykitPaymentProof(
+        identity = LOCAL_IDENTITY,
+        requestId = PaykitPaymentRequestId(
+            counterparty = COUNTERPARTY,
+            counterpartyReceiverPath = PaykitReceiverPaths.WALLET,
+            paymentRequestId = paymentRequestId,
+        ),
+        paymentEndpointIdentifier = MethodId.Bolt11.rawValue,
+        kind = PaykitPaymentProofKind.Lightning,
+        paymentIdentifier = PAYMENT_HASH,
+        proofData = PREIMAGE,
+    )
+
+    private fun paymentRequestRecord(
+        paymentProofs: List<PaymentProofRecord> = emptyList(),
+        paymentRequestId: String = PAYMENT_REQUEST_ID,
+    ) = PaymentRequestRecord(
         counterparty = COUNTERPARTY,
         counterpartyReceiverPath = PaykitReceiverPaths.WALLET,
-        paymentRequestId = PAYMENT_REQUEST_ID,
+        paymentRequestId = paymentRequestId,
         localRole = PaymentRequestLocalRole.PAYER,
         state = PaymentRequestLifecycleState.PROPOSED,
         proposalStreamItemId = 1uL,
