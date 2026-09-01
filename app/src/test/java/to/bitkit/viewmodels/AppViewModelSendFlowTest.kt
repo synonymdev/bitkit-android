@@ -4534,6 +4534,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         val startedPayment = sut.acceptSubscriptionAndStartPayment(subscription).getOrThrow()
+        advanceUntilIdle()
 
         assertTrue(startedPayment)
         verify(privatePaykitRepo).beginPaymentRequestWaitingForUpdatedList(dueRequest)
@@ -4544,7 +4545,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `initial subscription send replaces review without hiding the sheet`() = test {
+    fun `initial subscription send dismisses review before presentation`() = test {
         val subscription = subscriptionStartingAt(Clock.System.now())
         val destination = Sheet.Send(SendRoute.Confirm)
         sut.showSheet(Sheet.Subscription(SubscriptionRoute.Review(subscription.id)))
@@ -4554,6 +4555,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.showSheet(destination)
         runCurrent()
 
+        assertNull(sut.currentSheet.value)
+        advanceUntilIdle()
         assertEquals(destination, sut.currentSheet.value)
     }
 

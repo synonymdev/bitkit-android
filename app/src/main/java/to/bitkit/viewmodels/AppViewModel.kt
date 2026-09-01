@@ -4383,17 +4383,6 @@ class AppViewModel @Inject constructor(
     }
 
     fun showSheet(sheetType: Sheet) {
-        val replacesInitialSubscriptionInPlace = _currentSheet.value is Sheet.Subscription &&
-            sheetType is Sheet.Send &&
-            _sendUiState.value.isInitialSubscriptionPayment
-        if (replacesInitialSubscriptionInPlace) {
-            sheetTransitionJob?.cancel()
-            sheetTransitionJob = null
-            receiveSheetContext = null
-            _currentSheet.update { sheetType }
-            return
-        }
-
         val previousJob = sheetTransitionJob
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             receiveSheetContext = null
@@ -4783,6 +4772,7 @@ class AppViewModel @Inject constructor(
                     isInitialSubscriptionPayment = true,
                 )
                 scanJob?.join()
+                sheetTransitionJob?.join()
                 if (_currentSheet.value !is Sheet.Send) {
                     paykitPaymentRequestRepo.markPresented(acceptedDueRequest)
                     val error = PaykitPaymentRequestError.RequestUnavailable
