@@ -2,6 +2,7 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
+import androidx.annotation.DrawableRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -310,7 +311,7 @@ private fun PaymentRequestDetailsIcon(request: PaykitPaymentRequest) {
 private fun RequestDetailCell(
     title: String,
     value: String,
-    @androidx.annotation.DrawableRes iconRes: Int,
+    @DrawableRes iconRes: Int,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {

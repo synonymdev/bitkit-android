@@ -2,7 +2,9 @@
 
 package to.bitkit.ui.screens.subscriptions
 
+import androidx.annotation.DrawableRes
 import androidx.annotation.RawRes
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -227,7 +229,7 @@ internal fun SubscriptionsContent(
 }
 
 private fun LazyListScope.subscriptionSection(
-    @androidx.annotation.StringRes titleRes: Int,
+    @StringRes titleRes: Int,
     subscriptions: List<PaykitSubscription>,
     contacts: ImmutableList<PubkyProfile>,
     now: Instant,
@@ -485,7 +487,7 @@ private fun SubscriptionDetailsGrid(subscription: PaykitSubscription, now: Insta
 private fun SubscriptionDetailCell(
     title: String,
     value: String,
-    @androidx.annotation.DrawableRes iconRes: Int,
+    @DrawableRes iconRes: Int,
     modifier: Modifier = Modifier,
 ) {
     Column(

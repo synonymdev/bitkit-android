@@ -4378,6 +4378,60 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `cancelling hardware signing fails the started payment proof`() = test {
+        val request = paymentRequest()
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = "bcrt1qpaymentrequest",
+                amount = request.amountSats,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+                hardwareWalletId = "hardware-wallet",
+            )
+        )
+        assertTrue(sut.prepareHardwareContactPayment())
+
+        sut.onHardwareSignCancelled()
+        advanceUntilIdle()
+
+        verify(paykitPaymentProofRepo).failOnchainPayment(request)
+    }
+
+    @Test
+    fun `dismissing hardware signing fails the started payment proof`() = test {
+        val request = paymentRequest()
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = "bcrt1qpaymentrequest",
+                amount = request.amountSats,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+                hardwareWalletId = "hardware-wallet",
+            )
+        )
+        sut.showSheet(Sheet.Send(SendRoute.HardwareSign))
+        advanceUntilIdle()
+        assertTrue(sut.prepareHardwareContactPayment())
+
+        sut.hideSheet()
+        advanceUntilIdle()
+
+        verify(paykitPaymentProofRepo).failOnchainPayment(request)
+    }
+
+    @Test
     fun `proof preparation failure does not block hardware payment request`() = test {
         val request = paymentRequest()
         val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)

@@ -4418,6 +4418,7 @@ class AppViewModel @Inject constructor(
             return
         }
         if (_currentSheet.value is Sheet.Send) {
+            cancelHardwarePaymentRequestIfNeeded()
             resetQuickPay()
             quickPayRepo.detachAll()
         }
@@ -4657,7 +4658,27 @@ class AppViewModel @Inject constructor(
     }
 
     fun onHardwareSignCancelled() {
-        isSubmittingPaymentRequest = false
+        cancelHardwarePaymentRequestIfNeeded()
+    }
+
+    private fun cancelHardwarePaymentRequestIfNeeded() {
+        val request = synchronized(contactPaymentContextLock) {
+            activeContactPaymentContext
+                ?.takeIf { it == preparedContactPaymentContext && _sendUiState.value.hardwareWalletId != null }
+                ?.incomingPaymentRequest
+        }
+        if (request == null) {
+            isSubmittingPaymentRequest = false
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                paykitPaymentProofRepo.failOnchainPayment(request)
+            } finally {
+                isSubmittingPaymentRequest = false
+            }
+        }
     }
 
     fun onSendSuccess(

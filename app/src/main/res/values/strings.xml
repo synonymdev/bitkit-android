@@ -1275,7 +1275,6 @@
     <string name="wallet__payment_request_status_proof_submitted">Proof submitted</string>
     <string name="wallet__payment_request_status_rejected">Rejected</string>
     <string name="wallet__payment_request_status_unavailable">Unavailable</string>
-    <string name="wallet__payment_request_timestamp">%1$s at %2$s</string>
     <string name="wallet__payment_request_time">Time</string>
     <string name="wallet__payment_request_waiting">Waiting for payment</string>
     <string name="wallet__payment_request_waiting_for_details">Waiting for updated private payment details. Bitkit will retry automatically.</string>
