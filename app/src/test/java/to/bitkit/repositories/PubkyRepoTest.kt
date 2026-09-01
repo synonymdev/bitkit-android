@@ -10,6 +10,15 @@ import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PublicationStatus
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpStatusCode
+import io.ktor.http.headersOf
+import io.ktor.serialization.kotlinx.json.json
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -19,6 +28,7 @@ import org.junit.Test
 import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -79,14 +89,14 @@ class PubkyRepoTest : BaseUnitTest() {
         sut = createSut()
     }
 
-    private fun createSut() = PubkyRepo(
+    private fun createSut(httpClient: HttpClient = mock()) = PubkyRepo(
         ioDispatcher = testDispatcher,
         pubkyService = pubkyService,
         keychain = keychain,
         imageLoader = imageLoader,
         pubkyStore = pubkyStore,
         settingsStore = settingsStore,
-        httpClient = mock(),
+        httpClient = httpClient,
     )
 
     @Test
@@ -245,6 +255,29 @@ class PubkyRepoTest : BaseUnitTest() {
         val result = sut.completeAuthentication()
 
         assertTrue(result.isFailure)
+        verifyBlocking(pubkyService) { signOut() }
+    }
+
+    @Test
+    fun `completeAuthentication should revoke session when canceled during completion`() = test {
+        val completionStarted = CompletableDeferred<Unit>()
+        val finishCompletion = CompletableDeferred<Unit>()
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        whenever(pubkyService.completeAuth()).doSuspendableAnswer {
+            completionStarted.complete(Unit)
+            finishCompletion.await()
+        }
+
+        val authRequest = startAuthForTesting()
+        approveAuthForTesting(authRequest)
+        val result = async { sut.completeAuthentication() }
+        completionStarted.await()
+
+        result.cancel()
+        verifyBlocking(pubkyService, never()) { signOut() }
+        finishCompletion.complete(Unit)
+        result.join()
+
         verifyBlocking(pubkyService) { signOut() }
     }
 
@@ -421,6 +454,40 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertEquals(PubkyRingAuthCallbackHandlingResult.TrustedError("Ring failed"), result)
         verifyBlocking(pubkyService) { cancelAuth() }
+    }
+
+    @Test
+    fun `createIdentity should revoke session when profile publication fails`() = test {
+        val httpClient = HttpClient(
+            MockEngine {
+                respond(
+                    content = """{"signupCode":"test-code","homeserverPubky":"test-homeserver"}""",
+                    status = HttpStatusCode.OK,
+                    headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                )
+            },
+        ) {
+            install(ContentNegotiation) { json() }
+        }
+        sut = createSut(httpClient)
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
+        whenever(pubkyService.deriveSecretKey("test mnemonic")).thenReturn("test-secret")
+        whenever(pubkyService.publicKeyFromSecret("test-secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        whenever(pubkyService.signUp("test-secret", "test-homeserver", "test-code")).thenReturn(Unit)
+        whenever(pubkyService.publishPaykitProfile(any())).thenAnswer { throw TestAppError("Publish failed") }
+
+        val result = sut.createIdentity(
+            name = "Test",
+            bio = "",
+            links = emptyList(),
+            tags = emptyList(),
+            avatarBytes = null,
+        )
+        httpClient.close()
+
+        assertTrue(result.isFailure)
+        verifyBlocking(pubkyService) { signUp("test-secret", "test-homeserver", "test-code") }
+        verifyBlocking(pubkyService) { signOut() }
     }
 
     @Test

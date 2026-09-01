@@ -293,8 +293,10 @@ class PubkyRepo @Inject constructor(
             val result = runSuspendCatching {
                 waitForAuthApproval(attemptId)
                 withContext(ioDispatcher) {
-                    pubkyService.completeAuth()
-                    didCompleteAuth = true
+                    withContext(NonCancellable) {
+                        pubkyService.completeAuth()
+                        didCompleteAuth = true
+                    }
                     ensureAuthAttemptActive(attemptId)
                     val pk = requireNotNull(pubkyService.currentPublicKey()?.ensurePubkyPrefix()) {
                         "No active Pubky session"
