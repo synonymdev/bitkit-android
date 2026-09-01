@@ -1032,7 +1032,7 @@ private fun dueThisMonth(
     acceptedAt: (PaykitSubscriptionId) -> Instant?,
     now: Instant,
 ): Long {
-    val zonedNow = java.time.Instant.ofEpochMilli(now.toEpochMilliseconds()).atZone(java.time.ZoneId.systemDefault())
+    val zonedNow = java.time.Instant.ofEpochMilli(now.toEpochMilliseconds()).atZone(ZoneId.systemDefault())
     val start = zonedNow.withDayOfMonth(1).toLocalDate().atStartOfDay(zonedNow.zone).toInstant()
     val end = zonedNow.plusMonths(1).withDayOfMonth(1).toLocalDate().atStartOfDay(zonedNow.zone).toInstant()
     val startInstant = Instant.fromEpochMilliseconds(start.toEpochMilli())
