@@ -30,10 +30,12 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.async.appScope
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -613,6 +615,13 @@ private fun List<PaykitPaymentRequest>.withExpiredLifecycle(now: Instant): List<
 
 private val bitcoinAmountPattern = Regex("(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)")
 
+internal fun supportedPaykitEndpointIdentifiers(
+    identifiers: List<String>,
+    network: Network = Env.network,
+): List<String> = identifiers
+    .filter { MethodId.fromRawValue(it, network) != null }
+    .distinct()
+
 @Suppress("CyclomaticComplexMethod", "ReturnCount")
 private fun PaymentRequestRecord.toPaykitPaymentRequest(
     expectedRole: PaymentRequestLocalRole,
@@ -626,9 +635,7 @@ private fun PaymentRequestRecord.toPaykitPaymentRequest(
     val amountSats = requestTerms.amount.value.toSats()
         ?.takeIf { it <= ULong.MAX_VALUE / 1000uL }
         ?: return null
-    val endpoints = requestTerms.acceptedPaymentEndpointIdentifiers
-        .filter { MethodId.fromRawValue(it) != null }
-        .distinct()
+    val endpoints = supportedPaykitEndpointIdentifiers(requestTerms.acceptedPaymentEndpointIdentifiers)
     if (requiresActionableRequest && endpoints.isEmpty()) return null
 
     val expiresAt = requestTerms.proposalExpiresAt?.let {
