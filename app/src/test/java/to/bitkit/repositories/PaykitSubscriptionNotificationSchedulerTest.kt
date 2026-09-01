@@ -1,4 +1,4 @@
-@file:OptIn(kotlin.time.ExperimentalTime::class)
+@file:OptIn(ExperimentalTime::class)
 
 package to.bitkit.repositories
 
@@ -26,6 +26,7 @@ import to.bitkit.ui.EXTRA_PAYKIT_PAYMENT_REQUEST_ID
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 @Config(sdk = [34])
