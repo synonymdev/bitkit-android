@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.Network
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
@@ -25,6 +26,7 @@ import to.bitkit.services.PaykitResolvedPaymentEndpoint
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
@@ -76,6 +78,51 @@ class PublicPaykitRepoTest : BaseUnitTest() {
     @After
     fun tearDown() {
         PublicPaykitRepo.lightningRouteHintsValidator = null
+    }
+
+    @Test
+    fun `parseEndpoint accepts network correct JSON endpoint fixtures`() {
+        val fixtures = listOf(
+            Network.BITCOIN to "btc-bitcoin-p2wpkh",
+            Network.TESTNET to "btc-testnet-p2wpkh",
+            Network.SIGNET to "btc-signet-p2wpkh",
+            Network.REGTEST to "btc-regtest-p2wpkh",
+        )
+
+        fixtures.forEach { (network, identifier) ->
+            val endpoint = PublicPaykitRepo.parseEndpoint(
+                methodId = identifier,
+                endpointData = """{"value":"  address  ","min":"1000","max":"2000"}""",
+                network = network,
+            )
+
+            assertEquals(MethodId.P2wpkh, endpoint?.methodId)
+            assertEquals("address", endpoint?.value)
+            assertEquals("1000", endpoint?.min)
+            assertEquals("2000", endpoint?.max)
+        }
+    }
+
+    @Test
+    fun `parseEndpoint rejects non canonical JSON endpoint payloads`() {
+        val rejectedPayloads = listOf(
+            "bcrt1qraw",
+            """"bcrt1qjsonstring"""",
+            "{}",
+            """{"value":""}""",
+            """{"value":"   "}""",
+            """{"value":1}""",
+        )
+
+        rejectedPayloads.forEach {
+            assertNull(
+                PublicPaykitRepo.parseEndpoint(
+                    methodId = "btc-regtest-p2wpkh",
+                    endpointData = it,
+                    network = Network.REGTEST,
+                ),
+            )
+        }
     }
 
     @Test

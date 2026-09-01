@@ -105,10 +105,14 @@ class PublicPaykitRepo @Inject constructor(
         fun isOnchainPaymentOptionEnabled(settings: SettingsData): Boolean =
             settings.publicPaykitOnchainEnabled
 
-        fun parseEndpoint(methodId: String, endpointData: String): Endpoint? {
+        fun parseEndpoint(
+            methodId: String,
+            endpointData: String,
+            network: Network = Env.network,
+        ): Endpoint? {
             if (!methodIdPattern.matches(methodId)) return null
 
-            val knownMethodId = MethodId.fromRawValue(methodId) ?: return null
+            val knownMethodId = MethodId.fromRawValue(methodId, network) ?: return null
             val payload = runCatching {
                 payloadJson.decodeFromString<PaymentEndpointPayload>(endpointData)
             }.getOrNull() ?: return null
@@ -463,7 +467,10 @@ enum class MethodId(
     }
 
     companion object {
-        fun fromRawValue(value: String): MethodId? = entries.firstOrNull { it.rawValue == value }
+        fun fromRawValue(
+            value: String,
+            network: Network = Env.network,
+        ): MethodId? = entries.firstOrNull { it.rawValueForNetwork(network) == value }
     }
 }
 
