@@ -24,7 +24,6 @@ import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.SortDirection
-import com.synonym.bitkitcore.validateBitcoinAddress
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.collections.immutable.ImmutableList
@@ -1797,7 +1796,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun validateOnChainAddress(invoice: OnChainInvoice) {
-        val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
+        val validatedAddress = runCatching { coreService.validateBitcoinAddress(invoice.address) }
             .getOrElse {
                 showAddressValidationError(
                     titleRes = R.string.other__scan_err_decoding,
@@ -2686,7 +2685,7 @@ class AppViewModel @Inject constructor(
         scanResult: String,
         fromMainScanner: Boolean,
     ) {
-        val validatedAddress = runCatching { validateBitcoinAddress(invoice.address) }
+        val validatedAddress = runCatching { coreService.validateBitcoinAddress(invoice.address) }
             .getOrElse {
                 hideSheet()
                 toast(
