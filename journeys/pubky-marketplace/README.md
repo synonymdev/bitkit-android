@@ -40,7 +40,7 @@ Evidence must show the claimed account xpub and account index while omitting wal
 and tokens.
 
 The reference implementation is
-[`BitcoinErrorLog/pubky-marketplace/payments-env`](https://github.com/BitcoinErrorLog/pubky-marketplace/tree/master/payments-env).
+[`BitcoinErrorLog/pubky-marketplace/payments-env`](https://github.com/BitcoinErrorLog/pubky-marketplace/tree/ed03a32ecfe02deab40ad10ae1bac7fa18465c10/payments-env).
 Fixture commit `ed03a32e` pins Paykit Server source `867fc883` and verifies the canonical request
 contract. Its `scripts/verify.sh` proves the Locks, Paykit, Pubky, bitcoind, and Fulcrum protocol
 path. For this journey, the seller wallet replaces `paykit-companion-auth` and the buyer wallet
