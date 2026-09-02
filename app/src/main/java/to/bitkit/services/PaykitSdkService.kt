@@ -270,15 +270,28 @@ class PaykitSdkService @Inject constructor(
         secretKeyHex: String,
         homeserverPublicKey: String,
         signupCode: String?,
-    ) {
+    ): PubkySessionBootstrapResult {
         isSetup.await()
-        bootstrap().signUp(
+        return bootstrap().signUp(
             localSecretKey = localSecretKey(secretKeyHex),
             receiverNoiseSecretKey = sessionProvider.loadOrDeriveReceiverNoiseSecretKey(),
             homeserverPublicKey = homeserverPublicKey,
             signupCode = signupCode,
             requiredCapabilities = requiredCapabilities(),
         )
+    }
+
+    suspend fun activateRegisteredIdentity(result: PubkySessionBootstrapResult) {
+        isSetup.await()
+        val previousPublicKey = operationMutex.withLock { currentSdkStatePublicKeyLocked() }
+        operationMutex.withLock {
+            activateBootstrapResult(
+                result = result,
+                previousPublicKey = previousPublicKey,
+                shouldStoreLocalSecret = true,
+            )
+        }
+        notifyBackupStateChanged()
     }
 
     suspend fun signIn(secretKeyHex: String): PubkySessionBootstrapResult {

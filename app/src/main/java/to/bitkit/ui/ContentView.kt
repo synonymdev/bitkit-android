@@ -623,6 +623,7 @@ fun ContentView(
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     var isHomeCalculatorInputActive by remember { mutableStateOf(false) }
+                    var didResumePendingPubkyProfileSetup by remember { mutableStateOf(false) }
 
                     RootNavHost(
                         navController = navController,
@@ -650,12 +651,16 @@ fun ContentView(
                         currentSheet,
                         currentRoute,
                     ) {
+                        if (!isPubkyProfileSetupPending) {
+                            didResumePendingPubkyProfileSetup = false
+                        }
                         val canNavigate = currentSheet == null &&
                             currentRoute != Routes.CreateProfile::class.qualifiedName
                         val shouldResumeProfileSetup = isPaykitEnabled &&
                             isPubkyProfileSetupPending &&
                             isProfileAuthenticated
-                        if (shouldResumeProfileSetup && canNavigate) {
+                        if (shouldResumeProfileSetup && canNavigate && !didResumePendingPubkyProfileSetup) {
+                            didResumePendingPubkyProfileSetup = true
                             navController.navigateTo(Routes.CreateProfile)
                         }
                     }

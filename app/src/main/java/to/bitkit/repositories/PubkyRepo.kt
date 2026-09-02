@@ -1004,14 +1004,14 @@ class PubkyRepo @Inject constructor(
                 val (publicKey, secretKeyHex) = deriveKeys().getOrThrow()
                 if (hasIdentity()) throw PubkyAlreadySignedInError
 
-                pubkyService.registerIdentity(
+                val registeredSession = pubkyService.registerIdentity(
                     secretKeyHex = secretKeyHex,
                     homeserverZ32 = requireNotNull(request.homeserverPublicKey),
                     signupCode = request.signupToken,
                 )
                 pubkyService.approveRingAuth(request.authorizationUrl, secretKeyHex)
                 settingsStore.setPubkyProfileSetupPending(true)
-                pubkyService.signIn(secretKeyHex)
+                pubkyService.activateRegisteredIdentity(registeredSession)
 
                 settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
                 _publicKey.update { publicKey }
