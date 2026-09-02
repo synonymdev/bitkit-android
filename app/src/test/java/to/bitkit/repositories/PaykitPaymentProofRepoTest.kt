@@ -13,6 +13,10 @@ import com.synonym.paykit.PrivateJsonObject
 import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.PaymentDetails
+import org.lightningdevkit.ldknode.PaymentDirection
+import org.lightningdevkit.ldknode.PaymentKind
+import org.lightningdevkit.ldknode.PaymentStatus
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
@@ -114,7 +118,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val firstRepo = paymentProofRepo()
 
         firstRepo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        firstRepo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        firstRepo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
         firstRepo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
 
         assertEquals(PREIMAGE, storedProofs.single().proofData)
@@ -173,12 +177,68 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `associated lightning proof completes after repository restart`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        val paymentKind = mock<PaymentKind.Bolt11> {
+            on { preimage } doReturn PREIMAGE
+        }
+        val payment = mock<PaymentDetails> {
+            on { id } doReturn PAYMENT_HASH
+            on { kind } doReturn paymentKind
+            on { direction } doReturn PaymentDirection.OUTBOUND
+            on { status } doReturn PaymentStatus.SUCCEEDED
+        }
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(listOf(payment)))
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull())).thenReturn(record)
+        val firstRepo = paymentProofRepo()
+
+        firstRepo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
+        firstRepo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
+        assertNull(storedProofs.single().proofData)
+
+        paymentProofRepo().reconcile()
+
+        verify(lightningRepo).getPayments()
+        val proofCaptor = argumentCaptor<String>()
+        verify(paykitSdkService).submitPaymentProof(
+            counterparty = any(),
+            counterpartyReceiverPath = any(),
+            paymentRequestId = any(),
+            paymentEndpointIdentifier = any(),
+            proofJson = proofCaptor.capture(),
+            billingPeriod = isNull(),
+        )
+        assertEquals(
+            """{"data":"$PREIMAGE","type":"${PaykitPaymentProofKind.Lightning.type}"}""",
+            proofCaptor.firstValue,
+        )
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `lightning proof completes without prepared proof`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull())).thenReturn(record)
+        val repo = paymentProofRepo()
+
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
+        repo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
+
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
     fun `mismatched lightning preimage is not submitted`() = test {
         val request = paymentRequest(MethodId.Bolt11.rawValue)
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        repo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
         repo.completeLightningPayment(PAYMENT_HASH, "01".repeat(32))
 
         assertNull(storedProofs.single().proofData)
@@ -201,7 +261,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        repo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
         repo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
 
         assertTrue(storedProofs.isEmpty())
@@ -214,7 +274,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        repo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
         repo.failLightningPayment(PAYMENT_HASH)
 
         assertTrue(storedProofs.isEmpty())
@@ -278,6 +338,22 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `onchain proof submits without prepared proof`() = test {
+        val txid = "ab".repeat(32)
+        val endpoint = MethodId.P2wpkh.rawValue
+        val request = paymentRequest(endpoint)
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull())).thenReturn(record)
+        val repo = paymentProofRepo()
+
+        repo.completeOnchainPayment(request, txid, endpoint)
+
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), eq(endpoint), any(), isNull())
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
     fun `recurring proof includes the exact billing period`() = test {
         val period = PaykitBillingPeriod(
             startsAt = Instant.parse("2027-01-01T08:00:00Z"),
@@ -290,7 +366,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        repo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
         repo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
 
         val periodCaptor = argumentCaptor<PaykitBillingPeriod>()
@@ -329,7 +405,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        repo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
         repo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
 
         verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any(), any())
@@ -341,7 +417,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        repo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
         val retry = repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning)
 
         assertTrue(retry.exceptionOrNull() is PaykitPaymentRequestError.OperationInProgress)
@@ -561,7 +637,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = paymentRequest(MethodId.Bolt11.rawValue, billingPeriod = period)
         val repo = paymentProofRepo()
         repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        repo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
 
         val protectedRequestIds = repo.protectedRequestIdsForSubscriptionCancellation(
             LOCAL_IDENTITY,

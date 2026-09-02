@@ -321,7 +321,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.isProcessing(any())).thenReturn(false)
         whenever(paykitPaymentProofRepo.onchainPaymentResolution).thenReturn(onchainPaymentResolution)
         whenever { paykitPaymentProofRepo.prepare(any(), any(), any()) }.thenReturn(Result.success(Unit))
-        whenever { paykitPaymentProofRepo.associateLightningPayment(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever {
+            paykitPaymentProofRepo.associateLightningPayment(any(), any(), any())
+        }.thenReturn(Result.success(Unit))
         whenever {
             paykitPaymentProofRepo.markOnchainPaymentStarted(any(), any(), any())
         }.thenReturn(Result.success(Unit))
@@ -4080,6 +4082,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             beforeSendAttempt = any(),
             onBroadcast = any(),
         )
+        verify(paykitPaymentProofRepo).completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue)
     }
 
     @Test
@@ -4218,6 +4221,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             beforeSendAttempt = any(),
             onBroadcast = any(),
         )
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any())
     }
 
     @Test
@@ -4232,7 +4236,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 setSendState(sut.sendUiState.value.copy(decodedInvoice = lightningInvoice(bolt11, request.amountSats)))
                 Result.success(Unit)
             }
-        whenever { paykitPaymentProofRepo.associateLightningPayment(any(), any()) }
+        whenever { paykitPaymentProofRepo.associateLightningPayment(any(), any(), any()) }
             .thenReturn(Result.failure(IllegalStateException("proof unavailable")))
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
@@ -4252,7 +4256,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         verify(paykitPaymentProofRepo).prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning)
-        verify(paykitPaymentProofRepo).associateLightningPayment(request, paymentHash)
+        verify(paykitPaymentProofRepo).associateLightningPayment(request, paymentHash, MethodId.Bolt11.rawValue)
         verify(paykitPaymentProofRepo).cancelPreparation(request)
         verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
     }
@@ -4291,7 +4295,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(paykitPaymentProofRepo).prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning)
             verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
             verify(paykitPaymentRequestRepo).accept(request)
-            verify(paykitPaymentProofRepo).associateLightningPayment(request, invoicePaymentHash)
+            verify(paykitPaymentProofRepo).associateLightningPayment(
+                request,
+                invoicePaymentHash,
+                MethodId.Bolt11.rawValue,
+            )
             verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
         }
         verify(paykitPaymentProofRepo, never()).failLightningPayment(any())
@@ -4332,7 +4340,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(paykitPaymentProofRepo).prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning)
             verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
             verify(paykitPaymentRequestRepo).accept(request)
-            verify(paykitPaymentProofRepo).associateLightningPayment(request, invoicePaymentHash)
+            verify(paykitPaymentProofRepo).associateLightningPayment(
+                request,
+                invoicePaymentHash,
+                MethodId.Bolt11.rawValue,
+            )
             verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
             verify(paykitPaymentProofRepo).failLightningPayment(invoicePaymentHash)
             verify(paykitPaymentProofRepo).cancelPreparation(request)
@@ -4451,6 +4463,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
         verify(paykitPaymentRequestRepo).accept(request)
+        verify(paykitPaymentProofRepo, never()).markOnchainPaymentStarted(any(), any(), any())
     }
 
     @Test

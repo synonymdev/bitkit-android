@@ -3591,7 +3591,7 @@ class AppViewModel @Inject constructor(
             amount = amount,
             tags = tags,
             beforeSendAttempt = {
-                if (incomingPaymentRequest != null) {
+                if (preparedPaymentProofRequest != null) {
                     markOnchainPaymentStarted(incomingPaymentRequest, address).getOrThrow()
                     onchainPaymentStarted = true
                 }
@@ -4623,7 +4623,7 @@ class AppViewModel @Inject constructor(
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
             return false
         }
-        if (incomingPaymentRequest != null) {
+        if (preparedPaymentProofRequest != null) {
             val walletId = _sendUiState.value.hardwareWalletId ?: WalletScope.default
             markOnchainPaymentStarted(incomingPaymentRequest, _sendUiState.value.address, walletId).onFailure {
                 synchronized(contactPaymentContextLock) {
