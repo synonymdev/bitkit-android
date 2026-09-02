@@ -9,12 +9,16 @@ import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.core.net.toUri
 import app.cash.turbine.test
+import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.LightningInvoice
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
+import com.synonym.bitkitcore.OnChainInvoice
 import com.synonym.bitkitcore.Scanner
+import com.synonym.bitkitcore.ValidationResult
+import com.synonym.bitkitcore.validateBitcoinAddress
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.CancellationException
@@ -38,9 +42,10 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Event
-import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.PaymentFailureReason
+import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.TransactionDetails
+import org.mockito.Mockito
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.atLeast
@@ -93,6 +98,7 @@ import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
+import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestCreation
@@ -3716,6 +3722,67 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `incoming onchain payment request enables confirm with its fixed amount and context`() = test {
+        val request = onchainPaymentRequest()
+        val paymentEndpoint = "bitcoin:$REGTEST_ADDRESS"
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(coreService.decode(paymentEndpoint)).thenReturn(
+            Scanner.OnChain(onchainInvoice(amountSats = 0u)),
+        )
+        sut.setIsAuthenticated(true)
+
+        mockValidOnchainAddress().use {
+            sut.openContactPayment(
+                paymentRequest = paymentEndpoint,
+                publicKey = testPublicKey,
+                privatePaymentContext = privateContext,
+                incomingPaymentRequest = request,
+            )
+            advanceUntilIdle()
+
+            assertEquals(REGTEST_ADDRESS, sut.sendUiState.value.address)
+            assertEquals(paymentEndpoint, sut.sendUiState.value.addressInput)
+            assertEquals(request.amountSats, sut.sendUiState.value.amount)
+            assertTrue(sut.sendUiState.value.isAddressInputValid)
+            assertTrue(sut.sendUiState.value.isAmountInputValid)
+            assertEquals(SendMethod.ONCHAIN, sut.sendUiState.value.payMethod)
+            assertTrue(sut.sendUiState.value.isPaymentRequest)
+            assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+            assertEquals(
+                ContactPaymentContext(testPublicKey, privateContext, request),
+                activeContactPaymentContext(),
+            )
+        }
+    }
+
+    @Test
+    fun `unaffordable incoming onchain payment request remains blocked`() = test {
+        val request = onchainPaymentRequest()
+        val paymentEndpoint = "bitcoin:$REGTEST_ADDRESS"
+        balanceState.value = BalanceState(maxSendOnchainSats = request.amountSats - 1u)
+        whenever(coreService.decode(paymentEndpoint)).thenReturn(
+            Scanner.OnChain(onchainInvoice(amountSats = request.amountSats)),
+        )
+        whenever(formatMoneyValue(1u)).thenReturn("1 sat")
+        sut.setIsAuthenticated(true)
+
+        mockValidOnchainAddress().use {
+            sut.openContactPayment(
+                paymentRequest = paymentEndpoint,
+                publicKey = testPublicKey,
+                incomingPaymentRequest = request,
+            )
+            advanceUntilIdle()
+
+            assertNull(sut.currentSheet.value)
+            assertEquals(REGTEST_ADDRESS, sut.sendUiState.value.address)
+            assertEquals(request.amountSats, sut.sendUiState.value.amount)
+            assertFalse(sut.sendUiState.value.isAmountInputValid)
+        }
+    }
+
+    @Test
     fun `outgoing payment request creation continues after its caller returns`() = test {
         val request = paymentRequest().copy(counterparty = "pubkyrecipient")
         val target = PaykitPaymentRequestTarget(request.counterparty, request.counterpartyReceiverPath)
@@ -4682,6 +4749,22 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         payeeNodeId = null,
     )
 
+    private fun onchainInvoice(amountSats: ULong) = OnChainInvoice(
+        address = REGTEST_ADDRESS,
+        amountSatoshis = amountSats,
+        label = null,
+        message = null,
+        params = null,
+    )
+
+    private fun mockValidOnchainAddress() = Mockito.mockStatic(
+        Class.forName("com.synonym.bitkitcore.Bitkitcore_androidKt"),
+    ).apply {
+        `when`<ValidationResult> { validateBitcoinAddress(REGTEST_ADDRESS) }.thenReturn(
+            ValidationResult(REGTEST_ADDRESS, NetworkType.REGTEST, AddressType.P2WPKH),
+        )
+    }
+
     private suspend fun enablePublicPaykitSharing() {
         whenever(publicPaykitRepo.syncCurrentPublishedEndpoints(any(), any())).thenReturn(Result.success(Unit))
         walletState.value = WalletState(onchainAddress = "bc1qtest")
@@ -4857,6 +4940,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         amountSats = 2_500uL,
         expiresAt = null,
         acceptedPaymentEndpointIdentifiers = listOf("lightning_bolt11"),
+    )
+
+    private fun onchainPaymentRequest() = paymentRequest().copy(
+        acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
     )
 
     private fun paymentRequestCreation(
