@@ -559,7 +559,7 @@ internal fun PaymentRequestSentContent(
                         stringResource(R.string.wallet__payment_request_sending)
                     },
             )
-            VerticalSpacer(16.dp)
+            VerticalSpacer(32.dp)
             PrimaryButton(
                 text = stringResource(R.string.common__ok),
                 onClick = onDone,
