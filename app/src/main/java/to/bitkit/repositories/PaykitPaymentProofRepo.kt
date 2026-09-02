@@ -293,9 +293,11 @@ class PaykitPaymentProofRepo @Inject constructor(
                     )
                 }
         }
-        removeProofsLocked {
-            PubkyPublicKeyFormat.matches(it.identity, proof.identity) && it.requestId == proof.requestId
-        }
+        runSuspendCatching {
+            removeProofsLocked {
+                PubkyPublicKeyFormat.matches(it.identity, proof.identity) && it.requestId == proof.requestId
+            }
+        }.onFailure { Logger.warn("Failed to clear a submitted Paykit payment proof", it, context = TAG) }
     }
 
     private suspend fun removeProofs(predicate: (PendingPaykitPaymentProof) -> Boolean) = withContext(ioDispatcher) {

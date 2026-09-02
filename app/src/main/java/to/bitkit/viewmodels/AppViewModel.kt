@@ -3341,13 +3341,7 @@ class AppViewModel @Inject constructor(
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        var preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).fold(
-            onSuccess = { it },
-            onFailure = {
-                handlePaymentPreparationFailure(it)
-                return
-            },
-        )
+        var preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).getOrNull()
 
         consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
@@ -3392,7 +3386,7 @@ class AppViewModel @Inject constructor(
                 sendOnchain(address, amount, tags = tags)
                     .onSuccess { txId ->
                         preparedPaymentProofRequest = null
-                        completeOnchainPaymentProof(incomingPaymentRequest, txId)
+                        completeOnchainPaymentProofInBackground(incomingPaymentRequest, txId)
                         Logger.info("Onchain send result txid: $txId", context = TAG)
                         onSendSuccess(
                             NewTransactionSheetDetails(
@@ -3432,8 +3426,7 @@ class AppViewModel @Inject constructor(
                 val paymentHash = decodedInvoice.paymentHash.toHex()
                 associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
                     cancelPaymentProofPreparation(preparedPaymentProofRequest)
-                    handlePaymentPreparationFailure(it)
-                    return
+                    preparedPaymentProofRequest = null
                 }
 
                 // Create pre-activity metadata before sending
@@ -3528,12 +3521,14 @@ class AppViewModel @Inject constructor(
     ): Result<Unit> = request?.let { paykitPaymentProofRepo.associateLightningPayment(it, paymentHash) }
         ?: Result.success(Unit)
 
-    private suspend fun completeOnchainPaymentProof(request: PaykitPaymentRequest?, txId: String) {
-        request?.let {
+    private fun completeOnchainPaymentProofInBackground(request: PaykitPaymentRequest?, txId: String) {
+        val paymentRequest = request ?: return
+        val endpointIdentifier = paymentProofPreparation().endpointIdentifier
+        viewModelScope.launch {
             paykitPaymentProofRepo.completeOnchainPayment(
-                request = it,
+                request = paymentRequest,
                 txid = txId,
-                paymentEndpointIdentifier = paymentProofPreparation().endpointIdentifier,
+                paymentEndpointIdentifier = endpointIdentifier,
             )
         }
     }
@@ -4346,13 +4341,7 @@ class AppViewModel @Inject constructor(
         if (isPreparedContactPayment(contactPaymentContext)) return true
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).fold(
-            onSuccess = { it },
-            onFailure = {
-                handlePaymentPreparationFailure(it)
-                return false
-            },
-        )
+        val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).getOrNull()
         if (!prepareContactPayment(contactPaymentContext)) {
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
             return false
@@ -4360,11 +4349,11 @@ class AppViewModel @Inject constructor(
         return true
     }
 
-    suspend fun completeHardwareContactPayment(txId: String) {
+    fun completeHardwareContactPayment(txId: String) {
         val incomingPaymentRequest = synchronized(contactPaymentContextLock) {
             activeContactPaymentContext?.incomingPaymentRequest
         }
-        completeOnchainPaymentProof(incomingPaymentRequest, txId)
+        completeOnchainPaymentProofInBackground(incomingPaymentRequest, txId)
     }
 
     fun onHardwareSignCancelled() {

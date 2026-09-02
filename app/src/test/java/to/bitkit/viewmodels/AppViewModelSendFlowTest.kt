@@ -4060,6 +4060,83 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `proof preparation failure does not block incoming onchain payment`() = test {
+        val address = "bcrt1qpaymentrequest"
+        val request = paymentRequest()
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(paykitPaymentProofRepo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain))
+            .thenReturn(Result.failure(IllegalStateException("proof unavailable")))
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever {
+            lightningRepo.sendOnChain(
+                address = address,
+                sats = request.amountSats,
+                speed = TransactionSpeed.Medium,
+                utxosToSpend = null,
+                isMaxAmount = false,
+                tags = emptyList(),
+            )
+        }.thenReturn(Result.success("txid"))
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = request.amountSats,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+            ),
+        )
+
+        confirmCurrentPayment()
+
+        verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
+        verify(paykitPaymentRequestRepo).accept(request)
+        verify(lightningRepo).sendOnChain(
+            address = address,
+            sats = request.amountSats,
+            speed = TransactionSpeed.Medium,
+            utxosToSpend = null,
+            isMaxAmount = false,
+            tags = emptyList(),
+        )
+    }
+
+    @Test
+    fun `proof association failure does not block incoming lightning payment`() = test {
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1paymentrequest"
+        val paymentHash = "010203"
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever(paykitPaymentProofRepo.associateLightningPayment(request, paymentHash))
+            .thenReturn(Result.failure(IllegalStateException("proof unavailable")))
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(lightningRepo.payInvoice(bolt11 = bolt11, sats = null)).thenReturn(Result.success(paymentHash))
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = bolt11,
+                amount = request.amountSats,
+                payMethod = SendMethod.LIGHTNING,
+                decodedInvoice = lightningInvoice(bolt11, request.amountSats),
+                isPaymentRequest = true,
+            ),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(paykitPaymentProofRepo).cancelPreparation(request)
+        verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
+    }
+
+    @Test
     fun `pending incoming lightning payment keeps its proof association`() = test {
         val request = paymentRequest()
         val bolt11 = "lnbcrt1pendingrequest"
@@ -4170,12 +4247,45 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `hardware payment request completes proof after broadcast`() = test {
+    fun `proof preparation failure does not block hardware payment request`() = test {
         val request = paymentRequest()
         val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        whenever(paykitPaymentProofRepo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain))
+            .thenReturn(Result.failure(IllegalStateException("proof unavailable")))
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
+        setActiveContactPaymentContext(testPublicKey, privateContext, request)
+        setSendState(
+            SendUiState(
+                address = "bcrt1qpaymentrequest",
+                amount = request.amountSats,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+            ),
+        )
+
+        assertTrue(sut.prepareHardwareContactPayment())
+
+        verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
+        verify(paykitPaymentRequestRepo).accept(request)
+    }
+
+    @Test
+    fun `hardware payment request completes proof in background after broadcast`() = test {
+        val request = paymentRequest()
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        val completionStarted = CompletableDeferred<Unit>()
+        val finishCompletion = CompletableDeferred<Unit>()
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
+            .thenReturn(Result.success(Unit))
+        whenever(paykitPaymentProofRepo.completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue))
+            .doSuspendableAnswer {
+                completionStarted.complete(Unit)
+                finishCompletion.await()
+            }
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
             SendUiState(
@@ -4189,7 +4299,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertTrue(sut.prepareHardwareContactPayment())
         sut.completeHardwareContactPayment("txid")
+        runCurrent()
 
+        completionStarted.await()
+        assertFalse(finishCompletion.isCompleted)
+
+        finishCompletion.complete(Unit)
+        advanceUntilIdle()
         verify(paykitPaymentProofRepo).completeOnchainPayment(request, "txid", MethodId.P2wpkh.rawValue)
     }
 

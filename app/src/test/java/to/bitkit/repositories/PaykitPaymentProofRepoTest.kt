@@ -47,12 +47,14 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private var storedProofs = emptyList<PendingPaykitPaymentProof>()
     private var shouldFailNextLoad = false
     private var shouldFailNextSave = false
+    private var shouldFailProofRemoval = false
 
     @Before
     fun setUp() = test {
         storedProofs = emptyList()
         shouldFailNextLoad = false
         shouldFailNextSave = false
+        shouldFailProofRemoval = false
         whenever(store.hasPendingProofs()).thenReturn(true)
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
@@ -64,11 +66,16 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             storedProofs
         }
         whenever(store.save(any())).doSuspendableAnswer {
+            val proofs = it.getArgument<List<PendingPaykitPaymentProof>>(0)
             if (shouldFailNextSave) {
                 shouldFailNextSave = false
                 error("temporary save failure")
             }
-            storedProofs = it.getArgument(0)
+            if (shouldFailProofRemoval && proofs.isEmpty()) {
+                shouldFailProofRemoval = false
+                error("temporary proof removal failure")
+            }
+            storedProofs = proofs
         }
     }
 
@@ -326,6 +333,23 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any())
         assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `onchain proof cleanup failure does not retry delivery`() = test {
+        val txid = "ab".repeat(32)
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any())).thenReturn(record)
+        val repo = paymentProofRepo()
+
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        shouldFailProofRemoval = true
+        repo.completeOnchainPayment(request, txid, MethodId.P2wpkh.rawValue)
+
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any())
+        assertEquals(txid, storedProofs.single().proofData)
     }
 
     @Test
