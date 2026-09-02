@@ -6,6 +6,7 @@ import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PaykitPublicKeys
 import com.synonym.paykit.PubkyAuthCompanionClaim
+import com.synonym.paykit.PubkySessionBootstrapResult
 import to.bitkit.async.ServiceQueue
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.AppError
@@ -79,10 +80,18 @@ class PubkyService @Inject constructor(
             Unit
         }
 
-    suspend fun registerIdentity(secretKeyHex: String, homeserverZ32: String, signupCode: String?) =
+    suspend fun registerIdentity(
+        secretKeyHex: String,
+        homeserverZ32: String,
+        signupCode: String?,
+    ): PubkySessionBootstrapResult =
         ServiceQueue.CORE.background {
             paykitSdkService.registerIdentity(secretKeyHex, homeserverZ32, signupCode)
         }
+
+    suspend fun activateRegisteredIdentity(result: PubkySessionBootstrapResult) = ServiceQueue.CORE.background {
+        paykitSdkService.activateRegisteredIdentity(result)
+    }
 
     suspend fun signIn(secretKeyHex: String): Unit = ServiceQueue.CORE.background {
         paykitSdkService.signIn(secretKeyHex)

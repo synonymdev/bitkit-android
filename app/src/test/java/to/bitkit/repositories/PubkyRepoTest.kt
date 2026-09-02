@@ -9,6 +9,7 @@ import com.synonym.paykit.ContactProfileSource
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PubkyAuthCompanionClaim
+import com.synonym.paykit.PubkySessionBootstrapResult
 import com.synonym.paykit.PublicationStatus
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -115,29 +116,49 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `Ring signup registers and authorizes before activating the local session`() = test {
         val events = mutableListOf<String>()
+        val registeredSession = mock<PubkySessionBootstrapResult>()
         val request = ringSignupRequest()
         stubSignupKeys()
         whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenAnswer {
             events += "register"
+            registeredSession
         }
         whenever(pubkyService.approveRingAuth(request.authorizationUrl, "secret")).thenAnswer {
             events += "authorize"
         }
-        whenever(pubkyService.signIn("secret")).thenAnswer { events += "activate" }
+        whenever(pubkyService.activateRegisteredIdentity(registeredSession)).thenAnswer { events += "activate" }
 
         val result = sut.approveSignupAuth(request)
 
         assertTrue(result.isSuccess)
         assertEquals(listOf("register", "authorize", "activate"), events)
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
         assertTrue(profileSetupPending.value)
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
     }
 
     @Test
-    fun `Ring signup marks profile setup pending before local activation`() = test {
+    fun `Ring signup does not activate the registered session when authorization fails`() = test {
+        val registeredSession = mock<PubkySessionBootstrapResult>()
         val request = ringSignupRequest()
         stubSignupKeys()
-        whenever(pubkyService.signIn("secret")).thenAnswer {
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
+        whenever(pubkyService.approveRingAuth(request.authorizationUrl, "secret"))
+            .thenThrow(IllegalStateException("authorization failed"))
+
+        assertTrue(sut.approveSignupAuth(request).isFailure)
+        verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
+        assertFalse(profileSetupPending.value)
+        assertNull(sut.publicKey.value)
+    }
+
+    @Test
+    fun `Ring signup marks profile setup pending before activating the registered session`() = test {
+        val registeredSession = mock<PubkySessionBootstrapResult>()
+        val request = ringSignupRequest()
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
+        whenever(pubkyService.activateRegisteredIdentity(registeredSession)).thenAnswer {
             assertTrue(profileSetupPending.value)
             throw TestAppError("activation failed")
         }
@@ -156,7 +177,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(sut.approveSignupAuth(request).isFailure)
         verifyBlocking(pubkyService, never()) { approveRingAuth(any(), any()) }
-        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
         assertFalse(profileSetupPending.value)
     }
 
