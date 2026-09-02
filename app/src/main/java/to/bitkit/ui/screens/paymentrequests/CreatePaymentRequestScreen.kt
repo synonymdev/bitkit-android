@@ -529,7 +529,7 @@ internal fun PaymentRequestSentContent(
                 .fillMaxSize()
                 .padding(horizontal = 16.dp)
         ) {
-            VerticalSpacer(32.dp)
+            FillHeight()
             Image(
                 painter = painterResource(R.drawable.check),
                 contentDescription = null,
@@ -559,7 +559,7 @@ internal fun PaymentRequestSentContent(
                         stringResource(R.string.wallet__payment_request_sending)
                     },
             )
-            FillHeight()
+            VerticalSpacer(16.dp)
             PrimaryButton(
                 text = stringResource(R.string.common__ok),
                 onClick = onDone,
