@@ -20,14 +20,15 @@ class PaykitPaymentRequestDiagnosticsTest {
     }
 
     @Test
-    fun `parse rejection logs a safe reason and invalid counterparty placeholder`() {
-        sut.logParseRejection("secret", PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
+    fun `parse rejection logs a safe reason and redacted counterparty`() {
+        val counterparty = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        sut.logParseRejection(counterparty, PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
 
         val output = paymentRequestDiagnostic()
 
         assertTrue(output.contains("category='parse' reason='unsupported_asset'"))
-        assertTrue(output.contains("counterparty='<invalid>'"))
-        assertFalse(output.contains("secret"))
+        assertTrue(output.contains("counterparty='pubky3r…k8yw5xg'"))
+        assertFalse(output.contains(counterparty))
     }
 
     @Test
