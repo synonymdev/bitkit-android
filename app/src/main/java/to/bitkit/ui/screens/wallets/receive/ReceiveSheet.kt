@@ -86,6 +86,7 @@ fun ReceiveSheet(
     }
     var createdPaymentRequest by remember { mutableStateOf<PaykitPaymentRequest?>(null) }
     var paymentRequestTarget by remember { mutableStateOf<PaykitPaymentRequestTarget?>(null) }
+    var showRecipientContactsHeader by remember { mutableStateOf(true) }
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val isCreatingPaymentRequest by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
     val paymentRequestRecipient = paymentRequestTarget?.let { target ->
@@ -151,6 +152,7 @@ fun ReceiveSheet(
                                     navController.navigateToPaymentRequestSent()
                                 }
                             } else {
+                                showRecipientContactsHeader = true
                                 navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
                             }
                         },
@@ -182,6 +184,7 @@ fun ReceiveSheet(
                                 popUpTo(ReceiveRoute.PaymentRequestRecipient) { inclusive = true }
                             }
                         },
+                        showContactsHeader = showRecipientContactsHeader,
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestSent> {
@@ -296,6 +299,7 @@ fun ReceiveSheet(
                                 note = note,
                                 expiresAt = Clock.System.now() + 7.days,
                             )
+                            showRecipientContactsHeader = false
                             navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
                         },
                         navigateReceiveConfirm = { entry ->

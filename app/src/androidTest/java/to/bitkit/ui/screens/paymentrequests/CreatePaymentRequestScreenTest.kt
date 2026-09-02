@@ -7,8 +7,8 @@ import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
-import kotlinx.collections.immutable.persistentListOf
 import org.junit.Rule
 import org.junit.Test
 import to.bitkit.models.PubkyProfile
@@ -74,30 +74,62 @@ class CreatePaymentRequestScreenTest {
 
     @Test
     fun recipientShowsEligibleContactAndSendAction() {
+        val contacts = PaymentRequestFigmaFixtures.recipientContacts
         composeTestRule.setContent {
             AppThemeSurface {
                 PaymentRequestRecipientContent(
-                    targets = persistentListOf(target),
-                    contacts = persistentListOf(PubkyProfile.placeholder(target.publicKey)),
+                    targets = PaymentRequestFigmaFixtures.recipientTargets,
+                    contacts = contacts,
                     isCreating = false,
                     onBack = {},
                     onEditExpiration = {},
-                    onPaste = { target.publicKey },
+                    onPaste = { PaymentRequestFigmaFixtures.anna.publicKey },
                     onSend = {},
                 )
             }
         }
 
-        composeTestRule.onNodeWithTag("PaymentRequestContact${target.publicKey}").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Alex Stronghand").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Anna Pleb").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Areem Holden").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Craig Wrong").assertIsDisplayed()
+        composeTestRule.onNodeWithText("John Carvalho").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRecipientSearch").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestContactsHeader").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestEditExpiration").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRecipientPaste", useUnmergedTree = true).assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsDisplayed()
 
         composeTestRule.onNodeWithTag("PaymentRequestRecipientSearch").performTextInput("not this contact")
 
-        composeTestRule.onNodeWithTag("PaymentRequestContact${target.publicKey}").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Alex Stronghand").assertDoesNotExist()
         composeTestRule.onNodeWithText("No matching saved contact with a private connection.").assertIsDisplayed()
+    }
+
+    @Test
+    fun recipientFromInvoiceHidesContactsHeader() {
+        composeTestRule.setContent {
+            AppThemeSurface {
+                PaymentRequestRecipientContent(
+                    targets = PaymentRequestFigmaFixtures.recipientInvoiceTargets,
+                    contacts = PaymentRequestFigmaFixtures.recipientInvoiceContacts,
+                    isCreating = false,
+                    onBack = {},
+                    onEditExpiration = {},
+                    onPaste = { PaymentRequestFigmaFixtures.anna.publicKey },
+                    onSend = {},
+                    showContactsHeader = false,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("PaymentRequestContactsHeader").assertDoesNotExist()
+        composeTestRule.onNodeWithText("Alex Stronghand").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Anna Pleb").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Areem Holden").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Craig Wrong").assertIsDisplayed()
+        composeTestRule.onNodeWithText("John Carvalho").performScrollTo().assertIsDisplayed()
+        composeTestRule.onNodeWithText("Paola Andina").performScrollTo().assertIsDisplayed()
     }
 
     @Test

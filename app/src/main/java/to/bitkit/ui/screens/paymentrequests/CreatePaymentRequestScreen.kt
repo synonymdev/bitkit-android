@@ -333,6 +333,7 @@ fun PaymentRequestRecipientScreen(
     onBack: () -> Unit,
     onEditExpiration: () -> Unit,
     onRecipientSelected: (PaykitPaymentRequestTarget) -> Unit,
+    showContactsHeader: Boolean = true,
 ) {
     val context = LocalContext.current
     val targets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
@@ -346,6 +347,7 @@ fun PaymentRequestRecipientScreen(
         onEditExpiration = onEditExpiration,
         onPaste = { context.getClipboardText()?.trim().orEmpty() },
         onSend = onRecipientSelected,
+        showContactsHeader = showContactsHeader,
     )
 }
 
@@ -359,6 +361,7 @@ internal fun PaymentRequestRecipientContent(
     onEditExpiration: () -> Unit,
     onPaste: () -> String,
     onSend: (PaykitPaymentRequestTarget) -> Unit,
+    showContactsHeader: Boolean = true,
 ) {
     var selectedTarget by remember { mutableStateOf<PaykitPaymentRequestTarget?>(null) }
     var query by remember { mutableStateOf("") }
@@ -440,11 +443,15 @@ internal fun PaymentRequestRecipientContent(
             )
             VerticalSpacer(16.dp)
         }
-        Caption13Up(
-            text = stringResource(R.string.contacts__contacts_header),
-            color = Colors.White64,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
-        )
+        if (showContactsHeader) {
+            Caption13Up(
+                text = stringResource(R.string.contacts__contacts_header),
+                color = Colors.White64,
+                modifier = Modifier
+                    .padding(horizontal = 16.dp, vertical = 16.dp)
+                    .testTag("PaymentRequestContactsHeader")
+            )
+        }
         HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
         LazyColumn(modifier = Modifier.weight(1f)) {
             if (recipients.isEmpty()) {
