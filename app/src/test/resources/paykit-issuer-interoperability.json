@@ -2,7 +2,15 @@
   "schemaVersion": 1,
   "requestFixtures": [
     {
-      "name": "bitcoin-onchain",
+      "name": "bitcoin-p2tr",
+      "network": "bitcoin",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-bitcoin-p2tr"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-bitcoin-p2tr"]
+    },
+    {
+      "name": "bitcoin-p2wpkh",
       "network": "bitcoin",
       "asset": "btc",
       "acceptedPaymentEndpointIdentifiers": ["btc-bitcoin-p2wpkh"],
@@ -10,7 +18,31 @@
       "expectedIdentifiers": ["btc-bitcoin-p2wpkh"]
     },
     {
-      "name": "testnet-onchain",
+      "name": "bitcoin-p2sh",
+      "network": "bitcoin",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-bitcoin-p2sh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-bitcoin-p2sh"]
+    },
+    {
+      "name": "bitcoin-p2pkh",
+      "network": "bitcoin",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-bitcoin-p2pkh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-bitcoin-p2pkh"]
+    },
+    {
+      "name": "testnet-p2tr",
+      "network": "testnet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-testnet-p2tr"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-testnet-p2tr"]
+    },
+    {
+      "name": "testnet-p2wpkh",
       "network": "testnet",
       "asset": "btc",
       "acceptedPaymentEndpointIdentifiers": ["btc-testnet-p2wpkh"],
@@ -18,7 +50,31 @@
       "expectedIdentifiers": ["btc-testnet-p2wpkh"]
     },
     {
-      "name": "signet-onchain",
+      "name": "testnet-p2sh",
+      "network": "testnet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-testnet-p2sh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-testnet-p2sh"]
+    },
+    {
+      "name": "testnet-p2pkh",
+      "network": "testnet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-testnet-p2pkh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-testnet-p2pkh"]
+    },
+    {
+      "name": "signet-p2tr",
+      "network": "signet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-signet-p2tr"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-signet-p2tr"]
+    },
+    {
+      "name": "signet-p2wpkh",
       "network": "signet",
       "asset": "btc",
       "acceptedPaymentEndpointIdentifiers": ["btc-signet-p2wpkh"],
@@ -26,12 +82,52 @@
       "expectedIdentifiers": ["btc-signet-p2wpkh"]
     },
     {
-      "name": "regtest-onchain",
+      "name": "signet-p2sh",
+      "network": "signet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-signet-p2sh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-signet-p2sh"]
+    },
+    {
+      "name": "signet-p2pkh",
+      "network": "signet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-signet-p2pkh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-signet-p2pkh"]
+    },
+    {
+      "name": "regtest-p2tr",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-regtest-p2tr"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-regtest-p2tr"]
+    },
+    {
+      "name": "regtest-p2wpkh",
       "network": "regtest",
       "asset": "btc",
       "acceptedPaymentEndpointIdentifiers": ["btc-regtest-p2wpkh"],
       "accepted": true,
       "expectedIdentifiers": ["btc-regtest-p2wpkh"]
+    },
+    {
+      "name": "regtest-p2sh",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-regtest-p2sh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-regtest-p2sh"]
+    },
+    {
+      "name": "regtest-p2pkh",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-regtest-p2pkh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-regtest-p2pkh"]
     },
     {
       "name": "bitcoin-bolt11",
