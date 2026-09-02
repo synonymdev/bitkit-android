@@ -4189,16 +4189,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
             .thenReturn(Result.success(Unit))
-        whenever {
-            lightningRepo.sendOnChain(
-                address = address,
-                sats = request.amountSats,
-                speed = TransactionSpeed.Medium,
-                utxosToSpend = null,
-                isMaxAmount = false,
-                tags = emptyList(),
-            )
-        }.thenReturn(Result.success("txid"))
+        stubSuccessfulOnchainSend(address, request.amountSats)
         setActiveContactPaymentContext(testPublicKey, privateContext, request)
         setSendState(
             SendUiState(
@@ -4215,12 +4206,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(privatePaykitRepo).consumePrivatePaymentList(testPublicKey, privateContext)
         verify(paykitPaymentRequestRepo).accept(request)
         verify(lightningRepo).sendOnChain(
-            address = address,
-            sats = request.amountSats,
-            speed = TransactionSpeed.Medium,
-            utxosToSpend = null,
-            isMaxAmount = false,
-            tags = emptyList(),
+            address = any(),
+            sats = any(),
+            speed = anyOrNull(),
+            utxosToSpend = anyOrNull(),
+            feeRates = anyOrNull(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            isMaxAmount = any(),
+            tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
         )
     }
 

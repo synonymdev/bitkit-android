@@ -3523,13 +3523,7 @@ class AppViewModel @Inject constructor(
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).fold(
-            onSuccess = { it },
-            onFailure = {
-                handlePaymentPreparationFailure(it, contactPaymentContext)
-                return
-            },
-        )
+        val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).getOrNull()
 
         consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
@@ -3577,7 +3571,6 @@ class AppViewModel @Inject constructor(
             SendMethod.LIGHTNING -> proceedWithLightningPayment(
                 incomingPaymentRequest,
                 preparedPaymentProofRequest,
-                contactPaymentContext,
                 amount,
             )
         }
@@ -3605,7 +3598,7 @@ class AppViewModel @Inject constructor(
             },
             onBroadcast = { txId ->
                 proofRequest = null
-                completeOnchainPaymentProof(incomingPaymentRequest, txId)
+                completeOnchainPaymentProofInBackground(incomingPaymentRequest, txId)
             },
         ).onSuccess { txId ->
             Logger.info("Onchain send result txid: $txId", context = TAG)
@@ -3674,7 +3667,6 @@ class AppViewModel @Inject constructor(
     private suspend fun proceedWithLightningPayment(
         incomingPaymentRequest: PaykitPaymentRequest?,
         preparedPaymentProofRequest: PaykitPaymentRequest?,
-        contactPaymentContext: ContactPaymentContext?,
         amount: ULong,
     ) {
         val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
@@ -3685,8 +3677,7 @@ class AppViewModel @Inject constructor(
         val paymentHash = decodedInvoice.paymentHash.toHex()
         associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
             cancelPaymentProofPreparation(proofRequest)
-            handlePaymentPreparationFailure(it, contactPaymentContext)
-            return
+            proofRequest = null
         }
 
         val tags = _sendUiState.value.selectedTags
@@ -3781,14 +3772,16 @@ class AppViewModel @Inject constructor(
     }
         ?: Result.success(Unit)
 
-    private suspend fun completeOnchainPaymentProof(request: PaykitPaymentRequest?, txId: String) {
-        request?.let {
+    private fun completeOnchainPaymentProofInBackground(request: PaykitPaymentRequest?, txId: String) {
+        val paymentRequest = request ?: return
+        val endpointIdentifier = paymentProofPreparation().endpointIdentifier
+        viewModelScope.launch {
             paykitPaymentProofRepo.completeOnchainPayment(
-                request = it,
+                request = paymentRequest,
                 txid = txId,
-                paymentEndpointIdentifier = paymentProofPreparation().endpointIdentifier,
+                paymentEndpointIdentifier = endpointIdentifier,
             )
-            if (it.billingPeriod != null) refreshIncomingPaykitPaymentRequests()
+            if (paymentRequest.billingPeriod != null) refreshIncomingPaykitPaymentRequests()
         }
     }
 
@@ -4625,13 +4618,7 @@ class AppViewModel @Inject constructor(
         if (isPreparedContactPayment(contactPaymentContext)) return true
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).fold(
-            onSuccess = { it },
-            onFailure = {
-                handlePaymentPreparationFailure(it, contactPaymentContext)
-                return false
-            },
-        )
+        val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).getOrNull()
         if (!prepareContactPayment(contactPaymentContext)) {
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
             return false
@@ -4650,11 +4637,11 @@ class AppViewModel @Inject constructor(
         return true
     }
 
-    suspend fun completeHardwareContactPayment(txId: String) {
+    fun completeHardwareContactPayment(txId: String) {
         val incomingPaymentRequest = synchronized(contactPaymentContextLock) {
             activeContactPaymentContext?.incomingPaymentRequest
         }
-        completeOnchainPaymentProof(incomingPaymentRequest, txId)
+        completeOnchainPaymentProofInBackground(incomingPaymentRequest, txId)
     }
 
     fun onHardwareSignCancelled() {
