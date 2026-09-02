@@ -123,6 +123,24 @@ class HwReceiveViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `initial load does not replace a newer watcher address`() = test {
+        val loadResult = CompletableDeferred<Result<HwReceiveAddress>>()
+        whenever(hwWalletRepo.getReceiveAddress(WALLET_ID)).doSuspendableAnswer { loadResult.await() }
+
+        sut.loadAddress(WALLET_ID)
+        advanceUntilIdle()
+
+        receiveAddress.value = NEXT_RECEIVE_ADDRESS
+        advanceUntilIdle()
+        loadResult.complete(Result.success(RECEIVE_ADDRESS))
+        advanceUntilIdle()
+
+        assertEquals(NEXT_RECEIVE_ADDRESS, sut.uiState.value.address)
+        assertFalse(sut.uiState.value.isLoadingAddress)
+        assertFalse(sut.uiState.value.addressLoadFailed)
+    }
+
+    @Test
     fun `watcher address change cancels active verification`() = test {
         val verificationStarted = CompletableDeferred<Unit>()
         val verificationResult = CompletableDeferred<Result<Unit>>()

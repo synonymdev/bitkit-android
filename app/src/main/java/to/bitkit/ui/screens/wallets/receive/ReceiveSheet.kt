@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.imePadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -74,7 +75,7 @@ fun ReceiveSheet(
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
     val showCreateCjit = remember { mutableStateOf(false) }
     val cjitEntryDetails = remember { mutableStateOf<CjitEntryDetails?>(null) }
-    val isEditingHardwareInvoice = remember { mutableStateOf(false) }
+    val invoiceEditState = remember { ReceiveInvoiceEditState() }
     val lightningState: LightningState by wallet.lightningState.collectAsStateWithLifecycle()
     val paymentRequestTargets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
     var paymentRequestDraft by remember {
@@ -133,18 +134,14 @@ fun ReceiveSheet(
                             }
                         },
                         onClickEditInvoice = {
-                            isEditingHardwareInvoice.value = false
+                            invoiceEditState.beginSoftwareEdit()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         onClickHardwareEditInvoice = {
-                            isEditingHardwareInvoice.value = true
+                            invoiceEditState.beginHardwareEdit()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
-                        initialTab = if (hardwareWalletId != null || isEditingHardwareInvoice.value) {
-                            ReceiveTab.TREZOR
-                        } else {
-                            null
-                        },
+                        initialTab = invoiceEditState.initialTab(hardwareWalletId),
                         hardwareWalletId = selectedHardwareWalletId,
                         hardwareReceiveState = hwReceiveState,
                         onLoadHardwareAddress = hwReceiveViewModel::loadAddress,
@@ -307,7 +304,7 @@ fun ReceiveSheet(
                             cjitEntryDetails.value = entry
                             navController.navigateTo(ReceiveRoute.ConfirmIncreaseInbound)
                         },
-                        onchainOnly = isEditingHardwareInvoice.value,
+                        onchainOnly = invoiceEditState.isHardwareInvoice,
                         updateOnchainInvoice = wallet::setBip21AmountSats,
                     )
                 }
@@ -327,14 +324,11 @@ fun ReceiveSheet(
             }
         }
 
-        if (hwReceiveState.isPassphraseRequired) {
-            HwPassphrasePromptSheet(
-                isVerifying = hwReceiveState.isVerifyingPassphrase,
-                onSubmit = hwReceiveViewModel::submitPassphrase,
-                onDismiss = hwReceiveViewModel::dismissPassphrase,
-                bodyText = stringResource(R.string.hardware__passphrase_verify_address_text),
-            )
-        }
+        ReceivePassphrasePrompt(
+            state = hwReceiveState,
+            onSubmit = hwReceiveViewModel::submitPassphrase,
+            onDismiss = hwReceiveViewModel::dismissPassphrase,
+        )
 
         AnimatedVisibility(
             visible = isOffline,
@@ -344,6 +338,39 @@ fun ReceiveSheet(
             ConnectionIssuesView(titleText = stringResource(R.string.wallet__receive_bitcoin))
         }
     }
+}
+
+@Stable
+internal class ReceiveInvoiceEditState {
+    var isHardwareInvoice by mutableStateOf(false)
+        private set
+
+    fun beginSoftwareEdit() {
+        isHardwareInvoice = false
+    }
+
+    fun beginHardwareEdit() {
+        isHardwareInvoice = true
+    }
+
+    fun initialTab(hardwareWalletId: String?): ReceiveTab? =
+        ReceiveTab.TREZOR.takeIf { hardwareWalletId != null || isHardwareInvoice }
+}
+
+@Composable
+internal fun ReceivePassphrasePrompt(
+    state: HwReceiveUiState,
+    onSubmit: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (!state.isPassphraseRequired) return
+
+    HwPassphrasePromptSheet(
+        isVerifying = state.isVerifyingPassphrase,
+        onSubmit = onSubmit,
+        onDismiss = onDismiss,
+        bodyText = stringResource(R.string.hardware__passphrase_verify_address_text),
+    )
 }
 
 sealed interface ReceiveRoute {

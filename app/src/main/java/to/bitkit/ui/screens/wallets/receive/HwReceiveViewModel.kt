@@ -68,14 +68,22 @@ class HwReceiveViewModel @Inject constructor(
         loadJob = viewModelScope.launch {
             hwWalletRepo.getReceiveAddress(walletId)
                 .onSuccess { address ->
-                    if (_uiState.value.walletId == walletId) {
-                        _uiState.update { it.copy(address = address, isLoadingAddress = false) }
+                    _uiState.update {
+                        if (it.walletId == walletId && it.address == null) {
+                            it.copy(address = address, isLoadingAddress = false)
+                        } else {
+                            it
+                        }
                     }
                 }
                 .onFailure { error ->
                     if (error is CancellationException) return@onFailure
-                    if (_uiState.value.walletId == walletId) {
-                        _uiState.update { it.copy(isLoadingAddress = false, addressLoadFailed = true) }
+                    _uiState.update {
+                        if (it.walletId == walletId && it.address == null) {
+                            it.copy(isLoadingAddress = false, addressLoadFailed = true)
+                        } else {
+                            it
+                        }
                     }
                 }
         }
