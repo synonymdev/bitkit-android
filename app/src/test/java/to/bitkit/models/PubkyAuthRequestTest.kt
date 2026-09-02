@@ -12,9 +12,9 @@ class PubkyAuthRequestTest {
 
     @Test
     fun `parse Ring signup preserves registration and authorization details`() {
-        val request = PubkyAuthRequest.parseRingSignup(ringSignupUrl("invite code")).getOrThrow()
+        val request = PubkyAuthRequest.parseSignup(ringSignupUrl("invite code")).getOrThrow()
 
-        assertTrue(request.isRingSignup)
+        assertTrue(request.isSignup)
         assertEquals("homeserver", request.homeserverPublicKey)
         assertEquals("invite code", request.signupToken)
         assertEquals("https://relay.example/inbox/", request.relay)
@@ -27,6 +27,20 @@ class PubkyAuthRequestTest {
     }
 
     @Test
+    fun `parse direct signup accepts canonical and legacy formats`() {
+        listOf("direct_signup", "signup").forEach { action ->
+            val request = PubkyAuthRequest.parseSignup(directSignupUrl(action, "invite code")).getOrThrow()
+
+            assertTrue(request.isSignup)
+            assertEquals("homeserver", request.homeserverPublicKey)
+            assertEquals("invite code", request.signupToken)
+            assertEquals("", request.relay)
+            assertEquals("", request.capabilities)
+            assertNull(request.authorizationUrl)
+        }
+    }
+
+    @Test
     fun `parse Ring signup rejects missing and duplicate required values`() {
         val invalidUrls = listOf(
             ringSignupUrl().replace("&secret=secret", ""),
@@ -34,7 +48,7 @@ class PubkyAuthRequestTest {
         )
 
         invalidUrls.forEach { url ->
-            assertIs<PubkyAuthRequestError.InvalidUrl>(PubkyAuthRequest.parseRingSignup(url).exceptionOrNull())
+            assertIs<PubkyAuthRequestError.InvalidUrl>(PubkyAuthRequest.parseSignup(url).exceptionOrNull())
         }
     }
 
@@ -80,7 +94,7 @@ class PubkyAuthRequestTest {
             capabilities = "/pub/bitkit.to/:rw",
         ).getOrThrow()
 
-        assertFalse(request.isRingSignup)
+        assertFalse(request.isSignup)
         assertEquals("paykit.test", request.clientId)
         assertNull(request.bitkitClaim)
     }
@@ -297,5 +311,9 @@ class PubkyAuthRequestTest {
         "pubkyring://signup?hs=homeserver" +
             "&relay=https%3A%2F%2Frelay.example%2Finbox%2F" +
             "&secret=secret&caps=%2Fpub%2Fexample.app%2F%3Arw" +
+            signupToken?.let { "&st=${URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
+
+    private fun directSignupUrl(action: String, signupToken: String? = null): String =
+        "pubkyauth://$action?hs=homeserver" +
             signupToken?.let { "&st=${URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
 }

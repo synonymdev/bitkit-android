@@ -123,7 +123,7 @@ class PubkyRepoTest : BaseUnitTest() {
             events += "register"
             registeredSession
         }
-        whenever(pubkyService.approveRingAuth(request.authorizationUrl, "secret")).thenAnswer {
+        whenever(pubkyService.approveRingAuth(requireNotNull(request.authorizationUrl), "secret")).thenAnswer {
             events += "authorize"
         }
         whenever(pubkyService.activateRegisteredIdentity(registeredSession)).thenAnswer { events += "activate" }
@@ -143,7 +143,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val request = ringSignupRequest()
         stubSignupKeys()
         whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
-        whenever(pubkyService.approveRingAuth(request.authorizationUrl, "secret"))
+        whenever(pubkyService.approveRingAuth(requireNotNull(request.authorizationUrl), "secret"))
             .thenThrow(IllegalStateException("authorization failed"))
 
         assertTrue(sut.approveSignupAuth(request).isFailure)
@@ -166,6 +166,20 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(sut.approveSignupAuth(request).isFailure)
         assertTrue(profileSetupPending.value)
         assertNull(sut.publicKey.value)
+    }
+
+    @Test
+    fun `direct signup skips app authorization and activates the registered session`() = test {
+        val registeredSession = mock<PubkySessionBootstrapResult>()
+        val request = directSignupRequest()
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
+
+        assertTrue(sut.approveSignupAuth(request).isSuccess)
+        verifyBlocking(pubkyService, never()) { approveRingAuth(any(), any()) }
+        verifyBlocking(pubkyService) { activateRegisteredIdentity(registeredSession) }
+        assertTrue(profileSetupPending.value)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
     }
 
     @Test
@@ -1651,9 +1665,13 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.publicKeyFromSecret("secret")).thenReturn(VALID_SELF_KEY)
     }
 
-    private fun ringSignupRequest() = PubkyAuthRequest.parseRingSignup(
+    private fun ringSignupRequest() = PubkyAuthRequest.parseSignup(
         "pubkyring://signup?hs=homeserver&relay=https%3A%2F%2Frelay.example" +
             "&secret=request&caps=%2Fpub%2Fexample%2F%3Arw&st=invite",
+    ).getOrThrow()
+
+    private fun directSignupRequest() = PubkyAuthRequest.parseSignup(
+        "pubkyauth://direct_signup?hs=homeserver&st=invite",
     ).getOrThrow()
 
     private fun createPaykitProfile(

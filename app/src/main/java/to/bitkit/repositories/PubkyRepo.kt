@@ -976,9 +976,9 @@ class PubkyRepo @Inject constructor(
 
     suspend fun parseAuthUrl(authUrl: String): Result<PubkyAuthRequest> = runSuspendCatching {
         withContext(ioDispatcher) {
-            if (PubkyAuthRequest.isRingSignupUrl(authUrl)) {
-                val request = PubkyAuthRequest.parseRingSignup(authUrl).getOrThrow()
-                pubkyService.validateRingSignupAuth(
+            if (PubkyAuthRequest.isSignupUrl(authUrl)) {
+                val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
+                pubkyService.validateSignupRequest(
                     authorizationUrl = request.authorizationUrl,
                     homeserverPublicKey = requireNotNull(request.homeserverPublicKey),
                 )
@@ -998,7 +998,7 @@ class PubkyRepo @Inject constructor(
     suspend fun approveSignupAuth(request: PubkyAuthRequest): Result<Unit> = initializeMutex.withLock {
         runSuspendCatching {
             withContext(ioDispatcher) {
-                require(request.isRingSignup) { "Not a Pubky Ring signup request" }
+                require(request.isSignup) { "Not a Pubky signup request" }
                 if (hasIdentity()) throw PubkyAlreadySignedInError
 
                 val (publicKey, secretKeyHex) = deriveKeys().getOrThrow()
@@ -1009,7 +1009,7 @@ class PubkyRepo @Inject constructor(
                     homeserverZ32 = requireNotNull(request.homeserverPublicKey),
                     signupCode = request.signupToken,
                 )
-                pubkyService.approveRingAuth(request.authorizationUrl, secretKeyHex)
+                request.authorizationUrl?.let { pubkyService.approveRingAuth(it, secretKeyHex) }
                 settingsStore.setPubkyProfileSetupPending(true)
                 pubkyService.activateRegisteredIdentity(registeredSession)
 

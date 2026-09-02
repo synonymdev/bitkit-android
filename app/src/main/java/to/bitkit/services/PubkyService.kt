@@ -123,9 +123,9 @@ class PubkyService @Inject constructor(
         PaykitSdkService.parseAuthUrl(url)
     }
 
-    suspend fun validateRingSignupAuth(authorizationUrl: String, homeserverPublicKey: String): Unit =
+    suspend fun validateSignupRequest(authorizationUrl: String?, homeserverPublicKey: String): Unit =
         ServiceQueue.CORE.background {
-            parseLegacyPubkyAuthUrl(authorizationUrl)
+            authorizationUrl?.let { parseLegacyPubkyAuthUrl(it) }
             PaykitPublicKeys.normalize(homeserverPublicKey)
             Unit
         }

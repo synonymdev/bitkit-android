@@ -74,10 +74,10 @@ data class PubkyAuthRequest(
     val bitkitClaim: PubkyAuthClaim?,
     val homeserverPublicKey: String? = null,
     val signupToken: String? = null,
-    val authorizationUrl: String = rawUrl,
+    val authorizationUrl: String? = rawUrl,
 ) {
-    val isRingSignup: Boolean
-        get() = isRingSignupUrl(rawUrl)
+    val isSignup: Boolean
+        get() = isSignupUrl(rawUrl)
 
     companion object {
         @Suppress("LongParameterList")
@@ -88,7 +88,7 @@ data class PubkyAuthRequest(
             capabilities: String,
             homeserverPublicKey: String? = null,
             signupToken: String? = null,
-            authorizationUrl: String = rawUrl,
+            authorizationUrl: String? = rawUrl,
         ): Result<PubkyAuthRequest> = parseBitkitClaim(rawUrl, capabilities).map { bitkitClaim ->
             val permissions = parseCapabilities(capabilities)
             PubkyAuthRequest(
@@ -114,24 +114,25 @@ data class PubkyAuthRequest(
             }
         }.getOrDefault(false)
 
-        fun isRingSignupUrl(rawUrl: String): Boolean = runCatching {
-            val uri = URI(rawUrl)
-            uri.scheme.equals("pubkyring", ignoreCase = true) &&
-                uri.host.equals("signup", ignoreCase = true)
-        }.getOrDefault(false)
+        fun isSignupUrl(rawUrl: String): Boolean = runCatching { URI(rawUrl).isSignupRequest() }.getOrDefault(false)
 
-        fun parseRingSignup(rawUrl: String): Result<PubkyAuthRequest> = runCatching {
+        fun isDirectSignupUrl(rawUrl: String): Boolean =
+            runCatching { URI(rawUrl).isDirectSignupRequest() }.getOrDefault(false)
+
+        fun parseSignup(rawUrl: String): Result<PubkyAuthRequest> = runCatching {
             val uri = URI(rawUrl)
-            require(
-                uri.scheme.equals("pubkyring", ignoreCase = true) &&
-                    uri.host.equals("signup", ignoreCase = true),
-            ) { "Unsupported Pubky signup URL" }
+            require(uri.isSignupRequest()) { "Unsupported Pubky signup URL" }
             val query = parseQuery(uri)
-            val relay = query.requiredSingle("relay")
-            val secret = query.requiredSingle("secret")
-            val capabilities = query.requiredSingle("caps")
             val homeserver = query.requiredSingle("hs")
-            val authorizationUrl = ringAuthorizationUrl(relay, secret, capabilities)
+            val authorizesApp = uri.scheme.equals("pubkyring", ignoreCase = true)
+            val relay = if (authorizesApp) query.requiredSingle("relay") else ""
+            val secret = if (authorizesApp) query.requiredSingle("secret") else ""
+            val capabilities = if (authorizesApp) query.requiredSingle("caps") else ""
+            val authorizationUrl = if (authorizesApp) {
+                ringAuthorizationUrl(relay, secret, capabilities)
+            } else {
+                null
+            }
 
             parse(
                 rawUrl = rawUrl,
@@ -142,12 +143,23 @@ data class PubkyAuthRequest(
                 signupToken = query.optionalSingle("st"),
                 authorizationUrl = authorizationUrl,
             ).getOrThrow().also {
-                require(it.bitkitClaim == null) { "Ring signup does not support Bitkit companion claims" }
+                require(it.bitkitClaim == null) { "Pubky signup does not support Bitkit companion claims" }
             }
         }.fold(
             onSuccess = { Result.success(it) },
             onFailure = { Result.failure(PubkyAuthRequestError.InvalidUrl(it)) },
         )
+
+        private fun URI.isSignupRequest(): Boolean = when (scheme?.lowercase()) {
+            "pubkyring" -> host.equals("signup", ignoreCase = true)
+            "pubkyauth" -> isDirectSignupRequest()
+            else -> false
+        }
+
+        private fun URI.isDirectSignupRequest(): Boolean =
+            scheme.equals("pubkyauth", ignoreCase = true) && (host ?: rawAuthority).let {
+                it.equals("direct_signup", ignoreCase = true) || it.equals("signup", ignoreCase = true)
+            }
 
         fun parseBitkitClaim(rawUrl: String, capabilities: String): Result<PubkyAuthClaim?> =
             parseBitkitClaimValues(rawUrl).fold(
