@@ -3,13 +3,18 @@
 package to.bitkit.ui.screens.paymentrequests
 
 import android.graphics.Bitmap
+import android.graphics.Color as AndroidColor
+import androidx.activity.ComponentActivity
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.captureToImage
-import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -25,6 +30,7 @@ import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.theme.AppThemeSurface
+import to.bitkit.ui.theme.Colors
 import to.bitkit.viewmodels.AmountInputViewModel
 import java.io.File
 import kotlin.time.Clock
@@ -34,7 +40,7 @@ import kotlin.time.ExperimentalTime
 @ComposeUi
 class PaymentRequestUiCaptureTest {
     @get:Rule
-    val composeTestRule = createComposeRule()
+    val composeTestRule = createAndroidComposeRule<ComponentActivity>()
 
     @Test
     fun captureList() {
@@ -183,10 +189,19 @@ class PaymentRequestUiCaptureTest {
     }
 
     private fun captureScreen(name: String, content: @Composable () -> Unit) {
+        composeTestRule.runOnUiThread {
+            composeTestRule.activity.window.decorView.setBackgroundColor(AndroidColor.BLACK)
+        }
         composeTestRule.setContent {
             AppThemeSurface {
                 CompositionLocalProvider(LocalInspectionMode provides true) {
-                    content()
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Colors.Black),
+                    ) {
+                        content()
+                    }
                 }
             }
         }
@@ -201,11 +216,20 @@ class PaymentRequestUiCaptureTest {
     }
 
     private fun setSheetContent(content: @Composable (Modifier) -> Unit) {
+        composeTestRule.runOnUiThread {
+            composeTestRule.activity.window.decorView.setBackgroundColor(AndroidColor.BLACK)
+        }
         composeTestRule.setContent {
             AppThemeSurface {
                 CompositionLocalProvider(LocalInspectionMode provides true) {
-                    BottomSheetPreview {
-                        content(Modifier.sheetHeight())
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Colors.Black),
+                    ) {
+                        BottomSheetPreview {
+                            content(Modifier.sheetHeight())
+                        }
                     }
                 }
             }
