@@ -77,7 +77,7 @@ The issuer and wallet must be linked Paykit peers on the same receiver path befo
 
 The fixture file is the cross-platform source of truth for Bitkit iOS and Android:
 
-- Request fixtures cover the network-correct P2WPKH identifier for Bitcoin, testnet, signet, and regtest.
+- Request fixtures cover every documented P2TR, P2WPKH, P2SH, and P2PKH identifier for Bitcoin, testnet, signet, and regtest.
 - Request fixtures cover both Lightning identifiers on every network.
 - Rejected request fixtures cover uppercase `BTC`, a foreign-network on-chain identifier on every network, an uppercase identifier, an unknown identifier, and an empty identifier list.
 - Endpoint fixtures accept JSON object payloads with a non-empty string `value`, including optional string bounds and surrounding whitespace.

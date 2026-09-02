@@ -71,8 +71,20 @@ class PaykitIssuerInteropTest {
     }
 
     @Test
-    fun `request fixtures cover every network and chain independent lightning identifiers`() {
+    fun `request fixtures cover every documented identifier`() {
         val acceptedFixtures = loadFixtures().requestFixtures.filter { it.accepted }
+        val expectedOnchainFixtures = FixtureNetwork.entries.flatMap { network ->
+            FixtureScript.entries.map { script ->
+                "${network.serializedName}|btc-${network.serializedName}-${script.serializedName}"
+            }
+        }.toSet()
+        val actualOnchainFixtures = acceptedFixtures.mapNotNull { fixture ->
+            val identifier = fixture.expectedIdentifiers.singleOrNull() ?: return@mapNotNull null
+            if (!identifier.startsWith("btc-${fixture.network.serializedName}-")) return@mapNotNull null
+            "${fixture.network.serializedName}|$identifier"
+        }.toSet()
+
+        assertEquals(expectedOnchainFixtures, actualOnchainFixtures)
 
         FixtureNetwork.entries.forEach { network ->
             assertTrue(
@@ -86,13 +98,6 @@ class PaykitIssuerInteropTest {
                     it.network == network && it.expectedIdentifiers == listOf("btc-lightning-lnurl")
                 },
                 "Missing LNURL fixture for '${network.serializedName}'",
-            )
-            assertTrue(
-                acceptedFixtures.any {
-                    it.network == network &&
-                        it.expectedIdentifiers == listOf("btc-${network.serializedName}-p2wpkh")
-                },
-                "Missing on-chain fixture for '${network.serializedName}'",
             )
         }
     }
@@ -184,4 +189,11 @@ private enum class FixtureNetwork(
 
     @SerialName("regtest")
     Regtest(Network.REGTEST, "regtest"),
+}
+
+private enum class FixtureScript(val serializedName: String) {
+    P2tr("p2tr"),
+    P2wpkh("p2wpkh"),
+    P2sh("p2sh"),
+    P2pkh("p2pkh"),
 }
