@@ -112,6 +112,39 @@ internal sealed interface PaykitPaymentRequestParseResult {
     data class Rejected(val reason: PaykitPaymentRequest.ParseFailure) : PaykitPaymentRequestParseResult
 }
 
+@Singleton
+class PaykitPaymentRequestDiagnostics @Inject constructor() {
+    companion object {
+        private const val TAG = "PaykitPaymentRequestDiagnostics"
+    }
+
+    internal fun logParseRejection(
+        counterparty: String,
+        reason: PaykitPaymentRequest.ParseFailure,
+    ) {
+        Logger.warn(
+            "Rejected incoming Paykit payment request: category='parse' reason='${reason.logValue}' " +
+                "counterparty='${counterparty.redactedForPaymentRequestDiagnostics()}'",
+            context = TAG,
+        )
+    }
+
+    internal fun logPresentationRejection(
+        counterparty: String,
+        reason: IncomingPaykitPaymentRequestFailureReason,
+    ) {
+        Logger.warn(
+            "Rejected incoming Paykit payment request presentation: category='${reason.category}' " +
+                "reason='${reason.logValue}' " +
+                "counterparty='${counterparty.redactedForPaymentRequestDiagnostics()}'",
+            context = TAG,
+        )
+    }
+}
+
+private fun String.redactedForPaymentRequestDiagnostics(): String =
+    PubkyPublicKeyFormat.normalized(this)?.let(PubkyPublicKeyFormat::redacted) ?: "<invalid>"
+
 private data class ParsedPaykitPaymentRequestTerms(
     val terms: PaymentRequestTerms,
     val amountSats: ULong,
@@ -163,6 +196,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private val paykitSdkService: PaykitSdkService,
     private val settingsStore: SettingsStore,
     private val presentationStore: PaykitPaymentRequestPresentationStore,
+    private val diagnostics: PaykitPaymentRequestDiagnostics,
     private val clock: Clock,
 ) {
     companion object {
@@ -418,7 +452,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 is PaykitPaymentRequestParseResult.Parsed -> result.request
                 is PaykitPaymentRequestParseResult.Rejected -> {
                     if (result.reason.shouldLogIncomingRejection) {
-                        Logger.warn(record.incomingPaymentRequestRejectionLog(result.reason), context = TAG)
+                        diagnostics.logParseRejection(record.counterparty, result.reason)
                     }
                     null
                 }
@@ -660,11 +694,6 @@ internal fun PaymentRequestRecord.parseIncomingPaykitPaymentRequest(
     now = now,
     requiresActionableRequest = true,
 )
-
-internal fun PaymentRequestRecord.incomingPaymentRequestRejectionLog(
-    reason: PaykitPaymentRequest.ParseFailure,
-): String = "Rejected incoming Paykit payment request: category='parse' reason='${reason.logValue}' " +
-    "counterparty='${PubkyPublicKeyFormat.redacted(counterparty)}'"
 
 @Suppress("CyclomaticComplexMethod", "ReturnCount")
 private fun PaymentRequestRecord.parsePaykitPaymentRequest(

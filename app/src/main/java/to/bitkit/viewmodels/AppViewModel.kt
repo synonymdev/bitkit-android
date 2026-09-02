@@ -150,6 +150,7 @@ import to.bitkit.repositories.PaykitPaymentProofKind
 import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestCreation
+import to.bitkit.repositories.PaykitPaymentRequestDiagnostics
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
@@ -243,6 +244,7 @@ class AppViewModel @Inject constructor(
     private val privatePaykitRepo: PrivatePaykitRepo,
     private val paykitPaymentRequestRepo: PaykitPaymentRequestRepo,
     private val paykitPaymentProofRepo: PaykitPaymentProofRepo,
+    private val paykitPaymentRequestDiagnostics: PaykitPaymentRequestDiagnostics,
     private val refreshContactPaykitReceivers: RefreshContactPaykitReceiversUseCase,
     private val samRockRepo: SamRockRepo,
     private val appUpdateSheet: AppUpdateTimedSheet,
@@ -916,12 +918,7 @@ class AppViewModel @Inject constructor(
         request: PaykitPaymentRequest,
         reason: IncomingPaykitPaymentRequestFailureReason,
     ) {
-        Logger.warn(
-            "Rejected incoming Paykit payment request presentation: category='${reason.category}' " +
-                "reason='${reason.logValue}' " +
-                "counterparty='${PubkyPublicKeyFormat.redacted(request.counterparty)}'",
-            context = TAG,
-        )
+        paykitPaymentRequestDiagnostics.logPresentationRejection(request.counterparty, reason)
         val attempt = paymentRequestPresentationRetryAttempts[request.id] ?: 0
         val retryDelay = PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.getOrNull(attempt)
             ?: if (requestedPaymentRequestId == request.id) {

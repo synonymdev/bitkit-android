@@ -31,11 +31,11 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
-import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
@@ -68,6 +68,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val paykitSdkService = mock<PaykitSdkService>()
     private val settingsStore = mock<SettingsStore>()
     private val presentationStore = mock<PaykitPaymentRequestPresentationStore>()
+    private val diagnostics = mock<PaykitPaymentRequestDiagnostics>()
     private var schedulerOriginMillis = 0L
     private val clock = object : Clock {
         override fun now(): Instant = START_TIME.plus(
@@ -85,7 +86,14 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(settingsStore.isPaykitEnabled).thenReturn(flowOf(true))
         whenever(settingsStore.data).thenReturn(flowOf(SettingsData(sharesPrivatePaykitEndpoints = true)))
         whenever(presentationStore.load(LOCAL_IDENTITY)).thenReturn(emptySet())
-        sut = PaykitPaymentRequestRepo(testDispatcher, paykitSdkService, settingsStore, presentationStore, clock)
+        sut = PaykitPaymentRequestRepo(
+            testDispatcher,
+            paykitSdkService,
+            settingsStore,
+            presentationStore,
+            diagnostics,
+            clock,
+        )
         sut.activate(LOCAL_IDENTITY)
     }
 
@@ -135,24 +143,16 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
-    fun `incoming parse rejection log excludes request data`() {
-        val requestId = "do-not-log-this-id"
+    fun `refresh emits reason specific parse rejection diagnostic`() = test {
         val record = paymentRequestRecord(
-            id = requestId,
             asset = "BTC",
-            counterparty = COUNTERPARTY,
+            counterparty = "secret",
         )
-        val result = record.parseIncomingPaykitPaymentRequest(clock.now())
-            as PaykitPaymentRequestParseResult.Rejected
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
 
-        val output = record.incomingPaymentRequestRejectionLog(result.reason)
+        sut.refresh().getOrThrow()
 
-        assertTrue(output.contains("category='parse' reason='unsupported_asset'"))
-        assertTrue(output.contains("counterparty='${PubkyPublicKeyFormat.redacted(COUNTERPARTY)}'"))
-        assertFalse(output.contains(COUNTERPARTY))
-        assertFalse(output.contains(requestId))
-        assertFalse(output.contains(record.terms?.amount?.value.orEmpty()))
-        assertFalse(output.contains(record.terms?.acceptedPaymentEndpointIdentifiers?.single().orEmpty()))
+        verify(diagnostics).logParseRejection("secret", PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
     }
 
     @Test
