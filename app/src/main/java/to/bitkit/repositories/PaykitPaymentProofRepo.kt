@@ -78,24 +78,32 @@ class PaykitPaymentProofRepo @Inject constructor(
         }.onFailure { Logger.warn("Failed to prepare a Paykit payment proof", it, context = TAG) }
     }
 
-    suspend fun associateLightningPayment(request: PaykitPaymentRequest, paymentHash: String): Result<Unit> =
-        withContext(ioDispatcher) {
-            runSuspendCatching {
-                if (!paymentHash.isHex(HASH_BYTE_COUNT)) throw PaykitPaymentRequestError.RequestUnavailable
-                operationMutex.withLock {
-                    val proofs = loadProofs().toMutableList()
-                    val index = proofs.indexOfLast {
-                        it.requestId == request.id &&
-                            it.kind == PaykitPaymentProofKind.Lightning &&
-                            it.paymentIdentifier == null &&
-                            it.proofData == null
-                    }
-                    if (index < 0) throw PaykitPaymentRequestError.RequestUnavailable
-                    proofs[index] = proofs[index].copy(paymentIdentifier = paymentHash.lowercase())
-                    persist(proofs)
+    suspend fun associateLightningPayment(
+        request: PaykitPaymentRequest,
+        paymentHash: String,
+        paymentEndpointIdentifier: String,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            if (!paymentHash.isHex(HASH_BYTE_COUNT)) throw PaykitPaymentRequestError.RequestUnavailable
+            operationMutex.withLock {
+                val proofs = loadProofs().toMutableList()
+                val index = proofs.indexOfLast {
+                    it.requestId == request.id &&
+                        it.kind == PaykitPaymentProofKind.Lightning &&
+                        it.paymentIdentifier == null &&
+                        it.proofData == null
                 }
-            }.onFailure { Logger.warn("Failed to associate a Paykit Lightning payment proof", it, context = TAG) }
-        }
+                val proof = if (index >= 0) {
+                    proofs[index].copy(paymentIdentifier = paymentHash.lowercase())
+                } else {
+                    pendingProof(request, paymentEndpointIdentifier, PaykitPaymentProofKind.Lightning)
+                        .copy(paymentIdentifier = paymentHash.lowercase())
+                }
+                if (index >= 0) proofs[index] = proof else proofs += proof
+                persist(proofs)
+            }
+        }.onFailure { Logger.warn("Failed to associate a Paykit Lightning payment proof", it, context = TAG) }
+    }
 
     suspend fun completeLightningPayment(paymentHash: String, preimage: String?) = withContext(ioDispatcher) {
         if (preimage == null) return@withContext
@@ -150,12 +158,18 @@ class PaykitPaymentProofRepo @Inject constructor(
                         it.paymentIdentifier == null &&
                         it.proofData == null
                 }
-                if (index < 0) return@runSuspendCatching
-                val proof = proofs[index].copy(
-                    paymentIdentifier = txid.lowercase(),
-                    proofData = txid.lowercase(),
-                )
-                proofs[index] = proof
+                val proof = if (index >= 0) {
+                    proofs[index].copy(
+                        paymentIdentifier = txid.lowercase(),
+                        proofData = txid.lowercase(),
+                    )
+                } else {
+                    pendingProof(request, paymentEndpointIdentifier, PaykitPaymentProofKind.Onchain).copy(
+                        paymentIdentifier = txid.lowercase(),
+                        proofData = txid.lowercase(),
+                    )
+                }
+                if (index >= 0) proofs[index] = proof else proofs += proof
                 persistAndSubmit(listOf(proof), proofs)
             }
             completion.onFailure {

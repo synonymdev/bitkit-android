@@ -3518,7 +3518,13 @@ class AppViewModel @Inject constructor(
     private suspend fun associateLightningPaymentProof(
         request: PaykitPaymentRequest?,
         paymentHash: String,
-    ): Result<Unit> = request?.let { paykitPaymentProofRepo.associateLightningPayment(it, paymentHash) }
+    ): Result<Unit> = request?.let {
+        paykitPaymentProofRepo.associateLightningPayment(
+            request = it,
+            paymentHash = paymentHash,
+            paymentEndpointIdentifier = paymentProofPreparation().endpointIdentifier,
+        )
+    }
         ?: Result.success(Unit)
 
     private fun completeOnchainPaymentProofInBackground(request: PaykitPaymentRequest?, txId: String) {
