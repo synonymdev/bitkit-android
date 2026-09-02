@@ -21,6 +21,7 @@ import com.synonym.paykit.PaykitSdk
 import com.synonym.paykit.PaykitSdkDefaults
 import com.synonym.paykit.PaymentAmountContext
 import com.synonym.paykit.PaymentPayload
+import com.synonym.paykit.PaymentProofSubmission
 import com.synonym.paykit.PaymentReference
 import com.synonym.paykit.PaymentRequestAmount
 import com.synonym.paykit.PaymentRequestFilter
@@ -650,6 +651,30 @@ class PaykitSdkService @Inject constructor(
         return operationMutex.withLock {
             withStateRevisionTracking { handle ->
                 handle.acceptPaymentRequest(counterparty, counterpartyReceiverPath, paymentRequestId)
+            }
+        }
+    }
+
+    suspend fun submitPaymentProof(
+        counterparty: String,
+        counterpartyReceiverPath: String,
+        paymentRequestId: String,
+        paymentEndpointIdentifier: String,
+        proofJson: String,
+    ): PaymentRequestRecord {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.submitPaymentProof(
+                    counterparty,
+                    counterpartyReceiverPath,
+                    paymentRequestId,
+                    PaymentProofSubmission(
+                        billingPeriod = null,
+                        paymentEndpointIdentifier = paymentEndpointIdentifier,
+                        proof = PrivateJsonObject(proofJson),
+                    ),
+                )
             }
         }
     }
