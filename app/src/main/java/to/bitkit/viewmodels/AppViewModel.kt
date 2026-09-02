@@ -3406,7 +3406,8 @@ class AppViewModel @Inject constructor(
                         toast(
                             type = Toast.ToastType.ERROR,
                             title = context.getString(R.string.wallet__error_sending_title),
-                            description = e.message ?: context.getString(R.string.common__error_body)
+                            description = e.message ?: context.getString(R.string.common__error_body),
+                            testTag = "OnchainSendFailedToast",
                         )
                         hideSheet()
                     }
