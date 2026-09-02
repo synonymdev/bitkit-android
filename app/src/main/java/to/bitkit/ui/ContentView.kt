@@ -448,6 +448,7 @@ fun ContentView(
         val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
         val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
         val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+        val isPubkyProfileSetupPending by settingsViewModel.isPubkyProfileSetupPending.collectAsStateWithLifecycle()
         val hasSeenContactsIntro by settingsViewModel.hasSeenContactsIntro.collectAsStateWithLifecycle()
         val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
         val hasPubkyContacts by settingsViewModel.hasPubkyContacts.collectAsStateWithLifecycle()
@@ -642,6 +643,22 @@ fun ContentView(
 
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
+                    LaunchedEffect(
+                        isPaykitEnabled,
+                        isPubkyProfileSetupPending,
+                        isProfileAuthenticated,
+                        currentSheet,
+                        currentRoute,
+                    ) {
+                        val canNavigate = currentSheet == null &&
+                            currentRoute != Routes.CreateProfile::class.qualifiedName
+                        val shouldResumeProfileSetup = isPaykitEnabled &&
+                            isPubkyProfileSetupPending &&
+                            isProfileAuthenticated
+                        if (shouldResumeProfileSetup && canNavigate) {
+                            navController.navigateTo(Routes.CreateProfile)
+                        }
+                    }
                     val currentHardwareWalletId = navBackStackEntry
                         ?.takeIf { it.destination.hasRoute<Routes.HardwareWallet>() }
                         ?.toRoute<Routes.HardwareWallet>()
@@ -1498,7 +1515,7 @@ private fun NavGraphBuilder.shop(
             page = it.toRoute<Routes.ShopWebView>().page,
             title = it.toRoute<Routes.ShopWebView>().title,
             onPaymentIntent = { data ->
-                appViewModel.onScanResult(data)
+                appViewModel.onScanResult(data, allowPubkyAuth = false)
             },
             onBlockedNavigation = {
                 appViewModel.toast(

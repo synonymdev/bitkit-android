@@ -24,6 +24,7 @@ import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.Toast
 import to.bitkit.models.WatchOnlyAccountSetupState
+import to.bitkit.repositories.PubkyAlreadySignedInError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.WatchOnlyAccountAuthorizationStartError
 import to.bitkit.repositories.WatchOnlyAccountRepo
@@ -171,12 +172,31 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         if (!approveRequest(request, authUrl)) return
 
         Logger.info("Auth approved for '${request.serviceNames.firstOrNull().orEmpty()}'", context = TAG)
+        if (request.isRingSignup) {
+            _effects.emit(PubkyAuthApprovalEffect.Dismiss)
+            return
+        }
         _uiState.update { state ->
             if (state.authUrl == authUrl) state.copy(state = ApprovalState.Success) else state
         }
     }
 
     private suspend fun approveRequest(
+        request: PubkyAuthRequest,
+        authUrl: String,
+    ): Boolean = if (request.isRingSignup) {
+        pubkyRepo.approveSignupAuth(request).fold(
+            onSuccess = { true },
+            onFailure = {
+                handleApprovalFailure(it, authUrl)
+                false
+            },
+        )
+    } else {
+        approveSignInRequest(request, authUrl)
+    }
+
+    private suspend fun approveSignInRequest(
         request: PubkyAuthRequest,
         authUrl: String,
     ): Boolean {
@@ -273,8 +293,16 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     }
 
     private suspend fun handleApprovalFailure(error: Throwable, authUrl: String) {
-        Logger.error("Auth approval failed", error, context = TAG)
         if (_uiState.value.authUrl != authUrl) return
+        if (error is PubkyAlreadySignedInError) {
+            ToastEventBus.send(
+                type = Toast.ToastType.INFO,
+                title = context.getString(R.string.pubky_auth__already_signed_in),
+            )
+            _effects.emit(PubkyAuthApprovalEffect.Dismiss)
+            return
+        }
+        Logger.error("Auth approval failed", error, context = TAG)
         _uiState.update { it.copy(state = ApprovalState.Authorize) }
         ToastEventBus.send(
             type = Toast.ToastType.ERROR,

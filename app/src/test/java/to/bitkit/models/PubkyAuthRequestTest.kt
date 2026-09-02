@@ -1,12 +1,42 @@
 package to.bitkit.models
 
+import java.net.URLEncoder
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PubkyAuthRequestTest {
+
+    @Test
+    fun `parse Ring signup preserves registration and authorization details`() {
+        val request = PubkyAuthRequest.parseRingSignup(ringSignupUrl("invite code")).getOrThrow()
+
+        assertTrue(request.isRingSignup)
+        assertEquals("homeserver", request.homeserverPublicKey)
+        assertEquals("invite code", request.signupToken)
+        assertEquals("https://relay.example/inbox/", request.relay)
+        assertEquals("/pub/example.app/:rw", request.capabilities)
+        assertEquals(
+            "pubkyauth:///?relay=https%3A%2F%2Frelay.example%2Finbox%2F" +
+                "&secret=secret&caps=%2Fpub%2Fexample.app%2F%3Arw",
+            request.authorizationUrl,
+        )
+    }
+
+    @Test
+    fun `parse Ring signup rejects missing and duplicate required values`() {
+        val invalidUrls = listOf(
+            ringSignupUrl().replace("&secret=secret", ""),
+            "${ringSignupUrl()}&hs=other",
+        )
+
+        invalidUrls.forEach { url ->
+            assertIs<PubkyAuthRequestError.InvalidUrl>(PubkyAuthRequest.parseRingSignup(url).exceptionOrNull())
+        }
+    }
 
     @Test
     fun `parse recognizes watch-only account claim`() {
@@ -50,6 +80,7 @@ class PubkyAuthRequestTest {
             capabilities = "/pub/bitkit.to/:rw",
         ).getOrThrow()
 
+        assertFalse(request.isRingSignup)
         assertEquals("paykit.test", request.clientId)
         assertNull(request.bitkitClaim)
     }
@@ -261,4 +292,10 @@ class PubkyAuthRequestTest {
         }
         return "pubkyauth://signin?caps=$capabilities&relay=https%3A%2F%2Fhttprelay.pubky.app%2Finbox%2F$claims"
     }
+
+    private fun ringSignupUrl(signupToken: String? = null): String =
+        "pubkyring://signup?hs=homeserver" +
+            "&relay=https%3A%2F%2Frelay.example%2Finbox%2F" +
+            "&secret=secret&caps=%2Fpub%2Fexample.app%2F%3Arw" +
+            signupToken?.let { "&st=${URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
 }
