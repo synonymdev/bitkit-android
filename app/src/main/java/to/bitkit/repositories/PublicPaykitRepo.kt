@@ -8,10 +8,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.SettingsData
@@ -35,7 +31,6 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.minutes
 import kotlin.time.ExperimentalTime
-import to.bitkit.di.json as appJson
 
 sealed class PublicPaykitError(message: String) : AppError(message) {
     data object InvalidPayload : PublicPaykitError("Invalid Paykit payment endpoint payload")
@@ -78,12 +73,6 @@ class PublicPaykitRepo @Inject constructor(
     companion object {
         private val methodIdPattern = Regex("^[a-z0-9]+-[a-z0-9]+-[a-z0-9]+$")
 
-        private val payloadJson = Json(appJson) {
-            prettyPrint = false
-            isLenient = false
-            encodeDefaults = false
-        }
-
         internal val payablePreferenceOrder = listOf(
             MethodId.Bolt11,
             MethodId.Lnurl,
@@ -113,15 +102,11 @@ class PublicPaykitRepo @Inject constructor(
             if (!methodIdPattern.matches(methodId)) return null
 
             val knownMethodId = MethodId.fromRawValue(methodId, network) ?: return null
-            val payload = runCatching {
-                payloadJson.decodeFromString<PaymentEndpointPayload>(endpointData)
-            }.getOrNull() ?: return null
-            val value = payload.value.trim()
-            if (value.isEmpty()) return null
+            val payload = PaykitIssuerInterop.parseEndpointPayload(endpointData) ?: return null
 
             return Endpoint(
                 methodId = knownMethodId,
-                value = value,
+                value = payload.value,
                 min = payload.min,
                 max = payload.max,
                 rawPayload = endpointData,
@@ -129,9 +114,8 @@ class PublicPaykitRepo @Inject constructor(
         }
 
         fun serializePayload(value: String): String {
-            val trimmedValue = value.trim()
-            if (trimmedValue.isEmpty()) throw PublicPaykitError.InvalidPayload
-            return payloadJson.encodeToString(PaymentEndpointPayload(value = trimmedValue))
+            return PaykitIssuerInterop.serializeEndpointPayload(value)
+                ?: throw PublicPaykitError.InvalidPayload
         }
 
         fun hasLightningRouteHints(bolt11: String): Boolean =
@@ -473,10 +457,3 @@ enum class MethodId(
         ): MethodId? = entries.firstOrNull { it.rawValueForNetwork(network) == value }
     }
 }
-
-@Serializable
-private data class PaymentEndpointPayload(
-    val value: String,
-    val min: String? = null,
-    val max: String? = null,
-)

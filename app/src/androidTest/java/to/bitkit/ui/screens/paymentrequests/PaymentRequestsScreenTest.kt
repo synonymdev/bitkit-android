@@ -51,6 +51,8 @@ class PaymentRequestsScreenTest {
         composeTestRule.onNodeWithTag("MoneyPrimary").assertIsDisplayed()
         composeTestRule.onNodeWithTag("MoneySecondary").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestsSeeAll").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestRejectincoming").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestPayincoming").assertIsDisplayed()
         composeTestRule.onNodeWithText("Dismiss").assertIsDisplayed()
     }
 

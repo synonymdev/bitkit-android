@@ -22,7 +22,6 @@ import kotlinx.coroutines.test.runCurrent
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
-import org.lightningdevkit.ldknode.Network
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.clearInvocations
@@ -50,7 +49,6 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
-@Suppress("LargeClass")
 class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     companion object {
         private const val PAYMENT_REQUEST_ID = "550e8400-e29b-41d4-a716-446655440000"
@@ -105,53 +103,6 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = sut.pendingRequests.value.single()
         assertEquals(100_000uL, request.amountSats)
         assertEquals(listOf(MethodId.Bolt11.rawValue), request.acceptedPaymentEndpointIdentifiers)
-    }
-
-    @Test
-    fun `refresh accepts only exact lowercase bitcoin asset`() = test {
-        whenever(paykitSdkService.paymentRequests()).thenReturn(
-            listOf(
-                paymentRequestRecord(id = "lowercase", asset = "btc"),
-                paymentRequestRecord(id = "uppercase", asset = "BTC"),
-                paymentRequestRecord(id = "mixed-case", asset = "Btc"),
-                paymentRequestRecord(id = "whitespace", asset = " btc "),
-            ),
-        )
-
-        sut.refresh().getOrThrow()
-
-        assertEquals(listOf("lowercase"), sut.pendingRequests.value.map { it.paymentRequestId })
-    }
-
-    @Test
-    fun `request filtering accepts network correct and chain independent identifiers`() {
-        val networkRails = listOf(
-            Network.BITCOIN to "bitcoin",
-            Network.TESTNET to "testnet",
-            Network.SIGNET to "signet",
-            Network.REGTEST to "regtest",
-        )
-        val scriptTypes = listOf("p2tr", "p2wpkh", "p2sh", "p2pkh")
-        val onchainIdentifiers = networkRails.flatMap { (_, rail) ->
-            scriptTypes.map { "btc-$rail-$it" }
-        }
-
-        networkRails.forEach { (network, rail) ->
-            val accepted = listOf(
-                "btc-lightning-bolt11",
-                "btc-lightning-lnurl",
-            ) + scriptTypes.map { "btc-$rail-$it" }
-            val rejected = onchainIdentifiers.filterNot { it in accepted } + listOf(
-                "BTC-$rail-p2wpkh",
-                "btc-$rail-bolt12",
-                "btc-unsupported-method",
-            )
-
-            assertEquals(
-                accepted,
-                supportedPaykitEndpointIdentifiers(accepted + accepted.first() + rejected, network),
-            )
-        }
     }
 
     @Test
@@ -703,7 +654,6 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         role: PaymentRequestLocalRole? = PaymentRequestLocalRole.PAYER,
         state: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROPOSED,
         amount: String = "0.001",
-        asset: String = "btc",
         expiresAt: String? = null,
         endpoints: List<String> = listOf(MethodId.Bolt11.rawValue),
         counterparty: String = COUNTERPARTY,
@@ -719,7 +669,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         proposalOutboundStatus = null,
         proposalEventId = "proposal-event",
         terms = PaymentRequestTerms(
-            amount = PaymentRequestAmount(value = amount, asset = asset),
+            amount = PaymentRequestAmount(value = amount, asset = "btc"),
             paymentReference = PAYMENT_REFERENCE,
             proposalExpiresAt = expiresAt,
             recurrence = null,

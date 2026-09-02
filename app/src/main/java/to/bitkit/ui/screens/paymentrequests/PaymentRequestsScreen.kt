@@ -539,7 +539,9 @@ internal fun PaymentRequestCard(
                         )
                     },
                     size = ButtonSize.Small,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("PaymentRequestReject${request.paymentRequestId}")
                 )
                 PrimaryButton(
                     text = stringResource(R.string.wallet__payment_request_pay),
@@ -553,7 +555,9 @@ internal fun PaymentRequestCard(
                         )
                     },
                     size = ButtonSize.Small,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("PaymentRequestPay${request.paymentRequestId}")
                 )
             }
         }
