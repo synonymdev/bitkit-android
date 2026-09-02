@@ -4517,6 +4517,75 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `accepted onchain send presents success`() = test {
+        val address = "bcrt1qaccepted"
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever {
+            lightningRepo.sendOnChain(
+                address = address,
+                sats = 1000u,
+                speed = TransactionSpeed.Medium,
+                utxosToSpend = null,
+                isMaxAmount = false,
+                tags = emptyList(),
+            )
+        }.thenReturn(Result.success("accepted-txid"))
+        whenever(lightningRepo.sync()).thenReturn(Result.success(Unit))
+        whenever(activityRepo.syncActivities()).thenReturn(Result.success(Unit))
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = 1000u,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+            ),
+        )
+
+        sut.sendEffect.test {
+            confirmCurrentPayment()
+
+            assertEquals(SendEffect.PaymentSuccess, awaitItem())
+        }
+        assertEquals("accepted-txid", sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `rejected onchain send does not present success`() = test {
+        val address = "bcrt1qrejected"
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever {
+            lightningRepo.sendOnChain(
+                address = address,
+                sats = 1000u,
+                speed = TransactionSpeed.Medium,
+                utxosToSpend = null,
+                isMaxAmount = false,
+                tags = emptyList(),
+            )
+        }.thenReturn(Result.failure(AppError("Broadcast rejected")))
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = 1000u,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+            ),
+        )
+
+        sut.sendEffect.test {
+            confirmCurrentPayment()
+
+            expectNoEvents()
+        }
+        verify(toastManager).enqueue(
+            check {
+                assertEquals("OnchainSendFailedToast", it.testTag)
+            }
+        )
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
     fun `private lightning contact payment consumes private list before send`() = test {
         val bolt11 = "lnbcrt1privatecontact"
         val paymentHash = "payment_hash"
