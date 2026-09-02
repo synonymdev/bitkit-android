@@ -209,29 +209,32 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `approveAuth should forward requested capabilities`() = test {
         val authUrl = "pubkyauth://signin?caps=/pub/bitkit.to/:rw"
         val capabilities = "/pub/bitkit.to/:rw"
+        val clientId = "paykit.test"
         val secretKey = "local_secret"
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
 
-        val result = sut.approveAuth(authUrl, capabilities)
+        val result = sut.approveAuth(authUrl, capabilities, clientId)
 
         assertTrue(result.isSuccess)
-        verifyBlocking(pubkyService) { approveAuth(authUrl, capabilities, secretKey) }
+        verifyBlocking(pubkyService) { approveAuth(authUrl, capabilities, clientId, secretKey) }
     }
 
     @Test
     fun `approveAuthWithCompanionClaim forwards exact claim identifiers and capability`() = test {
         val authUrl = "pubkyauth://signin?x-bitkit-claim=watch-only-account-v1"
+        val clientId = "paykit.test"
         val secretKey = "local_secret"
         val payload = ByteArray(84) { it.toByte() }
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(secretKey)
 
-        val result = sut.approveAuthWithCompanionClaim(authUrl, payload)
+        val result = sut.approveAuthWithCompanionClaim(authUrl, clientId, payload)
 
         assertTrue(result.isSuccess)
         verifyBlocking(pubkyService) {
             approveAuthWithCompanionClaim(
                 authUrl = authUrl,
                 expectedCapabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
+                approvedClientId = clientId,
                 secretKeyHex = secretKey,
                 claim = PubkyAuthCompanionClaim(
                     queryParameter = PubkyAuthClaim.QUERY_PARAMETER,

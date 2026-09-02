@@ -939,23 +939,29 @@ class PubkyRepo @Inject constructor(
             val details = pubkyService.parseAuthUrl(authUrl)
             PubkyAuthRequest.parse(
                 rawUrl = authUrl,
+                clientId = details.clientId.orEmpty(),
                 relay = details.relayUrl.orEmpty(),
                 capabilities = details.capabilities.orEmpty(),
             ).getOrThrow()
         }
     }
 
-    suspend fun approveAuth(authUrl: String, expectedCapabilities: String): Result<Unit> = runSuspendCatching {
+    suspend fun approveAuth(
+        authUrl: String,
+        expectedCapabilities: String,
+        approvedClientId: String,
+    ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
             val secretKeyHex = requireNotNull(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)) {
                 "No secret key available — use Ring to manage authorizations"
             }
-            pubkyService.approveAuth(authUrl, expectedCapabilities, secretKeyHex)
+            pubkyService.approveAuth(authUrl, expectedCapabilities, approvedClientId, secretKeyHex)
         }
     }
 
     suspend fun approveAuthWithCompanionClaim(
         authUrl: String,
+        approvedClientId: String,
         unsignedPayload: ByteArray,
     ): Result<Unit> = runSuspendCatching {
         withContext(ioDispatcher) {
@@ -965,6 +971,7 @@ class PubkyRepo @Inject constructor(
             pubkyService.approveAuthWithCompanionClaim(
                 authUrl = authUrl,
                 expectedCapabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES,
+                approvedClientId = approvedClientId,
                 secretKeyHex = secretKeyHex,
                 claim = PubkyAuthCompanionClaim(
                     queryParameter = PubkyAuthClaim.QUERY_PARAMETER,

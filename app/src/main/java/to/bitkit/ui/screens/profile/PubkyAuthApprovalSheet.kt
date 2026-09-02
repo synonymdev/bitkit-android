@@ -43,6 +43,7 @@ import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
@@ -379,6 +380,11 @@ private fun ColumnScope.ApprovalDetails(
         VerticalSpacer(26.dp)
 
         DescriptionText(serviceName = uiState.serviceName)
+        VerticalSpacer(8.dp)
+        BodyS(
+            text = stringResource(R.string.profile__auth_approval_requester, uiState.clientId),
+            color = Colors.White64,
+        )
         VerticalSpacer(32.dp)
 
         PermissionsSection(permissions = uiState.permissions)
@@ -572,6 +578,7 @@ private fun AuthorizePreview() {
             Content(
                 uiState = PubkyAuthApprovalUiState(
                     state = ApprovalState.Authorize,
+                    clientId = "app.paykit.server",
                     serviceName = "pubky.app",
                     permissions = persistentListOf(
                         PubkyAuthPermission(path = "/pub/pubky.app/", accessLevel = "rw"),

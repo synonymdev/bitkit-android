@@ -604,6 +604,7 @@
     <string name="profile__auth_approval_authorizing">Authorizing…</string>
     <string name="profile__auth_approval_ok">OK</string>
     <string name="profile__auth_approval_permissions">Requested permissions</string>
+    <string name="profile__auth_approval_requester">Requested by %1$s</string>
     <string name="profile__auth_approval_ring_only">Use Ring to manage authorizations</string>
     <string name="profile__auth_approval_service">A service is requesting permission to access and edit your &lt;accent&gt;%1$s&lt;/accent&gt; data.</string>
     <string name="profile__auth_approval_service_unknown">Unknown service</string>

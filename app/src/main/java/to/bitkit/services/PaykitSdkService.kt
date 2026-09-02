@@ -327,9 +327,14 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun approveAuth(authUrl: String, expectedCapabilities: String, secretKeyHex: String) {
+    suspend fun approveAuth(
+        authUrl: String,
+        expectedCapabilities: String,
+        approvedClientId: String,
+        secretKeyHex: String,
+    ) {
         isSetup.await()
-        bootstrap().approveAuth(
+        approvalBootstrap(authUrl, approvedClientId).approveAuth(
             authUrl = authUrl,
             expectedCapabilities = expectedCapabilities,
             localSecretKey = localSecretKey(secretKeyHex),
@@ -339,11 +344,12 @@ class PaykitSdkService @Inject constructor(
     suspend fun approveAuthWithCompanionClaim(
         authUrl: String,
         expectedCapabilities: String,
+        approvedClientId: String,
         secretKeyHex: String,
         claim: PubkyAuthCompanionClaim,
     ) {
         isSetup.await()
-        bootstrap().approveAuthWithCompanionClaim(
+        approvalBootstrap(authUrl, approvedClientId).approveAuthWithCompanionClaim(
             authUrl = authUrl,
             expectedCapabilities = expectedCapabilities,
             localSecretKey = localSecretKey(secretKeyHex),
@@ -915,6 +921,17 @@ class PaykitSdkService @Inject constructor(
         clientId = BitkitPaykitSdkConfig.clientId,
         pubkyClient = pubkyClientConfig,
     )
+
+    private fun approvalBootstrap(authUrl: String, approvedClientId: String): PubkySessionBootstrap {
+        val requestClientId = parsePubkyAuthUrl(authUrl).clientId.orEmpty()
+        require(approvedClientId.isNotBlank() && approvedClientId == requestClientId) {
+            "Approved Pubky client ID does not match auth request"
+        }
+        return PubkySessionBootstrap.withPubkyClientConfig(
+            clientId = approvedClientId,
+            pubkyClient = pubkyClientConfig,
+        )
+    }
 
     private fun resetRuntime() {
         sdk = null
