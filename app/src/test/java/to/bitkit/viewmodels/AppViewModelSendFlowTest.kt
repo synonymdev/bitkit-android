@@ -96,6 +96,7 @@ import to.bitkit.repositories.ConnectivityState
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.HealthRepo
 import to.bitkit.repositories.HwWalletRepo
+import to.bitkit.repositories.IncomingPaykitPaymentRequestFailureReason
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.MethodId
@@ -104,6 +105,7 @@ import to.bitkit.repositories.PaykitPaymentProofKind
 import to.bitkit.repositories.PaykitPaymentProofRepo
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestCreation
+import to.bitkit.repositories.PaykitPaymentRequestDiagnostics
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitPaymentRequestRepo
@@ -198,6 +200,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val privatePaykitRepo = mock<PrivatePaykitRepo>()
     private val paykitPaymentRequestRepo = mock<PaykitPaymentRequestRepo>()
     private val paykitPaymentProofRepo = mock<PaykitPaymentProofRepo>()
+    private val paykitPaymentRequestDiagnostics = mock<PaykitPaymentRequestDiagnostics>()
     private val samRockRepo = mock<SamRockRepo>()
     private val widgetsRepo = mock<WidgetsRepo>()
     private val formatMoneyValue = mock<FormatMoneyValue>()
@@ -402,6 +405,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         privatePaykitRepo = privatePaykitRepo,
         paykitPaymentRequestRepo = paykitPaymentRequestRepo,
         paykitPaymentProofRepo = paykitPaymentProofRepo,
+        paykitPaymentRequestDiagnostics = paykitPaymentRequestDiagnostics,
         refreshContactPaykitReceivers = refreshContactPaykitReceivers,
         samRockRepo = samRockRepo,
         appUpdateSheet = mock(),
@@ -646,6 +650,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
         verify(paykitPaymentRequestRepo).markPresented(request)
         verify(privatePaykitRepo, times(15)).beginPaymentRequest(request)
+        verify(paykitPaymentRequestDiagnostics, times(15)).logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.PaymentDetailsPending,
+        )
         val toastCaptor = argumentCaptor<Toast>()
         verify(toastManager, times(2)).enqueue(toastCaptor.capture())
         val (waitingToast, terminalToast) = toastCaptor.allValues
@@ -681,6 +689,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertNull(sut.currentSheet.value)
         verify(paykitPaymentRequestRepo).markPresented(request)
         verify(privatePaykitRepo, times(15)).beginPaymentRequest(request)
+        verify(paykitPaymentRequestDiagnostics, times(15)).logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.NoSupportedEndpoint,
+        )
         val toastCaptor = argumentCaptor<Toast>()
         verify(toastManager, times(2)).enqueue(toastCaptor.capture())
         val (waitingToast, terminalToast) = toastCaptor.allValues
