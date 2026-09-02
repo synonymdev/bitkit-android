@@ -571,7 +571,7 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         permissions = listOf(PubkyAuthPermission(path = "/pub/paykit/v0/bitkit/server/", accessLevel = "rw")),
         serviceNames = listOf("paykit"),
         bitkitClaim = bitkitClaim,
-        homeserverPublicKey = if (PubkyAuthRequest.isRingSignupUrl(authUrl)) "homeserver" else null,
+        homeserverPublicKey = if (PubkyAuthRequest.isSignupUrl(authUrl)) "homeserver" else null,
     )
 
     private fun watchOnlyAccount() = WatchOnlyAccountRecord(

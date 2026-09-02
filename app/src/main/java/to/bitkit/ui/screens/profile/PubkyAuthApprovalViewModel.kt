@@ -172,7 +172,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         if (!approveRequest(request, authUrl)) return
 
         Logger.info("Auth approved for '${request.serviceNames.firstOrNull().orEmpty()}'", context = TAG)
-        if (request.isRingSignup) {
+        if (request.isSignup) {
             _effects.emit(PubkyAuthApprovalEffect.Dismiss)
             return
         }
@@ -184,7 +184,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     private suspend fun approveRequest(
         request: PubkyAuthRequest,
         authUrl: String,
-    ): Boolean = if (request.isRingSignup) {
+    ): Boolean = if (request.isSignup) {
         pubkyRepo.approveSignupAuth(request).fold(
             onSuccess = { true },
             onFailure = {

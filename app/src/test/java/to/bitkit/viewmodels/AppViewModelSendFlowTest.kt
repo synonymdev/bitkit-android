@@ -56,6 +56,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -78,6 +79,7 @@ import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
@@ -221,6 +223,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
     private val signupAuthUrl =
         "pubkyring://signup?hs=homeserver&relay=https://relay&secret=request&caps=/pub/example/:rw"
+    private val directSignupAuthUrl = "pubkyauth://direct_signup?hs=homeserver&st=invite"
+    private val legacyDirectSignupAuthUrl = "pubkyauth://signup?hs=homeserver&st=invite"
 
     private val timedSheetManager = mock<TimedSheetManager>()
     private val timedSheetType = MutableStateFlow<TimedSheetType?>(null)
@@ -1924,10 +1928,26 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `global scanner accepts Ring signup without an existing identity`() = test {
         enablePaykitUi()
-        scanSignup()
+
+        scanSignup(signupAuthUrl)
 
         assertEquals(Sheet.PubkyAuth(signupAuthUrl), sut.currentSheet.value)
         verify(pubkyRepo, never()).hasSecretKey()
+    }
+
+    @Test
+    fun `global scanner processes direct signup without auth sheet`() = test {
+        enablePaykitUi()
+        listOf(directSignupAuthUrl, legacyDirectSignupAuthUrl).forEach { authUrl ->
+            val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
+            whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
+            whenever(pubkyRepo.approveSignupAuth(request)).thenReturn(Result.success(Unit))
+
+            scanSignup(authUrl)
+
+            assertNull(sut.currentSheet.value)
+            verifyBlocking(pubkyRepo) { approveSignupAuth(request) }
+        }
     }
 
     @Test
@@ -1935,7 +1955,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         whenever(context.getString(R.string.pubky_auth__already_signed_in)).thenReturn("Already signed in")
-        scanSignup()
+        scanSignup(directSignupAuthUrl)
 
         assertNull(sut.currentSheet.value)
         verify(pubkyRepo, never()).hasSecretKey()
@@ -1944,7 +1964,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `send paste rejects pubky auth`() = test {
-        val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
+        val authUrl = directSignupAuthUrl
         val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
         val clipData = mock<ClipData>()
         val item = mock<ClipData.Item>()
@@ -5079,10 +5099,10 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         isPaykitEnabled.value = true
     }
 
-    private suspend fun TestScope.scanSignup() {
+    private suspend fun TestScope.scanSignup(authUrl: String = signupAuthUrl) {
         sut.showScannerSheet()
         advanceUntilIdle()
-        sut.onScannerSheetResult(signupAuthUrl)
+        sut.onScannerSheetResult(authUrl)
         advanceUntilIdle()
     }
 

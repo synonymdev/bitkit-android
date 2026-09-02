@@ -163,6 +163,7 @@ import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
+import to.bitkit.repositories.PubkyAlreadySignedInError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
@@ -4689,10 +4690,15 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handlePubkyAuth(authUrl: String) {
-        val isRingSignup = PubkyAuthRequest.isRingSignupUrl(authUrl)
-        if (isRingSignup && rejectPubkySignupForExistingIdentity()) return
+        val isSignup = PubkyAuthRequest.isSignupUrl(authUrl)
+        if (isSignup && rejectPubkySignupForExistingIdentity()) return
 
-        if (!isRingSignup && pubkyRepo.publicKey.value == null) {
+        if (PubkyAuthRequest.isDirectSignupUrl(authUrl)) {
+            handleDirectPubkySignup(authUrl)
+            return
+        }
+
+        if (!isSignup && pubkyRepo.publicKey.value == null) {
             ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.pubky_auth__no_identity),
@@ -4701,7 +4707,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        if (!isRingSignup && !pubkyRepo.hasSecretKey()) {
+        if (!isSignup && !pubkyRepo.hasSecretKey()) {
             ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.profile__auth_approval_ring_only),
@@ -4709,6 +4715,28 @@ class AppViewModel @Inject constructor(
             return
         }
         showSheet(Sheet.PubkyAuth(authUrl))
+    }
+
+    private suspend fun handleDirectPubkySignup(authUrl: String) {
+        hideSheet()
+        val request = pubkyRepo.parseAuthUrl(authUrl).getOrElse {
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.profile__auth_error_title),
+                description = it.localizedPubkyAuthMessage(context),
+            )
+            return
+        }
+        pubkyRepo.approveSignupAuth(request).onFailure {
+            val alreadySignedIn = it is PubkyAlreadySignedInError
+            ToastEventBus.send(
+                type = if (alreadySignedIn) Toast.ToastType.INFO else Toast.ToastType.ERROR,
+                title = context.getString(
+                    if (alreadySignedIn) R.string.pubky_auth__already_signed_in else R.string.profile__auth_error_title,
+                ),
+                description = if (alreadySignedIn) null else it.localizedPubkyAuthMessage(context),
+            )
+        }
     }
 
     private suspend fun rejectPubkySignupForExistingIdentity(): Boolean {
