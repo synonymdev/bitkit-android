@@ -89,26 +89,39 @@ entered in `4ea3dd16` and `7385376d`. No shipped Android release or tag contains
 2026-09-02. The first intended shipped release is the open `2.6.0` milestone; record its final tag
 here when it ships.
 
-## Baseline from 2026-09-02
+## Acceptance run from 2026-09-02
 
-The current implementation was built from `423d4b2f`. A deployed seller completed the unchanged
+The successful replay used fixture commit `ed03a32e` and the production fix from Android issue
+[#1218](https://github.com/synonymdev/bitkit-android/issues/1218) at `41b40818`. The installed E2E
+APK had SHA-256 `cb494d870a255b96e3e289cbe7e659aa89fff1987308502b2fd55f121a0b0c42`,
+used the local backend at `10.0.2.2`, and targeted homeserver
+`8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo`. A deployed seller completed the unchanged
 watch-only consent, approval, authorization, companion-claim delivery, and `/setup` completion
-path. Corrected fixture commit `ed03a32e` passed its canonical verifier with lowercase `btc`,
-endpoint identifier `btc-regtest-p2wpkh`, and a JSON `value`. An isolated Android emulator created
-buyer `pubky9s1fboi8r1ft1ecnzpik1wwkiuxmd85hzu6w3wpigmwdyry7rjxy`, linked seller
-`pubkyhbn4tahj71yzpmtarz5amtqqf5fmicdd7rs8ao448tzaujdapfiy`, and confirmed reciprocal contact
-rows and enabled contact payments.
+path. The fixture verifier passed with lowercase `btc`, endpoint identifier
+`btc-regtest-p2wpkh`, and a JSON string `value`.
 
-The fixture delivered Locks bundle `YT3N7MNQ55PARNR6BK4H80MBDC`, Payment Request
-`767ca32e-8f17-4763-9343-3b273f4fb699`, and event
-`b19f4936-7b83-4a1d-a1ae-a571653a4b9e`. Android surfaced the exact incoming row with Seller and
-15,000 sats, handled the absent note, and opened the payment confirmation. The app resolved
-`bcrt1q8r8ryq9tv7yufr7gpszpgyw7lly7dl97przkv2`, retained the 15,000-sat amount, and showed Seller
-as `ReviewContactRecipient` with a 141-sat fee.
+Fresh Android buyer `pubkycecq8ssqnfgfwifioj7djoutnupmpjgomobistnz34zd9d5yyn4o` linked seller
+`pubkyhbn4tahj71yzpmtarz5amtqqf5fmicdd7rs8ao448tzaujdapfiy`; both wallets saved the reciprocal
+contact and enabled contact payments. The buyer received 1,000,000 sats at
+`bcrt1q6mkkp26tu8zm4g78d58uksmvv3una04dryp7s0` in transaction
+`3b48b259cd9aec8817b902a44c1609738268880cb16f25179ab87dea21a81a11`, confirmed at height
+16,397 in block `5ad00a6d1d9e0e5a2348a255eae5bc83d507a759a4e9f377567af92fa3bacef6`.
 
-The confirmation slider remained disabled because the incoming on-chain scan path does not persist
-its successful amount validation into `isAmountInputValid`. No transaction was broadcast and the
-fixture mempool remained empty. Android issue
-[#1218](https://github.com/synonymdev/bitkit-android/issues/1218) blocks the broadcast and
-confirmation boundaries; [fixture issue #1](https://github.com/BitcoinErrorLog/pubky-marketplace/issues/1)
-records the corrected upstream contract work.
+The fixture delivered Locks bundle `1GC8SBDYB2HHA2E0NZ51ZVEZX4`, server invoice
+`92fdee57-6a46-40f2-9714-8a0e68d7e60e`, Payment Request
+`ad1a8463-59e0-4cf8-b037-99ffb9d5b6ca`, and event
+`4282bad8-270d-4e5c-a5f9-bca52d1583dd`. Android displayed the incoming Seller row for 15,000
+sats with an absent note, opened the payment review, resolved
+`bcrt1qkuajc36azmaf9kk9ndwy9rdttl6vdlqwtvgyg5`, preserved the amount and Seller recipient, and
+enabled the confirmation slider with a 141-sat fee.
+
+One swipe broadcast transaction `a3e2801d8cf3afa6a461a30fa38bc46680602311a7728b97e5d88f3767f3d9d2`.
+The frozen zero-confirmation boundary contained only that mempool transaction, whose output zero
+paid exactly 15,000 sats to the derived address; Paykit reported
+`detected/0/amount_matched=true` and Locks remained pending. The fixture then mined exactly one
+block. Android synced height 16,398 and showed a confirmed Seller activity with a 15,000-sat
+payment and 141-sat fee. The transaction confirmed in block
+`5f2a356cace276a17e0759d8d34e7c196c852b4b299901e592552fb8f8f0bb19`, Paykit reported
+`confirmed/1/amount_matched=true`, the Locks bundle completed, and the paid request remained as
+history without Pay or Dismiss actions. [Fixture issue #1](https://github.com/BitcoinErrorLog/pubky-marketplace/issues/1)
+tracks the upstream environment used for this replay.
