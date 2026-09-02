@@ -490,7 +490,7 @@ internal fun PaymentRequestCard(
                     Modifier
                 }
             )
-            .testTag("PaymentRequestRow${request.paymentRequestId}"),
+            .testTag("PaymentRequestRow-${request.paymentRequestId}")
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -553,7 +553,9 @@ internal fun PaymentRequestCard(
                         )
                     },
                     size = ButtonSize.Small,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("PaymentRequestPay-${request.paymentRequestId}")
                 )
             }
         }

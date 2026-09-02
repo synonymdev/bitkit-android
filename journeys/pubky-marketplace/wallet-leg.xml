@@ -1,0 +1,39 @@
+<journey name="pubky marketplace wallet leg">
+  <description>
+    Verifies a Bitkit seller grants a watch-only account claim and a separate linked Bitkit buyer
+    receives, approves, pays, and confirms the resulting marketplace Payment Request on regtest.
+    Precondition: two clean wallets and the external fixture described in this suite's README.
+    Configure the fixture Electrum endpoint, Android emulator port mappings, and Paykit UI before
+    either wallet's first launch. Start with the seller wallet open and the fixture's fresh setup
+    auth URL available.
+  </description>
+  <actions>
+    <action>Open the fixture setup auth URL in the seller wallet</action>
+    <action>Verify the watch-only consent screen (id "PubkyAuthWatchOnlyConsent") is visible</action>
+    <action>Capture the watch-only consent evidence, then tap Approve (id "PubkyAuthWatchOnlyApprove")</action>
+    <action>Verify the authorization screen shows only the requested Paykit capabilities</action>
+    <action>Tap Authorize (id "PubkyAuthAuthorize")</action>
+    <action>Verify authorization succeeds (id "PubkyAuthOK")</action>
+    <action>Verify the fixture completes setup with the seller account xpub and no spending authority</action>
+    <action>Open General Settings in both wallets and verify contact payments (id "ContactPaymentsToggle") are enabled</action>
+    <action>Open Contacts in the buyer wallet and save the fixture's seller public key</action>
+    <action>Verify the seller contact (id "Contact_&lt;seller-public-key&gt;") is visible</action>
+    <action>Open Contacts in the seller wallet and save the buyer public key</action>
+    <action>Verify the buyer contact (id "Contact_&lt;buyer-public-key&gt;") is visible</action>
+    <action>Verify the fixture reports the seller and buyer as linked peers</action>
+    <action>Have the fixture create one marketplace purchase for the buyer and record its Payment Request id</action>
+    <action>Verify the request uses lowercase "btc", a regtest endpoint identifier, and a JSON endpoint value</action>
+    <action>Wait for the incoming requests sheet (id "PaymentRequestsSheet")</action>
+    <action>Verify the request row (id "PaymentRequestRow-&lt;payment-request-id&gt;") shows the seller, note, and expected amount</action>
+    <action>Capture the incoming-request evidence, then tap Pay (id "PaymentRequestPay-&lt;payment-request-id&gt;")</action>
+    <action>Verify the review amount (id "ReviewAmount") matches the fixture amount</action>
+    <action>Show details and verify the payment URI (id "ReviewUri") contains the fixture's regtest address</action>
+    <action>Capture the payment-approval evidence, then swipe to send (id "GRAB")</action>
+    <action>Verify Bitcoin Sent (id "SendSuccess") appears after the backend accepts the transaction</action>
+    <action>Verify the fixture mempool contains the transaction with an amount-matched output</action>
+    <action>Mine one block with the fixture and wait for both Bitkit and the marketplace status to refresh</action>
+    <action>Open the latest sent on-chain activity and verify its amount (id "ActivityAmount") and transaction details (id "ActivityTxDetails")</action>
+    <action>Verify the fixture reports the transaction confirmed and the marketplace purchase completed</action>
+    <action>Capture the final activity, transaction id, confirmation height, and completed purchase evidence</action>
+  </actions>
+</journey>
