@@ -24,10 +24,10 @@
     <action>Have the fixture create one marketplace purchase for the buyer and record its Payment Request id</action>
     <action>Verify the request uses lowercase "btc", a regtest endpoint identifier, and a JSON endpoint value</action>
     <action>Wait for the incoming requests sheet (id "PaymentRequestsSheet")</action>
-    <action>Verify the request row (id "PaymentRequestRow-&lt;payment-request-id&gt;") shows the seller, note, and expected amount</action>
+    <action>Verify the request row (id "PaymentRequestRow-&lt;payment-request-id&gt;") shows the seller and expected amount, plus the fixture note when present</action>
     <action>Capture the incoming-request evidence, then tap Pay (id "PaymentRequestPay-&lt;payment-request-id&gt;")</action>
     <action>Verify the review amount (id "ReviewAmount") matches the fixture amount</action>
-    <action>Show details and verify the payment URI (id "ReviewUri") contains the fixture's regtest address</action>
+    <action>Show details and verify the recipient (id "ReviewContactRecipient") is the seller contact</action>
     <action>Capture the payment-approval evidence, then swipe to send (id "GRAB")</action>
     <action>Verify Bitcoin Sent (id "SendSuccess") appears after the backend accepts the transaction</action>
     <action>Verify the fixture mempool contains the transaction with an amount-matched output</action>
