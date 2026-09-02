@@ -288,14 +288,14 @@ class PubkyRepo @Inject constructor(
 
     suspend fun completeAuthentication(): Result<Unit> {
         val attemptId = _activeAuthAttemptId.value ?: return Result.failure(PubkyAuthAttemptInactive())
-        var didCompleteAuth = false
+        var shouldRevokeSessionOnFailure = false
         return try {
             val result = runSuspendCatching {
                 waitForAuthApproval(attemptId)
                 withContext(ioDispatcher) {
                     withContext(NonCancellable) {
                         pubkyService.completeAuth()
-                        didCompleteAuth = true
+                        shouldRevokeSessionOnFailure = true
                     }
                     ensureAuthAttemptActive(attemptId)
                     val pk = requireNotNull(pubkyService.currentPublicKey()?.ensurePubkyPrefix()) {
@@ -311,7 +311,7 @@ class PubkyRepo @Inject constructor(
             }
 
             if (result.isFailure) {
-                revokeCompletedAuthSessionIfNeeded(didCompleteAuth)
+                revokeCompletedAuthSessionIfNeeded(shouldRevokeSessionOnFailure)
                 if (_activeAuthAttemptId.value == attemptId) {
                     _activeAuthAttemptId.update { null }
                 }
@@ -330,12 +330,13 @@ class PubkyRepo @Inject constructor(
                 }
                 _publicKey.update { pk }
                 _authState.update { PubkyAuthState.Authenticated }
+                shouldRevokeSessionOnFailure = false
                 Logger.info("Completed pubky auth for '${redacted(pk)}'", context = TAG)
                 loadProfile()
                 loadContacts()
             }.map { }
         } catch (e: CancellationException) {
-            revokeCompletedAuthSessionIfNeeded(didCompleteAuth)
+            revokeCompletedAuthSessionIfNeeded(shouldRevokeSessionOnFailure)
             if (_activeAuthAttemptId.value == attemptId) {
                 _activeAuthAttemptId.update { null }
             }
@@ -347,8 +348,8 @@ class PubkyRepo @Inject constructor(
         }
     }
 
-    private suspend fun revokeCompletedAuthSessionIfNeeded(didCompleteAuth: Boolean) {
-        if (!didCompleteAuth) return
+    private suspend fun revokeCompletedAuthSessionIfNeeded(shouldRevokeSession: Boolean) {
+        if (!shouldRevokeSession) return
         runSuspendCatching {
             withContext(NonCancellable + ioDispatcher) {
                 pubkyService.signOut()
@@ -556,6 +557,7 @@ class PubkyRepo @Inject constructor(
 
                     val imageUrl = avatarBytes?.let { uploadAvatar(it).getOrNull() }
                     writeProfile(name, bio, links, tags, imageUrl)
+                    shouldRevokeSessionOnFailure = false
                     finishIdentityCreation(publicKeyZ32, name, bio, links, tags, imageUrl)
                 }
             }
@@ -1079,13 +1081,13 @@ class PubkyRepo @Inject constructor(
 
     // region Sign out
 
-    suspend fun signOut(): Result<Unit> {
+    suspend fun signOut(): Result<Unit> = withContext(NonCancellable + ioDispatcher) {
         val hadPaykitState = settingsStore.data.first().hasPaykitState()
         val endpointCleanupResult = removeBitkitPaymentEndpoints()
             .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
 
         val result = runSuspendCatching {
-            withContext(ioDispatcher) { pubkyService.signOut() }
+            pubkyService.signOut()
         }.onFailure { Logger.error("Failed to revoke Pubky session during sign out", it, context = TAG) }
 
         if (result.isFailure) {
@@ -1096,11 +1098,11 @@ class PubkyRepo @Inject constructor(
                     Logger.warn("Failed to mark Paykit state for reconciliation", it, context = TAG)
                 }
             }
-            return result
+            return@withContext result
         }
 
         clearLocalState(publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPaykitState)
-        return result
+        result
     }
 
     suspend fun wipeLocalState() {

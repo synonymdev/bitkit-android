@@ -801,6 +801,7 @@ class PaykitSdkService @Inject constructor(
     suspend fun forgetSessionAccess() {
         isSetup.await()
         operationMutex.withLock {
+            activeAuthRequest = null
             withStateRevisionTracking { handle ->
                 handle.forgetSessionAccess()
             }
@@ -1077,7 +1078,7 @@ internal class PaykitSdkSessionProvider(
         keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)?.isNotBlank() == true
 
     fun canDeferStaleSession(errorContext: String): Boolean =
-        errorContext == STALE_SESSION_IMPORT_CONTEXT && hasSessionAccess()
+        errorContext == STALE_SESSION_RESTORE_CONTEXT && hasSessionAccess()
 
     fun suspendStoredSessionAccess() = synchronized(lock) {
         liveSessionAccess = null
@@ -1097,7 +1098,7 @@ internal class PaykitSdkSessionProvider(
     }
 
     private companion object {
-        const val STALE_SESSION_IMPORT_CONTEXT = "import Pubky session from platform provider"
+        const val STALE_SESSION_RESTORE_CONTEXT = "restore Pubky grant session from platform provider"
     }
 
     fun loadLocalSecretKey(): PubkyLocalSecretKey? {

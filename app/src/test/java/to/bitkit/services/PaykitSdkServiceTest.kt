@@ -152,7 +152,7 @@ class PaykitSdkServiceTest {
         val provider = PaykitSdkSessionProvider(keychain)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved-session")
 
-        assertTrue(provider.canDeferStaleSession("import Pubky session from platform provider"))
+        assertTrue(provider.canDeferStaleSession("restore Pubky grant session from platform provider"))
         provider.suspendStoredSessionAccess()
         assertNull(provider.loadSessionAccess())
     }
@@ -163,7 +163,7 @@ class PaykitSdkServiceTest {
         val provider = PaykitSdkSessionProvider(keychain)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
 
-        assertTrue(!provider.canDeferStaleSession("import Pubky session from platform provider"))
+        assertTrue(!provider.canDeferStaleSession("restore Pubky grant session from platform provider"))
         assertTrue(!provider.canDeferStaleSession("local Pubky secret key does not match session public key"))
     }
 
