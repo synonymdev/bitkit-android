@@ -18,7 +18,7 @@
     <action>Swipe the confirm handle (testTag "GRAB") from left to right</action>
     <action>Verify the transaction failure feedback is visible (testTag "OnchainSendFailedToast")</action>
     <action>Verify the success screen is absent (testTag "SendSuccess")</action>
-    <action>Close the send sheet and open All Activity</action>
+    <action>Verify the send sheet dismisses automatically, then open All Activity</action>
     <action>Verify the rejected transaction is not listed as a sent on-chain activity</action>
   </actions>
 </journey>
