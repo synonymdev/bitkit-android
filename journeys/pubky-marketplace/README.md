@@ -40,10 +40,11 @@ Evidence must show the claimed account xpub and account index while omitting wal
 and tokens.
 
 The reference implementation is
-[`BitcoinErrorLog/pubky-marketplace/payments-env`](https://github.com/BitcoinErrorLog/pubky-marketplace/tree/0259d994967961cb0b972eba2f11a567d7376dd7/payments-env).
-Its `scripts/verify.sh` proves the Locks, Paykit, Pubky, bitcoind, and Fulcrum protocol path. For this
-journey, the seller wallet replaces `paykit-companion-auth` and the buyer wallet replaces
-`paykit-reader-demo`; the other fixture roles remain unchanged.
+[`BitcoinErrorLog/pubky-marketplace/payments-env`](https://github.com/BitcoinErrorLog/pubky-marketplace/tree/master/payments-env).
+Fixture commit `ed03a32e` pins Paykit Server source `867fc883` and verifies the canonical request
+contract. Its `scripts/verify.sh` proves the Locks, Paykit, Pubky, bitcoind, and Fulcrum protocol
+path. For this journey, the seller wallet replaces `paykit-companion-auth` and the buyer wallet
+replaces `paykit-reader-demo`; the other fixture roles remain unchanged.
 
 ## Required app changes
 
@@ -73,8 +74,8 @@ artifacts at each boundary:
 | Watch-only claim | `PubkyAuthWatchOnlyConsent`, `PubkyAuthWatchOnlyApprove`, `PubkyAuthAuthorize`, and `PubkyAuthOK` snapshots | Setup completion and the claimed xpub/account index, with no spending key |
 | Contact payments | `ContactPaymentsToggle` snapshots from both wallets | Public receiver markers for both wallet identities |
 | Linked buyer | `Contact_<seller-public-key>` snapshot | Seller and buyer peer-link state |
-| Incoming request | `PaymentRequestsSheet` and `PaymentRequestRow-<payment-request-id>` snapshots showing seller, note, and amount | Delivery record and exact Payment Request id |
-| Payment approval | `PaymentRequestPay-<payment-request-id>`, `ReviewAmount`, and `ReviewUri` snapshots | Derived regtest address and expected amount |
+| Incoming request | `PaymentRequestsSheet` and `PaymentRequestRow-<payment-request-id>` snapshots showing seller, amount, and note when present | Delivery record and exact Payment Request id |
+| Payment approval | `PaymentRequestPay-<payment-request-id>`, `ReviewAmount`, and `ReviewContactRecipient` snapshots | Derived regtest address and expected amount |
 | Broadcast | `SendSuccess` snapshot and buyer activity details | Transaction in the fixture mempool with an amount-matched output |
 | Confirmation | Confirmed buyer activity snapshot | Transaction id at one or more confirmations and completed purchase status |
 
@@ -90,16 +91,24 @@ here when it ships.
 
 ## Baseline from 2026-09-02
 
-The current implementation was built from `9182771b`. A deployed seller completed the unchanged
+The current implementation was built from `423d4b2f`. A deployed seller completed the unchanged
 watch-only consent, approval, authorization, companion-claim delivery, and `/setup` completion
-path. The pinned reference fixture passed all 15 protocol-verifier steps. An isolated Android
-emulator created a local Pubky profile after the required localhost port mappings, linked the live
-seller, and discovered a funded regtest UTXO through the fixture Fulcrum endpoint.
+path. Corrected fixture commit `ed03a32e` passed its canonical verifier with lowercase `btc`,
+endpoint identifier `btc-regtest-p2wpkh`, and a JSON `value`. An isolated Android emulator created
+buyer `pubky9s1fboi8r1ft1ecnzpik1wwkiuxmd85hzu6w3wpigmwdyry7rjxy`, linked seller
+`pubkyhbn4tahj71yzpmtarz5amtqqf5fmicdd7rs8ao448tzaujdapfiy`, and confirmed reciprocal contact
+rows and enabled contact payments.
 
-The seller then issued a 15,000-sat request. Paykit reached terminal `delivered` state for Payment
-Request `a90be1df-0a93-4077-a685-ccd8cb3142aa`, but the fixture record carried uppercase
-`asset=BTC` and endpoint identifier `btc-bitcoin-p2wpkh`; the canonical wallet contract requires
-lowercase `btc` and a network-correct `btc-regtest-*` identifier, so neither Android nor iOS
-surfaced the request.
-[Upstream issue #1](https://github.com/BitcoinErrorLog/pubky-marketplace/issues/1) blocks the
-payment and confirmation boundaries. The wallet filters remain strict.
+The fixture delivered Locks bundle `YT3N7MNQ55PARNR6BK4H80MBDC`, Payment Request
+`767ca32e-8f17-4763-9343-3b273f4fb699`, and event
+`b19f4936-7b83-4a1d-a1ae-a571653a4b9e`. Android surfaced the exact incoming row with Seller and
+15,000 sats, handled the absent note, and opened the payment confirmation. The app resolved
+`bcrt1q8r8ryq9tv7yufr7gpszpgyw7lly7dl97przkv2`, retained the 15,000-sat amount, and showed Seller
+as `ReviewContactRecipient` with a 141-sat fee.
+
+The confirmation slider remained disabled because the incoming on-chain scan path does not persist
+its successful amount validation into `isAmountInputValid`. No transaction was broadcast and the
+fixture mempool remained empty. Android issue
+[#1218](https://github.com/synonymdev/bitkit-android/issues/1218) blocks the broadcast and
+confirmation boundaries; [fixture issue #1](https://github.com/BitcoinErrorLog/pubky-marketplace/issues/1)
+records the corrected upstream contract work.
