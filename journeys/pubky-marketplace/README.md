@@ -5,14 +5,14 @@ watch-only account claim, a linked buyer receives the resulting Payment Request,
 the request on regtest through confirmation. It does not cover marketplace browsing, Locks content
 delivery, fiat payment, or Hypercolor.
 
-## Required external fixture
+## Required integration fixture runtime
 
-The journey needs a controlled marketplace fixture outside this repository. The fixture owns all
-server-side state and must provide:
+The journey needs a controlled integration fixture runtime. It must provide:
 
 - A fresh Pubky testnet or isolated staging namespace reachable by both wallets.
-- A Paykit Server with the marketplace wallet-interop fixes and a `/setup` flow whose auth URL
-  carries `x-bitkit-claim=watch-only-account-v1`.
+- A Paykit Server including the canonical request behavior from merged upstream
+  [`pubky/paykit-server#2`](https://github.com/pubky/paykit-server/pull/2), plus a `/setup` flow whose
+  auth URL carries `x-bitkit-claim=watch-only-account-v1`.
 - A regtest bitcoind and Electrum/Fulcrum endpoint on the same chain. Configure the endpoint in both
   wallets before their first launch so neither wallet retains a taller foreign regtest tip.
 - A clean seller wallet, a separate clean funded buyer wallet, and the seller Pubky public key.
@@ -20,8 +20,8 @@ server-side state and must provide:
   report Paykit delivery, return the derived on-chain address and expected amount, mine one block,
   and report the transaction and purchase status.
 
-Android emulators reach host services through `10.0.2.2`. The reference Pubky testnet advertises
-its homeserver endpoints as localhost, so map its TCP services into each emulator before creating a
+Android emulators reach host services through `10.0.2.2`. When the Pubky testnet runtime advertises
+its homeserver endpoints as localhost, map its TCP services into each emulator before creating a
 profile:
 
 ```sh
@@ -39,12 +39,11 @@ string `value`. The fixture must keep watch-only account material and spending a
 Evidence must show the claimed account xpub and account index while omitting wallet seed material
 and tokens.
 
-The reference implementation is
-[`BitcoinErrorLog/pubky-marketplace/payments-env`](https://github.com/BitcoinErrorLog/pubky-marketplace/tree/ed03a32ecfe02deab40ad10ae1bac7fa18465c10/payments-env).
-Fixture commit `ed03a32e` pins Paykit Server source `867fc883` and verifies the canonical request
-contract. Its `scripts/verify.sh` proves the Locks, Paykit, Pubky, bitcoind, and Fulcrum protocol
-path. For this journey, the seller wallet replaces `paykit-companion-auth` and the buyer wallet
-replaces `paykit-reader-demo`; the other fixture roles remain unchanged.
+Use an isolated, disposable runtime that implements this contract. Paykit Server merge
+`867fc883` supplies the canonical lowercase asset, network-correct endpoint identifier, JSON value
+payload, and initial private-link retry behavior. Before running the wallets, verify the complete
+Locks, Paykit, Pubky, bitcoind, and Fulcrum protocol path. The seller wallet fills the companion-auth
+role and the buyer wallet fills the reader role; the runtime supplies the remaining services.
 
 ## Required app changes
 
@@ -58,6 +57,9 @@ The full journey depends on the sibling work from the parent epic:
   intake policy. This journey does not implement or widen that policy.
 - [#1211](https://github.com/synonymdev/bitkit-android/issues/1211) prevents an Electrum-rejected
   broadcast from reaching `SendSuccess`.
+- [#1218](https://github.com/synonymdev/bitkit-android/issues/1218) tracks the incoming on-chain
+  request swipe requirement. The behavior is supplied by merged
+  [#1178](https://github.com/synonymdev/bitkit-android/pull/1178) at `9698dea4`.
 
 The linked-contact prerequisite is existing Paykit behavior: the buyer must save the seller before
 Bitkit's private-message poll can receive the request. The seller must also save the buyer when the
@@ -65,9 +67,9 @@ fixture exercises bilateral private delivery.
 
 ## Evidence contract
 
-Capture one timestamped evidence directory per run. Record the app commit, fixture commit, both
-device identifiers, Payment Request id, transaction id, and regtest block height. Keep these
-artifacts at each boundary:
+Capture one timestamped evidence directory per run. Record the app commit, fixture runtime
+revisions, both device identifiers, Payment Request id, transaction id, and regtest block height.
+Keep these artifacts at each boundary:
 
 | Boundary | Bitkit evidence | Fixture evidence |
 | --- | --- | --- |
@@ -91,10 +93,11 @@ here when it ships.
 
 ## Acceptance run from 2026-09-02
 
-The successful replay used fixture commit `ed03a32e` and the production fix from Android issue
-[#1218](https://github.com/synonymdev/bitkit-android/issues/1218) at `41b40818`. The installed E2E
-APK had SHA-256 `cb494d870a255b96e3e289cbe7e659aa89fff1987308502b2fd55f121a0b0c42`,
-used the local backend at `10.0.2.2`, and targeted homeserver
+The initial successful payment replay used an isolated runtime including upstream Paykit Server
+merge `867fc883` and a pre-merge copy of the incoming-request swipe behavior now supplied by merged
+[#1178](https://github.com/synonymdev/bitkit-android/pull/1178). The installed E2E APK had SHA-256
+`cb494d870a255b96e3e289cbe7e659aa89fff1987308502b2fd55f121a0b0c42`, used the local backend at
+`10.0.2.2`, and targeted homeserver
 `8pinxxgqs41n4aididenw5apqp1urfmzdztr8jt4abrkdn435ewo`. A deployed seller completed the unchanged
 watch-only consent, approval, authorization, companion-claim delivery, and `/setup` completion
 path. The fixture verifier passed with lowercase `btc`, endpoint identifier
@@ -123,5 +126,25 @@ block. Android synced height 16,398 and showed a confirmed Seller activity with 
 payment and 141-sat fee. The transaction confirmed in block
 `5f2a356cace276a17e0759d8d34e7c196c852b4b299901e592552fb8f8f0bb19`, Paykit reported
 `confirmed/1/amount_matched=true`, the Locks bundle completed, and the paid request remained as
-history without Pay or Dismiss actions. [Fixture issue #1](https://github.com/BitcoinErrorLog/pubky-marketplace/issues/1)
-tracks the upstream environment used for this replay.
+history without Pay or Dismiss actions.
+
+The selector-specific acceptance replay used Android buyer `emulator-5560` and seller iOS simulator
+`B379B7A4-715A-427F-8CB6-A6479BC73050`. It ran a pre-merge integration build containing the journey
+selectors and the incoming-request swipe behavior now supplied by merged #1178. The built and
+device-installed APKs both had SHA-256
+`8d62881da626a6f6eab1e243c05079305ebd3efd2f9abb820a1a6b55d6454cf4`. The retained Buyer profile
+was synced at height 16,398 with 984,859 sats before the fixture created Locks bundle
+`J9AKW3TNASDM6MJB0SNE08RJ0M`, server invoice `8d810705-6eeb-46f6-9c57-dd3bc4bdc0cf`, Payment
+Request `b7f67854-b052-4eed-a6e7-e1ac41c31a7a`, event
+`cec538cb-57f5-4c89-9d80-7584699af1ec`, and payment reference
+`94f212c9-ed8c-4b85-9b0a-e9eea09f0a73`.
+
+Android exposed the exact `PaymentRequestRow-b7f67854-b052-4eed-a6e7-e1ac41c31a7a` and
+`PaymentRequestPay-b7f67854-b052-4eed-a6e7-e1ac41c31a7a` selectors, then preserved the 15,000-sat
+amount, Seller recipient, and 141-sat fee with an enabled confirmation slider. One swipe broadcast
+transaction `3dacd7591e0e9d1b7eab62f814f86017c41c1a1b8dda839a79b7244d9b20f997`, whose output zero paid
+exactly 15,000 sats to `bcrt1qxluk70usejytg7ehgdhpsq657eshhmr8lmkcsv`. The frozen
+zero-confirmation boundary contained that single mempool transaction. The fixture mined exactly one
+block, `7cabfa65673a0472d70c0b1f217e93d6114e040a342381a446f9a50987d18f30`, at height 16,399. Paykit
+reported `confirmed/1/amount_matched=true`, the Locks bundle completed, Android showed the Seller
+payment as confirmed, and the paid request remained in history without Pay or Dismiss actions.
