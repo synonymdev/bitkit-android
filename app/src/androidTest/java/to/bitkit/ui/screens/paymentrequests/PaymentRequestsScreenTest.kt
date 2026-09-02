@@ -47,7 +47,9 @@ class PaymentRequestsScreenTest {
             }
         }
 
-        composeTestRule.onNodeWithTag("PaymentRequestRowincoming").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestRow-incoming").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestDismiss-incoming").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestPay-incoming").assertIsDisplayed()
         composeTestRule.onNodeWithTag("MoneyPrimary").assertIsDisplayed()
         composeTestRule.onNodeWithTag("MoneySecondary").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestsSeeAll").assertIsDisplayed()
@@ -105,8 +107,8 @@ class PaymentRequestsScreenTest {
             }
         }
 
-        composeTestRule.onNodeWithTag("PaymentRequestRowaccepted").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestRowoutgoing").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestRow-accepted").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestRow-outgoing").assertIsDisplayed()
         composeTestRule.onNodeWithText("Waiting for", substring = true).assertIsDisplayed()
         composeTestRule.onNodeWithText("PAYMENT REQUESTS").assertIsDisplayed()
         composeTestRule.onNodeWithText("TODAY").assertIsDisplayed()

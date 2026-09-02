@@ -46,6 +46,7 @@ import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeast
 import org.mockito.kotlin.check
 import org.mockito.kotlin.clearInvocations
@@ -82,6 +83,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.SendFailureDetails
+import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransportType
 import to.bitkit.models.USD
@@ -617,21 +619,22 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `failed manual request presentation returns to the request queue`() = test {
+    fun `failed manual request resolution returns to the request sheet with terminal feedback`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_waiting_for_details)).thenReturn("Waiting")
+        whenever(context.getString(R.string.wallet__payment_request_unavailable)).thenReturn(
+            "The payment request is no longer available."
+        )
         whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
-            Result.success(
-                PublicPaykitPaymentResult.Opened(
-                    paymentRequest = "bitcoin:first?lightning=bitcoin:second",
-                    privatePaymentContext = PrivatePaykitPaymentContext("bitkit/server", 8uL),
-                ),
-            )
+            Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList)
         )
         pendingPaykitPaymentRequests.value = listOf(request)
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         runCurrent()
+        clearInvocations(toastManager)
 
         sut.showPaymentRequests()
         sut.openIncomingPaymentRequest(request.id)
@@ -643,6 +646,46 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
         verify(paykitPaymentRequestRepo).markPresented(request)
         verify(privatePaykitRepo, times(15)).beginPaymentRequest(request)
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager, times(2)).enqueue(toastCaptor.capture())
+        val (waitingToast, terminalToast) = toastCaptor.allValues
+        assertEquals("Payment Request", waitingToast.title)
+        assertEquals("Waiting", waitingToast.description)
+        assertEquals("PaymentRequestUnavailableToast", terminalToast.testTag)
+        assertEquals("Payment Request", terminalToast.title)
+        assertEquals("The payment request is no longer available.", terminalToast.description)
+    }
+
+    @Test
+    fun `failed request opened from the full screen does not replace it with the request sheet`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_waiting_for_details)).thenReturn("Waiting")
+        whenever(context.getString(R.string.wallet__payment_request_unavailable)).thenReturn(
+            "The payment request is no longer available."
+        )
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
+            Result.success(PublicPaykitPaymentResult.NoEndpoint)
+        )
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        verify(paykitPaymentRequestRepo).markPresented(request)
+        verify(privatePaykitRepo, times(15)).beginPaymentRequest(request)
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager, times(2)).enqueue(toastCaptor.capture())
+        val (waitingToast, terminalToast) = toastCaptor.allValues
+        assertNull(waitingToast.testTag)
+        assertEquals("PaymentRequestUnavailableToast", terminalToast.testTag)
     }
 
     @Test

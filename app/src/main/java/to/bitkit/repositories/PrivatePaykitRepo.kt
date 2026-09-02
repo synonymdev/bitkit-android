@@ -371,8 +371,6 @@ class PrivatePaykitRepo @Inject constructor(
                 val publicKey = normalizedPublicKey(request.counterparty) ?: throw PrivatePaykitError.InvalidPublicKey
                 beginContactPayment(publicKey, request).getOrThrow()
             }
-        }.onFailure {
-            Logger.warn("Failed to present incoming Paykit payment request", it, context = TAG)
         }
 
     suspend fun consumePrivatePaymentList(

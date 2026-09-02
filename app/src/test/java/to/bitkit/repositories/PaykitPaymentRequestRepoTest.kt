@@ -35,6 +35,7 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.services.PaykitPaymentRequestProposalTerms
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
@@ -103,6 +104,55 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = sut.pendingRequests.value.single()
         assertEquals(100_000uL, request.amountSats)
         assertEquals(listOf(MethodId.Bolt11.rawValue), request.acceptedPaymentEndpointIdentifiers)
+    }
+
+    @Test
+    fun `incoming parse failures are reason specific`() {
+        val cases = listOf(
+            paymentRequestRecord(role = null) to PaykitPaymentRequest.ParseFailure.MissingLocalRole,
+            paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE) to
+                PaykitPaymentRequest.ParseFailure.UnsupportedLocalRole,
+            paymentRequestRecord(state = PaymentRequestLifecycleState.ACCEPTED) to
+                PaykitPaymentRequest.ParseFailure.NonActionableState,
+            paymentRequestRecord().copy(terms = null) to PaykitPaymentRequest.ParseFailure.MissingTerms,
+            paymentRequestRecord(asset = "BTC") to PaykitPaymentRequest.ParseFailure.UnsupportedAsset,
+            paymentRequestRecord(amount = "not-bitcoin") to PaykitPaymentRequest.ParseFailure.InvalidAmount,
+            paymentRequestRecord(amount = "184467440737.09551615") to
+                PaykitPaymentRequest.ParseFailure.AmountOutOfRange,
+            paymentRequestRecord(endpoints = listOf("btc-unsupported-method")) to
+                PaykitPaymentRequest.ParseFailure.NoSupportedEndpoint,
+            paymentRequestRecord(expiresAt = "not-a-timestamp") to
+                PaykitPaymentRequest.ParseFailure.InvalidExpiration,
+            paymentRequestRecord(expiresAt = clock.now().toString()) to PaykitPaymentRequest.ParseFailure.Expired,
+        )
+
+        cases.forEach { (record, expectedReason) ->
+            val result = record.parseIncomingPaykitPaymentRequest(clock.now())
+                as PaykitPaymentRequestParseResult.Rejected
+
+            assertEquals(expectedReason, result.reason)
+        }
+    }
+
+    @Test
+    fun `incoming parse rejection log excludes request data`() {
+        val requestId = "do-not-log-this-id"
+        val record = paymentRequestRecord(
+            id = requestId,
+            asset = "BTC",
+            counterparty = COUNTERPARTY,
+        )
+        val result = record.parseIncomingPaykitPaymentRequest(clock.now())
+            as PaykitPaymentRequestParseResult.Rejected
+
+        val output = record.incomingPaymentRequestRejectionLog(result.reason)
+
+        assertTrue(output.contains("category='parse' reason='unsupported_asset'"))
+        assertTrue(output.contains("counterparty='${PubkyPublicKeyFormat.redacted(COUNTERPARTY)}'"))
+        assertFalse(output.contains(COUNTERPARTY))
+        assertFalse(output.contains(requestId))
+        assertFalse(output.contains(record.terms?.amount?.value.orEmpty()))
+        assertFalse(output.contains(record.terms?.acceptedPaymentEndpointIdentifiers?.single().orEmpty()))
     }
 
     @Test
@@ -654,6 +704,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         role: PaymentRequestLocalRole? = PaymentRequestLocalRole.PAYER,
         state: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROPOSED,
         amount: String = "0.001",
+        asset: String = "btc",
         expiresAt: String? = null,
         endpoints: List<String> = listOf(MethodId.Bolt11.rawValue),
         counterparty: String = COUNTERPARTY,
@@ -669,7 +720,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         proposalOutboundStatus = null,
         proposalEventId = "proposal-event",
         terms = PaymentRequestTerms(
-            amount = PaymentRequestAmount(value = amount, asset = "btc"),
+            amount = PaymentRequestAmount(value = amount, asset = asset),
             paymentReference = PAYMENT_REFERENCE,
             proposalExpiresAt = expiresAt,
             recurrence = null,
