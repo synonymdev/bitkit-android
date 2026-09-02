@@ -382,13 +382,17 @@ private fun ColumnScope.ApprovalDetails(
 
         DescriptionText(serviceName = uiState.serviceName)
         VerticalSpacer(8.dp)
-        BodyS(
-            text = stringResource(R.string.profile__auth_approval_requester, uiState.clientId),
-            color = Colors.White64,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        VerticalSpacer(32.dp)
+        if (uiState.clientId.isNotBlank()) {
+            BodyS(
+                text = stringResource(R.string.profile__auth_approval_requester, uiState.clientId),
+                color = Colors.White64,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            VerticalSpacer(32.dp)
+        } else {
+            VerticalSpacer(24.dp)
+        }
 
         PermissionsSection(permissions = uiState.permissions)
         FillHeight(min = 32.dp)

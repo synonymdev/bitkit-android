@@ -114,6 +114,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkyRingAuthCallback
@@ -130,6 +131,7 @@ import to.bitkit.models.WalletScope
 import to.bitkit.models.msatFloorOf
 import to.bitkit.models.safe
 import to.bitkit.models.sanitizedDeeplinkLogValue
+import to.bitkit.models.sanitizedQrLogValue
 import to.bitkit.models.toActivityFilter
 import to.bitkit.models.toLdkNetwork
 import to.bitkit.models.toTxType
@@ -182,6 +184,7 @@ import to.bitkit.ui.sheets.SendRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
 import to.bitkit.ui.utils.ScreenDeepLinks
+import to.bitkit.ui.utils.localizedPubkyAuthMessage
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import to.bitkit.utils.AppError
@@ -1709,7 +1712,7 @@ class AppViewModel @Inject constructor(
         // Skip validation for empty input
         if (valueWithoutSpaces.isEmpty()) return
 
-        if (valueWithoutSpaces.startsWith("$PUBKYAUTH_SCHEME://", ignoreCase = true)) return
+        if (PubkyAuthRequest.isProtocolUrl(valueWithoutSpaces)) return
 
         if (PubkyPublicKeyFormat.normalized(valueWithoutSpaces) != null) {
             if (isPaykitEnabled.value) {
@@ -1921,21 +1924,15 @@ class AppViewModel @Inject constructor(
         routePubkyKeys: Boolean = false,
         contactPaymentContext: ContactPaymentContext? = null,
         preserveUntilComplete: Boolean = false,
+        allowPubkyAuth: Boolean = isMainScanner,
     ) {
         if (!_isAuthenticated.value) {
-            enqueueDeferredScan(
-                source = source,
-                data = data,
-                startDelay = startDelay,
-                routePubkyKeys = routePubkyKeys,
-                contactPaymentContext = contactPaymentContext,
-            )
+            enqueueDeferredScan(source, data, startDelay, routePubkyKeys, contactPaymentContext, allowPubkyAuth)
             return
         }
 
         val normalized = data.removeLightningSchemes()
         val scanId = scanLogId(data)
-
         val scheduled = scheduledScan
         val isSameActiveScan = normalized == scheduled?.normalizedInput &&
             scheduled.job.isActive &&
@@ -1946,16 +1943,16 @@ class AppViewModel @Inject constructor(
         }
 
         if (scheduled?.job?.isActive == true && scheduled.mustComplete) {
-            enqueueDeferredScan(source, data, startDelay, routePubkyKeys, contactPaymentContext)
+            enqueueDeferredScan(source, data, startDelay, routePubkyKeys, contactPaymentContext, allowPubkyAuth)
             return
         }
 
         val previousJob = scheduled?.job
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             scanMutex.withLock {
-                setActiveContactPaymentContext(contactPaymentContext)
+                prepareContactPaymentContextForScan(normalized, allowPubkyAuth, contactPaymentContext)
                 if (startDelay > Duration.ZERO) delay(startDelay)
-                handleScan(data, routePubkyKeys)
+                handleScan(data, routePubkyKeys, contactPaymentContext, allowPubkyAuth)
             }
         }
         val nextScheduledScan = ScheduledScan(
@@ -1981,7 +1978,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun scanLogId(data: String): String {
-        val scanLogInput = SamRockSetupRequest.sanitizedDescription(data.removeLightningSchemes()) ?: data
+        val scanLogInput = data.removeLightningSchemes().sanitizedQrLogValue()
         return if (scanLogInput.length > SCAN_LOG_ID_MAX_LENGTH) {
             "${scanLogInput.take(SCAN_LOG_ID_AFFIX_LENGTH)}…${scanLogInput.takeLast(SCAN_LOG_ID_AFFIX_LENGTH)}"
         } else {
@@ -1995,6 +1992,7 @@ class AppViewModel @Inject constructor(
         startDelay: Duration,
         routePubkyKeys: Boolean,
         contactPaymentContext: ContactPaymentContext?,
+        allowPubkyAuth: Boolean,
     ) {
         val scanId = scanLogId(data)
         val normalized = data.removeLightningSchemes()
@@ -2008,6 +2006,7 @@ class AppViewModel @Inject constructor(
                         startDelay = startDelay,
                         routePubkyKeys = routePubkyKeys,
                         contactPaymentContext = contactPaymentContext,
+                        allowPubkyAuth = allowPubkyAuth,
                     )
                     return
                 }
@@ -2026,6 +2025,7 @@ class AppViewModel @Inject constructor(
                 startDelay = startDelay,
                 routePubkyKeys = routePubkyKeys,
                 contactPaymentContext = contactPaymentContext,
+                allowPubkyAuth = allowPubkyAuth,
             )
         }
         Logger.info("Queuing '${source.label}' scan for deferred handling: '$scanId'", context = TAG)
@@ -2064,6 +2064,7 @@ class AppViewModel @Inject constructor(
             routePubkyKeys = pending.routePubkyKeys,
             contactPaymentContext = pending.contactPaymentContext,
             preserveUntilComplete = true,
+            allowPubkyAuth = pending.allowPubkyAuth,
         )
     }
 
@@ -2415,6 +2416,7 @@ class AppViewModel @Inject constructor(
         startDelay: Duration = Duration.ZERO,
         routePubkyKeys: Boolean = false,
         contactPaymentContext: ContactPaymentContext? = null,
+        allowPubkyAuth: Boolean = isMainScanner,
     ) {
         launchScan(
             source = ScanSource.SCAN_RESULT,
@@ -2422,6 +2424,7 @@ class AppViewModel @Inject constructor(
             startDelay = startDelay,
             routePubkyKeys = routePubkyKeys,
             contactPaymentContext = contactPaymentContext,
+            allowPubkyAuth = allowPubkyAuth,
         )
     }
 
@@ -2436,7 +2439,11 @@ class AppViewModel @Inject constructor(
             privatePaymentContext = privatePaymentContext,
             incomingPaymentRequest = incomingPaymentRequest,
         )
-        onScanResult(paymentRequest, contactPaymentContext = context)
+        onScanResult(
+            data = paymentRequest,
+            contactPaymentContext = context,
+            allowPubkyAuth = false,
+        )
     }
 
     fun preserveContactPaymentContext(paymentHash: String) {
@@ -2453,7 +2460,21 @@ class AppViewModel @Inject constructor(
     private suspend fun handleScan(
         result: String,
         routePubkyKeys: Boolean,
+        contactPaymentContext: ContactPaymentContext?,
+        allowPubkyAuth: Boolean,
     ) = withContext(bgDispatcher) {
+        val input = result.removeLightningSchemes()
+
+        if (PubkyAuthRequest.isProtocolUrl(input) && !allowPubkyAuth) {
+            toast(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.other__qr_error_header),
+                description = context.getString(R.string.other__qr_error_text),
+            )
+            clearRejectedContactPaymentContext(contactPaymentContext)
+            return@withContext
+        }
+
         val contactPaymentProfile = activeContactPaymentProfile()
         val isPaymentRequest = activeIncomingPaymentRequest() != null
         // always reset state on new scan
@@ -2461,7 +2482,6 @@ class AppViewModel @Inject constructor(
         resetQuickPay()
 
         val fromMainScanner = isMainScanner
-        val input = result.removeLightningSchemes()
 
         // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
         if (Bip21Utils.isDuplicatedBip21(input)) {
@@ -2486,16 +2506,9 @@ class AppViewModel @Inject constructor(
             return@withContext
         }
 
-        if (input.startsWith("$PUBKYAUTH_SCHEME://", ignoreCase = true)) {
+        if (PubkyAuthRequest.isProtocolUrl(input)) {
             clearActiveContactPaymentContext()
-            if (!fromMainScanner) {
-                hideSheet()
-                toast(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.other__qr_error_header),
-                    description = context.getString(R.string.other__qr_error_text),
-                )
-            } else if (isPaykitEnabled.value) {
+            if (isPaykitEnabled.value) {
                 handlePubkyAuth(input)
             } else {
                 hideSheet()
@@ -2624,12 +2637,7 @@ class AppViewModel @Inject constructor(
         if (interruptedRequest == null) return
 
         if (!retryIncomingRequest) {
-            paymentRequestPresentationGeneration++
-            if (requestedPaymentRequestId == interruptedRequest.id) {
-                requestedPaymentRequestId = null
-            }
-            clearPaymentRequestPresentationRetry(interruptedRequest.id)
-            viewModelScope.launch { paykitPaymentRequestRepo.markPresented(interruptedRequest) }
+            viewModelScope.launch { markIncomingPaymentRequestPresented(interruptedRequest) }
             return
         }
 
@@ -2642,11 +2650,39 @@ class AppViewModel @Inject constructor(
         isSubmittingPaymentRequest = false
     }
 
+    private suspend fun clearRejectedContactPaymentContext(context: ContactPaymentContext?) {
+        val request = context?.incomingPaymentRequest ?: return
+        synchronized(contactPaymentContextLock) {
+            if (activeContactPaymentContext != context) return
+            activeContactPaymentContext = null
+            preparedContactPaymentContext = null
+        }
+        markIncomingPaymentRequestPresented(request)
+    }
+
+    private suspend fun markIncomingPaymentRequestPresented(request: PaykitPaymentRequest) {
+        paymentRequestPresentationGeneration++
+        if (requestedPaymentRequestId == request.id) {
+            requestedPaymentRequestId = null
+        }
+        clearPaymentRequestPresentationRetry(request.id)
+        paykitPaymentRequestRepo.markPresented(request)
+    }
+
     private fun setActiveContactPaymentContext(context: ContactPaymentContext?) {
         synchronized(contactPaymentContextLock) {
             if (activeContactPaymentContext != context) preparedContactPaymentContext = null
             activeContactPaymentContext = context
         }
+    }
+
+    private fun prepareContactPaymentContextForScan(
+        input: String,
+        allowPubkyAuth: Boolean,
+        context: ContactPaymentContext?,
+    ) {
+        val preservesExistingContext = PubkyAuthRequest.isProtocolUrl(input) && !allowPubkyAuth && context == null
+        if (!preservesExistingContext) setActiveContactPaymentContext(context)
     }
 
     private fun clearPendingContactPaymentContext(paymentHash: String) {
@@ -4629,7 +4665,7 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
-        if (uri.scheme == PUBKYAUTH_SCHEME) {
+        if (PubkyAuthRequest.isProtocolUrl(uri.toString())) {
             if (!isPaykitEnabled.value) return@launch
             handlePubkyAuth(uri.toString())
             return@launch
@@ -4653,7 +4689,10 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun handlePubkyAuth(authUrl: String) {
-        if (pubkyRepo.publicKey.value == null) {
+        val isRingSignup = PubkyAuthRequest.isRingSignupUrl(authUrl)
+        if (isRingSignup && rejectPubkySignupForExistingIdentity()) return
+
+        if (!isRingSignup && pubkyRepo.publicKey.value == null) {
             ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.pubky_auth__no_identity),
@@ -4662,7 +4701,7 @@ class AppViewModel @Inject constructor(
             return
         }
 
-        if (!pubkyRepo.hasSecretKey()) {
+        if (!isRingSignup && !pubkyRepo.hasSecretKey()) {
             ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.profile__auth_approval_ring_only),
@@ -4670,6 +4709,24 @@ class AppViewModel @Inject constructor(
             return
         }
         showSheet(Sheet.PubkyAuth(authUrl))
+    }
+
+    private suspend fun rejectPubkySignupForExistingIdentity(): Boolean {
+        val hasIdentity = runCatching { pubkyRepo.hasIdentity() }.getOrElse {
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.profile__auth_error_title),
+                description = it.localizedPubkyAuthMessage(context),
+            )
+            return true
+        }
+        if (!hasIdentity) return false
+
+        ToastEventBus.send(
+            type = Toast.ToastType.INFO,
+            title = context.getString(R.string.pubky_auth__already_signed_in),
+        )
+        return true
     }
 
     private suspend fun handlePubkyRingAuthCallback(callback: PubkyRingAuthCallback) {
@@ -4756,7 +4813,6 @@ class AppViewModel @Inject constructor(
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
         private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
         private const val BITKIT_SCHEME = "bitkit"
-        private const val PUBKYAUTH_SCHEME = "pubkyauth"
         private const val RECOVERY_MODE_DEEPLINK = "recovery-mode"
 
         /** Max characters kept in a scan log id before truncating. */
@@ -4793,6 +4849,7 @@ private data class DeferredScan(
     val startDelay: Duration,
     val routePubkyKeys: Boolean,
     val contactPaymentContext: ContactPaymentContext?,
+    val allowPubkyAuth: Boolean,
 )
 
 // region send contract

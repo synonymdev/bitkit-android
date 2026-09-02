@@ -40,6 +40,9 @@ class SettingsStore @Inject constructor(
 
     val data: Flow<SettingsData> = store.data
     val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: false }
+    val isPubkyProfileSetupPending: Flow<Boolean> = localStore.data.map {
+        it[PUBKY_PROFILE_SETUP_PENDING_KEY] ?: false
+    }
 
     @Volatile
     var restoredMonitoredTypesFromBackup: Boolean = false
@@ -64,6 +67,10 @@ class SettingsStore @Inject constructor(
 
     suspend fun setIsPaykitEnabled(value: Boolean) {
         localStore.edit { it[PAYKIT_ENABLED_KEY] = value }
+    }
+
+    suspend fun setPubkyProfileSetupPending(value: Boolean) {
+        localStore.edit { it[PUBKY_PROFILE_SETUP_PENDING_KEY] = value }
     }
 
     suspend fun addLastUsedTag(newTag: String) {
@@ -98,6 +105,7 @@ class SettingsStore @Inject constructor(
         private const val TAG = "SettingsStore"
         private const val MAX_LAST_USED_TAGS = 10
         private val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
+        private val PUBKY_PROFILE_SETUP_PENDING_KEY = booleanPreferencesKey("pubky_profile_setup_pending")
     }
 }
 

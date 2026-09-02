@@ -219,6 +219,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val paykitPaymentRequestHistory = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val surfacedPaykitPaymentRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    private val signupAuthUrl =
+        "pubkyring://signup?hs=homeserver&relay=https://relay&secret=request&caps=/pub/example/:rw"
 
     private val timedSheetManager = mock<TimedSheetManager>()
     private val timedSheetType = MutableStateFlow<TimedSheetType?>(null)
@@ -280,6 +282,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
+        whenever(pubkyRepo.hasIdentity()).thenAnswer { pubkyPublicKey.value != null }
         whenever(pubkyRepo.contacts).thenReturn(pubkyContacts)
         whenever { refreshContactPaykitReceivers(any()) }.thenReturn(Result.success(Unit))
         whenever { publicPaykitRepo.syncLocalReceiverMarker(anyOrNull(), anyOrNull()) }
@@ -1919,20 +1922,44 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `global scanner accepts Ring signup without an existing identity`() = test {
+        enablePaykitUi()
+        scanSignup()
+
+        assertEquals(Sheet.PubkyAuth(signupAuthUrl), sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
+    }
+
+    @Test
+    fun `signup scan stops when already signed in`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(context.getString(R.string.pubky_auth__already_signed_in)).thenReturn("Already signed in")
+        scanSignup()
+
+        assertNull(sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(toastManager).enqueue(check { assertEquals("Already signed in", it.title) })
+    }
+
+    @Test
     fun `send paste rejects pubky auth`() = test {
         val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
+        val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
         val clipData = mock<ClipData>()
         val item = mock<ClipData.Item>()
         whenever(item.text).thenReturn(authUrl)
         whenever(clipData.getItemAt(0)).thenReturn(item)
         whenever(clipboardManager.primaryClip).thenReturn(clipData)
         sut.showSheet(Sheet.Send())
+        setSendState(paymentState)
         advanceUntilIdle()
 
         sut.setSendEvent(SendEvent.Paste)
         advanceUntilIdle()
 
-        assertNull(sut.currentSheet.value)
+        assertEquals(Sheet.Send(), sut.currentSheet.value)
+        assertEquals(paymentState, sut.sendUiState.value)
         verify(pubkyRepo, never()).hasSecretKey()
         verify(coreService, never()).decode(any())
         verify(toastManager).enqueue(any())
@@ -1941,15 +1968,51 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `send scanner rejects pubky auth`() = test {
         val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
+        val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
         sut.showSheet(Sheet.Send())
+        setSendState(paymentState)
+        setActiveContactPaymentContext(testPublicKey)
         advanceUntilIdle()
 
         sut.onScanResult(authUrl)
         advanceUntilIdle()
 
-        assertNull(sut.currentSheet.value)
+        assertEquals(Sheet.Send(), sut.currentSheet.value)
+        assertEquals(paymentState, sut.sendUiState.value)
+        assertEquals(testPublicKey, activeContactPaymentContext()?.publicKey)
         verify(pubkyRepo, never()).hasSecretKey()
         verify(coreService, never()).decode(any())
+        verify(toastManager).enqueue(any())
+    }
+
+    @Test
+    fun `incoming payment target rejects pubky auth without clearing payment state`() = test {
+        val request = paymentRequest()
+        val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
+        setSendState(paymentState)
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        stubOpenedPaymentRequest(request, signupAuthUrl)
+
+        sut.onHomeResumed()
+        advanceUntilIdle()
+
+        assertEquals(paymentState, sut.sendUiState.value)
+        assertNull(activeContactPaymentContext())
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+        verify(paykitPaymentRequestRepo).markPresented(request)
+        verify(pubkyRepo, never()).parseAuthUrl(any())
+    }
+
+    @Test
+    fun `signup scan stops when secure identity storage is unavailable`() = test {
+        enablePaykitUi()
+        whenever(pubkyRepo.hasIdentity()).thenThrow(IllegalStateException("storage unavailable"))
+        scanSignup()
+
+        assertNull(sut.currentSheet.value)
         verify(toastManager).enqueue(any())
     }
 
@@ -5014,6 +5077,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private fun enablePaykitUi() {
         isPaykitEnabled.value = true
+    }
+
+    private suspend fun TestScope.scanSignup() {
+        sut.showScannerSheet()
+        advanceUntilIdle()
+        sut.onScannerSheetResult(signupAuthUrl)
+        advanceUntilIdle()
     }
 
     private fun samRockSetupRequest() = SamRockSetupRequest(
