@@ -2,6 +2,7 @@ package to.bitkit.repositories
 
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.AddressInfo
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.OnchainActivity
@@ -187,6 +188,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 850_000u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
 
@@ -312,6 +314,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         watcherEvents.emit(
@@ -321,6 +324,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
 
@@ -345,6 +349,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 2u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
 
@@ -366,6 +371,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         watcherEvents.emit(
@@ -376,6 +382,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
 
@@ -407,6 +414,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         watcherEvents.emit(
@@ -419,6 +427,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
 
@@ -444,6 +453,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         watcherEvents.emit(
@@ -456,6 +466,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
 
@@ -484,6 +495,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         val firstTimestamp = (sut.wallets.value.single().activities.single() as Activity.Onchain).v1.timestamp
@@ -496,6 +508,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         val refreshedTimestamp = (sut.wallets.value.single().activities.single() as Activity.Onchain).v1.timestamp
@@ -667,6 +680,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         runCurrent()
@@ -684,6 +698,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 2u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         runCurrent()
@@ -710,6 +725,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 2u,
                 blockHeight = 3u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         runCurrent()
@@ -783,6 +799,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         runCurrent()
@@ -793,6 +810,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         runCurrent()
@@ -805,6 +823,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         runCurrent()
@@ -816,6 +835,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         runCurrent()
@@ -840,6 +860,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         watcherEvents.emit(
@@ -852,6 +873,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
 
@@ -888,6 +910,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
 
@@ -1356,6 +1379,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
         runCurrent()
@@ -1452,6 +1476,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = unusedAddress(),
             )
         )
 
@@ -2004,6 +2029,12 @@ class HwWalletRepoTest : BaseUnitTest() {
         total = total,
     )
 
+    private fun unusedAddress() = AddressInfo(
+        address = "bc1qtestunused",
+        path = "m/84'/0'/0'/0/0",
+        transfers = 0u,
+    )
+
     private fun transactionsChanged(
         total: ULong,
         activities: List<Activity> = emptyList(),
@@ -2014,6 +2045,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         txCount = activities.size.toUInt(),
         blockHeight = 1u,
         accountType = AccountType.NATIVE_SEGWIT,
+        nextUnusedExternalAddress = unusedAddress(),
     )
 
     @Suppress("LongParameterList")
