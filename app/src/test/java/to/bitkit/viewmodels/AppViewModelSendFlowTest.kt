@@ -223,6 +223,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
     private val signupAuthUrl =
         "pubkyring://signup?hs=homeserver&relay=https://relay&secret=request&caps=/pub/example/:rw"
+    private val legacyAuthorizedSignupAuthUrl = signupAuthUrl.replace("pubkyring://", "pubkyauth://")
     private val directSignupAuthUrl = "pubkyauth://direct_signup?hs=homeserver&st=invite"
     private val legacyDirectSignupAuthUrl = "pubkyauth://signup?hs=homeserver&st=invite"
 
@@ -1926,12 +1927,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `global scanner accepts Ring signup without an existing identity`() = test {
+    fun `global scanner accepts authorized signup without an existing identity`() = test {
         enablePaykitUi()
 
-        scanSignup(signupAuthUrl)
-
-        assertEquals(Sheet.PubkyAuth(signupAuthUrl), sut.currentSheet.value)
+        listOf(signupAuthUrl, legacyAuthorizedSignupAuthUrl).forEach { authUrl ->
+            scanSignup(authUrl)
+            assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+        }
         verify(pubkyRepo, never()).hasSecretKey()
     }
 
