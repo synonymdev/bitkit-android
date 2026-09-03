@@ -25,9 +25,12 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import kotlinx.serialization.Serializable
 import to.bitkit.R
+import to.bitkit.models.PubkyProfile
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDraft
+import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.WalletState
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.navigateTo
@@ -82,6 +85,14 @@ fun ReceiveSheet(
         )
     }
     var createdPaymentRequest by remember { mutableStateOf<PaykitPaymentRequest?>(null) }
+    var paymentRequestTarget by remember { mutableStateOf<PaykitPaymentRequestTarget?>(null) }
+    var showRecipientContactsHeader by remember { mutableStateOf(true) }
+    val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
+    val isCreatingPaymentRequest by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
+    val paymentRequestRecipient = paymentRequestTarget?.let { target ->
+        contacts.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, target.publicKey) }
+            ?: PubkyProfile.placeholder(target.publicKey)
+    }
 
     LaunchedEffect(Unit) {
         wallet.resetPreActivityMetadataTagsForCurrentInvoice()
@@ -91,13 +102,13 @@ fun ReceiveSheet(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .sheetHeight(),
+            .sheetHeight()
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .imePadding()
-                .testTag("ReceiveScreen"),
+                .testTag("ReceiveScreen")
         ) {
             NavHost(
                 navController = navController,
@@ -127,12 +138,23 @@ fun ReceiveSheet(
                     PaymentRequestDetailsScreen(
                         amountInputViewModel = paymentRequestAmountViewModel,
                         initialDraft = paymentRequestDraft,
+                        recipient = paymentRequestRecipient,
+                        isCreating = isCreatingPaymentRequest,
                         onBack = {
                             if (!navController.popBackStack()) appViewModel.hideSheet()
                         },
-                        onContinue = {
-                            paymentRequestDraft = it
-                            navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
+                        onContinue = { draft ->
+                            paymentRequestDraft = draft
+                            val target = paymentRequestTarget
+                            if (target != null) {
+                                appViewModel.createPaymentRequest(draft, target) {
+                                    createdPaymentRequest = it
+                                    navController.navigateToPaymentRequestSent()
+                                }
+                            } else {
+                                showRecipientContactsHeader = true
+                                navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
+                            }
                         },
                     )
                 }
@@ -140,6 +162,8 @@ fun ReceiveSheet(
                     PaymentRequestDetailsScreen(
                         amountInputViewModel = paymentRequestAmountViewModel,
                         initialDraft = paymentRequestDraft,
+                        recipient = paymentRequestRecipient,
+                        isCreating = isCreatingPaymentRequest,
                         onBack = { navController.popBackStack() },
                         onContinue = {
                             paymentRequestDraft = it
@@ -150,14 +174,17 @@ fun ReceiveSheet(
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestRecipient> {
                     PaymentRequestRecipientScreen(
                         appViewModel = appViewModel,
-                        draft = paymentRequestDraft,
+                        onBack = { navController.popBackStack() },
                         onEditExpiration = {
                             navController.navigateTo(ReceiveRoute.PaymentRequestExpiration)
                         },
-                        onSent = {
-                            createdPaymentRequest = it
-                            navController.navigateToPaymentRequestSent()
+                        onRecipientSelected = { target ->
+                            paymentRequestTarget = target
+                            navController.navigateTo(ReceiveRoute.PaymentRequestDetails) {
+                                popUpTo(ReceiveRoute.PaymentRequestRecipient) { inclusive = true }
+                            }
                         },
+                        showContactsHeader = showRecipientContactsHeader,
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestSent> {
@@ -272,6 +299,7 @@ fun ReceiveSheet(
                                 note = note,
                                 expiresAt = Clock.System.now() + 7.days,
                             )
+                            showRecipientContactsHeader = false
                             navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
                         },
                         navigateReceiveConfirm = { entry ->

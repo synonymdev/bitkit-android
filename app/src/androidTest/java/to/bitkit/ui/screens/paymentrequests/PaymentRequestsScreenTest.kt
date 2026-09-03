@@ -107,8 +107,9 @@ class PaymentRequestsScreenTest {
 
         composeTestRule.onNodeWithTag("PaymentRequestRowaccepted").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRowoutgoing").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Waiting for", substring = true).assertIsDisplayed()
-        composeTestRule.onNodeWithText("PAYMENT REQUESTS").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Dinner").assertIsDisplayed()
+        composeTestRule.onNodeWithText("INCOMING").assertDoesNotExist()
+        composeTestRule.onNodeWithText("OUTGOING").assertIsDisplayed()
         composeTestRule.onNodeWithText("TODAY").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestCreate").assertIsDisplayed()
     }
