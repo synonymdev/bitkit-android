@@ -996,10 +996,10 @@ class AppViewModel @Inject constructor(
     private suspend fun retryPendingPaykitEndpointRemoval(contactKeys: Collection<String>, reason: String) {
         val settings = settingsStore.data.first()
         if (settings.publicPaykitCleanupPending) {
-            val reconciliationResult = when {
-                settings.sharesPublicPaykitEndpoints -> publicPaykitRepo.syncCurrentPublishedEndpoints()
-                settings.sharesPrivatePaykitEndpoints -> publicPaykitRepo.syncLocalReceiverMarker()
-                else -> publicPaykitRepo.syncPublishedEndpoints(publish = false)
+            val reconciliationResult = if (settings.sharesPublicPaykitEndpoints) {
+                publicPaykitRepo.syncCurrentPublishedEndpoints()
+            } else {
+                publicPaykitRepo.syncPublishedEndpoints(publish = false)
             }
             reconciliationResult
                 .onSuccess {

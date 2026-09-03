@@ -4914,17 +4914,18 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `private Paykit refresh reconciles pending private-only receiver marker`() = test {
+    fun `private Paykit refresh removes pending public endpoints from private-only state`() = test {
         settingsData.value = SettingsData(
             sharesPrivatePaykitEndpoints = true,
             publicPaykitCleanupPending = true,
         )
-        whenever(publicPaykitRepo.syncLocalReceiverMarker()).thenReturn(Result.success(Unit))
+        whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false)).thenReturn(Result.success(Unit))
 
         sut.refreshPrivatePaykitEndpoints()
         advanceUntilIdle()
 
-        verify(publicPaykitRepo).syncLocalReceiverMarker()
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        verify(publicPaykitRepo, never()).syncLocalReceiverMarker()
         assertFalse(settingsData.value.publicPaykitCleanupPending)
         verify(privatePaykitRepo).retryPendingEndpointRemoval(emptyList())
     }
