@@ -228,7 +228,11 @@ private fun SpendingAmountNodeRunning(
                     modifier = Modifier.testTag("SpendingAmountAvailable")
                 )
                 VerticalSpacer(8.dp)
-                MoneySSB(sats = uiState.balanceAfterFee, modifier = Modifier.testTag("SpendingAmountUnit"))
+                MoneySSB(
+                    sats = uiState.balanceAfterFee,
+                    showSymbol = true,
+                    modifier = Modifier.testTag("SpendingAmountUnit")
+                )
             }
             FillWidth()
             UnitButton(

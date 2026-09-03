@@ -10,6 +10,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.PrimaryDisplay
@@ -30,12 +32,17 @@ fun MoneyDisplay(
     sats: Long,
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
-    showSymbol: Boolean? = null,
+    showSymbol: Boolean = true,
 ) {
-    val text = showSymbol?.let { rememberMoneyText(sats, showSymbol = it) } ?: rememberMoneyText(sats)
+    val text = rememberMoneyText(sats, showSymbol = showSymbol)
     text?.let {
         Display(
-            text = it.withAccent(accentColor = Colors.White64),
+            text = it.withAccent(
+                accentStyle = SpanStyle(
+                    color = Colors.White64,
+                    fontWeight = FontWeight.ExtraBold,
+                ),
+            ),
             modifier = modifier
                 .clickableAlpha(onClick = onClick)
                 .testTag("MoneyText")
