@@ -127,6 +127,7 @@ fun SendSheet(
             val navController = rememberNavController()
             LaunchedEffect(hwSendViewModel, navController) {
                 hwSendViewModel.results.collect { result ->
+                    appViewModel.completeHardwareContactPayment(result.txId)
                     appViewModel.onSendSuccess(
                         details = NewTransactionSheetDetails(
                             type = NewTransactionSheetType.ONCHAIN,

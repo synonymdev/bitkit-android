@@ -20,6 +20,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -47,12 +48,14 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private var storedProofs = emptyList<PendingPaykitPaymentProof>()
     private var shouldFailNextLoad = false
     private var shouldFailNextSave = false
+    private var shouldFailProofRemoval = false
 
     @Before
     fun setUp() = test {
         storedProofs = emptyList()
         shouldFailNextLoad = false
         shouldFailNextSave = false
+        shouldFailProofRemoval = false
         whenever(store.hasPendingProofs()).thenReturn(true)
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
@@ -64,11 +67,16 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             storedProofs
         }
         whenever(store.save(any())).doSuspendableAnswer {
+            val proofs = it.getArgument<List<PendingPaykitPaymentProof>>(0)
             if (shouldFailNextSave) {
                 shouldFailNextSave = false
                 error("temporary save failure")
             }
-            storedProofs = it.getArgument(0)
+            if (shouldFailProofRemoval && proofs.isEmpty()) {
+                shouldFailProofRemoval = false
+                error("temporary proof removal failure")
+            }
+            storedProofs = proofs
         }
     }
 
@@ -103,7 +111,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val firstRepo = paymentProofRepo()
 
         firstRepo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        firstRepo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        firstRepo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
         firstRepo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
 
         assertEquals(PREIMAGE, storedProofs.single().proofData)
@@ -178,7 +186,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val firstRepo = paymentProofRepo()
 
         firstRepo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        firstRepo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        firstRepo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
         assertNull(storedProofs.single().proofData)
 
         paymentProofRepo().reconcile()
@@ -200,12 +208,27 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `lightning proof completes without prepared proof`() = test {
+        val record = paymentRequestRecord()
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any())).thenReturn(record)
+        val repo = paymentProofRepo()
+
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
+        repo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
+
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any())
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
     fun `mismatched lightning preimage is not submitted`() = test {
         val request = paymentRequest(MethodId.Bolt11.rawValue)
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        repo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
         repo.completeLightningPayment(PAYMENT_HASH, "01".repeat(32))
 
         assertNull(storedProofs.single().proofData)
@@ -228,7 +251,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        repo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
         repo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
 
         assertTrue(storedProofs.isEmpty())
@@ -241,7 +264,7 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        repo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
         repo.failLightningPayment(PAYMENT_HASH)
 
         assertTrue(storedProofs.isEmpty())
@@ -278,6 +301,22 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `onchain proof submits without prepared proof`() = test {
+        val txid = "ab".repeat(32)
+        val endpoint = MethodId.P2wpkh.rawValue
+        val request = paymentRequest(endpoint)
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any())).thenReturn(record)
+        val repo = paymentProofRepo()
+
+        repo.completeOnchainPayment(request, txid, endpoint)
+
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), eq(endpoint), any())
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
     fun `lightning retry preserves earlier payment correlation`() = test {
         val record = paymentRequestRecord()
         val request = paymentRequest(MethodId.Bolt11.rawValue)
@@ -286,9 +325,9 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val repo = paymentProofRepo()
 
         repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        repo.associateLightningPayment(request, PAYMENT_HASH).getOrThrow()
+        repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
         repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
-        repo.associateLightningPayment(request, "aa".repeat(32)).getOrThrow()
+        repo.associateLightningPayment(request, "aa".repeat(32), MethodId.Bolt11.rawValue).getOrThrow()
 
         repo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
 
@@ -326,6 +365,23 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any())
         assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `onchain proof cleanup failure does not retry delivery`() = test {
+        val txid = "ab".repeat(32)
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any())).thenReturn(record)
+        val repo = paymentProofRepo()
+
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        shouldFailProofRemoval = true
+        repo.completeOnchainPayment(request, txid, MethodId.P2wpkh.rawValue)
+
+        verify(paykitSdkService).submitPaymentProof(any(), any(), any(), any(), any())
+        assertEquals(txid, storedProofs.single().proofData)
     }
 
     @Test
