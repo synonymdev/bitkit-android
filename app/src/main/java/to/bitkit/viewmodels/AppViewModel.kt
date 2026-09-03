@@ -2602,10 +2602,11 @@ class AppViewModel @Inject constructor(
             is Scanner.NodeId -> handleNonPaymentScan { onScanNodeId(scan) }
             is Scanner.Gift -> handleNonPaymentScan { onScanGift(scan.code, scan.amount) }
             else -> {
+                val hasIncomingPaymentRequest = activeIncomingPaymentRequest() != null
                 clearActiveContactPaymentContext(
                     failureReason = IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
                 )
-                hideSheet()
+                if (!hasIncomingPaymentRequest) hideSheet()
                 Logger.warn(
                     if (scan == null) "Failed to decode scan data" else "Received unhandled scan data '$scan'",
                     context = TAG,
