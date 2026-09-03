@@ -153,18 +153,18 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `Ring signup marks profile setup pending before activating the registered session`() = test {
+    fun `Ring signup clears profile setup state when local activation fails`() = test {
         val registeredSession = mock<PubkySessionBootstrapResult>()
         val request = ringSignupRequest()
+        profileSetupPending.value = true
         stubSignupKeys()
         whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
         whenever(pubkyService.activateRegisteredIdentity(registeredSession)).thenAnswer {
-            assertTrue(profileSetupPending.value)
             throw TestAppError("activation failed")
         }
 
         assertTrue(sut.approveSignupAuth(request).isFailure)
-        assertTrue(profileSetupPending.value)
+        assertFalse(profileSetupPending.value)
         assertNull(sut.publicKey.value)
     }
 
@@ -631,6 +631,31 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(pubkyService) { signUp("test-secret", "test-homeserver", "test-code") }
         verifyBlocking(pubkyService) { signOut() }
         verifyBlocking(pubkyService) { forgetSessionAccess() }
+    }
+
+    @Test
+    fun `createIdentity should preserve signup session when pending profile publication fails`() = test {
+        val registeredSession = mock<PubkySessionBootstrapResult>()
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
+        assertTrue(sut.approveSignupAuth(ringSignupRequest()).isSuccess)
+        clearInvocations(pubkyService)
+        whenever(pubkyService.publishPaykitProfile(any())).thenAnswer { throw TestAppError("Publish failed") }
+
+        val result = sut.createIdentity(
+            name = "Test",
+            bio = "",
+            links = emptyList(),
+            tags = emptyList(),
+            avatarBytes = null,
+        )
+
+        assertTrue(result.isFailure)
+        verifyBlocking(pubkyService) { publishPaykitProfile(any()) }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        assertTrue(profileSetupPending.value)
     }
 
     @Test
