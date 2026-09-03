@@ -6,11 +6,11 @@ import com.synonym.paykit.PaymentRequestLifecycleState
 import org.junit.Test
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionMetadata
 import to.bitkit.repositories.PaykitSubscriptionRecurrence
-import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -24,15 +24,57 @@ class SubscriptionsScreenTest {
     fun `next transition includes the next recurring period`() {
         assertEquals(
             Instant.parse("2027-01-22T08:00:00Z"),
-            nextSubscriptionTransition(listOf(subscription(PaykitRecurrenceUnit.Week)), now, ZoneOffset.UTC),
+            nextSubscriptionTransition(listOf(subscription(PaykitRecurrenceUnit.Week)), now),
         )
     }
 
     @Test
-    fun `next transition includes the next local month`() {
+    fun `next transition uses the next recurring period`() {
         assertEquals(
-            Instant.parse("2027-02-01T00:00:00Z"),
-            nextSubscriptionTransition(listOf(subscription(PaykitRecurrenceUnit.Year)), now, ZoneOffset.UTC),
+            Instant.parse("2028-01-01T08:00:00Z"),
+            nextSubscriptionTransition(listOf(subscription(PaykitRecurrenceUnit.Year)), now),
+        )
+    }
+
+    @Test
+    fun `monthly cost normalizes recurrence frequencies`() {
+        val cases = listOf(
+            Triple(PaykitRecurrenceUnit.Day, 1, 36_500L),
+            Triple(PaykitRecurrenceUnit.Week, 1, 5_200L),
+            Triple(PaykitRecurrenceUnit.Month, 1, 1_200L),
+            Triple(PaykitRecurrenceUnit.Month, 2, 600L),
+            Triple(PaykitRecurrenceUnit.Year, 1, 100L),
+        )
+
+        cases.forEach { (unit, every, expectedSats) ->
+            assertEquals(
+                expectedSats,
+                subscriptionMonthlyCostSats(listOf(subscription(unit, every, 1_200u)), now),
+                "Unexpected monthly cost for every '$every' '$unit'",
+            )
+        }
+        val lowCostYearlySubscriptions = List(3) { index ->
+            subscription(PaykitRecurrenceUnit.Year, amountSats = 10u).copy(paymentRequestId = "low-cost-$index")
+        }
+        assertEquals(3L, subscriptionMonthlyCostSats(lowCostYearlySubscriptions, now))
+    }
+
+    @Test
+    fun `monthly cost includes paid active subscriptions only`() {
+        val paidPeriod = PaykitBillingPeriod(
+            startsAt = Instant.parse("2027-01-01T08:00:00Z"),
+            endsAt = Instant.parse("2027-02-01T08:00:00Z"),
+        )
+        val paidActive = subscription(PaykitRecurrenceUnit.Month, amountSats = 1_200u)
+            .copy(paidPeriods = listOf(paidPeriod))
+        val canceled = subscription(PaykitRecurrenceUnit.Month, amountSats = 1_200u)
+            .copy(lifecycleState = PaymentRequestLifecycleState.CANCELED)
+        val proposed = subscription(PaykitRecurrenceUnit.Month, amountSats = 1_200u)
+            .copy(lifecycleState = PaymentRequestLifecycleState.PROPOSED)
+
+        assertEquals(
+            1_200L,
+            subscriptionMonthlyCostSats(listOf(paidActive, canceled, proposed), now),
         )
     }
 
@@ -72,17 +114,21 @@ class SubscriptionsScreenTest {
         assertEquals(R.raw.confetti_purple, subscriptionConfettiResource(null))
     }
 
-    private fun subscription(unit: PaykitRecurrenceUnit) = PaykitSubscription(
+    private fun subscription(
+        unit: PaykitRecurrenceUnit,
+        every: Int = 1,
+        amountSats: ULong = 100_000u,
+    ) = PaykitSubscription(
         paymentRequestId = "subscription",
         counterparty = "pubkypayee",
         counterpartyReceiverPath = "bitkit/server",
         amountValue = "0.001",
-        amountSats = 100_000u,
+        amountSats = amountSats,
         note = "Subscription",
         createdAt = Instant.parse("2027-01-01T08:00:00Z"),
         proposalExpiresAt = null,
         recurrence = PaykitSubscriptionRecurrence(
-            every = 1,
+            every = every,
             unit = unit,
             startsAt = Instant.parse("2027-01-01T08:00:00Z"),
             anchor = Instant.parse("2027-01-01T08:00:00Z"),

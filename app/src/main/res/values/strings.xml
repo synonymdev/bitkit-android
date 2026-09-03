@@ -1038,7 +1038,6 @@
     <string name="subscriptions__daily">Daily</string>
     <string name="subscriptions__daily_subscription">Daily Subscription</string>
     <string name="subscriptions__details">Subscription Details</string>
-    <string name="subscriptions__due_this_month">Due This Month</string>
     <string name="subscriptions__empty_description">At the moment, you don’t have any active subscriptions from any providers.</string>
     <string name="subscriptions__empty_headline"><![CDATA[Welcome To\n<accent>Subscriptions</accent>]]></string>
     <string name="subscriptions__every_days">Every %1$d days</string>
@@ -1053,6 +1052,7 @@
     <string name="subscriptions__frequency">Frequency</string>
     <string name="subscriptions__more_info">More Info</string>
     <string name="subscriptions__monthly">Monthly</string>
+    <string name="subscriptions__monthly_cost">Monthly Cost</string>
     <string name="subscriptions__monthly_subscription">Monthly Subscription</string>
     <string name="subscriptions__ongoing">Ongoing</string>
     <string name="subscriptions__overview">Overview</string>

@@ -49,7 +49,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.rememberLottieComposition
-import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -60,7 +59,6 @@ import to.bitkit.ext.dateTimeFormatterOf
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
-import to.bitkit.models.safe
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
@@ -97,7 +95,9 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
-import java.time.ZoneId
+import java.math.BigDecimal
+import java.math.MathContext
+import java.math.RoundingMode
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -194,11 +194,7 @@ internal fun SubscriptionsContent(
             ) {
                 item {
                     SubscriptionMetrics(
-                        dueSats = dueThisMonth(
-                            subscriptions.filter { it.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING },
-                            acceptedAt,
-                            now,
-                        ),
+                        monthlyCostSats = subscriptionMonthlyCostSats(subscriptions, now),
                         activeCount = active.size,
                     )
                 }
@@ -306,17 +302,17 @@ private fun SubscriptionEmptyState(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun SubscriptionMetrics(dueSats: Long, activeCount: Int) {
+private fun SubscriptionMetrics(monthlyCostSats: Long, activeCount: Int) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.weight(1f)) {
-            Caption13Up(text = stringResource(R.string.subscriptions__due_this_month), color = Colors.White64)
+            Caption13Up(text = stringResource(R.string.subscriptions__monthly_cost), color = Colors.White64)
             VerticalSpacer(8.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Icon(painterResource(R.drawable.ic_calendar), contentDescription = null, tint = Colors.Purple)
-                MoneyMSB(sats = dueSats)
+                MoneyMSB(sats = monthlyCostSats)
             }
         }
         Spacer(Modifier.size(width = 1.dp, height = 50.dp).background(Colors.White16))
@@ -998,23 +994,12 @@ private fun rememberSubscriptionNow(subscriptions: List<PaykitSubscription>): In
 internal fun nextSubscriptionTransition(
     subscriptions: List<PaykitSubscription>,
     now: Instant,
-    zoneId: ZoneId = ZoneId.systemDefault(),
 ): Instant? {
     val activeSubscriptions = subscriptions.filter { it.isActive(now) }
     val dates = subscriptions.flatMap {
         listOf(it.recurrence.startsAt, it.proposalExpiresAt, it.recurrence.endsAt)
     }.filterNotNull().toMutableList()
     dates += activeSubscriptions.mapNotNull { it.recurrence.nextPeriodAfter(now)?.startsAt }
-    if (activeSubscriptions.isNotEmpty()) {
-        val nextMonth = java.time.Instant.ofEpochMilli(now.toEpochMilliseconds())
-            .atZone(zoneId)
-            .toLocalDate()
-            .withDayOfMonth(1)
-            .plusMonths(1)
-            .atStartOfDay(zoneId)
-            .toInstant()
-        dates += Instant.fromEpochMilliseconds(nextMonth.toEpochMilli())
-    }
     return dates.filter { it > now }.minOrNull()
 }
 
@@ -1027,23 +1012,26 @@ private fun Instant.formatFullDate(): String = dateTimeFormatterOf("MMMM d, yyyy
 private val PaykitSubscription.displaySats: Long
     get() = amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
 
-private fun dueThisMonth(
+internal fun subscriptionMonthlyCostSats(
     subscriptions: List<PaykitSubscription>,
-    acceptedAt: (PaykitSubscriptionId) -> Instant?,
     now: Instant,
 ): Long {
-    val zonedNow = java.time.Instant.ofEpochMilli(now.toEpochMilliseconds()).atZone(ZoneId.systemDefault())
-    val start = zonedNow.withDayOfMonth(1).toLocalDate().atStartOfDay(zonedNow.zone).toInstant()
-    val end = zonedNow.plusMonths(1).withDayOfMonth(1).toLocalDate().atStartOfDay(zonedNow.zone).toInstant()
-    val startInstant = Instant.fromEpochMilliseconds(start.toEpochMilli())
-    val endInstant = Instant.fromEpochMilliseconds(end.toEpochMilli())
-    val total = subscriptions.fold(0uL) { total, subscription ->
-        val acceptance = acceptedAt(subscription.id) ?: return@fold total
-        val count = subscription.recurrence.periodsThrough(endInstant, acceptance).count {
-            it.startsAt >= startInstant && it.startsAt < endInstant && it !in subscription.paidPeriods
+    val total = subscriptions.filter { it.isActive(now) }.fold(BigDecimal.ZERO) { total, subscription ->
+        val annualPeriods = when (subscription.recurrence.unit) {
+            PaykitRecurrenceUnit.Minute -> 525_600L
+            PaykitRecurrenceUnit.Hour -> 8_760L
+            PaykitRecurrenceUnit.Day -> 365L
+            PaykitRecurrenceUnit.Week -> 52L
+            PaykitRecurrenceUnit.Month -> 12L
+            PaykitRecurrenceUnit.Year -> 1L
         }
-        val subtotal = subscription.amountSats.safe() * count.toULong().safe()
-        total.safe() + subtotal.safe()
+        val denominator = subscription.recurrence.every.toLong() * 12
+        val monthlyCost = BigDecimal(subscription.amountSats.toString())
+            .multiply(BigDecimal.valueOf(annualPeriods))
+            .divide(BigDecimal.valueOf(denominator), MathContext.DECIMAL128)
+            .setScale(0, RoundingMode.HALF_UP)
+        total.add(monthlyCost)
     }
-    return total.coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
+    return total.coerceAtMost(BigDecimal.valueOf(Long.MAX_VALUE))
+        .toLong()
 }
