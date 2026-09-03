@@ -79,6 +79,7 @@ val e2eBackendEnv = providers.environmentVariable("E2E_BACKEND").orElse("local")
 val e2eLocalHostEnv = providers.environmentVariable("E2E_LOCAL_HOST").orElse("10.0.2.2")
 val e2eHomegateUrlEnv = providers.environmentVariable("E2E_HOMEGATE_URL")
     .orElse(e2eLocalHostEnv.map { "http://$it:6288" })
+val e2eHomeserverPubkyEnv = providers.environmentVariable("E2E_HOMESERVER_PUBKY").orElse("")
 val geoEnv = envFlag("GEO", default = true)
 val paykitUiDisabledEnv = envFlag("PAYKIT_UI_DISABLED", default = false)
 val trezorBridgeEnv = localProp("TREZOR_BRIDGE").map { it.toBoolean().toString() }.orElse("false")
@@ -185,8 +186,8 @@ android {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 36
-        versionCode = 187
-        versionName = "2.4.0"
+        versionCode = 188
+        versionName = "2.4.1"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         bitkitAndroidTestAnnotation?.let {
             testInstrumentationRunnerArguments["annotation"] = it
@@ -323,6 +324,7 @@ androidComponents {
         buildConfigFields.put("E2E_BACKEND", e2eBackendEnv.stringField())
         buildConfigFields.put("E2E_LOCAL_HOST", e2eLocalHostEnv.stringField())
         buildConfigFields.put("E2E_HOMEGATE_URL", e2eHomegateUrlEnv.stringField())
+        buildConfigFields.put("E2E_HOMESERVER_PUBKY", e2eHomeserverPubkyEnv.stringField())
         buildConfigFields.put("TREZOR_BRIDGE", trezorBridgeEnv.booleanField())
         buildConfigFields.put("TREZOR_BRIDGE_URL", trezorBridgeUrlEnv.stringField())
         buildConfigFields.put("GEO", geoEnv.booleanField())
@@ -498,6 +500,7 @@ dependencies {
     implementation(libs.core.ktx)
     implementation(libs.core.splashscreen)
     implementation(libs.appcompat)
+    implementation(libs.webkit)
     implementation(libs.activity.compose)
     implementation(libs.material)
     implementation(libs.datastore.preferences)

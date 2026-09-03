@@ -538,10 +538,11 @@ class PubkyRepo @Inject constructor(
         withContext(ioDispatcher) {
             val (publicKeyZ32, secretKeyHex) = deriveKeys().getOrThrow()
 
-            val homegate = fetchHomegateSignupCode()
+            val signupDetails: Pair<String, String?> = Env.e2eHomeserverPubky?.let { it to null }
+                ?: fetchHomegateSignupCode().let { it.homeserverPubky to it.signupCode }
 
             runSuspendCatching {
-                pubkyService.signUp(secretKeyHex, homegate.homeserverPubky, homegate.signupCode)
+                pubkyService.signUp(secretKeyHex, signupDetails.first, signupDetails.second)
             }.getOrElse {
                 Logger.warn("Retrying sign in after sign up failed", it, context = TAG)
                 pubkyService.signIn(secretKeyHex)

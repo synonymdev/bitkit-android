@@ -7,6 +7,7 @@ import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PendingPaymentRepoTest : BaseUnitTest() {
@@ -94,6 +95,44 @@ class PendingPaymentRepoTest : BaseUnitTest() {
         sut.setActiveHash("hash1")
         sut.setActiveHash(null)
         assertFalse(sut.isActive("hash1"))
+    }
+
+    @Test
+    fun `late collector does not receive a buffered resolution`() = test {
+        sut.track("hash1")
+        sut.resolve(PendingPaymentResolution.Success("hash1"))
+        sut.resolution.test {
+            expectNoEvents()
+        }
+        assertIs<PendingPaymentResolution.Success>(sut.consumeResolution("hash1"))
+    }
+
+    @Test
+    fun `consumeResolution returns last resolve for that hash`() = test {
+        sut.resolve(PendingPaymentResolution.Success("hash1", amountWithFeeSats = 510L))
+
+        val taken = sut.consumeResolution("hash1")
+
+        assertIs<PendingPaymentResolution.Success>(taken)
+        assertEquals(510L, taken.amountWithFeeSats)
+        assertNull(sut.consumeResolution("hash1"))
+    }
+
+    @Test
+    fun `track clears a cached resolution for that hash`() = test {
+        sut.resolve(PendingPaymentResolution.Failure("hash1"))
+        sut.track("hash1")
+
+        assertNull(sut.consumeResolution("hash1"))
+        assertTrue(sut.isPending("hash1"))
+    }
+
+    @Test
+    fun `consumeResolution ignores other hashes`() = test {
+        sut.resolve(PendingPaymentResolution.Failure("hash1"))
+
+        assertNull(sut.consumeResolution("hash2"))
+        assertIs<PendingPaymentResolution.Failure>(sut.consumeResolution("hash1"))
     }
 
     @Test

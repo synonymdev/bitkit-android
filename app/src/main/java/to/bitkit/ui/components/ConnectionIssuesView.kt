@@ -88,7 +88,6 @@ fun ConnectionIssuesView(
             modifier = Modifier.fillMaxWidth()
         ) {
             GradientCircularProgressIndicator(
-                strokeWidth = 1.dp,
                 modifier = Modifier.size(32.dp)
             )
         }

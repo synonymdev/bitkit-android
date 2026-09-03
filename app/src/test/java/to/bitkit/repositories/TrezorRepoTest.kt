@@ -28,6 +28,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.isNull
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -35,6 +36,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
@@ -45,6 +47,7 @@ import to.bitkit.models.toCoreNetwork
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
 import to.bitkit.services.TrezorUiHandler
+import to.bitkit.services.TrezorWalletMode
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
@@ -70,6 +73,9 @@ class TrezorRepoTest : BaseUnitTest() {
         private const val TEST_SIGNATURE = "signature123"
         private const val TEST_ADDRESS = "bc1qtest"
         private const val DEVICE_BUSY_MESSAGE = "Your Trezor is busy. Unlock it on the device, then try again."
+
+        /** The address types the store keys account xpubs by. */
+        private val ALL_ADDRESS_TYPE_KEYS = listOf("legacy", "nestedSegwit", "nativeSegwit", "taproot")
     }
 
     @get:Rule(order = 1)
@@ -108,6 +114,7 @@ class TrezorRepoTest : BaseUnitTest() {
         whenever(context.getString(R.string.hardware__connect_error)).thenReturn("Could not connect to your Trezor.")
         whenever(context.getString(R.string.hardware__device_busy)).thenReturn(DEVICE_BUSY_MESSAGE)
         whenever { hwWalletStore.loadKnownDevices() }.thenReturn(emptyList())
+        whenever { hwWalletStore.loadPendingNames() }.thenReturn(emptyMap())
         stubAccountXpubFetch()
     }
 
@@ -146,9 +153,11 @@ class TrezorRepoTest : BaseUnitTest() {
         model: String? = DEVICE_MODEL,
         pinProtection: Boolean? = null,
         unlocked: Boolean? = null,
+        deviceId: String? = null,
     ): TrezorFeatures = mock {
         on { this.label }.thenReturn(label)
         on { this.model }.thenReturn(model)
+        on { this.deviceId }.thenReturn(deviceId)
         on { this.pinProtection }.thenReturn(pinProtection)
         on { this.unlocked }.thenReturn(unlocked)
     }
@@ -192,6 +201,8 @@ class TrezorRepoTest : BaseUnitTest() {
         xpubs: Map<String, String> = emptyMap(),
         customLabel: String? = null,
         walletId: String = "wallet-id",
+        passphraseProtected: Boolean = false,
+        trezorDeviceId: String? = null,
     ) = KnownDevice(
         id = id,
         name = name,
@@ -203,6 +214,8 @@ class TrezorRepoTest : BaseUnitTest() {
         xpubs = xpubs,
         customLabel = customLabel,
         walletId = walletId,
+        passphraseProtected = passphraseProtected,
+        trezorDeviceId = trezorDeviceId,
     )
 
     // region initialize
@@ -229,7 +242,7 @@ class TrezorRepoTest : BaseUnitTest() {
         val result = sut.initialize()
 
         assertTrue(result.isSuccess)
-        verify(hwWalletStore, never()).saveKnownDevices(any())
+        verify(hwWalletStore, never()).saveKnownDevices(any(), anyOrNull())
         assertEquals("", sut.state.value.knownDevices.single().walletId)
     }
 
@@ -709,7 +722,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         val saved = captor.firstValue.single()
         assertEquals(DEVICE_ID, saved.id)
         assertEquals(TransportType.USB, saved.transportType)
@@ -755,14 +768,283 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         assertEquals(setOf(walletId), captor.firstValue.map { it.walletId }.toSet())
     }
 
     @Test
+    fun `connect adds a passphrase wallet next to the standard one on the same device`() = test {
+        val standard = mockKnownDevice(
+            xpubs = mapOf("nativeSegwit" to "standard-native-xpub"),
+            customLabel = "Savings",
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(standard))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Hidden("secret"))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
+        val saved = captor.firstValue
+        assertEquals(2, saved.size)
+        assertEquals(standard, saved.first())
+        val hidden = saved.last()
+        assertEquals(DEVICE_ID, hidden.id)
+        assertTrue(hidden.passphraseProtected)
+        assertEquals("Savings", standard.customLabel)
+        assertNull(hidden.customLabel)
+        assertTrue(hidden.xpubs.values.none { it in standard.xpubs.values })
+    }
+
+    @Test
+    fun `connect keeps the custom label when the wallet appears on a new transport`() = test {
+        // A restarted bridge or a fresh usb handle gives the same wallet a new transport id; the
+        // name the user set is the wallet's, and the tile prefers the connected entry, so losing it
+        // here renames the wallet to the device's own name and finishing writes that over the rest.
+        val sharedKey = "shared-native-xpub"
+        val onOldTransport = mockKnownDevice(
+            id = "old-transport",
+            path = "bridge:1",
+            xpubs = ALL_ADDRESS_TYPE_KEYS.associateWith { sharedKey },
+            customLabel = "No Pass",
+            walletId = "standard-wallet",
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(onOldTransport))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(
+            trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
+        ).thenAnswer { mockPublicKeyResponse(xpub = sharedKey, path = it.getArgument(0)) }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
+        val added = captor.firstValue.single { it.id == DEVICE_ID }
+        assertEquals("No Pass", added.customLabel)
+        assertEquals("standard-wallet", added.walletId)
+    }
+
+    @Test
+    fun `connect adopts the pending name of a wallet paired again`() = test {
+        // Restored from a backup, or kept when the wallet was removed: pairing takes the name over.
+        val sharedKey = "shared-native-xpub"
+        val unnamed = mockKnownDevice(
+            id = DEVICE_ID,
+            xpubs = ALL_ADDRESS_TYPE_KEYS.associateWith { sharedKey },
+            customLabel = null,
+            walletId = "standard-wallet",
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(unnamed))
+        whenever { hwWalletStore.loadPendingNames() }.thenReturn(mapOf("standard-wallet" to "Cold Storage"))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(
+            trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
+        ).thenAnswer { mockPublicKeyResponse(xpub = sharedKey, path = it.getArgument(0)) }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        // Consumed in the same write as the entry that adopted it, so a failed save cannot lose it,
+        // and clearing the name later cannot fall back to it again.
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), eq(PendingNameUpdate("standard-wallet", name = null)))
+        assertEquals("Cold Storage", captor.firstValue.single { it.id == DEVICE_ID }.customLabel)
+    }
+
+    @Test
+    fun `connect prefers the stored custom label over a pending name`() = test {
+        val sharedKey = "shared-native-xpub"
+        val stored = mockKnownDevice(
+            id = DEVICE_ID,
+            xpubs = ALL_ADDRESS_TYPE_KEYS.associateWith { sharedKey },
+            customLabel = "Renamed Here",
+            walletId = "standard-wallet",
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(stored))
+        whenever { hwWalletStore.loadPendingNames() }.thenReturn(mapOf("standard-wallet" to "Cold Storage"))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(
+            trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
+        ).thenAnswer { mockPublicKeyResponse(xpub = sharedKey, path = it.getArgument(0)) }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        // The pending name lost, so it is stale: dropping it keeps a later rename from falling back to it.
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), eq(PendingNameUpdate("standard-wallet", name = null)))
+        assertEquals("Renamed Here", captor.firstValue.single { it.id == DEVICE_ID }.customLabel)
+    }
+
+    @Test
+    fun `connect leaves the pending name of another identity on the device alone`() = test {
+        val sharedKey = "shared-native-xpub"
+        val unnamed = mockKnownDevice(
+            id = DEVICE_ID,
+            xpubs = ALL_ADDRESS_TYPE_KEYS.associateWith { sharedKey },
+            customLabel = null,
+            walletId = "standard-wallet",
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(unnamed))
+        // A passphrase wallet on the same device derives its own keys, so its name is its own.
+        whenever { hwWalletStore.loadPendingNames() }.thenReturn(mapOf("hidden-wallet" to "Hidden Stash"))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(
+            trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
+        ).thenAnswer { mockPublicKeyResponse(xpub = sharedKey, path = it.getArgument(0)) }
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), isNull())
+        assertNull(captor.firstValue.single { it.id == DEVICE_ID }.customLabel)
+    }
+
+    @Test
+    fun `connect supersedes entries of a seed the device no longer carries`() = test {
+        // A wiped and restored device reports a new device id and different keys, so nothing would
+        // ever match those entries again; they would linger as wallets that can never sign.
+        val stale = mockKnownDevice(
+            xpubs = mapOf("nativeSegwit" to "old-seed-xpub"),
+            trezorDeviceId = "old-device-id",
+        )
+        val features = mockFeatures(deviceId = "new-device-id")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(stale))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
+        val saved = captor.firstValue.single()
+        assertEquals("new-device-id", saved.trezorDeviceId)
+        assertTrue(saved.xpubs.values.none { it == "old-seed-xpub" })
+    }
+
+    @Test
+    fun `connect keeps another identity of the same device id`() = test {
+        // Same device, same seed, different passphrase: both entries must survive.
+        val standard = mockKnownDevice(
+            xpubs = mapOf("nativeSegwit" to "standard-native-xpub"),
+            trezorDeviceId = "same-device-id",
+        )
+        val features = mockFeatures(deviceId = "same-device-id")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(standard))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.Hidden("secret"))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
+        assertEquals(2, captor.firstValue.size)
+        assertEquals(standard, captor.firstValue.first())
+    }
+
+    @Test
+    fun `connect clears a passphrase flag the standard wallet should never have had`() = test {
+        // Marked hidden it would demand a passphrase that opens a different wallet, so the standard
+        // wallet could never be signed with again; opening it must be able to correct that.
+        val misflagged = mockKnownDevice(
+            xpubs = mapOf("nativeSegwit" to "xpub-m/84'/1'/0'"),
+            passphraseProtected = true,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(misflagged))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
+        assertFalse(captor.firstValue.single().passphraseProtected)
+    }
+
+    @Test
+    fun `connect keeps the passphrase flag when the device asked on its own screen`() = test {
+        // On-device entry does not say which wallet was opened, so it must not downgrade a wallet
+        // already known to be hidden.
+        val hidden = mockKnownDevice(
+            xpubs = mapOf("nativeSegwit" to "xpub-m/84'/1'/0'"),
+            passphraseProtected = true,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(hidden))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(trezorUiHandler.currentSelection()).thenReturn(WalletSelection.OnDevice)
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
+        assertTrue(captor.firstValue.single().passphraseProtected)
+    }
+
+    @Test
+    fun `connect keeps the standard wallet unprotected when its keys are re-read`() = test {
+        val standard = mockKnownDevice(xpubs = mapOf("nativeSegwit" to "xpub-m/84'/1'/0'"))
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(standard))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        sut = createSut()
+
+        sut.scan()
+        val result = sut.connect(DEVICE_ID)
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
+        val saved = captor.firstValue.single()
+        assertFalse(saved.passphraseProtected)
+    }
+
+    @Test
     fun `connect preserves stored xpubs when account xpub refresh is partial`() = test {
+        // Re-reading an account of the same wallet yields the same key; a different one would
+        // be another identity on the device, not a refresh of this one.
         val previousXpubs = mapOf(
-            "nativeSegwit" to "old-native-xpub",
+            "nativeSegwit" to "native-xpub",
             "taproot" to "old-taproot-xpub",
         )
         val nativeSegwitPath = "m/84'/1'/0'"
@@ -780,7 +1062,7 @@ class TrezorRepoTest : BaseUnitTest() {
         ).thenAnswer {
             val path = it.getArgument<String>(0)
             if (path == nativeSegwitPath) {
-                mockPublicKeyResponse(xpub = "new-native-xpub", path = nativeSegwitPath)
+                mockPublicKeyResponse(xpub = "native-xpub", path = nativeSegwitPath)
             } else {
                 throw AppError("xpub failed")
             }
@@ -792,10 +1074,10 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         assertEquals(
             mapOf(
-                "nativeSegwit" to "new-native-xpub",
+                "nativeSegwit" to "native-xpub",
                 "taproot" to "old-taproot-xpub",
             ),
             captor.firstValue.single().xpubs,
@@ -818,7 +1100,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         val captor = argumentCaptor<List<KnownDevice>>()
-        verify(hwWalletStore).saveKnownDevices(captor.capture())
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
         assertEquals("Cold Storage", captor.lastValue.single().customLabel)
     }
 
@@ -827,7 +1109,11 @@ class TrezorRepoTest : BaseUnitTest() {
         val features = mockFeatures()
         val device = mockDeviceInfo()
         whenever(trezorService.connect(eq(DEVICE_ID), any()))
-            .thenThrow(RuntimeException("thp timeout"))
+            .thenAnswer {
+                throw TrezorException.ProtocolException(
+                    "THP decryption error: Channel mismatch: expected [73, cb], got [73, ca]"
+                )
+            }
             .thenReturn(features)
         whenever(trezorService.scan()).thenReturn(listOf(device))
         sut = createSut()
@@ -838,6 +1124,8 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals(features, result.getOrNull())
         verify(trezorService, times(2)).connect(eq(DEVICE_ID), any())
+        verify(trezorService).disconnect()
+        verify(trezorTransport).disconnectDevice(DEVICE_ID)
     }
 
     @Test
@@ -852,7 +1140,8 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertNull(sut.state.value.connected)
         verify(trezorService, times(2)).connect(eq(DEVICE_ID), any())
-        verify(trezorService).disconnect()
+        verify(trezorService, times(2)).disconnect()
+        verify(trezorTransport, times(2)).disconnectDevice(DEVICE_ID)
     }
 
     @Test
@@ -947,7 +1236,7 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertEquals(DEVICE_BUSY_MESSAGE, sut.state.value.error)
         assertNull(sut.state.value.connectedDevice())
-        verify(hwWalletStore, never()).saveKnownDevices(any())
+        verify(hwWalletStore, never()).saveKnownDevices(any(), anyOrNull())
     }
 
     @Test
@@ -994,7 +1283,7 @@ class TrezorRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         assertNull(sut.state.value.connectedDevice())
-        verify(hwWalletStore, never()).saveKnownDevices(any())
+        verify(hwWalletStore, never()).saveKnownDevices(any(), anyOrNull())
     }
 
     @Test
@@ -1018,7 +1307,7 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertEquals("DeviceDisconnected", sut.state.value.error)
         assertNull(sut.state.value.connectedDevice())
-        verify(hwWalletStore, never()).saveKnownDevices(any())
+        verify(hwWalletStore, never()).saveKnownDevices(any(), anyOrNull())
     }
 
     @Test
@@ -1322,6 +1611,27 @@ class TrezorRepoTest : BaseUnitTest() {
         assertEquals(electrumServer, params.firstValue.wallet.electrumUrl)
     }
 
+    @Test
+    fun `offline compose should not read the device fingerprint`() = test {
+        whenever(trezorService.composeTransaction(any())).thenReturn(emptyList())
+        sut = createSut()
+
+        val result = sut.composeTransactionOffline(
+            extendedKey = "vpub",
+            outputs = listOf(ComposeOutput.Payment(address = TEST_ADDRESS, amountSats = 100uL)),
+            feeRates = listOf(1f),
+            network = Env.network.toCoreNetwork(),
+            accountType = null,
+            coinSelection = CoinSelection.BRANCH_AND_BOUND,
+        )
+
+        val params = argumentCaptor<ComposeParams>()
+        assertTrue(result.isSuccess)
+        verify(trezorService, never()).getDeviceFingerprint()
+        verify(trezorService).composeTransaction(params.capture())
+        assertNull(params.firstValue.wallet.fingerprint)
+    }
+
     // endregion
 
     // region hasKnownDevices
@@ -1476,6 +1786,17 @@ class TrezorRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         assertEquals(otherDeviceId, sut.state.value.connectedDeviceId())
         verify(trezorService, never()).disconnect()
+    }
+
+    @Test
+    fun `disconnectStaleSession should close transport when core disconnect fails`() = test {
+        whenever(trezorService.disconnect()).thenThrow(RuntimeException("disconnect failed"))
+        sut = createSut()
+
+        val result = sut.disconnectStaleSession(DEVICE_ID)
+
+        assertTrue(result.isFailure)
+        verify(trezorTransport).disconnectDevice(DEVICE_ID)
     }
 
     @Test
@@ -1785,6 +2106,178 @@ class TrezorRepoTest : BaseUnitTest() {
         verify(trezorService).clearCredentials(DEVICE_ID)
         verify(hwWalletStore).saveKnownDevices(listOf(otherDevice))
     }
+
+    @Test
+    fun `forgetDevice removes an identity from every transport it was paired over`() = test {
+        // Removal walks the entries of one wallet, so each call has to take the whole identity out:
+        // a lagging store read or a connect landing mid-removal would otherwise write a sibling
+        // entry back and leave the wallet watched.
+        val sharedXpubs = mapOf("nativeSegwit" to "shared-native-xpub")
+        val overBluetooth = mockKnownDevice(id = "ble1", path = "ble:AA:BB", xpubs = sharedXpubs)
+        val overUsb = mockKnownDevice(id = "usb1", path = "/dev/trezor1", xpubs = sharedXpubs)
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(overBluetooth, overUsb))
+        sut = createSut()
+
+        val result = sut.forgetDevice("usb1", walletKey = walletKeyOf(sharedXpubs))
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
+        assertEquals(emptyList(), captor.lastValue)
+        assertTrue(sut.state.value.knownDevices.isEmpty())
+    }
+
+    @Test
+    fun `forgetDevice keeps the device paired while another identity remains`() = test {
+        val standardXpubs = mapOf("nativeSegwit" to "standard-native-xpub")
+        val hiddenXpubs = mapOf("nativeSegwit" to "hidden-native-xpub")
+        val standard = mockKnownDevice(xpubs = standardXpubs)
+        val hidden = mockKnownDevice(xpubs = hiddenXpubs, passphraseProtected = true)
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(standard, hidden))
+        sut = createSut()
+
+        val result = sut.forgetDevice(DEVICE_ID, walletKey = walletKeyOf(hiddenXpubs))
+
+        assertTrue(result.isSuccess)
+        assertEquals(listOf(standard), sut.state.value.knownDevices)
+        verify(hwWalletStore).saveKnownDevices(listOf(standard))
+        verify(trezorTransport, never()).clearDeviceCredential(any())
+        verify(trezorService, never()).clearCredentials(any())
+    }
+
+    @Test
+    fun `connectWithWalletMode opens a passphrase session when none is live`() = test {
+        // Reopening a hidden wallet happens exactly when its session is gone, so requiring a live
+        // one would make the passphrase prompt unable to ever succeed.
+        val features = mockFeatures()
+        val knownDevice = mockKnownDevice(xpubs = mapOf("nativeSegwit" to "hidden-native-xpub"))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(knownDevice))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        sut = createSut()
+        sut.initialize()
+        assertNull(sut.state.value.connectedDeviceId())
+
+        val result = sut.connectWithWalletMode(DEVICE_ID, TrezorWalletMode.PASSPHRASE_HOST, "secret")
+
+        assertTrue(result.isSuccess, "err=${result.exceptionOrNull()}")
+        verify(trezorUiHandler).setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, "secret")
+        assertEquals(DEVICE_ID, sut.state.value.connectedDeviceId())
+    }
+
+    @Test
+    fun `setWalletMode still requires a live session to switch`() = test {
+        sut = createSut()
+
+        val result = sut.setWalletMode(TrezorWalletMode.PASSPHRASE_HOST, "secret")
+
+        assertTrue(result.isFailure)
+        verify(trezorUiHandler, never()).setWalletMode(any(), any())
+    }
+
+    @Test
+    fun `forgetDevice keeps the live session of an identity it is not forgetting`() = test {
+        // The device holds one identity open at a time; forgetting a different wallet must not
+        // close the session the user is still transacting with.
+        val keptKey = "kept-native-xpub"
+        val kept = mockKnownDevice(
+            xpubs = ALL_ADDRESS_TYPE_KEYS.associateWith { keptKey },
+            walletId = "kept-wallet",
+        )
+        val forgottenXpubs = mapOf("nativeSegwit" to "forgotten-native-xpub")
+        val forgotten = mockKnownDevice(
+            xpubs = forgottenXpubs,
+            walletId = "forgotten-wallet",
+            passphraseProtected = true,
+        )
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(forgotten, kept))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(
+            trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
+        ).thenAnswer { mockPublicKeyResponse(xpub = keptKey, path = it.getArgument(0)) }
+        sut = createSut()
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        assertEquals("kept-wallet", sut.state.value.connectedWalletId())
+
+        val result = sut.forgetDevice(DEVICE_ID, walletKey = walletKeyOf(forgottenXpubs))
+
+        assertTrue(result.isSuccess)
+        assertEquals("kept-wallet", sut.state.value.connectedWalletId())
+        verify(trezorService, never()).disconnect()
+        verify(trezorTransport, never()).clearDeviceCredential(any())
+    }
+
+    @Test
+    fun `forgetDevice closes the session when it belongs to the identity being forgotten`() = test {
+        val forgottenKey = "forgotten-native-xpub"
+        val forgottenXpubs = ALL_ADDRESS_TYPE_KEYS.associateWith { forgottenKey }
+        val forgotten = mockKnownDevice(
+            xpubs = forgottenXpubs,
+            walletId = "forgotten-wallet",
+            passphraseProtected = true,
+        )
+        val kept = mockKnownDevice(xpubs = mapOf("nativeSegwit" to "kept-native-xpub"), walletId = "kept-wallet")
+        val features = mockFeatures()
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(forgotten, kept))
+        whenever(trezorService.connect(eq(DEVICE_ID), any())).thenReturn(features)
+        whenever(trezorService.scan()).thenReturn(listOf(mockDeviceInfo()))
+        whenever(
+            trezorService.getPublicKey(path = any(), coin = anyOrNull(), showOnTrezor = eq(false))
+        ).thenAnswer { mockPublicKeyResponse(xpub = forgottenKey, path = it.getArgument(0)) }
+        sut = createSut()
+        sut.scan()
+        sut.connect(DEVICE_ID)
+        assertEquals("forgotten-wallet", sut.state.value.connectedWalletId())
+
+        val result = sut.forgetDevice(DEVICE_ID, walletKey = walletKeyOf(forgottenXpubs))
+
+        assertTrue(result.isSuccess)
+        assertNull(sut.state.value.connectedDevice())
+        verify(trezorService).disconnect()
+    }
+
+    @Test
+    fun `forgetDevice keeps the stored label of the identity left behind`() = test {
+        // Labels are written straight to the store, so the cached device list can be out of date;
+        // rewriting from it would drop the name the user gave the wallet that stays paired.
+        val removedXpubs = mapOf("nativeSegwit" to "removed-native-xpub")
+        val keptXpubs = mapOf("nativeSegwit" to "kept-native-xpub")
+        val removed = mockKnownDevice(xpubs = removedXpubs, passphraseProtected = true)
+        val keptWhenCached = mockKnownDevice(xpubs = keptXpubs, passphraseProtected = true)
+        val keptWhenStored = keptWhenCached.copy(customLabel = "Pass B")
+        whenever(hwWalletStore.loadKnownDevices())
+            .thenReturn(listOf(removed, keptWhenCached))
+            .thenReturn(listOf(removed, keptWhenStored))
+        sut = createSut()
+        sut.initialize()
+
+        val result = sut.forgetDevice(DEVICE_ID, walletKey = walletKeyOf(removedXpubs))
+
+        assertTrue(result.isSuccess)
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull())
+        assertEquals(listOf(keptWhenStored), captor.lastValue)
+    }
+
+    @Test
+    fun `forgetDevice clears credentials once the last identity is gone`() = test {
+        val standardXpubs = mapOf("nativeSegwit" to "standard-native-xpub")
+        val standard = mockKnownDevice(xpubs = standardXpubs)
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(standard))
+        sut = createSut()
+
+        val result = sut.forgetDevice(DEVICE_ID, walletKey = walletKeyOf(standardXpubs))
+
+        assertTrue(result.isSuccess)
+        verify(hwWalletStore).saveKnownDevices(emptyList())
+        verify(trezorTransport).clearDeviceCredential(DEVICE_ID)
+        verify(trezorService).clearCredentials(DEVICE_ID)
+    }
+
+    private fun walletKeyOf(xpubs: Map<String, String>) = xpubs.values.sorted().joinToString()
 
     // endregion
 

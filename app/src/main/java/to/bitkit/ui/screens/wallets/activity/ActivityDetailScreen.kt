@@ -247,7 +247,8 @@ fun ActivityDetailScreen(
                         detailViewModel = detailViewModel,
                         isCpfpChild = isCpfpChild,
                         isHardware = uiState.isHardwareActivity,
-                        showContactActions = isPaykitEnabled && !uiState.isHardwareActivity,
+                        showContactActions = isPaykitEnabled &&
+                            (!uiState.isHardwareActivity || assignedContact != null),
                         boostTxDoesExist = boostTxDoesExist,
                         onCopy = { text ->
                             app.toast(
@@ -548,7 +549,7 @@ private fun ActivityDetailContent(
         }
 
         ContactTagsSection(
-            contact = assignedContact.takeIf { showContactActions },
+            contact = assignedContact,
             tags = tags,
             onRemoveTag = onRemoveTag,
         )

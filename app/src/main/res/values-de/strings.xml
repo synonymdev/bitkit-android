@@ -784,6 +784,7 @@
     <string name="wallet__recipient_invoice">Rechnung einfügen</string>
     <string name="wallet__recipient_manual">Manuell eingeben</string>
     <string name="wallet__recipient_scan">QR-Code scannen</string>
+    <string name="wallet__send_instant_failed">Zahlung fehlgeschlagen</string>
     <string name="wallet__send_invoice">Rechnung</string>
     <string name="wallet__send_clipboard_empty_title">Zwischenablage leer</string>
     <string name="wallet__send_clipboard_empty_text">Bitte kopiere eine Adresse oder eine Rechnung.</string>
@@ -809,6 +810,7 @@
     <string name="wallet__send_quickpay__title">Bezahlen\n&lt;accent&gt;Rechnung...&lt;/accent&gt;</string>
     <string name="wallet__send_error_tx_failed">Transaktion fehlgeschlagen</string>
     <string name="wallet__send_error_create_tx">Die Transaktion konnte nicht gesendet werden. Bitte versuche es erneut.</string>
+    <string name="wallet__send_error_support">Support kontaktieren</string>
     <string name="wallet__error_invalid_bitcoin_address">Ungültige Bitcoin-Sendeadresse</string>
     <string name="wallet__error_invoice_update">Fehler beim Aktualisieren der Rechnung</string>
     <string name="wallet__error_lnurl_invoice_fetch">Fehler beim Abrufen der LNURL-Rechnung</string>
@@ -838,6 +840,16 @@
     <string name="wallet__tags_filter">Aktivität nach Tags filtern</string>
     <string name="wallet__tags_filter_title">Tag auswählen</string>
     <string name="wallet__toast_payment_failed_title">Zahlung fehlgeschlagen</string>
+    <string name="wallet__payment_abandoned">Die Lightning-Zahlung wurde gestoppt, bevor sie abgeschlossen wurde.</string>
+    <string name="wallet__payment_expired">Diese Lightning-Zahlung ist abgelaufen. Bitte fordere eine neue Rechnung an.</string>
+    <string name="wallet__payment_failed_description">Deine sofortige Zahlung ist fehlgeschlagen. Bitte versuche es erneut.</string>
+    <string name="wallet__payment_invoice_request_expired">Diese Lightning-Rechnungsanfrage ist abgelaufen. Bitte fordere eine neue Rechnung an.</string>
+    <string name="wallet__payment_invoice_request_rejected">Der Empfänger hat diese Lightning-Rechnungsanfrage abgelehnt.</string>
+    <string name="wallet__payment_recipient_rejected">Der Empfänger hat diese Lightning-Zahlung abgelehnt. Bitte prüfe die Rechnung und versuche es erneut.</string>
+    <string name="wallet__payment_retries_exhausted">Bitkit hat mehrere Lightning-Routen ausprobiert, aber die Zahlung konnte nicht abgeschlossen werden.</string>
+    <string name="wallet__payment_route_not_found">Bitkit konnte keine Lightning-Route für diese Zahlung finden.</string>
+    <string name="wallet__payment_timeout">Zeitüberschreitung bei der Zahlung. Bitte versuche es erneut.</string>
+    <string name="wallet__payment_unknown_required_features">Diese Lightning-Rechnung verwendet Funktionen, die Bitkit noch nicht unterstützt.</string>
     <string name="wallet__toast_payment_failed_description">Deine sofortige Zahlung ist fehlgeschlagen. Bitte versuche es erneut.</string>
     <string name="wallet__toast_received_transaction_replaced_title">Empfangene Transaktion ersetzt</string>
     <string name="wallet__toast_received_transaction_replaced_description">Deine empfangene Transaktion wurde durch eine Gebührenerhöhung ersetzt</string>

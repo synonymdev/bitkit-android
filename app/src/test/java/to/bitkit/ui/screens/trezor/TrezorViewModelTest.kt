@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.trezor
 
+import com.synonym.bitkitcore.AddressInfo
 import com.synonym.bitkitcore.TrezorSignedTx
 import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.coroutines.CompletableDeferred
@@ -412,6 +413,7 @@ class TrezorViewModelTest : BaseUnitTest() {
                 txCount = 3u,
                 blockHeight = 850_000u,
                 accountType = TrezorPreviewData.sampleTransactionHistoryResult.accountType,
+                nextUnusedExternalAddress = unusedAddress(),
             ),
         )
         advanceUntilIdle()
@@ -440,6 +442,7 @@ class TrezorViewModelTest : BaseUnitTest() {
                 txCount = 3u,
                 blockHeight = 850_000u,
                 accountType = TrezorPreviewData.sampleTransactionHistoryResult.accountType,
+                nextUnusedExternalAddress = unusedAddress(),
             ),
         )
         advanceUntilIdle()
@@ -495,6 +498,12 @@ class TrezorViewModelTest : BaseUnitTest() {
     }
 
     // endregion
+
+    private fun unusedAddress() = AddressInfo(
+        address = "bc1qtestunused",
+        path = "m/84'/0'/0'/0/0",
+        transfers = 0u,
+    )
 
     private fun createViewModel() = TrezorViewModel(
         bgDispatcher = testDispatcher,

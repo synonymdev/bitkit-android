@@ -784,6 +784,7 @@
     <string name="wallet__recipient_invoice">Wklej fakturę</string>
     <string name="wallet__recipient_manual">Wprowadź ręcznie</string>
     <string name="wallet__recipient_scan">Skanuj QR</string>
+    <string name="wallet__send_instant_failed">Płatność nie powiodła się</string>
     <string name="wallet__send_invoice">Faktura</string>
     <string name="wallet__send_address_placeholder">Wprowadzić fakturę, adres lub klucz profilu</string>
     <string name="wallet__send_clipboard_empty_title">Schowek pusty</string>
@@ -809,6 +810,7 @@
     <string name="wallet__send_quickpay__title">Płatność\n&lt;accent&gt;faktury w toku...&lt;/accent&gt;</string>
     <string name="wallet__send_error_tx_failed">Transakcja nie powiodła się</string>
     <string name="wallet__send_error_create_tx">Nie udało się wysłać transakcji. Proszę spróbować ponownie.</string>
+    <string name="wallet__send_error_support">Skontaktuj się z pomocą techniczną</string>
     <string name="wallet__send_details">Szczegóły</string>
     <string name="wallet__send_fee_and_speed">Prędkość i opłata transakcyjna</string>
     <string name="wallet__send_fee_speed">Prędkość</string>
@@ -834,6 +836,16 @@
     <string name="wallet__tags_filter">Filtruj aktywność za pomocą tagów</string>
     <string name="wallet__tags_filter_title">Wybierz tag</string>
     <string name="wallet__toast_payment_failed_title">Płatność nie powiodła się</string>
+    <string name="wallet__payment_abandoned">Płatność Lightning została zatrzymana przed zakończeniem.</string>
+    <string name="wallet__payment_expired">Ta płatność Lightning wygasła. Poproś o nową fakturę.</string>
+    <string name="wallet__payment_failed_description">Natychmiastowa płatność nie powiodła się. Proszę spróbować ponownie.</string>
+    <string name="wallet__payment_invoice_request_expired">To żądanie faktury Lightning wygasło. Poproś o nową fakturę.</string>
+    <string name="wallet__payment_invoice_request_rejected">Odbiorca odrzucił to żądanie faktury Lightning.</string>
+    <string name="wallet__payment_recipient_rejected">Odbiorca odrzucił tę płatność Lightning. Sprawdź fakturę i spróbuj ponownie.</string>
+    <string name="wallet__payment_retries_exhausted">Bitkit wypróbował kilka tras Lightning, ale płatności nie udało się ukończyć.</string>
+    <string name="wallet__payment_route_not_found">Bitkit nie znalazł trasy Lightning dla tej płatności.</string>
+    <string name="wallet__payment_timeout">Przekroczono limit czasu płatności. Spróbuj ponownie.</string>
+    <string name="wallet__payment_unknown_required_features">Ta faktura Lightning używa funkcji, których Bitkit jeszcze nie obsługuje.</string>
     <string name="wallet__toast_payment_failed_description">Natychmiastowa płatność nie powiodła się. Proszę spróbować ponownie.</string>
     <string name="wallet__toast_received_transaction_replaced_description">Twoja otrzymana transakcja została zastąpiona przez przyspieszenie opłaty</string>
     <string name="wallet__toast_received_transaction_replaced_title">Otrzymana transakcja zastąpiona</string>

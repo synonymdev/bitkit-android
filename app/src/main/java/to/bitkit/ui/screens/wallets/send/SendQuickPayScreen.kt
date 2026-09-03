@@ -11,6 +11,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
@@ -19,7 +20,8 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
 import to.bitkit.models.NodeLifecycleState
-import to.bitkit.ui.appViewModel
+import to.bitkit.models.SendFailureDetails
+import to.bitkit.repositories.QuickPaySession
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
@@ -38,32 +40,44 @@ import to.bitkit.viewmodels.QuickPayViewModel
 @Composable
 fun SendQuickPayScreen(
     quickPayData: QuickPayData,
+    isRequestActive: Boolean,
     onPaymentComplete: (String, Long) -> Unit,
-    onPaymentPending: (String, Long) -> Unit,
-    onShowError: (String) -> Unit,
+    onPaymentPending: (String, Long, String) -> Unit,
+    onFallBackToConfirm: () -> Unit,
+    onShowError: (SendFailureDetails) -> Unit,
     viewModel: QuickPayViewModel = hiltViewModel(),
 ) {
-    val app = appViewModel ?: return
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val lightningState by viewModel.lightningState.collectAsStateWithLifecycle()
+    val session = remember { QuickPaySession() }
 
-    LaunchedEffect(quickPayData, lightningState.nodeLifecycleState) {
-        if (lightningState.nodeLifecycleState is NodeLifecycleState.Running) {
-            viewModel.pay(quickPayData)
+    DisposableEffect(session) {
+        viewModel.attach(session)
+        onDispose { viewModel.detach(session) }
+    }
+
+    LaunchedEffect(quickPayData, lightningState.nodeLifecycleState, isRequestActive) {
+        if (isRequestActive && lightningState.nodeLifecycleState is NodeLifecycleState.Running) {
+            viewModel.pay(session, quickPayData)
         }
     }
 
-    DisposableEffect(Unit) {
-        onDispose {
-            app.resetQuickPay()
-        }
-    }
-
-    LaunchedEffect(uiState.result) {
+    LaunchedEffect(uiState.result, isRequestActive) {
+        // A superseded request keeps rendering only for the exit transition; its results must not
+        // navigate. An unacknowledged error is flushed to a toast when the session detaches.
+        if (!isRequestActive) return@LaunchedEffect
         when (val result = uiState.result) {
-            is QuickPayResult.Success -> onPaymentComplete(result.paymentHash, result.amountWithFee)
-            is QuickPayResult.Pending -> onPaymentPending(result.paymentHash, result.amount)
-            is QuickPayResult.Error -> onShowError(result.message)
+            is QuickPayResult.Success -> {
+                onPaymentComplete(result.paymentHash, result.amountWithFee)
+            }
+            is QuickPayResult.Pending -> {
+                onPaymentPending(result.paymentHash, result.amount, result.paymentRequest)
+            }
+            is QuickPayResult.FallBackToConfirm -> onFallBackToConfirm()
+            is QuickPayResult.Error -> {
+                viewModel.acknowledge(session)
+                onShowError(result.failure)
+            }
             null -> Unit // continue showing loading state
         }
     }

@@ -1,5 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -19,7 +21,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -72,6 +73,7 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillHeight
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.NumberPadActionButton
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
@@ -93,16 +95,18 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.LnurlParams
+import to.bitkit.viewmodels.OnchainFeeUi
 import to.bitkit.viewmodels.SanityWarning
 import to.bitkit.viewmodels.SendEvent
-import to.bitkit.viewmodels.SendFee
 import to.bitkit.viewmodels.SendMethod
 import to.bitkit.viewmodels.SendUiState
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 
 private val EXPIRY_REFRESH_INTERVAL = 60.seconds
 private const val SWIPE_ROTATION_DEGREES = 14f
 private const val IMAGE_FILL_PERCENTAGE = 0.8f
+const val HARDWARE_SIGN_CANCELLED_RESULT_KEY = "HARDWARE_SIGN_CANCELLED_RESULT_KEY"
 
 @Suppress("MagicNumber")
 @Composable
@@ -138,6 +142,15 @@ fun SendConfirmScreen(
             }
     }
 
+    LaunchedEffect(savedStateHandle) {
+        savedStateHandle.getStateFlow(HARDWARE_SIGN_CANCELLED_RESULT_KEY, false)
+            .collect {
+                if (!it) return@collect
+                isLoading = false
+                savedStateHandle.remove<Boolean>(HARDWARE_SIGN_CANCELLED_RESULT_KEY)
+            }
+    }
+
     // Confirm with pin or bio if required
     LaunchedEffect(uiState.shouldConfirmPay) {
         if (!uiState.shouldConfirmPay) return@LaunchedEffect
@@ -166,7 +179,7 @@ fun SendConfirmScreen(
         onSwipeToConfirm = {
             scope.launch {
                 isLoading = true
-                delay(300)
+                delay(300.milliseconds)
                 onEvent(SendEvent.SwipeToPay)
             }
         },
@@ -281,6 +294,7 @@ private fun ContentRunning(
     var showDetails by rememberSaveable { mutableStateOf(initialShowDetails) }
     val swipeProgress = remember { mutableFloatStateOf(0f) }
     val isLnurlPay = uiState.lnurl is LnurlParams.LnurlPay
+    val isHardwareFeeLoading = uiState.hardwareWalletId != null && uiState.onchainFeeUi.isLoading
 
     val accentColor = when (uiState.payMethod) {
         SendMethod.ONCHAIN -> Colors.Brand
@@ -310,7 +324,11 @@ private fun ContentRunning(
         } else if (showDetails) {
             when (uiState.payMethod) {
                 SendMethod.ONCHAIN -> {
-                    OnChainDetails(uiState = uiState, onEvent = onEvent)
+                    OnChainDetails(
+                        uiState = uiState,
+                        interactionsEnabled = !isHardwareFeeLoading,
+                        onEvent = onEvent,
+                    )
                     VerticalSpacer(16.dp)
                     TagsSection(uiState, onClickTag, onClickAddTag)
                 }
@@ -379,6 +397,9 @@ private fun ContentRunning(
         SwipeToConfirm(
             text = stringResource(R.string.wallet__send_swipe),
             color = accentColor,
+            enabled = uiState.isAmountInputValid &&
+                !uiState.isFundingSourceLoading &&
+                !isHardwareFeeLoading,
             loading = isLoading,
             confirmed = isLoading,
             progress = swipeProgress,
@@ -424,7 +445,7 @@ private fun TagsSection(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            uiState.selectedTags.map { tagText ->
+            uiState.selectedTags.forEach { tagText ->
                 TagButton(
                     text = tagText,
                     displayIconClose = true,
@@ -480,10 +501,11 @@ private fun AddTagButton(
 @Composable
 private fun OnChainDetails(
     uiState: SendUiState,
+    interactionsEnabled: Boolean,
     onEvent: (SendEvent) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val fee = remember(uiState.speed) { FeeRate.fromSpeed(uiState.speed) }
+    val feeUi = uiState.onchainFeeUi
     Column(
         verticalArrangement = Arrangement.spacedBy(16.dp),
         modifier = modifier.fillMaxWidth()
@@ -497,10 +519,16 @@ private fun OnChainDetails(
                 modifier = Modifier.weight(1f)
             ) {
                 NumberPadActionButton(
-                    text = stringResource(R.string.wallet__savings__title),
-                    color = Colors.Brand,
-                    enabled = uiState.canSwitchWallet,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchWallet },
+                    text = if (uiState.hardwareWalletId != null) {
+                        uiState.hardwareWalletName ?: stringResource(R.string.hardware__device_model_trezor)
+                    } else {
+                        stringResource(R.string.wallet__savings__title)
+                    },
+                    color = if (uiState.hardwareWalletId != null) Colors.Blue else Colors.Brand,
+                    enabled = uiState.canSwitchFundingSource,
+                    isLoading = uiState.isFundingSourceLoading,
+                    clickable = interactionsEnabled,
+                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
@@ -534,34 +562,47 @@ private fun OnChainDetails(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
-                    .clickableAlpha { onEvent(SendEvent.SpeedAndFee) }
+                    .clickableAlpha(enabled = interactionsEnabled) { onEvent(SendEvent.SpeedAndFee) }
             ) {
                 SendCell(caption = stringResource(R.string.wallet__send_fee_and_speed)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Icon(
-                            painterResource(fee.icon),
-                            contentDescription = null,
-                            tint = fee.color,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        (uiState.fee as? SendFee.OnChain)?.value
-                            ?.takeIf { it > 0 }
-                            ?.let { feeSat ->
-                                val feeText = let {
-                                    val prefix = stringResource(fee.title)
-                                    val value = rememberMoneyText(feeSat, showSymbol = true)
-                                    "$prefix ($value)"
-                                }
-                                BodySSB(
-                                    text = feeText.withAccent(accentColor = Colors.White),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.MiddleEllipsis,
-                                )
+                        if (feeUi.isLoading) {
+                            GradientCircularProgressIndicator(
+                                tint = feeUi.rate.color,
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .padding(3.dp),
+                            )
+                        } else {
+                            Icon(
+                                painterResource(feeUi.rate.icon),
+                                contentDescription = null,
+                                tint = feeUi.rate.color,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                        val feeTextModifier = Modifier.animateContentSize(animationSpec = tween(200))
+                        if (feeUi.sats == null) {
+                            BodySSB(
+                                text = stringResource(feeUi.rate.title),
+                                modifier = feeTextModifier
+                            )
+                        } else {
+                            val feeText = let {
+                                val prefix = stringResource(feeUi.rate.title)
+                                val value = rememberMoneyText(feeUi.sats, showSymbol = true)
+                                "$prefix ($value)"
                             }
-                            ?: CircularProgressIndicator(Modifier.size(14.dp), Colors.White64, 2.dp)
+                            BodySSB(
+                                text = feeText.withAccent(accentColor = Colors.White),
+                                maxLines = 1,
+                                overflow = TextOverflow.MiddleEllipsis,
+                                modifier = feeTextModifier
+                            )
+                        }
                         Icon(
                             painterResource(R.drawable.ic_pencil_simple),
                             contentDescription = null,
@@ -584,7 +625,7 @@ private fun OnChainDetails(
                         tint = Colors.Brand,
                         modifier = Modifier.size(16.dp)
                     )
-                    BodySSB(stringResource(fee.description))
+                    BodySSB(stringResource(feeUi.rate.description))
                 }
             }
         }
@@ -623,8 +664,9 @@ private fun LightningDetails(
                 NumberPadActionButton(
                     text = stringResource(R.string.wallet__spending__title),
                     color = Colors.Purple,
-                    enabled = uiState.canSwitchWallet,
-                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchWallet },
+                    enabled = uiState.canSwitchFundingSource,
+                    isLoading = uiState.isFundingSourceLoading,
+                    icon = R.drawable.ic_transfer.takeIf { uiState.canSwitchFundingSource },
                     onClick = { onEvent(SendEvent.PaymentMethodSwitch) },
                     modifier = Modifier.testTag("SendConfirmAssetButton")
                 )
@@ -671,7 +713,7 @@ private fun LightningDetails(
                             tint = Colors.Purple,
                             modifier = Modifier.size(16.dp)
                         )
-                        (uiState.fee as? SendFee.Lightning)?.value
+                        uiState.lightningFeeSats
                             ?.takeIf { it > 0 }
                             ?.let { feeSat ->
                                 val feeText = let {
@@ -710,7 +752,7 @@ private fun LightningDetails(
                             tint = Colors.Purple,
                             modifier = Modifier.size(16.dp)
                         )
-                        val timestampSeconds = uiState.decodedInvoice?.timestampSeconds ?: 0uL
+                        val timestampSeconds = uiState.decodedInvoice.timestampSeconds
                         val invoiceExpiryText by produceState("", timestampSeconds, expirySeconds) {
                             val expiryMoment = timestampSeconds + expirySeconds
                             while (true) {
@@ -799,7 +841,7 @@ private fun LnurlPayDetails(
                     tint = Colors.Purple,
                     modifier = Modifier.size(16.dp)
                 )
-                (uiState.fee as? SendFee.Lightning)?.value
+                uiState.lightningFeeSats
                     ?.takeIf { it > 0 }
                     ?.let { feeSat ->
                         val feeText = let {
@@ -822,7 +864,6 @@ private fun LnurlPayDetails(
     }
 }
 
-@Suppress("SpellCheckingInspection")
 private fun sendUiState() = SendUiState(
     amount = 2_345u,
     address = "bcrt1qkgfgyxyqhvkdqh04sklnzxphmcds6vft6y7h0r",
@@ -848,8 +889,11 @@ private fun PreviewOnChain() {
             Content(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
-                    fee = SendFee.OnChain(1_234),
                     speed = TransactionSpeed.Medium,
+                    onchainFeeUi = OnchainFeeUi(
+                        rate = FeeRate.NORMAL,
+                        sats = 1_234,
+                    ),
                 ),
                 isNodeRunning = true,
                 isLoading = false,
@@ -869,8 +913,11 @@ private fun PreviewOnChainDetails() {
             Content(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
-                    fee = SendFee.OnChain(1_234),
                     speed = TransactionSpeed.Medium,
+                    onchainFeeUi = OnchainFeeUi(
+                        rate = FeeRate.NORMAL,
+                        sats = 1_234,
+                    ),
                 ),
                 isNodeRunning = true,
                 isLoading = false,
@@ -893,7 +940,7 @@ private fun PreviewLightningDetails() {
                     amount = 6_543u,
                     payMethod = SendMethod.LIGHTNING,
                     selectedTags = persistentListOf("coffee"),
-                    fee = SendFee.Lightning(43),
+                    lightningFeeSats = 43,
                 ),
                 isNodeRunning = true,
                 isLoading = false,
@@ -915,8 +962,11 @@ private fun PreviewOnChainLongFeeSmallScreen() {
                 uiState = sendUiState().copy(
                     amount = 2_345_678u,
                     selectedTags = persistentListOf("car", "house", "uber"),
-                    fee = SendFee.OnChain(654_321),
                     speed = TransactionSpeed.Custom(12_345u),
+                    onchainFeeUi = OnchainFeeUi(
+                        rate = FeeRate.CUSTOM,
+                        sats = 654_321,
+                    ),
                 ),
                 isNodeRunning = true,
                 isLoading = false,
@@ -935,7 +985,7 @@ private fun PreviewOnChainFeeLoading() {
             Content(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
-                    fee = null,
+                    onchainFeeUi = OnchainFeeUi(isLoading = true),
                 ),
                 isNodeRunning = true,
                 isLoading = false,
@@ -957,7 +1007,7 @@ private fun PreviewLightning() {
                     amount = 6_543u,
                     payMethod = SendMethod.LIGHTNING,
                     selectedTags = persistentListOf(),
-                    fee = SendFee.Lightning(43),
+                    lightningFeeSats = 43,
                 ),
                 isNodeRunning = true,
                 isLoading = false,
@@ -1008,7 +1058,7 @@ private fun PreviewLnurlDetails() {
                 uiState = sendUiState().copy(
                     amount = 5_000u,
                     payMethod = SendMethod.LIGHTNING,
-                    fee = SendFee.Lightning(12),
+                    lightningFeeSats = 12,
                     lnurl = LnurlParams.LnurlPay(
                         data = LnurlPayData(
                             uri = "veryLongLnurlPayUri12345677890123456789012345678901234567890",

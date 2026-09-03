@@ -15,6 +15,7 @@ import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.models.HwWallet
 import to.bitkit.models.Toast
+import to.bitkit.repositories.HwBackupDataUnreadableError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
 import to.bitkit.ui.shared.toast.ToastEventBus
@@ -34,7 +35,13 @@ class HwWalletViewModel @Inject constructor(
 
     private var renameSessionId = 0L
 
-    fun onRemoveClick(wallet: HwWallet) = _uiState.update { it.copy(isPendingRemoval = wallet) }
+    // Reset on open rather than on dismiss, so a back press, a failed removal or another wallet picked
+    // from the list all start from the default rather than from the last choice.
+    fun onRemoveClick(wallet: HwWallet) = _uiState.update {
+        it.copy(isPendingRemoval = wallet, keepBackupDataOnRemoval = true)
+    }
+
+    fun onKeepBackupDataChange(value: Boolean) = _uiState.update { it.copy(keepBackupDataOnRemoval = value) }
 
     fun onDismissRemoveDialog() = _uiState.update { it.copy(isPendingRemoval = null) }
 
@@ -108,17 +115,26 @@ class HwWalletViewModel @Inject constructor(
         }
     }
 
-    private fun HwWalletDetailUiState.matchesRenameSession(deviceId: String, sessionId: Long) =
-        renameSessionId == sessionId && isPendingRename?.id == deviceId
+    private fun HwWalletDetailUiState.matchesRenameSession(walletId: String, sessionId: Long) =
+        renameSessionId == sessionId && isPendingRename?.id == walletId
 
-    fun removeDevice(deviceId: String) {
+    fun removeDevice(walletId: String) {
+        // Read before the update below clears the pending state this choice was made in.
+        val keepBackupData = _uiState.value.keepBackupDataOnRemoval
+
         viewModelScope.launch {
             _uiState.update { it.copy(isPendingRemoval = null) }
-            hwWalletRepo.removeDevice(deviceId).onFailure {
+            hwWalletRepo.removeDevice(walletId, keepBackupData).onFailure {
+                // The wallet is untouched when its backup data could not be read, so say what failed
+                // and point at the way through instead of asking for a retry that repeats it.
+                val description = when (it) {
+                    is HwBackupDataUnreadableError -> R.string.hardware__remove_keep_error
+                    else -> R.string.hardware__remove_error
+                }
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.common__error),
-                    description = context.getString(R.string.hardware__remove_error),
+                    description = context.getString(description),
                 )
             }
         }
@@ -128,6 +144,7 @@ class HwWalletViewModel @Inject constructor(
 @Immutable
 data class HwWalletDetailUiState(
     val isPendingRemoval: HwWallet? = null,
+    val keepBackupDataOnRemoval: Boolean = true,
     val isPendingRename: HwWallet? = null,
     val labelInput: String = "",
     val isSavingLabel: Boolean = false,

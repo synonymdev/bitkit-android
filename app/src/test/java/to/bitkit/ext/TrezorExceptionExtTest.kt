@@ -1,10 +1,10 @@
 package to.bitkit.ext
 
 import com.synonym.bitkitcore.TrezorException
+import org.junit.Test
 import to.bitkit.utils.AppError
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
-import org.junit.Test
 
 class TrezorExceptionExtTest {
     @Test
@@ -57,5 +57,18 @@ class TrezorExceptionExtTest {
     fun `isTrezorFirmwareError rejects unrelated firmware errors`() {
         assertFalse(AppError("Firmware error").isTrezorFirmwareError())
         assertFalse(AppError("Device error (code 98): Firmware error").isTrezorFirmwareError())
+    }
+
+    @Test
+    fun `isTrezorSessionFailure recognizes broken THP channel`() {
+        val error = AppError(TrezorException.ProtocolException("THP decryption error: aead::Error"))
+
+        assertTrue(error.isTrezorSessionFailure())
+    }
+
+    @Test
+    fun `isTrezorSessionFailure rejects normal protocol failures`() {
+        assertFalse(TrezorException.ProtocolException("invalid PSBT").isTrezorSessionFailure())
+        assertFalse(TrezorException.UserCancelled().isTrezorSessionFailure())
     }
 }

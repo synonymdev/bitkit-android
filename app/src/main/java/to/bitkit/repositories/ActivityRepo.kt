@@ -11,6 +11,7 @@ import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.SortDirection
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
@@ -79,7 +80,23 @@ class ActivityRepo @Inject constructor(
     private val _activitiesChanged = MutableStateFlow(0L)
     val activitiesChanged: StateFlow<Long> = _activitiesChanged
 
-    private fun notifyActivitiesChanged() = _activitiesChanged.update { nowMillis(clock) }
+    private val _activityTagsChanged = MutableStateFlow(0L)
+
+    /**
+     * Emits only when the stored tag set can have changed, unlike [activitiesChanged] which also fires on
+     * every payment and sync. Backups that carry tags observe this so they are not rewritten for unrelated
+     * activity traffic.
+     */
+    val activityTagsChanged: StateFlow<Long> = _activityTagsChanged
+
+    /**
+     * @param tagsChanged whether the stored tag set can have changed. A tag change always implies the
+     * activity's displayed state changed, so [activityTagsChanged] never fires without [activitiesChanged].
+     */
+    private fun notifyActivitiesChanged(tagsChanged: Boolean = false) {
+        if (tagsChanged) _activityTagsChanged.update { nowMillis(clock) }
+        _activitiesChanged.update { nowMillis(clock) }
+    }
 
     suspend fun resetState() = withContext(bgDispatcher) {
         _state.update { ActivityState() }
@@ -226,14 +243,16 @@ class ActivityRepo @Inject constructor(
     ): Result<List<Activity>> = withContext(bgDispatcher) {
         runSuspendCatching {
             val transferChannelIds = transferRepo.getChannelIdsByFundingTxId().getOrDefault(emptyMap())
-            val persistedActivities = coreService.activity.replaceHwSnapshot(
+            val snapshot = coreService.activity.replaceHwSnapshot(
                 walletId = walletId,
                 activities = activities,
                 transactionDetails = transactionDetails,
                 transferChannelIdsByFundingTxId = transferChannelIds,
             )
-            notifyActivitiesChanged()
-            persistedActivities
+            // Only a deletion can drop tags, via the cascade. A plain upsert leaves the tag set untouched,
+            // so it must not trigger a rewrite of the backups that carry tags.
+            notifyActivitiesChanged(tagsChanged = snapshot.removedActivities)
+            snapshot.activities
         }.onFailure {
             Logger.error("Failed to persist hardware activities for '$walletId'", it, context = TAG)
         }
@@ -242,7 +261,7 @@ class ActivityRepo @Inject constructor(
     suspend fun deleteForWallet(walletId: String): Result<Unit> = withContext(bgDispatcher) {
         runSuspendCatching {
             val deleted = coreService.activity.deleteByWalletId(walletId)
-            notifyActivitiesChanged()
+            notifyActivitiesChanged(tagsChanged = true)
             Logger.info("Deleted '$deleted' activities for hardware wallet '$walletId'", context = TAG)
         }.onFailure {
             Logger.error("Failed to delete activities for hardware wallet '$walletId'", it, context = TAG)
@@ -328,11 +347,30 @@ class ActivityRepo @Inject constructor(
         type: ActivityFilter,
         txType: PaymentType?,
         retry: Boolean = true,
+    ): Result<Activity> = findActivityByPaymentId(
+        paymentHashOrTxId = paymentHashOrTxId,
+        type = type,
+        txType = txType,
+        retry = retry,
+        walletId = WalletScope.default,
+    )
+
+    suspend fun findActivityByPaymentId(
+        paymentHashOrTxId: String,
+        type: ActivityFilter,
+        txType: PaymentType?,
+        retry: Boolean,
+        walletId: String,
     ): Result<Activity> = withContext(bgDispatcher) {
         runCatching {
             require(paymentHashOrTxId.isNotEmpty()) { "paymentHashOrTxId is empty" }
 
-            suspend fun findActivity(): Activity? = getActivities(filter = type, txType = txType, limit = 10u)
+            suspend fun findActivity(): Activity? = getActivities(
+                walletId = walletId,
+                filter = type,
+                txType = txType,
+                limit = 10u,
+            )
                 .getOrNull()
                 ?.firstOrNull { it.matchesPaymentId(paymentHashOrTxId) }
 
@@ -343,13 +381,16 @@ class ActivityRepo @Inject constructor(
                     context = TAG
                 )
 
-                lightningRepo.sync().onSuccess { Logger.debug("Syncing LN node SUCCESS", context = TAG) }
-
-                syncActivities().onSuccess {
-                    Logger.debug(
-                        "Sync success, searching again the activity with paymentHashOrTxId:'$paymentHashOrTxId'",
-                        context = TAG,
-                    )
+                if (walletId == WalletScope.default) {
+                    lightningRepo.sync().onSuccess { Logger.debug("Syncing LN node SUCCESS", context = TAG) }
+                    syncActivities().onSuccess {
+                        Logger.debug(
+                            "Sync success, searching again the activity with paymentHashOrTxId:'$paymentHashOrTxId'",
+                            context = TAG,
+                        )
+                        activity = findActivity()
+                    }
+                } else {
                     activity = findActivity()
                 }
             }
@@ -357,7 +398,8 @@ class ActivityRepo @Inject constructor(
             checkNotNull(activity) { "Activity not found" }
         }.onFailure {
             Logger.error(
-                "findActivityByPaymentId error (paymentHashOrTxId:'$paymentHashOrTxId' type:'$type' txType:'$txType')",
+                "findActivityByPaymentId error " +
+                    "(paymentHashOrTxId:'$paymentHashOrTxId' type:'$type' txType:'$txType' walletId:'$walletId')",
                 context = TAG,
             )
         }
@@ -419,6 +461,7 @@ class ActivityRepo @Inject constructor(
             val normalizedKey = PubkyPublicKeyFormat.normalized(publicKey) ?: publicKey
             val txIdsInBoostTxIds = getTxIdsInBoostTxIds()
             getActivities(
+                walletId = null,
                 filter = ActivityFilter.ALL,
                 sortDirection = SortDirection.DESC,
             ).getOrThrow()
@@ -433,6 +476,7 @@ class ActivityRepo @Inject constructor(
         contactPublicKey: String,
         forPaymentId: String,
         syncLdkPayments: Boolean = true,
+        walletId: String = WalletScope.default,
     ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             if (syncLdkPayments) {
@@ -442,7 +486,7 @@ class ActivityRepo @Inject constructor(
             }
 
             val normalizedKey = PubkyPublicKeyFormat.normalized(contactPublicKey) ?: contactPublicKey
-            val activity = findActivityForPaymentId(forPaymentId, syncLdkPayments)
+            val activity = findActivityForPaymentId(forPaymentId, syncLdkPayments, walletId)
             if (activity == null) {
                 Logger.warn(
                     "Skipped setting contact for payment '$forPaymentId' because activity was not found",
@@ -457,7 +501,7 @@ class ActivityRepo @Inject constructor(
             val updatedAt = nowTimestamp().epochSecond.toULong()
             val updatedActivity = activity.withContact(normalizedKey, updatedAt)
             updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
-            updateReplacementContactIfNeeded(updatedActivity, normalizedKey, updatedAt)
+            updateReplacementContactIfNeeded(updatedActivity, normalizedKey, updatedAt, walletId)
         }.onFailure {
             Logger.error("Failed to set contact for payment '$forPaymentId'", it, context = TAG)
         }
@@ -466,6 +510,7 @@ class ActivityRepo @Inject constructor(
     suspend fun clearContact(
         forPaymentId: String,
         syncLdkPayments: Boolean = true,
+        walletId: String = WalletScope.default,
     ): Result<Unit> = withContext(ioDispatcher) {
         runCatching {
             if (syncLdkPayments) {
@@ -474,7 +519,7 @@ class ActivityRepo @Inject constructor(
                 }.getOrThrow()
             }
 
-            val activity = findActivityForPaymentId(forPaymentId, syncLdkPayments)
+            val activity = findActivityForPaymentId(forPaymentId, syncLdkPayments, walletId)
             if (activity == null) {
                 Logger.warn(
                     "Skipped clearing contact for payment '$forPaymentId' because activity was not found",
@@ -487,7 +532,7 @@ class ActivityRepo @Inject constructor(
             val updatedAt = nowTimestamp().epochSecond.toULong()
             val updatedActivity = activity.withContact(null, updatedAt)
             updateActivity(updatedActivity.rawId(), updatedActivity).getOrThrow()
-            updateReplacementContactIfNeeded(updatedActivity, null, updatedAt)
+            updateReplacementContactIfNeeded(updatedActivity, null, updatedAt, walletId)
         }.onFailure {
             Logger.error("Failed to clear contact for payment '$forPaymentId'", it, context = TAG)
         }
@@ -497,10 +542,11 @@ class ActivityRepo @Inject constructor(
         activity: Activity,
         normalizedKey: String?,
         updatedAt: ULong,
+        walletId: String = WalletScope.default,
     ) {
         if (activity !is Activity.Onchain || activity.v1.doesExist || activity.v1.txType != PaymentType.SENT) return
 
-        getActivities(filter = ActivityFilter.ONCHAIN).getOrThrow()
+        getActivities(walletId = walletId, filter = ActivityFilter.ONCHAIN).getOrThrow()
             .filterIsInstance<Activity.Onchain>()
             .filter { activity.v1.txId in it.v1.boostTxIds }
             .filterNot { PubkyPublicKeyFormat.matches(it.v1.contact, normalizedKey) }
@@ -510,18 +556,24 @@ class ActivityRepo @Inject constructor(
             }
     }
 
-    private suspend fun findActivityForPaymentId(forPaymentId: String, syncLdkPayments: Boolean): Activity? {
-        val activity = getActivityByPaymentId(forPaymentId)
+    private suspend fun findActivityForPaymentId(
+        forPaymentId: String,
+        syncLdkPayments: Boolean,
+        walletId: String = WalletScope.default,
+    ): Activity? {
+        val activity = getActivityByPaymentId(forPaymentId, walletId)
         if (activity != null) return activity
         if (!syncLdkPayments) return null
 
         syncActivities().getOrThrow()
-        return getActivityByPaymentId(forPaymentId)
+        return getActivityByPaymentId(forPaymentId, walletId)
     }
 
-    private suspend fun getActivityByPaymentId(forPaymentId: String): Activity? =
-        coreService.activity.getActivity(forPaymentId, WalletScope.default)
-            ?: getOnchainActivityByTxId(forPaymentId)?.let { Activity.Onchain(it) }
+    private suspend fun getActivityByPaymentId(
+        forPaymentId: String,
+        walletId: String = WalletScope.default,
+    ): Activity? = coreService.activity.getActivity(forPaymentId, walletId)
+        ?: getOnchainActivityByTxId(forPaymentId, walletId)?.let { Activity.Onchain(it) }
 
     private fun Activity.withContact(normalizedKey: String?, updatedAt: ULong): Activity = when (this) {
         is Activity.Lightning -> Activity.Lightning(v1.copy(contact = normalizedKey, updatedAt = updatedAt))
@@ -649,7 +701,7 @@ class ActivityRepo @Inject constructor(
             val deleted = coreService.activity.delete(id, walletId)
             check(deleted) { "Activity not deleted" }
             cacheStore.addActivityToDeletedList(id, walletId)
-            notifyActivitiesChanged()
+            notifyActivitiesChanged(tagsChanged = true)
         }.onFailure {
             Logger.error("deleteActivity error for ID: $id", it, context = TAG)
         }
@@ -747,7 +799,7 @@ class ActivityRepo @Inject constructor(
 
             if (newTags.isNotEmpty()) {
                 coreService.activity.appendTags(activityId, newTags, walletId).getOrThrow()
-                notifyActivitiesChanged()
+                notifyActivitiesChanged(tagsChanged = true)
                 Logger.info("Added ${newTags.size} new tags to activity $activityId", context = TAG)
             } else {
                 Logger.info("No new tags to add to activity $activityId", context = TAG)
@@ -792,7 +844,7 @@ class ActivityRepo @Inject constructor(
                 }
 
                 coreService.activity.dropTags(activityId, tags, walletId)
-                notifyActivitiesChanged()
+                notifyActivitiesChanged(tagsChanged = true)
                 Logger.info("Removed ${tags.size} tags from activity $activityId", context = TAG)
             }.onFailure {
                 Logger.error("removeTagsFromActivity error for activity $activityId", it, context = TAG)
@@ -824,7 +876,12 @@ class ActivityRepo @Inject constructor(
     }
 
     /**
-     * Get all [ActivityTags] for backup
+     * Get all [ActivityTags] for backup.
+     *
+     * Scoped to the default wallet: hardware activities are rebuilt by the device watcher and are not
+     * backed up, so a restored hardware [ActivityTags] row would have no parent activity and Core's
+     * foreign key would reject it. Hardware tags travel as [PreActivityMetadata] instead, see
+     * [getHardwareTagsAsPreActivityMetadata].
      */
     suspend fun getAllActivitiesTags(): Result<List<ActivityTags>> = withContext(bgDispatcher) {
         runCatching {
@@ -832,6 +889,88 @@ class ActivityRepo @Inject constructor(
                 .filter { it.walletId == WalletScope.default }
         }.onFailure {
             Logger.error("getAllActivityTags error", it, context = TAG)
+        }
+    }
+
+    /**
+     * Hardware wallet tags rendered as [PreActivityMetadata] so they can travel in the metadata backup.
+     *
+     * Hardware activities are rebuilt by the device watcher and are deliberately not backed up, so a
+     * restored hardware [ActivityTags] row would reference a missing activity. Core re-attaches
+     * pre-activity metadata when the watcher recreates the activity, matching received activities on
+     * address and sent activities on payment id, so the tags land back on the right rows.
+     *
+     * Every other field is left neutral: Core copies `address`, `feeRate`, `isTransfer` and `channelId`
+     * onto the activity it attaches to, and only when they are set, so a tag-only record must not carry
+     * them.
+     */
+    suspend fun getHardwareTagsAsPreActivityMetadata(): Result<List<PreActivityMetadata>> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                val hardwareTags = coreService.activity.getAllActivitiesTags()
+                    .filter { it.walletId != WalletScope.default }
+                if (hardwareTags.isEmpty()) return@runSuspendCatching emptyList()
+
+                val onchainByScopedId = coreService.activity.get(
+                    walletId = null,
+                    filter = ActivityFilter.ONCHAIN,
+                    txType = null,
+                    tags = null,
+                    search = null,
+                    minDate = null,
+                    maxDate = null,
+                    limit = null,
+                    sortDirection = null,
+                )
+                    .filterIsInstance<Activity.Onchain>()
+                    .associateBy { it.v1.walletId to it.v1.id }
+
+                hardwareTags.mapNotNull { tag ->
+                    val activity = onchainByScopedId[tag.walletId to tag.activityId] ?: return@mapNotNull null
+                    activity.v1.toPreActivityMetadata(tag.tags)
+                }
+            }.onFailure {
+                Logger.error("getHardwareTagsAsPreActivityMetadata error", it, context = TAG)
+            }
+        }
+
+    /**
+     * The slice of the metadata backup's tag data that belongs to [walletId], built the same way the
+     * envelope builds it so a caller can preserve a wallet's tags across a deletion.
+     *
+     * Both sources are needed: Core drops the stored [PreActivityMetadata] of a wallet along with its
+     * activities, and those rows are not covered by [getHardwareTagsAsPreActivityMetadata], which only
+     * renders tags that already reached an activity.
+     */
+    suspend fun getTagMetadataForWallet(walletId: String): Result<List<PreActivityMetadata>> =
+        withContext(bgDispatcher) {
+            runSuspendCatching {
+                val stored = coreService.activity.getAllPreActivityMetadata()
+                    .filter { it.walletId == walletId }
+                val rendered = getHardwareTagsAsPreActivityMetadata().getOrThrow()
+                    .filter { it.walletId == walletId }
+                (stored + rendered).distinctBy { it.walletId to it.paymentId }
+            }.onFailure {
+                Logger.error("Failed to read tag metadata of '$walletId'", it, context = TAG)
+            }
+        }
+
+    /**
+     * Fill in wallet ids missing from a backup envelope's `activities` slice, letting Core migrate its own
+     * model JSON before the app decodes it.
+     */
+    suspend fun migrateBackupActivitiesJson(json: String): Result<String> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            coreService.activity.migrateBackupActivitiesJson(json)
+        }
+    }
+
+    /**
+     * Fill in wallet ids missing from a backup envelope's `activityTags` slice.
+     */
+    suspend fun migrateBackupActivityTagsJson(json: String): Result<String> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            coreService.activity.migrateBackupActivityTagsJson(json)
         }
     }
 
@@ -854,7 +993,7 @@ class ActivityRepo @Inject constructor(
                     "${payload.closedChannels.size} closed channels",
                 context = TAG,
             )
-            notifyActivitiesChanged()
+            notifyActivitiesChanged(tagsChanged = true)
         }
     }
 
@@ -907,3 +1046,29 @@ class ActivityRepo @Inject constructor(
 data class ActivityState(
     val tags: ImmutableList<String> = persistentListOf(),
 )
+
+/** Activity timestamps are epoch seconds, while pre-activity metadata stores epoch millis. */
+private const val SECONDS_TO_MILLIS = 1_000uL
+
+/**
+ * Renders an on-chain activity's tags as a [PreActivityMetadata] Core can re-attach later.
+ *
+ * The lookup key mirrors Core: received activities are matched on `address` with `isReceive` set, sent
+ * activities on `paymentId`.
+ */
+private fun OnchainActivity.toPreActivityMetadata(tags: List<String>): PreActivityMetadata {
+    val isReceive = txType == PaymentType.RECEIVED
+    return PreActivityMetadata(
+        walletId = walletId,
+        paymentId = if (isReceive) id else txId,
+        tags = tags,
+        paymentHash = null,
+        txId = txId,
+        address = address.takeIf { isReceive },
+        isReceive = isReceive,
+        feeRate = 0uL,
+        isTransfer = false,
+        channelId = null,
+        createdAt = timestamp * SECONDS_TO_MILLIS,
+    )
+}

@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.IBtOrder
 import to.bitkit.R
+import to.bitkit.models.safe
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FeeInfo
@@ -36,12 +37,11 @@ import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
-import to.bitkit.models.safe
 import to.bitkit.viewmodels.TransferViewModel
 
 @Composable
 fun SpendingHwSignScreen(
-    deviceId: String,
+    walletId: String,
     viewModel: TransferViewModel,
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
@@ -55,9 +55,9 @@ fun SpendingHwSignScreen(
         return
     }
 
-    LaunchedEffect(deviceId, order.id) {
-        viewModel.warmUpHardwareConnection(deviceId)
-        viewModel.updateHwFundingFeeEstimate(order, deviceId)
+    LaunchedEffect(walletId, order.id) {
+        viewModel.warmUpHardwareConnection(walletId)
+        viewModel.updateHwFundingFeeEstimate(order, walletId)
     }
 
     DisposableEffect(viewModel) {
@@ -74,8 +74,16 @@ fun SpendingHwSignScreen(
         onLearnMoreClick = onLearnMoreClick,
         onAdvancedClick = onAdvancedClick,
         onUseDefaultLspBalanceClick = viewModel::onUseDefaultLspBalanceClick,
-        onOpenConnect = { viewModel.onTransferToSpendingHwConfirm(order, deviceId) },
+        onOpenConnect = { viewModel.onTransferToSpendingHwConfirm(order, walletId) },
     )
+
+    if (state.isHwPassphraseRequired) {
+        HwPassphrasePromptSheet(
+            isVerifying = state.isVerifyingHwPassphrase,
+            onSubmit = { viewModel.onHwPassphraseSubmit(order, walletId, it) },
+            onDismiss = viewModel::onHwPassphraseDismiss,
+        )
+    }
 }
 
 @Composable

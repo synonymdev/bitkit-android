@@ -24,8 +24,17 @@ class ReportIssueViewModel @Inject constructor(
 
     private val _reportIssueEffect = MutableSharedFlow<ReportIssueEffects>()
     val reportIssueEffect = _reportIssueEffect.asSharedFlow()
+    private var hasAppliedPrefillMessage = false
+
     private fun setReportIssueEffect(effect: ReportIssueEffects) =
         viewModelScope.launch { _reportIssueEffect.emit(effect) }
+
+    fun applyPrefillMessage(text: String?) {
+        if (text == null || hasAppliedPrefillMessage) return
+
+        hasAppliedPrefillMessage = true
+        updateMessage(text)
+    }
 
     fun sendMessage() {
         _uiState.update { it.copy(isLoading = true) }

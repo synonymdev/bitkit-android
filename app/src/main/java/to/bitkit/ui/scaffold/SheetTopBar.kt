@@ -24,6 +24,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 fun SheetTopBar(
     titleText: String?,
     modifier: Modifier = Modifier,
+    action: (@Composable () -> Unit)? = null,
     onBack: (() -> Unit)? = null,
 ) {
     Box(
@@ -49,6 +50,16 @@ fun SheetTopBar(
                     .align(Alignment.CenterStart)
                     .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Horizontal))
             )
+        }
+        action?.let {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .windowInsetsPadding(WindowInsets.statusBars.only(WindowInsetsSides.Horizontal))
+            ) {
+                it()
+            }
         }
     }
 }

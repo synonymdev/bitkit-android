@@ -1,11 +1,8 @@
 package to.bitkit.ui.screens.wallets.send
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -18,7 +15,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -28,12 +24,9 @@ import to.bitkit.R
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.ui.components.BodyM
-import to.bitkit.ui.components.BodyS
-import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.GradientCircularProgressIndicator
-import to.bitkit.ui.components.PubkyContactAvatar
+import to.bitkit.ui.components.PubkyContactRow
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
@@ -123,46 +116,12 @@ private fun SendContactList(
             .padding(horizontal = 16.dp)
     ) {
         items(contacts, key = { it.publicKey }) { contact ->
-            ContactRow(
+            PubkyContactRow(
                 profile = contact,
                 onClick = { onContactClick(contact.publicKey) },
                 modifier = Modifier.testTag("SendContact_${contact.publicKey}")
             )
             HorizontalDivider(color = Colors.White10)
-        }
-    }
-}
-
-@Composable
-private fun ContactRow(
-    profile: PubkyProfile,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = modifier
-            .fillMaxWidth()
-            .clickableAlpha(onClick = onClick)
-            .padding(vertical = 12.dp)
-    ) {
-        PubkyContactAvatar(profile = profile)
-        Column(
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            modifier = Modifier.weight(1f)
-        ) {
-            BodyS(
-                text = profile.truncatedPublicKey,
-                color = Colors.White64,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            BodySSB(
-                text = profile.name,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
         }
     }
 }

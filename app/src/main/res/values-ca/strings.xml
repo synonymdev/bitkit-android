@@ -929,6 +929,7 @@
     <string name="wallet__send_dialog3">La comissió de la transacció sembla ser més del 50% de l\'import que estàs enviant. Vols continuar?</string>
     <string name="wallet__send_dialog4">La comissió de la transacció sembla ser superior a 10 $. Vols continuar?</string>
     <string name="wallet__send_error_create_tx">No es pot transmetre la transacció. Si us plau, torna-ho a provar.</string>
+    <string name="wallet__send_error_support">Contacta amb el suport</string>
     <string name="wallet__send_error_tx_failed">Transacció fallida</string>
     <string name="wallet__send_fee_and_speed">Velocitat i comissió</string>
     <string name="wallet__send_fee_custom">Estableix una tarifa personalitzada</string>
@@ -938,6 +939,7 @@
     <string name="wallet__send_fee_speed">Velocitat</string>
     <string name="wallet__send_fee_total">₿ {feeSats} per a aquesta transacció</string>
     <string name="wallet__send_fee_total_fiat">₿ {feeSats} per a aquesta transacció ({fiatSymbol}{fiatFormatted})</string>
+    <string name="wallet__send_instant_failed">Pagament fallit</string>
     <string name="wallet__send_invoice">Factura</string>
     <string name="wallet__send_invoice_expiration">Caducitat de la factura</string>
     <string name="wallet__send_max">MAX</string>
@@ -960,6 +962,16 @@
     <string name="wallet__tags_new">Nova etiqueta</string>
     <string name="wallet__tags_new_enter">Introdueix una nova etiqueta</string>
     <string name="wallet__tags_previously">Etiquetes prèviament utilitzades</string>
+    <string name="wallet__payment_abandoned">El pagament Lightning s\'ha aturat abans de completar-se.</string>
+    <string name="wallet__payment_expired">Aquest pagament Lightning ha caducat. Demana una factura nova.</string>
+    <string name="wallet__payment_failed_description">El teu pagament instantani ha fallat. Si us plau, torna-ho a provar.</string>
+    <string name="wallet__payment_invoice_request_expired">Aquesta sol·licitud de factura Lightning ha caducat. Demana una factura nova.</string>
+    <string name="wallet__payment_invoice_request_rejected">El destinatari ha rebutjat aquesta sol·licitud de factura Lightning.</string>
+    <string name="wallet__payment_recipient_rejected">El destinatari ha rebutjat aquest pagament Lightning. Comprova la factura i torna-ho a provar.</string>
+    <string name="wallet__payment_retries_exhausted">Bitkit ha provat diverses rutes Lightning, però el pagament no s\'ha pogut completar.</string>
+    <string name="wallet__payment_route_not_found">Bitkit no ha pogut trobar cap ruta Lightning per a aquest pagament.</string>
+    <string name="wallet__payment_timeout">El pagament ha esgotat el temps d\'espera. Torna-ho a provar.</string>
+    <string name="wallet__payment_unknown_required_features">Aquesta factura Lightning utilitza funcions que Bitkit encara no admet.</string>
     <string name="wallet__toast_payment_failed_description">El teu pagament instantani ha fallat. Si us plau, torna-ho a provar.</string>
     <string name="wallet__toast_payment_failed_title">Pagament fallit</string>
     <string name="wallet__toast_received_transaction_replaced_description">La teva transacció rebuda ha estat substituïda per un augment de tarifa</string>

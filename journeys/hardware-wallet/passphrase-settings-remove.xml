@@ -1,0 +1,46 @@
+<journey name="Hardware Wallet Passphrase Settings And Remove">
+  <description>
+    Verifies that a passphrase wallet is a first-class identity in settings: the Payments count
+    includes it, the Hardware Wallets screen lists it as its own row with its own rename and
+    delete, and removing it leaves the standard wallet of the same physical device paired and
+    watched. Requires the hidden wallet from passphrase-pairing.xml already paired.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app, open the menu, and navigate to Settings
+    </action>
+    <action>
+      Ensure the "General" tab is selected, scroll to the "Payments" section, and verify the "Hardware Wallets" row shows a count of at least 2
+    </action>
+    <action>
+      Tap the "Hardware Wallets" row and verify the screen opens (testTag "HardwareWalletsScreen") listing two rows, one of them named "Hidden Trezor"
+    </action>
+    <action>
+      Verify each row shows its own balance and connection indicator, and that the two balances differ
+    </action>
+    <action>
+      Tap the "Hidden Trezor" row name to open the rename sheet, clear the input (testTag "RenameHardwareWalletInput"), type "Hidden Funds", and tap Save (testTag "RenameHardwareWalletSave")
+    </action>
+    <action>
+      Verify only the hidden wallet row was renamed to "Hidden Funds" and the standard wallet row kept its own name
+    </action>
+    <action>
+      Tap the delete (trash) icon on the "Hidden Funds" row, and confirm "Remove" in the dialog
+    </action>
+    <action>
+      Verify the Hardware Wallets screen now lists exactly one row, the standard wallet, still showing its balance
+    </action>
+    <action>
+      Navigate to the wallet home screen and verify a single hardware wallet tile remains with a non-zero balance
+    </action>
+    <action>
+      adb: adb shell "run-as to.bitkit.dev sh -c 'ls files/trezor-thp-credentials/ 2>/dev/null | wc -l'"
+    </action>
+    <action>
+      Verify the previous command reported at least one credential file: removing one identity must not unpair the physical device
+    </action>
+    <action>
+      Tap the remaining hardware wallet tile and verify its detail screen opens and lists its activity, confirming the device was not re-paired
+    </action>
+  </actions>
+</journey>
