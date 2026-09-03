@@ -350,12 +350,23 @@ class PubkyRepo @Inject constructor(
 
     private suspend fun revokeCompletedAuthSessionIfNeeded(shouldRevokeSession: Boolean) {
         if (!shouldRevokeSession) return
-        runSuspendCatching {
+        discardAbandonedSession()
+    }
+
+    private suspend fun discardAbandonedSession() {
+        val revocationError = runSuspendCatching {
             withContext(NonCancellable + ioDispatcher) {
                 pubkyService.signOut()
             }
+        }.exceptionOrNull() ?: return
+
+        Logger.warn("Failed to revoke abandoned Pubky session", revocationError, context = TAG)
+        runSuspendCatching {
+            withContext(NonCancellable + ioDispatcher) {
+                pubkyService.forgetSessionAccess()
+            }
         }.onFailure {
-            Logger.warn("Failed to revoke canceled Pubky auth session", it, context = TAG)
+            Logger.warn("Failed to forget abandoned Pubky session access", it, context = TAG)
         }
     }
 
@@ -598,13 +609,7 @@ class PubkyRepo @Inject constructor(
 
     private suspend fun revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSession: Boolean) {
         if (!shouldRevokeSession) return
-        runSuspendCatching {
-            withContext(NonCancellable + ioDispatcher) {
-                pubkyService.signOut()
-            }
-        }.onFailure {
-            Logger.warn("Failed to revoke incomplete Pubky profile session", it, context = TAG)
-        }
+        discardAbandonedSession()
     }
 
     suspend fun uploadAvatar(imageBytes: ByteArray): Result<String> = runSuspendCatching {

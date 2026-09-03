@@ -246,12 +246,13 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `completeAuthentication should revoke session when auth is canceled after completion`() = test {
+    fun `completeAuthentication should forget session when canceled session revocation fails`() = test {
         whenever(pubkyService.startAuth()).thenReturn("auth_uri")
         whenever(pubkyService.completeAuth()).thenAnswer {
             runBlocking { sut.cancelAuthentication() }
             Unit
         }
+        whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Server error") }
 
         val authRequest = startAuthForTesting()
         approveAuthForTesting(authRequest)
@@ -259,6 +260,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         verifyBlocking(pubkyService) { signOut() }
+        verifyBlocking(pubkyService) { forgetSessionAccess() }
     }
 
     @Test
@@ -487,7 +489,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `createIdentity should revoke session when profile publication fails`() = test {
+    fun `createIdentity should forget session when incomplete session revocation fails`() = test {
         val httpClient = identityHttpClient()
         sut = createSut(httpClient)
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
@@ -495,6 +497,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.publicKeyFromSecret("test-secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
         whenever(pubkyService.signUp("test-secret", "test-homeserver", "test-code")).thenReturn(Unit)
         whenever(pubkyService.publishPaykitProfile(any())).thenAnswer { throw TestAppError("Publish failed") }
+        whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Server error") }
 
         val result = sut.createIdentity(
             name = "Test",
@@ -506,8 +509,10 @@ class PubkyRepoTest : BaseUnitTest() {
         httpClient.close()
 
         assertTrue(result.isFailure)
+        assertEquals("Publish failed", result.exceptionOrNull()?.message)
         verifyBlocking(pubkyService) { signUp("test-secret", "test-homeserver", "test-code") }
         verifyBlocking(pubkyService) { signOut() }
+        verifyBlocking(pubkyService) { forgetSessionAccess() }
     }
 
     @Test
