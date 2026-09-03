@@ -38,6 +38,7 @@ enum class PubkyAuthClaim(val wireValue: String) {
 
 sealed class PubkyAuthRequestError(cause: Throwable? = null) : AppError(cause = cause) {
     class InvalidUrl(cause: Throwable) : PubkyAuthRequestError(cause)
+    data object RequesterChanged : PubkyAuthRequestError()
     data object MissingBitkitClaim : PubkyAuthRequestError()
     data object DuplicateBitkitClaim : PubkyAuthRequestError()
     data class UnsupportedBitkitClaim(val value: String) : PubkyAuthRequestError()

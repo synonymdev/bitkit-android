@@ -168,10 +168,6 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         }
         val approvalState = _uiState.value
         if (approvalState.authUrl != authUrl) return
-        if (approvalState.clientId != request.clientId) {
-            handleApprovalFailure(IllegalArgumentException("Pubky auth requester changed"), authUrl)
-            return
-        }
         if (!approveRequest(request, authUrl)) return
 
         Logger.info("Auth approved for '${request.serviceNames.firstOrNull().orEmpty()}'", context = TAG)

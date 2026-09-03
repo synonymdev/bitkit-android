@@ -81,6 +81,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PublicPaykitRepo
@@ -925,11 +926,8 @@ class PaykitSdkService @Inject constructor(
 
     private fun approvalBootstrap(authUrl: String, approvedClientId: String): PubkySessionBootstrap {
         val requestClientId = parsePubkyAuthUrl(authUrl).clientId.orEmpty()
-        require(approvedClientId.isNotBlank() && approvedClientId == requestClientId) {
-            "Approved Pubky client ID does not match auth request"
-        }
         return PubkySessionBootstrap.withPubkyClientConfig(
-            clientId = approvedClientId,
+            clientId = validatedApprovalClientId(requestClientId, approvedClientId),
             pubkyClient = pubkyClientConfig,
         )
     }
@@ -999,6 +997,13 @@ internal fun paykitPubkyClientConfig(
     } else {
         baseConfig
     }
+
+internal fun validatedApprovalClientId(requestClientId: String, approvedClientId: String): String {
+    if (approvedClientId.isBlank() || approvedClientId != requestClientId) {
+        throw PubkyAuthRequestError.RequesterChanged
+    }
+    return requestClientId
+}
 
 private class PaykitSdkStateBlobStore(
     private val keychain: Keychain,

@@ -10,6 +10,7 @@ fun Throwable.localizedPubkyAuthMessage(context: Context): String? {
     while (current != null) {
         val messageResource = when (current) {
             is PubkyAuthRequestError.InvalidUrl -> R.string.profile__auth_error_invalid_url
+            PubkyAuthRequestError.RequesterChanged -> R.string.profile__auth_error_invalid_url
             PubkyAuthRequestError.MissingBitkitClaim -> R.string.profile__auth_error_missing_claim
             PubkyAuthRequestError.DuplicateBitkitClaim -> R.string.profile__auth_error_duplicate_claim
             is PubkyAuthRequestError.UnsupportedBitkitClaim -> R.string.profile__auth_error_unsupported_claim

@@ -125,25 +125,6 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `confirmAuthorize rejects a requester change after user review`() = test {
-        val authUrl = "pubkyauth://signin?caps=/pub/current/:rw"
-        val capabilities = "/pub/current/:rw"
-        whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(
-            Result.success(authRequest(authUrl, capabilities)),
-            Result.success(authRequest(authUrl, capabilities, clientId = "changed.test")),
-        )
-        val sut = createSut()
-
-        sut.load(authUrl)
-        advanceUntilIdle()
-        sut.confirmAuthorize(authUrl)
-        advanceUntilIdle()
-
-        assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
-        verifyBlocking(pubkyRepo, never()) { approveAuth(any(), any(), any()) }
-    }
-
-    @Test
     fun `ordinary authorization uses the requested capabilities`() = test {
         val authUrl = "pubkyauth://signin?caps=/pub/example/:rw"
         val capabilities = "/pub/example/:rw"

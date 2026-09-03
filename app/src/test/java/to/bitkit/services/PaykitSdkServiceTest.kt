@@ -10,6 +10,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.toHex
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.utils.AppError
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -52,6 +53,18 @@ class PaykitSdkServiceTest {
 
         assertEquals("192.0.2.1", config.localTestnetHost)
         assertEquals(basePubkyClientConfig.requestTimeoutSecs, config.requestTimeoutSecs)
+    }
+
+    @Test
+    fun `approval uses external requester client id`() {
+        assertEquals("paykit.test", validatedApprovalClientId("paykit.test", "paykit.test"))
+    }
+
+    @Test
+    fun `approval rejects a mismatched client id`() {
+        assertFailsWith<PubkyAuthRequestError.RequesterChanged> {
+            validatedApprovalClientId("paykit.test", "different.test")
+        }
     }
 
     @Test
