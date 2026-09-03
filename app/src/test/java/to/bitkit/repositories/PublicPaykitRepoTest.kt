@@ -249,6 +249,8 @@ class PublicPaykitRepoTest : BaseUnitTest() {
             IncomingPaykitPaymentRequestFailureReason.PaymentDetailsPending,
             PublicPaykitPaymentResult.WaitingForUpdatedPaymentList.incomingPaymentRequestFailureReason,
         )
+        assertEquals("presentation", IncomingPaykitPaymentRequestFailureReason.RequestExpired.category)
+        assertEquals("request_expired", IncomingPaykitPaymentRequestFailureReason.RequestExpired.logValue)
     }
 
     @Suppress("LongParameterList")

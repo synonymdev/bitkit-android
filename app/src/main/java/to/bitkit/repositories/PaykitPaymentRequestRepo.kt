@@ -81,7 +81,8 @@ data class PaykitPaymentRequest(
         val shouldLogIncomingRejection: Boolean = true,
     ) {
         MissingLocalRole("missing_local_role"),
-        UnsupportedLocalRole("unsupported_local_role", shouldLogIncomingRejection = false),
+        OutgoingRequest("outgoing_request", shouldLogIncomingRejection = false),
+        UnsupportedLocalRole("unsupported_local_role"),
         NonActionableState("non_actionable_state", shouldLogIncomingRejection = false),
         MissingTerms("missing_terms"),
         RecurringRequest("recurring_request"),
@@ -704,7 +705,13 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
     val role = localRole
         ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.MissingLocalRole)
     if (role != expectedRole) {
-        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedLocalRole)
+        return PaykitPaymentRequestParseResult.Rejected(
+            if (expectedRole == PaymentRequestLocalRole.PAYER && role == PaymentRequestLocalRole.PAYEE) {
+                PaykitPaymentRequest.ParseFailure.OutgoingRequest
+            } else {
+                PaykitPaymentRequest.ParseFailure.UnsupportedLocalRole
+            },
+        )
     }
     if (requiresActionableRequest && state != PaymentRequestLifecycleState.PROPOSED) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.NonActionableState)

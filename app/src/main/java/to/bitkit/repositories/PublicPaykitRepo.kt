@@ -65,13 +65,14 @@ internal enum class IncomingPaykitPaymentRequestFailureReason(
     PaymentDetailsPending("payment_details_pending"),
     InvalidPaymentTarget("invalid_payment_target"),
     PaymentTargetNotRoutable("payment_target_not_routable"),
+    RequestExpired("request_expired"),
     ResolutionFailed("resolution_failed"),
     ;
 
     val category: String
         get() = when (this) {
             NoSupportedEndpoint, EndpointNotPayable, PaymentDetailsPending, ResolutionFailed -> "resolution"
-            InvalidPaymentTarget, PaymentTargetNotRoutable -> "presentation"
+            InvalidPaymentTarget, PaymentTargetNotRoutable, RequestExpired -> "presentation"
         }
 }
 
