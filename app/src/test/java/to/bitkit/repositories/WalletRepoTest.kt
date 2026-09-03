@@ -301,6 +301,7 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `updateBip21Invoice should create bolt11 when node can receive`() = test {
         whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
         whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
 
         sut.updateBip21Invoice(amountSats = SATS, description = "test").let { result ->
@@ -529,6 +530,7 @@ class WalletRepoTest : BaseUnitTest() {
         sut.setBip21AmountSats(SATS)
         sut.setBip21Description(testDescription)
         whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
         whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
 
         sut.refreshBip21ForEvent(channelReady)
@@ -572,6 +574,7 @@ class WalletRepoTest : BaseUnitTest() {
     fun `refreshBip21ForEvent ChannelClosed should not clear bolt11 when can still receive`() = test {
         sut.setBolt11(INVOICE)
         whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
 
         sut.refreshBip21ForEvent(
             Event.ChannelClosed(
@@ -737,6 +740,7 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `refreshBip21 should create a fresh invoice after PaymentReceived invalidates the old one`() = test {
         whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
         whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
             .thenReturn(Result.success(INVOICE_REPLACEMENT))
         sut.setOnchainAddress(ADDRESS)

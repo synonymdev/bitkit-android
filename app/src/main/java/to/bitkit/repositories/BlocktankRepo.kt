@@ -450,6 +450,8 @@ class BlocktankRepo @Inject constructor(
     }
 
     private suspend fun canCreateCjit(amountSats: ULong, maxChannelSizeSat: ULong): Boolean {
+        if (amountSats > maxChannelSizeSat) return false
+
         val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
         return amountSats <= maxChannelSizeSat && lspBalance <= maxChannelSizeSat - amountSats
     }

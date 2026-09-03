@@ -23,12 +23,11 @@ import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
 import to.bitkit.models.BlocktankBackupV1
-import to.bitkit.models.EUR
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
-import java.math.BigDecimal
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -197,17 +196,16 @@ class BlocktankRepoTest : BaseUnitTest() {
     @Test
     fun `canCreateCjit refreshes max channel size before checking amount`() = test {
         sut = createSut()
-        val staleInfo = btInfo(maxChannelSizeSat = 50_000u)
-        val freshInfo = btInfo(maxChannelSizeSat = 1_000_000u)
+        val staleInfo = btInfo(maxChannelSizeSat = 1_000_000u)
+        val freshInfo = btInfo(maxChannelSizeSat = 50_000u)
         whenever(coreService.blocktank.info(refresh = false)).thenReturn(staleInfo)
         whenever(coreService.blocktank.info(refresh = true)).thenReturn(staleInfo, freshInfo)
-        whenever(currencyRepo.convertFiatToSats(BigDecimal(1), EUR)).thenReturn(Result.success(50_000u))
 
         sut.refreshInfo()
         val result = sut.canCreateCjit(amountSats = 100_000u)
 
-        assertTrue(result.getOrThrow())
-        verify(coreService.blocktank, times(2)).info(refresh = true)
+        assertFalse(result.getOrThrow())
+        verify(coreService.blocktank, times(3)).info(refresh = true)
     }
 
     @Test
