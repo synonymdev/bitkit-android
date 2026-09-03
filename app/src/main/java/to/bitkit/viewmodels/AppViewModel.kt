@@ -3839,7 +3839,8 @@ class AppViewModel @Inject constructor(
      */
     private suspend fun refreshMaxSendOnchain() {
         val state = _sendUiState.value
-        if (state.payMethod != SendMethod.ONCHAIN || state.amount == 0uL || state.address.isEmpty()) return
+        if (state.payMethod != SendMethod.ONCHAIN || state.hardwareWalletId != null) return
+        if (state.amount == 0uL || state.address.isEmpty()) return
 
         val max = lightningRepo.estimateMaxSendOnchain(
             address = state.address,
