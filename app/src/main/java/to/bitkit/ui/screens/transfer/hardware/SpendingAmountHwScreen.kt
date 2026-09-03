@@ -234,7 +234,11 @@ private fun NodeRunning(
                     modifier = Modifier.testTag("HardwareTransferAmountAvailable")
                 )
                 VerticalSpacer(8.dp)
-                MoneySSB(sats = uiState.balanceAfterFee, modifier = Modifier.testTag("HardwareTransferAmountUnit"))
+                MoneySSB(
+                    sats = uiState.balanceAfterFee,
+                    showSymbol = true,
+                    modifier = Modifier.testTag("HardwareTransferAmountUnit")
+                )
             }
             FillWidth()
             UnitButton(
