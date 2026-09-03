@@ -117,14 +117,14 @@ data class PubkyAuthRequest(
         fun isSignupUrl(rawUrl: String): Boolean = runCatching { URI(rawUrl).isSignupRequest() }.getOrDefault(false)
 
         fun isDirectSignupUrl(rawUrl: String): Boolean =
-            runCatching { URI(rawUrl).isDirectSignupRequest() }.getOrDefault(false)
+            parseSignup(rawUrl).getOrNull()?.let { it.authorizationUrl == null } ?: false
 
         fun parseSignup(rawUrl: String): Result<PubkyAuthRequest> = runCatching {
             val uri = URI(rawUrl)
             require(uri.isSignupRequest()) { "Unsupported Pubky signup URL" }
             val query = parseQuery(uri)
             val homeserver = query.requiredSingle("hs")
-            val authorizesApp = uri.scheme.equals("pubkyring", ignoreCase = true)
+            val authorizesApp = uri.authorizesApp(query)
             val relay = if (authorizesApp) query.requiredSingle("relay") else ""
             val secret = if (authorizesApp) query.requiredSingle("secret") else ""
             val capabilities = if (authorizesApp) query.requiredSingle("caps") else ""
@@ -160,6 +160,14 @@ data class PubkyAuthRequest(
             scheme.equals("pubkyauth", ignoreCase = true) && (host ?: rawAuthority).let {
                 it.equals("direct_signup", ignoreCase = true) || it.equals("signup", ignoreCase = true)
             }
+
+        private fun URI.authorizesApp(query: Map<String, List<String>>): Boolean =
+            scheme.equals("pubkyring", ignoreCase = true) ||
+                (
+                    scheme.equals("pubkyauth", ignoreCase = true) &&
+                        (host ?: rawAuthority).equals("signup", ignoreCase = true) &&
+                        listOf("relay", "secret", "caps").any(query::containsKey)
+                    )
 
         fun parseBitkitClaim(rawUrl: String, capabilities: String): Result<PubkyAuthClaim?> =
             parseBitkitClaimValues(rawUrl).fold(

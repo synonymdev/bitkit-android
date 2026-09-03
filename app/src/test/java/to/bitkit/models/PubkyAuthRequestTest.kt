@@ -11,19 +11,22 @@ import kotlin.test.assertTrue
 class PubkyAuthRequestTest {
 
     @Test
-    fun `parse Ring signup preserves registration and authorization details`() {
-        val request = PubkyAuthRequest.parseSignup(ringSignupUrl("invite code")).getOrThrow()
+    fun `parse authorized signup preserves registration and authorization details`() {
+        listOf("pubkyring", "pubkyauth").forEach { scheme ->
+            val request = PubkyAuthRequest.parseSignup(ringSignupUrl("invite code", scheme)).getOrThrow()
 
-        assertTrue(request.isSignup)
-        assertEquals("homeserver", request.homeserverPublicKey)
-        assertEquals("invite code", request.signupToken)
-        assertEquals("https://relay.example/inbox/", request.relay)
-        assertEquals("/pub/example.app/:rw", request.capabilities)
-        assertEquals(
-            "pubkyauth:///?relay=https%3A%2F%2Frelay.example%2Finbox%2F" +
-                "&secret=secret&caps=%2Fpub%2Fexample.app%2F%3Arw",
-            request.authorizationUrl,
-        )
+            assertTrue(request.isSignup)
+            assertEquals("homeserver", request.homeserverPublicKey)
+            assertEquals("invite code", request.signupToken)
+            assertEquals("https://relay.example/inbox/", request.relay)
+            assertEquals("/pub/example.app/:rw", request.capabilities)
+            assertEquals(
+                "pubkyauth:///?relay=https%3A%2F%2Frelay.example%2Finbox%2F" +
+                    "&secret=secret&caps=%2Fpub%2Fexample.app%2F%3Arw",
+                request.authorizationUrl,
+            )
+            assertFalse(PubkyAuthRequest.isDirectSignupUrl(request.rawUrl))
+        }
     }
 
     @Test
@@ -45,6 +48,7 @@ class PubkyAuthRequestTest {
         val invalidUrls = listOf(
             ringSignupUrl().replace("&secret=secret", ""),
             "${ringSignupUrl()}&hs=other",
+            directSignupUrl("signup") + "&relay=https%3A%2F%2Frelay.example",
         )
 
         invalidUrls.forEach { url ->
@@ -95,6 +99,7 @@ class PubkyAuthRequestTest {
         ).getOrThrow()
 
         assertFalse(request.isSignup)
+        assertFalse(PubkyAuthRequest.isDirectSignupUrl(request.rawUrl))
         assertEquals("paykit.test", request.clientId)
         assertNull(request.bitkitClaim)
     }
@@ -307,8 +312,8 @@ class PubkyAuthRequestTest {
         return "pubkyauth://signin?caps=$capabilities&relay=https%3A%2F%2Fhttprelay.pubky.app%2Finbox%2F$claims"
     }
 
-    private fun ringSignupUrl(signupToken: String? = null): String =
-        "pubkyring://signup?hs=homeserver" +
+    private fun ringSignupUrl(signupToken: String? = null, scheme: String = "pubkyring"): String =
+        "$scheme://signup?hs=homeserver" +
             "&relay=https%3A%2F%2Frelay.example%2Finbox%2F" +
             "&secret=secret&caps=%2Fpub%2Fexample.app%2F%3Arw" +
             signupToken?.let { "&st=${URLEncoder.encode(it, Charsets.UTF_8.name())}" }.orEmpty()
