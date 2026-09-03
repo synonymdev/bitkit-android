@@ -107,6 +107,7 @@ import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestCreation
 import to.bitkit.repositories.PaykitPaymentRequestDiagnostics
 import to.bitkit.repositories.PaykitPaymentRequestDraft
+import to.bitkit.repositories.PaykitPaymentRequestError
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
@@ -698,9 +699,79 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         )
         val toastCaptor = argumentCaptor<Toast>()
         verify(toastManager, atLeast(2)).enqueue(toastCaptor.capture())
-        val terminalToast = toastCaptor.allValues.single { it.testTag == "PaymentRequestUnavailableToast" }
+        val terminalToast = toastCaptor.allValues.last()
+        assertEquals("PaymentRequestUnavailableToast", terminalToast.testTag)
         assertEquals("Payment Request", terminalToast.title)
         assertEquals("The payment request is no longer available.", terminalToast.description)
+    }
+
+    @Test
+    fun `mismatched bolt11 from a request sheet returns to the request sheet`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1mismatchedrequest"
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_waiting_for_details)).thenReturn("Waiting")
+        whenever(context.getString(R.string.wallet__payment_request_unavailable)).thenReturn(
+            "The payment request is no longer available."
+        )
+        stubOpenedPaymentRequest(request, bolt11)
+        stubLightningScan(bolt11 = bolt11, amountSats = 1_000u)
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
+        verify(paykitPaymentRequestRepo).markPresented(request)
+        verify(privatePaykitRepo, times(15)).beginPaymentRequest(request)
+        verify(paykitPaymentRequestDiagnostics, times(15)).logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
+        )
+    }
+
+    @Test
+    fun `expired explicit request shows the expired toast once`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
+            "The payment request has expired."
+        )
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
+            Result.failure(PaykitPaymentRequestError.RequestExpired)
+        )
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+
+        assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+        verify(paykitPaymentRequestDiagnostics).logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.RequestExpired,
+        )
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("PaymentRequestExpiredToast", toastCaptor.lastValue.testTag)
+        assertEquals("Payment Request", toastCaptor.lastValue.title)
+        assertEquals("The payment request has expired.", toastCaptor.lastValue.description)
     }
 
     @Test

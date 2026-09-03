@@ -1193,6 +1193,7 @@
     <string name="wallet__payment_request_dismiss">Dismiss</string>
     <string name="wallet__payment_request_edit_expiration">Edit expiration</string>
     <string name="wallet__payment_request_enter_pubky">Enter pubky</string>
+    <string name="wallet__payment_request_expired">The payment request has expired.</string>
     <string name="wallet__payment_request_expires">Expires in</string>
     <string name="wallet__payment_request_expiry_day">1 day</string>
     <string name="wallet__payment_request_expiry_hour">1 hour</string>

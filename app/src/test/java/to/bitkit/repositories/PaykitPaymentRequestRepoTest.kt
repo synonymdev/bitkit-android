@@ -119,6 +119,8 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val cases = listOf(
             paymentRequestRecord(role = null) to PaykitPaymentRequest.ParseFailure.MissingLocalRole,
             paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE) to
+                PaykitPaymentRequest.ParseFailure.OutgoingRequest,
+            paymentRequestRecord(role = PaymentRequestLocalRole.UNKNOWN) to
                 PaykitPaymentRequest.ParseFailure.UnsupportedLocalRole,
             paymentRequestRecord(state = PaymentRequestLifecycleState.ACCEPTED) to
                 PaykitPaymentRequest.ParseFailure.NonActionableState,
@@ -153,6 +155,31 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         sut.refresh().getOrThrow()
 
         verify(diagnostics).logParseRejection("secret", PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
+    }
+
+    @Test
+    fun `refresh logs unknown local role as unsupported_local_role`() = test {
+        val record = paymentRequestRecord(
+            role = PaymentRequestLocalRole.UNKNOWN,
+            counterparty = "secret",
+        )
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+
+        sut.refresh().getOrThrow()
+
+        verify(diagnostics).logParseRejection("secret", PaykitPaymentRequest.ParseFailure.UnsupportedLocalRole)
+        assertTrue(sut.pendingRequests.value.isEmpty())
+    }
+
+    @Test
+    fun `refresh does not log outgoing payee requests`() = test {
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE, counterparty = "secret")),
+        )
+
+        sut.refresh().getOrThrow()
+
+        verify(diagnostics, never()).logParseRejection(any(), any())
     }
 
     @Test
