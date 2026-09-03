@@ -665,6 +665,45 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `opened request with an invalid target returns to the request sheet`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val invalidTarget = "not-a-payment-invoice"
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_waiting_for_details)).thenReturn("Waiting")
+        whenever(context.getString(R.string.wallet__payment_request_unavailable)).thenReturn(
+            "The payment request is no longer available."
+        )
+        stubOpenedPaymentRequest(request, invalidTarget)
+        whenever(coreService.decode(invalidTarget)).thenThrow(IllegalStateException("invalid"))
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
+        verify(paykitPaymentRequestRepo).markPresented(request)
+        verify(privatePaykitRepo, times(15)).beginPaymentRequest(request)
+        verify(paykitPaymentRequestDiagnostics, times(15)).logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
+        )
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager, atLeast(2)).enqueue(toastCaptor.capture())
+        val terminalToast = toastCaptor.allValues.single { it.testTag == "PaymentRequestUnavailableToast" }
+        assertEquals("Payment Request", terminalToast.title)
+        assertEquals("The payment request is no longer available.", terminalToast.description)
+    }
+
+    @Test
     fun `failed request opened from the full screen does not replace it with the request sheet`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
