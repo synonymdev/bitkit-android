@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,9 +44,16 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
+import to.bitkit.models.ReceiveAdditionalLiquidityAction
+import to.bitkit.models.ReceiveLiquiditySource
+import to.bitkit.models.ReceiveLiquiditySource.AUTO
+import to.bitkit.models.ReceiveLiquiditySource.SAVINGS
+import to.bitkit.models.ReceiveLiquiditySource.SPENDING
 import to.bitkit.repositories.CurrencyState
+import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletState
 import to.bitkit.ui.LocalCurrencies
+import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
@@ -67,6 +75,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.keyboardAsState
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
 
@@ -75,6 +84,8 @@ import to.bitkit.viewmodels.previewAmountInputViewModel
 fun EditInvoiceScreen(
     amountInputViewModel: AmountInputViewModel,
     walletUiState: WalletState,
+    lightningState: LightningState,
+    sourceTab: ReceiveTab,
     updateInvoice: (ULong?) -> Unit,
     onClickAddTag: () -> Unit,
     onClickTag: (String) -> Unit,
@@ -85,48 +96,56 @@ fun EditInvoiceScreen(
     navigateReceiveConfirm: (CjitEntryDetails) -> Unit,
     onchainOnly: Boolean = false,
     updateOnchainInvoice: (ULong?) -> Unit = {},
+    navigateCjitAmount: () -> Unit,
+    navigateGeoBlock: () -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
     editInvoiceVM: EditInvoiceVM = hiltViewModel(),
 ) {
+    val app = appViewModel ?: return
     val blocktankVM = blocktankViewModel ?: return
     var keyboardVisible by remember { mutableStateOf(false) }
     var isSoftKeyboardVisible by keyboardAsState()
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
+    val currentReceiveSats by rememberUpdatedState(amountInputUiState.sats.toULong())
     val isLoading by editInvoiceVM.isLoading.collectAsStateWithLifecycle()
 
     LaunchedEffect(onchainOnly) {
         if (onchainOnly) return@LaunchedEffect
         editInvoiceVM.editInvoiceEffect.collect { effect ->
-            val receiveSats = amountInputUiState.sats.toULong()
+            val receiveSats = currentReceiveSats
             when (effect) {
-                is EditInvoiceVM.EditInvoiceScreenEffects.NavigateAddLiquidity -> {
-                    updateInvoice(receiveSats)
-
-                    if (receiveSats == 0UL) {
-                        onBack()
-                        return@collect
+                is EditInvoiceVM.EditInvoiceScreenEffects.ApplyReceiveLiquidityAction -> {
+                    when (val action = effect.action) {
+                        ReceiveAdditionalLiquidityAction.None -> {
+                            updateInvoice(receiveSats)
+                            onBack()
+                        }
+                        ReceiveAdditionalLiquidityAction.ChooseAmount -> {
+                            updateInvoice(receiveSats)
+                            navigateCjitAmount()
+                        }
+                        is ReceiveAdditionalLiquidityAction.CreateCjit -> {
+                            runCatching { blocktankVM.createCjit(action.amountSats) }.onSuccess { entry ->
+                                navigateReceiveConfirm(
+                                    CjitEntryDetails(
+                                        networkFeeSat = entry.networkFeeSat.toLong(),
+                                        serviceFeeSat = entry.serviceFeeSat.toLong(),
+                                        channelSizeSat = entry.channelSizeSat.toLong(),
+                                        feeSat = entry.feeSat.toLong(),
+                                        receiveAmountSats = action.amountSats.toLong(),
+                                        invoice = entry.invoice.request,
+                                    )
+                                )
+                            }.onFailure {
+                                Logger.error("Failed to create CJIT invoice", it, context = "EditInvoiceScreen")
+                                if (it !is ServiceError.ChannelSizeExceedsMaximum) {
+                                    app.toast(it)
+                                }
+                                navigateCjitAmount()
+                            }
+                        }
+                        ReceiveAdditionalLiquidityAction.GeoBlocked -> navigateGeoBlock()
                     }
-
-                    runCatching { blocktankVM.createCjit(receiveSats) }.onSuccess { entry ->
-                        navigateReceiveConfirm(
-                            CjitEntryDetails(
-                                networkFeeSat = entry.networkFeeSat.toLong(),
-                                serviceFeeSat = entry.serviceFeeSat.toLong(),
-                                channelSizeSat = entry.channelSizeSat.toLong(),
-                                feeSat = entry.feeSat.toLong(),
-                                receiveAmountSats = receiveSats.toLong(),
-                                invoice = entry.invoice.request,
-                            )
-                        )
-                    }.onFailure { e ->
-                        Logger.error("error creating cjit invoice", e, context = "EditInvoiceScreen")
-                        onBack()
-                    }
-                }
-
-                EditInvoiceVM.EditInvoiceScreenEffects.UpdateInvoice -> {
-                    updateInvoice(receiveSats)
-                    onBack()
                 }
             }
         }
@@ -148,7 +167,13 @@ fun EditInvoiceScreen(
             }
         },
         onContinueKeyboard = { keyboardVisible = false },
-        onContinueGeneral = editInvoiceVM::onClickContinue,
+        onContinueGeneral = {
+            editInvoiceVM.onClickContinue(
+                source = sourceTab.toReceiveLiquiditySource(),
+                amountSats = amountInputUiState.sats.toULong(),
+                isGeoBlocked = lightningState.isGeoBlocked,
+            )
+        },
         onContinueOnchain = { amountSats ->
             updateOnchainInvoice(amountSats)
             onBack()
@@ -163,6 +188,14 @@ fun EditInvoiceScreen(
         },
         onchainOnly = onchainOnly,
     )
+}
+
+private fun ReceiveTab.toReceiveLiquiditySource(): ReceiveLiquiditySource {
+    return when (this) {
+        ReceiveTab.SAVINGS -> SAVINGS
+        ReceiveTab.AUTO -> AUTO
+        ReceiveTab.SPENDING -> SPENDING
+    }
 }
 
 @Suppress("ViewModelForwarding")

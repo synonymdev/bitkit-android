@@ -9,13 +9,19 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import to.bitkit.models.ReceiveAdditionalLiquidityAction
+import to.bitkit.models.ReceiveAdditionalLiquidityParams
+import to.bitkit.models.ReceiveLiquidityDecision
+import to.bitkit.models.ReceiveLiquiditySource
+import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
 class EditInvoiceVM @Inject constructor(
-    val walletRepo: WalletRepo
+    private val walletRepo: WalletRepo,
+    private val blocktankRepo: BlocktankRepo,
 ) : ViewModel() {
 
     private val _editInvoiceEffect = MutableSharedFlow<EditInvoiceScreenEffects>(extraBufferCapacity = 1)
@@ -30,26 +36,55 @@ class EditInvoiceVM @Inject constructor(
         )
     }
 
-    fun onClickContinue() {
+    fun onClickContinue(
+        source: ReceiveLiquiditySource,
+        amountSats: ULong,
+        isGeoBlocked: Boolean,
+    ) {
         viewModelScope.launch {
             _isLoading.update { true }
-            walletRepo.shouldRequestAdditionalLiquidity().onSuccess { shouldRequest ->
-                if (shouldRequest) {
-                    editInvoiceEffect(EditInvoiceScreenEffects.NavigateAddLiquidity)
-                } else {
-                    editInvoiceEffect(EditInvoiceScreenEffects.UpdateInvoice)
-                }
-            }.onFailure {
-                Logger.warn("Failed to check for liquidity, navigating back to QR screen", context = TAG)
-                editInvoiceEffect(EditInvoiceScreenEffects.UpdateInvoice)
-            }
+            val maxCjitAmountSats = maxCjitAmountSats(source, amountSats, isGeoBlocked)
+            val action = ReceiveLiquidityDecision.additionalLiquidityAction(
+                ReceiveAdditionalLiquidityParams(
+                    source = source,
+                    invoiceAmountSats = amountSats,
+                    inboundCapacitySats = walletRepo.inboundLiquiditySats(),
+                    minCjitSats = blocktankRepo.blocktankState.value.minCjitSats?.toULong(),
+                    maxCjitAmountSats = maxCjitAmountSats,
+                    isGeoBlocked = isGeoBlocked,
+                )
+            )
+            editInvoiceEffect(EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(action))
             _isLoading.update { false }
         }
     }
 
+    private suspend fun maxCjitAmountSats(
+        source: ReceiveLiquiditySource,
+        amountSats: ULong,
+        isGeoBlocked: Boolean,
+    ): ULong? {
+        if (!ReceiveLiquidityDecision.needsCjitLimitsForAdditionalLiquidity(
+                source = source,
+                invoiceAmountSats = amountSats,
+                inboundCapacitySats = walletRepo.inboundLiquiditySats(),
+                isGeoBlocked = isGeoBlocked,
+            )
+        ) {
+            return null
+        }
+
+        blocktankRepo.refreshMinCjitSats()
+        return blocktankRepo.maxCjitAmountSats().getOrElse {
+            Logger.warn("Failed to calculate max CJIT amount", it, context = TAG)
+            null
+        }
+    }
+
     sealed interface EditInvoiceScreenEffects {
-        data object UpdateInvoice : EditInvoiceScreenEffects
-        data object NavigateAddLiquidity : EditInvoiceScreenEffects
+        data class ApplyReceiveLiquidityAction(
+            val action: ReceiveAdditionalLiquidityAction,
+        ) : EditInvoiceScreenEffects
     }
 
     companion object {

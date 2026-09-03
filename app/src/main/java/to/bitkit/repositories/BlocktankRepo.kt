@@ -253,6 +253,9 @@ class BlocktankRepo @Inject constructor(
             if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
             val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
             val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
+            if (!canFitChannelSize(amountSats, lspBalance)) {
+                throw ServiceError.ChannelSizeExceedsMaximum()
+            }
             val channelSizeSat = amountSats + lspBalance
 
             val cjitEntry = coreService.blocktank.createCjit(
@@ -269,6 +272,38 @@ class BlocktankRepo @Inject constructor(
             return@runCatching cjitEntry
         }.onFailure {
             Logger.error("Failed to create CJIT", it, context = TAG)
+        }
+    }
+
+    suspend fun canCreateCjit(amountSats: ULong): Result<Boolean> = withContext(bgDispatcher) {
+        runCatching {
+            val maxChannelSizeSat = maxChannelSizeSat() ?: return@runCatching true
+            val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
+
+            return@runCatching amountSats <= maxChannelSizeSat && lspBalance <= maxChannelSizeSat - amountSats
+        }.onFailure {
+            Logger.error("Failed to check CJIT limit", it, context = TAG)
+        }
+    }
+
+    suspend fun maxCjitAmountSats(): Result<ULong?> = withContext(bgDispatcher) {
+        runCatching {
+            val maxChannelSizeSat = maxChannelSizeSat() ?: return@runCatching null
+            var lowerBound = 0uL
+            var upperBound = maxChannelSizeSat
+
+            while (lowerBound < upperBound) {
+                val candidate = lowerBound + (upperBound - lowerBound + 1uL) / 2uL
+                if (canCreateCjit(candidate).getOrThrow()) {
+                    lowerBound = candidate
+                } else {
+                    upperBound = candidate - 1uL
+                }
+            }
+
+            lowerBound
+        }.onFailure {
+            Logger.error("Failed to calculate max CJIT amount", it, context = TAG)
         }
     }
 
@@ -407,6 +442,21 @@ class BlocktankRepo @Inject constructor(
         )
 
         return@withContext getDefaultLspBalance(params)
+    }
+
+    private suspend fun maxChannelSizeSat(): ULong? {
+        if (_blocktankState.value.info == null) {
+            refreshInfo()
+        }
+
+        return _blocktankState.value.info?.options?.maxChannelSizeSat?.takeIf { it > 0uL }
+    }
+
+    private fun canFitChannelSize(amountSats: ULong, lspBalance: ULong): Boolean {
+        val maxChannelSizeSat = _blocktankState.value.info?.options?.maxChannelSizeSat?.takeIf { it > 0uL }
+            ?: return true
+
+        return amountSats <= maxChannelSizeSat && lspBalance <= maxChannelSizeSat - amountSats
     }
 
     fun calculateLiquidityOptions(clientBalanceSat: ULong): Result<ChannelLiquidityOptions> {

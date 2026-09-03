@@ -493,52 +493,6 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `shouldRequestAdditionalLiquidity should return false when geo status is true`() = test {
-        whenever(coreService.isGeoBlocked()).thenReturn(true)
-
-        val result = sut.shouldRequestAdditionalLiquidity()
-
-        assertTrue(result.isSuccess)
-        assertFalse(result.getOrThrow())
-    }
-
-    @Test
-    fun `shouldRequestAdditionalLiquidity should return true when amount exceeds inbound capacity`() = test {
-        whenever(coreService.isGeoBlocked()).thenReturn(false)
-        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
-        sut.updateBip21Invoice(amountSats = 1000uL)
-
-        val result = sut.shouldRequestAdditionalLiquidity()
-
-        assertTrue(result.isSuccess)
-        assertTrue(result.getOrThrow())
-    }
-
-    @Test
-    fun `should not request additional liquidity for 0 channels`() = test {
-        whenever(coreService.isGeoBlocked()).thenReturn(false)
-        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
-        sut.updateBip21Invoice(amountSats = 1000uL)
-
-        val result = sut.shouldRequestAdditionalLiquidity()
-
-        assertTrue(result.isSuccess)
-        assertFalse(result.getOrThrow())
-    }
-
-    @Test
-    fun `shouldRequestAdditionalLiquidity should return false when amount is less than inbound capacity`() = test {
-        whenever(coreService.isGeoBlocked()).thenReturn(false)
-        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
-        sut.updateBip21Invoice(amountSats = 900uL)
-
-        val result = sut.shouldRequestAdditionalLiquidity()
-
-        assertTrue(result.isSuccess)
-        assertFalse(result.getOrThrow())
-    }
-
-    @Test
     fun `clearBip21State should clear all bip21 related state`() = test {
         sut.setOnchainAddress(ADDRESS)
         val addResult = sut.addTagToSelected(ACTIVITY_TAG)

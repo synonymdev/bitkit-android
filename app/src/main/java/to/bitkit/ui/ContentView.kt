@@ -18,6 +18,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -509,17 +510,20 @@ fun ContentView(
                         is Sheet.Receive -> {
                             val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
                             val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
-                            ReceiveSheet(
-                                appViewModel = appViewModel,
-                                startRoute = sheet.route,
-                                hardwareWalletId = sheet.hardwareWalletId,
-                                walletState = walletState,
-                                isOffline = connectivityState != ConnectivityState.CONNECTED,
-                                navigateToExternalConnection = {
-                                    navController.navigateTo(ExternalConnection())
-                                    appViewModel.hideSheet()
-                                },
-                            )
+
+                            key(System.identityHashCode(sheet)) {
+                                ReceiveSheet(
+                                    appViewModel = appViewModel,
+                                    startRoute = sheet.route,
+                                    hardwareWalletId = sheet.hardwareWalletId,
+                                    walletState = walletState,
+                                    isOffline = connectivityState != ConnectivityState.CONNECTED,
+                                    navigateToExternalConnection = {
+                                        navController.navigateTo(ExternalConnection())
+                                        appViewModel.hideSheet()
+                                    },
+                                )
+                            }
                         }
 
                         Sheet.PaymentRequests -> PaymentRequestsSheet(

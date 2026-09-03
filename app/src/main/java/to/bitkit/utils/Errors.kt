@@ -22,6 +22,7 @@ sealed class ServiceError(message: String) : AppError(message) {
     class InvalidNodeSigningMessage : ServiceError("Invalid node signing message")
     class CurrencyRateUnavailable : ServiceError("Currency rate unavailable")
     class BlocktankInfoUnavailable : ServiceError("Blocktank info not available")
+    class ChannelSizeExceedsMaximum : ServiceError("Channel size exceeds maximum")
     class GeoBlocked : ServiceError("Geo blocked user")
     class GiftClaimPaymentNotReceived : ServiceError("Gift claim payment not received")
 }

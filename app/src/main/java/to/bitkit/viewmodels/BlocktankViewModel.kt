@@ -59,4 +59,8 @@ class BlocktankViewModel @Inject constructor(
     suspend fun refreshMinCjitSats() {
         blocktankRepo.refreshMinCjitSats()
     }
+
+    suspend fun maxCjitAmountSats(): ULong? {
+        return blocktankRepo.maxCjitAmountSats().getOrThrow()
+    }
 }

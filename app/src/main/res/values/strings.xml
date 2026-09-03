@@ -1253,6 +1253,8 @@
     <string name="wallet__receive_bitcoin_invoice">Bitcoin invoice</string>
     <string name="wallet__receive_connect_additional">To receive more instant Bitcoin, Bitkit has to increase your liquidity. A &lt;accent&gt;{networkFee}&lt;/accent&gt; network fee and &lt;accent&gt;{serviceFee}&lt;/accent&gt; service provider fee will be deducted from the amount you specified.</string>
     <string name="wallet__receive_connect_initial">To set up your spending balance, a &lt;accent&gt;{networkFee}&lt;/accent&gt; network fee and &lt;accent&gt;{serviceFee}&lt;/accent&gt; service provider fee will be deducted.</string>
+    <string name="wallet__receive_cjit_error_max__description">The amount you can receive with additional liquidity is currently limited to ₿ {amount}.</string>
+    <string name="wallet__receive_cjit_error_max__title">Maximum exceeded</string>
     <string name="wallet__receive_copied">Invoice copied to clipboard</string>
     <string name="wallet__receive_lightning_invoice">Lightning invoice</string>
     <string name="wallet__receive_liquidity__bg_setup_desc">Enable background setup to safely exit Bitkit while your balance is being configured.</string>
@@ -1264,10 +1266,10 @@
     <string name="wallet__receive_liquidity__text">Your Spending Balance uses the Lightning Network to make your payments cheaper, faster, and more private.\n\nThis works like internet access, but you pay for liquidity &amp; routing instead of bandwidth.\n\nThis setup includes some one-time costs.</string>
     <string name="wallet__receive_liquidity__text_additional">Your Spending Balance uses the Lightning Network to make your payments cheaper, faster, and more private.\n\nThis works like internet access, but you pay for liquidity &amp; routing instead of bandwidth.\n\nBitkit needs to increase the receiving capacity of your spending balance to process this payment.</string>
     <string name="wallet__receive_note_placeholder">Optional note to payer</string>
-    <string name="wallet__receive_onboarding_description">Enjoy instant and cheap\ntransactions with friends, family,\nand merchants.</string>
+    <string name="wallet__receive_onboarding_description">Enjoy instant and cheap bitcoin payments on the Lightning Network.</string>
     <string name="wallet__receive_onboarding_title">Receive on &lt;accent&gt;spending balance&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Show Details</string>
-    <string name="wallet__receive_show_qr">Show QR Code</string>
+    <string name="wallet__receive_show_qr">QR Code</string>
     <string name="wallet__receive_specify">Edit Invoice</string>
     <string name="wallet__receive_tab_auto">Auto</string>
     <string name="wallet__receive_tab_savings">Savings</string>
