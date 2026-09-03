@@ -1004,18 +1004,43 @@ class PubkyRepo @Inject constructor(
                 val (publicKey, secretKeyHex) = deriveKeys().getOrThrow()
                 if (hasIdentity()) throw PubkyAlreadySignedInError
 
+                settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
                 val registeredSession = pubkyService.registerIdentity(
                     secretKeyHex = secretKeyHex,
                     homeserverZ32 = requireNotNull(request.homeserverPublicKey),
                     signupCode = request.signupToken,
                 )
                 request.authorizationUrl?.let { pubkyService.approveRingAuth(it, secretKeyHex) }
-                settingsStore.setPubkyProfileSetupPending(true)
-                pubkyService.activateRegisteredIdentity(registeredSession)
+                var activated = false
+                try {
+                    pubkyService.activateRegisteredIdentity(registeredSession)
+                    activated = true
+                } finally {
+                    if (!activated) {
+                        withContext(NonCancellable) {
+                            settingsStore.setPubkyProfileSetupPending(false)
+                        }
+                    }
+                }
 
-                settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
                 _publicKey.update { publicKey }
                 _authState.update { PubkyAuthState.Authenticated }
+                var pendingSaved = false
+                try {
+                    settingsStore.setPubkyProfileSetupPending(true)
+                    pendingSaved = true
+                } finally {
+                    if (!pendingSaved) {
+                        withContext(NonCancellable) {
+                            runSuspendCatching { pubkyService.forgetSessionAccess() }
+                                .onFailure {
+                                    Logger.warn("Failed to roll back Pubky signup session", it, context = TAG)
+                                }
+                            _publicKey.update { null }
+                            _authState.update { PubkyAuthState.Idle }
+                        }
+                    }
+                }
                 notifyBackupStateChanged()
             }
         }

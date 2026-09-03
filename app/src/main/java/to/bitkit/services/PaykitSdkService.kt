@@ -69,12 +69,14 @@ import com.synonym.paykit.pubkySecretKeyFromBip39Mnemonic
 import com.synonym.paykit.requiredSessionCapabilities
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
@@ -285,11 +287,17 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         val previousPublicKey = operationMutex.withLock { currentSdkStatePublicKeyLocked() }
         operationMutex.withLock {
-            activateBootstrapResult(
-                result = result,
-                previousPublicKey = previousPublicKey,
-                shouldStoreLocalSecret = true,
-            )
+            var activated = false
+            try {
+                activateBootstrapResult(
+                    result = result,
+                    previousPublicKey = previousPublicKey,
+                    shouldStoreLocalSecret = true,
+                )
+                activated = true
+            } finally {
+                if (!activated) clearRegisteredIdentityActivationLocked()
+            }
         }
         notifyBackupStateChanged()
     }
@@ -891,6 +899,15 @@ class PaykitSdkService @Inject constructor(
         val handle = handle()
         handle.initialize()
         publishReceiverMarkerIfLiveSessionAvailable(handle)
+    }
+
+    private suspend fun clearRegisteredIdentityActivationLocked() = withContext(NonCancellable) {
+        runSuspendCatching { sessionProvider.clearSessionAccess() }
+            .onFailure { Logger.warn("Failed to clear incomplete Pubky signup session", it, context = TAG) }
+        runSuspendCatching { keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name) }
+            .onFailure { Logger.warn("Failed to clear incomplete Pubky signup state", it, context = TAG) }
+        resetRuntime()
+        notifyBackupStateChanged()
     }
 
     private suspend fun publishReceiverMarkerIfLiveSessionAvailable(handle: PaykitSdk) {
