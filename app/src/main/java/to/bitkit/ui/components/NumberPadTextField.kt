@@ -4,10 +4,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
@@ -17,6 +21,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import to.bitkit.R
 import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.USD_SYMBOL
@@ -38,6 +43,7 @@ fun NumberPadTextField(
     viewModel: AmountInputViewModel,
     modifier: Modifier = Modifier,
     showSecondaryField: Boolean = true,
+    showEditButton: Boolean = false,
     uiState: State<AmountInputUiState> = viewModel.uiState.collectAsStateWithLifecycle(),
     currencies: CurrencyState = LocalCurrencies.current,
     onClick: (() -> Unit)? = { viewModel.switchUnit(currencies) },
@@ -53,6 +59,7 @@ fun NumberPadTextField(
         isSymbolSuffix = currencies.primaryDisplay == PrimaryDisplay.FIAT &&
             isSuffixSymbolCurrency(currencies.selectedCurrency),
         showSecondaryField = showSecondaryField,
+        showEditButton = showEditButton,
     )
 }
 
@@ -67,6 +74,7 @@ private fun MoneyAmount(
     isSymbolSuffix: Boolean = false,
     showPlaceholder: Boolean = true,
     showSecondaryField: Boolean = true,
+    showEditButton: Boolean = false,
     valueStyle: SpanStyle = SpanStyle(color = Colors.White),
     placeholderStyle: SpanStyle = SpanStyle(color = Colors.White50),
 ) {
@@ -77,7 +85,12 @@ private fun MoneyAmount(
         horizontalAlignment = Alignment.Start
     ) {
         if (showSecondaryField) {
-            MoneySSB(sats = satoshis, unit = unit.not(), color = Colors.White64, showSymbol = true)
+            MoneyCaptionM(
+                sats = satoshis,
+                unit = unit.not(),
+                color = Colors.White64,
+                showSymbol = true,
+            )
             VerticalSpacer(12.dp)
         }
         Row(
@@ -105,7 +118,7 @@ private fun MoneyAmount(
                         }
                     }
                 },
-                modifier = if (isSymbolSuffix) Modifier else Modifier.weight(1f)
+                modifier = Modifier.weight(1f, fill = false)
             )
             if (isSymbolSuffix) {
                 Display(
@@ -113,6 +126,16 @@ private fun MoneyAmount(
                     fontWeight = FontWeight.ExtraBold,
                     color = Colors.White64,
                     modifier = Modifier.padding(start = 6.dp)
+                )
+            }
+            if (showEditButton) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_pencil_simple),
+                    contentDescription = stringResource(R.string.common__edit),
+                    tint = Colors.White,
+                    modifier = Modifier
+                        .padding(start = 5.dp)
+                        .size(24.dp)
                 )
             }
         }
