@@ -281,6 +281,12 @@
       "expectedValue": "bcrt1qissuerfixture"
     },
     {
+      "name": "foreign-network-endpoint",
+      "identifier": "btc-bitcoin-p2wpkh",
+      "payload": "{\"value\":\"bc1qissuerfixture\"}",
+      "accepted": false
+    },
+    {
       "name": "bolt11-json-value-with-bounds",
       "identifier": "btc-lightning-bolt11",
       "payload": "{\"value\":\"lnbc1issuerfixture\",\"min\":\"1000\",\"max\":\"2000\"}",
@@ -288,6 +294,18 @@
       "expectedValue": "lnbc1issuerfixture",
       "expectedMin": "1000",
       "expectedMax": "2000"
+    },
+    {
+      "name": "numeric-min",
+      "identifier": "btc-regtest-p2wpkh",
+      "payload": "{\"value\":\"bcrt1qissuerfixture\",\"min\":1000}",
+      "accepted": false
+    },
+    {
+      "name": "boolean-max",
+      "identifier": "btc-regtest-p2wpkh",
+      "payload": "{\"value\":\"bcrt1qissuerfixture\",\"max\":true}",
+      "accepted": false
     },
     {
       "name": "lnurl-trims-value",

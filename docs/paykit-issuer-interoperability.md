@@ -65,7 +65,7 @@ Optional `min` and `max` string fields are retained:
 {"value":"lnbc1issuerfixture","min":"1000","max":"2000"}
 ```
 
-Bitkit trims whitespace around the payload and `value`. It rejects a bare address or invoice string, invalid JSON, a non-object top level, a missing `value`, a non-string `value`, an empty value, a whitespace-only value, or an unknown identifier.
+Bitkit trims whitespace around the payload and `value`. It rejects a bare address or invoice string, invalid JSON, a non-object top level, a missing `value`, a non-string `value`, non-string `min` or `max` values, an empty value, a whitespace-only value, a wrong-network on-chain identifier, or an unknown identifier.
 
 After this shape check, Bitkit validates that the value is usable: an on-chain address matches the current network, a BOLT 11 invoice is unexpired and network-correct, and an LNURL value is an LNURL-pay request.
 
@@ -81,6 +81,6 @@ The fixture file is the cross-platform source of truth for Bitkit iOS and Androi
 - Request fixtures cover both Lightning identifiers on every network.
 - Rejected request fixtures cover uppercase `BTC`, a foreign-network on-chain identifier on every network, an uppercase identifier, an unknown identifier, and an empty identifier list.
 - Endpoint fixtures accept JSON object payloads with a non-empty string `value`, including optional string bounds and surrounding whitespace.
-- Rejected endpoint fixtures cover a raw string, empty payload, missing/empty/whitespace/numeric `value`, top-level array, malformed JSON, and unsupported identifier.
+- Rejected endpoint fixtures cover a raw string, empty payload, missing/empty/whitespace/numeric `value`, non-string bounds, a wrong-network on-chain identifier, top-level array, malformed JSON, and unsupported identifier.
 
 The iOS fixture suite in [PR #719](https://github.com/synonymdev/bitkit-ios/pull/719) consumes the same fixture names, inputs, and expected results. Any intentional platform difference requires changing this contract and both fixture suites together.
