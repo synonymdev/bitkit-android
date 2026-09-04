@@ -152,7 +152,6 @@ private fun SettingsButtonRowCore(
                 ) {
                     if (subtitle != null) {
                         BodyMSB(text = title)
-                        Spacer(modifier = Modifier.height(4.dp))
                         BodySSB(
                             text = subtitle,
                             maxLines = maxLinesSubtitle,
