@@ -2082,6 +2082,7 @@ class AppViewModel @Inject constructor(
             it.copy(
                 amount = amount,
                 isAmountInputValid = validateAmount(amount),
+                isMaxAmount = false,
                 confirmedWarnings = persistentListOf(),
             )
         }
@@ -2358,6 +2359,7 @@ class AppViewModel @Inject constructor(
         _sendUiState.update {
             it.copy(selectedUtxos = utxos.toImmutableList())
         }
+        refreshMaxSendOnchain()
         refreshOnchainFeeUi()
         setSendEffect(SendEffect.NavigateToConfirm)
     }
@@ -3240,6 +3242,7 @@ class AppViewModel @Inject constructor(
             state.copy(
                 amount = 0u,
                 isAmountInputValid = false,
+                isMaxAmount = false,
             )
         }
     }
@@ -3354,6 +3357,9 @@ class AppViewModel @Inject constructor(
             handlePaymentPreparationFailure(it)
             return
         }
+
+        // pay the amount & drain flag the refresh settled on, not the ones it is about to replace
+        onchainSendRefreshJob?.join()
 
         val amount = _sendUiState.value.amount
 
@@ -3729,13 +3735,14 @@ class AppViewModel @Inject constructor(
         amount: ULong,
         tags: List<String> = emptyList(),
     ): Result<Txid> {
+        val state = _sendUiState.value
         return lightningRepo.sendOnChain(
             address = address,
             sats = amount,
-            speed = _sendUiState.value.speed,
-            utxosToSpend = _sendUiState.value.selectedUtxos,
-            isMaxAmount = _sendUiState.value.payMethod == SendMethod.ONCHAIN &&
-                amount == walletRepo.balanceState.value.maxSendOnchainSats,
+            speed = state.speed,
+            utxosToSpend = state.selectedUtxos,
+            feeRates = state.feeRates,
+            isMaxAmount = state.payMethod == SendMethod.ONCHAIN && state.isMaxAmount,
             tags = tags,
         )
     }
@@ -3787,12 +3794,12 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    /** Reselect utxos for current amount & speed then refresh fees using updated utxos */
+    /** Recheck the max sendable, reselect utxos for current amount & speed, then refresh fees using updated utxos */
     private fun refreshOnchainSendIfNeeded(): Job? {
-        val currentState = _sendUiState.value
-        if (currentState.payMethod != SendMethod.ONCHAIN ||
-            currentState.amount == 0uL ||
-            currentState.address.isEmpty()
+        val state = _sendUiState.value
+        if (state.payMethod != SendMethod.ONCHAIN ||
+            state.amount == 0uL ||
+            state.address.isEmpty()
         ) {
             return null
         }
@@ -3800,6 +3807,8 @@ class AppViewModel @Inject constructor(
         updateOnchainFeeUi { it.copy(isLoading = true) }
         onchainSendRefreshJob?.cancel()
         val job = viewModelScope.launch(bgDispatcher, start = CoroutineStart.LAZY) {
+            refreshMaxSendOnchain()
+            val currentState = _sendUiState.value
             // preselect utxos for deterministic fee estimation
             if (
                 currentState.hardwareWalletId == null &&
@@ -3826,6 +3835,48 @@ class AppViewModel @Inject constructor(
         job.start()
         return job
     }
+
+    /**
+     * Flags the send as a drain when the amount reaches the max sendable to this recipient at the selected speed,
+     * lowering the amount to that max so the confirmed figure matches what the drain delivers.
+     */
+    private suspend fun refreshMaxSendOnchain() {
+        val state = _sendUiState.value
+        if (state.payMethod != SendMethod.ONCHAIN || state.hardwareWalletId != null) return
+        if (state.amount == 0uL || state.address.isEmpty()) return
+
+        val max = lightningRepo.estimateMaxSendOnchain(
+            address = state.address,
+            speed = state.speed,
+            feeRates = state.feeRates,
+        ).getOrNull()?.takeIf { it > 0uL }
+
+        if (max == null) {
+            // without an estimate the cached max is the only max-send signal left
+            _sendUiState.update {
+                if (it.divergedFrom(state)) return@update it
+                it.copy(isMaxAmount = it.amount == walletRepo.balanceState.value.maxSendOnchainSats)
+            }
+            return
+        }
+
+        val isMaxAmount = state.amount >= max
+        if (isMaxAmount && state.amount != max) {
+            Logger.info(
+                "Lowering amount '${state.amount}' to max '$max' at speed '${state.speed.serialized()}'",
+                context = TAG,
+            )
+        }
+        _sendUiState.update {
+            if (it.divergedFrom(state)) return@update it
+            it.copy(amount = if (isMaxAmount) max else it.amount, isMaxAmount = isMaxAmount)
+        }
+    }
+
+    private fun SendUiState.divergedFrom(snapshot: SendUiState) = amount != snapshot.amount ||
+        address != snapshot.address ||
+        speed != snapshot.speed ||
+        hardwareWalletId != snapshot.hardwareWalletId
 
     private suspend fun refreshOnchainFeeUi() = withContext(bgDispatcher) {
         val currentState = _sendUiState.value
@@ -4809,6 +4860,7 @@ data class SendUiState(
     val isAddressInputValid: Boolean = false,
     val amount: ULong = 0u,
     val isAmountInputValid: Boolean = false,
+    val isMaxAmount: Boolean = false,
     val isUnified: Boolean = false,
     val canSwitchWallet: Boolean = false,
     val canSwitchFundingSource: Boolean = false,
