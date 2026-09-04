@@ -95,7 +95,7 @@ fun ReceiveQrScreen(
     lightningState: LightningState,
     onClickEditInvoice: (ReceiveTab) -> Unit,
     onClickReceiveCjit: () -> Unit,
-    onClickHardwareEditInvoice: () -> Unit = onClickEditInvoice,
+    onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.TREZOR) },
     modifier: Modifier = Modifier,
     initialTab: ReceiveTab? = null,
     hardwareWalletId: String? = null,

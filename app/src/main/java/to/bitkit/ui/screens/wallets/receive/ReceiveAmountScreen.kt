@@ -29,6 +29,7 @@ import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.launch
 import to.bitkit.R
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.Toast
 import to.bitkit.models.formatToModernDisplay
@@ -54,6 +55,7 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.walletViewModel
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
 import to.bitkit.viewmodels.AmountInputEffect
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
@@ -90,7 +92,7 @@ fun ReceiveAmountScreen(
 
     LaunchedEffect(Unit) {
         blocktank.refreshMinCjitSats()
-        maxCjitAmountSats = runCatching { blocktank.maxCjitAmountSats() }.getOrNull()
+        maxCjitAmountSats = runSuspendCatching { blocktank.maxCjitAmountSats() }.getOrNull()
     }
 
     LaunchedEffect(maxCjitAmountSats, amountInputUiState.sats) {
@@ -135,7 +137,7 @@ fun ReceiveAmountScreen(
                     return@launch
                 }
                 isCreatingInvoice = true
-                runCatching {
+                runSuspendCatching {
                     require(lightningState.nodeLifecycleState == NodeLifecycleState.Running) {
                         "Should not be able to land on this screen if the node is not running."
                     }
@@ -153,8 +155,8 @@ fun ReceiveAmountScreen(
                     )
                 }.onFailure { e ->
                     Logger.error("Failed to create CJIT", e)
-                    if (e.isCjitMaxAmountError()) {
-                        maxCjitAmountSats = runCatching { blocktank.maxCjitAmountSats() }.getOrNull()
+                    if (e is ServiceError.ChannelSizeExceedsMaximum) {
+                        maxCjitAmountSats = runSuspendCatching { blocktank.maxCjitAmountSats() }.getOrNull()
                         maxCjitAmountSats?.let { showMaxExceededToast(it) }
                     } else {
                         app.toast(e)

@@ -44,6 +44,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.ReceiveAdditionalLiquidityAction
 import to.bitkit.models.ReceiveLiquiditySource
 import to.bitkit.models.ReceiveLiquiditySource.AUTO
@@ -125,7 +126,7 @@ fun EditInvoiceScreen(
                             navigateCjitAmount()
                         }
                         is ReceiveAdditionalLiquidityAction.CreateCjit -> {
-                            runCatching { blocktankVM.createCjit(action.amountSats) }.onSuccess { entry ->
+                            runSuspendCatching { blocktankVM.createCjit(action.amountSats) }.onSuccess { entry ->
                                 navigateReceiveConfirm(
                                     CjitEntryDetails(
                                         networkFeeSat = entry.networkFeeSat.toLong(),
@@ -195,6 +196,7 @@ private fun ReceiveTab.toReceiveLiquiditySource(): ReceiveLiquiditySource {
         ReceiveTab.SAVINGS -> SAVINGS
         ReceiveTab.AUTO -> AUTO
         ReceiveTab.SPENDING -> SPENDING
+        ReceiveTab.TREZOR -> SAVINGS
     }
 }
 

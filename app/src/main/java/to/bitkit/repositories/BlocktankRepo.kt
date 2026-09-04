@@ -54,8 +54,10 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.nowTimestamp
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.models.EUR
+import to.bitkit.models.safe
 import to.bitkit.models.msatCeilOf
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
@@ -249,7 +251,7 @@ class BlocktankRepo @Inject constructor(
         amountSats: ULong,
         description: String = "",
     ): Result<IcJitEntry> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
             val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
             freshMaxChannelSizeSat()
@@ -257,7 +259,7 @@ class BlocktankRepo @Inject constructor(
             if (!canFitChannelSize(amountSats, lspBalance)) {
                 throw ServiceError.ChannelSizeExceedsMaximum()
             }
-            val channelSizeSat = amountSats + lspBalance
+            val channelSizeSat = amountSats.safe() + lspBalance.safe()
 
             val cjitEntry = coreService.blocktank.createCjit(
                 channelSizeSat = channelSizeSat,
@@ -270,29 +272,34 @@ class BlocktankRepo @Inject constructor(
 
             repoScope.launch { refreshOrders() }
 
-            return@runCatching cjitEntry
-        }.onFailure {
+            return@runSuspendCatching cjitEntry
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { Result.failure(it.toCjitError()) },
+        ).onFailure {
             Logger.error("Failed to create CJIT", it, context = TAG)
         }
     }
 
     suspend fun canCreateCjit(amountSats: ULong): Result<Boolean> = withContext(bgDispatcher) {
-        runCatching {
-            val maxChannelSizeSat = freshMaxChannelSizeSat() ?: return@runCatching true
-            return@runCatching canCreateCjit(amountSats, maxChannelSizeSat)
+        runSuspendCatching {
+            val maxChannelSizeSat = freshMaxChannelSizeSat() ?: return@runSuspendCatching true
+            return@runSuspendCatching canCreateCjit(amountSats, maxChannelSizeSat)
         }.onFailure {
             Logger.error("Failed to check CJIT limit", it, context = TAG)
         }
     }
 
     suspend fun maxCjitAmountSats(): Result<ULong?> = withContext(bgDispatcher) {
-        runCatching {
-            val maxChannelSizeSat = freshMaxChannelSizeSat() ?: return@runCatching null
+        runSuspendCatching {
+            val maxChannelSizeSat = freshMaxChannelSizeSat() ?: return@runSuspendCatching null
             var lowerBound = 0uL
             var upperBound = maxChannelSizeSat
 
             while (lowerBound < upperBound) {
-                val candidate = lowerBound + (upperBound - lowerBound + 1uL) / 2uL
+                val distance = upperBound.safe() - lowerBound.safe()
+                val step = (distance.safe() + 1uL.safe()) / 2uL
+                val candidate = lowerBound.safe() + step.safe()
                 if (canCreateCjit(candidate, maxChannelSizeSat)) {
                     lowerBound = candidate
                 } else {
@@ -461,6 +468,22 @@ class BlocktankRepo @Inject constructor(
             ?: return true
 
         return amountSats <= maxChannelSizeSat && lspBalance <= maxChannelSizeSat - amountSats
+    }
+
+    private fun Throwable.toCjitError(): Throwable {
+        if (this is ServiceError.ChannelSizeExceedsMaximum) return this
+
+        val description = toString()
+        return if (
+            description.contains("Channel size is too big") ||
+            description.contains("channelSizeExceedsMaximum") ||
+            description.contains("maxChannelSizeSat") ||
+            description.contains("channelSizeSat")
+        ) {
+            ServiceError.ChannelSizeExceedsMaximum()
+        } else {
+            this
+        }
     }
 
     fun calculateLiquidityOptions(clientBalanceSat: ULong): Result<ChannelLiquidityOptions> {
