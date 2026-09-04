@@ -803,10 +803,13 @@ class PaykitSdkService @Inject constructor(
         isSetup.await()
         operationMutex.withLock {
             activeAuthRequest = null
-            withStateRevisionTracking { handle ->
-                handle.forgetSessionAccess()
+            try {
+                withStateRevisionTracking { handle ->
+                    handle.forgetSessionAccess()
+                }
+            } finally {
+                resetRuntime()
             }
-            resetRuntime()
         }
     }
 
