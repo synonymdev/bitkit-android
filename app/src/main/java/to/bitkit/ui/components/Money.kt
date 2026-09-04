@@ -138,6 +138,24 @@ fun MoneyMSB(
 }
 
 @Composable
+fun MoneyCaptionM(
+    sats: Long,
+    modifier: Modifier = Modifier,
+    unit: PrimaryDisplay = LocalCurrencies.current.primaryDisplay,
+    color: Color = MaterialTheme.colorScheme.primary,
+    accent: Color = Colors.White64,
+    showSymbol: Boolean = false,
+) {
+    rememberMoneyText(sats = sats, unit = unit, showSymbol = showSymbol)?.let { text ->
+        CaptionM(
+            text = text.withAccent(accentColor = accent),
+            color = color,
+            modifier = modifier.testTag("MoneyText")
+        )
+    }
+}
+
+@Composable
 fun MoneyCaptionB(
     sats: Long,
     modifier: Modifier = Modifier,
