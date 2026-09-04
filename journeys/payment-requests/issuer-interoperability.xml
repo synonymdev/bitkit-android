@@ -1,0 +1,14 @@
+<journey name="Paykit Issuer Interoperability">
+  <description>
+    Verifies that the canonical accepted regtest issuer fixture reaches Bitkit and opens the payment confirmation flow. Requires the linked fixture issuer and funded regtest wallet described in README.md. Rejected shapes are covered by the shared fixture unit tests because Bitkit intentionally does not present them.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app with Paykit UI enabled and the fixture issuer linked on receiver path "bitkit/server"</action>
+    <action>Have the issuer publish a current regtest P2WPKH address under identifier "btc-regtest-p2wpkh" with JSON payload {"value":"&lt;current address&gt;"}</action>
+    <action>Have the issuer send proposed one-time Payment Request "71300000-0000-4000-8000-000000000001" for amount "0.001", asset "btc", and accepted identifier "btc-regtest-p2wpkh"</action>
+    <action>Verify the incoming Payment Requests sheet (id "PaymentRequestsSheet") appears</action>
+    <action>Verify request row (id "PaymentRequestRow71300000-0000-4000-8000-000000000001") shows 100,000 sats</action>
+    <action>Tap Pay (id "PaymentRequestPay71300000-0000-4000-8000-000000000001")</action>
+    <action>Verify the Payment Request confirmation screen (id "PaymentRequestConfirm") shows 100,000 sats and the issuer as recipient</action>
+  </actions>
+</journey>

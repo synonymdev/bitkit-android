@@ -30,10 +30,12 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.async.appScope
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -614,21 +616,23 @@ private fun List<PaykitPaymentRequest>.withExpiredLifecycle(now: Instant): List<
 private val bitcoinAmountPattern = Regex("(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)")
 
 @Suppress("CyclomaticComplexMethod", "ReturnCount")
-private fun PaymentRequestRecord.toPaykitPaymentRequest(
+internal fun PaymentRequestRecord.toPaykitPaymentRequest(
     expectedRole: PaymentRequestLocalRole,
     now: Instant,
     requiresActionableRequest: Boolean = true,
+    network: Network = Env.network,
 ): PaykitPaymentRequest? {
     if (localRole != expectedRole || state == PaymentRequestLifecycleState.ACTIVE_RECURRING) return null
     if (requiresActionableRequest && state != PaymentRequestLifecycleState.PROPOSED) return null
     val requestTerms = terms ?: return null
-    if (requestTerms.recurrence != null || requestTerms.amount.asset != "btc") return null
+    if (requestTerms.recurrence != null || requestTerms.amount.asset != PaykitIssuerInterop.BITCOIN_ASSET) return null
     val amountSats = requestTerms.amount.value.toSats()
         ?.takeIf { it <= ULong.MAX_VALUE / 1000uL }
         ?: return null
-    val endpoints = requestTerms.acceptedPaymentEndpointIdentifiers
-        .filter { MethodId.fromRawValue(it) != null }
-        .distinct()
+    val endpoints = PaykitIssuerInterop.supportedEndpointIdentifiers(
+        requestTerms.acceptedPaymentEndpointIdentifiers,
+        network,
+    )
     if (requiresActionableRequest && endpoints.isEmpty()) return null
 
     val expiresAt = requestTerms.proposalExpiresAt?.let {
