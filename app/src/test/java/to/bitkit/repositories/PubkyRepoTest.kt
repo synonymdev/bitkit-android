@@ -183,6 +183,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         assertFalse(sut.isAuthenticated.value)
         assertNull(sut.publicKey.value)
+        verifyBlocking(pubkyService) { signOut() }
     }
 
     @Test
@@ -765,12 +766,19 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `deleteProfile should fail when signOut fails`() = test {
         authenticateForTesting()
+        settingsFlow.value = SettingsData(
+            sharesPublicPaykitEndpoints = true,
+            sharesPrivatePaykitEndpoints = true,
+        )
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("test_secret")
         whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Sign out failed") }
 
         val result = sut.deleteProfile()
 
         assertTrue(result.isFailure)
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
     }
 
     @Test
@@ -1079,6 +1087,38 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(sut.isAuthenticated.value)
         assertNull(sut.publicKey.value)
         verifyBlocking(pubkyService) { forgetSessionAccess() }
+        verifyBlocking(keychain) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+    }
+
+    @Test
+    fun `restoreSessionBackupState should import external session when forgetting current session fails`() = test {
+        whenever(pubkyService.forgetSessionAccess()).thenAnswer { throw TestAppError("Forget failed") }
+        whenever(pubkyService.importExternalSession("external_session")).thenReturn(VALID_SELF_KEY)
+
+        val result = sut.restoreSessionBackupState(
+            PubkySessionBackupV1(
+                kind = PubkySessionBackupKind.ExternalSession,
+                sessionSecret = "external_session",
+            ),
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verifyBlocking(keychain) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+    }
+
+    @Test
+    fun `restore without backup clears credentials when forgetting current session fails`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        whenever(pubkyService.forgetSessionAccess()).thenAnswer { throw TestAppError("Forget failed") }
+
+        val result = sut.restoreSessionBackupState(null)
+
+        assertTrue(result.isSuccess)
+        assertFalse(sut.isAuthenticated.value)
+        assertNull(sut.publicKey.value)
         verifyBlocking(keychain) { delete(Keychain.Key.PAYKIT_SESSION.name) }
         verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
     }

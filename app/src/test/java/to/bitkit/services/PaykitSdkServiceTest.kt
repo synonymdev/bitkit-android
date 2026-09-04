@@ -180,6 +180,23 @@ class PaykitSdkServiceTest {
         assertTrue(!provider.canDeferStaleSession("local Pubky secret key does not match session public key"))
     }
 
+    @Test
+    fun `session teardown attempts both credentials with session first`() {
+        val attemptedKeys = mutableListOf<String>()
+
+        assertFailsWith<AppError> {
+            clearPubkySessionCredentials {
+                attemptedKeys += it
+                if (it == Keychain.Key.PAYKIT_SESSION.name) throw AppError("Delete failed")
+            }
+        }
+
+        assertEquals(
+            listOf(Keychain.Key.PAYKIT_SESSION.name, Keychain.Key.PUBKY_SECRET_KEY.name),
+            attemptedKeys,
+        )
+    }
+
     private fun keyStore(
         loadBytes: () -> ByteArray?,
         upsertBytes: (ByteArray) -> Unit = {},

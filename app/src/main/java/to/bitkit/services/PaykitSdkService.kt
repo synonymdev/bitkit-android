@@ -1097,8 +1097,7 @@ internal class PaykitSdkSessionProvider(
     override fun clearSessionAccess() {
         clearLiveSessionAccess()
         keychain.accessBlocking {
-            delete(Keychain.Key.PUBKY_SECRET_KEY.name)
-            delete(Keychain.Key.PAYKIT_SESSION.name)
+            clearPubkySessionCredentials(::delete)
         }
     }
 
@@ -1155,6 +1154,13 @@ internal object PaykitReceiverNoiseKeyDerivation {
             init(SecretKeySpec(key, "HmacSHA256"))
             doFinal(data)
         }
+}
+
+internal fun clearPubkySessionCredentials(deleteKeychainValue: (String) -> Unit) {
+    val sessionResult = runCatching { deleteKeychainValue(Keychain.Key.PAYKIT_SESSION.name) }
+    val localSecretResult = runCatching { deleteKeychainValue(Keychain.Key.PUBKY_SECRET_KEY.name) }
+    sessionResult.getOrThrow()
+    localSecretResult.getOrThrow()
 }
 
 internal class PaykitReceiverNoiseKeyStore(

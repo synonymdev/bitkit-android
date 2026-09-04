@@ -36,6 +36,7 @@ import to.bitkit.data.PubkyStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.hasPaykitState
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.paykitDisabled
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
@@ -294,8 +295,8 @@ class PubkyRepo @Inject constructor(
                 waitForAuthApproval(attemptId)
                 withContext(ioDispatcher) {
                     withContext(NonCancellable) {
-                        pubkyService.completeAuth()
                         shouldRevokeSessionOnFailure = true
+                        pubkyService.completeAuth()
                     }
                     ensureAuthAttemptActive(attemptId)
                     val pk = requireNotNull(pubkyService.currentPublicKey()?.ensurePubkyPrefix()) {
@@ -675,6 +676,7 @@ class PubkyRepo @Inject constructor(
                 Logger.info("Continuing sign out, bitkit profile storage already missing", context = TAG)
             }
         }
+        settingsStore.update { it.paykitDisabled(markPublicCleanupPending = it.hasPaykitState()) }
         signOut().getOrThrow()
     }
 
@@ -1023,7 +1025,14 @@ class PubkyRepo @Inject constructor(
             ensureServiceInitialized()
 
             initializeMutex.withLock {
-                pubkyService.forgetSessionAccess()
+                runSuspendCatching { pubkyService.forgetSessionAccess() }
+                    .onFailure {
+                        Logger.warn(
+                            "Failed to forget existing Pubky session before restore",
+                            it,
+                            context = TAG,
+                        )
+                    }
                 clearAuthenticatedState()
                 runCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
                 runCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
