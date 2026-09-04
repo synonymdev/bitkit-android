@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.FundingTx
 import com.synonym.bitkitcore.IBtChannel
 import com.synonym.bitkitcore.IBtInfo
+import com.synonym.bitkitcore.IBtInfoOptions
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +16,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.OutPoint
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
@@ -25,6 +27,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -188,6 +191,21 @@ class BlocktankRepoTest : BaseUnitTest() {
             val result = sut.refreshOrders()
             assertTrue(result.isFailure)
         }
+    }
+
+    @Test
+    fun `canCreateCjit refreshes max channel size before checking amount`() = test {
+        sut = createSut()
+        val staleInfo = btInfo(maxChannelSizeSat = 1_000_000u)
+        val freshInfo = btInfo(maxChannelSizeSat = 50_000u)
+        whenever(coreService.blocktank.info(refresh = false)).thenReturn(staleInfo)
+        whenever(coreService.blocktank.info(refresh = true)).thenReturn(staleInfo, freshInfo)
+
+        sut.refreshInfo()
+        val result = sut.canCreateCjit(amountSats = 100_000u)
+
+        assertFalse(result.getOrThrow())
+        verify(coreService.blocktank, times(3)).info(refresh = true)
     }
 
     @Test
@@ -398,6 +416,14 @@ class BlocktankRepoTest : BaseUnitTest() {
     private fun pendingCjitEntry(): IcJitEntry = mock<IcJitEntry>().apply {
         whenever(channel).thenReturn(null)
         whenever(state).thenReturn(CJitStateEnum.CREATED)
+    }
+
+    private fun btInfo(maxChannelSizeSat: ULong): IBtInfo {
+        val options = mock<IBtInfoOptions>()
+        whenever(options.maxChannelSizeSat).thenReturn(maxChannelSizeSat)
+        return mock<IBtInfo>().also {
+            whenever(it.options).thenReturn(options)
+        }
     }
 
     private suspend fun seedCjitEntries(vararg entries: IcJitEntry) {

@@ -1,11 +1,15 @@
 package to.bitkit.ui.screens.wallets.receive
 
 import app.cash.turbine.test
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
-import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.models.ReceiveAdditionalLiquidityAction
+import to.bitkit.models.ReceiveLiquiditySource
+import to.bitkit.repositories.BlocktankRepo
+import to.bitkit.repositories.BlocktankState
 import to.bitkit.repositories.WalletRepo
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.wallets.receive.EditInvoiceVM.EditInvoiceScreenEffects
@@ -15,57 +19,86 @@ class EditInvoiceVMTest : BaseUnitTest() {
 
     private lateinit var sut: EditInvoiceVM
     private val walletRepo: WalletRepo = mock()
+    private val blocktankRepo: BlocktankRepo = mock()
 
     @Before
     fun setUp() {
-        sut = EditInvoiceVM(walletRepo)
+        whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(minCjitSats = 5_000)))
+        whenever(walletRepo.inboundLiquiditySats()).thenReturn(1_000u)
+        sut = EditInvoiceVM(walletRepo, blocktankRepo)
     }
 
     @Test
-    fun `onClickContinue should emit NavigateAddLiquidity when shouldRequestAdditionalLiquidity returns true`() = test {
-        // Given
-        whenever(walletRepo.shouldRequestAdditionalLiquidity()).thenReturn(Result.success(true))
-
-        // When & Then
+    fun `onClickContinue should emit none for auto when amount exceeds inbound`() = test {
         sut.editInvoiceEffect.test {
-            sut.onClickContinue()
+            sut.onClickContinue(
+                source = ReceiveLiquiditySource.AUTO,
+                amountSats = 10_000u,
+                isGeoBlocked = false,
+            )
 
-            assertEquals(EditInvoiceScreenEffects.NavigateAddLiquidity, awaitItem())
+            assertEquals(
+                EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(ReceiveAdditionalLiquidityAction.None),
+                awaitItem(),
+            )
             cancelAndIgnoreRemainingEvents()
         }
-
-        verify(walletRepo).shouldRequestAdditionalLiquidity()
     }
 
     @Test
-    fun `onClickContinue should emit UpdateInvoice when shouldRequestAdditionalLiquidity returns false`() = test {
-        // Given
-        whenever(walletRepo.shouldRequestAdditionalLiquidity()).thenReturn(Result.success(false))
+    fun `onClickContinue should emit choose amount for spending below CJIT minimum`() = test {
+        whenever(blocktankRepo.maxCjitAmountSats()).thenReturn(Result.success(100_000u))
 
-        // When & Then
         sut.editInvoiceEffect.test {
-            sut.onClickContinue()
+            sut.onClickContinue(
+                source = ReceiveLiquiditySource.SPENDING,
+                amountSats = 4_000u,
+                isGeoBlocked = false,
+            )
 
-            assertEquals(EditInvoiceScreenEffects.UpdateInvoice, awaitItem())
+            assertEquals(
+                EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(ReceiveAdditionalLiquidityAction.ChooseAmount),
+                awaitItem(),
+            )
             cancelAndIgnoreRemainingEvents()
         }
-
-        verify(walletRepo).shouldRequestAdditionalLiquidity()
     }
 
     @Test
-    fun `onClickContinue should emit UpdateInvoice when shouldRequestAdditionalLiquidity fails`() = test {
-        // Given
-        whenever(walletRepo.shouldRequestAdditionalLiquidity()).thenReturn(Result.failure<Boolean>(Exception("Error")))
+    fun `onClickContinue should emit create CJIT for spending amount within limits`() = test {
+        whenever(blocktankRepo.maxCjitAmountSats()).thenReturn(Result.success(100_000u))
 
-        // When & Then
         sut.editInvoiceEffect.test {
-            sut.onClickContinue()
+            sut.onClickContinue(
+                source = ReceiveLiquiditySource.SPENDING,
+                amountSats = 10_000u,
+                isGeoBlocked = false,
+            )
 
-            assertEquals(EditInvoiceScreenEffects.UpdateInvoice, awaitItem())
+            assertEquals(
+                EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(
+                    ReceiveAdditionalLiquidityAction.CreateCjit(10_000u)
+                ),
+                awaitItem(),
+            )
             cancelAndIgnoreRemainingEvents()
         }
+    }
 
-        verify(walletRepo).shouldRequestAdditionalLiquidity()
+    @Test
+    fun `onClickContinue should emit geo blocked without fetching CJIT limits`() = test {
+        sut.editInvoiceEffect.test {
+            sut.onClickContinue(
+                source = ReceiveLiquiditySource.SPENDING,
+                amountSats = 10_000u,
+                isGeoBlocked = true,
+            )
+
+            assertEquals(
+                EditInvoiceScreenEffects.ApplyReceiveLiquidityAction(ReceiveAdditionalLiquidityAction.GeoBlocked),
+                awaitItem(),
+            )
+            cancelAndIgnoreRemainingEvents()
+        }
     }
 }
