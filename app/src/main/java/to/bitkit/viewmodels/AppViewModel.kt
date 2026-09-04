@@ -3521,7 +3521,12 @@ class AppViewModel @Inject constructor(
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).getOrNull()
+        val proofPreparation = preparePaymentProof(incomingPaymentRequest)
+        if (proofPreparation.exceptionOrNull() is PaykitPaymentRequestError.OperationInProgress) {
+            handlePaymentPreparationFailure(PaykitPaymentRequestError.OperationInProgress, contactPaymentContext)
+            return
+        }
+        val preparedPaymentProofRequest = proofPreparation.getOrNull()
 
         consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
@@ -3705,16 +3710,16 @@ class AppViewModel @Inject constructor(
                 ),
             )
         }.onFailure { error ->
-            if (error is PaymentPendingException) {
+            if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest != null)) {
+                val pendingHash = (error as? PaymentPendingException)?.paymentHash ?: paymentHash
                 proofRequest = null
                 Logger.info("Lightning payment pending", context = TAG)
-                pendingPaymentRepo.track(error.paymentHash)
-                preserveContactPaymentContext(error.paymentHash)
+                pendingPaymentRepo.track(pendingHash)
+                preserveContactPaymentContext(pendingHash)
                 refreshIncomingPaykitPaymentRequests()
-                setSendEffect(SendEffect.NavigateToPending(error.paymentHash, displayAmountSats.toLong()))
+                setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
                 return@onFailure
             }
-            paykitPaymentProofRepo.failLightningPayment(paymentHash)
             cancelPaymentProofPreparation(proofRequest)
             createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
             Logger.error("Error sending lightning payment", error, context = TAG)
@@ -3724,6 +3729,19 @@ class AppViewModel @Inject constructor(
             }
             setSendEffect(SendEffect.NavigateToError(failure))
         }
+    }
+
+    private suspend fun clearFailedLightningPayment(
+        paymentHash: String,
+        error: Throwable,
+        isPaymentRequest: Boolean,
+    ): Boolean = when {
+        error is PaymentPendingException -> false
+        error is LightningPaymentFailedError || !isPaymentRequest -> {
+            paykitPaymentProofRepo.failLightningPayment(paymentHash)
+            true
+        }
+        else -> paykitPaymentProofRepo.failLightningPayment(paymentHash, error)
     }
 
     private suspend fun prepareContactPayment(contactPaymentContext: ContactPaymentContext?): Boolean {
@@ -4618,7 +4636,12 @@ class AppViewModel @Inject constructor(
         if (isPreparedContactPayment(contactPaymentContext)) return true
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).getOrNull()
+        val proofPreparation = preparePaymentProof(incomingPaymentRequest)
+        if (proofPreparation.exceptionOrNull() is PaykitPaymentRequestError.OperationInProgress) {
+            handlePaymentPreparationFailure(PaykitPaymentRequestError.OperationInProgress, contactPaymentContext)
+            return false
+        }
+        val preparedPaymentProofRequest = proofPreparation.getOrNull()
         if (!prepareContactPayment(contactPaymentContext)) {
             cancelPaymentProofPreparation(preparedPaymentProofRequest)
             return false

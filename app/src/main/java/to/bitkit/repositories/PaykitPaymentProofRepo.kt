@@ -19,6 +19,7 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
@@ -31,6 +32,8 @@ import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.WalletScope
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.Logger
+import to.bitkit.utils.ServiceError
+import to.bitkit.utils.asNodeException
 import java.security.MessageDigest
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -307,6 +310,20 @@ class PaykitPaymentProofRepo @Inject constructor(
 
     suspend fun failLightningPayment(paymentHash: String) = removeProofs {
         it.kind == PaykitPaymentProofKind.Lightning && it.paymentIdentifier.equals(paymentHash, ignoreCase = true)
+    }
+
+    suspend fun failLightningPayment(paymentHash: String, submissionError: Throwable): Boolean {
+        val error = submissionError.asNodeException() ?: submissionError
+        when (error) {
+            is ServiceError.NodeNotSetup,
+            is ServiceError.NodeNotStarted,
+            is NodeException.NotRunning,
+            is NodeException.InvalidInvoice,
+            is NodeException.InvalidAmount,
+            is NodeException.PaymentSendingFailed -> failLightningPayment(paymentHash)
+            else -> return false
+        }
+        return true
     }
 
     suspend fun failOnchainPayment(request: PaykitPaymentRequest) {

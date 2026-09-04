@@ -13,6 +13,7 @@ import com.synonym.paykit.PrivateJsonObject
 import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
@@ -32,7 +33,11 @@ import to.bitkit.models.WalletScope
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
+import to.bitkit.utils.LdkError
+import to.bitkit.utils.ServiceError
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
@@ -279,6 +284,62 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertTrue(storedProofs.isEmpty())
         verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
+    }
+
+    @Test
+    fun `uncertain lightning submission preserves proof until settlement`() = test {
+        val errors = listOf(
+            NodeException.PersistenceFailed("io"),
+            LdkError(NodeException.PersistenceFailed("io")),
+            NodeException.DuplicatePayment("pending"),
+            AppError("payment outcome unknown"),
+        )
+        val record = paymentRequestRecord()
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(lightningRepo.getPayments()).thenReturn(Result.success(emptyList()))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull())).thenReturn(record)
+        for (error in errors) {
+            val request = paymentRequest(MethodId.Bolt11.rawValue)
+            val repo = paymentProofRepo()
+            repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
+            repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
+
+            val failed = repo.failLightningPayment(PAYMENT_HASH, error)
+            repo.cancelPreparation(request)
+            val restartedRepo = paymentProofRepo()
+            restartedRepo.reconcile()
+
+            assertFalse(failed)
+            assertTrue(storedProofs.single().paymentStarted)
+            assertEquals(PAYMENT_HASH, storedProofs.single().paymentIdentifier)
+            val retry = restartedRepo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning)
+            assertTrue(retry.exceptionOrNull() is PaykitPaymentRequestError.OperationInProgress)
+
+            restartedRepo.completeLightningPayment(PAYMENT_HASH, PREIMAGE)
+            assertTrue(storedProofs.isEmpty())
+        }
+        verify(paykitSdkService, times(errors.size)).submitPaymentProof(any(), any(), any(), any(), any(), isNull())
+    }
+
+    @Test
+    fun `definite lightning submission failure clears proof`() = test {
+        val errors = listOf(
+            ServiceError.NodeNotSetup(),
+            ServiceError.NodeNotStarted(),
+            NodeException.NotRunning("stopped"),
+            NodeException.InvalidInvoice("invalid"),
+            NodeException.InvalidAmount("invalid"),
+            LdkError(NodeException.PaymentSendingFailed("no route")),
+        )
+        for (error in errors) {
+            val request = paymentRequest(MethodId.Bolt11.rawValue)
+            val repo = paymentProofRepo()
+            repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
+            repo.associateLightningPayment(request, PAYMENT_HASH, MethodId.Bolt11.rawValue).getOrThrow()
+
+            assertTrue(repo.failLightningPayment(PAYMENT_HASH, error))
+            assertTrue(storedProofs.isEmpty())
+        }
     }
 
     @Test
