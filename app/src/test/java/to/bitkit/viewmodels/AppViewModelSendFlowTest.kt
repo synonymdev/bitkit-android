@@ -706,6 +706,43 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `duplicated bip21 request target leaves terminal feedback visible`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val first = "bitcoin:bcrt1qfirst?amount=0.00000001"
+        val duplicatedBip21 = first + "bitcoin:bcrt1qsecond?amount=0.00000001"
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_waiting_for_details)).thenReturn("Waiting")
+        whenever(context.getString(R.string.wallet__payment_request_unavailable)).thenReturn(
+            "The payment request is no longer available."
+        )
+        stubOpenedPaymentRequest(request, duplicatedBip21)
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
+        verify(paykitPaymentRequestRepo).markPresented(request)
+        verify(privatePaykitRepo, times(15)).beginPaymentRequest(request)
+        verify(paykitPaymentRequestDiagnostics, times(15)).logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
+        )
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager, times(2)).enqueue(toastCaptor.capture())
+        assertEquals("PaymentRequestUnavailableToast", toastCaptor.lastValue.testTag)
+    }
+
+    @Test
     fun `mismatched bolt11 from a request sheet returns to the request sheet`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
@@ -4558,9 +4595,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 isPaymentRequest = true,
             ),
         )
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        advanceUntilIdle()
 
         confirmCurrentPayment()
 
+        assertNull(sut.currentSheet.value)
         verify(paykitPaymentRequestRepo, never()).accept(any())
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
         verify(lightningRepo, never()).payInvoice(any(), anyOrNull())
