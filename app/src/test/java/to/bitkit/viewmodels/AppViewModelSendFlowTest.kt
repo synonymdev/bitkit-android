@@ -4553,10 +4553,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `initial subscription payment auto start is consumed once`() = test {
-        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
         setSendState(
             SendUiState(
                 amount = 1_000u,
+                payMethod = SendMethod.LIGHTNING,
                 isAmountInputValid = true,
                 isInitialSubscriptionPayment = true,
                 initialSubscriptionPaymentAutoStartPending = true,
@@ -4571,6 +4572,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         sut.setSendEvent(SendEvent.ClearPayConfirmation)
         advanceUntilIdle()
+        sut.setSendEvent(SendEvent.StartInitialSubscriptionPayment)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+    }
+
+    @Test
+    fun `initial onchain subscription payment requires confirmation`() = test {
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u, maxSendLightningSats = 100_000u)
+        setSendState(
+            SendUiState(
+                amount = 1_000u,
+                payMethod = SendMethod.ONCHAIN,
+                isAmountInputValid = true,
+                isInitialSubscriptionPayment = true,
+                initialSubscriptionPaymentAutoStartPending = true,
+            )
+        )
+
+        sut.setSendEvent(SendEvent.StartInitialSubscriptionPayment)
+        advanceUntilIdle()
+
+        assertFalse(sut.sendUiState.value.shouldAutomaticallyPay)
+        assertFalse(sut.sendUiState.value.initialSubscriptionPaymentAutoStartPending)
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+
+        setSendState(sut.sendUiState.value.copy(payMethod = SendMethod.LIGHTNING))
         sut.setSendEvent(SendEvent.StartInitialSubscriptionPayment)
         advanceUntilIdle()
 

@@ -167,16 +167,17 @@ fun SendConfirmScreen(
 
     LaunchedEffect(uiState.initialSubscriptionPaymentAutoStartPending, canAutoStart) {
         if (!uiState.initialSubscriptionPaymentAutoStartPending || !canAutoStart) return@LaunchedEffect
-        isLoading = true
+        isLoading = uiState.shouldAutomaticallyPay
         currentOnEvent(SendEvent.StartInitialSubscriptionPayment)
     }
 
-    Content(
+    SendConfirmContent(
         uiState = uiState,
         isNodeRunning = isNodeRunning,
         isLoading = isLoading,
         showBiometrics = showBiometrics,
         canGoBack = canGoBack,
+        initialShowDetails = uiState.isInitialSubscriptionPayment && !uiState.shouldAutomaticallyPay,
         onBack = onBack,
         onEvent = onEvent,
         onClickAddTag = onClickAddTag,
@@ -202,7 +203,7 @@ fun SendConfirmScreen(
 }
 
 @Composable
-private fun Content(
+internal fun SendConfirmContent(
     uiState: SendUiState,
     isNodeRunning: Boolean,
     isLoading: Boolean,
@@ -241,7 +242,7 @@ private fun Content(
 
             Spacer(Modifier.height(16.dp))
 
-            if (uiState.isInitialSubscriptionPayment) {
+            if (uiState.shouldAutomaticallyPay && (uiState.initialSubscriptionPaymentAutoStartPending || isLoading)) {
                 FillHeight()
                 GradientCircularProgressIndicator(modifier = Modifier.size(32.dp).align(Alignment.CenterHorizontally))
                 FillHeight()
@@ -870,7 +871,7 @@ private fun sendUiState() = SendUiState(
 private fun PreviewOnChain() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
                     speed = TransactionSpeed.Medium,
@@ -894,7 +895,7 @@ private fun PreviewOnChain() {
 private fun PreviewOnChainDetails() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
                     speed = TransactionSpeed.Medium,
@@ -919,7 +920,7 @@ private fun PreviewOnChainDetails() {
 private fun PreviewLightningDetails() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     amount = 6_543u,
                     payMethod = SendMethod.LIGHTNING,
@@ -942,7 +943,7 @@ private fun PreviewLightningDetails() {
 private fun PreviewOnChainLongFeeSmallScreen() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     amount = 2_345_678u,
                     selectedTags = persistentListOf("car", "house", "uber"),
@@ -966,7 +967,7 @@ private fun PreviewOnChainLongFeeSmallScreen() {
 private fun PreviewOnChainFeeLoading() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
                     onchainFeeUi = OnchainFeeUi(isLoading = true),
@@ -986,7 +987,7 @@ private fun PreviewOnChainFeeLoading() {
 private fun PreviewLightning() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     amount = 6_543u,
                     payMethod = SendMethod.LIGHTNING,
@@ -1007,7 +1008,7 @@ private fun PreviewLightning() {
 private fun PreviewLnurl() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     payMethod = SendMethod.LIGHTNING,
                     lnurl = LnurlParams.LnurlPay(
@@ -1038,7 +1039,7 @@ private fun PreviewLnurl() {
 private fun PreviewLnurlDetails() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     amount = 5_000u,
                     payMethod = SendMethod.LIGHTNING,
@@ -1071,7 +1072,7 @@ private fun PreviewLnurlDetails() {
 private fun PreviewBio() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState(),
                 isNodeRunning = true,
                 isLoading = false,
@@ -1087,7 +1088,7 @@ private fun PreviewBio() {
 private fun PreviewDialog() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     showSanityWarningDialog = SanityWarning.VALUE_OVER_100_USD,
                 ),
@@ -1105,7 +1106,7 @@ private fun PreviewDialog() {
 private fun PreviewNodeNotRunning() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     payMethod = SendMethod.LIGHTNING,
                     lnurl = LnurlParams.LnurlPay(

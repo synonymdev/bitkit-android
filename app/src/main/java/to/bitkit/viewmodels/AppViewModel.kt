@@ -3424,8 +3424,10 @@ class AppViewModel @Inject constructor(
     }
 
     private fun onStartInitialSubscriptionPayment() {
-        if (!_sendUiState.value.initialSubscriptionPaymentAutoStartPending) return
+        val state = _sendUiState.value
+        if (!state.initialSubscriptionPaymentAutoStartPending) return
         _sendUiState.update { it.copy(initialSubscriptionPaymentAutoStartPending = false) }
+        if (!state.shouldAutomaticallyPay) return
         onSwipeToPay()
     }
 
@@ -5314,7 +5316,10 @@ data class SendUiState(
     val isInitialSubscriptionPayment: Boolean = false,
     val initialSubscriptionPaymentAutoStartPending: Boolean = false,
     val incomingPaymentRequestId: PaykitPaymentRequestId? = null,
-)
+) {
+    val shouldAutomaticallyPay: Boolean
+        get() = isInitialSubscriptionPayment && payMethod == SendMethod.LIGHTNING && hardwareWalletId == null
+}
 
 @Immutable
 data class OnchainFeeUi(
