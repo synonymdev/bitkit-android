@@ -291,3 +291,15 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - Use `WakeNodeWorker` to manage the handling of remote notifications received via cloud messages
 - Use `*Services` to wrap rust library code exposed via bindings
 - Use CQRS pattern of Command + Handler like it's done in the `NotifyPaymentReceived` + `NotifyPaymentReceivedHandler` setup
+
+## Cursor Cloud specific instructions
+
+Standard commands live in `## Build Commands` above (`just compile`, `just test`, `just lint`, `just build`, etc.). This section only captures non-obvious cloud-environment caveats.
+
+- Build tooling is baked into the VM snapshot: JDK 17 (`/usr/lib/jvm/java-17-openjdk-amd64`), Android SDK at `$HOME/android-sdk` (platform 36, build-tools 36.0.0, platform-tools), and `just`. Interactive shells get `JAVA_HOME`/`ANDROID_HOME`/`PATH` from `~/.bashrc`; Gradle also reads JDK 17 from `~/.gradle/gradle.properties` (`org.gradle.java.home`) and the SDK from `local.properties` (`sdk.dir`), so `./gradlew` works even in non-interactive shells.
+- REQUIRED SECRET: the `com.synonym:*` and `paykit` native libraries resolve from private GitHub Packages Maven repos (see `settings.gradle.kts`). Gradle needs `GITHUB_ACTOR` + `GITHUB_TOKEN` (a PAT with `read:packages`) as env vars, or `gpr.user`/`gpr.key` in `local.properties`. Without these, ALL Gradle tasks that resolve the app classpath fail with `Username must not be null!` — this includes `just compile`, `just test`, `just build`, and `just lint`. The Cursor `gh` installation token does NOT have access to these packages; a real user PAT is required and must be added under Secrets.
+- Only config-only tasks (e.g. `./gradlew projects`, `./gradlew tasks`) succeed without the packages token; anything touching the app classpath needs it.
+- Unit tests run on the JVM via Robolectric and need NO emulator: `just test` (`testDevDebugUnitTest`). `just test android`, UI tests, and E2E all require an emulator/device.
+- `just run` installs and launches on a connected device/emulator via `adb`; the cloud VM has no device by default, so an AVD must be created and started first (a headless emulator with `-no-window -gpu swiftshader_indirect`).
+- NDK is only needed for release builds (`just release`); dev/debug builds bundle the prebuilt `.so` from the AARs.
+- `google-services.json` has a checked-in placeholder, so dev/testnet debug builds compile without real Firebase config; real config is only needed for push-notification testing.
