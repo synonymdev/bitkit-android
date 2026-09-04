@@ -2524,7 +2524,7 @@ class AppViewModel @Inject constructor(
 
         // TODO Workaround for https://github.com/synonymdev/bitkit-core/issues/63
         if (Bip21Utils.isDuplicatedBip21(input)) {
-            clearIncomingPaymentRequestTarget()
+            if (clearIncomingPaymentRequestTarget()) return@withContext
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
@@ -2695,8 +2695,9 @@ class AppViewModel @Inject constructor(
             IncomingPaykitPaymentRequestFailureReason.InvalidPaymentTarget,
     ): Boolean {
         val hasIncomingPaymentRequest = activeIncomingPaymentRequest() != null
+        val shouldHideSheet = !hasIncomingPaymentRequest || currentSheet.value is Sheet.Send
         clearActiveContactPaymentContext(failureReason = failureReason)
-        if (!hasIncomingPaymentRequest) hideSheet()
+        if (shouldHideSheet) hideSheet()
         return hasIncomingPaymentRequest
     }
 
@@ -2771,7 +2772,7 @@ class AppViewModel @Inject constructor(
     ) {
         val validatedAddress = runCatching { coreService.validateBitcoinAddress(invoice.address) }
             .getOrElse {
-                clearIncomingPaymentRequestTarget()
+                if (clearIncomingPaymentRequestTarget()) return
                 toast(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.other__scan_err_decoding),
@@ -2782,7 +2783,7 @@ class AppViewModel @Inject constructor(
             }
 
         if (NetworkValidationHelper.isNetworkMismatch(validatedAddress.network.toLdkNetwork(), Env.network)) {
-            clearIncomingPaymentRequestTarget()
+            if (clearIncomingPaymentRequestTarget()) return
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
@@ -3001,13 +3002,14 @@ class AppViewModel @Inject constructor(
         else -> SendFundingSource.Savings
     }
 
+    @Suppress("ReturnCount")
     private suspend fun onScanLightning(
         invoice: LightningInvoice,
         scanResult: String,
         fromMainScanner: Boolean,
     ) {
         if (invoice.isExpired) {
-            clearIncomingPaymentRequestTarget()
+            if (clearIncomingPaymentRequestTarget()) return
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__scan_err_decoding),
