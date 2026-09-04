@@ -58,7 +58,10 @@ sealed interface Sheet {
         val route: SendRoute = SendRoute.Recipient,
         val hardwareWalletId: String? = null,
     ) : Sheet
-    data class Receive(val route: ReceiveRoute = ReceiveRoute.QR) : Sheet
+    data class Receive(
+        val route: ReceiveRoute = ReceiveRoute.QR,
+        val hardwareWalletId: String? = null,
+    ) : Sheet
     data object PaymentRequests : Sheet
     data class Pin(val route: PinRoute = PinRoute.Prompt()) : Sheet
     data object ChangePin : Sheet

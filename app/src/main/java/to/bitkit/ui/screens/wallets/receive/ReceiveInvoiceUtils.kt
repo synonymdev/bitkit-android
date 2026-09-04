@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.receive
 
 import to.bitkit.R
+import to.bitkit.utils.Bip21Utils
 
 /**
  * Returns the appropriate invoice/address for the selected tab.
@@ -20,6 +21,9 @@ fun getInvoiceForTab(
     cjitInvoice: String?,
     isNodeRunning: Boolean,
     onchainAddress: String,
+    hardwareAddress: String = "",
+    hardwareAmountSats: ULong? = null,
+    hardwareMessage: String = "",
 ): String {
     return when (tab) {
         ReceiveTab.SAVINGS -> {
@@ -36,6 +40,14 @@ fun getInvoiceForTab(
             cjitInvoice?.takeIf { it.isNotEmpty() && isNodeRunning }
                 ?: bolt11.takeIf { isNodeRunning }.orEmpty()
         }
+
+        ReceiveTab.TREZOR -> hardwareAddress.takeIf(String::isNotBlank)?.let { address ->
+            Bip21Utils.buildBip21Url(
+                bitcoinAddress = address,
+                amountSats = hardwareAmountSats?.takeUnless { it == 0uL },
+                message = hardwareMessage,
+            )
+        }.orEmpty()
     }
 }
 
@@ -93,5 +105,6 @@ fun getQrLogoResource(tab: ReceiveTab): Int {
         ReceiveTab.SAVINGS -> R.drawable.ic_btc_circle
         ReceiveTab.AUTO -> R.drawable.ic_unified_circle
         ReceiveTab.SPENDING -> R.drawable.ic_ln_circle
+        ReceiveTab.TREZOR -> R.drawable.ic_btc_circle_blue
     }
 }

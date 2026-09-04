@@ -5,6 +5,54 @@ import kotlin.test.assertEquals
 
 class ReceiveInvoiceUtilsTest {
 
+    @Test
+    fun `getInvoiceForTab TREZOR returns only the hardware address`() {
+        val result = getInvoiceForTab(
+            tab = ReceiveTab.TREZOR,
+            bip21 = "bitcoin:software?lightning=lnbc1software",
+            bolt11 = "lnbc1software",
+            cjitInvoice = null,
+            isNodeRunning = true,
+            onchainAddress = "bc1qsoftware",
+            hardwareAddress = "bc1qhardware",
+        )
+
+        assertEquals("bitcoin:bc1qhardware", result)
+    }
+
+    @Test
+    fun `getInvoiceForTab TREZOR applies hardware invoice details`() {
+        val result = getInvoiceForTab(
+            tab = ReceiveTab.TREZOR,
+            bip21 = "bitcoin:software",
+            bolt11 = "",
+            cjitInvoice = null,
+            isNodeRunning = true,
+            onchainAddress = "bc1qsoftware",
+            hardwareAddress = "bc1qhardware",
+            hardwareAmountSats = 12_345uL,
+            hardwareMessage = "Cold storage",
+        )
+
+        assertEquals("bitcoin:bc1qhardware?amount=0.00012345&message=Cold+storage", result)
+    }
+
+    @Test
+    fun `getInvoiceForTab TREZOR omits a zero amount`() {
+        val result = getInvoiceForTab(
+            tab = ReceiveTab.TREZOR,
+            bip21 = "bitcoin:bc1qsoftware",
+            bolt11 = "",
+            cjitInvoice = null,
+            isNodeRunning = true,
+            onchainAddress = "bc1qsoftware",
+            hardwareAddress = "bc1qhardware",
+            hardwareAmountSats = 0uL,
+        )
+
+        assertEquals("bitcoin:bc1qhardware", result)
+    }
+
     private val testAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
     private val testBolt11 = "lnbc1500n1pn2s39xpp5wyxw0e9fvvf..."
     private val testCjitInvoice = "lnbc2000n1pn2s39xpp5zyxw0e9fvvf..."

@@ -83,6 +83,8 @@ fun EditInvoiceScreen(
     onClickPaymentRequest: (amountSats: ULong, note: String) -> Unit,
     onBack: () -> Unit,
     navigateReceiveConfirm: (CjitEntryDetails) -> Unit,
+    onchainOnly: Boolean = false,
+    updateOnchainInvoice: (ULong?) -> Unit = {},
     currencies: CurrencyState = LocalCurrencies.current,
     editInvoiceVM: EditInvoiceVM = hiltViewModel(),
 ) {
@@ -92,7 +94,8 @@ fun EditInvoiceScreen(
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val isLoading by editInvoiceVM.isLoading.collectAsStateWithLifecycle()
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(onchainOnly) {
+        if (onchainOnly) return@LaunchedEffect
         editInvoiceVM.editInvoiceEffect.collect { effect ->
             val receiveSats = amountInputUiState.sats.toULong()
             when (effect) {
@@ -145,7 +148,11 @@ fun EditInvoiceScreen(
             }
         },
         onContinueKeyboard = { keyboardVisible = false },
-        onContinueGeneral = { editInvoiceVM.onClickContinue() },
+        onContinueGeneral = editInvoiceVM::onClickContinue,
+        onContinueOnchain = { amountSats ->
+            updateOnchainInvoice(amountSats)
+            onBack()
+        },
         isLoading = isLoading,
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
@@ -154,6 +161,7 @@ fun EditInvoiceScreen(
         onClickPaymentRequest = {
             onClickPaymentRequest(amountInputUiState.sats.toULong(), walletUiState.bip21Description)
         },
+        onchainOnly = onchainOnly,
     )
 }
 
@@ -163,12 +171,14 @@ fun EditInvoiceContent(
     amountInputViewModel: AmountInputViewModel,
     noteText: String,
     isSoftKeyboardVisible: Boolean,
+    onchainOnly: Boolean = false,
     keyboardVisible: Boolean,
     tags: ImmutableList<String>,
     onBack: () -> Unit,
     onContinueKeyboard: () -> Unit,
     onClickBalance: () -> Unit,
     onContinueGeneral: () -> Unit,
+    onContinueOnchain: (ULong) -> Unit = {},
     onClickAddTag: () -> Unit,
     onTextChanged: (String) -> Unit,
     onClickTag: (String) -> Unit,
@@ -314,38 +324,40 @@ fun EditInvoiceContent(
                         )
 
                         VerticalSpacer(16.dp)
-                        Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
-                        VerticalSpacer(8.dp)
+                        if (!onchainOnly) {
+                            Caption13Up(text = stringResource(R.string.wallet__tags), color = Colors.White64)
+                            VerticalSpacer(8.dp)
 
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(bottom = 16.dp)
-                        ) {
-                            tags.forEach { tagText ->
-                                TagButton(
-                                    text = tagText,
-                                    displayIconClose = true,
-                                    onClick = { onClickTag(tagText) },
-                                )
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 16.dp)
+                            ) {
+                                tags.forEach { tagText ->
+                                    TagButton(
+                                        text = tagText,
+                                        displayIconClose = true,
+                                        onClick = { onClickTag(tagText) },
+                                    )
+                                }
                             }
+                            PrimaryButton(
+                                text = stringResource(R.string.wallet__tags_add),
+                                size = ButtonSize.Small,
+                                onClick = { onClickAddTag() },
+                                icon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_tag),
+                                        contentDescription = null,
+                                        tint = Colors.Brand
+                                    )
+                                },
+                                fullWidth = false,
+                                modifier = Modifier.testTag("TagsAdd")
+                            )
                         }
-                        PrimaryButton(
-                            text = stringResource(R.string.wallet__tags_add),
-                            size = ButtonSize.Small,
-                            onClick = { onClickAddTag() },
-                            icon = {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_tag),
-                                    contentDescription = null,
-                                    tint = Colors.Brand
-                                )
-                            },
-                            fullWidth = false,
-                            modifier = Modifier.testTag("TagsAdd")
-                        )
 
                         FillHeight()
 
@@ -361,7 +373,13 @@ fun EditInvoiceContent(
 
                         PrimaryButton(
                             text = stringResource(R.string.wallet__receive_show_qr),
-                            onClick = onContinueGeneral,
+                            onClick = {
+                                if (onchainOnly) {
+                                    onContinueOnchain(amountInputViewModel.uiState.value.sats.toULong())
+                                } else {
+                                    onContinueGeneral()
+                                }
+                            },
                             isLoading = isLoading,
                             modifier = Modifier.testTag("ShowQrReceive")
                         )
