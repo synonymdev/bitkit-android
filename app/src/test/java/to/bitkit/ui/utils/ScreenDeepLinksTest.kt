@@ -46,6 +46,38 @@ class ScreenDeepLinksTest : BaseUnitTest() {
     }
 
     @Test
+    fun `SpendingHwSign required arguments are wallet and order path segments`() {
+        if (!ScreenDeepLinks.isEnabled) return
+        val links = ScreenDeepLinks.linksFor(Routes.SpendingHwSign::class)
+
+        assertEquals(
+            "bitkit://screen/spending-hw-sign/{walletId}/{orderId}",
+            links.single().uriPattern,
+        )
+    }
+
+    @Test
+    fun `spendingHwSignLink reads wallet and order ids from the path`() {
+        val screenId = ScreenDeepLinks.kebabId(Routes.SpendingHwSign::class)
+        val uri = Uri.parse("bitkit://screen/$screenId/hardware-wallet/order-1")
+
+        val link = ScreenDeepLinks.spendingHwSignLink(uri)
+
+        assertNotNull(link)
+        assertEquals("hardware-wallet", link.walletId)
+        assertEquals("order-1", link.orderId)
+    }
+
+    @Test
+    fun `spendingHwSignLink returns null when the order id is missing`() {
+        val uri = Uri.parse("bitkit://screen/spending-hw-sign/hardware-wallet")
+
+        val link = ScreenDeepLinks.spendingHwSignLink(uri)
+
+        assertNull(link)
+    }
+
+    @Test
     fun `a route with both argument kinds keeps the required one in the path`() {
         if (!ScreenDeepLinks.isEnabled) return
         val links = ScreenDeepLinks.linksFor(Routes.ActivityDetail::class)

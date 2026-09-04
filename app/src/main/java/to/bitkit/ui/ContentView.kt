@@ -318,11 +318,20 @@ fun ContentView(
         val uri = pendingScreenDeepLink ?: return@LaunchedEffect
 
         navController.currentBackStackEntryFlow.first()
-        appViewModel.consumeScreenDeepLink()
 
         SheetDeepLinks.sheetFor(uri)?.let {
             appViewModel.showSheet(it)
+            appViewModel.consumeScreenDeepLink()
             return@LaunchedEffect
+        }
+
+        ScreenDeepLinks.spendingHwSignLink(uri)?.let { link ->
+            val prepared = transferViewModel.prepareSpendingHwSign(link.walletId, link.orderId)
+            if (!prepared) {
+                Logger.warn("Unhandled screen deeplink '$uri'", context = "ContentView")
+                appViewModel.consumeScreenDeepLink()
+                return@LaunchedEffect
+            }
         }
 
         val request = Intent(Intent.ACTION_VIEW, uri)
@@ -335,6 +344,7 @@ fun ContentView(
         if (!handled) {
             Logger.warn("Unhandled screen deeplink '$uri'", context = "ContentView")
         }
+        appViewModel.consumeScreenDeepLink()
     }
 
     LaunchedEffect(appViewModel) {
@@ -883,13 +893,16 @@ private fun RootNavHost(
                     viewModel = transferViewModel,
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.navigateTo(Routes.SpendingHwSign(walletId)) },
+                    onOrderCreated = { orderId ->
+                        navController.navigateTo(Routes.SpendingHwSign(walletId, orderId))
+                    },
                 )
             }
-            composableWithDefaultTransitions<Routes.SpendingHwSign> { entry ->
-                val walletId = entry.toRoute<Routes.SpendingHwSign>().walletId
+            deepLinkableComposable<Routes.SpendingHwSign> { entry ->
+                val route = entry.toRoute<Routes.SpendingHwSign>()
                 SpendingHwSignScreen(
-                    walletId = walletId,
+                    walletId = route.walletId,
+                    orderId = route.orderId,
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
                     onCloseClick = { navController.navigateToHome() },
@@ -2169,7 +2182,7 @@ sealed interface Routes {
     data class SpendingAmountHw(val walletId: String) : Routes.DeepLinkable
 
     @Serializable
-    data class SpendingHwSign(val walletId: String) : Routes.InternalOnly
+    data class SpendingHwSign(val walletId: String, val orderId: String) : Routes.DeepLinkable
 
     @Serializable
     data object SpendingHwSigned : Routes.InternalOnly
