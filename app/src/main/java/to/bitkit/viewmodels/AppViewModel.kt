@@ -3358,6 +3358,9 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        // pay the amount & drain flag the refresh settled on, not the ones it is about to replace
+        onchainSendRefreshJob?.join()
+
         val amount = _sendUiState.value.amount
 
         val lnurl = _sendUiState.value.lnurl
@@ -3851,6 +3854,7 @@ class AppViewModel @Inject constructor(
         if (max == null) {
             // without an estimate the cached max is the only max-send signal left
             _sendUiState.update {
+                if (it.divergedFrom(state)) return@update it
                 it.copy(isMaxAmount = it.amount == walletRepo.balanceState.value.maxSendOnchainSats)
             }
             return
@@ -3864,9 +3868,15 @@ class AppViewModel @Inject constructor(
             )
         }
         _sendUiState.update {
+            if (it.divergedFrom(state)) return@update it
             it.copy(amount = if (isMaxAmount) max else it.amount, isMaxAmount = isMaxAmount)
         }
     }
+
+    private fun SendUiState.divergedFrom(snapshot: SendUiState) = amount != snapshot.amount ||
+        address != snapshot.address ||
+        speed != snapshot.speed ||
+        hardwareWalletId != snapshot.hardwareWalletId
 
     private suspend fun refreshOnchainFeeUi() = withContext(bgDispatcher) {
         val currentState = _sendUiState.value
