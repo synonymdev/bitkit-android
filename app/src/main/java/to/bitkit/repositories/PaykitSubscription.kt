@@ -76,19 +76,23 @@ data class PaykitSubscriptionRecurrence(
 
     @Suppress("ReturnCount")
     fun nextPeriodAfter(date: Instant): PaykitBillingPeriod? {
-        var start = startsAt
-        var index = firstBoundaryIndexAfter(start) ?: return null
-        repeat(MAX_PERIODS) {
-            var end = boundary(index++) ?: return null
-            if (end <= start) end = addInterval(start) ?: return null
-            endsAt?.let {
-                if (start >= it) return null
-                if (end > it) end = it
-            }
-            if (start > date) return PaykitBillingPeriod(start, end)
-            start = end
+        val start: Instant
+        val endIndex: Int
+        if (startsAt > date) {
+            start = startsAt
+            endIndex = firstBoundaryIndexAfter(start) ?: return null
+        } else {
+            val startIndex = firstBoundaryIndexAfter(date) ?: return null
+            start = boundary(startIndex) ?: return null
+            endIndex = startIndex + 1
         }
-        return null
+        var end = boundary(endIndex) ?: return null
+        if (end <= start) end = addInterval(start) ?: return null
+        endsAt?.let {
+            if (start >= it) return null
+            if (end > it) end = it
+        }
+        return PaykitBillingPeriod(start, end)
     }
 
     fun upcomingPeriodsAfter(date: Instant, limit: Int): List<PaykitBillingPeriod> {
@@ -104,17 +108,21 @@ data class PaykitSubscriptionRecurrence(
     }
 
     private fun firstBoundaryIndexAfter(date: Instant): Int? {
-        var index = 0
-        val anchorBoundary = boundary(index) ?: return null
-        if (anchorBoundary > date) {
-            while (index > -MAX_PERIODS && boundary(index - 1)?.let { it > date } == true) index--
-        } else {
-            while (index < MAX_PERIODS && boundary(index)?.let { it <= date } == true) index++
+        var lowerBound = -MAX_PERIODS + 1
+        var upperBound = MAX_PERIODS
+        while (lowerBound < upperBound) {
+            val index = lowerBound + (upperBound - lowerBound) / 2
+            val candidate = boundary(index) ?: return null
+            if (candidate <= date) {
+                lowerBound = index + 1
+            } else {
+                upperBound = index
+            }
         }
 
-        boundary(index)?.takeIf { it > date } ?: return null
-        boundary(index - 1)?.takeIf { it <= date } ?: return null
-        return index
+        boundary(lowerBound)?.takeIf { it > date } ?: return null
+        boundary(lowerBound - 1)?.takeIf { it <= date } ?: return null
+        return lowerBound
     }
 
     private fun boundary(index: Int): Instant? = runCatching {
@@ -307,6 +315,9 @@ private fun String.clean(limit: Int): String? = trim().take(limit).takeIf(String
 
 private fun String.parseInstant(): Instant? = runCatching { Instant.parse(this) }.getOrNull()
 
-private fun Instant.utc(): ZonedDateTime = java.time.Instant.parse(toString()).atZone(ZoneOffset.UTC)
+private fun Instant.utc(): ZonedDateTime = java.time.Instant.ofEpochSecond(epochSeconds, nanosecondsOfSecond.toLong())
+    .atZone(ZoneOffset.UTC)
 
-private fun ZonedDateTime.toKotlinInstant(): Instant = Instant.parse(toInstant().toString())
+private fun ZonedDateTime.toKotlinInstant(): Instant = toInstant().let {
+    Instant.fromEpochSeconds(it.epochSecond, it.nano.toLong())
+}

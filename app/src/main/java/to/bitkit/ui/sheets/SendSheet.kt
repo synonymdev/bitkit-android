@@ -518,11 +518,13 @@ fun SendSheet(
                         secondaryText = stringResource(R.string.wallet__payment_requests_not_now)
                             .takeIf { sendUiState.isInitialSubscriptionPayment },
                         onRetry = {
-                            sendUiState.incomingPaymentRequestId?.let {
-                                appViewModel.retryIncomingPaymentRequest(it)
-                                return@SendErrorScreen
+                            if (isRetrying || isRetryingInitialSubscriptionPayment) return@SendErrorScreen
+                            if (sendUiState.isInitialSubscriptionPayment) {
+                                sendUiState.incomingPaymentRequestId?.let {
+                                    appViewModel.retryIncomingPaymentRequest(it)
+                                    return@SendErrorScreen
+                                }
                             }
-                            if (isRetrying) return@SendErrorScreen
                             scope.launch {
                                 val shouldResetRoutingCaches = route.shouldResetRoutingCaches(
                                     routingCacheResetAttempted = routingCacheResetAttempted

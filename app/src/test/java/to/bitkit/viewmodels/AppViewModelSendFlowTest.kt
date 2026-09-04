@@ -230,7 +230,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val pendingPaykitPaymentRequests = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val paykitPaymentRequestHistory = MutableStateFlow<List<PaykitPaymentRequest>>(emptyList())
     private val paykitSubscriptions = MutableStateFlow<List<PaykitSubscription>>(emptyList())
-    private val onchainPaymentResolution = MutableStateFlow<PaykitOnchainPaymentProofResolution?>(null)
+    private val onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
     private val surfacedPaykitPaymentRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
 
@@ -319,7 +319,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         whenever(paykitPaymentRequestRepo.isPending(any())).thenReturn(true)
         whenever(paykitPaymentRequestRepo.isProcessing(any())).thenReturn(false)
-        whenever(paykitPaymentProofRepo.onchainPaymentResolution).thenReturn(onchainPaymentResolution)
+        whenever(paykitPaymentProofRepo.onchainPaymentResolutions).thenReturn(onchainPaymentResolutions)
         whenever { paykitPaymentProofRepo.prepare(any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever {
             paykitPaymentProofRepo.associateLightningPayment(any(), any(), any())
@@ -4792,10 +4792,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             sut.showSheet(Sheet.Send(pendingRoute))
 
             val transactionId = "ab".repeat(32)
-            onchainPaymentResolution.value = PaykitOnchainPaymentProofResolution(
-                testPublicKey,
-                request.id,
-                transactionId,
+            onchainPaymentResolutions.value = listOf(
+                PaykitOnchainPaymentProofResolution(
+                    testPublicKey,
+                    request.id,
+                    transactionId,
+                ),
             )
             assertEquals(SendEffect.PaymentSuccess, awaitItem())
             runCurrent()
@@ -4813,10 +4815,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         pubkyPublicKey.value = testPublicKey
         runCurrent()
 
-        onchainPaymentResolution.value = PaykitOnchainPaymentProofResolution(
-            testPublicKey,
-            request.id,
-            transactionId,
+        onchainPaymentResolutions.value = listOf(
+            PaykitOnchainPaymentProofResolution(
+                testPublicKey,
+                request.id,
+                transactionId,
+            ),
         )
         runCurrent()
 
@@ -4869,10 +4873,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 )
             )
             sut.showSheet(Sheet.Send(SendRoute.Confirm))
-            onchainPaymentResolution.value = PaykitOnchainPaymentProofResolution(
-                testPublicKey,
-                request.id,
-                "cd".repeat(32),
+            onchainPaymentResolutions.value = listOf(
+                PaykitOnchainPaymentProofResolution(
+                    testPublicKey,
+                    request.id,
+                    "cd".repeat(32),
+                ),
             )
             runCurrent()
 

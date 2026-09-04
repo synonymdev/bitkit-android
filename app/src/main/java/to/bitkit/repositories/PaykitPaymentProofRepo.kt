@@ -7,6 +7,7 @@ import com.synonym.paykit.BillingPeriod
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -115,8 +116,8 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     private val operationMutex = Mutex()
-    private val _onchainPaymentResolution = MutableStateFlow<PaykitOnchainPaymentProofResolution?>(null)
-    val onchainPaymentResolution = _onchainPaymentResolution.asStateFlow()
+    private val _onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
+    val onchainPaymentResolutions = _onchainPaymentResolutions.asStateFlow()
 
     suspend fun prepare(
         request: PaykitPaymentRequest,
@@ -309,11 +310,8 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     suspend fun failOnchainPayment(request: PaykitPaymentRequest) {
-        val identity = currentIdentity() ?: return
-        removeProofs {
-            PubkyPublicKeyFormat.matches(it.identity, identity) &&
-                it.requestId == request.id &&
-                it.kind == PaykitPaymentProofKind.Onchain &&
+        removeRequestProofs(request) {
+            it.kind == PaykitPaymentProofKind.Onchain &&
                 it.paymentStarted &&
                 it.paymentIdentifier == null &&
                 it.proofData == null
@@ -321,11 +319,8 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     suspend fun cancelPreparation(request: PaykitPaymentRequest) {
-        val identity = currentIdentity() ?: return
-        removeProofs {
-            PubkyPublicKeyFormat.matches(it.identity, identity) &&
-                it.requestId == request.id &&
-                !it.paymentStarted &&
+        removeRequestProofs(request) {
+            !it.paymentStarted &&
                 it.paymentIdentifier == null &&
                 it.proofData == null
         }
@@ -457,19 +452,22 @@ class PaykitPaymentProofRepo @Inject constructor(
     }
 
     private fun publishOnchainResolution(proof: PendingPaykitPaymentProof, txid: String) {
-        _onchainPaymentResolution.value = PaykitOnchainPaymentProofResolution(
+        val resolution = PaykitOnchainPaymentProofResolution(
             identity = proof.identity,
             requestId = proof.requestId,
             transactionId = txid.lowercase(),
         )
+        _onchainPaymentResolutions.update { resolutions ->
+            if (resolution in resolutions) resolutions else resolutions + resolution
+        }
     }
 
     fun consumeOnchainPaymentResolution(resolution: PaykitOnchainPaymentProofResolution) {
-        _onchainPaymentResolution.compareAndSet(resolution, null)
+        _onchainPaymentResolutions.update { it - resolution }
     }
 
-    fun clearOnchainPaymentResolution() {
-        _onchainPaymentResolution.value = null
+    fun clearOnchainPaymentResolutions() {
+        _onchainPaymentResolutions.update { emptyList() }
     }
 
     private suspend fun currentIdentity(): String? = paykitSdkService.identityStatus()
@@ -528,6 +526,29 @@ class PaykitPaymentProofRepo @Inject constructor(
         operationMutex.withLock {
             runSuspendCatching { removeProofsLocked(predicate) }
                 .onFailure { Logger.warn("Failed to clear a pending Paykit payment proof", it, context = TAG) }
+        }
+    }
+
+    private suspend fun removeRequestProofs(
+        request: PaykitPaymentRequest,
+        predicate: (PendingPaykitPaymentProof) -> Boolean,
+    ) = withContext(ioDispatcher) {
+        val identity = currentIdentity()
+        operationMutex.withLock {
+            runSuspendCatching {
+                val proofs = loadProofs()
+                val candidateIdentities = proofs
+                    .filter { it.requestId == request.id && predicate(it) }
+                    .mapNotNull { PubkyPublicKeyFormat.normalized(it.identity) }
+                    .distinct()
+                val targetIdentity = identity ?: candidateIdentities.singleOrNull() ?: return@runSuspendCatching
+                val remaining = proofs.filterNot {
+                    it.requestId == request.id &&
+                        PubkyPublicKeyFormat.matches(it.identity, targetIdentity) &&
+                        predicate(it)
+                }
+                if (remaining != proofs) persist(remaining)
+            }.onFailure { Logger.warn("Failed to clear a pending Paykit payment proof", it, context = TAG) }
         }
     }
 

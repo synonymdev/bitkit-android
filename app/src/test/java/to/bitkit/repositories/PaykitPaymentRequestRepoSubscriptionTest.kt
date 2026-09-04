@@ -15,7 +15,9 @@ import com.synonym.paykit.PaymentRequestRecord
 import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.advanceTimeBy
@@ -27,6 +29,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -51,6 +54,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         const val PAYMENT_REQUEST_ID = "550e8400-e29b-41d4-a716-446655440000"
         const val COUNTERPARTY = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         const val LOCAL_IDENTITY = "pubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        const val SECOND_IDENTITY = "pubky4rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
         val START_TIME = Instant.parse("2027-01-15T08:00:00Z")
         val PAYMENT_REFERENCE = mock<PaymentReference> {
             on { exportText() } doReturn "invoice-123"
@@ -227,6 +231,54 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         assertTrue(sut.pendingRequests.value.isEmpty())
         verifyBlocking(presentationStore) {
             saveSubscriptionState(eq(LOCAL_IDENTITY), argThat { dismissedPaymentIds == setOf(request.id) })
+        }
+    }
+
+    @Test
+    fun `failed dismissal persistence keeps subscription payment in queue`() = test {
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)),
+        )
+        sut.refresh().getOrThrow()
+        val request = sut.pendingRequests.value.single()
+        whenever(
+            presentationStore.saveSubscriptionState(
+                eq(LOCAL_IDENTITY),
+                argThat { dismissedPaymentIds == setOf(request.id) },
+            )
+        ).thenThrow(IllegalStateException("persistence failed"))
+
+        val dismissed = sut.dismissSubscriptionPayment(request)
+
+        assertFalse(dismissed)
+        assertEquals(listOf(request), sut.pendingRequests.value)
+    }
+
+    @Test
+    fun `identity switch prevents refresh state from persisting under previous identity`() = test {
+        val refreshStarted = CompletableDeferred<Unit>()
+        val resumeRefresh = CompletableDeferred<Unit>()
+        whenever(paykitSdkService.processPendingPrivateMessages()).doSuspendableAnswer {
+            refreshStarted.complete(Unit)
+            resumeRefresh.await()
+            emptyList()
+        }
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(paymentRequestRecord(state = PaymentRequestLifecycleState.ACTIVE_RECURRING)),
+        )
+        whenever(presentationStore.load(SECOND_IDENTITY)).thenReturn(emptySet())
+
+        val refresh = async { sut.refresh() }
+        runCurrent()
+        refreshStarted.await()
+        val activation = async { sut.activate(SECOND_IDENTITY) }
+        runCurrent()
+        resumeRefresh.complete(Unit)
+        refresh.await().getOrThrow()
+        activation.await()
+
+        verifyBlocking(presentationStore, never()) {
+            saveSubscriptionState(eq(LOCAL_IDENTITY), argThat { acceptedAt.isNotEmpty() })
         }
     }
 

@@ -278,11 +278,21 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 return@withLock false
             }
             val identity = activeIdentity ?: return@withLock false
-            dismissedSubscriptionPaymentIds = dismissedSubscriptionPaymentIds + request.id
+            val updatedDismissedPaymentIds = dismissedSubscriptionPaymentIds + request.id
+            val subscriptionState = currentSubscriptionState().copy(
+                dismissedPaymentIds = updatedDismissedPaymentIds,
+            )
+            val didPersistDismissal = runSuspendCatching {
+                presentationStore.saveSubscriptionState(identity, subscriptionState)
+            }.onFailure {
+                Logger.warn("Failed to persist dismissed Paykit subscription payment", it, context = TAG)
+            }.isSuccess
+            if (!didPersistDismissal) return@withLock false
+
+            dismissedSubscriptionPaymentIds = updatedDismissedPaymentIds
             _pendingRequests.update { requests -> requests.filterNot { it.id == request.id } }
             presentedRequestIds = presentedRequestIds - request.id
             runSuspendCatching {
-                presentationStore.saveSubscriptionState(identity, currentSubscriptionState())
                 presentationStore.save(identity, presentedRequestIds)
             }.onFailure { Logger.warn("Failed to persist dismissed Paykit subscription payment", it, context = TAG) }
             subscriptionNotificationScheduler.synchronize(
@@ -580,17 +590,18 @@ class PaykitPaymentRequestRepo @Inject constructor(
                     ?: now
                 subscription.id to acceptedAt
             }
-        if (restoredAcceptances.isNotEmpty()) {
-            subscriptionAcceptedAt = subscriptionAcceptedAt + restoredAcceptances
-            expectedIdentity?.let { persistSubscriptionState(it) }
+        val updatedSubscriptionAcceptedAt = subscriptionAcceptedAt + restoredAcceptances
+        val recurringRequestsBySubscription = subscriptions.associateWith { subscription ->
+            updatedSubscriptionAcceptedAt[subscription.id]
+                ?.let { subscription.requestsThrough(now, it) }
+                .orEmpty()
         }
-        val recurringRequestsBySubscription = subscriptions.associateWith { requestsThroughAcceptance(it, now) }
         val activeRecurringRequestIds = recurringRequestsBySubscription
             .filterKeys { it.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING }
             .values
             .flatten()
             .mapTo(mutableSetOf()) { it.id }
-        pruneDismissedSubscriptionPaymentIds(activeRecurringRequestIds, expectedIdentity)
+        val updatedDismissedPaymentIds = dismissedSubscriptionPaymentIds.intersect(activeRecurringRequestIds)
         val dueRequests = recurringRequestsBySubscription
             .filterKeys { it.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING }
             .values
@@ -599,7 +610,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
                 it.lifecycleState != PaymentRequestLifecycleState.PROOF_SUBMITTED &&
                     it.id !in locallyCompletedRequestIds &&
                     it.id !in locallyInFlightRequestIds &&
-                    it.id !in dismissedSubscriptionPaymentIds
+                    it.id !in updatedDismissedPaymentIds
             }
         val recurringHistory = recurringRequestsBySubscription.values.flatten().mapNotNull { request ->
             when {
@@ -624,12 +635,13 @@ class PaykitPaymentRequestRepo @Inject constructor(
         }
         val history = (recurringHistory + oneTimeHistory)
             .sortedByDescending { it.createdAt }
-        if (
-            stateGeneration.get() != generation ||
-            !PubkyPublicKeyFormat.matches(activeIdentity, expectedIdentity)
-        ) {
-            return
-        }
+        if (!isCurrentState(generation, expectedIdentity) || expectedIdentity == null) return
+        val subscriptionStateChanged =
+            subscriptionAcceptedAt != updatedSubscriptionAcceptedAt ||
+                dismissedSubscriptionPaymentIds != updatedDismissedPaymentIds
+        subscriptionAcceptedAt = updatedSubscriptionAcceptedAt
+        dismissedSubscriptionPaymentIds = updatedDismissedPaymentIds
+        if (subscriptionStateChanged) persistSubscriptionState(expectedIdentity)
         _pendingRequests.update { incoming }
         _paymentRequestHistory.update { history }
         _subscriptions.update { subscriptions }
@@ -638,7 +650,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             subscriptions = subscriptions,
             acceptedAt = { subscriptionAcceptedAt[it.id] },
             pendingRequestIds = incoming.mapTo(mutableSetOf()) { it.id },
-            payerIdentity = expectedIdentity ?: return,
+            payerIdentity = expectedIdentity,
             notificationsEnabled = settingsStore.data.first().notificationsGranted,
         )
         prunePresentedRequestIds(incoming)
@@ -901,17 +913,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
         if (prunedIds == presentedSubscriptionProposalIds) return
         presentedSubscriptionProposalIds = prunedIds
         val identity = activeIdentity ?: return
-        persistSubscriptionState(identity)
-    }
-
-    private suspend fun pruneDismissedSubscriptionPaymentIds(
-        activeRequestIds: Set<PaykitPaymentRequestId>,
-        identity: String?,
-    ) {
-        val prunedIds = dismissedSubscriptionPaymentIds.intersect(activeRequestIds)
-        if (prunedIds == dismissedSubscriptionPaymentIds) return
-        dismissedSubscriptionPaymentIds = prunedIds
-        identity ?: return
         persistSubscriptionState(identity)
     }
 

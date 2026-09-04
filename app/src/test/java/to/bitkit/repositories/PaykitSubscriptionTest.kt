@@ -76,6 +76,22 @@ class PaykitSubscriptionTest {
     }
 
     @Test
+    fun `old daily recurrence finds its next period directly`() {
+        val recurrence = PaykitSubscriptionRecurrence(
+            every = 1,
+            unit = PaykitRecurrenceUnit.Day,
+            startsAt = Instant.parse("2020-01-01T08:00:00Z"),
+            anchor = Instant.parse("2020-01-01T08:00:00Z"),
+            endsAt = null,
+        )
+
+        val period = recurrence.nextPeriodAfter(Instant.parse("2027-01-14T12:00:00Z"))
+
+        assertEquals(Instant.parse("2027-01-15T08:00:00Z"), period?.startsAt)
+        assertEquals(Instant.parse("2027-01-16T08:00:00Z"), period?.endsAt)
+    }
+
+    @Test
     fun `recurrence preserves nanosecond billing boundaries`() {
         val recurrence = PaykitSubscriptionRecurrence(
             every = 1,

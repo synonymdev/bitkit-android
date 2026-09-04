@@ -55,7 +55,6 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -362,7 +361,6 @@ class AppViewModel @Inject constructor(
     private var requestedPaymentRequestIdentity: String? = null
     private var requestedPaymentRequestTags: ImmutableList<String> = persistentListOf()
     private var uncertainOnchainPaymentRequestId: PaykitPaymentRequestId? = null
-    private val initialSubscriptionPaymentRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     private var isPresentingPaymentRequest = false
     private var paymentRequestPresentationGeneration = 0L
     private var activePaymentRequestPresentationGeneration: Long? = null
@@ -664,7 +662,7 @@ class AppViewModel @Inject constructor(
 
         val identityChanged = !PubkyPublicKeyFormat.matches(paymentRequestIdentity, state.publicKey)
         if (identityChanged) {
-            paykitPaymentProofRepo.clearOnchainPaymentResolution()
+            paykitPaymentProofRepo.clearOnchainPaymentResolutions()
             resetPaykitPresentationState(
                 dismissActiveRequest = paymentRequestIdentity != null,
                 preserveRequestedPaymentRequest = paymentRequestIdentity == null,
@@ -745,9 +743,9 @@ class AppViewModel @Inject constructor(
 
     private fun observePaykitOnchainPaymentResolution() {
         viewModelScope.launch {
-            paykitPaymentProofRepo.onchainPaymentResolution
-                .filterNotNull()
-                .collect(::handlePaykitOnchainPaymentResolution)
+            paykitPaymentProofRepo.onchainPaymentResolutions.collect { resolutions ->
+                resolutions.forEach(::handlePaykitOnchainPaymentResolution)
+            }
         }
     }
 
@@ -1016,7 +1014,6 @@ class AppViewModel @Inject constructor(
             publicKey = request.counterparty,
             privatePaymentContext = result.privatePaymentContext,
             incomingPaymentRequest = request,
-            isInitialSubscriptionPayment = initialSubscriptionPaymentRequestIds.remove(request.id),
             selectedTags = requestedPaymentRequestTags.takeIf { requestedPaymentRequestId == request.id }
                 ?: persistentListOf(),
         )
@@ -1067,7 +1064,6 @@ class AppViewModel @Inject constructor(
     private fun retainPaymentRequestPresentationState(requests: List<PaykitPaymentRequest>) {
         val requestIds = requests.mapTo(mutableSetOf()) { it.id }
         paymentRequestPresentationRetryAttempts.keys.retainAll(requestIds)
-        initialSubscriptionPaymentRequestIds.retainAll(requestIds)
         paymentRequestPresentationRetryJobs.keys.filter { it !in requestIds }.forEach {
             paymentRequestPresentationRetryJobs.remove(it)?.cancel()
         }
@@ -3636,7 +3632,9 @@ class AppViewModel @Inject constructor(
         if (paymentStarted && !error.isDefiniteOnchainPreBroadcastFailure()) {
             Logger.warn("On-chain payment outcome is uncertain after send started", error, context = TAG)
             uncertainOnchainPaymentRequestId = incomingPaymentRequest?.id
-            paykitPaymentProofRepo.onchainPaymentResolution.value?.let(::handlePaykitOnchainPaymentResolution)
+            paykitPaymentProofRepo.onchainPaymentResolutions.value
+                .firstOrNull { it.requestId == incomingPaymentRequest?.id }
+                ?.let(::handlePaykitOnchainPaymentResolution)
             if (uncertainOnchainPaymentRequestId == null) return
             setSendEffect(
                 SendEffect.NavigateToPending(

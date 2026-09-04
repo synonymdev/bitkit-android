@@ -338,6 +338,31 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `onchain failure clears started proof without a live identity`() = test {
+        val request = paymentRequest(MethodId.P2wpkh.rawValue)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(request, ONCHAIN_ADDRESS).getOrThrow()
+        whenever(paykitSdkService.identityStatus()).thenReturn(null)
+
+        repo.failOnchainPayment(request)
+
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `cancel preparation clears proof without a live identity`() = test {
+        val request = paymentRequest(MethodId.Bolt11.rawValue)
+        val repo = paymentProofRepo()
+        repo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning).getOrThrow()
+        whenever(paykitSdkService.identityStatus()).thenReturn(null)
+
+        repo.cancelPreparation(request)
+
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
     fun `onchain proof submits without prepared proof`() = test {
         val txid = "ab".repeat(32)
         val endpoint = MethodId.P2wpkh.rawValue
@@ -563,6 +588,35 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             billingPeriod = isNull(),
         )
         assertTrue(proofCaptor.firstValue.contains(txid))
+    }
+
+    @Test
+    fun `reconcile publishes every onchain resolution`() = test {
+        val secondPaymentRequestId = "550e8400-e29b-41d4-a716-446655440001"
+        val firstRequest = paymentRequest(MethodId.P2wpkh.rawValue)
+        val secondRequest = paymentRequest(MethodId.P2wpkh.rawValue, secondPaymentRequestId)
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(
+                paymentRequestRecord(paymentRequestId = PAYMENT_REQUEST_ID),
+                paymentRequestRecord(paymentRequestId = secondPaymentRequestId),
+            ),
+        )
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any(), isNull()))
+            .thenReturn(paymentRequestRecord())
+        whenever(onchainPaymentLookup.transactionId(any(), any(), any(), any()))
+            .thenReturn("ab".repeat(32), "cd".repeat(32))
+        val repo = paymentProofRepo()
+        repo.prepare(firstRequest, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(firstRequest, ONCHAIN_ADDRESS).getOrThrow()
+        repo.prepare(secondRequest, MethodId.P2wpkh.rawValue, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.markOnchainPaymentStarted(secondRequest, ONCHAIN_ADDRESS).getOrThrow()
+
+        repo.reconcile()
+
+        assertEquals(
+            listOf(PAYMENT_REQUEST_ID, secondPaymentRequestId),
+            repo.onchainPaymentResolutions.value.map { it.requestId.paymentRequestId },
+        )
     }
 
     @Test
