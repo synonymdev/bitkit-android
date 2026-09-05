@@ -954,6 +954,7 @@ class LightningRepoTest : BaseUnitTest() {
     fun `unsuccessful onchain send should not create metadata or sent activity`() = test {
         val errors = listOf(
             NodeException.OnchainTxBroadcastRejected("Broadcast rejected"),
+            NodeException.OnchainTxBroadcastNotDispatched("Broadcast not dispatched"),
             NodeException.OnchainTxBroadcastFailed("Broadcast failed"),
             NodeException.OnchainTxBroadcastTimeout("Broadcast timed out"),
         )
