@@ -812,6 +812,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failed explicit request logs a redacted resolution error`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val failure = IllegalStateException("private payment payload")
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(Result.failure(failure))
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+
+        sut.openIncomingPaymentRequest(request.id)
+        runCurrent()
+
+        verify(paykitPaymentRequestDiagnostics).logPresentationFailure(request.counterparty, failure)
+        verify(paykitPaymentRequestDiagnostics).logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
+        )
+    }
+
+    @Test
     fun `failed request opened from the full screen does not replace it with the request sheet`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
