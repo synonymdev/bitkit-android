@@ -6,6 +6,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.shadows.ShadowLog
+import to.bitkit.utils.Logger
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -16,6 +17,7 @@ class PaykitPaymentRequestDiagnosticsTest {
 
     @Before
     fun setUp() {
+        Logger.reset()
         ShadowLog.clear()
     }
 
@@ -45,7 +47,23 @@ class PaykitPaymentRequestDiagnosticsTest {
         assertFalse(output.contains("secret"))
     }
 
-    private fun paymentRequestDiagnostic(): String = ShadowLog.getLogsForTag("APP")
-        .single { it.msg.contains("Rejected incoming Paykit payment request") }
+    @Test
+    fun `presentation failure logs error type without throwable message`() {
+        val counterparty = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val secret = "private payment payload"
+        sut.logPresentationFailure(counterparty, IllegalStateException(secret))
+
+        val output = paymentRequestDiagnostic("Failed to resolve incoming Paykit payment request")
+
+        assertTrue(output.contains("category='resolution' errorType='IllegalStateException'"))
+        assertTrue(output.contains("counterparty='pubky3r…k8yw5xg'"))
+        assertFalse(output.contains(secret))
+        assertFalse(output.contains(counterparty))
+    }
+
+    private fun paymentRequestDiagnostic(
+        message: String = "Rejected incoming Paykit payment request",
+    ): String = ShadowLog.getLogsForTag("APP")
+        .single { it.msg.contains(message) }
         .msg
 }

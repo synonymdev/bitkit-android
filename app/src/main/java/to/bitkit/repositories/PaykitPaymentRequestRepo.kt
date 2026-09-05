@@ -141,6 +141,18 @@ class PaykitPaymentRequestDiagnostics @Inject constructor() {
             context = TAG,
         )
     }
+
+    internal fun logPresentationFailure(
+        counterparty: String,
+        error: Throwable,
+    ) {
+        Logger.warn(
+            "Failed to resolve incoming Paykit payment request: " +
+                "category='resolution' errorType='${error::class.simpleName ?: "Unknown"}' " +
+                "counterparty='${counterparty.redactedForPaymentRequestDiagnostics()}'",
+            context = TAG,
+        )
+    }
 }
 
 private fun String.redactedForPaymentRequestDiagnostics(): String =

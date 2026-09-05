@@ -883,10 +883,12 @@ class AppViewModel @Inject constructor(
         if (!isCurrentPaymentRequestPresentation(request, generation) || isPaymentRequestPresentationBlocked()) {
             return true
         }
-        if (presentationResult.exceptionOrNull() is PaykitPaymentRequestError.RequestExpired) {
+        val error = presentationResult.exceptionOrNull()
+        if (error is PaykitPaymentRequestError.RequestExpired) {
             finishExpiredPaymentRequestPresentation(request)
             return false
         }
+        if (error != null) paykitPaymentRequestDiagnostics.logPresentationFailure(request.counterparty, error)
         if (!paykitPaymentRequestRepo.isPending(request)) {
             if (requestedPaymentRequestId == request.id) {
                 invalidatePaymentRequestPresentation()
