@@ -119,7 +119,7 @@ class LightningServiceTest : BaseUnitTest() {
 
     @Test
     fun `stop destroys the node handle when it is already not running`() = test {
-        whenever(node.stop()).thenThrow(NodeException.NotRunning("not running"))
+        whenever(node.stop()).thenThrow(NodeException.NotRunning())
 
         sut.stop()
 
@@ -403,7 +403,7 @@ class LightningServiceTest : BaseUnitTest() {
     // Regression: a failing node stop must still release the handle instead of rethrowing and leaking it
     @Test
     fun `stop destroys the node handle when node stop throws`() = test {
-        whenever(node.stop()).thenThrow(NodeException.ConnectionFailed("boom"))
+        whenever(node.stop()).thenThrow(NodeException.ConnectionFailed())
 
         sut.stop()
 

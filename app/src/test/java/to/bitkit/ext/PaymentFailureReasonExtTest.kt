@@ -43,7 +43,7 @@ class PaymentFailureReasonExtTest {
         assertEquals(message, Exception("  ").toSendFailureMessage(context))
         assertEquals(
             message,
-            LdkError(NodeException.DuplicatePayment("Duplicate payment.")).toSendFailureMessage(context),
+            LdkError(NodeException.DuplicatePayment()).toSendFailureMessage(context),
         )
     }
 
@@ -56,11 +56,11 @@ class PaymentFailureReasonExtTest {
     fun `compact failure types use android ldk error classes`() {
         assertEquals(
             "DuplicatePayment",
-            LdkError(NodeException.DuplicatePayment("Duplicate payment.")).toCompactFailureType(),
+            LdkError(NodeException.DuplicatePayment()).toCompactFailureType(),
         )
         assertEquals(
             "InvalidCustomTlvs",
-            LdkError(NodeException.InvalidCustomTlvs("Invalid custom TLVs")).toCompactFailureType(),
+            LdkError(NodeException.InvalidCustomTlvs()).toCompactFailureType(),
         )
     }
 
