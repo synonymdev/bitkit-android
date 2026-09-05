@@ -29,6 +29,7 @@ import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Node
+import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PeerDetails
@@ -893,15 +894,16 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `sendOnChain should cache activity meta data`() = test {
+    fun `accepted onchain send should create metadata and sent activity`() = test {
         val mockSettingsData = SettingsData(
             defaultTransactionSpeed = TransactionSpeed.Fast,
             coinSelectAuto = false // Disable auto coin selection to simplify the test
         )
+        val activityService = mock<ActivityService>()
         whenever(settingsStore.data).thenReturn(flowOf(mockSettingsData))
 
         whenever(preActivityMetadataRepo.addPreActivityMetadata(any())).thenReturn(Result.success(Unit))
-        whenever(coreService.activity).thenReturn(mock())
+        whenever(coreService.activity).thenReturn(activityService)
 
         whenever(
             lightningService.send(
@@ -937,6 +939,69 @@ class LightningRepoTest : BaseUnitTest() {
         verifyBlocking(preActivityMetadataRepo) {
             addPreActivityMetadata(any())
         }
+        verify(activityService).createSentOnchainActivityFromSendResult(
+            txid = "testPaymentId",
+            address = "test_address",
+            amount = 1000uL,
+            fee = 0uL,
+            feeRate = 10uL,
+            isTransfer = true,
+            channelId = "test_channel_id",
+        )
+    }
+
+    @Test
+    fun `unsuccessful onchain send should not create metadata or sent activity`() = test {
+        val errors = listOf(
+            NodeException.OnchainTxBroadcastRejected("Broadcast rejected"),
+            NodeException.OnchainTxBroadcastNotDispatched("Broadcast not dispatched"),
+            NodeException.OnchainTxBroadcastFailed("Broadcast failed"),
+            NodeException.OnchainTxBroadcastTimeout("Broadcast timed out"),
+        )
+        val activityService = mock<ActivityService>()
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    defaultTransactionSpeed = TransactionSpeed.Fast,
+                    coinSelectAuto = false,
+                )
+            )
+        )
+        whenever(coreService.activity).thenReturn(activityService)
+        startNodeForTesting()
+        val spySut = spy(sut)
+        doReturn(Result.success(10uL)).whenever(spySut).getFeeRateForSpeed(any(), anyOrNull())
+
+        errors.forEach { error ->
+            whenever(
+                lightningService.send(
+                    address = any(),
+                    sats = any(),
+                    satsPerVByte = any(),
+                    utxosToSpend = anyOrNull(),
+                    isMaxAmount = any(),
+                )
+            ).thenAnswer { throw error }
+
+            val result = spySut.sendOnChain(
+                address = "test_address",
+                sats = 1000uL,
+                speed = TransactionSpeed.Fast,
+            )
+
+            assertEquals(error, result.exceptionOrNull())
+        }
+        verifyBlocking(preActivityMetadataRepo, never()) { addPreActivityMetadata(any()) }
+        verify(activityService, never()).createSentOnchainActivityFromSendResult(
+            txid = any(),
+            address = any(),
+            amount = any(),
+            fee = any(),
+            feeRate = any(),
+            isTransfer = any(),
+            channelId = anyOrNull(),
+            walletId = any(),
+        )
     }
 
     @Test
