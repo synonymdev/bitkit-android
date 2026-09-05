@@ -57,6 +57,35 @@ sealed interface PublicPaykitPaymentResult {
     data object WaitingForUpdatedPaymentList : PublicPaykitPaymentResult
 }
 
+internal enum class IncomingPaykitPaymentRequestFailureReason(
+    val logValue: String,
+) {
+    NoSupportedEndpoint("no_supported_endpoint"),
+    EndpointNotPayable("endpoint_not_payable"),
+    PaymentDetailsPending("payment_details_pending"),
+    InvalidPaymentTarget("invalid_payment_target"),
+    PaymentTargetNotRoutable("payment_target_not_routable"),
+    RequestExpired("request_expired"),
+    ResolutionFailed("resolution_failed"),
+    ;
+
+    val category: String
+        get() = when (this) {
+            NoSupportedEndpoint, EndpointNotPayable, PaymentDetailsPending, ResolutionFailed -> "resolution"
+            InvalidPaymentTarget, PaymentTargetNotRoutable, RequestExpired -> "presentation"
+        }
+}
+
+internal val PublicPaykitPaymentResult.incomingPaymentRequestFailureReason:
+    IncomingPaykitPaymentRequestFailureReason?
+    get() = when (this) {
+        is PublicPaykitPaymentResult.Opened -> null
+        PublicPaykitPaymentResult.NoEndpoint -> IncomingPaykitPaymentRequestFailureReason.NoSupportedEndpoint
+        PublicPaykitPaymentResult.NotOpened -> IncomingPaykitPaymentRequestFailureReason.EndpointNotPayable
+        PublicPaykitPaymentResult.WaitingForUpdatedPaymentList ->
+            IncomingPaykitPaymentRequestFailureReason.PaymentDetailsPending
+    }
+
 data class PrivatePaykitPaymentContext(
     val receiverPath: String,
     val paymentListVersion: ULong,

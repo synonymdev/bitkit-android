@@ -1193,6 +1193,7 @@
     <string name="wallet__payment_request_dismiss">Dismiss</string>
     <string name="wallet__payment_request_edit_expiration">Edit expiration</string>
     <string name="wallet__payment_request_enter_pubky">Enter pubky</string>
+    <string name="wallet__payment_request_expired">The payment request has expired.</string>
     <string name="wallet__payment_request_expires">Expires in</string>
     <string name="wallet__payment_request_expiry_day">1 day</string>
     <string name="wallet__payment_request_expiry_hour">1 hour</string>
@@ -1222,6 +1223,7 @@
     <string name="wallet__payment_request_status_rejected">Rejected</string>
     <string name="wallet__payment_request_status_unavailable">Unavailable</string>
     <string name="wallet__payment_request_timestamp">%1$s at %2$s</string>
+    <string name="wallet__payment_request_unavailable">The payment request is no longer available.</string>
     <string name="wallet__payment_request_waiting">Waiting for payment</string>
     <string name="wallet__payment_request_waiting_for_details">Waiting for updated private payment details. Bitkit will retry automatically.</string>
     <string name="wallet__payment_request_waiting_for_recipient">Waiting for %1$s to pay</string>

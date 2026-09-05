@@ -8,6 +8,7 @@ import com.synonym.paykit.OutboundPrivateMessageStatus
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
+import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PrivateJsonObject
 import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
 import kotlinx.coroutines.CoroutineDispatcher
@@ -75,6 +76,24 @@ data class PaykitPaymentRequest(
     val direction: PaykitPaymentRequestDirection = PaykitPaymentRequestDirection.Incoming,
     val lifecycleState: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROPOSED,
 ) {
+    enum class ParseFailure(
+        val logValue: String,
+        val shouldLogIncomingRejection: Boolean = true,
+    ) {
+        MissingLocalRole("missing_local_role"),
+        OutgoingRequest("outgoing_request", shouldLogIncomingRejection = false),
+        UnsupportedLocalRole("unsupported_local_role"),
+        NonActionableState("non_actionable_state", shouldLogIncomingRejection = false),
+        MissingTerms("missing_terms"),
+        RecurringRequest("recurring_request"),
+        UnsupportedAsset("unsupported_asset"),
+        InvalidAmount("invalid_amount"),
+        AmountOutOfRange("amount_out_of_range"),
+        NoSupportedEndpoint("no_supported_endpoint"),
+        InvalidExpiration("invalid_expiration"),
+        Expired("expired"),
+    }
+
     val id: PaykitPaymentRequestId
         get() = PaykitPaymentRequestId(paymentRequestId, counterparty, counterpartyReceiverPath)
 
@@ -88,6 +107,63 @@ data class PaykitPaymentRequest(
 
     fun acceptsPaymentAmount(amountSats: ULong): Boolean = amountSats == this.amountSats
 }
+
+internal sealed interface PaykitPaymentRequestParseResult {
+    data class Parsed(val request: PaykitPaymentRequest) : PaykitPaymentRequestParseResult
+    data class Rejected(val reason: PaykitPaymentRequest.ParseFailure) : PaykitPaymentRequestParseResult
+}
+
+@Singleton
+class PaykitPaymentRequestDiagnostics @Inject constructor() {
+    companion object {
+        private const val TAG = "PaykitPaymentRequestDiagnostics"
+    }
+
+    internal fun logParseRejection(
+        counterparty: String,
+        reason: PaykitPaymentRequest.ParseFailure,
+    ) {
+        Logger.warn(
+            "Rejected incoming Paykit payment request: category='parse' reason='${reason.logValue}' " +
+                "counterparty='${counterparty.redactedForPaymentRequestDiagnostics()}'",
+            context = TAG,
+        )
+    }
+
+    internal fun logPresentationRejection(
+        counterparty: String,
+        reason: IncomingPaykitPaymentRequestFailureReason,
+    ) {
+        Logger.warn(
+            "Rejected incoming Paykit payment request presentation: category='${reason.category}' " +
+                "reason='${reason.logValue}' " +
+                "counterparty='${counterparty.redactedForPaymentRequestDiagnostics()}'",
+            context = TAG,
+        )
+    }
+
+    internal fun logPresentationFailure(
+        counterparty: String,
+        error: Throwable,
+    ) {
+        Logger.warn(
+            "Failed to resolve incoming Paykit payment request: " +
+                "category='resolution' errorType='${error::class.simpleName ?: "Unknown"}' " +
+                "counterparty='${counterparty.redactedForPaymentRequestDiagnostics()}'",
+            context = TAG,
+        )
+    }
+}
+
+private fun String.redactedForPaymentRequestDiagnostics(): String =
+    PubkyPublicKeyFormat.normalized(this)?.let(PubkyPublicKeyFormat::redacted) ?: "<invalid>"
+
+private data class ParsedPaykitPaymentRequestTerms(
+    val terms: PaymentRequestTerms,
+    val amountSats: ULong,
+    val endpoints: List<String>,
+    val expiresAt: Instant?,
+)
 
 enum class PaykitPaymentRequestDeliveryStatus { Queued, Sent }
 
@@ -133,6 +209,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
     private val paykitSdkService: PaykitSdkService,
     private val settingsStore: SettingsStore,
     private val presentationStore: PaykitPaymentRequestPresentationStore,
+    private val diagnostics: PaykitPaymentRequestDiagnostics,
     private val clock: Clock,
 ) {
     companion object {
@@ -383,7 +460,17 @@ class PaykitPaymentRequestRepo @Inject constructor(
         paykitSdkService.receivePrivateMessagesFromLinkedPeers().also(::logIntakeFailures)
         val now = clock.now()
         val records = paykitSdkService.paymentRequests()
-        val incoming = records.mapNotNull { it.toPaykitPaymentRequest(PaymentRequestLocalRole.PAYER, now) }
+        val incoming = records.mapNotNull { record ->
+            when (val result = record.parseIncomingPaykitPaymentRequest(now)) {
+                is PaykitPaymentRequestParseResult.Parsed -> result.request
+                is PaykitPaymentRequestParseResult.Rejected -> {
+                    if (result.reason.shouldLogIncomingRejection) {
+                        diagnostics.logParseRejection(record.counterparty, result.reason)
+                    }
+                    null
+                }
+            }
+        }
         val history = records.mapNotNull { it.toPaykitPaymentRequestHistory(now) }
             .sortedByDescending { it.createdAt }
         if (
@@ -613,65 +700,113 @@ private fun List<PaykitPaymentRequest>.withExpiredLifecycle(now: Instant): List<
 
 private val bitcoinAmountPattern = Regex("(?:[0-9]+(?:\\.[0-9]*)?|\\.[0-9]+)")
 
+internal fun PaymentRequestRecord.parseIncomingPaykitPaymentRequest(
+    now: Instant,
+): PaykitPaymentRequestParseResult = parsePaykitPaymentRequest(
+    expectedRole = PaymentRequestLocalRole.PAYER,
+    now = now,
+    requiresActionableRequest = true,
+)
+
 @Suppress("CyclomaticComplexMethod", "ReturnCount")
-private fun PaymentRequestRecord.toPaykitPaymentRequest(
+private fun PaymentRequestRecord.parsePaykitPaymentRequest(
     expectedRole: PaymentRequestLocalRole,
     now: Instant,
     requiresActionableRequest: Boolean = true,
-): PaykitPaymentRequest? {
-    if (localRole != expectedRole || state == PaymentRequestLifecycleState.ACTIVE_RECURRING) return null
-    if (requiresActionableRequest && state != PaymentRequestLifecycleState.PROPOSED) return null
-    val requestTerms = terms ?: return null
-    if (requestTerms.recurrence != null || requestTerms.amount.asset != "btc") return null
+): PaykitPaymentRequestParseResult {
+    val role = localRole
+        ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.MissingLocalRole)
+    if (role != expectedRole) {
+        return PaykitPaymentRequestParseResult.Rejected(
+            if (expectedRole == PaymentRequestLocalRole.PAYER && role == PaymentRequestLocalRole.PAYEE) {
+                PaykitPaymentRequest.ParseFailure.OutgoingRequest
+            } else {
+                PaykitPaymentRequest.ParseFailure.UnsupportedLocalRole
+            },
+        )
+    }
+    if (requiresActionableRequest && state != PaymentRequestLifecycleState.PROPOSED) {
+        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.NonActionableState)
+    }
+    if (state == PaymentRequestLifecycleState.ACTIVE_RECURRING) {
+        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.RecurringRequest)
+    }
+    val requestTerms = terms
+        ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.MissingTerms)
+    if (requestTerms.recurrence != null) {
+        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.RecurringRequest)
+    }
+    if (requestTerms.amount.asset != "btc") {
+        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
+    }
     val amountSats = requestTerms.amount.value.toSats()
-        ?.takeIf { it <= ULong.MAX_VALUE / 1000uL }
-        ?: return null
+        ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.InvalidAmount)
+    if (amountSats > ULong.MAX_VALUE / 1000uL) {
+        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.AmountOutOfRange)
+    }
     val endpoints = requestTerms.acceptedPaymentEndpointIdentifiers
         .filter { MethodId.fromRawValue(it) != null }
         .distinct()
-    if (requiresActionableRequest && endpoints.isEmpty()) return null
+    if (requiresActionableRequest && endpoints.isEmpty()) {
+        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.NoSupportedEndpoint)
+    }
 
     val expiresAt = requestTerms.proposalExpiresAt?.let {
-        runCatching { Instant.parse(it) }.getOrNull() ?: return null
+        runCatching { Instant.parse(it) }.getOrNull()
+            ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.InvalidExpiration)
     }
-    if (requiresActionableRequest && expiresAt != null && expiresAt <= now) return null
+    if (requiresActionableRequest && expiresAt != null && expiresAt <= now) {
+        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.Expired)
+    }
 
-    return PaykitPaymentRequest(
-        paymentRequestId = paymentRequestId,
-        counterparty = counterparty,
-        counterpartyReceiverPath = counterpartyReceiverPath,
-        amountValue = requestTerms.amount.value,
-        amountSats = amountSats,
-        note = requestTerms.metadata.note(),
-        createdAt = lastEventAt?.let { runCatching { Instant.parse(it) }.getOrNull() },
-        expiresAt = expiresAt,
-        acceptedPaymentEndpointIdentifiers = endpoints,
-        deliveryStatus = if (expectedRole == PaymentRequestLocalRole.PAYEE) {
-            if (proposalOutboundStatus == OutboundPrivateMessageStatus.SENT) {
-                PaykitPaymentRequestDeliveryStatus.Sent
-            } else {
-                PaykitPaymentRequestDeliveryStatus.Queued
-            }
-        } else {
-            null
-        },
-        direction = if (expectedRole == PaymentRequestLocalRole.PAYER) {
-            PaykitPaymentRequestDirection.Incoming
-        } else {
-            PaykitPaymentRequestDirection.Outgoing
-        },
-        lifecycleState = if (state == PaymentRequestLifecycleState.PROPOSED && expiresAt?.let { it <= now } == true) {
-            PaymentRequestLifecycleState.PROPOSAL_EXPIRED
-        } else {
-            state
-        },
-    )
+    val parsedTerms = ParsedPaykitPaymentRequestTerms(requestTerms, amountSats, endpoints, expiresAt)
+    return PaykitPaymentRequestParseResult.Parsed(toPaykitPaymentRequest(expectedRole, parsedTerms, now))
 }
+
+private fun PaymentRequestRecord.toPaykitPaymentRequest(
+    expectedRole: PaymentRequestLocalRole,
+    parsedTerms: ParsedPaykitPaymentRequestTerms,
+    now: Instant,
+) = PaykitPaymentRequest(
+    paymentRequestId = paymentRequestId,
+    counterparty = counterparty,
+    counterpartyReceiverPath = counterpartyReceiverPath,
+    amountValue = parsedTerms.terms.amount.value,
+    amountSats = parsedTerms.amountSats,
+    note = parsedTerms.terms.metadata.note(),
+    createdAt = lastEventAt?.let { runCatching { Instant.parse(it) }.getOrNull() },
+    expiresAt = parsedTerms.expiresAt,
+    acceptedPaymentEndpointIdentifiers = parsedTerms.endpoints,
+    deliveryStatus = if (expectedRole == PaymentRequestLocalRole.PAYEE) {
+        if (proposalOutboundStatus == OutboundPrivateMessageStatus.SENT) {
+            PaykitPaymentRequestDeliveryStatus.Sent
+        } else {
+            PaykitPaymentRequestDeliveryStatus.Queued
+        }
+    } else {
+        null
+    },
+    direction = if (expectedRole == PaymentRequestLocalRole.PAYER) {
+        PaykitPaymentRequestDirection.Incoming
+    } else {
+        PaykitPaymentRequestDirection.Outgoing
+    },
+    lifecycleState = if (
+        state == PaymentRequestLifecycleState.PROPOSED && parsedTerms.expiresAt?.let { it <= now } == true
+    ) {
+        PaymentRequestLifecycleState.PROPOSAL_EXPIRED
+    } else {
+        state
+    },
+)
 
 private fun PaymentRequestRecord.toPaykitPaymentRequestHistory(now: Instant): PaykitPaymentRequest? {
     val role = localRole ?: return null
     if (role == PaymentRequestLocalRole.UNKNOWN) return null
-    return toPaykitPaymentRequest(role, now, requiresActionableRequest = false)
+    return when (val result = parsePaykitPaymentRequest(role, now, requiresActionableRequest = false)) {
+        is PaykitPaymentRequestParseResult.Parsed -> result.request
+        is PaykitPaymentRequestParseResult.Rejected -> null
+    }
 }
 
 private fun PaymentRequestRecord.toCreatedPaykitPaymentRequest(
