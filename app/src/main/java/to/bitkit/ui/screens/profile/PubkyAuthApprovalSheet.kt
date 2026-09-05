@@ -348,7 +348,9 @@ private fun ColumnScope.AuthorizeContent(
         PrimaryButton(
             text = stringResource(R.string.profile__auth_approval_authorize),
             onClick = onAuthorize,
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .testTag("PubkyAuthAuthorize")
         )
     }
     VerticalSpacer(16.dp)
@@ -420,6 +422,7 @@ private fun ColumnScope.SuccessContent(
     PrimaryButton(
         text = stringResource(R.string.profile__auth_approval_ok),
         onClick = onDismiss,
+        modifier = Modifier.testTag("PubkyAuthOK")
     )
     VerticalSpacer(16.dp)
 }
