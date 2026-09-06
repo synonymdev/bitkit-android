@@ -10,6 +10,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.toHex
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.utils.AppError
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
@@ -21,10 +22,12 @@ class PaykitSdkServiceTest {
     private val basePubkyClientConfig = PubkyClientConfig(
         requestTimeoutSecs = 30uL,
         localTestnetHost = null,
+        authRelayUrl = null,
     )
 
     @Test
     fun `config scopes public endpoint sync to Bitkit managed endpoints`() {
+        assertEquals(BitkitPaykitSdkConfig.profileNamespace, BitkitPaykitSdkConfig.clientId)
         assertEquals(EndpointManagementScope.MANAGED_ONLY, BitkitPaykitSdkConfig.endpointManagementScope)
         assertEquals(PublicContactSharingPolicy.LOCAL_ONLY, BitkitPaykitSdkConfig.publicContactSharing)
         assertEquals(EncryptedLinkRecoveryMarkerPolicy.ENABLED, BitkitPaykitSdkConfig.encryptedLinkRecoveryMarkers)
@@ -50,6 +53,18 @@ class PaykitSdkServiceTest {
 
         assertEquals("192.0.2.1", config.localTestnetHost)
         assertEquals(basePubkyClientConfig.requestTimeoutSecs, config.requestTimeoutSecs)
+    }
+
+    @Test
+    fun `approval uses external requester client id`() {
+        assertEquals("paykit.test", validatedApprovalClientId("paykit.test", "paykit.test"))
+    }
+
+    @Test
+    fun `approval rejects a mismatched client id`() {
+        assertFailsWith<PubkyAuthRequestError.RequesterChanged> {
+            validatedApprovalClientId("paykit.test", "different.test")
+        }
     }
 
     @Test
@@ -150,7 +165,7 @@ class PaykitSdkServiceTest {
         val provider = PaykitSdkSessionProvider(keychain)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved-session")
 
-        assertTrue(provider.canDeferStaleSession("import Pubky session from platform provider"))
+        assertTrue(provider.canDeferStaleSession("restore Pubky grant session from platform provider"))
         provider.suspendStoredSessionAccess()
         assertNull(provider.loadSessionAccess())
     }
@@ -161,8 +176,25 @@ class PaykitSdkServiceTest {
         val provider = PaykitSdkSessionProvider(keychain)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
 
-        assertTrue(!provider.canDeferStaleSession("import Pubky session from platform provider"))
+        assertTrue(!provider.canDeferStaleSession("restore Pubky grant session from platform provider"))
         assertTrue(!provider.canDeferStaleSession("local Pubky secret key does not match session public key"))
+    }
+
+    @Test
+    fun `session teardown attempts both credentials with session first`() {
+        val attemptedKeys = mutableListOf<String>()
+
+        assertFailsWith<AppError> {
+            clearPubkySessionCredentials {
+                attemptedKeys += it
+                if (it == Keychain.Key.PAYKIT_SESSION.name) throw AppError("Delete failed")
+            }
+        }
+
+        assertEquals(
+            listOf(Keychain.Key.PAYKIT_SESSION.name, Keychain.Key.PUBKY_SECRET_KEY.name),
+            attemptedKeys,
+        )
     }
 
     private fun keyStore(

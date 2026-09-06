@@ -38,6 +38,7 @@ enum class PubkyAuthClaim(val wireValue: String) {
 
 sealed class PubkyAuthRequestError(cause: Throwable? = null) : AppError(cause = cause) {
     class InvalidUrl(cause: Throwable) : PubkyAuthRequestError(cause)
+    data object RequesterChanged : PubkyAuthRequestError()
     data object MissingBitkitClaim : PubkyAuthRequestError()
     data object DuplicateBitkitClaim : PubkyAuthRequestError()
     data class UnsupportedBitkitClaim(val value: String) : PubkyAuthRequestError()
@@ -64,6 +65,7 @@ data class PubkyAuthPermission(
 
 data class PubkyAuthRequest(
     val rawUrl: String,
+    val clientId: String,
     val relay: String,
     val capabilities: String,
     val permissions: List<PubkyAuthPermission>,
@@ -73,12 +75,14 @@ data class PubkyAuthRequest(
     companion object {
         fun parse(
             rawUrl: String,
+            clientId: String,
             relay: String,
             capabilities: String,
         ): Result<PubkyAuthRequest> = parseBitkitClaim(rawUrl, capabilities).map { bitkitClaim ->
             val permissions = parseCapabilities(capabilities)
             PubkyAuthRequest(
                 rawUrl = rawUrl,
+                clientId = clientId,
                 relay = relay,
                 capabilities = capabilities,
                 permissions = permissions,

@@ -29,6 +29,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -43,6 +44,7 @@ import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
+import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Display
@@ -379,6 +381,13 @@ private fun ColumnScope.ApprovalDetails(
         VerticalSpacer(26.dp)
 
         DescriptionText(serviceName = uiState.serviceName)
+        VerticalSpacer(8.dp)
+        BodyS(
+            text = stringResource(R.string.profile__auth_approval_requester, uiState.clientId),
+            color = Colors.White64,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
         VerticalSpacer(32.dp)
 
         PermissionsSection(permissions = uiState.permissions)
@@ -572,6 +581,7 @@ private fun AuthorizePreview() {
             Content(
                 uiState = PubkyAuthApprovalUiState(
                     state = ApprovalState.Authorize,
+                    clientId = "app.paykit.server",
                     serviceName = "pubky.app",
                     permissions = persistentListOf(
                         PubkyAuthPermission(path = "/pub/pubky.app/", accessLevel = "rw"),

@@ -22,7 +22,7 @@ appcompat = { module = "androidx.appcompat:appcompat", version = "1.7.1" }
 barcode-scanning = { module = "com.google.mlkit:barcode-scanning", version = "17.3.0" }
 biometric = { module = "androidx.biometric:biometric", version = "1.4.0-alpha05" }
 bitkit-core = { module = "com.synonym:bitkit-core-android", version = "0.5.14" }
-paykit = { module = "com.synonym:paykit-android", version = "0.1.0-rc46" }
+paykit = { module = "com.synonym:paykit-android", version = "0.1.0-rc51" }
 bouncycastle-provider-jdk = { module = "org.bouncycastle:bcprov-jdk18on", version = "1.83" }
 camera-camera2 = { module = "androidx.camera:camera-camera2", version.ref = "camera" }
 camera-lifecycle = { module = "androidx.camera:camera-lifecycle", version.ref = "camera" }
@@ -62,6 +62,7 @@ ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 ktor-client-content-negotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
+ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "ktor" }
 ktor-serialization-kotlinx-json = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
 ldk-node-android = { module = "com.synonym:ldk-node-android", version = "0.7.0-rc.66" }

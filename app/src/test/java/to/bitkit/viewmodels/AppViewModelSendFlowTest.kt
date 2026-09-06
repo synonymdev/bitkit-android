@@ -4914,6 +4914,23 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `private Paykit refresh removes pending public endpoints from private-only state`() = test {
+        settingsData.value = SettingsData(
+            sharesPrivatePaykitEndpoints = true,
+            publicPaykitCleanupPending = true,
+        )
+        whenever(publicPaykitRepo.syncPublishedEndpoints(publish = false)).thenReturn(Result.success(Unit))
+
+        sut.refreshPrivatePaykitEndpoints()
+        advanceUntilIdle()
+
+        verify(publicPaykitRepo).syncPublishedEndpoints(publish = false)
+        verify(publicPaykitRepo, never()).syncLocalReceiverMarker()
+        assertFalse(settingsData.value.publicPaykitCleanupPending)
+        verify(privatePaykitRepo).retryPendingEndpointRemoval(emptyList())
+    }
+
+    @Test
     fun `private Paykit refresh republishes marker for private-only sharing`() = test {
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey

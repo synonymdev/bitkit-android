@@ -81,6 +81,7 @@ import to.bitkit.env.Env
 import to.bitkit.ext.fromHex
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
+import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PublicPaykitRepo
@@ -327,9 +328,14 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun approveAuth(authUrl: String, expectedCapabilities: String, secretKeyHex: String) {
+    suspend fun approveAuth(
+        authUrl: String,
+        expectedCapabilities: String,
+        approvedClientId: String,
+        secretKeyHex: String,
+    ) {
         isSetup.await()
-        bootstrap().approveAuth(
+        approvalBootstrap(authUrl, approvedClientId).approveAuth(
             authUrl = authUrl,
             expectedCapabilities = expectedCapabilities,
             localSecretKey = localSecretKey(secretKeyHex),
@@ -339,11 +345,12 @@ class PaykitSdkService @Inject constructor(
     suspend fun approveAuthWithCompanionClaim(
         authUrl: String,
         expectedCapabilities: String,
+        approvedClientId: String,
         secretKeyHex: String,
         claim: PubkyAuthCompanionClaim,
     ) {
         isSetup.await()
-        bootstrap().approveAuthWithCompanionClaim(
+        approvalBootstrap(authUrl, approvedClientId).approveAuthWithCompanionClaim(
             authUrl = authUrl,
             expectedCapabilities = expectedCapabilities,
             localSecretKey = localSecretKey(secretKeyHex),
@@ -792,26 +799,18 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun forceSignOut() {
+    suspend fun forgetSessionAccess() {
+        isSetup.await()
         operationMutex.withLock {
-            clearSessionAccessLocked()
-            clearStateLocked()
+            activeAuthRequest = null
+            try {
+                withStateRevisionTracking { handle ->
+                    handle.forgetSessionAccess()
+                }
+            } finally {
+                resetRuntime()
+            }
         }
-    }
-
-    suspend fun clearSessionAccess() {
-        operationMutex.withLock {
-            clearSessionAccessLocked()
-            notifyBackupStateChanged()
-        }
-    }
-
-    private suspend fun clearSessionAccessLocked() {
-        sessionProvider.clearLiveSessionAccess()
-        keychain.delete(Keychain.Key.PAYKIT_SESSION.name)
-        keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name)
-        activeAuthRequest = null
-        resetRuntime()
     }
 
     suspend fun clearState() {
@@ -923,7 +922,18 @@ class PaykitSdkService @Inject constructor(
         ).also { sdk = it }
     }
 
-    private fun bootstrap() = PubkySessionBootstrap.withPubkyClientConfig(pubkyClientConfig)
+    private fun bootstrap() = PubkySessionBootstrap.withPubkyClientConfig(
+        clientId = BitkitPaykitSdkConfig.clientId,
+        pubkyClient = pubkyClientConfig,
+    )
+
+    private fun approvalBootstrap(authUrl: String, approvedClientId: String): PubkySessionBootstrap {
+        val requestClientId = parsePubkyAuthUrl(authUrl).clientId.orEmpty()
+        return PubkySessionBootstrap.withPubkyClientConfig(
+            clientId = validatedApprovalClientId(requestClientId, approvedClientId),
+            pubkyClient = pubkyClientConfig,
+        )
+    }
 
     private fun resetRuntime() {
         sdk = null
@@ -962,6 +972,8 @@ class PaykitSdkService @Inject constructor(
 }
 
 internal object BitkitPaykitSdkConfig {
+    val clientId: String
+        get() = profileNamespace
     val profileNamespace: String
         get() = if (Env.network == Network.BITCOIN) "bitkit.to" else "staging.bitkit.to"
     val endpointManagementScope = PaykitSdkDefaults.DEFAULT_ENDPOINT_MANAGEMENT_SCOPE
@@ -988,6 +1000,13 @@ internal fun paykitPubkyClientConfig(
     } else {
         baseConfig
     }
+
+internal fun validatedApprovalClientId(requestClientId: String, approvedClientId: String): String {
+    if (approvedClientId.isBlank() || approvedClientId != requestClientId) {
+        throw PubkyAuthRequestError.RequesterChanged
+    }
+    return requestClientId
+}
 
 private class PaykitSdkStateBlobStore(
     private val keychain: Keychain,
@@ -1053,6 +1072,7 @@ internal class PaykitSdkSessionProvider(
                 ?.let { return it }
 
             PubkySessionAccess(
+                clientId = BitkitPaykitSdkConfig.clientId,
                 sessionSecret = sessionSecret,
                 localSecretKey = loadLocalSecretKey(),
                 receiverNoiseSecretKey = loadOrDeriveReceiverNoiseSecretKey(),
@@ -1066,7 +1086,7 @@ internal class PaykitSdkSessionProvider(
         keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)?.isNotBlank() == true
 
     fun canDeferStaleSession(errorContext: String): Boolean =
-        errorContext == STALE_SESSION_IMPORT_CONTEXT && hasSessionAccess()
+        errorContext == STALE_SESSION_RESTORE_CONTEXT && hasSessionAccess()
 
     fun suspendStoredSessionAccess() = synchronized(lock) {
         liveSessionAccess = null
@@ -1080,13 +1100,12 @@ internal class PaykitSdkSessionProvider(
     override fun clearSessionAccess() {
         clearLiveSessionAccess()
         keychain.accessBlocking {
-            delete(Keychain.Key.PAYKIT_SESSION.name)
-            delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+            clearPubkySessionCredentials(::delete)
         }
     }
 
     private companion object {
-        const val STALE_SESSION_IMPORT_CONTEXT = "import Pubky session from platform provider"
+        const val STALE_SESSION_RESTORE_CONTEXT = "restore Pubky grant session from platform provider"
     }
 
     fun loadLocalSecretKey(): PubkyLocalSecretKey? {
@@ -1138,6 +1157,13 @@ internal object PaykitReceiverNoiseKeyDerivation {
             init(SecretKeySpec(key, "HmacSHA256"))
             doFinal(data)
         }
+}
+
+internal fun clearPubkySessionCredentials(deleteKeychainValue: (String) -> Unit) {
+    val sessionResult = runCatching { deleteKeychainValue(Keychain.Key.PAYKIT_SESSION.name) }
+    val localSecretResult = runCatching { deleteKeychainValue(Keychain.Key.PUBKY_SECRET_KEY.name) }
+    sessionResult.getOrThrow()
+    localSecretResult.getOrThrow()
 }
 
 internal class PaykitReceiverNoiseKeyStore(
