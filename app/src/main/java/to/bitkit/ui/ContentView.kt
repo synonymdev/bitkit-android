@@ -200,6 +200,7 @@ import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
+import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.sheets.BTCPayConnectionSheet
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
@@ -732,7 +733,8 @@ fun ContentView(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(Colors.Black),
+                        .background(Colors.Black)
+                        .blockPointerInputPassthrough(),
                     contentAlignment = Alignment.Center,
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

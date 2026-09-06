@@ -196,6 +196,27 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `Ring signup clears credentials when pending setup persistence and rollback fail`() = test {
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite"))
+            .thenReturn(mock<PubkySessionBootstrapResult>())
+        whenever(settingsStore.setPubkyProfileSetupPending(true)).thenAnswer {
+            throw TestAppError("persistence failed")
+        }
+        whenever(pubkyService.forgetSessionAccess()).thenAnswer {
+            throw TestAppError("cleanup failed")
+        }
+
+        assertTrue(sut.approveSignupAuth(ringSignupRequest()).isFailure)
+
+        verify(keychain).delete(Keychain.Key.PAYKIT_SESSION.name)
+        verify(keychain).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.isAuthenticated.value)
+        assertFalse(profileSetupPending.value)
+    }
+
+    @Test
     fun `identity check fails closed when secure storage cannot be read`() = test {
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenThrow(IllegalStateException("unavailable"))
 

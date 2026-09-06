@@ -969,10 +969,11 @@ class PubkyRepo @Inject constructor(
         managedSecretKeyFor(publicKey) != null
     }.getOrDefault(false)
 
-    fun hasIdentity(): Boolean =
+    suspend fun hasIdentity(): Boolean = withContext(ioDispatcher) {
         _publicKey.value != null ||
             !keychain.loadString(Keychain.Key.PAYKIT_SESSION.name).isNullOrEmpty() ||
             !keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name).isNullOrEmpty()
+    }
 
     suspend fun parseAuthUrl(authUrl: String): Result<PubkyAuthRequest> = runSuspendCatching {
         withContext(ioDispatcher) {
@@ -1036,8 +1037,7 @@ class PubkyRepo @Inject constructor(
                                 .onFailure {
                                     Logger.warn("Failed to roll back Pubky signup session", it, context = TAG)
                                 }
-                            _publicKey.update { null }
-                            _authState.update { PubkyAuthState.Idle }
+                            clearLocalState()
                         }
                     }
                 }
