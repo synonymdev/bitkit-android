@@ -265,6 +265,26 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `completeAuthentication clears credentials when abandoned session cleanup fails`() = test {
+        whenever(pubkyService.startAuth()).thenReturn("auth_uri")
+        whenever(pubkyService.completeAuth()).thenAnswer {
+            runBlocking { sut.cancelAuthentication() }
+            Unit
+        }
+        whenever(pubkyService.signOut()).thenAnswer { throw TestAppError("Server error") }
+        whenever(pubkyService.forgetSessionAccess()).thenAnswer { throw TestAppError("Cleanup error") }
+
+        val authRequest = startAuthForTesting()
+        approveAuthForTesting(authRequest)
+        val result = sut.completeAuthentication()
+
+        assertTrue(result.isFailure)
+        assertFalse(sut.isAuthenticated.value)
+        verify(keychain).delete(Keychain.Key.PAYKIT_SESSION.name)
+        verify(keychain).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+    }
+
+    @Test
     fun `completeAuthentication should revoke session when canceled during completion`() = test {
         val completionStarted = CompletableDeferred<Unit>()
         val finishCompletion = CompletableDeferred<Unit>()
