@@ -89,7 +89,7 @@ class PrivatePaykitRepo @Inject constructor(
             90.seconds,
         )
         private val initialLinkBurstRetryDelays = List(14) { 2.seconds }
-        private val privatePaymentResolutionRetryDelays = privateMessageDrainRetryDelays.take(3)
+        private val privatePaymentResolutionRetryDelays = listOf(1.seconds, 3.seconds, 8.seconds)
 
         fun isDuplicatePaymentError(error: Throwable): Boolean =
             PrivatePaykitErrorClassifier.isDuplicatePaymentError(error)
@@ -374,6 +374,18 @@ class PrivatePaykitRepo @Inject constructor(
         }.onFailure {
             Logger.warn("Failed to present incoming Paykit payment request", it, context = TAG)
         }
+
+    suspend fun beginPaymentRequestWaitingForUpdatedList(
+        request: PaykitPaymentRequest,
+    ): Result<PublicPaykitPaymentResult> = runSuspendCatching {
+        var result = beginPaymentRequest(request).getOrThrow()
+        for (retryDelay in initialLinkBurstRetryDelays) {
+            if (result != PublicPaykitPaymentResult.WaitingForUpdatedPaymentList) return@runSuspendCatching result
+            delay(retryDelay)
+            result = beginPaymentRequest(request).getOrThrow()
+        }
+        result
+    }
 
     suspend fun consumePrivatePaymentList(
         publicKey: String,

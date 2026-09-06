@@ -12,7 +12,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -33,6 +35,7 @@ fun <T : TabItem> CustomTabRowWithSpacing(
     onTabChange: (T) -> Unit,
     modifier: Modifier = Modifier,
     selectedColor: Color = Colors.Brand,
+    badgeCount: (T) -> Int? = { null },
 ) {
     Column(modifier = modifier) {
         Row(
@@ -54,12 +57,27 @@ fun <T : TabItem> CustomTabRowWithSpacing(
                             .padding(vertical = 8.dp)
                             .testTag("Tab-${tab.name.lowercase()}")
                     ) {
-                        CaptionB(
-                            tab.uiText,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = if (isSelected) Colors.White else Colors.White50
-                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            CaptionB(
+                                tab.uiText,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                color = if (isSelected) Colors.White else Colors.White50
+                            )
+                            badgeCount(tab)?.takeIf { it > 0 }?.let { count ->
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .background(Colors.Brand, CircleShape),
+                                ) {
+                                    CaptionB(text = count.toString(), color = Colors.White)
+                                }
+                            }
+                        }
                     }
 
                     val animatedColor by animateColorAsState(

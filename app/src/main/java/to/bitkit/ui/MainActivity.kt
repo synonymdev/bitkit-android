@@ -39,6 +39,7 @@ import to.bitkit.androidServices.LightningNodeService.Companion.ACTION_START_SER
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.SamRockSetupRequest
+import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.IsOnlineTracker
 import to.bitkit.ui.components.ToastOverlay
@@ -230,6 +231,13 @@ class MainActivity : FragmentActivity() {
     }
 
     private fun handleLaunchIntent(intent: Intent) {
+        if (intent.getBooleanExtra(EXTRA_PAYKIT_SUBSCRIPTION_PAYMENT_DUE, false)) {
+            intent.removeExtra(EXTRA_PAYKIT_SUBSCRIPTION_PAYMENT_DUE)
+            appViewModel.onPaykitSubscriptionNotificationTapped(
+                payerIdentity = intent.getStringExtra(EXTRA_PAYKIT_PAYER_IDENTITY),
+                requestId = intent.paykitPaymentRequestId(),
+            )
+        }
         if (intent.action == UsbManager.ACTION_USB_DEVICE_ATTACHED) {
             handleUsbAttachIntent(intent)
             return
@@ -240,6 +248,20 @@ class MainActivity : FragmentActivity() {
         if (ScreenDeepLinks.detachScreenUri(intent)) {
             setIntent(intent)
         }
+    }
+
+    private fun Intent.paykitPaymentRequestId(): PaykitPaymentRequestId? {
+        val requestId = getStringExtra(EXTRA_PAYKIT_PAYMENT_REQUEST_ID) ?: return null
+        val counterparty = getStringExtra(EXTRA_PAYKIT_COUNTERPARTY) ?: return null
+        val receiverPath = getStringExtra(EXTRA_PAYKIT_COUNTERPARTY_RECEIVER_PATH) ?: return null
+        val billingPeriodStartsAt = getStringExtra(EXTRA_PAYKIT_BILLING_PERIOD_STARTS_AT) ?: return null
+
+        return PaykitPaymentRequestId(
+            paymentRequestId = requestId,
+            counterparty = counterparty,
+            counterpartyReceiverPath = receiverPath,
+            billingPeriodStartsAt = billingPeriodStartsAt,
+        )
     }
 
     /**

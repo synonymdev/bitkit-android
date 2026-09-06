@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.contacts
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,14 +9,20 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -34,10 +41,15 @@ import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.ui.components.ActionButton
 import to.bitkit.ui.components.AddTagSheet
 import to.bitkit.ui.components.BodyM
+import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.CenteredProfileHeader
+import to.bitkit.ui.components.Display
+import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.LinkRow
+import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Text13Up
 import to.bitkit.ui.components.VerticalSpacer
@@ -45,9 +57,13 @@ import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
+import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.shared.modifiers.sheetHeight
+import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.shared.util.shareText
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.withAccent
 
 @Composable
 fun ContactDetailScreen(
@@ -55,12 +71,15 @@ fun ContactDetailScreen(
     onBackClick: () -> Unit,
     onPayContact: (String, String, PrivatePaykitPaymentContext?) -> Unit,
     onActivityClick: (String) -> Unit,
+    canRequestPayment: Boolean = false,
+    onRequestPayment: () -> Unit = {},
     showDeleteAction: Boolean = false,
     onContactDeleted: () -> Unit = {},
     onEditContact: (String) -> Unit = {},
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
+    var showRequestOrPay by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.effects.collect {
@@ -79,7 +98,13 @@ fun ContactDetailScreen(
         showDeleteAction = showDeleteAction,
         onClickDelete = { viewModel.showDeleteConfirmation() },
         onClickCopy = { viewModel.copyPublicKey() },
-        onClickPay = { viewModel.payContact() },
+        onClickPay = {
+            if (canRequestPayment) {
+                showRequestOrPay = true
+            } else {
+                viewModel.payContact()
+            }
+        },
         onClickActivity = { uiState.profile?.publicKey?.let { onActivityClick(it) } },
         onClickShare = { uiState.profile?.publicKey?.let { shareText(context, it) } },
         onClickRetry = { viewModel.loadContact() },
@@ -90,6 +115,89 @@ fun ContactDetailScreen(
         onDismissDeleteDialog = { viewModel.dismissDeleteConfirmation() },
         onConfirmDelete = { viewModel.deleteContact() },
     )
+
+    if (showRequestOrPay && uiState.profile != null) {
+        RequestOrPaySheet(
+            contact = requireNotNull(uiState.profile),
+            onDismiss = { showRequestOrPay = false },
+            onPay = {
+                showRequestOrPay = false
+                viewModel.payContact()
+            },
+            onRequest = {
+                showRequestOrPay = false
+                onRequestPayment()
+            },
+        )
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun RequestOrPaySheet(
+    contact: PubkyProfile,
+    onDismiss: () -> Unit,
+    onPay: () -> Unit,
+    onRequest: () -> Unit,
+) {
+    BottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier
+                .sheetHeight(SheetSize.MEDIUM, isModal = true)
+                .gradientBackground()
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp)
+                .testTag("RequestOrPaySheet")
+        ) {
+            SheetTopBar(titleText = stringResource(R.string.wallet__payment_request_or_pay))
+            FillHeight()
+            Image(
+                painter = painterResource(R.drawable.coin_stack),
+                contentDescription = null,
+                modifier = Modifier
+                    .size(256.dp)
+                    .align(Alignment.CenterHorizontally),
+            )
+            FillHeight()
+            Display(
+                text = stringResource(R.string.wallet__payment_request_or_pay_headline)
+                    .withAccent(accentColor = Colors.Purple),
+            )
+            VerticalSpacer(12.dp)
+            BodyM(
+                text = stringResource(R.string.wallet__payment_request_or_pay_description, contact.name),
+                color = Colors.White64,
+            )
+            VerticalSpacer(24.dp)
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                SecondaryButton(
+                    text = stringResource(R.string.wallet__payment_request_pay),
+                    onClick = onPay,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_sent),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+                PrimaryButton(
+                    text = stringResource(R.string.wallet__payment_request_request),
+                    onClick = onRequest,
+                    icon = {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_received),
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            VerticalSpacer(16.dp)
+        }
+    }
 }
 
 @Composable

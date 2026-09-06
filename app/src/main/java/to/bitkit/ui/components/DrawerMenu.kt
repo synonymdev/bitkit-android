@@ -60,7 +60,7 @@ private const val Z_INDEX_SCRIM = 10f
 private const val Z_INDEX_MENU = 11f
 private val bgScrim = Colors.Black50
 private val drawerBg = Colors.Brand
-private val drawerWidth = 200.dp
+private val drawerWidth = 260.dp
 
 @Composable
 fun DrawerMenu(
@@ -185,7 +185,7 @@ fun DrawerMenu(
                 onBeforeNavigate(Routes.Home)
                 onOpenWalletHome()
             },
-            showPaymentRequests = isPaykitEnabled,
+            showSubscriptions = isPaykitEnabled,
             onBeforeNavigate = onBeforeNavigate,
         )
     }
@@ -200,7 +200,7 @@ private fun Menu(
     onClickContacts: () -> Unit,
     onClickProfile: () -> Unit,
     onClickWallet: () -> Unit,
-    showPaymentRequests: Boolean,
+    showSubscriptions: Boolean,
     onBeforeNavigate: (Routes?) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -235,16 +235,17 @@ private fun Menu(
             modifier = Modifier.testTag("DrawerActivity")
         )
 
-        if (showPaymentRequests) {
+        if (showSubscriptions) {
             DrawerItem(
-                label = stringResource(R.string.wallet__drawer__payment_requests),
-                iconRes = R.drawable.ic_file_text,
+                label = stringResource(R.string.subscriptions__title),
+                iconRes = R.drawable.ic_arrows_clockwise,
                 onClick = {
-                    onBeforeNavigate(Routes.PaymentRequests)
-                    rootNavController.navigateIfNotCurrent(Routes.PaymentRequests)
+                    val route = Routes.Subscriptions()
+                    onBeforeNavigate(route)
+                    rootNavController.navigateIfNotCurrent(route)
                     scope.launch { drawerState.close() }
                 },
-                modifier = Modifier.testTag("DrawerPaymentRequests")
+                modifier = Modifier.testTag("DrawerSubscriptions")
             )
         }
 

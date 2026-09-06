@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import to.bitkit.models.SamRockSetupRequest
+import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.sheets.BackupRoute
@@ -52,6 +53,13 @@ enum class SheetHandlePlacement {
     ContentOverlay,
 }
 
+sealed interface SubscriptionRoute {
+    data class Review(val id: PaykitSubscriptionId) : SubscriptionRoute
+    data class Success(val id: PaykitSubscriptionId) : SubscriptionRoute
+    data class Details(val id: PaykitSubscriptionId) : SubscriptionRoute
+    data class Cancel(val id: PaykitSubscriptionId) : SubscriptionRoute
+}
+
 @Stable
 sealed interface Sheet {
     data class Send(
@@ -63,6 +71,7 @@ sealed interface Sheet {
         val hardwareWalletId: String? = null,
     ) : Sheet
     data object PaymentRequests : Sheet
+    data class Subscription(val route: SubscriptionRoute) : Sheet
     data class Pin(val route: PinRoute = PinRoute.Prompt()) : Sheet
     data object ChangePin : Sheet
     data object DisablePin : Sheet
@@ -132,14 +141,15 @@ fun SheetHost(
     LaunchedEffect(scaffoldState.bottomSheetState.isVisible, visibilityKey) {
         if (scaffoldState.bottomSheetState.isVisible) {
             wasSheetVisible = true
-            if (visibleKey != visibilityKey) {
+            if (currentShouldExpand && visibleKey != visibilityKey) {
                 visibleKey = visibilityKey
                 onVisible()
             }
         } else if (wasSheetVisible) {
+            val dismissedKey = visibleKey
             wasSheetVisible = false
             visibleKey = null
-            onDismiss()
+            if (dismissedKey == visibilityKey) onDismiss()
         }
     }
 

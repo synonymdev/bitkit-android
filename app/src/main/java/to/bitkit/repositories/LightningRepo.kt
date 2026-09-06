@@ -1354,6 +1354,8 @@ class LightningRepo @Inject constructor(
         channelId: String? = null,
         isMaxAmount: Boolean = false,
         tags: List<String> = emptyList(),
+        beforeSendAttempt: suspend () -> Unit = {},
+        onBroadcast: suspend (Txid) -> Unit = {},
     ): Result<Txid> = executeWhenNodeRunning("sendOnChain") {
         require(address.isNotEmpty()) { "Send address cannot be empty" }
 
@@ -1378,7 +1380,9 @@ class LightningRepo @Inject constructor(
 
         Logger.debug("UTXOs selected to spend: $utxosForSend", context = TAG)
 
+        beforeSendAttempt()
         val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount)
+        onBroadcast(txId)
 
         val preActivityMetadata = PreActivityMetadata(
             walletId = WalletScope.default,
