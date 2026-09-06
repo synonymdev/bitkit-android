@@ -75,6 +75,7 @@ sealed class PubkyContactError(message: String) : AppError(message) {
 }
 
 private class PubkyAuthAttemptInactive : AppError("Auth attempt is no longer active")
+data object PubkyAlreadySignedInError : AppError("Already signed in")
 
 private enum class AuthAttemptWaitResult { Approved, Inactive }
 
@@ -553,6 +554,16 @@ class PubkyRepo @Inject constructor(
         tags: List<String>,
         avatarBytes: ByteArray?,
     ): Result<Unit> {
+        if (settingsStore.isPubkyProfileSetupPending.first()) {
+            return runSuspendCatching {
+                withContext(ioDispatcher) {
+                    val publicKey = requireNotNull(_publicKey.value) { "No active Pubky session" }
+                    val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
+                    finishIdentityCreation(publicKey, name, bio, links, tags, imageUrl)
+                }
+            }
+        }
+
         var shouldRevokeSessionOnFailure = false
         return try {
             val result = runSuspendCatching {
@@ -570,8 +581,7 @@ class PubkyRepo @Inject constructor(
                         pubkyService.signIn(secretKeyHex)
                     }
 
-                    val imageUrl = avatarBytes?.let { uploadAvatar(it).getOrNull() }
-                    writeProfile(name, bio, links, tags, imageUrl)
+                    val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
                     shouldRevokeSessionOnFailure = false
                     finishIdentityCreation(publicKeyZ32, name, bio, links, tags, imageUrl)
                 }
@@ -582,6 +592,18 @@ class PubkyRepo @Inject constructor(
             revokeIncompleteIdentitySessionIfNeeded(shouldRevokeSessionOnFailure)
             throw error
         }
+    }
+
+    private suspend fun publishIdentityProfile(
+        name: String,
+        bio: String,
+        links: List<PubkyProfileLink>,
+        tags: List<String>,
+        avatarBytes: ByteArray?,
+    ): String? {
+        val imageUrl = avatarBytes?.let { uploadAvatar(it).getOrNull() }
+        writeProfile(name, bio, links, tags, imageUrl)
+        return imageUrl
     }
 
     private suspend fun finishIdentityCreation(
@@ -605,6 +627,7 @@ class PubkyRepo @Inject constructor(
         _authState.update { PubkyAuthState.Authenticated }
         _profile.update { createdProfile }
         cacheMetadata(createdProfile)
+        settingsStore.setPubkyProfileSetupPending(false)
         notifyBackupStateChanged()
         Logger.info("Created identity for '${redacted(publicKey)}'", context = TAG)
         loadProfile()
@@ -946,8 +969,23 @@ class PubkyRepo @Inject constructor(
         managedSecretKeyFor(publicKey) != null
     }.getOrDefault(false)
 
+    suspend fun hasIdentity(): Boolean = withContext(ioDispatcher) {
+        _publicKey.value != null ||
+            !keychain.loadString(Keychain.Key.PAYKIT_SESSION.name).isNullOrEmpty() ||
+            !keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name).isNullOrEmpty()
+    }
+
     suspend fun parseAuthUrl(authUrl: String): Result<PubkyAuthRequest> = runSuspendCatching {
         withContext(ioDispatcher) {
+            if (PubkyAuthRequest.isSignupUrl(authUrl)) {
+                val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
+                pubkyService.validateSignupRequest(
+                    authorizationUrl = request.authorizationUrl,
+                    homeserverPublicKey = requireNotNull(request.homeserverPublicKey),
+                )
+                return@withContext request
+            }
+
             val details = pubkyService.parseAuthUrl(authUrl)
             PubkyAuthRequest.parse(
                 rawUrl = authUrl,
@@ -955,6 +993,56 @@ class PubkyRepo @Inject constructor(
                 relay = details.relayUrl.orEmpty(),
                 capabilities = details.capabilities.orEmpty(),
             ).getOrThrow()
+        }
+    }
+
+    suspend fun approveSignupAuth(request: PubkyAuthRequest): Result<Unit> = initializeMutex.withLock {
+        runSuspendCatching {
+            withContext(ioDispatcher) {
+                require(request.isSignup) { "Not a Pubky signup request" }
+                if (hasIdentity()) throw PubkyAlreadySignedInError
+
+                val (publicKey, secretKeyHex) = deriveKeys().getOrThrow()
+                if (hasIdentity()) throw PubkyAlreadySignedInError
+
+                settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
+                val registeredSession = pubkyService.registerIdentity(
+                    secretKeyHex = secretKeyHex,
+                    homeserverZ32 = requireNotNull(request.homeserverPublicKey),
+                    signupCode = request.signupToken,
+                )
+                request.authorizationUrl?.let { pubkyService.approveRingAuth(it, secretKeyHex) }
+                var activated = false
+                try {
+                    pubkyService.activateRegisteredIdentity(registeredSession)
+                    activated = true
+                } finally {
+                    if (!activated) {
+                        withContext(NonCancellable) {
+                            settingsStore.setPubkyProfileSetupPending(false)
+                        }
+                    }
+                }
+
+                _publicKey.update { publicKey }
+                _authState.update { PubkyAuthState.Authenticated }
+                var pendingSaved = false
+                try {
+                    settingsStore.setPubkyProfileSetupPending(true)
+                    pendingSaved = true
+                } finally {
+                    if (!pendingSaved) {
+                        withContext(NonCancellable) {
+                            runSuspendCatching { pubkyService.forgetSessionAccess() }
+                                .onFailure {
+                                    Logger.warn("Failed to roll back Pubky signup session", it, context = TAG)
+                                }
+                            clearLocalState()
+                        }
+                    }
+                }
+                notifyBackupStateChanged()
+            }
         }
     }
 
@@ -1320,6 +1408,7 @@ class PubkyRepo @Inject constructor(
                 publicPaykitCleanupPending = publicPaykitCleanupPending,
             )
         }
+        settingsStore.setPubkyProfileSetupPending(false)
     }
 
     private fun requireAddableContactPublicKey(publicKey: String, allowExisting: Boolean = false): String {

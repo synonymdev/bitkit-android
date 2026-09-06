@@ -130,6 +130,9 @@ class SettingsViewModel @Inject constructor(
     val hasSeenProfileIntro = settingsStore.data.map { it.hasSeenProfileIntro }
         .asStateFlow(initialValue = false)
 
+    val isPubkyProfileSetupPending = settingsStore.isPubkyProfileSetupPending
+        .asStateFlow(initialValue = false)
+
     fun setHasSeenProfileIntro(value: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it.copy(hasSeenProfileIntro = value) }

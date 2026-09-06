@@ -4,6 +4,7 @@ import androidx.compose.runtime.Immutable
 import to.bitkit.utils.AppError
 import java.net.URI
 import java.net.URLDecoder
+import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 enum class PubkyAuthClaim(val wireValue: String) {
@@ -71,13 +72,23 @@ data class PubkyAuthRequest(
     val permissions: List<PubkyAuthPermission>,
     val serviceNames: List<String>,
     val bitkitClaim: PubkyAuthClaim?,
+    val homeserverPublicKey: String? = null,
+    val signupToken: String? = null,
+    val authorizationUrl: String? = rawUrl,
 ) {
+    val isSignup: Boolean
+        get() = isSignupUrl(rawUrl)
+
     companion object {
+        @Suppress("LongParameterList")
         fun parse(
             rawUrl: String,
             clientId: String,
             relay: String,
             capabilities: String,
+            homeserverPublicKey: String? = null,
+            signupToken: String? = null,
+            authorizationUrl: String? = rawUrl,
         ): Result<PubkyAuthRequest> = parseBitkitClaim(rawUrl, capabilities).map { bitkitClaim ->
             val permissions = parseCapabilities(capabilities)
             PubkyAuthRequest(
@@ -88,8 +99,75 @@ data class PubkyAuthRequest(
                 permissions = permissions,
                 serviceNames = permissions.mapNotNull { extractServiceName(it.path) }.distinct(),
                 bitkitClaim = bitkitClaim,
+                homeserverPublicKey = homeserverPublicKey,
+                signupToken = signupToken,
+                authorizationUrl = authorizationUrl,
             )
         }
+
+        fun isProtocolUrl(rawUrl: String): Boolean = runCatching {
+            val uri = URI(rawUrl)
+            when (uri.scheme?.lowercase()) {
+                "pubkyauth" -> true
+                "pubkyring" -> uri.host.equals("signup", ignoreCase = true)
+                else -> false
+            }
+        }.getOrDefault(false)
+
+        fun isSignupUrl(rawUrl: String): Boolean = runCatching { URI(rawUrl).isSignupRequest() }.getOrDefault(false)
+
+        fun isDirectSignupUrl(rawUrl: String): Boolean =
+            parseSignup(rawUrl).getOrNull()?.let { it.authorizationUrl == null } ?: false
+
+        fun parseSignup(rawUrl: String): Result<PubkyAuthRequest> = runCatching {
+            val uri = URI(rawUrl)
+            require(uri.isSignupRequest()) { "Unsupported Pubky signup URL" }
+            val query = parseQuery(uri)
+            val homeserver = query.requiredSingle("hs")
+            val authorizesApp = uri.authorizesApp(query)
+            val relay = if (authorizesApp) query.requiredSingle("relay") else ""
+            val secret = if (authorizesApp) query.requiredSingle("secret") else ""
+            val capabilities = if (authorizesApp) query.requiredSingle("caps") else ""
+            val authorizationUrl = if (authorizesApp) {
+                ringAuthorizationUrl(relay, secret, capabilities)
+            } else {
+                null
+            }
+
+            parse(
+                rawUrl = rawUrl,
+                clientId = "",
+                relay = relay,
+                capabilities = capabilities,
+                homeserverPublicKey = homeserver,
+                signupToken = query.optionalSingle("st"),
+                authorizationUrl = authorizationUrl,
+            ).getOrThrow().also {
+                require(it.bitkitClaim == null) { "Pubky signup does not support Bitkit companion claims" }
+            }
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { Result.failure(PubkyAuthRequestError.InvalidUrl(it)) },
+        )
+
+        private fun URI.isSignupRequest(): Boolean = when (scheme?.lowercase()) {
+            "pubkyring" -> host.equals("signup", ignoreCase = true)
+            "pubkyauth" -> isDirectSignupRequest()
+            else -> false
+        }
+
+        private fun URI.isDirectSignupRequest(): Boolean =
+            scheme.equals("pubkyauth", ignoreCase = true) && (host ?: rawAuthority).let {
+                it.equals("direct_signup", ignoreCase = true) || it.equals("signup", ignoreCase = true)
+            }
+
+        private fun URI.authorizesApp(query: Map<String, List<String>>): Boolean =
+            scheme.equals("pubkyring", ignoreCase = true) ||
+                (
+                    scheme.equals("pubkyauth", ignoreCase = true) &&
+                        (host ?: rawAuthority).equals("signup", ignoreCase = true) &&
+                        listOf("relay", "secret", "caps").any(query::containsKey)
+                    )
 
         fun parseBitkitClaim(rawUrl: String, capabilities: String): Result<PubkyAuthClaim?> =
             parseBitkitClaimValues(rawUrl).fold(
@@ -152,5 +230,31 @@ data class PubkyAuthRequest(
         }
 
         private fun decodeQueryComponent(value: String) = URLDecoder.decode(value, StandardCharsets.UTF_8.name())
+
+        private fun ringAuthorizationUrl(relay: String, secret: String, capabilities: String): String =
+            "pubkyauth:///?relay=${encodeQueryComponent(relay)}" +
+                "&secret=${encodeQueryComponent(secret)}&caps=${encodeQueryComponent(capabilities)}"
+
+        private fun encodeQueryComponent(value: String) =
+            URLEncoder.encode(value, StandardCharsets.UTF_8.name()).replace("+", "%20")
+
+        private fun parseQuery(uri: URI): Map<String, List<String>> = uri.rawQuery.orEmpty()
+            .split("&")
+            .filter { it.isNotEmpty() }
+            .map { it.split("=", limit = 2) }
+            .groupBy(
+                keySelector = { decodeQueryComponent(it.first()) },
+                valueTransform = { decodeQueryComponent(it.getOrElse(1) { "" }) },
+            )
+
+        private fun Map<String, List<String>>.requiredSingle(name: String): String =
+            optionalSingle(name)?.takeIf { it.isNotBlank() }
+                ?: throw IllegalArgumentException("Missing Pubky signup parameter: $name")
+
+        private fun Map<String, List<String>>.optionalSingle(name: String): String? {
+            val values = this[name].orEmpty()
+            require(values.size <= 1) { "Duplicate Pubky signup parameter: $name" }
+            return values.singleOrNull()?.takeIf { it.isNotBlank() }
+        }
     }
 }
