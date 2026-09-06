@@ -31,6 +31,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.paykit.PaymentRequestLifecycleState
+import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.launch
 import to.bitkit.R
 import to.bitkit.ext.UiDateStyle
@@ -102,7 +105,7 @@ private fun IncomingPaymentRequestDetailsContent(
 ) {
     val scope = rememberCoroutineScope()
     var isDismissing by remember(request?.id) { mutableStateOf(false) }
-    var selectedTags by remember(request?.id) { mutableStateOf(emptyList<String>()) }
+    var selectedTags by remember(request?.id) { mutableStateOf<ImmutableList<String>>(persistentListOf()) }
     var isAddingTag by remember { mutableStateOf(false) }
 
     Column(
@@ -122,7 +125,7 @@ private fun IncomingPaymentRequestDetailsContent(
             BodyM(
                 text = stringResource(R.string.wallet__payment_request_status_unavailable),
                 color = Colors.White64,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
+                modifier = Modifier.align(Alignment.CenterHorizontally)
             )
             FillHeight()
             return@Column
@@ -160,14 +163,14 @@ private fun IncomingPaymentRequestDetailsContent(
                     value = request.createdAt?.let { uiDateText(it.epochSeconds.toULong(), UiDateStyle.DATE) }
                         ?: stringResource(R.string.wallet__payment_request_status_unavailable),
                     iconRes = R.drawable.ic_calendar,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
                 )
                 RequestDetailCell(
                     title = stringResource(R.string.wallet__payment_request_time),
                     value = request.createdAt?.let { uiDateText(it.epochSeconds.toULong(), UiDateStyle.TIME) }
                         ?: stringResource(R.string.wallet__payment_request_status_unavailable),
                     iconRes = R.drawable.ic_clock,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
                 )
             }
             VerticalSpacer(20.dp)
@@ -187,7 +190,7 @@ private fun IncomingPaymentRequestDetailsContent(
             VerticalSpacer(20.dp)
             PaymentRequestTags(
                 tags = selectedTags,
-                onRemove = { selectedTags -= it },
+                onRemove = { selectedTags = (selectedTags - it).toImmutableList() },
                 onAdd = { isAddingTag = true },
             )
             VerticalSpacer(20.dp)
@@ -205,7 +208,7 @@ private fun IncomingPaymentRequestDetailsContent(
         if (isPending) {
             Row(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
             ) {
                 SecondaryButton(
                     text = stringResource(R.string.wallet__payment_request_dismiss),
@@ -223,10 +226,10 @@ private fun IncomingPaymentRequestDetailsContent(
                         Icon(
                             painter = painterResource(R.drawable.ic_x),
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(16.dp)
                         )
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
                 )
                 PrimaryButton(
                     text = stringResource(R.string.wallet__payment_request_pay),
@@ -236,10 +239,10 @@ private fun IncomingPaymentRequestDetailsContent(
                         Icon(
                             painter = painterResource(R.drawable.ic_coins),
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(16.dp)
                         )
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
                 )
             }
         }
@@ -249,7 +252,7 @@ private fun IncomingPaymentRequestDetailsContent(
         AddTagSheet(
             onDismiss = { isAddingTag = false },
             onSave = { tag ->
-                selectedTags = (selectedTags + tag.trim()).filter(String::isNotBlank).distinct()
+                selectedTags = (selectedTags + tag.trim()).filter(String::isNotBlank).distinct().toImmutableList()
                 isAddingTag = false
             },
         )
@@ -258,7 +261,7 @@ private fun IncomingPaymentRequestDetailsContent(
 
 @Composable
 private fun PaymentRequestTags(
-    tags: List<String>,
+    tags: ImmutableList<String>,
     onRemove: (String) -> Unit,
     onAdd: () -> Unit,
 ) {
@@ -277,7 +280,7 @@ private fun PaymentRequestTags(
         }
         AddTagButton(
             onClick = onAdd,
-            modifier = Modifier.testTag("PaymentRequestAddTag"),
+            modifier = Modifier.testTag("PaymentRequestAddTag")
         )
     }
 }
@@ -325,7 +328,7 @@ private fun RequestDetailCell(
                 painter = painterResource(iconRes),
                 contentDescription = null,
                 tint = Colors.Purple,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(16.dp)
             )
             BodySSB(text = value, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }

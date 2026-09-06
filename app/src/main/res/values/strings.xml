@@ -1050,10 +1050,10 @@
     <string name="subscriptions__first_payment_failed">First Payment Failed</string>
     <string name="subscriptions__first_payment_failed_description">You’re subscribed, but your first payment wasn’t sent.</string>
     <string name="subscriptions__frequency">Frequency</string>
-    <string name="subscriptions__more_info">More Info</string>
     <string name="subscriptions__monthly">Monthly</string>
     <string name="subscriptions__monthly_cost">Monthly Cost</string>
     <string name="subscriptions__monthly_subscription">Monthly Subscription</string>
+    <string name="subscriptions__more_info">More Info</string>
     <string name="subscriptions__ongoing">Ongoing</string>
     <string name="subscriptions__overview">Overview</string>
     <string name="subscriptions__payment_due_description">Open Bitkit to review a subscription payment.</string>
@@ -1066,8 +1066,8 @@
     <string name="subscriptions__proposals">Proposals</string>
     <string name="subscriptions__renews">Renews</string>
     <string name="subscriptions__renews_date">Renews %1$s</string>
-    <string name="subscriptions__review_and_subscribe">Review &amp; Subscribe</string>
     <string name="subscriptions__retry_payment">Retry Payment</string>
+    <string name="subscriptions__review_and_subscribe">Review &amp; Subscribe</string>
     <string name="subscriptions__status">Status</string>
     <string name="subscriptions__subscribed">Subscribed</string>
     <string name="subscriptions__subscription">Subscription</string>
@@ -1240,8 +1240,8 @@
     <string name="wallet__payment_request_amount">Amount</string>
     <string name="wallet__payment_request_choose_recipient">Choose Recipient</string>
     <string name="wallet__payment_request_contact">Contact</string>
-    <string name="wallet__payment_request_dismiss">Dismiss</string>
     <string name="wallet__payment_request_date">Date</string>
+    <string name="wallet__payment_request_dismiss">Dismiss</string>
     <string name="wallet__payment_request_enter_pubky">Enter pubky</string>
     <string name="wallet__payment_request_expires">Expires in</string>
     <string name="wallet__payment_request_expiry_day">1 day</string>
@@ -1260,8 +1260,8 @@
     <string name="wallet__payment_request_recipient">RECIPIENT</string>
     <string name="wallet__payment_request_recipient_no_match">No matching saved contact with a private connection.</string>
     <string name="wallet__payment_request_recipient_unavailable">Payment requests can only be sent to a saved contact with a private connection.</string>
-    <string name="wallet__payment_request_request_payment">Request Payment</string>
     <string name="wallet__payment_request_request">Request</string>
+    <string name="wallet__payment_request_request_payment">Request Payment</string>
     <string name="wallet__payment_request_send">Send Payment Request</string>
     <string name="wallet__payment_request_send_request">Send Request</string>
     <string name="wallet__payment_request_sending">Queued for delivery</string>

@@ -177,10 +177,10 @@ private fun RequestOrPaySheet(
                         Icon(
                             painter = painterResource(R.drawable.ic_sent),
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(16.dp)
                         )
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
                 )
                 PrimaryButton(
                     text = stringResource(R.string.wallet__payment_request_request),
@@ -189,10 +189,10 @@ private fun RequestOrPaySheet(
                         Icon(
                             painter = painterResource(R.drawable.ic_received),
                             contentDescription = null,
-                            modifier = Modifier.size(16.dp),
+                            modifier = Modifier.size(16.dp)
                         )
                     },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(1f)
                 )
             }
             VerticalSpacer(16.dp)

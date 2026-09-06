@@ -1328,7 +1328,7 @@ class PrivatePaykitRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         sut.beginSavedContactPayment(CONTACT_KEY).getOrThrow()
 
-        verifyBlocking(paykitSdkService, times(15)) {
+        verifyBlocking(paykitSdkService, times(4)) {
             prepareAndResolvePrivateContactPayment(CONTACT_KEY, WALLET_RECEIVER_PATH, 7uL)
         }
     }

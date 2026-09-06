@@ -60,13 +60,7 @@ data class PaykitPaymentRequestId(
     val counterparty: String,
     val counterpartyReceiverPath: String,
     val billingPeriodStartsAt: String? = null,
-) {
-    fun belongsTo(subscription: PaykitSubscription): Boolean =
-        billingPeriodStartsAt != null &&
-            paymentRequestId == subscription.paymentRequestId &&
-            counterparty == subscription.counterparty &&
-            counterpartyReceiverPath == subscription.counterpartyReceiverPath
-}
+)
 
 data class PaykitPaymentRequest(
     val paymentRequestId: String,

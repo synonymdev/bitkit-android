@@ -3558,7 +3558,7 @@ class AppViewModel @Inject constructor(
             }.onFailure {
                 cancelPaymentProofPreparation(preparedPaymentProofRequest)
                 val message = getLnurlInvoiceFetchErrorMessage(it)
-                handlePaymentPreparationFailure(Exception(message), contactPaymentContext)
+                handlePaymentPreparationFailure(AppError(message, it), contactPaymentContext)
                 return
             }
         }
@@ -3735,9 +3735,13 @@ class AppViewModel @Inject constructor(
         paymentHash: String,
         error: Throwable,
         isPaymentRequest: Boolean,
-    ): Boolean = when {
-        error is PaymentPendingException -> false
-        error is LightningPaymentFailedError || !isPaymentRequest -> {
+    ): Boolean = when (error) {
+        is PaymentPendingException -> false
+        is LightningPaymentFailedError -> {
+            paykitPaymentProofRepo.failLightningPayment(paymentHash)
+            true
+        }
+        else if !isPaymentRequest -> {
             paykitPaymentProofRepo.failLightningPayment(paymentHash)
             true
         }
@@ -4882,21 +4886,6 @@ class AppViewModel @Inject constructor(
             paymentRequestSheetTransitionJob = job
         } else {
             viewModelScope.launch { presentNextIncomingPaykitPaymentRequest() }
-        }
-    }
-
-    fun rejectIncomingPaymentRequest(request: PaykitPaymentRequest) {
-        if (requestedPaymentRequestId == request.id || request.id in _rejectingPaymentRequestIds.value) {
-            toast(PaykitPaymentRequestError.OperationInProgress)
-            return
-        }
-        _rejectingPaymentRequestIds.update { it + request.id }
-        viewModelScope.launch {
-            try {
-                paykitPaymentRequestRepo.reject(request).onFailure(::toast)
-            } finally {
-                _rejectingPaymentRequestIds.update { it - request.id }
-            }
         }
     }
 

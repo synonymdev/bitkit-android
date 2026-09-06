@@ -114,7 +114,7 @@ fun SubscriptionsScreen(
     val subscriptions by appViewModel.subscriptions.collectAsStateWithLifecycle()
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val pendingPaymentRequests by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
-    val now = rememberSubscriptionNow(subscriptions)
+    val now = rememberSubscriptionNow(subscriptions.toImmutableList())
 
     SubscriptionsContent(
         subscriptions = subscriptions.toImmutableList(),
@@ -190,7 +190,7 @@ internal fun SubscriptionsContent(
             LazyColumn(
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 32.dp),
                 verticalArrangement = Arrangement.spacedBy(32.dp),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             ) {
                 item {
                     SubscriptionMetrics(
@@ -305,7 +305,7 @@ private fun SubscriptionEmptyState(modifier: Modifier = Modifier) {
 private fun SubscriptionMetrics(monthlyCostSats: Long, activeCount: Int) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Caption13Up(text = stringResource(R.string.subscriptions__monthly_cost), color = Colors.White64)
@@ -373,7 +373,7 @@ fun SubscriptionDetailScreen(
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val paymentHistory by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
     val subscription = subscriptions.firstOrNull { it.id == id }
-    val now = rememberSubscriptionNow(listOfNotNull(subscription))
+    val now = rememberSubscriptionNow(listOfNotNull(subscription).toImmutableList())
 
     Column(
         modifier = Modifier
@@ -391,7 +391,7 @@ fun SubscriptionDetailScreen(
             BodyM(
                 text = stringResource(R.string.subscriptions__unavailable),
                 color = Colors.White64,
-                modifier = Modifier.align(Alignment.CenterHorizontally),
+                modifier = Modifier.align(Alignment.CenterHorizontally)
             )
             FillHeight()
             return@Column
@@ -473,7 +473,7 @@ private fun SubscriptionDetailsGrid(subscription: PaykitSubscription, now: Insta
                     Modifier.weight(1f),
                 )
             } else {
-                Spacer(Modifier.weight(1f))
+                FillWidth()
             }
         }
     }
@@ -497,7 +497,7 @@ private fun SubscriptionDetailCell(
                 painter = painterResource(iconRes),
                 contentDescription = null,
                 tint = Colors.Purple,
-                modifier = Modifier.size(16.dp),
+                modifier = Modifier.size(16.dp)
             )
             BodySSB(text = value, maxLines = 2, overflow = TextOverflow.Ellipsis)
         }
@@ -517,13 +517,13 @@ private fun SubscriptionDetailFooter(
     if (!hasMoreInfo && !canCancel) return
     Row(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
         if (hasMoreInfo) {
             SecondaryButton(
                 text = stringResource(R.string.subscriptions__more_info),
                 onClick = { appViewModel.showSheet(Sheet.Subscription(SubscriptionRoute.Details(subscription.id))) },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f)
             )
         }
         if (canCancel) {
@@ -535,7 +535,7 @@ private fun SubscriptionDetailFooter(
                     Icon(
                         painter = painterResource(R.drawable.ic_x),
                         contentDescription = null,
-                        modifier = Modifier.size(16.dp),
+                        modifier = Modifier.size(16.dp)
                     )
                 },
             )
@@ -552,7 +552,7 @@ fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRout
     val isAccepting by appViewModel.isAcceptingSubscription.collectAsStateWithLifecycle()
     val subscription = subscriptions.firstOrNull { it.id == route.id }
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
-    val now = rememberSubscriptionNow(listOfNotNull(subscription))
+    val now = rememberSubscriptionNow(listOfNotNull(subscription).toImmutableList())
 
     LaunchedEffect(route, subscription, isProcessing) {
         val proposalIsUnavailable = route is SubscriptionRoute.Review &&
@@ -691,7 +691,7 @@ private fun SubscriptionReview(
         Image(
             painter = painterResource(R.drawable.subscription_clock),
             contentDescription = null,
-            modifier = Modifier.size(256.dp).align(Alignment.CenterHorizontally),
+            modifier = Modifier.size(256.dp).align(Alignment.CenterHorizontally)
         )
         FillHeight()
         if (subscription.isProposalActionable(now)) {
@@ -737,7 +737,7 @@ private fun SubscriptionProviderCard(
     }
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = cardModifier,
+        modifier = cardModifier
     ) {
         PubkyContactAvatar(profile = contact, size = 40.dp)
         Column(Modifier.padding(start = 16.dp).weight(1f)) {
@@ -777,7 +777,7 @@ fun SubscriptionSuccess(
             composition = composition,
             contentScale = ContentScale.Crop,
             iterations = 100,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier.fillMaxSize()
         )
         Column(
             modifier = Modifier
@@ -789,7 +789,7 @@ fun SubscriptionSuccess(
             Image(
                 painter = painterResource(R.drawable.check),
                 contentDescription = null,
-                modifier = Modifier.size(256.dp).align(Alignment.CenterHorizontally),
+                modifier = Modifier.size(256.dp).align(Alignment.CenterHorizontally)
             )
             FillHeight()
             PrimaryButton(text = stringResource(R.string.common__close), onClick = onClose)
@@ -981,7 +981,7 @@ private fun PaykitSubscription.renewalText(now: Instant): String =
         ?: stringResource(R.string.subscriptions__ongoing)
 
 @Composable
-private fun rememberSubscriptionNow(subscriptions: List<PaykitSubscription>): Instant {
+private fun rememberSubscriptionNow(subscriptions: ImmutableList<PaykitSubscription>): Instant {
     var now by remember(subscriptions) { mutableStateOf(Clock.System.now()) }
     LaunchedEffect(subscriptions, now) {
         val nextTransition = nextSubscriptionTransition(subscriptions, now) ?: return@LaunchedEffect

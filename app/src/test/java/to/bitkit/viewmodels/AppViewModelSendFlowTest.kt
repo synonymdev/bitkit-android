@@ -32,6 +32,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -581,7 +582,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `unaffordable request releases manual presentation state`() = test {
         val request = paymentRequest()
-        whenever { paykitPaymentRequestRepo.reject(request) }.thenReturn(Result.success(Unit))
+        whenever { paykitPaymentRequestRepo.dismiss(request) }.thenReturn(Result.success(Unit))
         pendingPaykitPaymentRequests.value = listOf(request)
         surfacedPaykitPaymentRequestIds += request.id
         setActiveContactPaymentContext(
@@ -597,11 +598,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertNull(activeContactPaymentContext())
         verify(paykitPaymentRequestRepo).markPresented(request)
 
-        sut.rejectIncomingPaymentRequest(request)
+        sut.dismissIncomingPaymentRequest(request)
         runCurrent()
 
         assertTrue(sut.rejectingPaymentRequestIds.value.isEmpty())
-        verify(paykitPaymentRequestRepo).reject(request)
+        verify(paykitPaymentRequestRepo).dismiss(request)
         verify(paykitPaymentRequestRepo, never()).accept(any<PaykitPaymentRequest>())
         verify(privatePaykitRepo, never()).consumePrivatePaymentList(any(), any())
 
@@ -611,28 +612,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `duplicate rejection is ignored while request is rejecting`() = test {
+    fun `duplicate dismissal is ignored while request is dismissing`() = test {
         val request = paymentRequest()
         val rejectionStarted = CompletableDeferred<Unit>()
         val finishRejection = CompletableDeferred<Unit>()
-        whenever { paykitPaymentRequestRepo.reject(request) }.doSuspendableAnswer {
+        whenever { paykitPaymentRequestRepo.dismiss(request) }.doSuspendableAnswer {
             rejectionStarted.complete(Unit)
             finishRejection.await()
             Result.success(Unit)
         }
 
-        sut.rejectIncomingPaymentRequest(request)
+        val rejection = launch { sut.dismissIncomingPaymentRequest(request) }
         rejectionStarted.await()
 
         assertTrue(request.id in sut.rejectingPaymentRequestIds.value)
-        sut.rejectIncomingPaymentRequest(request)
-        verify(paykitPaymentRequestRepo).reject(request)
+        sut.dismissIncomingPaymentRequest(request)
+        verify(paykitPaymentRequestRepo).dismiss(request)
 
         finishRejection.complete(Unit)
+        rejection.join()
         runCurrent()
 
         assertTrue(sut.rejectingPaymentRequestIds.value.isEmpty())
-        verify(paykitPaymentRequestRepo).reject(request)
+        verify(paykitPaymentRequestRepo).dismiss(request)
     }
 
     @Test
