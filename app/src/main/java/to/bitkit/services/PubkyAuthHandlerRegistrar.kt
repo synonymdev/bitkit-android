@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Advertises Bitkit as a `pubkyauth` handler only while it can authorize requests locally. */
+/** Advertises Bitkit as a `pubkyauth` handler for signup or locally managed authorization. */
 @Singleton
 internal class PubkyAuthHandlerRegistrar @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -92,4 +92,4 @@ internal fun canHandlePubkyAuth(
     isPaykitUiEnabled: Boolean,
     hasIdentity: Boolean,
     hasSecretKey: Boolean,
-): Boolean = isPaykitUiEnabled && hasIdentity && hasSecretKey
+): Boolean = isPaykitUiEnabled && (!hasIdentity || hasSecretKey)

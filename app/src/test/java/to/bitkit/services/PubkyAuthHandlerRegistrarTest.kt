@@ -70,13 +70,13 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
     }
 
     @Test
-    fun `handler is disabled without an identity`() = test {
+    fun `handler is enabled for signup without an identity`() = test {
         isPaykitEnabled.value = true
 
         createSut().start(backgroundScope)
         runCurrent()
 
-        verifyComponentState(PackageManager.COMPONENT_ENABLED_STATE_DISABLED)
+        verifyComponentState(PackageManager.COMPONENT_ENABLED_STATE_ENABLED)
         verify(pubkyRepo, never()).hasSecretKey()
     }
 
@@ -93,7 +93,7 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
     }
 
     @Test
-    fun `handler is disabled when the local identity is removed`() = test {
+    fun `handler stays enabled for signup when the local identity is removed`() = test {
         isPaykitEnabled.value = true
         publicKey.value = "pubkylocal"
         whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
@@ -104,7 +104,7 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
         publicKey.value = null
         runCurrent()
 
-        verifyComponentState(PackageManager.COMPONENT_ENABLED_STATE_DISABLED)
+        verifyComponentState(PackageManager.COMPONENT_ENABLED_STATE_ENABLED)
     }
 
     @Test

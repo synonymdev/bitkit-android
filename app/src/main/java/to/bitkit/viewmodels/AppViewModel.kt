@@ -4751,7 +4751,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun rejectPubkySignupForExistingIdentity(): Boolean {
-        val hasIdentity = runCatching { pubkyRepo.hasIdentity() }.getOrElse {
+        val hasIdentity = runSuspendCatching { pubkyRepo.hasIdentity() }.getOrElse {
             ToastEventBus.send(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.profile__auth_error_title),

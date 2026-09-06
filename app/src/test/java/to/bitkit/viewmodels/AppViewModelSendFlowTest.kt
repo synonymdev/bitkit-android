@@ -287,7 +287,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
-        whenever(pubkyRepo.hasIdentity()).thenAnswer { pubkyPublicKey.value != null }
+        whenever { pubkyRepo.hasIdentity() }.thenAnswer { pubkyPublicKey.value != null }
         whenever(pubkyRepo.contacts).thenReturn(pubkyContacts)
         whenever { refreshContactPaykitReceivers(any()) }.thenReturn(Result.success(Unit))
         whenever { publicPaykitRepo.syncLocalReceiverMarker(anyOrNull(), anyOrNull()) }
@@ -1924,6 +1924,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `signup deeplink opens authorization without an existing identity`() = test {
+        enablePaykitUi()
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, legacyAuthorizedSignupAuthUrl.toUri()))
+        advanceUntilIdle()
+
+        assertEquals(Sheet.PubkyAuth(legacyAuthorizedSignupAuthUrl), sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
     }
 
     @Test
