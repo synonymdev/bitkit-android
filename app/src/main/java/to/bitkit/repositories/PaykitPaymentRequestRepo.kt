@@ -91,7 +91,7 @@ data class PaykitPaymentRequest(
         AmountOutOfRange("amount_out_of_range"),
         NoSupportedEndpoint("no_supported_endpoint"),
         InvalidExpiration("invalid_expiration"),
-        Expired("expired"),
+        Expired("expired", shouldLogIncomingRejection = false),
     }
 
     val id: PaykitPaymentRequestId
@@ -434,6 +434,8 @@ class PaykitPaymentRequestRepo @Inject constructor(
 
     fun isPending(request: PaykitPaymentRequest): Boolean =
         !request.isExpired(clock.now()) && _pendingRequests.value.any { it.id == request.id }
+
+    fun isExpired(request: PaykitPaymentRequest): Boolean = request.isExpired(clock.now())
 
     fun isProcessing(request: PaykitPaymentRequest): Boolean = synchronized(processingLock) {
         request.id in processingRequestIds

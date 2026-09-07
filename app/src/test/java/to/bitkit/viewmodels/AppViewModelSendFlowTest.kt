@@ -60,6 +60,7 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowLog
 import to.bitkit.App
 import to.bitkit.CurrentActivity
 import to.bitkit.R
@@ -308,6 +309,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             true
         }
         whenever(paykitPaymentRequestRepo.isPending(any())).thenReturn(true)
+        whenever(paykitPaymentRequestRepo.isExpired(any())).thenReturn(false)
         whenever(paykitPaymentRequestRepo.isProcessing(any())).thenReturn(false)
         whenever { paykitPaymentProofRepo.prepare(any(), any(), any()) }.thenReturn(Result.success(Unit))
         whenever {
@@ -669,19 +671,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     fun `opened request with an invalid target returns to the request sheet`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
-        val invalidTarget = "not-a-payment-invoice"
+        val invalidTarget = "private-payment-invoice"
         whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
         whenever(context.getString(R.string.wallet__payment_request_waiting_for_details)).thenReturn("Waiting")
         whenever(context.getString(R.string.wallet__payment_request_unavailable)).thenReturn(
             "The payment request is no longer available."
         )
         stubOpenedPaymentRequest(request, invalidTarget)
-        whenever(coreService.decode(invalidTarget)).thenThrow(IllegalStateException("invalid"))
+        whenever(coreService.decode(invalidTarget)).thenThrow(IllegalStateException(invalidTarget))
         pendingPaykitPaymentRequests.value = listOf(request)
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         runCurrent()
         clearInvocations(toastManager)
+        ShadowLog.clear()
 
         sut.showPaymentRequests()
         sut.openIncomingPaymentRequest(request.id)
@@ -703,6 +706,54 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals("PaymentRequestUnavailableToast", terminalToast.testTag)
         assertEquals("Payment Request", terminalToast.title)
         assertEquals("The payment request is no longer available.", terminalToast.description)
+        val logs = ShadowLog.getLogsForTag("APP").map { it.msg }
+        assertTrue(logs.any { it.contains("Failed to decode incoming Paykit payment request target") })
+        assertFalse(logs.any { it.contains(invalidTarget) })
+    }
+
+    @Test
+    fun `out of range lnurl request target leaves terminal feedback visible`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val lnurl = "lnurl1outofrangerequest"
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_waiting_for_details)).thenReturn("Waiting")
+        whenever(context.getString(R.string.wallet__payment_request_unavailable)).thenReturn(
+            "The payment request is no longer available."
+        )
+        stubOpenedPaymentRequest(request, lnurl)
+        whenever { coreService.decode(lnurl) }.thenReturn(
+            Scanner.LnurlPay(
+                LnurlPayData(
+                    uri = lnurl,
+                    callback = "https://example.com/callback",
+                    minSendable = 1_000_000uL,
+                    maxSendable = 2_000_000uL,
+                    metadataStr = "[]",
+                    commentAllowed = null,
+                    allowsNostr = false,
+                    nostrPubkey = null,
+                ),
+            ),
+        )
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
+        verify(privatePaykitRepo, times(15)).beginPaymentRequest(request)
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager, times(2)).enqueue(toastCaptor.capture())
+        assertEquals("PaymentRequestUnavailableToast", toastCaptor.lastValue.testTag)
     }
 
     @Test
@@ -809,6 +860,87 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals("PaymentRequestExpiredToast", toastCaptor.lastValue.testTag)
         assertEquals("Payment Request", toastCaptor.lastValue.title)
         assertEquals("The payment request has expired.", toastCaptor.lastValue.description)
+    }
+
+    @Test
+    fun `explicit request expiring during backoff shows the expired toast once`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_waiting_for_details)).thenReturn("Waiting")
+        whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
+            "The payment request has expired."
+        )
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
+            Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList),
+        )
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        advanceTimeBy(1.seconds.inWholeMilliseconds)
+        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(true)
+        pendingPaykitPaymentRequests.value = emptyList()
+        runCurrent()
+        advanceTimeBy(2.seconds.inWholeMilliseconds)
+        runCurrent()
+
+        assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+        verify(paykitPaymentRequestDiagnostics).logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.RequestExpired,
+        )
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager, times(2)).enqueue(toastCaptor.capture())
+        assertEquals("PaymentRequestExpiredToast", toastCaptor.lastValue.testTag)
+    }
+
+    @Test
+    fun `explicit request expiring during resolution shows the expired toast once`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val resolutionStarted = CompletableDeferred<Unit>()
+        val finishResolution = CompletableDeferred<Unit>()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
+            "The payment request has expired."
+        )
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).doSuspendableAnswer {
+            resolutionStarted.complete(Unit)
+            finishResolution.await()
+            Result.failure(PaykitPaymentRequestError.RequestExpired)
+        }
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        resolutionStarted.await()
+        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(true)
+        pendingPaykitPaymentRequests.value = emptyList()
+        runCurrent()
+        finishResolution.complete(Unit)
+        runCurrent()
+
+        assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
+        verify(paykitPaymentRequestDiagnostics).logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.RequestExpired,
+        )
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("PaymentRequestExpiredToast", toastCaptor.lastValue.testTag)
     }
 
     @Test
@@ -1504,6 +1636,49 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.stopPaykitPaymentRequestPolling()
 
         verify(privatePaykitRepo).beginPaymentRequest(unavailableRequest)
+        verify(privatePaykitRepo).beginPaymentRequest(payableRequest)
+        assertEquals(payableRequest, activeContactPaymentContext()?.incomingPaymentRequest)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `expired request does not discard a later payable request`() = test {
+        val expiredRequest = paymentRequest()
+        val payableRequest = expiredRequest.copy(paymentRequestId = "payable-request")
+        val bolt11 = "lnbcrt1payableafterexpired"
+        val privateContext = PrivatePaykitPaymentContext("bitkit/server", 7uL)
+        var payableAttempts = 0
+        whenever(privatePaykitRepo.beginPaymentRequest(expiredRequest))
+            .thenReturn(Result.failure(PaykitPaymentRequestError.RequestExpired))
+        whenever(privatePaykitRepo.beginPaymentRequest(payableRequest)).doSuspendableAnswer {
+            payableAttempts++
+            if (payableAttempts > 1) awaitCancellation()
+            Result.success(
+                PublicPaykitPaymentResult.Opened(
+                    paymentRequest = bolt11,
+                    privatePaymentContext = privateContext,
+                ),
+            )
+        }
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        pendingPaykitPaymentRequests.value = listOf(expiredRequest, payableRequest)
+        isPaykitEnabled.value = true
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+
+        sut.startPaykitPaymentRequestPolling()
+        advanceTimeBy(30.seconds.inWholeMilliseconds)
+        runCurrent()
+        sut.stopPaykitPaymentRequestPolling()
+
+        assertEquals(
+            expected = 1,
+            actual = payableAttempts,
+            message = "expired request invalidated the automatic presentation, so the payable request " +
+                "was resolved again instead of being shown",
+        )
+        verify(privatePaykitRepo).beginPaymentRequest(expiredRequest)
         verify(privatePaykitRepo).beginPaymentRequest(payableRequest)
         assertEquals(payableRequest, activeContactPaymentContext()?.incomingPaymentRequest)
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)

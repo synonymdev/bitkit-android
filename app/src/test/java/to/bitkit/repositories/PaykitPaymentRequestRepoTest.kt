@@ -183,6 +183,17 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `refresh does not log expired requests`() = test {
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(paymentRequestRecord(expiresAt = clock.now().toString())),
+        )
+
+        sut.refresh().getOrThrow()
+
+        verify(diagnostics, never()).logParseRejection(any(), any())
+    }
+
+    @Test
     fun `refresh rejects amounts outside the app payment range`() = test {
         whenever(paykitSdkService.paymentRequests()).thenReturn(
             listOf(

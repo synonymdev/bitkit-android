@@ -349,6 +349,7 @@ class AppViewModel @Inject constructor(
     private var activeContactPaymentContext: ContactPaymentContext? = null
     private val pendingContactPaymentContexts = mutableMapOf<String, ContactPaymentContext>()
     private var requestedPaymentRequestId: PaykitPaymentRequestId? = null
+    private var requestedPaymentRequest: PaykitPaymentRequest? = null
     private var shouldRestorePaymentRequestSheet = false
     private var preparedContactPaymentContext: ContactPaymentContext? = null
     private var isPresentingPaymentRequest = false
@@ -862,7 +863,14 @@ class AppViewModel @Inject constructor(
         if (requestedId != null && paymentRequestPresentationRetryJobs[requestedId]?.isActive == true) return null
         if (requestedId != null) {
             val request = paykitPaymentRequestRepo.pendingRequest(requestedId)
-            if (request != null) return listOf(request)
+            if (request != null) {
+                requestedPaymentRequest = request
+                return listOf(request)
+            }
+            requestedPaymentRequest?.takeIf(paykitPaymentRequestRepo::isExpired)?.let {
+                finishExpiredPaymentRequestPresentation(it)
+                return null
+            }
             invalidatePaymentRequestPresentation()
             clearRequestedPaymentRequestPresentation()
             return null
@@ -975,8 +983,8 @@ class AppViewModel @Inject constructor(
         val restorePaymentRequestSheet =
             requestedPaymentRequestId == request.id && shouldRestorePaymentRequestSheet
         val showExpiredToast = requestedPaymentRequestId == request.id
-        paymentRequestPresentationGeneration++
         if (requestedPaymentRequestId == request.id) {
+            paymentRequestPresentationGeneration++
             clearRequestedPaymentRequestPresentation()
         }
         clearPaymentRequestPresentationRetry(request.id)
@@ -996,7 +1004,12 @@ class AppViewModel @Inject constructor(
         paymentRequestPresentationRetryJobs.keys.filter { it !in requestIds }.forEach {
             paymentRequestPresentationRetryJobs.remove(it)?.cancel()
         }
-        if (requestedPaymentRequestId?.let { it !in requestIds } == true) {
+        val requestedRequest = requestedPaymentRequest
+        if (requestedRequest != null && requestedRequest.id !in requestIds) {
+            if (paykitPaymentRequestRepo.isExpired(requestedRequest)) {
+                finishExpiredPaymentRequestPresentation(requestedRequest)
+                return
+            }
             invalidatePaymentRequestPresentation()
             clearRequestedPaymentRequestPresentation()
         }
@@ -1004,6 +1017,7 @@ class AppViewModel @Inject constructor(
 
     private fun clearRequestedPaymentRequestPresentation() {
         requestedPaymentRequestId = null
+        requestedPaymentRequest = null
         shouldRestorePaymentRequestSheet = false
     }
 
@@ -1995,9 +2009,8 @@ class AppViewModel @Inject constructor(
         }
 
         val normalized = data.removeLightningSchemes()
-        val scanId = scanLogId(data)
-
         val scheduled = scheduledScan
+        val scanId = scanLogId(data, contactPaymentContext ?: scheduled?.contactPaymentContext)
         val isSameActiveScan = normalized == scheduled?.normalizedInput &&
             scheduled.job.isActive &&
             (scheduled.contactPaymentContext == contactPaymentContext || contactPaymentContext == null)
@@ -2041,7 +2054,8 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun scanLogId(data: String): String {
+    private fun scanLogId(data: String, contactPaymentContext: ContactPaymentContext? = null): String {
+        if (contactPaymentContext?.incomingPaymentRequest != null) return "incoming payment request target"
         val scanLogInput = SamRockSetupRequest.sanitizedDescription(data.removeLightningSchemes()) ?: data
         return if (scanLogInput.length > SCAN_LOG_ID_MAX_LENGTH) {
             "${scanLogInput.take(SCAN_LOG_ID_AFFIX_LENGTH)}…${scanLogInput.takeLast(SCAN_LOG_ID_AFFIX_LENGTH)}"
@@ -2057,7 +2071,7 @@ class AppViewModel @Inject constructor(
         routePubkyKeys: Boolean,
         contactPaymentContext: ContactPaymentContext?,
     ) {
-        val scanId = scanLogId(data)
+        val scanId = scanLogId(data, contactPaymentContext)
         val normalized = data.removeLightningSchemes()
         synchronized(deferredScanLock) {
             val queued = deferredScan
@@ -2077,7 +2091,8 @@ class AppViewModel @Inject constructor(
             }
             if (queued != null) {
                 Logger.warn(
-                    "Replacing deferred scan from '${queued.source.label}': '${scanLogId(queued.data)}'",
+                    "Replacing deferred scan from '${queued.source.label}': " +
+                        "'${scanLogId(queued.data, queued.contactPaymentContext)}'",
                     context = TAG,
                 )
             }
@@ -2591,9 +2606,15 @@ class AppViewModel @Inject constructor(
             }
         }
 
-        val safeLogInput = SamRockSetupRequest.sanitizedDescription(input) ?: input
         val scan = runSuspendCatching { coreService.decode(input) }
-            .onFailure { Logger.error("Failed to decode scan data: '$safeLogInput'", it, context = TAG) }
+            .onFailure {
+                if (isPaymentRequest) {
+                    Logger.error("Failed to decode incoming Paykit payment request target", context = TAG)
+                } else {
+                    val safeLogInput = SamRockSetupRequest.sanitizedDescription(input) ?: input
+                    Logger.error("Failed to decode scan data: '$safeLogInput'", it, context = TAG)
+                }
+            }
             .onSuccess { Logger.info("Handling decoded scan data: $it", context = TAG) }
             .getOrNull()
 
@@ -2607,6 +2628,12 @@ class AppViewModel @Inject constructor(
         fromMainScanner: Boolean,
     ) {
         if (activeHardwareWalletId != null && scan != null && scan !is Scanner.OnChain) {
+            if (activeIncomingPaymentRequest() != null) {
+                clearActiveContactPaymentContext(
+                    failureReason = IncomingPaykitPaymentRequestFailureReason.PaymentTargetNotRoutable,
+                )
+                return
+            }
             toast(
                 type = Toast.ToastType.WARNING,
                 title = context.getString(R.string.hardware__send_onchain_only_title),
@@ -3080,6 +3107,7 @@ class AppViewModel @Inject constructor(
         val displaySats = data.minSendableSat()
         val incomingAmount = activeIncomingPaymentRequest()?.amountSats
         if (incomingAmount != null && incomingAmount !in displaySats..data.maxSendableSat()) {
+            if (clearIncomingPaymentRequestTarget()) return
             toast(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.other__lnurl_pay_error),
@@ -4527,6 +4555,7 @@ class AppViewModel @Inject constructor(
         invalidatePaymentRequestPresentation()
         clearPaymentRequestPresentationRetry(id)
         requestedPaymentRequestId = id
+        requestedPaymentRequest = request
         shouldRestorePaymentRequestSheet = _currentSheet.value is Sheet.PaymentRequests
 
         if (shouldRestorePaymentRequestSheet) {
