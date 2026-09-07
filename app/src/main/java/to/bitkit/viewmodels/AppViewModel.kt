@@ -995,7 +995,7 @@ class AppViewModel @Inject constructor(
             description = context.getString(R.string.wallet__payment_request_expired),
             testTag = "PaymentRequestExpiredToast",
         )
-        if (restorePaymentRequestSheet) showSheet(Sheet.PaymentRequests)
+        if (restorePaymentRequestSheet && currentSheet.value == null) showSheet(Sheet.PaymentRequests)
     }
 
     private fun retainPaymentRequestPresentationState(requests: List<PaykitPaymentRequest>) {
@@ -2656,8 +2656,15 @@ class AppViewModel @Inject constructor(
             is Scanner.Gift -> handleNonPaymentScan { onScanGift(scan.code, scan.amount) }
             else -> {
                 val hasIncomingPaymentRequest = clearIncomingPaymentRequestTarget()
+                val logMessage = if (hasIncomingPaymentRequest) {
+                    "Received unhandled incoming Paykit payment request target"
+                } else if (scan == null) {
+                    "Failed to decode scan data"
+                } else {
+                    "Received unhandled scan data '$scan'"
+                }
                 Logger.warn(
-                    if (scan == null) "Failed to decode scan data" else "Received unhandled scan data '$scan'",
+                    logMessage,
                     context = TAG,
                 )
                 if (hasIncomingPaymentRequest) return

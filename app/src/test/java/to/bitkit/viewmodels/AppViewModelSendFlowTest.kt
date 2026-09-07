@@ -7,12 +7,14 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.nfc.NfcAdapter
+import android.util.Log
 import androidx.core.net.toUri
 import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.FeeRates
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.LightningInvoice
+import com.synonym.bitkitcore.LnurlAddressData
 import com.synonym.bitkitcore.LnurlPayData
 import com.synonym.bitkitcore.NetworkType
 import com.synonym.bitkitcore.OnChainInvoice
@@ -712,6 +714,41 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `opened request with an unhandled target redacts warning logs`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val unhandledTarget = "alice@example.com"
+        stubOpenedPaymentRequest(request, unhandledTarget)
+        whenever(coreService.decode(unhandledTarget)).thenReturn(
+            Scanner.LnurlAddress(
+                LnurlAddressData(
+                    uri = unhandledTarget,
+                    domain = "example.com",
+                    username = "alice",
+                ),
+            ),
+        )
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        ShadowLog.clear()
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+
+        val warningLogs = ShadowLog.getLogsForTag("APP")
+            .filter { it.type == Log.WARN }
+            .map { it.msg }
+        assertTrue(
+            warningLogs.any { it.contains("Received unhandled incoming Paykit payment request target") },
+        )
+        assertFalse(warningLogs.any { it.contains(unhandledTarget) })
+    }
+
+    @Test
     fun `out of range lnurl request target leaves terminal feedback visible`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
@@ -897,6 +934,40 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             request.counterparty,
             IncomingPaykitPaymentRequestFailureReason.RequestExpired,
         )
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager, times(2)).enqueue(toastCaptor.capture())
+        assertEquals("PaymentRequestExpiredToast", toastCaptor.lastValue.testTag)
+    }
+
+    @Test
+    fun `explicit request expiring during backoff keeps an unrelated send sheet open`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_waiting_for_details)).thenReturn("Waiting")
+        whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
+            "The payment request has expired."
+        )
+        whenever(privatePaykitRepo.beginPaymentRequest(request)).thenReturn(
+            Result.success(PublicPaykitPaymentResult.WaitingForUpdatedPaymentList),
+        )
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.showPaymentRequests()
+        sut.openIncomingPaymentRequest(request.id)
+        advanceTimeBy(TRANSITION_SCREEN_MS)
+        runCurrent()
+        sut.showSheet(Sheet.Send(SendRoute.Confirm))
+        runCurrent()
+        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(true)
+        pendingPaykitPaymentRequests.value = emptyList()
+        runCurrent()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         val toastCaptor = argumentCaptor<Toast>()
         verify(toastManager, times(2)).enqueue(toastCaptor.capture())
         assertEquals("PaymentRequestExpiredToast", toastCaptor.lastValue.testTag)
