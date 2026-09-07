@@ -288,8 +288,8 @@ class HwSendViewModel @Inject constructor(
             pendingBroadcast != null &&
                 (error.isBroadcastConnectivityFailure() || error is TimeoutCancellationException) -> ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
-                title = context.getString(R.string.other__connection_issue),
-                description = context.getString(R.string.other__connection_issues_explain),
+                title = context.getString(R.string.hardware__send_broadcast_failed_title),
+                description = context.getString(R.string.hardware__send_broadcast_failed_text),
             )
             error is TimeoutCancellationException -> ToastEventBus.send(
                 type = Toast.ToastType.ERROR,

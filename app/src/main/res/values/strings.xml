@@ -213,6 +213,8 @@
     <string name="hardware__remove_keep_error">Could not keep this wallet\'s tags in your backup. Try again, or remove it without keeping them.</string>
     <string name="hardware__rename_error">Could not rename the hardware wallet. Please try again.</string>
     <string name="hardware__search_error">Could not search for hardware wallets. Check your connection and try again.</string>
+    <string name="hardware__send_broadcast_failed_text">Check your connection and try again.</string>
+    <string name="hardware__send_broadcast_failed_title">Payment not sent</string>
     <string name="hardware__send_confirm_address">TO ADDRESS (CONFIRM ON DEVICE)</string>
     <string name="hardware__send_onchain_only_text">Trezor can only send to a Bitcoin address from this wallet.</string>
     <string name="hardware__send_onchain_only_title">Bitcoin address required</string>
