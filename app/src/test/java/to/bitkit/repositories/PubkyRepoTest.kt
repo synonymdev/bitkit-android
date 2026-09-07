@@ -41,6 +41,7 @@ import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyAuthClaim
 import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
@@ -220,7 +221,7 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `identity check fails closed when secure storage cannot be read`() = test {
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenThrow(IllegalStateException("unavailable"))
 
-        assertTrue(runCatching { sut.hasIdentity() }.isFailure)
+        assertTrue(runSuspendCatching { sut.hasIdentity() }.isFailure)
     }
 
     @Test
@@ -653,6 +654,19 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(pubkyService) { signUp("test-secret", "test-homeserver", "test-code") }
         verifyBlocking(pubkyService) { signOut() }
         verifyBlocking(pubkyService) { forgetSessionAccess() }
+    }
+
+    @Test
+    fun `createIdentity clears stale pending signup without a session`() = test {
+        profileSetupPending.value = true
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
+
+        val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+
+        assertTrue(result.isFailure)
+        assertFalse(profileSetupPending.value)
+        verify(keychain).loadString(Keychain.Key.BIP39_MNEMONIC.name)
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
     }
 
     @Test

@@ -79,7 +79,6 @@ import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
@@ -1949,17 +1948,37 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `global scanner processes direct signup without auth sheet`() = test {
+    fun `global scanner requires approval for direct signup`() = test {
         enablePaykitUi()
         listOf(directSignupAuthUrl, legacyDirectSignupAuthUrl).forEach { authUrl ->
-            val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
-            whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
-            whenever(pubkyRepo.approveSignupAuth(request)).thenReturn(Result.success(Unit))
-
             scanSignup(authUrl)
 
+            assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+            verifyBlocking(pubkyRepo, never()) { approveSignupAuth(any()) }
+        }
+    }
+
+    @Test
+    fun `signup deeplinks wait for unlock then require approval`() = test {
+        enablePaykitUi()
+        listOf(directSignupAuthUrl, legacyDirectSignupAuthUrl, signupAuthUrl).forEach { authUrl ->
+            sut.hideSheet()
+            settingsData.value = SettingsData(isPinEnabled = true)
+            sut.resetIsAuthenticatedState()
+            advanceUntilIdle()
+            assertFalse(sut.isAuthenticated.value)
+
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+            advanceUntilIdle()
+
             assertNull(sut.currentSheet.value)
-            verifyBlocking(pubkyRepo) { approveSignupAuth(request) }
+            verifyBlocking(pubkyRepo, never()) { approveSignupAuth(any()) }
+
+            sut.setIsAuthenticated(true)
+            advanceUntilIdle()
+
+            assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+            verifyBlocking(pubkyRepo, never()) { approveSignupAuth(any()) }
         }
     }
 

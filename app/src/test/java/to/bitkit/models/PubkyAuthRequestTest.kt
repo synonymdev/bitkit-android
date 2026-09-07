@@ -25,7 +25,6 @@ class PubkyAuthRequestTest {
                     "&secret=secret&caps=%2Fpub%2Fexample.app%2F%3Arw",
                 request.authorizationUrl,
             )
-            assertFalse(PubkyAuthRequest.isDirectSignupUrl(request.rawUrl))
         }
     }
 
@@ -99,7 +98,6 @@ class PubkyAuthRequestTest {
         ).getOrThrow()
 
         assertFalse(request.isSignup)
-        assertFalse(PubkyAuthRequest.isDirectSignupUrl(request.rawUrl))
         assertEquals("paykit.test", request.clientId)
         assertNull(request.bitkitClaim)
     }

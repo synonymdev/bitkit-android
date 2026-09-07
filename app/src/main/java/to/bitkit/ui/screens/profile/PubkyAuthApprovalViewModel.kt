@@ -91,6 +91,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
                         ApprovalState.Authorize
                     },
                     clientId = request.clientId,
+                    homeserverPublicKey = request.homeserverPublicKey,
                     serviceName = serviceName,
                     permissions = request.permissions.toImmutableList(),
                     bitkitClaim = request.bitkitClaim,
@@ -327,6 +328,7 @@ data class PubkyAuthApprovalUiState(
     val authUrl: String = "",
     val state: ApprovalState = ApprovalState.Loading,
     val clientId: String = "",
+    val homeserverPublicKey: String? = null,
     val serviceName: String = "",
     val permissions: ImmutableList<PubkyAuthPermission> = persistentListOf(),
     val bitkitClaim: PubkyAuthClaim? = null,

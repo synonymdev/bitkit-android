@@ -683,8 +683,10 @@
     <string name="profile__your_name">Your Name</string>
     <string name="profile__your_pubky">Your Pubky</string>
     <string name="pubky_auth__already_signed_in">Already signed in</string>
+    <string name="pubky_auth__homeserver">Homeserver</string>
     <string name="pubky_auth__no_identity">Pubky Identity Required</string>
     <string name="pubky_auth__no_identity_desc">Create a Pubky identity in your profile to approve auth requests.</string>
+    <string name="pubky_auth__signup_description">Create a new Pubky identity on this homeserver. Only continue if you trust it.</string>
     <string name="security__backup_button">Back Up</string>
     <string name="security__backup_funds">Now that you have some funds in your wallet, it is time to back up your money!</string>
     <string name="security__backup_funds_no">There are no funds in your wallet yet, but you can create a backup if you wish.</string>

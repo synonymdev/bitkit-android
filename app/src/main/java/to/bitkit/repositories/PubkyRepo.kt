@@ -554,7 +554,7 @@ class PubkyRepo @Inject constructor(
         tags: List<String>,
         avatarBytes: ByteArray?,
     ): Result<Unit> {
-        if (settingsStore.isPubkyProfileSetupPending.first()) {
+        if (settingsStore.isPubkyProfileSetupPending.first() && _publicKey.value != null) {
             return runSuspendCatching {
                 withContext(ioDispatcher) {
                     val publicKey = requireNotNull(_publicKey.value) { "No active Pubky session" }
@@ -568,6 +568,7 @@ class PubkyRepo @Inject constructor(
         return try {
             val result = runSuspendCatching {
                 withContext(ioDispatcher) {
+                    settingsStore.setPubkyProfileSetupPending(false)
                     val (publicKeyZ32, secretKeyHex) = deriveKeys().getOrThrow()
 
                     val signupDetails: Pair<String, String?> = Env.e2eHomeserverPubky?.let { it to null }

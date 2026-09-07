@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.profile
 
+import app.cash.turbine.test
 import android.content.Context
 import com.synonym.paykit.PubkyAuthCompanionClaimApprovalException
 import kotlinx.coroutines.CompletableDeferred
@@ -144,6 +145,41 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         verifyBlocking(pubkyRepo) { approveAuth(authUrl, capabilities, clientId) }
         verifyBlocking(pubkyRepo, never()) { approveAuthWithCompanionClaim(any(), any(), any()) }
         verifyBlocking(watchOnlyAccountRepo, never()) { prepareUnsignedClaim(any(), any()) }
+    }
+
+    @Test
+    fun `signup requires consent and local auth before registration`() = test {
+        listOf("pubkyauth://direct_signup", "pubkyauth://signup", "pubkyring://signup").forEach { prefix ->
+            val authUrl = "$prefix?hs=homeserver" +
+                if (prefix.startsWith("pubkyring")) "&relay=https://relay.example/inbox/&secret=secret&caps=/pub/example/:rw" else ""
+            val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
+            whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
+            whenever(pubkyRepo.approveSignupAuth(request)).thenReturn(Result.success(Unit))
+            val sut = createSut()
+
+            sut.effects.test {
+                sut.load(authUrl)
+                advanceUntilIdle()
+                assertEquals("homeserver", sut.uiState.value.homeserverPublicKey)
+                verifyBlocking(pubkyRepo, never()) { approveSignupAuth(request) }
+
+                sut.requestAuthorize(authUrl)
+                advanceUntilIdle()
+                assertEquals(PubkyAuthApprovalEffect.RequestLocalAuth(authUrl), awaitItem())
+                verifyBlocking(pubkyRepo, never()) { approveSignupAuth(request) }
+                sut.cancelLocalAuth(authUrl)
+                assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+                verifyBlocking(pubkyRepo, never()) { approveSignupAuth(request) }
+
+                sut.requestAuthorize(authUrl)
+                advanceUntilIdle()
+                assertEquals(PubkyAuthApprovalEffect.RequestLocalAuth(authUrl), awaitItem())
+                sut.confirmAuthorize(authUrl)
+                advanceUntilIdle()
+                verifyBlocking(pubkyRepo) { approveSignupAuth(request) }
+                assertEquals(PubkyAuthApprovalEffect.Dismiss, awaitItem())
+            }
+        }
     }
 
     @Test

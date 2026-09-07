@@ -116,9 +116,6 @@ data class PubkyAuthRequest(
 
         fun isSignupUrl(rawUrl: String): Boolean = runCatching { URI(rawUrl).isSignupRequest() }.getOrDefault(false)
 
-        fun isDirectSignupUrl(rawUrl: String): Boolean =
-            parseSignup(rawUrl).getOrNull()?.let { it.authorizationUrl == null } ?: false
-
         fun parseSignup(rawUrl: String): Result<PubkyAuthRequest> = runCatching {
             val uri = URI(rawUrl)
             require(uri.isSignupRequest()) { "Unsupported Pubky signup URL" }

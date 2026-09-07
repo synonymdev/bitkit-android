@@ -160,6 +160,20 @@ class PaykitSdkService @Inject constructor(
     private var activeAuthRequest: PubkyAuthRequest? = null
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
+    private var sdkFactory: () -> PaykitSdk = {
+        PaykitSdk.withPaymentAdapterAndPubkyClientConfig(
+            stateStore = stateStore,
+            sessionProvider = sessionProvider,
+            paymentAdapter = paymentAdapter,
+            config = paykitSdkConfig(),
+            pubkyClient = pubkyClientConfig,
+        )
+    }
+
+    internal constructor(context: Context, keychain: Keychain, sdkFactory: () -> PaykitSdk) : this(context, keychain) {
+        this.sdkFactory = sdkFactory
+        isSetup.complete(Unit)
+    }
 
     @Suppress("TooGenericExceptionCaught")
     suspend fun initialize() {
@@ -958,13 +972,7 @@ class PaykitSdkService @Inject constructor(
 
     private suspend fun handle(): PaykitSdk = handleMutex.withLock {
         sdk?.let { return@withLock it }
-        PaykitSdk.withPaymentAdapterAndPubkyClientConfig(
-            stateStore = stateStore,
-            sessionProvider = sessionProvider,
-            paymentAdapter = paymentAdapter,
-            config = paykitSdkConfig(),
-            pubkyClient = pubkyClientConfig,
-        ).also { sdk = it }
+        sdkFactory().also { sdk = it }
     }
 
     private fun bootstrap() = PubkySessionBootstrap.withPubkyClientConfig(

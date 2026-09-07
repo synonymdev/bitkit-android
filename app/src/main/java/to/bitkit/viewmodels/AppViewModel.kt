@@ -163,7 +163,6 @@ import to.bitkit.repositories.PendingPaymentResolution
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.repositories.PrivatePaykitPaymentContext
 import to.bitkit.repositories.PrivatePaykitRepo
-import to.bitkit.repositories.PubkyAlreadySignedInError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.PublicPaykitPaymentResult
 import to.bitkit.repositories.PublicPaykitRepo
@@ -325,8 +324,6 @@ class AppViewModel @Inject constructor(
 
     private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
     val currentSheet = _currentSheet.asStateFlow()
-    private val _isCompletingPubkySignup = MutableStateFlow(false)
-    val isCompletingPubkySignup = _isCompletingPubkySignup.asStateFlow()
     val pendingPaymentRequests = paykitPaymentRequestRepo.pendingRequests
     val paymentRequestHistory = paykitPaymentRequestRepo.paymentRequestHistory
     val eligiblePaymentRequestTargets = paykitPaymentRequestRepo.eligibleTargets
@@ -4669,8 +4666,13 @@ class AppViewModel @Inject constructor(
         }
 
         if (PubkyAuthRequest.isProtocolUrl(uri.toString())) {
-            if (!isPaykitEnabled.value) return@launch
-            handlePubkyAuth(uri.toString())
+            if (!isPaykitEnabled.value || !walletRepo.walletExists()) return@launch
+            launchScan(
+                source = ScanSource.DEEPLINK,
+                data = uri.toString(),
+                startDelay = SCREEN_TRANSITION_DELAY,
+                allowPubkyAuth = true,
+            )
             return@launch
         }
 
@@ -4695,11 +4697,6 @@ class AppViewModel @Inject constructor(
         val isSignup = PubkyAuthRequest.isSignupUrl(authUrl)
         if (isSignup && rejectPubkySignupForExistingIdentity()) return
 
-        if (PubkyAuthRequest.isDirectSignupUrl(authUrl)) {
-            handleDirectPubkySignup(authUrl)
-            return
-        }
-
         if (!isSignup && pubkyRepo.publicKey.value == null) {
             ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
@@ -4717,37 +4714,6 @@ class AppViewModel @Inject constructor(
             return
         }
         showSheet(Sheet.PubkyAuth(authUrl))
-    }
-
-    private suspend fun handleDirectPubkySignup(authUrl: String) {
-        hideSheet()
-        _isCompletingPubkySignup.value = true
-        try {
-            val request = pubkyRepo.parseAuthUrl(authUrl).getOrElse {
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__auth_error_title),
-                    description = it.localizedPubkyAuthMessage(context),
-                )
-                return
-            }
-            pubkyRepo.approveSignupAuth(request).onFailure {
-                val alreadySignedIn = it is PubkyAlreadySignedInError
-                ToastEventBus.send(
-                    type = if (alreadySignedIn) Toast.ToastType.INFO else Toast.ToastType.ERROR,
-                    title = context.getString(
-                        if (alreadySignedIn) {
-                            R.string.pubky_auth__already_signed_in
-                        } else {
-                            R.string.profile__auth_error_title
-                        },
-                    ),
-                    description = if (alreadySignedIn) null else it.localizedPubkyAuthMessage(context),
-                )
-            }
-        } finally {
-            _isCompletingPubkySignup.value = false
-        }
     }
 
     private suspend fun rejectPubkySignupForExistingIdentity(): Boolean {

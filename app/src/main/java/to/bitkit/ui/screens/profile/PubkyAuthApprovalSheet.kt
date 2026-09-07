@@ -380,8 +380,14 @@ private fun ColumnScope.ApprovalDetails(
     Column(modifier = Modifier.weight(1f)) {
         VerticalSpacer(26.dp)
 
-        DescriptionText(serviceName = uiState.serviceName)
-        VerticalSpacer(8.dp)
+        if (uiState.homeserverPublicKey != null) {
+            BodyM(text = stringResource(R.string.pubky_auth__signup_description), color = Colors.White64)
+            VerticalSpacer(16.dp)
+        }
+        if (uiState.permissions.isNotEmpty()) {
+            DescriptionText(serviceName = uiState.serviceName)
+            VerticalSpacer(8.dp)
+        }
         if (uiState.clientId.isNotBlank()) {
             BodyS(
                 text = stringResource(R.string.profile__auth_approval_requester, uiState.clientId),
@@ -394,13 +400,27 @@ private fun ColumnScope.ApprovalDetails(
             VerticalSpacer(24.dp)
         }
 
-        PermissionsSection(permissions = uiState.permissions)
+        if (uiState.permissions.isNotEmpty()) {
+            PermissionsSection(permissions = uiState.permissions)
+        }
         FillHeight(min = 32.dp)
 
         TrustWarning()
         VerticalSpacer(16.dp)
 
-        uiState.profile?.let { ProfileCard(it) }
+        uiState.homeserverPublicKey?.let { homeserver ->
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Colors.Gray6, RoundedCornerShape(16.dp))
+                    .padding(24.dp)
+                    .testTag("PubkySignupHomeserver")
+            ) {
+                Text13Up(text = stringResource(R.string.pubky_auth__homeserver), color = Colors.White64)
+                BodyMSB(text = homeserver)
+            }
+        } ?: uiState.profile?.let { ProfileCard(it) }
         VerticalSpacer(16.dp)
     }
 }

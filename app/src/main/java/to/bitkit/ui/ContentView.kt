@@ -7,11 +7,8 @@ import android.content.Intent
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.size
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.rememberDrawerState
@@ -30,7 +27,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -67,11 +63,8 @@ import to.bitkit.models.Toast
 import to.bitkit.repositories.ConnectivityState
 import to.bitkit.ui.Routes.ExternalConnection
 import to.bitkit.ui.components.AuthCheckScreen
-import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.DefaultSheetContainerColor
 import to.bitkit.ui.components.DrawerMenu
-import to.bitkit.ui.components.GradientCircularProgressIndicator
-import to.bitkit.ui.components.HorizontalSpacer
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SheetHandlePlacement
 import to.bitkit.ui.components.SheetHost
@@ -200,7 +193,6 @@ import to.bitkit.ui.settings.support.ReportIssueScreen
 import to.bitkit.ui.settings.support.SupportScreen
 import to.bitkit.ui.settings.transactionSpeed.CustomFeeSettingsScreen
 import to.bitkit.ui.settings.transactionSpeed.TransactionSpeedSettingsScreen
-import to.bitkit.ui.shared.util.blockPointerInputPassthrough
 import to.bitkit.ui.sheets.BTCPayConnectionSheet
 import to.bitkit.ui.sheets.BackgroundPaymentsIntroSheet
 import to.bitkit.ui.sheets.BackupRoute
@@ -464,7 +456,6 @@ fun ContentView(
         val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
         val isCreatingPaymentRequest by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
-        val isCompletingPubkySignup by appViewModel.isCompletingPubkySignup.collectAsStateWithLifecycle()
         val hwSendViewModel = hiltViewModel<HwSendViewModel>()
         val hwSendUiState by hwSendViewModel.uiState.collectAsStateWithLifecycle()
         val canDismissSheet = currentSheet !is Sheet.Send ||
@@ -632,7 +623,7 @@ fun ContentView(
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     var isHomeCalculatorInputActive by remember { mutableStateOf(false) }
-                    var didResumePendingPubkyProfileSetup by remember { mutableStateOf(false) }
+                    val pubkyProfileSetupNavigation = remember { PubkyProfileSetupNavigation() }
 
                     RootNavHost(
                         navController = navController,
@@ -660,16 +651,15 @@ fun ContentView(
                         currentSheet,
                         currentRoute,
                     ) {
-                        if (!isPubkyProfileSetupPending) {
-                            didResumePendingPubkyProfileSetup = false
-                        }
                         val canNavigate = currentSheet == null &&
                             currentRoute != Routes.CreateProfile::class.qualifiedName
-                        val shouldResumeProfileSetup = isPaykitEnabled &&
-                            isPubkyProfileSetupPending &&
-                            isProfileAuthenticated
-                        if (shouldResumeProfileSetup && canNavigate && !didResumePendingPubkyProfileSetup) {
-                            didResumePendingPubkyProfileSetup = true
+                        if (pubkyProfileSetupNavigation.shouldNavigate(
+                                isEnabled = isPaykitEnabled,
+                                isPending = isPubkyProfileSetupPending,
+                                isAuthenticated = isProfileAuthenticated,
+                                canNavigate = canNavigate,
+                            )
+                        ) {
                             navController.navigateTo(Routes.CreateProfile)
                         }
                     }
@@ -728,23 +718,27 @@ fun ContentView(
                 onOpenWidgetsSheet = { appViewModel.showSheet(Sheet.Widgets()) },
                 modifier = Modifier.align(Alignment.TopEnd)
             )
-
-            if (isCompletingPubkySignup) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Colors.Black)
-                        .blockPointerInputPassthrough(),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        GradientCircularProgressIndicator(modifier = Modifier.size(20.dp))
-                        HorizontalSpacer(12.dp)
-                        BodyM(text = stringResource(R.string.profile__deriving_keys), color = Colors.White64)
-                    }
-                }
-            }
         }
+    }
+}
+
+internal class PubkyProfileSetupNavigation {
+    private var didResume = false
+
+    fun shouldNavigate(
+        isEnabled: Boolean,
+        isPending: Boolean,
+        isAuthenticated: Boolean,
+        canNavigate: Boolean,
+    ): Boolean {
+        if (!isPending) {
+            didResume = false
+            return false
+        }
+        if (didResume) return false
+        if (!isEnabled || !isAuthenticated || !canNavigate) return false
+        didResume = true
+        return true
     }
 }
 
