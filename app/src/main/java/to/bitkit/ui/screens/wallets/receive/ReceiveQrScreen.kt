@@ -107,16 +107,18 @@ fun ReceiveQrScreen(
     SetMaxBrightness()
 
     val haptic = LocalHapticFeedback.current
-    val inboundLiquiditySats = lightningState.channels.calculateRemoteBalance()
-    val hasUsableChannels = lightningState.channels.any { it.isChannelReady }
+    val hasUsableChannels = lightningState.channels.any { it.isUsable }
+    val usableInboundLiquiditySats = remember(lightningState.channels) {
+        lightningState.channels.filter { it.isUsable }.calculateRemoteBalance()
+    }
     val canCreateLightningInvoice = remember(
         hasUsableChannels,
-        lightningState.channels,
+        usableInboundLiquiditySats,
         walletState.bip21AmountSats,
     ) {
         ReceiveLiquidityDecision.canCreateLightningInvoice(
-            hasReadyChannels = hasUsableChannels,
-            inboundCapacitySats = inboundLiquiditySats,
+            hasUsableChannels = hasUsableChannels,
+            inboundCapacitySats = usableInboundLiquiditySats,
             invoiceAmountSats = walletState.bip21AmountSats,
         )
     }
