@@ -57,8 +57,8 @@ import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.models.EUR
-import to.bitkit.models.safe
 import to.bitkit.models.msatCeilOf
+import to.bitkit.models.safe
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.utils.Logger
@@ -254,7 +254,10 @@ class BlocktankRepo @Inject constructor(
         runSuspendCatching {
             if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
             val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
-            freshMaxChannelSizeSat()
+            val maxChannelSizeSat = freshMaxChannelSizeSat()
+            if (maxChannelSizeSat != null && amountSats > maxChannelSizeSat) {
+                throw ServiceError.ChannelSizeExceedsMaximum()
+            }
             val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
             if (!canFitChannelSize(amountSats, lspBalance)) {
                 throw ServiceError.ChannelSizeExceedsMaximum()
@@ -278,15 +281,6 @@ class BlocktankRepo @Inject constructor(
             onFailure = { Result.failure(it.toCjitError()) },
         ).onFailure {
             Logger.error("Failed to create CJIT", it, context = TAG)
-        }
-    }
-
-    suspend fun canCreateCjit(amountSats: ULong): Result<Boolean> = withContext(bgDispatcher) {
-        runSuspendCatching {
-            val maxChannelSizeSat = freshMaxChannelSizeSat() ?: return@runSuspendCatching true
-            return@runSuspendCatching canCreateCjit(amountSats, maxChannelSizeSat)
-        }.onFailure {
-            Logger.error("Failed to check CJIT limit", it, context = TAG)
         }
     }
 
@@ -451,7 +445,7 @@ class BlocktankRepo @Inject constructor(
     }
 
     private suspend fun freshMaxChannelSizeSat(): ULong? {
-        refreshInfo().getOrThrow()
+        refreshInfo()
 
         return _blocktankState.value.info?.options?.maxChannelSizeSat?.takeIf { it > 0uL }
     }
@@ -460,30 +454,18 @@ class BlocktankRepo @Inject constructor(
         if (amountSats > maxChannelSizeSat) return false
 
         val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
-        return amountSats <= maxChannelSizeSat && lspBalance <= maxChannelSizeSat - amountSats
+        val remainingCapacity = maxChannelSizeSat.safe() - amountSats.safe()
+        return lspBalance <= remainingCapacity
     }
 
     private fun canFitChannelSize(amountSats: ULong, lspBalance: ULong): Boolean {
         val maxChannelSizeSat = _blocktankState.value.info?.options?.maxChannelSizeSat?.takeIf { it > 0uL }
             ?: return true
 
-        return amountSats <= maxChannelSizeSat && lspBalance <= maxChannelSizeSat - amountSats
-    }
+        if (amountSats > maxChannelSizeSat) return false
 
-    private fun Throwable.toCjitError(): Throwable {
-        if (this is ServiceError.ChannelSizeExceedsMaximum) return this
-
-        val description = toString()
-        return if (
-            description.contains("Channel size is too big") ||
-            description.contains("channelSizeExceedsMaximum") ||
-            description.contains("maxChannelSizeSat") ||
-            description.contains("channelSizeSat")
-        ) {
-            ServiceError.ChannelSizeExceedsMaximum()
-        } else {
-            this
-        }
+        val remainingCapacity = maxChannelSizeSat.safe() - amountSats.safe()
+        return lspBalance <= remainingCapacity
     }
 
     fun calculateLiquidityOptions(clientBalanceSat: ULong): Result<ChannelLiquidityOptions> {
@@ -675,6 +657,27 @@ class BlocktankRepo @Inject constructor(
         private val CJIT_REFRESH_TIMEOUT = 5.seconds
         private val CJIT_REFRESH_RETRY_DELAY = 1.seconds
     }
+}
+
+internal fun Throwable.toCjitError(): Throwable {
+    if (this is ServiceError.ChannelSizeExceedsMaximum) return this
+
+    return if (isMaxChannelSizeError()) {
+        ServiceError.ChannelSizeExceedsMaximum()
+    } else {
+        this
+    }
+}
+
+private fun Throwable.isMaxChannelSizeError(): Boolean {
+    val description = toString()
+    val maximumErrors = listOf(
+        "Channel size is too big",
+        "channelSizeExceedsMaximum",
+        "maxChannelSizeSat",
+        "capacity is above our capacity limit",
+    )
+    return maximumErrors.any { description.contains(it, ignoreCase = true) }
 }
 
 @Stable

@@ -42,6 +42,7 @@ import to.bitkit.ui.sheets.WidgetsRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.Colors
+import java.util.UUID
 
 enum class SheetSize { LARGE, MEDIUM, COMPACT, SMALL, CALENDAR; }
 
@@ -61,6 +62,7 @@ sealed interface Sheet {
     data class Receive(
         val route: ReceiveRoute = ReceiveRoute.QR,
         val hardwareWalletId: String? = null,
+        val presentationId: String = UUID.randomUUID().toString(),
     ) : Sheet
     data object PaymentRequests : Sheet
     data class Pin(val route: PinRoute = PinRoute.Prompt()) : Sheet

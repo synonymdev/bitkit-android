@@ -1251,10 +1251,10 @@
     <string name="wallet__receive__cjit">Receive Lightning funds</string>
     <string name="wallet__receive_bitcoin">Receive Bitcoin</string>
     <string name="wallet__receive_bitcoin_invoice">Bitcoin invoice</string>
+    <string name="wallet__receive_cjit_error_max__description">The maximum you can receive to your spending balance right now is ₿ {amount}.</string>
+    <string name="wallet__receive_cjit_error_max__title">Receiving Capacity Maximum</string>
     <string name="wallet__receive_connect_additional">To receive more instant Bitcoin, Bitkit has to increase your liquidity. A &lt;accent&gt;{networkFee}&lt;/accent&gt; network fee and &lt;accent&gt;{serviceFee}&lt;/accent&gt; service provider fee will be deducted from the amount you specified.</string>
     <string name="wallet__receive_connect_initial">To set up your spending balance, a &lt;accent&gt;{networkFee}&lt;/accent&gt; network fee and &lt;accent&gt;{serviceFee}&lt;/accent&gt; service provider fee will be deducted.</string>
-    <string name="wallet__receive_cjit_error_max__description">The amount you can receive with additional liquidity is currently limited to ₿ {amount}.</string>
-    <string name="wallet__receive_cjit_error_max__title">Maximum exceeded</string>
     <string name="wallet__receive_copied">Invoice copied to clipboard</string>
     <string name="wallet__receive_lightning_invoice">Lightning invoice</string>
     <string name="wallet__receive_liquidity__bg_setup_desc">Enable background setup to safely exit Bitkit while your balance is being configured.</string>

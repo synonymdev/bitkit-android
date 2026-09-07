@@ -511,7 +511,7 @@ fun ContentView(
                             val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
                             val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
 
-                            key(System.identityHashCode(sheet)) {
+                            key(receiveSheetPresentationKey(sheet)) {
                                 ReceiveSheet(
                                     appViewModel = appViewModel,
                                     startRoute = sheet.route,
@@ -1969,6 +1969,8 @@ fun NavController.navigateToTransferSpendingStart(
 
 internal fun shouldDismissSheetForScreenLink(handled: Boolean, currentSheet: Sheet?): Boolean =
     handled && currentSheet != null
+
+internal fun receiveSheetPresentationKey(sheet: Sheet.Receive): String = sheet.presentationId
 
 internal fun transferEffectDestination(effect: TransferEffect): Routes? = when (effect) {
     TransferEffect.OnHwTxSigned -> Routes.SpendingHwSigned

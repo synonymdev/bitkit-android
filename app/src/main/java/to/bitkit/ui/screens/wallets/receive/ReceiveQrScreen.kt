@@ -169,7 +169,7 @@ fun ReceiveQrScreen(
     // LazyRow state with snap behavior
     val scope = rememberCoroutineScope()
     val lazyListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = visibleTabs.indexOf(initialTab ?: ReceiveTab.SAVINGS).coerceAtLeast(0),
+        initialFirstVisibleItemIndex = visibleTabs.indexOf(defaultTab).coerceAtLeast(0),
     )
 
     val snapBehavior = rememberSnapFlingBehavior(
@@ -192,15 +192,16 @@ fun ReceiveQrScreen(
             }
         }
         if (selectedTab !in visibleTabs) {
-            selectedTab = visibleTabs.first()
-            lazyListState.scrollToItem(0)
+            val fallbackTab = visibleTabs.defaultReceiveTab()
+            selectedTab = fallbackTab
+            lazyListState.scrollToItem(visibleTabs.indexOf(fallbackTab).coerceAtLeast(0))
         }
     }
 
     LaunchedEffect(canCreateLightningInvoice, cjitInvoice) {
         if (!canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()) {
             selectedTab = ReceiveTab.SAVINGS
-            lazyListState.scrollToItem(0)
+            lazyListState.scrollToItem(visibleTabs.indexOf(ReceiveTab.SAVINGS).coerceAtLeast(0))
         }
     }
 
@@ -217,7 +218,8 @@ fun ReceiveQrScreen(
 
     // Auto-switch to AUTO tab when it becomes available for the first time
     LaunchedEffect(canCreateLightningInvoice, cjitInvoice) {
-        if (canCreateLightningInvoice && cjitInvoice.isNullOrEmpty() && visibleTabs.contains(ReceiveTab.AUTO)) {
+        val shouldAutoSwitch = initialTab == null && canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()
+        if (shouldAutoSwitch && visibleTabs.contains(ReceiveTab.AUTO)) {
             val autoIndex = visibleTabs.indexOf(ReceiveTab.AUTO)
             if (autoIndex != -1) {
                 lazyListState.animateScrollToItem(autoIndex)
@@ -611,7 +613,7 @@ private fun ReceiveDetailsView(
     ) {
         Column(
             verticalArrangement = Arrangement.spacedBy(32.dp),
-            modifier = Modifier.padding(32.dp),
+            modifier = Modifier.padding(32.dp)
         ) {
             when (tab) {
                 ReceiveTab.SAVINGS -> {

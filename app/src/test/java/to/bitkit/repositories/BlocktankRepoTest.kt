@@ -26,8 +26,9 @@ import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.ServiceError
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -194,18 +195,55 @@ class BlocktankRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `canCreateCjit refreshes max channel size before checking amount`() = test {
+    fun `createCjit refreshes max channel size before checking amount`() = test {
         sut = createSut()
         val staleInfo = btInfo(maxChannelSizeSat = 1_000_000u)
         val freshInfo = btInfo(maxChannelSizeSat = 50_000u)
         whenever(coreService.blocktank.info(refresh = false)).thenReturn(staleInfo)
         whenever(coreService.blocktank.info(refresh = true)).thenReturn(staleInfo, freshInfo)
+        whenever(coreService.isGeoBlocked()).thenReturn(false)
+        whenever(lightningService.nodeId).thenReturn("node-id")
 
         sut.refreshInfo()
-        val result = sut.canCreateCjit(amountSats = 100_000u)
+        val result = sut.createCjit(amountSats = 100_000u)
 
-        assertFalse(result.getOrThrow())
+        assertIs<ServiceError.ChannelSizeExceedsMaximum>(result.exceptionOrNull())
         verify(coreService.blocktank, times(3)).info(refresh = true)
+    }
+
+    @Test
+    fun `createCjit uses cached max channel size when fresh info refresh fails`() = test {
+        sut = createSut()
+        val cachedInfo = btInfo(maxChannelSizeSat = 1_000_000u)
+        whenever(coreService.blocktank.info(refresh = false)).thenReturn(cachedInfo)
+        whenever(coreService.blocktank.info(refresh = true)).thenReturn(cachedInfo)
+            .thenThrow(RuntimeException("Network error"))
+        whenever(coreService.isGeoBlocked()).thenReturn(false)
+        whenever(lightningService.nodeId).thenReturn("node-id")
+
+        sut.refreshInfo()
+        val result = sut.createCjit(amountSats = 1_000_001uL)
+
+        assertIs<ServiceError.ChannelSizeExceedsMaximum>(result.exceptionOrNull())
+        verify(coreService.blocktank, times(3)).info(refresh = true)
+    }
+
+    @Test
+    fun `toCjitError maps node capacity limit to max channel size error`() {
+        val error = RuntimeException("Node capacity is above our capacity limit.")
+
+        val result = error.toCjitError()
+
+        assertIs<ServiceError.ChannelSizeExceedsMaximum>(result)
+    }
+
+    @Test
+    fun `toCjitError does not map generic channel size field error to max channel size error`() {
+        val error = RuntimeException("channelSizeSat must be above minimum")
+
+        val result = error.toCjitError()
+
+        assertEquals(error, result)
     }
 
     @Test

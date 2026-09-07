@@ -15,7 +15,6 @@ import to.bitkit.models.ReceiveLiquidityDecision
 import to.bitkit.models.ReceiveLiquiditySource
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.WalletRepo
-import to.bitkit.utils.Logger
 import javax.inject.Inject
 
 @HiltViewModel
@@ -75,19 +74,12 @@ class EditInvoiceVM @Inject constructor(
         }
 
         blocktankRepo.refreshMinCjitSats()
-        return blocktankRepo.maxCjitAmountSats().getOrElse {
-            Logger.warn("Failed to calculate max CJIT amount", it, context = TAG)
-            null
-        }
+        return blocktankRepo.maxCjitAmountSats().getOrNull()
     }
 
     sealed interface EditInvoiceScreenEffects {
         data class ApplyReceiveLiquidityAction(
             val action: ReceiveAdditionalLiquidityAction,
         ) : EditInvoiceScreenEffects
-    }
-
-    companion object {
-        const val TAG = "EditInvoiceVM"
     }
 }
