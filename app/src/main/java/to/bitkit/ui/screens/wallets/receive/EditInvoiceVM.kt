@@ -42,12 +42,13 @@ class EditInvoiceVM @Inject constructor(
     ) {
         viewModelScope.launch {
             _isLoading.update { true }
-            val maxCjitAmountSats = maxCjitAmountSats(source, amountSats, isGeoBlocked)
+            val inboundCapacitySats = walletRepo.inboundLiquiditySats()
+            val maxCjitAmountSats = maxCjitAmountSats(source, amountSats, inboundCapacitySats, isGeoBlocked)
             val action = ReceiveLiquidityDecision.additionalLiquidityAction(
                 ReceiveAdditionalLiquidityParams(
                     source = source,
                     invoiceAmountSats = amountSats,
-                    inboundCapacitySats = walletRepo.inboundLiquiditySats(),
+                    inboundCapacitySats = inboundCapacitySats,
                     minCjitSats = blocktankRepo.blocktankState.value.minCjitSats?.toULong(),
                     maxCjitAmountSats = maxCjitAmountSats,
                     isGeoBlocked = isGeoBlocked,
@@ -61,12 +62,13 @@ class EditInvoiceVM @Inject constructor(
     private suspend fun maxCjitAmountSats(
         source: ReceiveLiquiditySource,
         amountSats: ULong,
+        inboundCapacitySats: ULong,
         isGeoBlocked: Boolean,
     ): ULong? {
         if (!ReceiveLiquidityDecision.needsCjitLimitsForAdditionalLiquidity(
                 source = source,
                 invoiceAmountSats = amountSats,
-                inboundCapacitySats = walletRepo.inboundLiquiditySats(),
+                inboundCapacitySats = inboundCapacitySats,
                 isGeoBlocked = isGeoBlocked,
             )
         ) {

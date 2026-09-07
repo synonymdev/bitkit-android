@@ -2,9 +2,12 @@ package to.bitkit.ui.screens.wallets.receive
 
 import app.cash.turbine.test
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.models.ReceiveAdditionalLiquidityAction
 import to.bitkit.models.ReceiveLiquiditySource
@@ -22,7 +25,7 @@ class EditInvoiceVMTest : BaseUnitTest() {
     private val blocktankRepo: BlocktankRepo = mock()
 
     @Before
-    fun setUp() {
+    fun setUp() = runBlocking {
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(minCjitSats = 5_000)))
         whenever(walletRepo.inboundLiquiditySats()).thenReturn(1_000u)
         sut = EditInvoiceVM(walletRepo, blocktankRepo)
@@ -43,6 +46,7 @@ class EditInvoiceVMTest : BaseUnitTest() {
             )
             cancelAndIgnoreRemainingEvents()
         }
+        verify(walletRepo, times(1)).inboundLiquiditySats()
     }
 
     @Test

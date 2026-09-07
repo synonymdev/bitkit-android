@@ -305,6 +305,7 @@ class WalletRepoTest : BaseUnitTest() {
         )
 
         verify(onchainService, never()).deriveBitcoinAddress(any(), any(), any(), anyOrNull())
+        verify(lightningRepo, never()).syncState()
     }
 
     @Test
@@ -572,6 +573,7 @@ class WalletRepoTest : BaseUnitTest() {
         assertEquals(INVOICE, sut.walletState.value.bolt11)
         assertEquals(SATS, sut.walletState.value.bip21AmountSats)
         assertEquals(testDescription, sut.walletState.value.bip21Description)
+        verify(lightningRepo).syncState()
     }
 
     @Test
@@ -582,6 +584,7 @@ class WalletRepoTest : BaseUnitTest() {
         sut.refreshBip21ForEvent(channelReady)
 
         verify(lightningRepo, never()).createInvoice(anyOrNull(), any(), any())
+        verify(lightningRepo).syncState()
     }
 
     @Test
@@ -600,6 +603,7 @@ class WalletRepoTest : BaseUnitTest() {
         )
 
         assertEquals("", sut.walletState.value.bolt11)
+        verify(lightningRepo).syncState()
     }
 
     @Test
@@ -612,6 +616,7 @@ class WalletRepoTest : BaseUnitTest() {
         sut.refreshBip21ForEvent(channelReady)
 
         verify(lightningRepo).createInvoice(anyOrNull(), any(), any())
+        verify(lightningRepo).syncState()
         assertEquals(INVOICE, sut.walletState.value.bolt11)
     }
 

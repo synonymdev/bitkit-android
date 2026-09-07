@@ -755,8 +755,8 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    fun inboundLiquiditySats(): ULong {
-        return currentUsableChannels().calculateRemoteBalance()
+    suspend fun inboundLiquiditySats(): ULong = withContext(bgDispatcher) {
+        return@withContext currentUsableChannels().calculateRemoteBalance()
     }
 
     private fun canCreateLightningInvoice(amountSats: ULong?): Boolean {
