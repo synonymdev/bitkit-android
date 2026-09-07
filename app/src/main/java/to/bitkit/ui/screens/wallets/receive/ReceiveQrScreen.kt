@@ -182,13 +182,18 @@ fun ReceiveQrScreen(
         mutableStateOf(defaultTab)
     }
     var hasAppliedInitialTab by remember { mutableStateOf(false) }
+    var appliedInitialTab by remember { mutableStateOf<ReceiveTab?>(null) }
 
     LaunchedEffect(visibleTabs, initialTab) {
-        if (!hasAppliedInitialTab) {
+        val requestedTab = initialTab?.takeIf { it in visibleTabs }
+        val shouldApplyInitialTab = !hasAppliedInitialTab || requestedTab != null && requestedTab != appliedInitialTab
+        if (shouldApplyInitialTab) {
             hasAppliedInitialTab = true
-            initialTab?.takeIf { it in visibleTabs }?.let { requestedTab ->
-                selectedTab = requestedTab
-                lazyListState.scrollToItem(visibleTabs.indexOf(requestedTab))
+            appliedInitialTab = requestedTab
+            requestedTab?.let {
+                selectedTab = it
+                lazyListState.scrollToItem(visibleTabs.indexOf(it))
+                return@LaunchedEffect
             }
         }
         if (selectedTab !in visibleTabs) {
@@ -198,7 +203,8 @@ fun ReceiveQrScreen(
         }
     }
 
-    LaunchedEffect(canCreateLightningInvoice, cjitInvoice) {
+    LaunchedEffect(canCreateLightningInvoice, cjitInvoice, initialTab) {
+        if (initialTab == ReceiveTab.TREZOR) return@LaunchedEffect
         if (!canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()) {
             selectedTab = ReceiveTab.SAVINGS
             lazyListState.scrollToItem(visibleTabs.indexOf(ReceiveTab.SAVINGS).coerceAtLeast(0))

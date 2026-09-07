@@ -16,6 +16,11 @@ This document describes how the receive flow decides whether to show a normal Li
   - If the edited amount cannot be received over Lightning, Auto falls back to the Savings tab and shows the onchain QR instead of routing to CJIT.
   - The edit flow does not create CJIT or route to CJIT amount entry.
 
+- Editing from a hardware receive tab:
+  - Editing sets the amount for the hardware/onchain receive request.
+  - Returning from the edit flow preserves the hardware receive tab when the edit originated there.
+  - Editing from Savings or Auto while a hardware wallet is available still returns to the source tab, not the hardware tab.
+
 - Lightning receive unavailable because there is no ready channel or inbound liquidity is `0`:
   - No Lightning invoice is created.
   - The normal QR remains Savings/onchain only.

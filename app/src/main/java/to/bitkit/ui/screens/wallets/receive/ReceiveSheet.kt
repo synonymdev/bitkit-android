@@ -132,11 +132,11 @@ fun ReceiveSheet(
                         },
                         onClickEditInvoice = {
                             editInvoiceSourceTab = it
-                            invoiceEditState.beginSoftwareEdit()
+                            invoiceEditState.beginSoftwareEdit(it)
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         onClickHardwareEditInvoice = {
-                            editInvoiceSourceTab = ReceiveTab.SAVINGS
+                            editInvoiceSourceTab = ReceiveTab.TREZOR
                             invoiceEditState.beginHardwareEdit()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
@@ -356,17 +356,20 @@ fun ReceiveSheet(
 internal class ReceiveInvoiceEditState {
     var isHardwareInvoice by mutableStateOf(false)
         private set
+    private var returnTab by mutableStateOf<ReceiveTab?>(null)
 
-    fun beginSoftwareEdit() {
+    fun beginSoftwareEdit(sourceTab: ReceiveTab) {
         isHardwareInvoice = false
+        returnTab = sourceTab
     }
 
     fun beginHardwareEdit() {
         isHardwareInvoice = true
+        returnTab = ReceiveTab.TREZOR
     }
 
     fun initialTab(hardwareWalletId: String?): ReceiveTab? =
-        ReceiveTab.TREZOR.takeIf { hardwareWalletId != null || isHardwareInvoice }
+        returnTab ?: ReceiveTab.TREZOR.takeIf { hardwareWalletId != null }
 }
 
 @Composable
