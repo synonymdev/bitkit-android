@@ -893,9 +893,8 @@ class AppViewModel @Inject constructor(
             paykitPaymentRequestRepo.pendingRequests.drop(1).collect { requests ->
                 retainPaymentRequestPresentationState(requests)
                 val activeRequest = activeIncomingPaymentRequest() ?: return@collect
+                if (isSubmittingPaymentRequest || uncertainOnchainPaymentRequestId == activeRequest.id) return@collect
                 if (
-                    !isSubmittingPaymentRequest &&
-                    uncertainOnchainPaymentRequestId != activeRequest.id &&
                     currentSheet.value is Sheet.Send &&
                     requests.none { it.id == activeRequest.id }
                 ) {
