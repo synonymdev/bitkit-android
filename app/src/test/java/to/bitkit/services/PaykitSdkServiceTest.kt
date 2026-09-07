@@ -165,11 +165,7 @@ class PaykitSdkServiceTest {
         val provider = PaykitSdkSessionProvider(keychain)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved-session")
 
-        listOf(
-            "restore Pubky grant session from platform provider",
-            "Pubky session must be grant-backed",
-            "Pubky grant client ID `old.bitkit.to` did not match `staging.bitkit.to`",
-        ).forEach { assertTrue(provider.canDeferStaleSession(it)) }
+        assertTrue(provider.canDeferStaleSession("restore Pubky grant session from platform provider"))
         assertTrue(!provider.canDeferStaleSession("local Pubky secret key does not match session public key"))
         provider.suspendStoredSessionAccess()
         assertNull(provider.loadSessionAccess())
@@ -182,10 +178,6 @@ class PaykitSdkServiceTest {
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
 
         assertTrue(!provider.canDeferStaleSession("restore Pubky grant session from platform provider"))
-        assertTrue(!provider.canDeferStaleSession("Pubky session must be grant-backed"))
-        assertTrue(
-            !provider.canDeferStaleSession("Pubky grant client ID `old.bitkit.to` did not match `staging.bitkit.to`"),
-        )
         assertTrue(!provider.canDeferStaleSession("local Pubky secret key does not match session public key"))
     }
 

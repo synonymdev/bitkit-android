@@ -1086,11 +1086,7 @@ internal class PaykitSdkSessionProvider(
         keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)?.isNotBlank() == true
 
     fun canDeferStaleSession(errorContext: String): Boolean =
-        hasSessionAccess() && (
-            errorContext == STALE_SESSION_RESTORE_CONTEXT ||
-                errorContext == "Pubky session must be grant-backed" ||
-                errorContext.startsWith("Pubky grant client ID `")
-            )
+        errorContext == STALE_SESSION_RESTORE_CONTEXT && hasSessionAccess()
 
     fun suspendStoredSessionAccess() = synchronized(lock) {
         liveSessionAccess = null
