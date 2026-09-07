@@ -1,7 +1,7 @@
 package to.bitkit.ui.screens.profile
 
-import app.cash.turbine.test
 import android.content.Context
+import app.cash.turbine.test
 import com.synonym.paykit.PubkyAuthCompanionClaimApprovalException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -151,7 +151,11 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
     fun `signup requires consent and local auth before registration`() = test {
         listOf("pubkyauth://direct_signup", "pubkyauth://signup", "pubkyring://signup").forEach { prefix ->
             val authUrl = "$prefix?hs=homeserver" +
-                if (prefix.startsWith("pubkyring")) "&relay=https://relay.example/inbox/&secret=secret&caps=/pub/example/:rw" else ""
+                if (prefix.startsWith("pubkyring")) {
+                    "&relay=https://relay.example/inbox/&secret=secret&caps=/pub/example/:rw"
+                } else {
+                    ""
+                }
             val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
             whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
             whenever(pubkyRepo.approveSignupAuth(request)).thenReturn(Result.success(Unit))
