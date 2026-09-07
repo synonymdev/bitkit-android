@@ -21,6 +21,8 @@ import io.ktor.http.headersOf
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
@@ -667,6 +669,148 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(profileSetupPending.value)
         verify(keychain).loadString(Keychain.Key.BIP39_MNEMONIC.name)
         verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
+    }
+
+    @Test
+    fun `createIdentity restores a stored local key without Homegate signup`() = test {
+        val httpClient = identityHttpClient()
+        sut = createSut(httpClient)
+        profileSetupPending.value = true
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local-secret")
+        whenever(pubkyService.publicKeyFromSecret("local-secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+
+        val result = sut.createIdentity("Restored", "", emptyList(), emptyList(), null)
+
+        assertTrue(result.isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertEquals("Restored", sut.profile.value?.name)
+        assertFalse(profileSetupPending.value)
+        assertTrue((httpClient.engine as MockEngine).requestHistory.isEmpty())
+        verifyBlocking(pubkyService) { signIn("local-secret") }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verify(keychain, never()).loadString(Keychain.Key.BIP39_MNEMONIC.name)
+        httpClient.close()
+    }
+
+    @Test
+    fun `createIdentity stops when the local key cannot be read`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenAnswer {
+            throw TestAppError("unavailable")
+        }
+
+        val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+
+        assertEquals("unavailable", result.exceptionOrNull()?.message)
+        verify(keychain, never()).loadString(Keychain.Key.BIP39_MNEMONIC.name)
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
+    }
+
+    @Test
+    fun `createIdentity retries local sign in without deleting the existing identity`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local-secret")
+        whenever(pubkyService.publicKeyFromSecret("local-secret")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.signIn("local-secret")).thenAnswer { throw TestAppError("offline") }.thenReturn(Unit)
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+
+        val firstResult = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+
+        assertEquals("offline", firstResult.exceptionOrNull()?.message)
+        assertNull(sut.publicKey.value)
+        verifyBlocking(pubkyService, never()) { publishPaykitProfile(any()) }
+
+        assertTrue(sut.createIdentity("Test", "", emptyList(), emptyList(), null).isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verifyBlocking(pubkyService, times(2)) { signIn("local-secret") }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+        verify(keychain, never()).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+    }
+
+    @Test
+    fun `createIdentity preserves the existing identity when profile publication fails`() = test {
+        authenticateForTesting(publicKey = VALID_SELF_KEY)
+        val existingProfile = sut.profile.value
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local-secret")
+        whenever(pubkyService.publicKeyFromSecret("local-secret")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.publishPaykitProfile(any()))
+            .thenAnswer { throw TestAppError("offline") }
+            .thenReturn(mock())
+
+        val firstResult = sut.createIdentity("Updated", "", emptyList(), emptyList(), null)
+
+        assertEquals("offline", firstResult.exceptionOrNull()?.message)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertEquals(existingProfile, sut.profile.value)
+        assertTrue(sut.isAuthenticated.value)
+
+        assertTrue(sut.createIdentity("Updated", "", emptyList(), emptyList(), null).isSuccess)
+        verifyBlocking(pubkyService, times(2)) { signIn("local-secret") }
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+        verify(keychain, never()).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+    }
+
+    @Test
+    fun `createIdentity preserves local recovery after cancellation`() = test {
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("local-secret")
+        whenever(pubkyService.publicKeyFromSecret("local-secret")).thenReturn(VALID_SELF_KEY)
+        var cancelDuringSignIn: Boolean? = true
+        var operationStarted = CompletableDeferred<Unit>()
+        whenever(pubkyService.signIn("local-secret")).doSuspendableAnswer {
+            if (cancelDuringSignIn == true) {
+                operationStarted.complete(Unit)
+                awaitCancellation()
+            }
+            Unit
+        }
+        whenever(pubkyService.publishPaykitProfile(any())).doSuspendableAnswer {
+            if (cancelDuringSignIn == false) {
+                operationStarted.complete(Unit)
+                awaitCancellation()
+            }
+            mock()
+        }
+        for (duringSignIn in listOf(true, false)) {
+            cancelDuringSignIn = duringSignIn
+            operationStarted = CompletableDeferred()
+
+            val result = async { sut.createIdentity("Test", "", emptyList(), emptyList(), null) }
+            operationStarted.await()
+            result.cancelAndJoin()
+
+            assertTrue(result.isCancelled)
+            assertNull(sut.publicKey.value)
+        }
+
+        cancelDuringSignIn = null
+        assertTrue(sut.createIdentity("Test", "", emptyList(), emptyList(), null).isSuccess)
+        verifyBlocking(pubkyService, never()) { signUp(any(), any(), any()) }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
+        verify(keychain, never()).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+    }
+
+    @Test
+    fun `createIdentity signs up when a Ring session has no local key`() = test {
+        val httpClient = identityHttpClient()
+        sut = createSut(httpClient)
+        stubSignupKeys()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("ring-session")
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("")
+        whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
+
+        val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
+
+        assertTrue(result.isSuccess)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        verifyBlocking(pubkyService) { signUp("secret", "test-homeserver", "test-code") }
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        httpClient.close()
     }
 
     @Test

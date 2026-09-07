@@ -569,17 +569,23 @@ class PubkyRepo @Inject constructor(
             val result = runSuspendCatching {
                 withContext(ioDispatcher) {
                     settingsStore.setPubkyProfileSetupPending(false)
-                    val (publicKeyZ32, secretKeyHex) = deriveKeys().getOrThrow()
+                    val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+                    val publicKeyZ32 = if (!storedSecretKeyHex.isNullOrEmpty()) {
+                        pubkyService.signIn(storedSecretKeyHex)
+                        pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix()
+                    } else {
+                        val (publicKey, secretKeyHex) = deriveKeys().getOrThrow()
+                        val signupDetails: Pair<String, String?> = Env.e2eHomeserverPubky?.let { it to null }
+                            ?: fetchHomegateSignupCode().let { it.homeserverPubky to it.signupCode }
 
-                    val signupDetails: Pair<String, String?> = Env.e2eHomeserverPubky?.let { it to null }
-                        ?: fetchHomegateSignupCode().let { it.homeserverPubky to it.signupCode }
-
-                    shouldRevokeSessionOnFailure = true
-                    runSuspendCatching {
-                        pubkyService.signUp(secretKeyHex, signupDetails.first, signupDetails.second)
-                    }.getOrElse {
-                        Logger.warn("Retrying sign in after sign up failed", it, context = TAG)
-                        pubkyService.signIn(secretKeyHex)
+                        shouldRevokeSessionOnFailure = true
+                        runSuspendCatching {
+                            pubkyService.signUp(secretKeyHex, signupDetails.first, signupDetails.second)
+                        }.getOrElse {
+                            Logger.warn("Retrying sign in after sign up failed", it, context = TAG)
+                            pubkyService.signIn(secretKeyHex)
+                        }
+                        publicKey
                     }
 
                     val imageUrl = publishIdentityProfile(name, bio, links, tags, avatarBytes)
