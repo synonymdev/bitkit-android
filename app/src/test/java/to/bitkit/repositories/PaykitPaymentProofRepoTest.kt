@@ -29,6 +29,7 @@ import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.WalletScope
 import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
@@ -326,6 +327,8 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val errors = listOf(
             ServiceError.NodeNotSetup(),
             ServiceError.NodeNotStarted(),
+            NodeNotRunningError("payInvoice", NodeLifecycleState.Stopped),
+            NodeRunTimeoutError("payInvoice"),
             NodeException.NotRunning("stopped"),
             NodeException.InvalidInvoice("invalid"),
             NodeException.InvalidAmount("invalid"),

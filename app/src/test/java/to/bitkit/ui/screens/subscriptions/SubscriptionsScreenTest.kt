@@ -60,6 +60,23 @@ class SubscriptionsScreenTest {
     }
 
     @Test
+    fun `proposed subscription review updates at the first billing boundary`() {
+        val proposed = subscription(PaykitRecurrenceUnit.Month).let {
+            it.copy(
+                lifecycleState = PaymentRequestLifecycleState.PROPOSED,
+                recurrence = it.recurrence.copy(startsAt = now, anchor = Instant.parse("2027-01-15T08:01:00Z")),
+            )
+        }
+        val boundary = Instant.parse("2027-01-15T08:01:00Z")
+        assertEquals(boundary, proposed.paymentDueOnAcceptance(now)?.billingPeriod?.endsAt)
+        assertEquals(boundary, nextSubscriptionTransition(listOf(proposed), now))
+        assertEquals(
+            Instant.parse("2027-02-15T08:01:00Z"),
+            nextSubscriptionTransition(listOf(proposed), boundary),
+        )
+    }
+
+    @Test
     fun `monthly cost includes paid active subscriptions only`() {
         val paidPeriod = PaykitBillingPeriod(
             startsAt = Instant.parse("2027-01-01T08:00:00Z"),

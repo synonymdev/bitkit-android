@@ -895,6 +895,7 @@ class AppViewModel @Inject constructor(
                 val activeRequest = activeIncomingPaymentRequest() ?: return@collect
                 if (
                     !isSubmittingPaymentRequest &&
+                    uncertainOnchainPaymentRequestId != activeRequest.id &&
                     currentSheet.value is Sheet.Send &&
                     requests.none { it.id == activeRequest.id }
                 ) {
@@ -2786,6 +2787,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun clearActiveContactPaymentContext(retryIncomingRequest: Boolean = true) {
+        uncertainOnchainPaymentRequestId = null
         val interruptedRequest = synchronized(contactPaymentContextLock) {
             val request = activeContactPaymentContext?.incomingPaymentRequest
             activeContactPaymentContext = null
@@ -5456,6 +5458,8 @@ private fun Throwable.isDefiniteOnchainPreBroadcastFailure(): Boolean =
                 it is NodeException.NotRunning ||
                 it is NodeException.OnchainTxCreationFailed ||
                 it is NodeException.OnchainTxSigningFailed ||
+                it is NodeException.WalletOperationFailed ||
+                it is NodeException.PersistenceFailed ||
                 it is NodeException.InvalidAddress ||
                 it is NodeException.InvalidAmount ||
                 it is NodeException.InvalidNetwork ||

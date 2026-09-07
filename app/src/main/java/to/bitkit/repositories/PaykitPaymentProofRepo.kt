@@ -315,6 +315,8 @@ class PaykitPaymentProofRepo @Inject constructor(
     suspend fun failLightningPayment(paymentHash: String, submissionError: Throwable): Boolean {
         val error = submissionError.asNodeException() ?: submissionError
         when (error) {
+            is NodeNotRunningError,
+            is NodeRunTimeoutError,
             is ServiceError.NodeNotSetup,
             is ServiceError.NodeNotStarted,
             is NodeException.NotRunning,

@@ -677,6 +677,17 @@ private fun SubscriptionReview(
         MoneyDisplay(sats = subscription.displaySats, showSymbol = true)
         VerticalSpacer(24.dp)
         SubscriptionProviderCard(subscription, contact, onClick = onDetails)
+        subscription.paymentDueOnAcceptance(now)?.billingPeriod?.let { period ->
+            VerticalSpacer(16.dp)
+            BodyS(
+                text = stringResource(
+                    R.string.subscriptions__first_period_ends,
+                    dateTimeFormatterOf("MMM d, yyyy, HH:mm")
+                        .format(java.time.Instant.ofEpochMilli(period.endsAt.toEpochMilliseconds())),
+                ),
+                color = Colors.White64,
+            )
+        }
         if (!subscription.recurrence.unit.isSupported) {
             VerticalSpacer(16.dp)
             BodyM(text = stringResource(R.string.subscriptions__unsupported_description), color = Colors.White64)
@@ -1000,6 +1011,7 @@ internal fun nextSubscriptionTransition(
         listOf(it.recurrence.startsAt, it.proposalExpiresAt, it.recurrence.endsAt)
     }.filterNotNull().toMutableList()
     dates += activeSubscriptions.mapNotNull { it.recurrence.nextPeriodAfter(now)?.startsAt }
+    dates += subscriptions.mapNotNull { it.paymentDueOnAcceptance(now)?.billingPeriod?.endsAt }
     return dates.filter { it > now }.minOrNull()
 }
 

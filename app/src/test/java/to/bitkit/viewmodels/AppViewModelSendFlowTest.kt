@@ -4834,36 +4834,43 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `definite onchain failure after send attempt allows proof retry`() = test {
-        val request = paymentRequest()
-        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
-        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
-        stubOnchainSend(
-            address = "bcrt1qdefinitefailure",
-            sats = request.amountSats,
-            result = Result.failure(NodeException.InvalidAddress("invalid address")),
-        )
-        setActiveContactPaymentContext(
-            testPublicKey,
-            incomingPaymentRequest = request,
-            isInitialSubscriptionPayment = true,
-        )
-        setSendState(
-            SendUiState(
+        for (error in listOf(
+            NodeException.InvalidAddress("invalid address"),
+            NodeException.WalletOperationFailed("wallet"),
+            NodeException.PersistenceFailed("io"),
+        )) {
+            clearInvocations(paykitPaymentProofRepo)
+            val request = paymentRequest()
+            balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+            whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+            stubOnchainSend(
                 address = "bcrt1qdefinitefailure",
-                amount = request.amountSats,
-                payMethod = SendMethod.ONCHAIN,
-                speed = TransactionSpeed.Medium,
-                isPaymentRequest = true,
+                sats = request.amountSats,
+                result = Result.failure(error),
+            )
+            setActiveContactPaymentContext(
+                testPublicKey,
+                incomingPaymentRequest = request,
                 isInitialSubscriptionPayment = true,
             )
-        )
+            setSendState(
+                SendUiState(
+                    address = "bcrt1qdefinitefailure",
+                    amount = request.amountSats,
+                    payMethod = SendMethod.ONCHAIN,
+                    speed = TransactionSpeed.Medium,
+                    isPaymentRequest = true,
+                    isInitialSubscriptionPayment = true,
+                )
+            )
 
-        sut.sendEffect.test {
-            confirmCurrentPayment()
+            sut.sendEffect.test {
+                confirmCurrentPayment()
 
-            assertTrue(awaitItem() is SendEffect.NavigateToError)
+                assertTrue(awaitItem() is SendEffect.NavigateToError)
+            }
+            verify(paykitPaymentProofRepo).failOnchainPayment(request)
         }
-        verify(paykitPaymentProofRepo).failOnchainPayment(request)
     }
 
     @Test
@@ -4909,14 +4916,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
             sut.showSheet(Sheet.Send(pendingRoute))
 
+            pendingPaykitPaymentRequests.value = listOf(request)
+            runCurrent()
+            pendingPaykitPaymentRequests.value = emptyList()
+            runCurrent()
+            assertEquals(Sheet.Send(pendingRoute), sut.currentSheet.value)
+
             val transactionId = "ab".repeat(32)
-            onchainPaymentResolutions.value = listOf(
-                PaykitOnchainPaymentProofResolution(
-                    testPublicKey,
-                    request.id,
-                    transactionId,
-                ),
-            )
+            val resolution = PaykitOnchainPaymentProofResolution(testPublicKey, request.id, transactionId)
+            onchainPaymentResolutions.value = listOf(resolution)
             assertEquals(SendEffect.PaymentSuccess, awaitItem())
             runCurrent()
             assertEquals(transactionId, sut.successSendUiState.value.paymentHashOrTxId)
