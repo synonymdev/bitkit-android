@@ -106,6 +106,7 @@ fun EditInvoiceScreen(
     val blocktankVM = blocktankViewModel ?: return
     var keyboardVisible by remember { mutableStateOf(false) }
     var isSoftKeyboardVisible by keyboardAsState()
+    var isCreatingCjit by remember { mutableStateOf(false) }
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentReceiveSats by rememberUpdatedState(amountInputUiState.sats.toULong())
     val isLoading by editInvoiceVM.isLoading.collectAsStateWithLifecycle()
@@ -126,6 +127,7 @@ fun EditInvoiceScreen(
                             navigateCjitAmount()
                         }
                         is ReceiveAdditionalLiquidityAction.CreateCjit -> {
+                            isCreatingCjit = true
                             runSuspendCatching { blocktankVM.createCjit(action.amountSats) }.onSuccess { entry ->
                                 navigateReceiveConfirm(
                                     CjitEntryDetails(
@@ -144,6 +146,7 @@ fun EditInvoiceScreen(
                                 }
                                 navigateCjitAmount()
                             }
+                            isCreatingCjit = false
                         }
                         ReceiveAdditionalLiquidityAction.GeoBlocked -> navigateGeoBlock()
                     }
@@ -179,7 +182,7 @@ fun EditInvoiceScreen(
             updateOnchainInvoice(amountSats)
             onBack()
         },
-        isLoading = isLoading,
+        isLoading = isLoading || isCreatingCjit,
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
         isSoftKeyboardVisible = isSoftKeyboardVisible,
