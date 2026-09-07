@@ -39,11 +39,14 @@ string `value`. The fixture must keep watch-only account material and spending a
 Evidence must show the claimed account xpub and account index while omitting wallet seed material
 and tokens.
 
-Use an isolated, disposable runtime that implements this contract. Paykit Server merge
-`867fc883` supplies the canonical lowercase asset, network-correct endpoint identifier, JSON value
-payload, and initial private-link retry behavior. Before running the wallets, verify the complete
-Locks, Paykit, Pubky, bitcoind, and Fulcrum protocol path. The seller wallet fills the companion-auth
-role and the buyer wallet fills the reader role; the runtime supplies the remaining services.
+Use the pinned
+[`BitcoinErrorLog/pubky-marketplace/payments-env`](https://github.com/BitcoinErrorLog/pubky-marketplace/tree/ed03a32ecfe02deab40ad10ae1bac7fa18465c10/payments-env)
+runtime as the marketplace driver and Locks harness. Fixture commit `ed03a32e` pins Paykit Server
+source `867fc883` and verifies the canonical lowercase asset, network-correct endpoint identifier,
+JSON value payload, and initial private-link retry behavior. Its `scripts/verify.sh` proves the
+Locks, Paykit, Pubky, bitcoind, and Fulcrum protocol path. The seller wallet fills the
+companion-auth role and the buyer wallet fills the reader role; the other fixture roles remain
+unchanged.
 
 ## Required app changes
 
@@ -51,8 +54,8 @@ The full journey depends on the sibling work from the parent epic:
 
 - [#1208](https://github.com/synonymdev/bitkit-android/issues/1208) defines the issuer interop
   contract.
-- [#1209](https://github.com/synonymdev/bitkit-android/issues/1209) preserves rejected incoming
-  requests as visible history.
+- [#1209](https://github.com/synonymdev/bitkit-android/issues/1209) adds reason-specific parse
+  diagnostics and terminal feedback when an open-time Pay retry is exhausted.
 - [#1210](https://github.com/synonymdev/bitkit-android/issues/1210) owns the approved Payment Request
   intake policy. This journey does not implement or widen that policy.
 - [#1211](https://github.com/synonymdev/bitkit-android/issues/1211) prevents an Electrum-rejected
@@ -82,7 +85,9 @@ Keep these artifacts at each boundary:
 | Confirmation | Confirmed buyer activity snapshot | Transaction id at one or more confirmations and completed purchase status |
 
 `SendSuccess` is evidence of backend acceptance, not confirmation. The fixture's chain and purchase
-status are the confirmation authority.
+status are the confirmation authority. `PaymentRequestPay-<payment-request-id>` is Android-only;
+this Android journey uses that testTag, while an iOS buyer must locate its Pay control by its
+accessible label until iOS adds a counterpart.
 
 ## Release provenance
 
