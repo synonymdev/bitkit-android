@@ -76,6 +76,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     private val trezorRepo = mock<TrezorRepo>()
+    private val jadeRepo = mock<JadeRepo>()
     private val activityRepo = mock<ActivityRepo>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val hwWalletStore = mock<HwWalletStore>()
@@ -84,6 +85,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     private lateinit var storeData: MutableStateFlow<HwWalletData>
     private lateinit var settingsData: MutableStateFlow<SettingsData>
     private lateinit var trezorState: MutableStateFlow<TrezorState>
+    private lateinit var jadeState: MutableStateFlow<JadeRepoState>
     private lateinit var watcherEvents: MutableSharedFlow<Pair<String, WatcherEvent>>
 
     private val device = KnownDevice(
@@ -110,7 +112,10 @@ class HwWalletRepoTest : BaseUnitTest() {
         storeData = MutableStateFlow(HwWalletData(knownDevices = listOf(device)))
         settingsData = MutableStateFlow(SettingsData())
         trezorState = MutableStateFlow(TrezorState())
+        jadeState = MutableStateFlow(JadeRepoState())
         watcherEvents = MutableSharedFlow(extraBufferCapacity = 8)
+        whenever(jadeRepo.state).thenReturn(jadeState)
+        whenever { jadeRepo.scan(any()) }.thenReturn(Result.success(emptyList()))
         whenever(hwWalletStore.data).thenReturn(storeData)
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(trezorRepo.state).thenReturn(trezorState)
@@ -140,6 +145,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     private fun createRepo() = HwWalletRepo(
         trezorRepo = trezorRepo,
+        jadeRepo = jadeRepo,
         activityRepo = activityRepo,
         preActivityMetadataRepo = preActivityMetadataRepo,
         hwWalletStore = hwWalletStore,
@@ -1923,6 +1929,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 network = any(),
                 accountType = anyOrNull(),
                 coinSelection = any(),
+                fingerprint = anyOrNull(),
             )
         ).thenReturn(
             Result.success(

@@ -49,6 +49,7 @@ import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -97,6 +98,8 @@ fun ReceiveQrScreen(
     modifier: Modifier = Modifier,
     initialTab: ReceiveTab? = null,
     hardwareWalletId: String? = null,
+    /** Vendor name shown on the hardware tab, e.g. "Trezor" or "Jade". */
+    hardwareTabLabel: String? = null,
     hardwareReceiveState: HwReceiveUiState = HwReceiveUiState(),
     onLoadHardwareAddress: (String) -> Unit = {},
     onRetryHardwareAddress: () -> Unit = {},
@@ -112,7 +115,7 @@ fun ReceiveQrScreen(
     val visibleTabs = remember(hasUsableChannels, hardwareWalletId) {
         buildList {
             if (hardwareWalletId != null) {
-                add(ReceiveTab.TREZOR)
+                add(ReceiveTab.HARDWARE)
             }
             add(ReceiveTab.SAVINGS)
             if (hasUsableChannels) {
@@ -213,7 +216,7 @@ fun ReceiveQrScreen(
 
     LaunchedEffect(selectedTab, hardwareWalletId) {
         showDetails = false
-        if (selectedTab == ReceiveTab.TREZOR && hardwareWalletId != null) {
+        if (selectedTab == ReceiveTab.HARDWARE && hardwareWalletId != null) {
             onLoadHardwareAddress(hardwareWalletId)
         }
     }
@@ -240,6 +243,9 @@ fun ReceiveQrScreen(
                 tabs = visibleTabs,
                 currentTabIndex = visibleTabs.indexOf(selectedTab),
                 selectedColor = Colors.White,
+                labelOverrides = remember(hardwareTabLabel) {
+                    hardwareTabLabel?.let { persistentMapOf(ReceiveTab.HARDWARE to it) } ?: persistentMapOf()
+                },
                 onTabChange = { tab ->
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     val newIndex = visibleTabs.indexOf(tab)
@@ -282,7 +288,7 @@ fun ReceiveQrScreen(
                                 )
                             }
 
-                            tab == ReceiveTab.TREZOR && hardwareReceiveState.address == null -> {
+                            tab == ReceiveTab.HARDWARE && hardwareReceiveState.address == null -> {
                                 HardwareAddressLoadingView(
                                     isLoading = hardwareReceiveState.isLoadingAddress,
                                     hasFailed = hardwareReceiveState.addressLoadFailed,
@@ -300,7 +306,7 @@ fun ReceiveQrScreen(
                                     onClickEditInvoice = onClickEditInvoice,
                                     onClickHardwareEditInvoice = onClickHardwareEditInvoice,
                                     hardwareAddress = hardwareReceiveState.address?.address,
-                                    hardwareInvoice = invoicesByTab[ReceiveTab.TREZOR].orEmpty(),
+                                    hardwareInvoice = invoicesByTab[ReceiveTab.HARDWARE].orEmpty(),
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -313,7 +319,7 @@ fun ReceiveQrScreen(
                                         walletState.onchainAddress,
                                     )
 
-                                    ReceiveTab.TREZOR -> invoice.takeIf { '?' in it }
+                                    ReceiveTab.HARDWARE -> invoice.takeIf { '?' in it }
                                         ?: hardwareReceiveState.address?.address.orEmpty()
 
                                     else -> invoice
@@ -323,7 +329,7 @@ fun ReceiveQrScreen(
                                     uri = invoice,
                                     copyText = copyText,
                                     qrLogoPainter = painterResource(getQrLogoResource(tab)),
-                                    onClickEditInvoice = if (tab == ReceiveTab.TREZOR) {
+                                    onClickEditInvoice = if (tab == ReceiveTab.HARDWARE) {
                                         onClickHardwareEditInvoice
                                     } else if (cjitInvoice.isNullOrEmpty()) {
                                         onClickEditInvoice
@@ -375,7 +381,7 @@ fun ReceiveQrScreen(
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                         modifier = Modifier.padding(horizontal = 16.dp)
                     ) {
-                        if (selectedTab == ReceiveTab.TREZOR) {
+                        if (selectedTab == ReceiveTab.HARDWARE) {
                             SecondaryButton(
                                 text = stringResource(R.string.hardware__verify_address),
                                 enabled = hardwareReceiveState.address != null,
@@ -404,7 +410,7 @@ fun ReceiveQrScreen(
                     BottomButtonVariant.SHOW_DETAILS -> TertiaryButton(
                         text = stringResource(R.string.wallet__receive_show_details),
                         onClick = { showDetails = true },
-                        enabled = selectedTab != ReceiveTab.TREZOR || hardwareReceiveState.address != null,
+                        enabled = selectedTab != ReceiveTab.HARDWARE || hardwareReceiveState.address != null,
                         fullWidth = true,
                         modifier = Modifier
                             .padding(horizontal = 16.dp)
@@ -645,7 +651,7 @@ private fun ReceiveDetailsView(
                     }
                 }
 
-                ReceiveTab.TREZOR -> {
+                ReceiveTab.HARDWARE -> {
                     hardwareAddress?.let { address ->
                         CopyAddressCard(
                             title = stringResource(R.string.wallet__receive_bitcoin_invoice),

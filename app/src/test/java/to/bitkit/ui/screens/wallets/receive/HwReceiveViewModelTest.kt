@@ -23,6 +23,7 @@ import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HwReceiveViewModelTest : BaseUnitTest() {
@@ -38,6 +39,7 @@ class HwReceiveViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(hwWalletRepo.wallets).thenReturn(wallets)
         whenever(hwWalletRepo.observeReceiveAddress(any(), any())).thenReturn(receiveAddress)
+        whenever { hwWalletRepo.reconnectTimeout(any()) }.thenReturn(30.seconds)
         sut = HwReceiveViewModel(context, hwWalletRepo)
     }
 

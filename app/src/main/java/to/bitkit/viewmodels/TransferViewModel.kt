@@ -10,6 +10,7 @@ import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.IBtOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
@@ -46,15 +47,16 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.env.Defaults
 import to.bitkit.ext.amountOnClose
 import to.bitkit.ext.isBroadcastConnectivityFailure
-import to.bitkit.ext.isTrezorDeviceBusy
-import to.bitkit.ext.isTrezorFirmwareError
-import to.bitkit.ext.isTrezorSessionFailure
-import to.bitkit.ext.isTrezorUserCancellation
+import to.bitkit.ext.isHwDeviceBusy
+import to.bitkit.ext.isHwFirmwareError
+import to.bitkit.ext.isHwSessionFailure
+import to.bitkit.ext.isHwUserCancellation
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toUserMessage
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.HwWallet
 import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransferType
@@ -70,6 +72,7 @@ import to.bitkit.repositories.WalletRepo
 import to.bitkit.services.BoltzService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
+import to.bitkit.utils.HwErrorPresenter
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import kotlin.math.min
@@ -97,6 +100,10 @@ class TransferViewModel @Inject constructor(
     private val boltzService: BoltzService,
     private val clock: Clock,
 ) : ViewModel() {
+
+    /** Paired hardware wallets, for screens that render vendor-specific device visuals. */
+    val hardwareWallets: StateFlow<ImmutableList<HwWallet>>
+        get() = hwWalletRepo.wallets
     private val _spendingUiState = MutableStateFlow(TransferToSpendingUiState())
     val spendingUiState = _spendingUiState.asStateFlow()
 
@@ -1169,12 +1176,13 @@ class TransferViewModel @Inject constructor(
     @Suppress("ThrowsCount")
     private suspend fun ensureHardwareConnected(walletId: String) {
         runCatching {
-            withTimeout(HW_RECONNECT_TIMEOUT) {
+            // A Jade reconnect may include entering the PIN on the device, so the budget is per vendor.
+            withTimeout(hwWalletRepo.reconnectTimeout(walletId)) {
                 hwWalletRepo.ensureConnected(walletId).getOrThrow()
             }
         }.getOrElse {
             it.rethrowIfCancellation()
-            if (it.isTrezorUserCancellation()) throw it
+            if (it.isHwUserCancellation()) throw it
             throw HardwareReconnectError(it)
         }
     }
@@ -1204,7 +1212,7 @@ class TransferViewModel @Inject constructor(
     ): HwFundingSignedTx {
         val firstAttempt = runSuspendCatching { signHardwareFundingOnce(walletId, funding) }
         val error = firstAttempt.exceptionOrNull() ?: return firstAttempt.getOrThrow()
-        if (!error.isTrezorSessionFailure()) throw error
+        if (!error.isHwSessionFailure()) throw error
 
         ensureHardwareConnected(walletId)
         return signHardwareFundingOnce(walletId, funding)
@@ -1244,7 +1252,7 @@ class TransferViewModel @Inject constructor(
     }
 
     private suspend fun handleHardwareTransferFailure(e: Throwable, walletId: String) {
-        if (e.isTrezorUserCancellation()) {
+        if (e.isHwUserCancellation()) {
             Logger.info("Hardware transfer cancelled on device for '$walletId'", context = TAG)
             return
         }
@@ -1254,16 +1262,16 @@ class TransferViewModel @Inject constructor(
             _spendingUiState.update { it.copy(isHwPassphraseRequired = true) }
             return
         }
-        if (e.isTrezorDeviceBusy()) {
-            Logger.warn("Blocked hardware transfer for locked or busy Trezor '$walletId'", e, context = TAG)
+        if (e.isHwDeviceBusy()) {
+            Logger.warn("Blocked hardware transfer for locked or busy device '$walletId'", e, context = TAG)
             ToastEventBus.send(
                 type = Toast.ToastType.INFO,
-                title = context.getString(R.string.hardware__device_busy),
+                title = HwErrorPresenter.userMessage(context, e),
             )
             return
         }
-        if (e.isTrezorFirmwareError()) {
-            Logger.warn("Received Trezor firmware error for '$walletId'", e, context = TAG)
+        if (e.isHwFirmwareError()) {
+            Logger.warn("Received hardware firmware error for '$walletId'", e, context = TAG)
             showHardwareReconnectRequiredError()
             return
         }
@@ -1833,9 +1841,6 @@ class TransferViewModel @Inject constructor(
 
         /** Minimum fallback fee rate when fee estimates are temporarily unavailable. */
         private const val HW_FUNDING_FALLBACK_SATS_PER_VBYTE = 3uL
-
-        /** Upper bound for reconnecting a known device before the UI asks for reconnect. */
-        private val HW_RECONNECT_TIMEOUT = 30.seconds
 
         /** Upper bound for exact hardware funding composition before signing starts. */
         private val HW_COMPOSE_TIMEOUT = 45.seconds

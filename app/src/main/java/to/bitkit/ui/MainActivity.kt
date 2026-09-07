@@ -39,9 +39,11 @@ import to.bitkit.androidServices.LightningNodeService.Companion.ACTION_START_SER
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.SamRockSetupRequest
+import to.bitkit.services.JadeTransport
 import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.IsOnlineTracker
 import to.bitkit.ui.components.ToastOverlay
+import to.bitkit.ui.components.modelNameRes
 import to.bitkit.ui.onboarding.CreateWalletWithPassphraseScreen
 import to.bitkit.ui.onboarding.IntroScreen
 import to.bitkit.ui.onboarding.OnboardingSlidesScreen
@@ -56,6 +58,8 @@ import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.ui.utils.composableWithDefaultTransitions
 import to.bitkit.ui.utils.enableAppEdgeToEdge
+import to.bitkit.ui.utils.hwVendorOrNull
+import to.bitkit.ui.utils.isHwBootloader
 import to.bitkit.utils.Logger
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -66,18 +70,16 @@ import to.bitkit.viewmodels.MainScreenEffect
 import to.bitkit.viewmodels.SettingsViewModel
 import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
-
-private const val TREZOR_WEBUSB_VENDOR_ID = 0x1209
-private const val TREZOR_WEBUSB_FIRMWARE_PRODUCT_ID = 0x53C1
-private const val TREZOR_WEBUSB_BOOTLOADER_PRODUCT_ID = 0x53C0
-private const val TREZOR_LEGACY_VENDOR_ID = 0x534C
-private const val TREZOR_LEGACY_PRODUCT_ID = 0x0001
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : FragmentActivity() {
     private companion object {
         const val KEY_CONSUMED_LAUNCH_INTENT = "consumed_launch_intent"
     }
+
+    @Inject
+    lateinit var jadeTransport: JadeTransport
 
     private val appViewModel by viewModels<AppViewModel>()
     private val walletViewModel by viewModels<WalletViewModel>()
@@ -252,11 +254,12 @@ class MainActivity : FragmentActivity() {
             appViewModel.onUsbDeviceAttached()
             return
         }
-        if (!device.isSupportedTrezorDevice()) return
+        val vendor = device.hwVendorOrNull() ?: return
 
         appViewModel.onUsbDeviceAttached(
-            deviceId = device.deviceName.takeUnless { device.isTrezorBootloader() },
-            deviceModel = getString(R.string.hardware__device_model_trezor),
+            deviceId = device.deviceName.takeUnless { device.isHwBootloader() },
+            deviceModel = getString(vendor.modelNameRes()),
+            vendor = vendor,
         )
     }
 
@@ -269,6 +272,9 @@ class MainActivity : FragmentActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // A Jade left with an open Bluetooth link when the process dies can refuse connections until
+        // it is power-cycled, so release every link when the activity is going away for good.
+        if (isFinishing) jadeTransport.closeAllConnections()
         if (!settingsViewModel.notificationsGranted.value) {
             stopForegroundService()
         }
@@ -312,15 +318,6 @@ internal fun Intent?.launchKey(): String? {
 
 private fun Intent.usbDevice(): UsbDevice? =
     IntentCompat.getParcelableExtra(this, UsbManager.EXTRA_DEVICE, UsbDevice::class.java)
-
-private fun UsbDevice.isSupportedTrezorDevice() = isTrezorFirmwareDevice() || isTrezorBootloader()
-
-private fun UsbDevice.isTrezorFirmwareDevice() =
-    (vendorId == TREZOR_WEBUSB_VENDOR_ID && productId == TREZOR_WEBUSB_FIRMWARE_PRODUCT_ID) ||
-        (vendorId == TREZOR_LEGACY_VENDOR_ID && productId == TREZOR_LEGACY_PRODUCT_ID)
-
-private fun UsbDevice.isTrezorBootloader() =
-    vendorId == TREZOR_WEBUSB_VENDOR_ID && productId == TREZOR_WEBUSB_BOOTLOADER_PRODUCT_ID
 
 @Composable
 private fun OnboardingNav(

@@ -4,9 +4,9 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.CoinSelection
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
+import com.synonym.bitkitcore.JadeException
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.TransactionDetails
-import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.WatcherEvent
 import kotlinx.collections.immutable.ImmutableList
@@ -38,19 +38,23 @@ import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
-import to.bitkit.ext.isTrezorSessionFailure
+import to.bitkit.ext.isHwSessionFailure
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.scopedId
 import to.bitkit.ext.timestamp
 import to.bitkit.ext.walletId
+import to.bitkit.models.HwConnectedDevice
+import to.bitkit.models.HwDeviceState
 import to.bitkit.models.HwFundingAccount
 import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.HwNearbyDevice
 import to.bitkit.models.HwReceiveAddress
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.WalletScope
@@ -59,26 +63,31 @@ import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toTrezorCoinType
+import to.bitkit.models.walletKey
 import to.bitkit.services.TrezorWalletMode
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.math.ceil
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 
 /**
- * Production hardware-wallet business layer. Tracks paired Trezor devices as
- * watch-only balances by running one on-chain xpub watcher per (device, address type)
- * and exposing the aggregated per-device balance and activity to the UI.
+ * Production hardware-wallet business layer. Tracks paired devices of every vendor as
+ * watch-only balances by running one on-chain xpub watcher per (wallet, address type)
+ * and exposing the aggregated per-wallet balance and activity to the UI.
  *
- * Built on top of [TrezorRepo], which owns the device list, connect orchestration
- * and the underlying watcher transport.
+ * Device sessions are owned per vendor by [TrezorRepo] and [JadeRepo]; every call that
+ * touches a device is routed by the vendor of the wallet's stored entry. The watcher and
+ * on-chain transport is vendor neutral and lives in [TrezorRepo].
  */
-@Suppress("LargeClass", "TooManyFunctions")
+@Suppress("LargeClass", "TooManyFunctions", "LongParameterList")
 @Singleton
 class HwWalletRepo @Inject constructor(
     private val trezorRepo: TrezorRepo,
+    private val jadeRepo: JadeRepo,
     private val activityRepo: ActivityRepo,
     private val preActivityMetadataRepo: PreActivityMetadataRepo,
     private val hwWalletStore: HwWalletStore,
@@ -93,7 +102,14 @@ class HwWalletRepo @Inject constructor(
 
         /** Trezor v1 (2.4.0) tracks native SegWit accounts. */
         private val SUPPORTED_WATCHER_ADDRESS_TYPES = setOf(HwFundingAddressType.NATIVE_SEGWIT.settingsKey)
+
+        /** A Trezor reconnect is a session handshake; a Jade one may include entering the PIN on the device. */
+        private val TREZOR_RECONNECT_TIMEOUT = 30.seconds
+        private val JADE_RECONNECT_TIMEOUT = 5.minutes
     }
+
+    /** Alternates which vendor gets the Bluetooth part of a scan, to stay under Android's scan-rate limit. */
+    private var scanBluetoothVendor = HwWalletVendor.TREZOR
 
     private val scope = appScope(ioDispatcher, TAG)
     private val watcherMutex = Mutex()
@@ -115,14 +131,37 @@ class HwWalletRepo @Inject constructor(
     val receivedTxs: SharedFlow<HwWalletReceivedTx> = _receivedTxs.asSharedFlow()
 
     /** Forwards UI-delivered transport events, e.g. the USB attach intent from the OS app picker. */
-    fun onTransportRestored(transportType: TransportType) = trezorRepo.onTransportRestored(transportType)
+    fun onTransportRestored(transportType: TransportType, vendor: HwWalletVendor? = null) {
+        if (vendor != HwWalletVendor.BLOCKSTREAM) trezorRepo.onTransportRestored(transportType)
+        if (vendor != HwWalletVendor.TREZOR) jadeRepo.onTransportRestored(transportType)
+    }
 
-    fun onAppForegrounded() = trezorRepo.onAppForegrounded()
+    fun onAppForegrounded() {
+        trezorRepo.onAppForegrounded()
+        jadeRepo.onAppForegrounded()
+    }
+
+    /** The whole app left the foreground; a Jade releases its Bluetooth link after a grace period. */
+    fun onAppBackgrounded() = jadeRepo.onAppBackgrounded()
 
     fun warmUpKnownDevice(walletId: String) {
         scope.launch {
-            transportDeviceIdOrNull(walletId)?.let { trezorRepo.warmUpKnownDevice(it) }
+            val deviceId = transportDeviceIdOrNull(walletId) ?: return@launch
+            when (vendorOf(walletId)) {
+                HwWalletVendor.TREZOR -> trezorRepo.warmUpKnownDevice(deviceId)
+                HwWalletVendor.BLOCKSTREAM -> jadeRepo.warmUpKnownDevice(deviceId)
+            }
         }
+    }
+
+    /** The vendor of the device tracking [walletId]; entries stored before Jade existed are Trezor ones. */
+    private suspend fun vendorOf(walletId: String): HwWalletVendor =
+        devicesForWallet(walletId).firstOrNull()?.vendor ?: HwWalletVendor.TREZOR
+
+    /** How long a reconnect may take before the UI gives up; a Jade may be waiting for its PIN. */
+    suspend fun reconnectTimeout(walletId: String): Duration = when (vendorOf(walletId)) {
+        HwWalletVendor.TREZOR -> TREZOR_RECONNECT_TIMEOUT
+        HwWalletVendor.BLOCKSTREAM -> JADE_RECONNECT_TIMEOUT
     }
 
     /**
@@ -135,7 +174,7 @@ class HwWalletRepo @Inject constructor(
     /** Transport-level id to reach [walletId] with: the connected entry, else the most recent one. */
     private suspend fun transportDeviceIdOrNull(walletId: String): String? {
         val devices = devicesForWallet(walletId)
-        val connectedId = trezorRepo.state.value.connectedDeviceId()
+        val connectedId = deviceState.value.connectedDeviceId()
         return devices.find { it.id == connectedId }?.id ?: devices.maxByOrNull { it.lastConnectedAt }?.id
     }
 
@@ -159,6 +198,7 @@ class HwWalletRepo @Inject constructor(
             _watcherData.update { emptyMap() }
         }
         trezorRepo.resetState()
+        jadeRepo.resetState()
     }
 
     /** Pairing-code request raised by the device during connect; the UI shows the Pair Device sheet. */
@@ -171,22 +211,75 @@ class HwWalletRepo @Inject constructor(
 
     fun cancelPairingCode() = trezorRepo.cancelPairingCode()
 
-    /** Device discovery and connection state used by the Connect Hardware flow. */
-    val deviceState: StateFlow<TrezorState> = trezorRepo.state
+    /** Device discovery and connection state of every vendor, merged for the Connect Hardware flow. */
+    val deviceState: StateFlow<HwDeviceState> = combine(trezorRepo.state, jadeRepo.state) { trezor, jade ->
+        val trezorState = trezor.toHwDeviceState()
+        val jadeState = jade.toHwDeviceState()
+        HwDeviceState(
+            isScanning = trezorState.isScanning || jadeState.isScanning,
+            isConnecting = trezorState.isConnecting || jadeState.isConnecting,
+            isAutoReconnecting = trezorState.isAutoReconnecting || jadeState.isAutoReconnecting,
+            isUnlocking = jadeState.isUnlocking,
+            knownDevices = (trezorState.knownDevices + jadeState.knownDevices).toImmutableList(),
+            nearbyDevices = (trezorState.nearbyDevices + jadeState.nearbyDevices).toImmutableList(),
+            connected = trezorState.connected ?: jadeState.connected,
+            error = trezorState.error ?: jadeState.error,
+        )
+    }.stateIn(scope, SharingStarted.Eagerly, HwDeviceState())
 
-    /** Scans for nearby unpaired devices; results land in [deviceState]'s nearbyDevices. */
+    /**
+     * Scans every vendor for nearby unpaired devices; results land in [deviceState]'s nearbyDevices.
+     * USB is enumerated for both vendors every time, while the Bluetooth part alternates between
+     * them: Android throttles apps that start scans too often, and a scan drops any open Bluetooth
+     * link, so none runs while either vendor holds one. Succeeds when either vendor's scan does.
+     */
     suspend fun scan(
         includeBluetooth: Boolean = true,
-    ): Result<List<TrezorDeviceInfo>> = trezorRepo.scan(
-        includeBluetooth = includeBluetooth,
-    )
+    ): Result<List<HwNearbyDevice>> = withContext(ioDispatcher) {
+        val bluetoothVendor = scanBluetoothVendor
+        scanBluetoothVendor = when (bluetoothVendor) {
+            HwWalletVendor.TREZOR -> HwWalletVendor.BLOCKSTREAM
+            HwWalletVendor.BLOCKSTREAM -> HwWalletVendor.TREZOR
+        }
+        val bluetoothFree = includeBluetooth && !hasOpenBluetoothSession()
+        val trezor = trezorRepo.scan(includeBluetooth = bluetoothFree && bluetoothVendor == HwWalletVendor.TREZOR)
+        val jade = jadeRepo.scan(includeBluetooth = bluetoothFree && bluetoothVendor == HwWalletVendor.BLOCKSTREAM)
+        if (trezor.isFailure && jade.isFailure) {
+            return@withContext Result.failure(checkNotNull(trezor.exceptionOrNull()))
+        }
+        val found = trezor.getOrDefault(emptyList()).map { it.toHwNearbyDevice() } +
+            jade.getOrDefault(emptyList()).map { it.toHwNearbyDevice() }
+        Result.success(found)
+    }
 
-    suspend fun hasKnownDevice(deviceId: String): Boolean = trezorRepo.hasKnownDevice(deviceId)
+    private suspend fun hasOpenBluetoothSession(): Boolean {
+        val connected = deviceState.value.connected ?: return false
+        return devicesForDeviceId(connected.id).any { it.transportType == TransportType.BLUETOOTH } ||
+            connected.id.startsWith("ble:")
+    }
+
+    private suspend fun devicesForDeviceId(deviceId: String): List<KnownDevice> =
+        hwWalletStore.loadKnownDevices().filter { it.id == deviceId || it.path == deviceId }
+
+    suspend fun hasKnownDevice(deviceId: String, vendor: HwWalletVendor? = null): Boolean = when (vendor) {
+        HwWalletVendor.TREZOR -> trezorRepo.hasKnownDevice(deviceId)
+        // A USB path is renumbered on every plug, so any paired USB Jade claims a plugged-in one.
+        HwWalletVendor.BLOCKSTREAM -> jadeRepo.hasKnownUsbDevice(deviceId)
+        null -> trezorRepo.hasKnownDevice(deviceId) || jadeRepo.hasKnownDevice(deviceId)
+    }
 
     /** Connects and pairs a discovered device, persisting it as a watch-only known device. */
-    suspend fun connect(deviceId: String): Result<TrezorFeatures> {
-        trezorRepo.resetWalletSelection()
-        return trezorRepo.connect(deviceId)
+    suspend fun connect(
+        deviceId: String,
+        vendor: HwWalletVendor = HwWalletVendor.TREZOR,
+    ): Result<HwConnectedDevice> = when (vendor) {
+        HwWalletVendor.TREZOR -> {
+            trezorRepo.resetWalletSelection()
+            trezorRepo.connect(deviceId).map { features ->
+                trezorRepo.state.value.connected?.toHwConnectedDevice() ?: features.toHwConnectedDevice(deviceId)
+            }
+        }
+        HwWalletVendor.BLOCKSTREAM -> jadeRepo.connect(deviceId).map { it.toHwConnectedDevice() }
     }
 
     /**
@@ -205,6 +298,7 @@ class HwWalletRepo @Inject constructor(
                 // user retyping a passphrase that can never take effect. Only the device can say
                 // that though: with no session there is nothing to ask, and sending the user to
                 // enable a setting they already have on helps nobody.
+                if (jadeRepo.state.value.connected?.matches(deviceId) == true) throw HwPassphraseDisabledError()
                 val features = trezorRepo.state.value.connectedDevice()
                     ?: throw AppError("Lost the session with device '$deviceId' before reading its wallet")
                 if (features.passphraseProtection != true) throw HwPassphraseDisabledError()
@@ -222,9 +316,17 @@ class HwWalletRepo @Inject constructor(
     suspend fun reconnect(
         walletId: String,
         forceSession: Boolean = false,
-    ): Result<TrezorFeatures> = withContext(ioDispatcher) {
+    ): Result<HwConnectedDevice> = withContext(ioDispatcher) {
         runSuspendCatching {
-            trezorRepo.connectKnownDevice(transportDeviceId(walletId), forceSession = forceSession).getOrThrow()
+            val deviceId = transportDeviceId(walletId)
+            when (vendorOf(walletId)) {
+                HwWalletVendor.TREZOR -> trezorRepo.connectKnownDevice(deviceId, forceSession = forceSession)
+                    .getOrThrow()
+                    .toHwConnectedDevice(deviceId)
+                HwWalletVendor.BLOCKSTREAM -> jadeRepo.connectKnownDevice(deviceId, forceSession = forceSession)
+                    .getOrThrow()
+                    .toHwConnectedDevice()
+            }
         }
     }
 
@@ -234,10 +336,18 @@ class HwWalletRepo @Inject constructor(
      * otherwise be accepted and sign with the wrong seed. The standard wallet needs no secret to
      * reopen; a passphrase wallet does, which the caller has to collect.
      */
-    suspend fun ensureConnected(walletId: String): Result<TrezorFeatures> = withContext(ioDispatcher) {
+    suspend fun ensureConnected(walletId: String): Result<HwConnectedDevice> = withContext(ioDispatcher) {
         runSuspendCatching {
             val deviceId = transportDeviceId(walletId)
-            val features = trezorRepo.ensureConnected(deviceId).getOrThrow()
+            if (vendorOf(walletId) == HwWalletVendor.BLOCKSTREAM) {
+                val connected = jadeRepo.ensureConnected(deviceId).getOrThrow()
+                val opened = connected.walletId
+                if (opened != null && opened != walletId) {
+                    throw AppError("Device '$deviceId' is not holding wallet '$walletId'")
+                }
+                return@runSuspendCatching connected.toHwConnectedDevice()
+            }
+            val features = trezorRepo.ensureConnected(deviceId).getOrThrow().toHwConnectedDevice(deviceId)
             if (trezorRepo.state.value.connectedWalletId().isIdentityOf(walletId)) {
                 return@runSuspendCatching features
             }
@@ -251,7 +361,7 @@ class HwWalletRepo @Inject constructor(
                 // device simply is not holding it, which is a reconnect failure.
                 throw AppError("Device '$deviceId' is not holding wallet '$walletId'")
             }
-            reopened
+            reopened.toHwConnectedDevice(deviceId)
         }
     }
 
@@ -274,6 +384,10 @@ class HwWalletRepo @Inject constructor(
         devices.any { it.passphraseProtected } && trezorRepo.state.value.connectedWalletId() != walletId
     }
 
+    private fun HwWalletVendor.requirePassphraseSupport() {
+        if (this == HwWalletVendor.BLOCKSTREAM) throw HwPassphraseDisabledError()
+    }
+
     /**
      * Reopens a watched passphrase wallet for signing. A wrong passphrase is not rejected by the
      * device — it silently derives a different wallet — so the reopened session is only accepted
@@ -283,6 +397,7 @@ class HwWalletRepo @Inject constructor(
     suspend fun reconnectWithPassphrase(walletId: String, passphrase: String): Result<Unit> =
         withContext(ioDispatcher) {
             runSuspendCatching {
+                vendorOf(walletId).requirePassphraseSupport()
                 val deviceId = transportDeviceId(walletId)
                 val watchedBefore = hwWalletStore.loadKnownDevices().mapNotNull { it.resolvedWalletId() }.toSet()
                 // Not setWalletMode: the session this reopens is usually already gone, either
@@ -315,7 +430,10 @@ class HwWalletRepo @Inject constructor(
 
     suspend fun isKnownBluetoothDevice(walletId: String): Boolean = withContext(ioDispatcher) {
         val deviceId = transportDeviceIdOrNull(walletId) ?: return@withContext false
-        trezorRepo.isKnownBluetoothDevice(deviceId)
+        when (vendorOf(walletId)) {
+            HwWalletVendor.TREZOR -> trezorRepo.isKnownBluetoothDevice(deviceId)
+            HwWalletVendor.BLOCKSTREAM -> jadeRepo.isKnownBluetoothDevice(deviceId)
+        }
     }
 
     suspend fun getFundingAccount(
@@ -334,11 +452,18 @@ class HwWalletRepo @Inject constructor(
                 .values
                 .filter { it.addressType == addressType && it.walletId == walletId }
                 .fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
-            HwFundingAccount.Trezor(
-                xpub = xpub,
-                addressType = addressType,
-                balanceSats = balanceSats,
-            )
+            when (target.vendor) {
+                HwWalletVendor.TREZOR -> HwFundingAccount.Trezor(
+                    xpub = xpub,
+                    addressType = addressType,
+                    balanceSats = balanceSats,
+                )
+                HwWalletVendor.BLOCKSTREAM -> HwFundingAccount.Jade(
+                    xpub = xpub,
+                    addressType = addressType,
+                    balanceSats = balanceSats,
+                )
+            }
         }
     }
 
@@ -384,6 +509,9 @@ class HwWalletRepo @Inject constructor(
         walletId: String,
         receiveAddress: HwReceiveAddress,
     ): Result<Unit> = withContext(ioDispatcher) {
+        if (vendorOf(walletId) == HwWalletVendor.BLOCKSTREAM) {
+            return@withContext verifyJadeReceiveAddress(walletId, receiveAddress)
+        }
         runSuspendCatching {
             suspend fun readOnDevice() = trezorRepo.getAddress(
                 path = receiveAddress.path,
@@ -398,12 +526,12 @@ class HwWalletRepo @Inject constructor(
             val response = if (firstError == null) {
                 firstAttempt.getOrThrow()
             } else {
-                if (!firstError.isTrezorSessionFailure()) throw firstError
+                if (!firstError.isHwSessionFailure()) throw firstError
                 disconnectStaleSession(walletId).getOrThrow()
                 ensureConnected(walletId).getOrThrow()
                 runSuspendCatching { readOnDevice() }
                     .onFailure {
-                        if (it.isTrezorSessionFailure()) {
+                        if (it.isHwSessionFailure()) {
                             disconnectStaleSession(walletId).getOrThrow()
                         }
                     }
@@ -418,6 +546,37 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
+    /** Jade compares on the device itself: it shows the address and answers with a mismatch error. */
+    private suspend fun verifyJadeReceiveAddress(
+        walletId: String,
+        receiveAddress: HwReceiveAddress,
+    ): Result<Unit> = runSuspendCatching {
+        suspend fun verifyOnDevice() = jadeRepo.verifyAddress(
+            addressType = receiveAddress.addressType,
+            derivationPath = receiveAddress.path,
+            expectedAddress = receiveAddress.address,
+        ).getOrThrow()
+
+        ensureConnected(walletId).getOrThrow()
+        runSuspendCatching { verifyOnDevice() }
+            .recoverCatching { error ->
+                if (!error.isHwSessionFailure()) throw error
+                disconnectStaleSession(walletId).getOrThrow()
+                ensureConnected(walletId).getOrThrow()
+                runSuspendCatching { verifyOnDevice() }
+                    .onFailure { if (it.isHwSessionFailure()) disconnectStaleSession(walletId).getOrThrow() }
+                    .getOrThrow()
+            }
+            .recoverCatching { error ->
+                if (error !is JadeException.AddressMismatch) throw error
+                throw HwReceiveAddressMismatchError(
+                    "Address verification failed: Jade returned '${error.returned}' for " +
+                        "'${receiveAddress.path}', expected '${receiveAddress.address}'"
+                )
+            }
+            .getOrThrow()
+    }
+
     /** Composes the exact on-chain funding payment before prompting for the Trezor signature. */
     suspend fun composeFundingTransaction(
         walletId: String,
@@ -428,14 +587,31 @@ class HwWalletRepo @Inject constructor(
         runSuspendCatching {
             val account = getFundingAccount(walletId).getOrThrow()
             val network = Env.network.toCoreNetwork()
-            val composed = trezorRepo.composeTransaction(
-                extendedKey = account.xpub,
-                outputs = listOf(ComposeOutput.Payment(address = address, amountSats = sats)),
-                feeRates = listOf(satsPerVByte.toFloat()),
-                network = network,
-                accountType = account.accountType,
-                coinSelection = CoinSelection.BRANCH_AND_BOUND,
-            ).getOrThrow()
+            val outputs = listOf(ComposeOutput.Payment(address = address, amountSats = sats))
+            val composed = when (account) {
+                is HwFundingAccount.Trezor -> trezorRepo.composeTransaction(
+                    extendedKey = account.xpub,
+                    outputs = outputs,
+                    feeRates = listOf(satsPerVByte.toFloat()),
+                    network = network,
+                    accountType = account.accountType,
+                    coinSelection = CoinSelection.BRANCH_AND_BOUND,
+                ).getOrThrow()
+                // The PSBT must carry the Jade's key origins, or the device signs nothing.
+                is HwFundingAccount.Jade -> {
+                    ensureConnected(walletId).getOrThrow()
+                    val fingerprint = jadeRepo.getMasterFingerprint().getOrThrow()
+                    trezorRepo.composeTransactionOffline(
+                        extendedKey = account.xpub,
+                        outputs = outputs,
+                        feeRates = listOf(satsPerVByte.toFloat()),
+                        network = network,
+                        accountType = account.accountType,
+                        coinSelection = CoinSelection.BRANCH_AND_BOUND,
+                        fingerprint = fingerprint,
+                    ).getOrThrow()
+                }
+            }
             val success = composed.filterIsInstance<ComposeResult.Success>().firstOrNull()
                 ?: throw AppError(
                     composed.filterIsInstance<ComposeResult.Error>().firstOrNull()?.error
@@ -504,33 +680,43 @@ class HwWalletRepo @Inject constructor(
             )
     }
 
-    /** Signs a composed funding payment on the Trezor. */
+    /** Signs a composed funding payment on the device. */
     suspend fun signFunding(
         walletId: String,
         funding: HwFundingTransaction,
     ): Result<HwFundingSignedTx> = withContext(ioDispatcher) {
         runSuspendCatching {
-            // The session can change between connecting and signing, and signing the wrong seed
-            // would produce signatures that do not match the inputs being spent.
-            if (!trezorRepo.state.value.connectedWalletId().isIdentityOf(walletId)) {
-                throw HwPassphraseRequiredError()
-            }
-            val signedTx = trezorRepo.signTxFromPsbt(
-                psbtBase64 = funding.psbt,
-                network = Env.network.toTrezorCoinType(),
-            ).getOrElse {
-                if (it.isTrezorSessionFailure()) {
-                    transportDeviceIdOrNull(walletId)?.let { deviceId -> trezorRepo.disconnectStaleSession(deviceId) }
-                }
-                throw it
+            val serializedTx = when (vendorOf(walletId)) {
+                HwWalletVendor.TREZOR -> signTrezorFunding(walletId, funding)
+                HwWalletVendor.BLOCKSTREAM -> jadeRepo.signPsbt(funding.psbt).getOrElse {
+                    if (it.isHwSessionFailure()) disconnectStaleSession(walletId)
+                    throw it
+                }.serializedTx
             }
             HwFundingSignedTx(
-                serializedTx = signedTx.serializedTx,
+                serializedTx = serializedTx,
                 miningFeeSats = funding.miningFeeSats,
                 feeRate = ceil(funding.feeRate.toDouble()).toULong(),
                 totalSpent = funding.totalSpent,
             )
         }
+    }
+
+    private suspend fun signTrezorFunding(walletId: String, funding: HwFundingTransaction): String {
+        // The session can change between connecting and signing, and signing the wrong seed
+        // would produce signatures that do not match the inputs being spent.
+        if (!trezorRepo.state.value.connectedWalletId().isIdentityOf(walletId)) {
+            throw HwPassphraseRequiredError()
+        }
+        return trezorRepo.signTxFromPsbt(
+            psbtBase64 = funding.psbt,
+            network = Env.network.toTrezorCoinType(),
+        ).getOrElse {
+            if (it.isHwSessionFailure()) {
+                transportDeviceIdOrNull(walletId)?.let { deviceId -> trezorRepo.disconnectStaleSession(deviceId) }
+            }
+            throw it
+        }.serializedTx
     }
 
     /** Broadcasts a signed funding payment without requiring the hardware device. */
@@ -551,7 +737,10 @@ class HwWalletRepo @Inject constructor(
     suspend fun disconnectStaleSession(walletId: String): Result<Unit> = withContext(ioDispatcher) {
         runSuspendCatching {
             val deviceId = transportDeviceIdOrNull(walletId) ?: return@runSuspendCatching
-            trezorRepo.disconnectStaleSession(deviceId).getOrThrow()
+            when (vendorOf(walletId)) {
+                HwWalletVendor.TREZOR -> trezorRepo.disconnectStaleSession(deviceId).getOrThrow()
+                HwWalletVendor.BLOCKSTREAM -> jadeRepo.disconnectStaleSession(deviceId).getOrThrow()
+            }
         }
     }
 
@@ -627,11 +816,19 @@ class HwWalletRepo @Inject constructor(
                 // store never publishes a device list still holding this wallet. A separate write would,
                 // and a reconcile reading it restarts the watcher of the wallet being removed.
                 val failures = targets.mapNotNull { device ->
-                    trezorRepo.forgetDevice(
-                        device.id,
-                        walletKey = device.walletKey,
-                        pendingName = PendingNameUpdate(walletId, keptName),
-                    ).exceptionOrNull()
+                    val pendingName = PendingNameUpdate(walletId, keptName)
+                    when (device.vendor) {
+                        HwWalletVendor.TREZOR -> trezorRepo.forgetDevice(
+                            device.id,
+                            walletKey = device.walletKey,
+                            pendingName = pendingName,
+                        )
+                        HwWalletVendor.BLOCKSTREAM -> jadeRepo.forgetDevice(
+                            device.id,
+                            walletKey = device.walletKey,
+                            pendingName = pendingName,
+                        )
+                    }.exceptionOrNull()
                 }
                 val remaining = hwWalletStore.loadKnownDevices()
                 failures.firstOrNull()?.let { throw it }
@@ -646,9 +843,9 @@ class HwWalletRepo @Inject constructor(
 
     val wallets: StateFlow<ImmutableList<HwWallet>> = combine(
         hwWalletStore.data,
-        trezorRepo.state,
+        deviceState,
         _watcherData,
-    ) { data, trezorState, watcherData ->
+    ) { data, hwState, watcherData ->
         // The same physical device paired over both bluetooth and usb is stored as two
         // entries with different transport-level ids; its xpubs are the cross-transport
         // identity, so group by them to show one wallet and count its balance once. A
@@ -658,7 +855,7 @@ class HwWalletRepo @Inject constructor(
             .groupBy { it.walletKey }
             .mapNotNull { (_, devices) ->
                 val walletId = devices.firstNotNullOfOrNull { it.resolvedWalletId() } ?: return@mapNotNull null
-                val connectedDevice = devices.find { it.id == trezorState.connectedDeviceId() }
+                val connectedDevice = devices.find { it.id == hwState.connectedDeviceId() }
                 val device = connectedDevice ?: devices.maxBy { it.lastConnectedAt }
                 val ids = devices.map { it.id }.toSet()
                 val walletWatchers = watcherData.values.filter { it.walletId == walletId }
@@ -674,7 +871,7 @@ class HwWalletRepo @Inject constructor(
                     // them, and only that identity can sign; mark the others disconnected. Sessions
                     // opened before an identity was resolved report no wallet and stay inclusive.
                     isConnected = connectedDevice != null &&
-                        trezorState.connectedWalletId().let { it == null || it == walletId },
+                        hwState.connectedWalletId().let { it == null || it == walletId },
                     balanceSats = walletWatchers.fold(0uL) { acc, watcher -> acc + watcher.balanceSats },
                     activities = walletWatchers
                         .toMergedActivities()
@@ -682,6 +879,7 @@ class HwWalletRepo @Inject constructor(
                     fundingBalanceSats = fundingBalanceSats,
                     deviceIds = ids.toImmutableSet(),
                     passphraseProtected = devices.any { it.passphraseProtected },
+                    vendor = device.vendor,
                 )
             }
             .toImmutableList()
@@ -921,8 +1119,10 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    private fun KnownDevice.resolvedWalletId(): String? =
-        walletId.takeIf { it.isNotBlank() } ?: trezorRepo.deriveWalletId(xpubs)
+    private fun KnownDevice.resolvedWalletId(): String? = walletId.takeIf { it.isNotBlank() } ?: when (vendor) {
+        HwWalletVendor.TREZOR -> trezorRepo.deriveWalletId(xpubs)
+        HwWalletVendor.BLOCKSTREAM -> jadeRepo.deriveWalletId(xpubs)
+    }
 
     private fun List<HwWatcherData>.toMergedActivities(): List<Activity> =
         flatMap { it.activities }
@@ -1005,27 +1205,36 @@ private data class WatcherSettings(
 )
 
 /**
- * Cross-transport identity of the wallet a device entry tracks: entries created by
- * pairing the same physical device over different transports share the same xpubs.
- * Entries without captured xpubs fall back to their own transport-level id.
- */
-private val KnownDevice.walletKey: String
-    get() = xpubs.values.sorted().joinToString().ifEmpty { id }
-
-/**
  * Resolves the name shown for a hardware wallet: the Bitkit-side custom label if the user set one,
  * otherwise the device's own label; without one (or with the factory default that just mirrors the
- * model) it falls back to the vendor-prefixed model (e.g. "Safe 7" reads as "Trezor Safe 7").
+ * model) it falls back to the vendor-prefixed model (e.g. "Safe 7" reads as "Trezor Safe 7"). Jade
+ * models already carry their name ("Jade", "Jade Plus") and a Jade has no label of its own.
  */
-fun resolveHwWalletName(label: String?, model: String?, customLabel: String? = null): String {
+fun resolveHwWalletName(
+    label: String?,
+    model: String?,
+    customLabel: String? = null,
+    vendor: HwWalletVendor = HwWalletVendor.TREZOR,
+): String {
     customLabel?.takeIf { it.isNotBlank() }?.let { return it }
+    if (vendor == HwWalletVendor.BLOCKSTREAM) return model?.takeIf { it.isNotBlank() } ?: "Jade"
     label?.takeIf { it != model }?.let { return it }
     val resolvedModel = model ?: return "Trezor"
     return if (resolvedModel.startsWith("Trezor")) resolvedModel else "Trezor $resolvedModel"
 }
 
 private val KnownDevice.displayName: String
-    get() = resolveHwWalletName(label = label, model = model, customLabel = customLabel)
+    get() = resolveHwWalletName(label = label, model = model, customLabel = customLabel, vendor = vendor)
+
+private fun TrezorFeatures.toHwConnectedDevice(deviceId: String) = HwConnectedDevice(
+    vendor = HwWalletVendor.TREZOR,
+    id = deviceId,
+    label = label,
+    model = model,
+    walletId = null,
+    passphraseProtection = passphraseProtection == true,
+    isLocked = pinProtection == true && unlocked == false,
+)
 
 /** The device has passphrase protection turned off, so it cannot open a hidden wallet at all. */
 class HwPassphraseDisabledError : AppError("Passphrase protection is off on this device")
@@ -1040,6 +1249,9 @@ class HwPassphraseRequiredError : AppError("Passphrase needed to reopen this wal
 class HwPassphraseMismatchError : AppError("Passphrase opened a different wallet")
 
 class HwReceiveAddressMismatchError(message: String) : AppError(message)
+
+/** The device has no wallet yet; it has to be created or restored on the device itself. */
+class HwDeviceUninitializedError : AppError("Hardware device is not set up")
 
 /**
  * A removal asked to keep the wallet's backup data, but its tags could not be read. Raised before

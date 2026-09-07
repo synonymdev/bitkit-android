@@ -32,6 +32,7 @@ import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.WalletState
 import to.bitkit.ui.components.ConnectionIssuesView
+import to.bitkit.ui.components.modelNameRes
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.openNotificationSettings
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestDetailsScreen
@@ -143,6 +144,8 @@ fun ReceiveSheet(
                         },
                         initialTab = invoiceEditState.initialTab(hardwareWalletId),
                         hardwareWalletId = selectedHardwareWalletId,
+                        hardwareTabLabel = hardwareWallets.firstOrNull { it.id == selectedHardwareWalletId }
+                            ?.let { stringResource(it.vendor.modelNameRes()) },
                         hardwareReceiveState = hwReceiveState,
                         onLoadHardwareAddress = hwReceiveViewModel::loadAddress,
                         onRetryHardwareAddress = hwReceiveViewModel::retryAddress,
@@ -354,7 +357,7 @@ internal class ReceiveInvoiceEditState {
     }
 
     fun initialTab(hardwareWalletId: String?): ReceiveTab? =
-        ReceiveTab.TREZOR.takeIf { hardwareWalletId != null || isHardwareInvoice }
+        ReceiveTab.HARDWARE.takeIf { hardwareWalletId != null || isHardwareInvoice }
 }
 
 @Composable
