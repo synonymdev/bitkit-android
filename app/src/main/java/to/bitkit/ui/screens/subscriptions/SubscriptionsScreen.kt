@@ -625,7 +625,6 @@ fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRout
                             appViewModel.hideSheet()
                         }
                     },
-                    onClose = appViewModel::hideSheet,
                 )
                 is SubscriptionRoute.Cancel -> SubscriptionCancel(
                     subscription = subscription,
@@ -818,7 +817,6 @@ private fun SubscriptionMoreInfo(
     subscription: PaykitSubscription,
     contact: PubkyProfile,
     onBack: () -> Unit,
-    onClose: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -838,7 +836,7 @@ private fun SubscriptionMoreInfo(
                 }
             }
         }
-        PrimaryButton(text = stringResource(R.string.common__ok), onClick = onClose)
+        PrimaryButton(text = stringResource(R.string.common__ok), onClick = onBack)
         VerticalSpacer(16.dp)
     }
 }
