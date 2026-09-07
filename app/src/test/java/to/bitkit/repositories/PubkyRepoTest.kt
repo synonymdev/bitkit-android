@@ -282,6 +282,7 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(sut.isAuthenticated.value)
         verify(keychain).delete(Keychain.Key.PAYKIT_SESSION.name)
         verify(keychain).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
     }
 
     @Test

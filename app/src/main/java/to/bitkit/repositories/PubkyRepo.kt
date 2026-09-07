@@ -369,7 +369,7 @@ class PubkyRepo @Inject constructor(
         }.onFailure {
             Logger.warn("Failed to forget abandoned Pubky session access", it, context = TAG)
             withContext(NonCancellable + ioDispatcher) {
-                clearLocalState()
+                clearLocalState(publicPaykitCleanupPending = true)
             }
         }
     }
