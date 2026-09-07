@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.Bolt11Invoice
+import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.WordCount
 import to.bitkit.async.appScope
@@ -318,6 +319,13 @@ class WalletRepo @Inject constructor(
         settledReceiveInvoice: SettledReceiveInvoice? = null,
         settledReceiveAddress: SettledReceiveAddress? = null,
     ) = withContext(bgDispatcher) {
+        when (event) {
+            is Event.ChannelReady,
+            is Event.ChannelClosed,
+            -> lightningRepo.syncState()
+            else -> Unit
+        }
+
         when (event) {
             is Event.ChannelReady -> {
                 // Only refresh bolt11 if we can now receive on lightning
@@ -748,16 +756,20 @@ class WalletRepo @Inject constructor(
     }
 
     fun inboundLiquiditySats(): ULong {
-        return lightningRepo.lightningState.value.channels.calculateRemoteBalance()
+        return currentChannels().calculateRemoteBalance()
     }
 
     private fun canCreateLightningInvoice(amountSats: ULong?): Boolean {
-        val channels = lightningRepo.lightningState.value.channels
+        val channels = currentChannels()
         return ReceiveLiquidityDecision.canCreateLightningInvoice(
-            hasReadyChannels = channels.any { it.isChannelReady },
+            hasReadyChannels = channels.any { it.isUsable },
             inboundCapacitySats = channels.calculateRemoteBalance(),
             invoiceAmountSats = amountSats,
         )
+    }
+
+    private fun currentChannels(): List<ChannelDetails> {
+        return lightningRepo.getChannels() ?: lightningRepo.lightningState.value.channels
     }
 
     private suspend fun Scanner.OnChain.extractLightningHash(): String? {

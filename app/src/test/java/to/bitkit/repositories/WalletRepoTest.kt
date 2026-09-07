@@ -70,10 +70,12 @@ class WalletRepoTest : BaseUnitTest() {
             mock<ChannelDetails> {
                 on { inboundCapacityMsat } doReturn 500_000u
                 on { isChannelReady } doReturn true
+                on { isUsable } doReturn true
             },
             mock<ChannelDetails> {
                 on { inboundCapacityMsat } doReturn 500_000u
                 on { isChannelReady } doReturn true
+                on { isUsable } doReturn true
             }
         ).toImmutableList()
         private val channelReady = Event.ChannelReady(
@@ -302,6 +304,7 @@ class WalletRepoTest : BaseUnitTest() {
     fun `updateBip21Invoice should create bolt11 when node can receive`() = test {
         whenever(lightningRepo.canReceive()).thenReturn(true)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
         whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
 
         sut.updateBip21Invoice(amountSats = SATS, description = "test").let { result ->
@@ -531,6 +534,7 @@ class WalletRepoTest : BaseUnitTest() {
         sut.setBip21Description(testDescription)
         whenever(lightningRepo.canReceive()).thenReturn(true)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
         whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
 
         sut.refreshBip21ForEvent(channelReady)
@@ -548,6 +552,37 @@ class WalletRepoTest : BaseUnitTest() {
         sut.refreshBip21ForEvent(channelReady)
 
         verify(lightningRepo, never()).createInvoice(anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `refreshBip21ForEvent ChannelClosed should clear bolt11 when live channels are gone`() = test {
+        sut.setBolt11(INVOICE)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+
+        sut.refreshBip21ForEvent(
+            Event.ChannelClosed(
+                channelId = "testChannelId",
+                userChannelId = "testUserChannelId",
+                counterpartyNodeId = null,
+                reason = null,
+            )
+        )
+
+        assertEquals("", sut.walletState.value.bolt11)
+    }
+
+    @Test
+    fun `refreshBip21ForEvent ChannelReady should create invoice from live channels`() = test {
+        sut.setBip21AmountSats(SATS)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
+
+        sut.refreshBip21ForEvent(channelReady)
+
+        verify(lightningRepo).createInvoice(anyOrNull(), any(), any())
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
     }
 
     @Test
@@ -575,6 +610,7 @@ class WalletRepoTest : BaseUnitTest() {
         sut.setBolt11(INVOICE)
         whenever(lightningRepo.canReceive()).thenReturn(true)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
 
         sut.refreshBip21ForEvent(
             Event.ChannelClosed(
@@ -741,6 +777,7 @@ class WalletRepoTest : BaseUnitTest() {
     fun `refreshBip21 should create a fresh invoice after PaymentReceived invalidates the old one`() = test {
         whenever(lightningRepo.canReceive()).thenReturn(true)
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
         whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
             .thenReturn(Result.success(INVOICE_REPLACEMENT))
         sut.setOnchainAddress(ADDRESS)
