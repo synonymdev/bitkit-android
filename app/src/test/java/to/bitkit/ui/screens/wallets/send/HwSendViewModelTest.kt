@@ -241,13 +241,13 @@ class HwSendViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `broadcast failure warns the payment was not sent`() = test {
+    fun `broadcast failure warns the payment was not confirmed`() = test {
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
         val fixture = stubSuccessfulPayment()
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
             .thenReturn(Result.failure(BroadcastException.ElectrumException("connection failed")))
-        whenever(context.getString(R.string.hardware__send_broadcast_failed_title)).thenReturn("Payment not sent")
+        whenever(context.getString(R.string.hardware__send_broadcast_failed_title)).thenReturn("Payment not confirmed")
         whenever(context.getString(R.string.hardware__send_broadcast_failed_text))
             .thenReturn("Check your connection and try again.")
 
@@ -256,7 +256,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         toastJob.cancel()
 
         assertEquals(Toast.ToastType.WARNING, toasts.single().type)
-        assertEquals("Payment not sent", toasts.single().title)
+        assertEquals("Payment not confirmed", toasts.single().title)
         assertEquals("Check your connection and try again.", toasts.single().description)
     }
 
