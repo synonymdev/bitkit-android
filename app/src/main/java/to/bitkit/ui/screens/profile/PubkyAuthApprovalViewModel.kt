@@ -294,6 +294,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     }
 
     private suspend fun handleApprovalFailure(error: Throwable, authUrl: String) {
+        if (error !is PubkyAlreadySignedInError) Logger.error("Auth approval failed", error, context = TAG)
         if (_uiState.value.authUrl != authUrl) return
         if (error is PubkyAlreadySignedInError) {
             ToastEventBus.send(
@@ -303,7 +304,6 @@ class PubkyAuthApprovalViewModel @Inject constructor(
             _effects.emit(PubkyAuthApprovalEffect.Dismiss)
             return
         }
-        Logger.error("Auth approval failed", error, context = TAG)
         _uiState.update { it.copy(state = ApprovalState.Authorize) }
         ToastEventBus.send(
             type = Toast.ToastType.ERROR,
