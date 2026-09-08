@@ -12,6 +12,8 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.lightningdevkit.ldknode.BroadcastOutcome
+import org.lightningdevkit.ldknode.BroadcastOutcomeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
@@ -43,6 +45,9 @@ data class PendingPaykitPaymentProof(
     val paymentIdentifier: String? = null,
     val proofData: String? = null,
     val preparationId: String? = null,
+    val requiresBroadcastOutcome: Boolean = false,
+    val broadcastLineage: List<String> = emptyList(),
+    val broadcastOutcomeHandled: Boolean = false,
 )
 
 @Singleton
@@ -125,10 +130,18 @@ class PaykitPaymentProofRepo @Inject constructor(
                     }
                 }
                 val proof = if (index >= 0) {
-                    proofs[index].copy(paymentIdentifier = txid.lowercase())
+                    proofs[index].copy(
+                        paymentIdentifier = txid.lowercase(),
+                        requiresBroadcastOutcome = true,
+                        broadcastLineage = listOf(txid.lowercase()),
+                    )
                 } else {
                     pendingProof(request, paymentEndpointIdentifier, PaykitPaymentProofKind.Onchain)
-                        .copy(paymentIdentifier = txid.lowercase())
+                        .copy(
+                            paymentIdentifier = txid.lowercase(),
+                            requiresBroadcastOutcome = true,
+                            broadcastLineage = listOf(txid.lowercase()),
+                        )
                 }
                 if (index >= 0) proofs[index] = proof else proofs += proof
                 persist(proofs)
@@ -269,6 +282,17 @@ class PaykitPaymentProofRepo @Inject constructor(
         proof: PendingPaykitPaymentProof,
         payments: List<PaymentDetails>,
     ) {
+        if (proof.broadcastOutcomeHandled) {
+            acknowledgeHandledBroadcastOutcome(proof)
+            return
+        }
+        if (
+            proof.kind == PaykitPaymentProofKind.Onchain &&
+            (proof.requiresBroadcastOutcome || proof.proofData == null)
+        ) {
+            reconcileOnchainProof(proof)
+            return
+        }
         if (proof.proofData != null) {
             submitReady(proof)
             return
@@ -299,21 +323,87 @@ class PaykitPaymentProofRepo @Inject constructor(
         }
     }
 
+    private suspend fun reconcileOnchainProof(proof: PendingPaykitPaymentProof) {
+        val txid = proof.paymentIdentifier ?: return
+        val outcome = lightningRepo.getOnchainBroadcastOutcome(txid).getOrThrow() ?: return
+        when (outcome.status) {
+            BroadcastOutcomeStatus.PENDING -> persistBroadcastOutcome(proof, outcome, proofData = null)
+            BroadcastOutcomeStatus.ACCEPTED -> handleAcceptedBroadcastOutcome(proof, outcome)
+            BroadcastOutcomeStatus.ABANDONED -> handleAbandonedBroadcastOutcome(proof, outcome)
+        }
+    }
+
+    private suspend fun handleAcceptedBroadcastOutcome(
+        proof: PendingPaykitPaymentProof,
+        outcome: BroadcastOutcome,
+    ) {
+        val completed = persistBroadcastOutcome(proof, outcome, proofData = outcome.txid) ?: return
+        if (!queueReadyProof(completed)) return
+        val handled = completed.copy(
+            proofData = null,
+            broadcastOutcomeHandled = true,
+        )
+        persistHandledBroadcastOutcome(handled)
+        acknowledgeHandledBroadcastOutcome(handled)
+    }
+
+    private suspend fun handleAbandonedBroadcastOutcome(
+        proof: PendingPaykitPaymentProof,
+        outcome: BroadcastOutcome,
+    ) {
+        val canonical = persistBroadcastOutcome(proof, outcome, proofData = null) ?: return
+        val handled = canonical.copy(broadcastOutcomeHandled = true)
+        persistHandledBroadcastOutcome(handled)
+        acknowledgeHandledBroadcastOutcome(handled)
+    }
+
+    private suspend fun persistBroadcastOutcome(
+        proof: PendingPaykitPaymentProof,
+        outcome: BroadcastOutcome,
+        proofData: String?,
+    ): PendingPaykitPaymentProof? {
+        val updated = proof.copy(
+            paymentIdentifier = outcome.txid.lowercase(),
+            proofData = proofData?.lowercase(),
+            requiresBroadcastOutcome = true,
+            broadcastLineage = outcome.lineage.map { it.lowercase() },
+        )
+        if (!replaceProofLocked(proof, updated)) return null
+        return updated
+    }
+
+    private suspend fun persistHandledBroadcastOutcome(proof: PendingPaykitPaymentProof) {
+        val proofs = loadProofs().filterNot { it.matchesRequest(proof) } + proof
+        persist(proofs)
+    }
+
+    private suspend fun acknowledgeHandledBroadcastOutcome(proof: PendingPaykitPaymentProof) {
+        val txid = proof.paymentIdentifier ?: return
+        lightningRepo.acknowledgeOnchainBroadcastOutcome(txid).getOrThrow()
+        removeProofsLocked { it == proof }
+    }
+
     private suspend fun submitReady(proof: PendingPaykitPaymentProof) {
-        val proofData = proof.proofData ?: return
+        if (!queueReadyProof(proof)) return
+        runSuspendCatching { removeProofsLocked { it.matchesRequest(proof) } }
+            .onFailure { Logger.warn("Failed to clear a submitted Paykit payment proof", it, context = TAG) }
+    }
+
+    private suspend fun queueReadyProof(proof: PendingPaykitPaymentProof): Boolean {
+        val proofData = proof.proofData ?: return false
         val identityStatus = paykitSdkService.identityStatus()
         if (
             identityStatus?.liveSessionAvailable != true ||
             !PubkyPublicKeyFormat.matches(identityStatus.publicKey, proof.identity)
         ) {
-            return
+            return false
         }
 
         val record = paykitSdkService.paymentRequests().firstOrNull {
             it.paymentRequestId == proof.requestId.paymentRequestId &&
                 PubkyPublicKeyFormat.matches(it.counterparty, proof.requestId.counterparty) &&
                 it.counterpartyReceiverPath == proof.requestId.counterpartyReceiverPath
-        } ?: return
+        } ?: return false
         val proofJson = proofJson(proof.kind, proofData)
         val alreadyQueued = record.paymentProofs.any {
             it.billingPeriod == null &&
@@ -338,11 +428,7 @@ class PaykitPaymentProofRepo @Inject constructor(
                     )
                 }
         }
-        runSuspendCatching {
-            removeProofsLocked {
-                PubkyPublicKeyFormat.matches(it.identity, proof.identity) && it.requestId == proof.requestId
-            }
-        }.onFailure { Logger.warn("Failed to clear a submitted Paykit payment proof", it, context = TAG) }
+        return true
     }
 
     private suspend fun removeProofs(predicate: (PendingPaykitPaymentProof) -> Boolean) = withContext(ioDispatcher) {
@@ -356,6 +442,18 @@ class PaykitPaymentProofRepo @Inject constructor(
         val current = loadProofs()
         val remaining = current.filterNot(predicate)
         if (remaining != current) persist(remaining)
+    }
+
+    private suspend fun replaceProofLocked(
+        currentProof: PendingPaykitPaymentProof,
+        updatedProof: PendingPaykitPaymentProof,
+    ): Boolean {
+        val proofs = loadProofs().toMutableList()
+        val index = proofs.indexOf(currentProof)
+        if (index < 0) return false
+        proofs[index] = updatedProof
+        persist(proofs)
+        return true
     }
 
     private suspend fun persistAndSubmit(
@@ -412,6 +510,9 @@ private fun endpointSupports(identifier: String, kind: PaykitPaymentProofKind): 
         PaykitPaymentProofKind.Onchain -> method.isOnchain
     }
 }
+
+private fun PendingPaykitPaymentProof.matchesRequest(other: PendingPaykitPaymentProof): Boolean =
+    PubkyPublicKeyFormat.matches(identity, other.identity) && requestId == other.requestId
 
 private fun proofJson(kind: PaykitPaymentProofKind, data: String): String = buildJsonObject {
     put("data", JsonPrimitive(data))

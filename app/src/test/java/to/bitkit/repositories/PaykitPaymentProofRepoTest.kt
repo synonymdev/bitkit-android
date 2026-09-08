@@ -12,6 +12,8 @@ import com.synonym.paykit.PrivateJsonObject
 import kotlinx.coroutines.test.StandardTestDispatcher
 import org.junit.Before
 import org.junit.Test
+import org.lightningdevkit.ldknode.BroadcastOutcome
+import org.lightningdevkit.ldknode.BroadcastOutcomeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PaymentDirection
 import org.lightningdevkit.ldknode.PaymentKind
@@ -59,6 +61,8 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         whenever(store.hasPendingProofs()).thenReturn(true)
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
         whenever(paykitSdkService.processPendingPrivateMessages()).thenReturn(emptyList())
+        whenever(lightningRepo.getOnchainBroadcastOutcome(any())).thenReturn(Result.success(null))
+        whenever(lightningRepo.acknowledgeOnchainBroadcastOutcome(any())).thenReturn(Result.success(Unit))
         whenever(store.load()).thenAnswer {
             if (shouldFailNextLoad) {
                 shouldFailNextLoad = false
@@ -330,6 +334,8 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
 
         assertEquals(txid, storedProofs.single().paymentIdentifier)
         assertNull(storedProofs.single().proofData)
+        assertEquals(listOf(txid), storedProofs.single().broadcastLineage)
+        assertTrue(storedProofs.single().requiresBroadcastOutcome)
 
         paymentProofRepo().reconcile()
 
@@ -337,6 +343,157 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         assertNull(storedProofs.single().proofData)
         verify(lightningRepo, never()).getPayments()
         verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any())
+        verify(lightningRepo, never()).acknowledgeOnchainBroadcastOutcome(any())
+    }
+
+    @Test
+    fun `pending onchain outcome persists canonical replacement lineage without delivery`() = test {
+        val txid = "ab".repeat(32)
+        val replacementTxid = "cd".repeat(32)
+        val endpoint = MethodId.P2wpkh.rawValue
+        val request = paymentRequest(endpoint)
+        val repo = paymentProofRepo()
+        val preparationId = repo.prepare(request, endpoint, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.associateOnchainPayment(request, txid, endpoint, preparationId).getOrThrow()
+        whenever(lightningRepo.getOnchainBroadcastOutcome(txid)).thenReturn(
+            Result.success(
+                BroadcastOutcome(
+                    status = BroadcastOutcomeStatus.PENDING,
+                    txid = replacementTxid,
+                    lineage = listOf(txid, replacementTxid),
+                ),
+            ),
+        )
+
+        repo.reconcile()
+
+        assertEquals(replacementTxid, storedProofs.single().paymentIdentifier)
+        assertEquals(listOf(txid, replacementTxid), storedProofs.single().broadcastLineage)
+        assertNull(storedProofs.single().proofData)
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any())
+        verify(lightningRepo, never()).acknowledgeOnchainBroadcastOutcome(any())
+    }
+
+    @Test
+    fun `onchain outcome query failure preserves the correlated proof`() = test {
+        val txid = "ab".repeat(32)
+        val endpoint = MethodId.P2wpkh.rawValue
+        val request = paymentRequest(endpoint)
+        val repo = paymentProofRepo()
+        val preparationId = repo.prepare(request, endpoint, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.associateOnchainPayment(request, txid, endpoint, preparationId).getOrThrow()
+        val expectedProof = storedProofs.single()
+        whenever(lightningRepo.getOnchainBroadcastOutcome(txid))
+            .thenReturn(Result.failure(IllegalStateException("temporary outcome failure")))
+
+        repo.reconcile()
+
+        assertEquals(expectedProof, storedProofs.single())
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any())
+        verify(lightningRepo, never()).acknowledgeOnchainBroadcastOutcome(any())
+    }
+
+    @Test
+    fun `accepted onchain outcome delivers canonical proof before acknowledgment`() = test {
+        val txid = "ab".repeat(32)
+        val acceptedTxid = "cd".repeat(32)
+        val endpoint = MethodId.P2wpkh.rawValue
+        val request = paymentRequest(endpoint)
+        val record = paymentRequestRecord()
+        val repo = paymentProofRepo()
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any())).thenReturn(record)
+        val preparationId = repo.prepare(request, endpoint, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.associateOnchainPayment(request, txid, endpoint, preparationId).getOrThrow()
+        whenever(lightningRepo.getOnchainBroadcastOutcome(txid)).thenReturn(
+            Result.success(
+                BroadcastOutcome(
+                    status = BroadcastOutcomeStatus.ACCEPTED,
+                    txid = acceptedTxid,
+                    lineage = listOf(txid, acceptedTxid),
+                ),
+            ),
+        )
+
+        repo.reconcile()
+
+        val proofCaptor = argumentCaptor<String>()
+        verify(paykitSdkService).submitPaymentProof(
+            counterparty = any(),
+            counterpartyReceiverPath = any(),
+            paymentRequestId = any(),
+            paymentEndpointIdentifier = eq(endpoint),
+            proofJson = proofCaptor.capture(),
+        )
+        assertEquals(
+            """{"data":"$acceptedTxid","type":"${PaykitPaymentProofKind.Onchain.type}"}""",
+            proofCaptor.firstValue,
+        )
+        verify(lightningRepo).acknowledgeOnchainBroadcastOutcome(acceptedTxid)
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `abandoned onchain outcome removes proof before acknowledgment`() = test {
+        val txid = "ab".repeat(32)
+        val abandonedTxid = "cd".repeat(32)
+        val endpoint = MethodId.P2wpkh.rawValue
+        val request = paymentRequest(endpoint)
+        val repo = paymentProofRepo()
+        val preparationId = repo.prepare(request, endpoint, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.associateOnchainPayment(request, txid, endpoint, preparationId).getOrThrow()
+        whenever(lightningRepo.getOnchainBroadcastOutcome(txid)).thenReturn(
+            Result.success(
+                BroadcastOutcome(
+                    status = BroadcastOutcomeStatus.ABANDONED,
+                    txid = abandonedTxid,
+                    lineage = listOf(txid, abandonedTxid),
+                ),
+            ),
+        )
+
+        repo.reconcile()
+
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any())
+        verify(lightningRepo).acknowledgeOnchainBroadcastOutcome(abandonedTxid)
+        assertTrue(storedProofs.isEmpty())
+    }
+
+    @Test
+    fun `terminal acknowledgment retries without duplicate proof delivery`() = test {
+        val txid = "ab".repeat(32)
+        val acceptedTxid = "cd".repeat(32)
+        val endpoint = MethodId.P2wpkh.rawValue
+        val request = paymentRequest(endpoint)
+        val record = paymentRequestRecord()
+        val repo = paymentProofRepo()
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+        whenever(paykitSdkService.submitPaymentProof(any(), any(), any(), any(), any())).thenReturn(record)
+        whenever(lightningRepo.acknowledgeOnchainBroadcastOutcome(acceptedTxid))
+            .thenReturn(Result.failure(IllegalStateException("temporary acknowledgment failure")))
+            .thenReturn(Result.success(Unit))
+        val preparationId = repo.prepare(request, endpoint, PaykitPaymentProofKind.Onchain).getOrThrow()
+        repo.associateOnchainPayment(request, txid, endpoint, preparationId).getOrThrow()
+        whenever(lightningRepo.getOnchainBroadcastOutcome(txid)).thenReturn(
+            Result.success(
+                BroadcastOutcome(
+                    status = BroadcastOutcomeStatus.ACCEPTED,
+                    txid = acceptedTxid,
+                    lineage = listOf(txid, acceptedTxid),
+                ),
+            ),
+        )
+
+        repo.reconcile()
+
+        assertTrue(storedProofs.single().broadcastOutcomeHandled)
+        assertNull(storedProofs.single().proofData)
+
+        paymentProofRepo().reconcile()
+
+        verify(paykitSdkService, times(1)).submitPaymentProof(any(), any(), any(), any(), any())
+        verify(lightningRepo, times(2)).acknowledgeOnchainBroadcastOutcome(acceptedTxid)
+        assertTrue(storedProofs.isEmpty())
     }
 
     @Test

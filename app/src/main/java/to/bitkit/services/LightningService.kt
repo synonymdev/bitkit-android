@@ -23,6 +23,7 @@ import org.lightningdevkit.ldknode.BackgroundSyncConfig
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Bolt11InvoiceDescription
+import org.lightningdevkit.ldknode.BroadcastOutcome
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelConfig
@@ -1333,6 +1334,20 @@ class LightningService @Inject constructor(
         val node = this.node ?: return null
         return ServiceQueue.LDK.background {
             node.listPayments()
+        }
+    }
+
+    suspend fun getOnchainBroadcastOutcome(txid: Txid): BroadcastOutcome? {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        return ServiceQueue.LDK.background {
+            node.onchainPayment().broadcastOutcome(txid)
+        }
+    }
+
+    suspend fun acknowledgeOnchainBroadcastOutcome(txid: Txid) {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        ServiceQueue.LDK.background {
+            node.onchainPayment().acknowledgeBroadcastOutcome(txid)
         }
     }
     // endregion
