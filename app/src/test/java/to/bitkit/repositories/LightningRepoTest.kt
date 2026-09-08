@@ -1436,7 +1436,7 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `setMonitoring should fail when disabling native SegWit required for automatic refunds`() = test {
+    fun `setMonitoring should fail when disabling native SegWit required for Blocktank refunds`() = test {
         startNodeForTesting()
         whenever(settingsStore.data).thenReturn(
             flowOf(
@@ -1450,7 +1450,7 @@ class LightningRepoTest : BaseUnitTest() {
         val result = sut.setMonitoring(AddressType.P2WPKH, enabled = false)
 
         assertTrue(result.isFailure)
-        assertTrue(result.exceptionOrNull()?.message?.contains("automatic refunds") == true)
+        assertTrue(result.exceptionOrNull()?.message?.contains("Blocktank refunds") == true)
         verify(lightningService, never()).removeAddressTypeFromMonitor(any())
         verify(lightningService, never()).getBalanceForAddressType(any())
     }

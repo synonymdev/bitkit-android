@@ -1015,7 +1015,7 @@ class LightningRepo @Inject constructor(
     ): AppError? {
         val configurationError = when {
             addressType == AddressType.P2WPKH ->
-                AppError("Cannot disable monitoring: Native SegWit is required for automatic refunds")
+                AppError("Cannot disable monitoring: Native SegWit is required for Blocktank refunds")
             addressType == settings.selectedAddressType.toAddressType() ->
                 AppError("Cannot disable monitoring: address type is currently selected")
             isLastRequiredNativeWitnessWallet(addressType, monitoredTypes) -> AppError(

@@ -43,7 +43,7 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
     private val disabledHasBalance = "Address type has balance"
     private val disabledVerifyFailed = "Failed to verify balance"
     private val disabledNativeRequired = "Native SegWit or Taproot required"
-    private val disabledNativeRefundRequired = "Native SegWit required for automatic refunds"
+    private val disabledNativeRefundRequired = "Native SegWit required for Blocktank refunds"
     private val disabledCurrentlySelected = "Currently selected"
 
     @Before
@@ -191,7 +191,7 @@ class AddressTypePreferenceViewModelTest : BaseUnitTest() {
     @Test
     fun `setMonitoring native refund requirement sends localized error toast`() = test {
         whenever(lightningRepo.setMonitoring(AddressType.P2WPKH, false)).thenReturn(
-            Result.failure(Exception("Cannot disable monitoring: Native SegWit is required for automatic refunds")),
+            Result.failure(Exception("Cannot disable monitoring: Native SegWit is required for Blocktank refunds")),
         )
         whenever(settingsStore.data).thenReturn(
             flowOf(

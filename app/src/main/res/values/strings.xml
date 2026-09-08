@@ -806,7 +806,7 @@
     <string name="settings__addr_type__changed">Address Type Changed</string>
     <string name="settings__addr_type__disabled_currently_selected">Cannot disable monitoring: address type is currently selected</string>
     <string name="settings__addr_type__disabled_has_balance">Cannot disable monitoring: address type has balance</string>
-    <string name="settings__addr_type__disabled_native_refund_required">Native SegWit monitoring is required for automatic refunds.</string>
+    <string name="settings__addr_type__disabled_native_refund_required">Native SegWit monitoring is required to receive Blocktank refunds.</string>
     <string name="settings__addr_type__disabled_native_required">At least one Native SegWit or Taproot wallet is required for Lightning channels.</string>
     <string name="settings__addr_type__disabled_verify_failed">Cannot disable monitoring: failed to verify balance</string>
     <string name="settings__addr_type__monitoring">Monitor address types</string>

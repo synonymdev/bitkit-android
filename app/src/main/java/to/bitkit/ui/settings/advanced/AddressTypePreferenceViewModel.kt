@@ -148,7 +148,7 @@ class AddressTypePreferenceViewModel @Inject constructor(
     }
 
     private fun monitoringErrorMessage(errorMessage: String?): String? = when {
-        errorMessage?.contains("automatic refunds") == true ->
+        errorMessage?.contains("Blocktank refunds") == true ->
             context.getString(R.string.settings__addr_type__disabled_native_refund_required)
         errorMessage?.contains("has balance") == true ->
             context.getString(R.string.settings__addr_type__disabled_has_balance)
