@@ -527,7 +527,13 @@ internal fun PaymentRequestSentContent(
         )
         VerticalSpacer(12.dp)
         BodyM(
-            text = stringResource(R.string.wallet__payment_request_sent_description),
+            text = stringResource(
+                if (request.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
+                    R.string.wallet__payment_request_sent_description
+                } else {
+                    R.string.wallet__payment_request_queued_description
+                }
+            ),
             color = Colors.White64,
             textAlign = TextAlign.Start,
             modifier = Modifier.fillMaxWidth(),

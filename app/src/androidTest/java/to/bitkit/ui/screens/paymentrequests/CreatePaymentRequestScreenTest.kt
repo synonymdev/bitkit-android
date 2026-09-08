@@ -130,10 +130,11 @@ class CreatePaymentRequestScreenTest {
     @Test
     fun sentShowsSuccessSurface() {
         val contact = PubkyProfile.forDisplay(target.publicKey, "Anna", imageUrl = null)
+        var deliveryStatus by mutableStateOf(PaykitPaymentRequestDeliveryStatus.Queued)
         composeTestRule.setContent {
             AppThemeSurface {
                 PaymentRequestSentContent(
-                    request = request.copy(deliveryStatus = PaykitPaymentRequestDeliveryStatus.Sent),
+                    request = request.copy(deliveryStatus = deliveryStatus),
                     contact = contact,
                     onDone = {},
                 )
@@ -145,6 +146,13 @@ class CreatePaymentRequestScreenTest {
         composeTestRule.onNodeWithText("PAYMENT REQUESTED").assertIsDisplayed()
         composeTestRule.onNodeWithText("Anna").assertIsDisplayed()
         composeTestRule.onNodeWithText("Dinner").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Your payment request is queued and will send automatically").assertIsDisplayed()
+        composeTestRule.onNodeWithText("You have sent a payment request").assertDoesNotExist()
+
+        composeTestRule.runOnIdle { deliveryStatus = PaykitPaymentRequestDeliveryStatus.Sent }
+
+        composeTestRule.onNodeWithText("You have sent a payment request").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Your payment request is queued and will send automatically").assertDoesNotExist()
     }
 
     private val draft = PaykitPaymentRequestDraft(
