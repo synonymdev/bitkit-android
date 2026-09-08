@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.profile
 
 import android.content.Context
+import android.util.Log
 import app.cash.turbine.test
 import com.synonym.paykit.PubkyAuthCompanionClaimApprovalException
 import kotlinx.coroutines.CompletableDeferred
@@ -10,11 +11,15 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
+import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
+import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.same
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
@@ -103,6 +108,43 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
         assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
         verifyBlocking(pubkyRepo, never()) { parseAuthUrl(staleAuthUrl) }
         verifyBlocking(pubkyRepo, never()) { approveAuth(staleAuthUrl, "/pub/current/:rw", clientId) }
+    }
+
+    @Test
+    fun `superseded signup failure is logged without changing the current request`() = test {
+        val authUrl = "pubkyauth://direct_signup?hs=homeserver"
+        val currentAuthUrl = "pubkyauth://direct_signup?hs=current-homeserver"
+        val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
+        val currentRequest = PubkyAuthRequest.parseSignup(currentAuthUrl).getOrThrow()
+        val approvalResult = CompletableDeferred<Result<Unit>>()
+        val error = AppError("Signup approval failed")
+        whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
+        whenever(pubkyRepo.parseAuthUrl(currentAuthUrl)).thenReturn(Result.success(currentRequest))
+        whenever(pubkyRepo.approveSignupAuth(request)).doSuspendableAnswer { approvalResult.await() }
+        val sut = createSut()
+
+        mockStatic(Log::class.java).use { log ->
+            sut.load(authUrl)
+            advanceUntilIdle()
+            sut.confirmAuthorize(authUrl)
+            runCurrent()
+            assertEquals(ApprovalState.Authorizing, sut.uiState.value.state)
+            verifyBlocking(pubkyRepo) { approveSignupAuth(request) }
+
+            sut.load(currentAuthUrl)
+            advanceUntilIdle()
+            sut.requestAuthorize(currentAuthUrl)
+            runCurrent()
+            val currentState = sut.uiState.value
+            assertEquals(currentAuthUrl, currentState.authUrl)
+            assertEquals(ApprovalState.Authenticating, currentState.state)
+
+            approvalResult.complete(Result.failure(error))
+            advanceUntilIdle()
+
+            log.verify { Log.e(eq("APP"), argThat { contains("PubkyAuthApprovalVM") }, same(error)) }
+            assertEquals(currentState, sut.uiState.value)
+        }
     }
 
     @Test
