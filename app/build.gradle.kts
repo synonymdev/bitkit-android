@@ -580,6 +580,7 @@ dependencies {
     implementation(libs.ktor.client.logging)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
+    testImplementation(libs.ktor.client.mock)
     // Logging
     runtimeOnly(libs.slf4j.simple)
     implementation(libs.slf4j.api)

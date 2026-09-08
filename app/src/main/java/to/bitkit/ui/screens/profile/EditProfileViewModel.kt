@@ -242,13 +242,12 @@ class EditProfileViewModel @Inject constructor(
             }
 
             val result = pubkyRepo.signOut()
-            privatePaykitRepo.closeAndClear()
             if (result.isSuccess) {
+                privatePaykitRepo.closeAndClear()
                 _uiState.update { it.copy(isSaving = false) }
                 _effects.emit(EditProfileEffect.DisconnectSuccess)
             } else {
                 val error = requireNotNull(result.exceptionOrNull()) { "Disconnect failed without an error" }
-                Logger.error("Failed to disconnect profile", error, context = TAG)
                 _uiState.update { it.copy(isSaving = false) }
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
