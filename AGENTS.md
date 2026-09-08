@@ -170,7 +170,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - Use narrower checks earlier only when they answer an immediate risk, e.g. a single unit test after touching focused business logic or a Kotlin compile after a risky refactor.
 - ALWAYS ask clarifying questions to ensure an optimal plan when encountering functional or technical uncertainties in requests
 - ALWAYS when fixing lint or test failures prefer to do the minimal amount of changes to fix the issues
-- USE single-line commit messages under 50 chars; use conventional commit messages template format: `feat: add something new`
+- USE single-line commit messages under 72 chars; use conventional commit messages template format: `feat: add something new`
 - USE `git diff HEAD sourceFilePath` to diff an uncommitted file against the last commit
 - NEVER capitalize words in commit messages
 - ALWAYS create a `*-backup` branch before performing a rebase
