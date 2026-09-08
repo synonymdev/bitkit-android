@@ -45,6 +45,7 @@ If no base branch argument provided, detect the repo's default branch:
 - Fetch 10 most recent PRs (open or closed) from the extracted repo for writing style reference
 - Run `git log $base..HEAD --oneline` for commit messages
 - Run `git diff $base...HEAD --stat` for understanding scope of changes
+- Read `docs/screens-map.md` as the starting point for locating relevant Figma frames when the diff has user-visible UI changes
 - **If custom instructions provided:**
   - If instructions reference a specific commit SHA (pattern like `commit [a-f0-9]{7,40}`):
     - Read full commit message: `git log -1 --format='%B' <commit_sha>`
@@ -156,6 +157,15 @@ When the user provides custom instructions after `--`:
 - Always use `→` to denote navigation, for example `Send → Amount`.
 - Use screen names from code, formatted as separate words without the `Screen` suffix, for example `SendAmountScreen` becomes `Send Amount`.
 - Use short-form wording like `in-sheet` for sheet screens, `nav` for navigation, `back` for back nav, and `LN` for Lightning Network.
+
+**Design Section:**
+Always include `### Design` and apply exactly one case:
+- UI changes with existing designs: link the relevant Figma frames, using `docs/screens-map.md` as the starting point.
+- UI changes without an available design, including new features: write `N/A — no design available.`
+- Changes without user-visible UI changes: write `N/A — no UI changes.`
+- Missing or uncertain screens-map entries: report the uncertainty honestly; never invent links or require new designs.
+
+Reviewers may make at most one advisory request when a UI PR omits an existing-design link. Explicit `N/A` cases require no request. Missing links never block approval, CI, PR creation, or review readiness.
 
 **For library repos (has `bindings/` directory or `Cargo.toml`):**
 Structure manual QA around integration validation only. Automated checks belong under `#### Automated Checks`.
