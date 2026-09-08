@@ -33,6 +33,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HwSendViewModelTest : BaseUnitTest() {
@@ -229,7 +230,8 @@ class HwSendViewModelTest : BaseUnitTest() {
     fun `broadcast timeout unblocks navigation`() = test {
         whenever(context.getString(any())).thenReturn("message")
         val fixture = stubSuccessfulPayment()
-        val timeout = runCatching { withTimeout(0) { Unit } }.exceptionOrNull() as TimeoutCancellationException
+        val timeout = runCatching { withTimeout(Duration.ZERO) { Unit } }
+            .exceptionOrNull() as TimeoutCancellationException
         whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(Result.failure(timeout))
 
         sut.signAndBroadcast(request())
