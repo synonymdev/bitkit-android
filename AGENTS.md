@@ -185,7 +185,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS remove unused code after refactors
 - ALWAYS follow Material3 design guidelines for UI components
 - When building from a Figma frame, reuse only scaffolding (sheet host, `SheetTopBar`, buttons, typography); NEVER swap a design-specific illustration/animation for a lookalike. Export the frame's assets via the Figma MCP and read animation timing/easing/direction from prototype reactions (`use_figma` → `node.reactions`)
-- ALWAYS resolve a changed `*Screen.kt` to its Figma frame through `docs/screens-map.md` (`Flow › Frame` on the latest `Bitkit - Handoff vNN` page). When adding or removing a `*Screen.kt`, update its row there; `ScreensMapTest` fails otherwise
+- ALWAYS resolve a changed `*Screen.kt` to its Figma frame through `docs/screens-map.md` (`Flow › Frame` on the latest `Bitkit - Handoff vNN` page). When adding or removing a `*Screen.kt`, add or drop its row there (`todo` when the design does not exist yet); `ScreensMapTest` fails otherwise
 - ALWAYS ensure proper error handling in coroutines
 - ALWAYS acknowledge datastore async operations run synchronously in a suspend context
 - NEVER use `runBlocking` in suspend functions

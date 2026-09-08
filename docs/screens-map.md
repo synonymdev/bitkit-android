@@ -4,8 +4,8 @@ Every `*Screen.kt` under `app/src/main/java`, grouped by feature package, with t
 
 Columns:
 
-- Android: the Compose screen file. Every `*Screen.kt` in the app has exactly one row; `ScreensMapTest` fails when a screen is added or removed without updating this file.
-- Figma: `Flow › Frame`, where Flow is the `SectionTitle` above the frame on the handoff page and Frame is the top-level frame name. `n/a` when the screen has no design (dev tools, debug screens).
+- Android: the Compose screen file. Every `*Screen.kt` in the app has exactly one row; `ScreensMapTest` fails when a screen is added or removed without updating this file. A row is the only requirement, a design is not.
+- Figma: `Flow › Frame`, where Flow is the `SectionTitle` above the frame on the handoff page and Frame is the top-level frame name. `todo` when the screen shipped ahead of its design; `n/a` when no design is intended (dev tools, debug screens).
 
 Frame names are stable across handoff iterations; node ids are not, so the map lists names only. Sheets, dialogs, and composables without the `Screen` suffix are out of scope.
 
