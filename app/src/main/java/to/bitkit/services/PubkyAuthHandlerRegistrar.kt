@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Singleton
 
-/** Advertises Bitkit as a `pubkyauth` handler for signup or locally managed authorization. */
+/** Advertises Pubky signup and authorization handlers when their required identity state is available. */
 @Singleton
 internal class PubkyAuthHandlerRegistrar @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -28,8 +28,17 @@ internal class PubkyAuthHandlerRegistrar @Inject constructor(
     private val settingsStore: SettingsStore,
     @IoDispatcher ioDispatcher: CoroutineDispatcher,
 ) {
+    companion object {
+        private const val TAG = "PubkyAuthHandlerRegistrar"
+        private const val PUBKY_AUTH_ALIAS_CLASS = "to.bitkit.ui.MainActivityPubkyAuth"
+
+        /** Handles signup links before a Pubky identity is available. */
+        private const val PUBKY_SIGNUP_ALIAS_CLASS = "to.bitkit.ui.MainActivityPubkySignup"
+    }
+
     private val scope: CoroutineScope = appScope(ioDispatcher, TAG)
     private val aliasComponent = ComponentName(context.packageName, PUBKY_AUTH_ALIAS_CLASS)
+    private val signupAliasComponent = ComponentName(context.packageName, PUBKY_SIGNUP_ALIAS_CLASS)
     private val started = AtomicBoolean()
 
     fun start() = start(scope)
@@ -48,17 +57,19 @@ internal class PubkyAuthHandlerRegistrar @Inject constructor(
                     val hasSecretKey = isPaykitUiEnabled && hasIdentity && pubkyRepo.hasSecretKey()
 
                     setAliasEnabled(
+                        aliasComponent,
                         canHandlePubkyAuth(
                             isPaykitUiEnabled = isPaykitUiEnabled,
                             hasIdentity = hasIdentity,
                             hasSecretKey = hasSecretKey,
                         ),
                     )
+                    setAliasEnabled(signupAliasComponent, isPaykitUiEnabled && !hasIdentity)
                 }
         }
     }
 
-    private fun setAliasEnabled(enabled: Boolean) {
+    private fun setAliasEnabled(component: ComponentName, enabled: Boolean) {
         val state =
             if (enabled) {
                 PackageManager.COMPONENT_ENABLED_STATE_ENABLED
@@ -68,23 +79,18 @@ internal class PubkyAuthHandlerRegistrar @Inject constructor(
 
         runCatching {
             context.packageManager.setComponentEnabledSetting(
-                aliasComponent,
+                component,
                 state,
                 PackageManager.DONT_KILL_APP,
             )
         }.onSuccess {
             Logger.info(
-                "Updated pubkyauth handler to '${if (enabled) "enabled" else "disabled"}'",
+                "Updated Pubky handler '${component.className}' to '${if (enabled) "enabled" else "disabled"}'",
                 context = TAG,
             )
         }.onFailure {
-            Logger.error("Failed to update pubkyauth handler", it, context = TAG)
+            Logger.error("Failed to update Pubky handler '${component.className}'", it, context = TAG)
         }
-    }
-
-    companion object {
-        private const val TAG = "PubkyAuthHandlerRegistrar"
-        private const val PUBKY_AUTH_ALIAS_CLASS = "to.bitkit.ui.MainActivityPubkyAuth"
     }
 }
 
@@ -92,4 +98,4 @@ internal fun canHandlePubkyAuth(
     isPaykitUiEnabled: Boolean,
     hasIdentity: Boolean,
     hasSecretKey: Boolean,
-): Boolean = isPaykitUiEnabled && (!hasIdentity || hasSecretKey)
+): Boolean = isPaykitUiEnabled && hasIdentity && hasSecretKey

@@ -38,53 +38,88 @@ class PubkyAuthManifestTest {
     }
 
     @Test
-    fun `pubkyauth alias is disabled by default`() {
-        val alias = manifest.getElementsByTagName("activity-alias").elements()
-            .single { it.getAttribute("android:name") == ".ui.MainActivityPubkyAuth" }
-
-        assertEquals(".ui.MainActivity", alias.getAttribute("android:targetActivity"))
-        assertEquals("false", alias.getAttribute("android:enabled"))
-        assertEquals("true", alias.getAttribute("android:exported"))
-        assertTrue(alias.handlesScheme("pubkyauth"))
+    fun `Pubky aliases are disabled by default`() {
+        val aliases = manifest.getElementsByTagName("activity-alias").elements()
+        listOf(".ui.MainActivityPubkyAuth", ".ui.MainActivityPubkySignup").forEach { name ->
+            val alias = aliases.single { it.getAttribute("android:name") == name }
+            assertEquals(".ui.MainActivity", alias.getAttribute("android:targetActivity"))
+            assertEquals("false", alias.getAttribute("android:enabled"))
+            assertEquals("true", alias.getAttribute("android:exported"))
+            assertTrue(alias.handlesScheme("pubkyauth"))
+        }
     }
 
     @Test
-    fun `signup links resolve only through the enabled Pubky alias`() {
+    fun `signup and authorization links resolve only through their enabled aliases`() {
         val application = ApplicationProvider.getApplicationContext<Application>()
         val packageManager = application.packageManager
-        val alias = ComponentName(application.packageName, "to.bitkit.ui.MainActivityPubkyAuth")
-        val signup = Intent(Intent.ACTION_VIEW, "pubkyring://signup?hs=homeserver".toUri())
-            .addCategory(Intent.CATEGORY_BROWSABLE)
-            .setPackage(application.packageName)
+        val authAlias = ComponentName(application.packageName, "to.bitkit.ui.MainActivityPubkyAuth")
+        val signupAlias = ComponentName(application.packageName, "to.bitkit.ui.MainActivityPubkySignup")
+        val signupUrls = listOf(
+            "pubkyring://signup?hs=homeserver",
+            "pubkyauth://signup?hs=homeserver&relay=relay&secret=secret&caps=rw",
+            "pubkyauth://signup?hs=homeserver",
+            "pubkyauth://direct_signup?hs=homeserver",
+        )
+        val authUrls = listOf("pubkyauth://?caps=rw", "pubkyauth://signin?caps=rw", "pubkyauth://grant?caps=rw")
+        val unrelatedUrls = listOf("pubkyring://auth", "pubkyring://direct_signup")
+        val allUrls = signupUrls + authUrls + unrelatedUrls
 
-        assertTrue(packageManager.queryIntentActivities(signup, PackageManager.MATCH_DEFAULT_ONLY).isEmpty())
-
+        assertRoutes(packageManager, application.packageName, allUrls, null)
         packageManager.setComponentEnabledSetting(
-            alias,
+            signupAlias,
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
             PackageManager.DONT_KILL_APP,
         )
-
-        listOf("pubkyring://signup?hs=homeserver", "pubkyauth://direct_signup?hs=homeserver", "pubkyauth://?caps=rw")
-            .forEach {
-                val resolved = packageManager.queryIntentActivities(
-                    Intent(signup).setData(it.toUri()),
-                    PackageManager.MATCH_DEFAULT_ONLY,
-                ).single().activityInfo
-                assertEquals(alias.className, resolved.name)
-                assertEquals("to.bitkit.ui.MainActivity", resolved.targetActivity)
-                assertTrue(resolved.exported)
-            }
-
-        val signIn = Intent(signup).setData("pubkyring://auth".toUri())
-        assertTrue(packageManager.queryIntentActivities(signIn, PackageManager.MATCH_DEFAULT_ONLY).isEmpty())
+        assertRoutes(packageManager, application.packageName, signupUrls, signupAlias)
+        assertRoutes(packageManager, application.packageName, authUrls + unrelatedUrls, null)
 
         packageManager.setComponentEnabledSetting(
-            alias,
+            signupAlias,
             PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
             PackageManager.DONT_KILL_APP,
         )
-        assertTrue(packageManager.queryIntentActivities(signup, PackageManager.MATCH_DEFAULT_ONLY).isEmpty())
+        packageManager.setComponentEnabledSetting(
+            authAlias,
+            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+            PackageManager.DONT_KILL_APP,
+        )
+        assertRoutes(
+            packageManager,
+            application.packageName,
+            signupUrls.filter { it.startsWith("pubkyauth:") } + authUrls,
+            authAlias,
+        )
+        assertRoutes(packageManager, application.packageName, listOf(signupUrls.first()) + unrelatedUrls, null)
+
+        packageManager.setComponentEnabledSetting(
+            authAlias,
+            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+            PackageManager.DONT_KILL_APP,
+        )
+        assertRoutes(packageManager, application.packageName, allUrls, null)
+    }
+
+    private fun assertRoutes(
+        packageManager: PackageManager,
+        packageName: String,
+        urls: List<String>,
+        alias: ComponentName?,
+    ) {
+        urls.forEach {
+            val intent = Intent(Intent.ACTION_VIEW, it.toUri())
+                .addCategory(Intent.CATEGORY_BROWSABLE)
+                .setPackage(packageName)
+            val resolved = packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            if (alias == null) {
+                assertTrue(resolved.isEmpty(), it)
+            } else {
+                val activity = resolved.single().activityInfo
+                assertEquals(alias.className, activity.name, it)
+                assertEquals("to.bitkit.ui.MainActivity", activity.targetActivity)
+                assertTrue(activity.exported)
+            }
+        }
     }
 
     private fun parseManifest(path: Path) = DocumentBuilderFactory.newInstance()
