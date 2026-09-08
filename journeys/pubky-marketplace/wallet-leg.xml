@@ -22,11 +22,11 @@
     <action>Open Contacts in the seller wallet and save the buyer public key</action>
     <action>Verify the buyer contact (testTag "Contact_&lt;buyer-public-key&gt;") is visible</action>
     <action>Verify the fixture reports the seller and buyer as linked peers</action>
-    <action>Return the buyer wallet to Home and verify the requests bell (testTag "PaymentRequestsBell") is visible</action>
+    <action>Return the buyer wallet to Home</action>
     <action>Have the fixture create one marketplace purchase for the buyer and record its Payment Request id</action>
     <action>Verify the request uses lowercase "btc", a regtest endpoint identifier, and a JSON endpoint value</action>
     <action>Verify the fresh request opens payment review automatically (testTag "ReviewAmount")</action>
-    <action>Press Android back to dismiss the automatic review, then tap the requests bell (testTag "PaymentRequestsBell")</action>
+    <action>Press Android back to dismiss the automatic review, verify the requests bell (testTag "PaymentRequestsBell") is visible, then tap it</action>
     <action>Verify the incoming requests sheet (testTag "PaymentRequestsSheet") is visible</action>
     <action>Verify the request row (testTag "PaymentRequestRow-&lt;payment-request-id&gt;") shows the seller and expected amount, plus the fixture note when present</action>
     <action>Capture the incoming-request evidence, then tap Pay (testTag "PaymentRequestPay-&lt;payment-request-id&gt;")</action>
