@@ -323,7 +323,7 @@ fun SendSheet(
                                 ?.savedStateHandle
                                 ?.set(HARDWARE_SIGN_CANCELLED_RESULT_KEY, true)
                             appViewModel.onHardwareSignCancelled()
-                            navController.popBackStack()
+                            if (!navController.popBackStack()) appViewModel.hideSheet()
                         },
                     )
                 }
