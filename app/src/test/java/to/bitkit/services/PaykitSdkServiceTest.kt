@@ -80,7 +80,7 @@ class PaykitSdkServiceTest {
                 }
                 verify(blocking, never()).delete(any())
             } else {
-                val thrown = assertFailsWith<Exception> { service.activateRegisteredIdentity(result) }
+                val thrown = assertFailsWith(error::class) { service.activateRegisteredIdentity(result) }
                 assertEquals(error, thrown)
                 verify(blocking).delete(Keychain.Key.PAYKIT_SESSION.name)
                 verify(blocking).delete(Keychain.Key.PUBKY_SECRET_KEY.name)
