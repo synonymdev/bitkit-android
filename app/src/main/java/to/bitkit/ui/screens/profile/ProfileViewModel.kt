@@ -122,12 +122,11 @@ class ProfileViewModel @Inject constructor(
             }
 
             val result = pubkyRepo.signOut()
-            privatePaykitRepo.closeAndClear()
             if (result.isSuccess) {
+                privatePaykitRepo.closeAndClear()
                 _effects.emit(ProfileEffect.SignedOut)
             } else {
                 val error = requireNotNull(result.exceptionOrNull()) { "Sign out failed without an error" }
-                Logger.error("Sign out failed", error, context = TAG)
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = context.getString(R.string.profile__sign_out_title),

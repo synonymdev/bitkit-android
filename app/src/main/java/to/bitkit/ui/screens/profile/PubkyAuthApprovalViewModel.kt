@@ -89,6 +89,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
                     } else {
                         ApprovalState.Authorize
                     },
+                    clientId = request.clientId,
                     serviceName = serviceName,
                     permissions = request.permissions.toImmutableList(),
                     bitkitClaim = request.bitkitClaim,
@@ -165,7 +166,8 @@ class PubkyAuthApprovalViewModel @Inject constructor(
             handleApprovalFailure(it, authUrl)
             return
         }
-        if (_uiState.value.authUrl != authUrl) return
+        val approvalState = _uiState.value
+        if (approvalState.authUrl != authUrl) return
         if (!approveRequest(request, authUrl)) return
 
         Logger.info("Auth approved for '${request.serviceNames.firstOrNull().orEmpty()}'", context = TAG)
@@ -204,8 +206,8 @@ class PubkyAuthApprovalViewModel @Inject constructor(
         }
 
         val approvalResult = preparedClaim?.let {
-            pubkyRepo.approveAuthWithCompanionClaim(authUrl, it.payload)
-        } ?: pubkyRepo.approveAuth(authUrl, request.capabilities)
+            pubkyRepo.approveAuthWithCompanionClaim(authUrl, request.clientId, it.payload)
+        } ?: pubkyRepo.approveAuth(authUrl, request.capabilities, request.clientId)
         if (approvalResult.isFailure) {
             val approvalError = checkNotNull(approvalResult.exceptionOrNull()) { "Authorization failed" }
             preparedClaim?.let { claim ->
@@ -296,6 +298,7 @@ class PubkyAuthApprovalViewModel @Inject constructor(
 data class PubkyAuthApprovalUiState(
     val authUrl: String = "",
     val state: ApprovalState = ApprovalState.Loading,
+    val clientId: String = "",
     val serviceName: String = "",
     val permissions: ImmutableList<PubkyAuthPermission> = persistentListOf(),
     val bitkitClaim: PubkyAuthClaim? = null,
