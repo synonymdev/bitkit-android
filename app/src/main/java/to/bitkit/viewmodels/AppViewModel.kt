@@ -2651,13 +2651,13 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun clearRejectedContactPaymentContext(context: ContactPaymentContext?) {
-        val request = context?.incomingPaymentRequest ?: return
+        if (context == null) return
         synchronized(contactPaymentContextLock) {
             if (activeContactPaymentContext != context) return
             activeContactPaymentContext = null
             preparedContactPaymentContext = null
         }
-        markIncomingPaymentRequestPresented(request)
+        context.incomingPaymentRequest?.let { markIncomingPaymentRequestPresented(it) }
     }
 
     private suspend fun markIncomingPaymentRequestPresented(request: PaykitPaymentRequest) {

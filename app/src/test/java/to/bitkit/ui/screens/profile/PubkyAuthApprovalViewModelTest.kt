@@ -193,8 +193,8 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
             authUrl = authUrl,
             capabilities = "/pub/example/:rw",
         )
-        whenever { pubkyRepo.parseAuthUrl(authUrl) }.thenReturn(Result.success(request))
-        whenever { pubkyRepo.approveSignupAuth(request) }.thenReturn(Result.success(Unit))
+        whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
+        whenever(pubkyRepo.approveSignupAuth(request)).thenReturn(Result.success(Unit))
         val sut = createSut()
 
         sut.load(authUrl)

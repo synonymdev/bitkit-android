@@ -2038,6 +2038,38 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `contact payment rejects pubky auth without blocking later incoming requests`() = test {
+        val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
+        setSendState(paymentState)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+
+        sut.openContactPayment(paymentRequest = signupAuthUrl, publicKey = testPublicKey)
+        advanceUntilIdle()
+
+        assertEquals(paymentState, sut.sendUiState.value)
+        assertNull(activeContactPaymentContext())
+        verify(paykitPaymentRequestRepo, never()).markPresented(any())
+        verify(pubkyRepo, never()).parseAuthUrl(any())
+
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1afterrejectedcontact"
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+        whenever(lightningRepo.canSend(request.amountSats)).thenReturn(true)
+        stubOpenedPaymentRequest(request, bolt11)
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        pendingPaykitPaymentRequests.value = listOf(request)
+
+        sut.onHomeResumed()
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(request, activeContactPaymentContext()?.incomingPaymentRequest)
+        assertEquals(request.amountSats, sut.sendUiState.value.amount)
+    }
+
+    @Test
     fun `incoming payment target rejects pubky auth without clearing payment state`() = test {
         val request = paymentRequest()
         val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
