@@ -1387,6 +1387,55 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `estimateMaxSendOnchain should subtract the send-all fee for the given speed`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(
+            BalanceDetails(
+                totalOnchainBalanceSats = 100_000uL,
+                spendableOnchainBalanceSats = 80_000uL,
+                totalAnchorChannelsReserveSats = 0uL,
+                totalLightningBalanceSats = 0uL,
+                lightningBalances = emptyList(),
+                pendingBalancesFromChannelClosures = emptyList(),
+            ),
+        )
+        whenever { lightningService.estimateSendAllFee(any(), any()) }.thenReturn(2_000uL)
+
+        val result = sut.estimateMaxSendOnchain(
+            address = "bcrt1qtest",
+            speed = TransactionSpeed.Fast,
+            feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u),
+        )
+
+        assertEquals(78_000uL, result.getOrNull())
+        verify(lightningService).estimateSendAllFee(address = "bcrt1qtest", satsPerVByte = 20uL)
+    }
+
+    @Test
+    fun `estimateMaxSendOnchain should return zero when nothing is spendable`() = test {
+        startNodeForTesting()
+        whenever(lightningService.balances).thenReturn(
+            BalanceDetails(
+                totalOnchainBalanceSats = 100_000uL,
+                spendableOnchainBalanceSats = 0uL,
+                totalAnchorChannelsReserveSats = 0uL,
+                totalLightningBalanceSats = 0uL,
+                lightningBalances = emptyList(),
+                pendingBalancesFromChannelClosures = emptyList(),
+            ),
+        )
+
+        val result = sut.estimateMaxSendOnchain(
+            address = "bcrt1qtest",
+            speed = TransactionSpeed.Fast,
+            feeRates = FeeRates(fast = 20u, mid = 10u, slow = 5u),
+        )
+
+        assertEquals(0uL, result.getOrNull())
+        verify(lightningService, never()).estimateSendAllFee(any(), any())
+    }
+
+    @Test
     fun `updateAddressType should fail when already in progress`() = test {
         startNodeForTesting()
         val settingsFlow = MutableSharedFlow<SettingsData>(replay = 1)

@@ -1514,6 +1514,21 @@ class LightningRepo @Inject constructor(
         }
     }
 
+    /** Max onchain amount sendable at [speed], i.e. the spendable balance minus the send-all mining fee */
+    suspend fun estimateMaxSendOnchain(
+        address: Address? = null,
+        speed: TransactionSpeed? = null,
+        feeRates: FeeRates? = null,
+    ): Result<ULong> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val spendableSats = getBalancesAsync().getOrThrow().spendableOnchainBalanceSats
+            if (spendableSats == 0uL) return@runSuspendCatching 0uL
+
+            val fee = estimateSendAllFee(address = address, speed = speed, feeRates = feeRates).getOrThrow()
+            spendableSats.safe() - fee.safe()
+        }
+    }
+
     suspend fun getFeeRateForSpeed(
         speed: TransactionSpeed,
         feeRates: FeeRates? = null,
