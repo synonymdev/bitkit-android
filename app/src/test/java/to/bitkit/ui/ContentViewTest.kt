@@ -5,6 +5,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.viewmodels.TransferEffect
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -76,5 +77,15 @@ class ContentViewTest {
         val result = shouldDismissSheetForScreenLink(handled = true, currentSheet = null)
 
         assertFalse(result)
+    }
+
+    @Test
+    fun `receive presentation key changes only between sheet presentations`() {
+        val sheet = Sheet.Receive()
+        val samePresentation = sheet.copy(route = ReceiveRoute.Amount)
+        val nextPresentation = Sheet.Receive()
+
+        assertEquals(receiveSheetPresentationKey(sheet), receiveSheetPresentationKey(samePresentation))
+        assertFalse(receiveSheetPresentationKey(sheet) == receiveSheetPresentationKey(nextPresentation))
     }
 }
