@@ -54,9 +54,11 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.nowTimestamp
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.models.EUR
 import to.bitkit.models.msatCeilOf
+import to.bitkit.models.safe
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.utils.Logger
@@ -249,11 +251,18 @@ class BlocktankRepo @Inject constructor(
         amountSats: ULong,
         description: String = "",
     ): Result<IcJitEntry> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
             val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
+            val maxChannelSizeSat = freshMaxChannelSizeSat()
+            if (maxChannelSizeSat != null && amountSats > maxChannelSizeSat) {
+                throw ServiceError.ChannelSizeExceedsMaximum()
+            }
             val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
-            val channelSizeSat = amountSats + lspBalance
+            if (!canFitChannelSize(amountSats, lspBalance)) {
+                throw ServiceError.ChannelSizeExceedsMaximum()
+            }
+            val channelSizeSat = amountSats.safe() + lspBalance.safe()
 
             val cjitEntry = coreService.blocktank.createCjit(
                 channelSizeSat = channelSizeSat,
@@ -266,9 +275,35 @@ class BlocktankRepo @Inject constructor(
 
             repoScope.launch { refreshOrders() }
 
-            return@runCatching cjitEntry
-        }.onFailure {
+            return@runSuspendCatching cjitEntry
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { Result.failure(it.toCjitError()) },
+        ).onFailure {
             Logger.error("Failed to create CJIT", it, context = TAG)
+        }
+    }
+
+    suspend fun maxCjitAmountSats(): Result<ULong?> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val maxChannelSizeSat = freshMaxChannelSizeSat() ?: return@runSuspendCatching null
+            var lowerBound = 0uL
+            var upperBound = maxChannelSizeSat
+
+            while (lowerBound < upperBound) {
+                val distance = upperBound.safe() - lowerBound.safe()
+                val step = (distance.safe() + 1uL.safe()) / 2uL
+                val candidate = lowerBound.safe() + step.safe()
+                if (canCreateCjit(candidate, maxChannelSizeSat)) {
+                    lowerBound = candidate
+                } else {
+                    upperBound = candidate - 1uL
+                }
+            }
+
+            lowerBound
+        }.onFailure {
+            Logger.error("Failed to calculate max CJIT amount", it, context = TAG)
         }
     }
 
@@ -407,6 +442,30 @@ class BlocktankRepo @Inject constructor(
         )
 
         return@withContext getDefaultLspBalance(params)
+    }
+
+    private suspend fun freshMaxChannelSizeSat(): ULong? {
+        refreshInfo()
+
+        return _blocktankState.value.info?.options?.maxChannelSizeSat?.takeIf { it > 0uL }
+    }
+
+    private suspend fun canCreateCjit(amountSats: ULong, maxChannelSizeSat: ULong): Boolean {
+        if (amountSats > maxChannelSizeSat) return false
+
+        val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
+        val remainingCapacity = maxChannelSizeSat.safe() - amountSats.safe()
+        return lspBalance <= remainingCapacity
+    }
+
+    private fun canFitChannelSize(amountSats: ULong, lspBalance: ULong): Boolean {
+        val maxChannelSizeSat = _blocktankState.value.info?.options?.maxChannelSizeSat?.takeIf { it > 0uL }
+            ?: return true
+
+        if (amountSats > maxChannelSizeSat) return false
+
+        val remainingCapacity = maxChannelSizeSat.safe() - amountSats.safe()
+        return lspBalance <= remainingCapacity
     }
 
     fun calculateLiquidityOptions(clientBalanceSat: ULong): Result<ChannelLiquidityOptions> {
@@ -598,6 +657,27 @@ class BlocktankRepo @Inject constructor(
         private val CJIT_REFRESH_TIMEOUT = 5.seconds
         private val CJIT_REFRESH_RETRY_DELAY = 1.seconds
     }
+}
+
+internal fun Throwable.toCjitError(): Throwable {
+    if (this is ServiceError.ChannelSizeExceedsMaximum) return this
+
+    return if (isMaxChannelSizeError()) {
+        ServiceError.ChannelSizeExceedsMaximum()
+    } else {
+        this
+    }
+}
+
+private fun Throwable.isMaxChannelSizeError(): Boolean {
+    val description = toString()
+    val maximumErrors = listOf(
+        "Channel size is too big",
+        "channelSizeExceedsMaximum",
+        "maxChannelSizeSat",
+        "capacity is above our capacity limit",
+    )
+    return maximumErrors.any { description.contains(it, ignoreCase = true) }
 }
 
 @Stable
