@@ -20,6 +20,7 @@ fun getInvoiceForTab(
     bolt11: String,
     cjitInvoice: String?,
     isNodeRunning: Boolean,
+    canCreateLightningInvoice: Boolean = true,
     onchainAddress: String,
     hardwareAddress: String = "",
     hardwareAmountSats: ULong? = null,
@@ -32,13 +33,14 @@ fun getInvoiceForTab(
         }
 
         ReceiveTab.AUTO -> {
-            bip21.takeIf { isNodeRunning && containsLightningParameter(bip21) }.orEmpty()
+            bip21.takeIf { isNodeRunning && canCreateLightningInvoice && containsLightningParameter(bip21) }
+                ?: removeLightningFromBip21(bip21, onchainAddress)
         }
 
         ReceiveTab.SPENDING -> {
             // Lightning only: prefer CJIT > bolt11, empty when node is not running
             cjitInvoice?.takeIf { it.isNotEmpty() && isNodeRunning }
-                ?: bolt11.takeIf { isNodeRunning }.orEmpty()
+                ?: bolt11.takeIf { isNodeRunning && canCreateLightningInvoice }.orEmpty()
         }
 
         ReceiveTab.TREZOR -> hardwareAddress.takeIf(String::isNotBlank)?.let { address ->

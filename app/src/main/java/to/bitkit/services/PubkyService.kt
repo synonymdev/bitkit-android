@@ -37,12 +37,8 @@ class PubkyService @Inject constructor(
         paykitSdkService.signOut()
     }
 
-    suspend fun forceSignOut() = ServiceQueue.CORE.background {
-        paykitSdkService.forceSignOut()
-    }
-
-    suspend fun clearSessionAccess() = ServiceQueue.CORE.background {
-        paykitSdkService.clearSessionAccess()
+    suspend fun forgetSessionAccess() = ServiceQueue.CORE.background {
+        paykitSdkService.forgetSessionAccess()
     }
 
     suspend fun removeBitkitPaymentEndpoints() = ServiceQueue.CORE.background {
@@ -113,20 +109,23 @@ class PubkyService @Inject constructor(
     suspend fun approveAuth(
         authUrl: String,
         expectedCapabilities: String,
+        approvedClientId: String,
         secretKeyHex: String,
     ) = ServiceQueue.CORE.background {
-        paykitSdkService.approveAuth(authUrl, expectedCapabilities, secretKeyHex)
+        paykitSdkService.approveAuth(authUrl, expectedCapabilities, approvedClientId, secretKeyHex)
     }
 
     suspend fun approveAuthWithCompanionClaim(
         authUrl: String,
         expectedCapabilities: String,
+        approvedClientId: String,
         secretKeyHex: String,
         claim: PubkyAuthCompanionClaim,
     ) = ServiceQueue.CORE.background {
         paykitSdkService.approveAuthWithCompanionClaim(
             authUrl = authUrl,
             expectedCapabilities = expectedCapabilities,
+            approvedClientId = approvedClientId,
             secretKeyHex = secretKeyHex,
             claim = claim,
         )

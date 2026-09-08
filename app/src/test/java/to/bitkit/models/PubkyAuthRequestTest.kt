@@ -13,6 +13,7 @@ class PubkyAuthRequestTest {
         val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
         val request = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         ).getOrThrow()
@@ -25,6 +26,7 @@ class PubkyAuthRequestTest {
         val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES.split(",").reversed().joinToString(",")
         val request = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         ).getOrThrow()
@@ -43,10 +45,12 @@ class PubkyAuthRequestTest {
     fun `parse preserves normal auth without Bitkit claim`() {
         val request = PubkyAuthRequest.parse(
             rawUrl = authUrl("/pub/bitkit.to/:rw"),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = "/pub/bitkit.to/:rw",
         ).getOrThrow()
 
+        assertEquals("paykit.test", request.clientId)
         assertNull(request.bitkitClaim)
     }
 
@@ -56,6 +60,7 @@ class PubkyAuthRequestTest {
 
         val request = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         ).getOrThrow()
@@ -71,6 +76,7 @@ class PubkyAuthRequestTest {
 
         val request = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         ).getOrThrow()
@@ -84,6 +90,7 @@ class PubkyAuthRequestTest {
         val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         )
@@ -100,6 +107,7 @@ class PubkyAuthRequestTest {
                 PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
                 PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue,
             ),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         )
@@ -112,6 +120,7 @@ class PubkyAuthRequestTest {
         val capabilities = PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, "unknown-v1"),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         )
@@ -125,6 +134,7 @@ class PubkyAuthRequestTest {
         val capabilities = "/pub/paykit/v0/:rw"
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         )
@@ -137,6 +147,7 @@ class PubkyAuthRequestTest {
         val capabilities = "/pub/paykit/v0/bitkit/server/:rw"
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         )
@@ -149,6 +160,7 @@ class PubkyAuthRequestTest {
         val capabilities = "${PubkyAuthClaim.WATCH_ONLY_ACCOUNT_CAPABILITIES},"
         val result = PubkyAuthRequest.parse(
             rawUrl = authUrl(capabilities, PubkyAuthClaim.WATCH_ONLY_ACCOUNT_V1.wireValue),
+            clientId = "paykit.test",
             relay = "https://httprelay.pubky.app/inbox/",
             capabilities = capabilities,
         )

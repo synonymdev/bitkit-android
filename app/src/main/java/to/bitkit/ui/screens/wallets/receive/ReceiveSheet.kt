@@ -78,9 +78,10 @@ fun ReceiveSheet(
     LaunchedEffect(startRoute) { navController.navigateToReceiveStart(startRoute) }
 
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
-    val showCreateCjit = remember { mutableStateOf(false) }
     val cjitEntryDetails = remember { mutableStateOf<CjitEntryDetails?>(null) }
     val invoiceEditState = remember { ReceiveInvoiceEditState() }
+    var editInvoiceSourceTab by remember { mutableStateOf(ReceiveTab.SAVINGS) }
+    var isAdditionalLiquidityAmountEntry by remember { mutableStateOf(false) }
     val lightningState: LightningState by wallet.lightningState.collectAsStateWithLifecycle()
     val paymentRequestTargets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
     val paymentRequestContacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
@@ -134,10 +135,6 @@ fun ReceiveSheet(
                 startDestination = rootRoute,
             ) {
                 composableWithDefaultTransitions<ReceiveRoute.QR> {
-                    LaunchedEffect(cjitInvoice.value) {
-                        showCreateCjit.value = !cjitInvoice.value.isNullOrBlank()
-                    }
-
                     ReceiveQrScreen(
                         cjitInvoice = cjitInvoice.value,
                         walletState = walletState,
@@ -146,15 +143,17 @@ fun ReceiveSheet(
                             if (lightningState.isGeoBlocked) {
                                 navController.navigateTo(ReceiveRoute.GeoBlock)
                             } else {
-                                showCreateCjit.value = true
+                                isAdditionalLiquidityAmountEntry = lightningState.channels.isNotEmpty()
                                 navController.navigateTo(ReceiveRoute.Amount)
                             }
                         },
                         onClickEditInvoice = {
-                            invoiceEditState.beginSoftwareEdit()
+                            editInvoiceSourceTab = it
+                            invoiceEditState.beginSoftwareEdit(it)
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         onClickHardwareEditInvoice = {
+                            editInvoiceSourceTab = ReceiveTab.TREZOR
                             invoiceEditState.beginHardwareEdit()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
@@ -262,7 +261,13 @@ fun ReceiveSheet(
                     ReceiveAmountScreen(
                         onCjitCreated = { entry ->
                             cjitEntryDetails.value = entry
-                            navController.navigateTo(ReceiveRoute.Confirm)
+                            navController.navigateTo(
+                                if (isAdditionalLiquidityAmountEntry) {
+                                    ReceiveRoute.ConfirmIncreaseInbound
+                                } else {
+                                    ReceiveRoute.Confirm
+                                }
+                            )
                         },
                         onBack = { navController.popBackStack() },
                     )
@@ -349,6 +354,8 @@ fun ReceiveSheet(
                     EditInvoiceScreen(
                         amountInputViewModel = editInvoiceAmountViewModel,
                         walletUiState = walletUiState,
+                        lightningState = lightningState,
+                        sourceTab = editInvoiceSourceTab,
                         onBack = { navController.popBackStack() },
                         updateInvoice = wallet::updateBip21Invoice,
                         onClickAddTag = { navController.navigateTo(ReceiveRoute.AddTag) },
@@ -372,6 +379,11 @@ fun ReceiveSheet(
                         },
                         onchainOnly = invoiceEditState.isHardwareInvoice,
                         updateOnchainInvoice = wallet::setBip21AmountSats,
+                        navigateCjitAmount = {
+                            isAdditionalLiquidityAmountEntry = true
+                            navController.navigateTo(ReceiveRoute.Amount)
+                        },
+                        navigateGeoBlock = { navController.navigateTo(ReceiveRoute.GeoBlock) },
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.AddTag> {
@@ -410,17 +422,20 @@ fun ReceiveSheet(
 internal class ReceiveInvoiceEditState {
     var isHardwareInvoice by mutableStateOf(false)
         private set
+    private var returnTab by mutableStateOf<ReceiveTab?>(null)
 
-    fun beginSoftwareEdit() {
+    fun beginSoftwareEdit(sourceTab: ReceiveTab) {
         isHardwareInvoice = false
+        returnTab = sourceTab
     }
 
     fun beginHardwareEdit() {
         isHardwareInvoice = true
+        returnTab = ReceiveTab.TREZOR
     }
 
     fun initialTab(hardwareWalletId: String?): ReceiveTab? =
-        ReceiveTab.TREZOR.takeIf { hardwareWalletId != null || isHardwareInvoice }
+        returnTab ?: ReceiveTab.TREZOR.takeIf { hardwareWalletId != null }
 }
 
 @Composable
