@@ -162,10 +162,6 @@ internal fun PaymentRequestAmountContent(
 
             Column(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
                 VerticalSpacer(16.dp)
-                rememberMoneyText(sats = amountState.sats, reversed = true, showSymbol = true)?.let {
-                    Caption13Up(text = it.removeAccentTags(), color = Colors.White64)
-                }
-                VerticalSpacer(8.dp)
                 NumberPadTextField(
                     viewModel = amountInputViewModel,
                     modifier = Modifier
