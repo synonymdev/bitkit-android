@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import androidx.compose.runtime.Stable
+import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.ChannelLiquidityOptions
@@ -27,6 +28,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +43,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -49,6 +53,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.async.ServiceQueue
 import to.bitkit.async.appScope
+import to.bitkit.data.BlocktankRefundAddress
 import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
@@ -61,6 +66,7 @@ import to.bitkit.models.msatCeilOf
 import to.bitkit.models.safe
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import java.math.BigDecimal
@@ -84,6 +90,7 @@ class BlocktankRepo @Inject constructor(
     private val lightningRepo: LightningRepo,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
+    private val refundAddressMutex = Mutex()
 
     private val _blocktankState = MutableStateFlow(BlocktankState())
     val blocktankState: StateFlow<BlocktankState> = _blocktankState.asStateFlow()
@@ -312,16 +319,25 @@ class BlocktankRepo @Inject constructor(
         receivingBalanceSats: ULong = spendingBalanceSats * 2u,
         channelExpiryWeeks: UInt = DEFAULT_CHANNEL_EXPIRY_WEEKS,
     ): Result<IBtOrder> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
+            if (lightningService.nodeId == null) throw ServiceError.NodeNotStarted()
 
-            val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
+            currentCoroutineContext().ensureActive()
+            val refundAddress = getBlocktankRefundAddress()
+            currentCoroutineContext().ensureActive()
+            val baseOptions = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
+            val options = baseOptions.copy(refundOnchainAddress = refundAddress)
+            currentCoroutineContext().ensureActive()
 
             Logger.info(
                 "Buying channel with " +
+                    "clientBalanceSat: '$spendingBalanceSats', " +
                     "lspBalanceSat: '$receivingBalanceSats', " +
                     "channelExpiryWeeks: '$channelExpiryWeeks', " +
-                    "options: '$options'",
+                    "zeroConf: '${options.zeroConf}', " +
+                    "zeroReserve: '${options.zeroReserve}', " +
+                    "announceChannel: '${options.announceChannel}'",
                 context = TAG,
             )
 
@@ -333,10 +349,50 @@ class BlocktankRepo @Inject constructor(
 
             repoScope.launch { refreshOrders() }
 
-            return@runCatching order
+            return@runSuspendCatching order
         }.onFailure {
             Logger.error("Failed to create order", it, context = TAG)
         }
+    }
+
+    private suspend fun getBlocktankRefundAddress(): String = refundAddressMutex.withLock {
+        val cached = cacheStore.data.first().blocktankRefundAddress
+        if (cached == null) return@withLock allocateBlocktankRefundAddress()
+
+        if (cached.index !in 0..Int.MAX_VALUE.toLong()) {
+            throw AppError("Invalid cached Blocktank refund address index")
+        }
+        if (cached.address.isBlank()) {
+            throw AppError("Invalid cached Blocktank refund address")
+        }
+
+        val index = cached.index.toInt()
+        val derived = lightningRepo.addressInfoForType(AddressType.P2WPKH, index).getOrThrow()
+        if (derived.index != index || derived.address != cached.address) {
+            throw AppError("Cached Blocktank refund address does not belong to the active wallet")
+        }
+
+        lightningRepo.revealReceiveAddresses(index, AddressType.P2WPKH).getOrThrow()
+        if (!coreService.isAddressUsed(cached.address)) return@withLock cached.address
+
+        allocateBlocktankRefundAddress()
+    }
+
+    private suspend fun allocateBlocktankRefundAddress(): String {
+        val derived = lightningRepo.newAddressInfoForType(AddressType.P2WPKH).getOrThrow()
+        if (derived.index !in 0..Int.MAX_VALUE || derived.address.isBlank()) {
+            throw AppError("Failed to allocate a valid Blocktank refund address")
+        }
+
+        cacheStore.update {
+            it.copy(
+                blocktankRefundAddress = BlocktankRefundAddress(
+                    address = derived.address,
+                    index = derived.index.toLong(),
+                ),
+            )
+        }
+        return derived.address
     }
 
     suspend fun estimateOrderFee(

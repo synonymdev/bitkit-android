@@ -38,6 +38,7 @@ import org.lightningdevkit.ldknode.TxOutput
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -1435,6 +1436,26 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `setMonitoring should fail when disabling native SegWit required for automatic refunds`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "taproot",
+                    addressTypesToMonitor = listOf("nativeSegwit", "taproot"),
+                )
+            )
+        )
+
+        val result = sut.setMonitoring(AddressType.P2WPKH, enabled = false)
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message?.contains("automatic refunds") == true)
+        verify(lightningService, never()).removeAddressTypeFromMonitor(any())
+        verify(lightningService, never()).getBalanceForAddressType(any())
+    }
+
+    @Test
     fun `setMonitoring should fail when disabling last required native witness`() = test {
         startNodeForTesting()
         whenever(
@@ -1564,6 +1585,27 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `updateAddressType retains native SegWit monitoring`() = test {
+        startNodeForTesting()
+        val previous = SettingsData(
+            selectedAddressType = "nativeSegwit",
+            addressTypesToMonitor = listOf("nativeSegwit"),
+        )
+        whenever(settingsStore.data).thenReturn(flowOf(previous))
+        whenever { settingsStore.update(any()) }.thenReturn(Unit)
+        val transforms = argumentCaptor<(SettingsData) -> SettingsData>()
+
+        val result = sut.updateAddressType("taproot", listOf("taproot"))
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(settingsStore) { update(transforms.capture()) }
+        assertEquals(
+            listOf("taproot", "nativeSegwit"),
+            transforms.firstValue(previous).addressTypesToMonitor,
+        )
+    }
+
+    @Test
     fun `updateAddressType should fail when setPrimaryAddressType fails`() = test {
         startNodeForTesting()
         whenever(
@@ -1670,6 +1712,24 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(lightningService, times(0)).removeAddressTypeFromMonitor(any())
+    }
+
+    @Test
+    fun `pruneEmptyAddressTypesAfterRestore keeps empty native SegWit when Taproot is selected`() = test {
+        startNodeForTesting()
+        whenever(settingsStore.data).thenReturn(
+            flowOf(
+                SettingsData(
+                    selectedAddressType = "taproot",
+                    addressTypesToMonitor = listOf("nativeSegwit", "taproot"),
+                )
+            )
+        )
+
+        val result = sut.pruneEmptyAddressTypesAfterRestore()
+
+        assertTrue(result.isSuccess)
+        verify(lightningService, never()).removeAddressTypeFromMonitor(any())
     }
 
     @Test

@@ -73,6 +73,7 @@ import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.ElectrumServer
 import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.NodeLifecycleState
@@ -947,6 +948,7 @@ class LightningRepo @Inject constructor(
         val previousSettings = settingsStore.data.first()
         val oldSelected = previousSettings.selectedAddressType
         val oldMonitored = previousSettings.addressTypesToMonitor
+        val requiredMonitoredTypes = (monitoredTypes + DEFAULT_ADDRESS_TYPE_STRING).distinct()
         val addressType = selectedType.toAddressType() ?: AddressType.P2WPKH
 
         suspend fun rollback() =
@@ -954,7 +956,7 @@ class LightningRepo @Inject constructor(
 
         runCatching {
             settingsStore.update {
-                it.copy(selectedAddressType = selectedType, addressTypesToMonitor = monitoredTypes)
+                it.copy(selectedAddressType = selectedType, addressTypesToMonitor = requiredMonitoredTypes)
             }
             lightningService.setPrimaryAddressType(addressType)
             syncMonitoredTypesFromNode()
@@ -1011,21 +1013,22 @@ class LightningRepo @Inject constructor(
         settings: SettingsData,
         monitoredTypes: List<String>,
     ): AppError? {
-        if (addressType == settings.selectedAddressType.toAddressType()) {
-            return AppError("Cannot disable monitoring: address type is currently selected")
-        }
-        if (isLastRequiredNativeWitnessWallet(addressType, monitoredTypes)) {
-            return AppError(
+        val configurationError = when {
+            addressType == AddressType.P2WPKH ->
+                AppError("Cannot disable monitoring: Native SegWit is required for automatic refunds")
+            addressType == settings.selectedAddressType.toAddressType() ->
+                AppError("Cannot disable monitoring: address type is currently selected")
+            isLastRequiredNativeWitnessWallet(addressType, monitoredTypes) -> AppError(
                 "Cannot disable monitoring: at least one Native SegWit or Taproot wallet required for Lightning"
             )
+            else -> null
         }
+        if (configurationError != null) return configurationError
+
         val balance = getBalanceForAddressType(addressType).getOrElse {
             return AppError("Cannot disable monitoring: failed to verify balance")
         }
-        if (balance > 0uL) {
-            return AppError("Cannot disable monitoring: address type has balance")
-        }
-        return null
+        return if (balance > 0uL) AppError("Cannot disable monitoring: address type has balance") else null
     }
 
     private suspend fun syncMonitoredTypesFromNode() {
@@ -1033,7 +1036,7 @@ class LightningRepo @Inject constructor(
             val nodeMonitored = lightningService.listMonitoredAddressTypes()
             val settings = settingsStore.data.first()
             val selectedType = settings.selectedAddressType.toAddressType() ?: AddressType.P2WPKH
-            val combined = (nodeMonitored + selectedType).distinct()
+            val combined = (nodeMonitored + selectedType + AddressType.P2WPKH).distinct()
             val allOrdered = ALL_ADDRESS_TYPE_STRINGS
             val newMonitored = allOrdered.filter { typeStr ->
                 typeStr.toAddressType() in combined
@@ -1054,6 +1057,7 @@ class LightningRepo @Inject constructor(
         val monitored = settings.addressTypesToMonitor.toMutableList()
 
         val toRemove = monitored.filter { typeStr ->
+            if (typeStr == DEFAULT_ADDRESS_TYPE_STRING) return@filter false
             if (typeStr == settings.selectedAddressType) return@filter false
             val type = typeStr.toAddressType() ?: return@filter false
             val balance = getBalanceForAddressType(type).getOrNull() ?: return@filter false
@@ -1149,12 +1153,12 @@ class LightningRepo @Inject constructor(
 
     suspend fun newAddressInfoForType(addressType: AddressType): Result<AddressDerivationInfo> =
         executeWhenNodeRunning("newAddressInfoForType") {
-            runCatching { lightningService.newAddressInfoForType(addressType) }
+            runSuspendCatching { lightningService.newAddressInfoForType(addressType) }
         }
 
     suspend fun addressInfoForType(addressType: AddressType, receiveIndex: Int): Result<AddressDerivationInfo> =
         executeWhenNodeRunning("addressInfoForType") {
-            runCatching { lightningService.addressInfoForType(addressType, receiveIndex) }
+            runSuspendCatching { lightningService.addressInfoForType(addressType, receiveIndex) }
         }
 
     suspend fun addressInfosForType(
@@ -1169,7 +1173,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun revealReceiveAddresses(toReceiveIndex: Int, forType: AddressType): Result<Unit> =
         executeWhenNodeRunning("revealReceiveAddresses") {
-            runCatching { lightningService.revealReceiveAddresses(toReceiveIndex, forType) }
+            runSuspendCatching { lightningService.revealReceiveAddresses(toReceiveIndex, forType) }
         }
 
     suspend fun createInvoice(

@@ -301,6 +301,18 @@ class BackupRepo @Inject constructor(
         }
         dataListenerJobs.add(preActivityMetadataJob)
 
+        val blocktankRefundAddressJob = scope.launch {
+            cacheStore.data
+                .map { it.blocktankRefundAddress }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    if (shouldSkipBackup()) return@collect
+                    markBackupRequired(BackupCategory.METADATA)
+                }
+        }
+        dataListenerJobs.add(blocktankRefundAddressJob)
+
         // METADATA - Observe hardware wallet names only: the store is also rewritten by every connect,
         // and reconnect traffic must not re-upload the whole metadata envelope.
         val hwWalletNamesJob = scope.launch {
