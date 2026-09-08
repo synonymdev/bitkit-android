@@ -4696,6 +4696,33 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `subscription cancellation completes after the sheet caller is cancelled`() = test {
+        val subscription = subscriptionStartingAt(Clock.System.now()).copy(
+            lifecycleState = PaymentRequestLifecycleState.ACTIVE_RECURRING,
+        )
+        paykitSubscriptions.value = listOf(subscription)
+        val cancellationStarted = CompletableDeferred<Unit>()
+        val finishCancellation = CompletableDeferred<Unit>()
+        var cancellationCompleted = false
+        whenever(paykitPaymentRequestRepo.cancel(subscription)).doSuspendableAnswer {
+            cancellationStarted.complete(Unit)
+            finishCancellation.await()
+            cancellationCompleted = true
+            Result.success(Unit)
+        }
+
+        val caller = launch { sut.cancelSubscription(subscription.id).getOrThrow() }
+        cancellationStarted.await()
+        caller.cancel()
+        caller.join()
+        finishCancellation.complete(Unit)
+        runCurrent()
+
+        assertTrue(caller.isCancelled)
+        assertTrue(cancellationCompleted)
+    }
+
+    @Test
     fun `subscription acceptance pays a due period materialized during acceptance`() = test {
         val subscription = subscriptionStartingAt(Clock.System.now() + 60.seconds)
         val dueRequest = paymentRequest().copy(

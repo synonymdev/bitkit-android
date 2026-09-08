@@ -4846,11 +4846,11 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    suspend fun cancelSubscription(id: PaykitSubscriptionId): Result<Unit> {
-        val subscription = subscription(id) ?: return Result.failure(PaykitPaymentRequestError.RequestUnavailable)
-        return paykitPaymentRequestRepo.cancel(subscription)
+    suspend fun cancelSubscription(id: PaykitSubscriptionId): Result<Unit> = viewModelScope.async {
+        val subscription = subscription(id) ?: return@async Result.failure(PaykitPaymentRequestError.RequestUnavailable)
+        paykitPaymentRequestRepo.cancel(subscription)
             .onFailure(::toast)
-    }
+    }.await()
 
     fun openIncomingPaymentRequest(id: PaykitPaymentRequestId) {
         openIncomingPaymentRequestWithTags(id, emptyList())
