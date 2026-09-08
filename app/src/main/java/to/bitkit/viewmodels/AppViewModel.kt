@@ -2610,10 +2610,18 @@ class AppViewModel @Inject constructor(
                     Logger.error("Failed to decode scan data: '$safeLogInput'", it, context = TAG)
                 }
             }
-            .onSuccess { Logger.info("Handling decoded scan data: $it", context = TAG) }
+            .onSuccess { logDecodedScan(it, isPaymentRequest) }
             .getOrNull()
 
         handleDecodedScan(scan, input, fromMainScanner)
+    }
+
+    private fun logDecodedScan(scan: Scanner, isPaymentRequest: Boolean) {
+        if (isPaymentRequest) {
+            Logger.info("Decoded incoming Paykit payment request target", context = TAG)
+        } else {
+            Logger.info("Handling decoded scan data: $scan", context = TAG)
+        }
     }
 
     @Suppress("CyclomaticComplexMethod")

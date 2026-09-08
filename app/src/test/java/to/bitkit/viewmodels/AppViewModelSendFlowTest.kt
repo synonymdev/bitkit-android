@@ -7,7 +7,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.nfc.NfcAdapter
-import android.util.Log
 import androidx.core.net.toUri
 import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
@@ -714,7 +713,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `opened request with an unhandled target redacts warning logs`() = test {
+    fun `opened request with an unhandled target redacts logs`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()
         val unhandledTarget = "alice@example.com"
@@ -739,13 +738,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceTimeBy(TRANSITION_SCREEN_MS)
         runCurrent()
 
-        val warningLogs = ShadowLog.getLogsForTag("APP")
-            .filter { it.type == Log.WARN }
-            .map { it.msg }
+        val logs = ShadowLog.getLogsForTag("APP").map { it.msg }
+        assertTrue(logs.any { it.contains("Decoded incoming Paykit payment request target") })
         assertTrue(
-            warningLogs.any { it.contains("Received unhandled incoming Paykit payment request target") },
+            logs.any { it.contains("Received unhandled incoming Paykit payment request target") },
         )
-        assertFalse(warningLogs.any { it.contains(unhandledTarget) })
+        assertFalse(logs.any { it.contains(unhandledTarget) })
     }
 
     @Test
