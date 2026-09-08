@@ -70,10 +70,19 @@ class WalletRepoTest : BaseUnitTest() {
             mock<ChannelDetails> {
                 on { inboundCapacityMsat } doReturn 500_000u
                 on { isChannelReady } doReturn true
+                on { isUsable } doReturn true
             },
             mock<ChannelDetails> {
                 on { inboundCapacityMsat } doReturn 500_000u
                 on { isChannelReady } doReturn true
+                on { isUsable } doReturn true
+            }
+        ).toImmutableList()
+        val readyButNotUsableChannels = listOf(
+            mock<ChannelDetails> {
+                on { inboundCapacityMsat } doReturn 1_000_000u
+                on { isChannelReady } doReturn true
+                on { isUsable } doReturn false
             }
         ).toImmutableList()
         private val channelReady = Event.ChannelReady(
@@ -296,11 +305,14 @@ class WalletRepoTest : BaseUnitTest() {
         )
 
         verify(onchainService, never()).deriveBitcoinAddress(any(), any(), any(), anyOrNull())
+        verify(lightningRepo, never()).syncState()
     }
 
     @Test
     fun `updateBip21Invoice should create bolt11 when node can receive`() = test {
         whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
         whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
 
         sut.updateBip21Invoice(amountSats = SATS, description = "test").let { result ->
@@ -315,6 +327,29 @@ class WalletRepoTest : BaseUnitTest() {
             assertTrue(result.isSuccess)
             assertEquals("", sut.walletState.value.bolt11)
         }
+    }
+
+    @Test
+    fun `updateBip21Invoice should not create bolt11 when channels are ready but not usable`() = test {
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(channels = readyButNotUsableChannels)))
+        whenever(lightningRepo.getChannels()).thenReturn(readyButNotUsableChannels)
+
+        sut.updateBip21Invoice(amountSats = SATS, description = "test").let { result ->
+            assertTrue(result.isSuccess)
+            assertEquals("", sut.walletState.value.bolt11)
+        }
+        verify(lightningRepo, never()).createInvoice(anyOrNull(), any(), any())
+    }
+
+    @Test
+    fun `inboundLiquiditySats should only count usable channels`() = test {
+        val mixedChannels = (channels + readyButNotUsableChannels).toImmutableList()
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(channels = mixedChannels)))
+        whenever(lightningRepo.getChannels()).thenReturn(mixedChannels)
+
+        assertEquals(1_000uL, sut.inboundLiquiditySats())
     }
 
     @Test
@@ -493,52 +528,6 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `shouldRequestAdditionalLiquidity should return false when geo status is true`() = test {
-        whenever(coreService.isGeoBlocked()).thenReturn(true)
-
-        val result = sut.shouldRequestAdditionalLiquidity()
-
-        assertTrue(result.isSuccess)
-        assertFalse(result.getOrThrow())
-    }
-
-    @Test
-    fun `shouldRequestAdditionalLiquidity should return true when amount exceeds inbound capacity`() = test {
-        whenever(coreService.isGeoBlocked()).thenReturn(false)
-        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
-        sut.updateBip21Invoice(amountSats = 1000uL)
-
-        val result = sut.shouldRequestAdditionalLiquidity()
-
-        assertTrue(result.isSuccess)
-        assertTrue(result.getOrThrow())
-    }
-
-    @Test
-    fun `should not request additional liquidity for 0 channels`() = test {
-        whenever(coreService.isGeoBlocked()).thenReturn(false)
-        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
-        sut.updateBip21Invoice(amountSats = 1000uL)
-
-        val result = sut.shouldRequestAdditionalLiquidity()
-
-        assertTrue(result.isSuccess)
-        assertFalse(result.getOrThrow())
-    }
-
-    @Test
-    fun `shouldRequestAdditionalLiquidity should return false when amount is less than inbound capacity`() = test {
-        whenever(coreService.isGeoBlocked()).thenReturn(false)
-        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
-        sut.updateBip21Invoice(amountSats = 900uL)
-
-        val result = sut.shouldRequestAdditionalLiquidity()
-
-        assertTrue(result.isSuccess)
-        assertFalse(result.getOrThrow())
-    }
-
-    @Test
     fun `clearBip21State should clear all bip21 related state`() = test {
         sut.setOnchainAddress(ADDRESS)
         val addResult = sut.addTagToSelected(ACTIVITY_TAG)
@@ -575,6 +564,8 @@ class WalletRepoTest : BaseUnitTest() {
         sut.setBip21AmountSats(SATS)
         sut.setBip21Description(testDescription)
         whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
         whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
 
         sut.refreshBip21ForEvent(channelReady)
@@ -582,6 +573,7 @@ class WalletRepoTest : BaseUnitTest() {
         assertEquals(INVOICE, sut.walletState.value.bolt11)
         assertEquals(SATS, sut.walletState.value.bip21AmountSats)
         assertEquals(testDescription, sut.walletState.value.bip21Description)
+        verify(lightningRepo).syncState()
     }
 
     @Test
@@ -592,6 +584,40 @@ class WalletRepoTest : BaseUnitTest() {
         sut.refreshBip21ForEvent(channelReady)
 
         verify(lightningRepo, never()).createInvoice(anyOrNull(), any(), any())
+        verify(lightningRepo).syncState()
+    }
+
+    @Test
+    fun `refreshBip21ForEvent ChannelClosed should clear bolt11 when live channels are gone`() = test {
+        sut.setBolt11(INVOICE)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+
+        sut.refreshBip21ForEvent(
+            Event.ChannelClosed(
+                channelId = "testChannelId",
+                userChannelId = "testUserChannelId",
+                counterpartyNodeId = null,
+                reason = null,
+            )
+        )
+
+        assertEquals("", sut.walletState.value.bolt11)
+        verify(lightningRepo).syncState()
+    }
+
+    @Test
+    fun `refreshBip21ForEvent ChannelReady should create invoice from live channels`() = test {
+        sut.setBip21AmountSats(SATS)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
+
+        sut.refreshBip21ForEvent(channelReady)
+
+        verify(lightningRepo).createInvoice(anyOrNull(), any(), any())
+        verify(lightningRepo).syncState()
+        assertEquals(INVOICE, sut.walletState.value.bolt11)
     }
 
     @Test
@@ -618,6 +644,8 @@ class WalletRepoTest : BaseUnitTest() {
     fun `refreshBip21ForEvent ChannelClosed should not clear bolt11 when can still receive`() = test {
         sut.setBolt11(INVOICE)
         whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
 
         sut.refreshBip21ForEvent(
             Event.ChannelClosed(
@@ -783,6 +811,8 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `refreshBip21 should create a fresh invoice after PaymentReceived invalidates the old one`() = test {
         whenever(lightningRepo.canReceive()).thenReturn(true)
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState(channels = channels)))
+        whenever(lightningRepo.getChannels()).thenReturn(channels)
         whenever(lightningRepo.createInvoice(anyOrNull(), any(), any()))
             .thenReturn(Result.success(INVOICE_REPLACEMENT))
         sut.setOnchainAddress(ADDRESS)
