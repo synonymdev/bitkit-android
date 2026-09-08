@@ -490,7 +490,7 @@ internal fun PaymentRequestCard(
                     Modifier
                 }
             )
-            .testTag("PaymentRequestRow${request.paymentRequestId}"),
+            .testTag("PaymentRequestRow-${request.paymentRequestId}")
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -541,7 +541,7 @@ internal fun PaymentRequestCard(
                     size = ButtonSize.Small,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("PaymentRequestReject${request.paymentRequestId}")
+                        .testTag("PaymentRequestDismiss-${request.paymentRequestId}")
                 )
                 PrimaryButton(
                     text = stringResource(R.string.wallet__payment_request_pay),
@@ -557,7 +557,7 @@ internal fun PaymentRequestCard(
                     size = ButtonSize.Small,
                     modifier = Modifier
                         .weight(1f)
-                        .testTag("PaymentRequestPay${request.paymentRequestId}")
+                        .testTag("PaymentRequestPay-${request.paymentRequestId}")
                 )
             }
         }

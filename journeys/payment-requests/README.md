@@ -6,7 +6,7 @@ Cover incoming Paykit Payment Requests from a linked issuer. The issuer contract
 
 ## Setup
 
-Run Bitkit against regtest with Paykit UI enabled. Authenticate a Pubky identity, link the fixture issuer on receiver path `bitkit/server`, and give the wallet enough on-chain balance to pay 100,000 sats. The fixture issuer must be able to publish a Paykit endpoint and send a one-time Payment Request to that linked peer.
+Run Bitkit against regtest with Paykit UI enabled. Authenticate a Pubky identity, save the fixture issuer as a contact, link it on receiver path `bitkit/server`, and give the wallet enough on-chain balance to pay 100,000 sats. The fixture issuer must be able to publish a Paykit endpoint and send a one-time Payment Request to that linked peer.
 
 The accepted journey uses:
 
@@ -27,8 +27,11 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 
 ## Identifiers used
 
+- Pending-request bell: `PaymentRequestsBell`
 - Incoming sheet: `PaymentRequestsSheet`
-- Request row: `PaymentRequestRow<paymentRequestId>`
-- Pay action: `PaymentRequestPay<paymentRequestId>`
-- Reject action: `PaymentRequestReject<paymentRequestId>`
+- Request row: `PaymentRequestRow-<paymentRequestId>`
+- Pay action: `PaymentRequestPay-<paymentRequestId>`
+- Dismiss action: `PaymentRequestDismiss-<paymentRequestId>`
 - Payment confirmation: `PaymentRequestConfirm`
+- Confirmation details: `SendConfirmToggleDetails`
+- Saved-contact recipient: `ReviewContactRecipient`
