@@ -41,6 +41,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.SpendableUtxo
 import org.lightningdevkit.ldknode.TransactionDetails
@@ -143,6 +144,7 @@ import to.bitkit.ui.utils.ScreenDeepLinks
 import to.bitkit.usecases.FormatMoneyValue
 import to.bitkit.usecases.RefreshContactPaykitReceiversUseCase
 import to.bitkit.utils.AppError
+import to.bitkit.utils.PendingOnchainBroadcastError
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import java.math.BigDecimal
 import java.net.URLEncoder
@@ -303,12 +305,20 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         }
         whenever(paykitPaymentRequestRepo.isPending(any())).thenReturn(true)
         whenever(paykitPaymentRequestRepo.isProcessing(any())).thenReturn(false)
-        whenever { paykitPaymentProofRepo.prepare(any(), any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { paykitPaymentProofRepo.prepare(any(), any(), any()) }.thenReturn(Result.success(PREPARATION_ID))
         whenever {
             paykitPaymentProofRepo.associateLightningPayment(
                 any(),
                 any(),
                 any(),
+            )
+        }.thenReturn(Result.success(Unit))
+        whenever {
+            paykitPaymentProofRepo.associateOnchainPayment(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
             )
         }.thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.initialLinkBurstStarted).thenReturn(MutableSharedFlow())
@@ -4122,7 +4132,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentProofRepo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning))
             .doSuspendableAnswer {
                 setSendState(sut.sendUiState.value.copy(decodedInvoice = lightningInvoice(bolt11, request.amountSats)))
-                Result.success(Unit)
+                Result.success(PREPARATION_ID)
             }
         whenever { paykitPaymentProofRepo.associateLightningPayment(any(), any(), any()) }
             .thenReturn(Result.failure(IllegalStateException("proof unavailable")))
@@ -4145,7 +4155,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         verify(paykitPaymentProofRepo).prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning)
         verify(paykitPaymentProofRepo).associateLightningPayment(request, paymentHash, MethodId.Bolt11.rawValue)
-        verify(paykitPaymentProofRepo).cancelPreparation(request)
+        verify(paykitPaymentProofRepo).cancelPreparation(PREPARATION_ID)
         verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
     }
 
@@ -4159,7 +4169,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentProofRepo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning))
             .doSuspendableAnswer {
                 setSendState(sut.sendUiState.value.copy(decodedInvoice = lightningInvoice(bolt11, request.amountSats)))
-                Result.success(Unit)
+                Result.success(PREPARATION_ID)
             }
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
@@ -4204,7 +4214,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(paykitPaymentProofRepo.prepare(request, MethodId.Bolt11.rawValue, PaykitPaymentProofKind.Lightning))
             .doSuspendableAnswer {
                 setSendState(sut.sendUiState.value.copy(decodedInvoice = lightningInvoice(bolt11, request.amountSats)))
-                Result.success(Unit)
+                Result.success(PREPARATION_ID)
             }
         whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
         whenever(privatePaykitRepo.consumePrivatePaymentList(testPublicKey, privateContext))
@@ -4235,7 +4245,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             )
             verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = null)
             verify(paykitPaymentProofRepo).failLightningPayment(invoicePaymentHash)
-            verify(paykitPaymentProofRepo).cancelPreparation(request)
+            verify(paykitPaymentProofRepo).cancelPreparation(PREPARATION_ID)
         }
     }
 
@@ -4581,6 +4591,101 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             check {
                 assertEquals("OnchainSendFailedToast", it.testTag)
             }
+        )
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `unknown onchain send associates its proof and remains user visible`() = test {
+        val address = "bcrt1qunknown"
+        val txid = "ab".repeat(32)
+        val request = paymentRequest()
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever {
+            lightningRepo.sendOnChain(
+                address = address,
+                sats = request.amountSats,
+                speed = TransactionSpeed.Medium,
+                utxosToSpend = null,
+                isMaxAmount = false,
+                tags = emptyList(),
+            )
+        }.thenReturn(Result.failure(AppError(NodeException.OnchainTxBroadcastTimeout(txid))))
+        whenever(context.getString(R.string.wallet__send_broadcast_unknown__title))
+            .thenReturn("Payment Status Unknown")
+        whenever(context.getString(R.string.wallet__send_broadcast_unknown__description))
+            .thenReturn("Transaction {txid} is unknown. Do not send again.")
+        setActiveContactPaymentContext(testPublicKey, incomingPaymentRequest = request)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = request.amountSats,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+            ),
+        )
+
+        sut.sendEffect.test {
+            confirmCurrentPayment()
+
+            expectNoEvents()
+        }
+
+        verify(paykitPaymentProofRepo).associateOnchainPayment(
+            request,
+            txid,
+            MethodId.P2wpkh.rawValue,
+            PREPARATION_ID,
+        )
+        verify(paykitPaymentProofRepo, never()).cancelPreparation(any())
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.WARNING, it.type)
+                assertEquals("Payment Status Unknown", it.title)
+                assertEquals("Transaction $txid is unknown. Do not send again.", it.description)
+                assertFalse(it.autoHide)
+                assertEquals("OnchainBroadcastPendingToast", it.testTag)
+            }
+        )
+        assertNull(sut.successSendUiState.value.paymentHashOrTxId)
+    }
+
+    @Test
+    fun `existing pending broadcast cancels only the new proof preparation`() = test {
+        val address = "bcrt1qblocked"
+        val txid = "ab".repeat(32)
+        val request = paymentRequest()
+        balanceState.value = BalanceState(maxSendOnchainSats = 100_000u)
+        whenever(paykitPaymentRequestRepo.accept(request)).thenReturn(Result.success(Unit))
+        whenever {
+            lightningRepo.sendOnChain(
+                address = address,
+                sats = request.amountSats,
+                speed = TransactionSpeed.Medium,
+                utxosToSpend = null,
+                isMaxAmount = false,
+                tags = emptyList(),
+            )
+        }.thenReturn(Result.failure(AppError(PendingOnchainBroadcastError(txid))))
+        setActiveContactPaymentContext(testPublicKey, incomingPaymentRequest = request)
+        setSendState(
+            SendUiState(
+                address = address,
+                amount = request.amountSats,
+                payMethod = SendMethod.ONCHAIN,
+                speed = TransactionSpeed.Medium,
+                isPaymentRequest = true,
+            ),
+        )
+
+        confirmCurrentPayment()
+
+        verify(paykitPaymentProofRepo).cancelPreparation(PREPARATION_ID)
+        verify(paykitPaymentProofRepo, never()).associateOnchainPayment(any(), any(), any(), anyOrNull())
+        verify(toastManager).enqueue(
+            check { assertEquals("OnchainBroadcastPendingToast", it.testTag) }
         )
         assertNull(sut.successSendUiState.value.paymentHashOrTxId)
     }
@@ -5264,4 +5369,5 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 private const val SAMROCK_SETUP_URL =
     "https://btcpay.example.com/plugins/store/samrock/protocol?setup=btc-chain&otp=secret"
 private const val HARDWARE_WALLET_ID = "trezor:wallet"
+private const val PREPARATION_ID = "preparation-id"
 private const val REGTEST_ADDRESS = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8"

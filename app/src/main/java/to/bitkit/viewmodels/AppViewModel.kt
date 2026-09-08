@@ -188,6 +188,8 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
+import to.bitkit.utils.PendingOnchainBroadcast
+import to.bitkit.utils.asPendingOnchainBroadcast
 import to.bitkit.utils.jsonLogOf
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
@@ -3336,16 +3338,16 @@ class AppViewModel @Inject constructor(
         if (!validateIncomingPaymentRequest(contactPaymentContext)) return
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        var preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).getOrNull()
+        val preparedPaymentProof = preparePaymentProof(incomingPaymentRequest).getOrNull()
 
         consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
-            cancelPaymentProofPreparation(preparedPaymentProofRequest)
+            cancelPaymentProofPreparation(preparedPaymentProof)
             handlePaymentPreparationFailure(it)
             return
         }
 
         acceptIncomingPaymentRequestIfNeeded(contactPaymentContext).onFailure {
-            cancelPaymentProofPreparation(preparedPaymentProofRequest)
+            cancelPaymentProofPreparation(preparedPaymentProof)
             handlePaymentPreparationFailure(it)
             return
         }
@@ -3366,7 +3368,7 @@ class AppViewModel @Inject constructor(
                     it.copy(decodedInvoice = invoice)
                 }
             }.onFailure {
-                cancelPaymentProofPreparation(preparedPaymentProofRequest)
+                cancelPaymentProofPreparation(preparedPaymentProof)
                 val message = getLnurlInvoiceFetchErrorMessage(it)
                 toast(Exception(message))
                 hideSheet()
@@ -3380,7 +3382,6 @@ class AppViewModel @Inject constructor(
                 val tags = _sendUiState.value.selectedTags
                 sendOnchain(address, amount, tags = tags)
                     .onSuccess { txId ->
-                        preparedPaymentProofRequest = null
                         completeOnchainPaymentProofInBackground(incomingPaymentRequest, txId)
                         Logger.info("Onchain send result txid: $txId", context = TAG)
                         onSendSuccess(
@@ -3396,14 +3397,32 @@ class AppViewModel @Inject constructor(
                         activityRepo.syncActivities()
                         _successSendUiState.update { it.copy(isLoadingDetails = false) }
                     }.onFailure { e ->
-                        cancelPaymentProofPreparation(preparedPaymentProofRequest)
                         Logger.error("Error sending onchain payment", e, context = TAG)
-                        toast(
-                            type = Toast.ToastType.ERROR,
-                            title = context.getString(R.string.wallet__error_sending_title),
-                            description = e.message ?: context.getString(R.string.common__error_body),
-                            testTag = "OnchainSendFailedToast",
-                        )
+                        when (val pendingBroadcast = e.asPendingOnchainBroadcast()) {
+                            is PendingOnchainBroadcast.Current -> {
+                                associateOnchainPaymentProof(
+                                    request = incomingPaymentRequest,
+                                    txid = pendingBroadcast.txid,
+                                    preparationId = preparedPaymentProof?.id,
+                                )
+                                showPendingOnchainBroadcast(pendingBroadcast.txid)
+                            }
+
+                            is PendingOnchainBroadcast.Existing -> {
+                                cancelPaymentProofPreparation(preparedPaymentProof)
+                                showPendingOnchainBroadcast(pendingBroadcast.txid)
+                            }
+
+                            null -> {
+                                cancelPaymentProofPreparation(preparedPaymentProof)
+                                toast(
+                                    type = Toast.ToastType.ERROR,
+                                    title = context.getString(R.string.wallet__error_sending_title),
+                                    description = e.message ?: context.getString(R.string.common__error_body),
+                                    testTag = "OnchainSendFailedToast",
+                                )
+                            }
+                        }
                         hideSheet()
                     }
             }
@@ -3421,8 +3440,7 @@ class AppViewModel @Inject constructor(
                 // Extract payment hash from invoice for pre-activity metadata
                 val paymentHash = decodedInvoice.paymentHash.toHex()
                 associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
-                    cancelPaymentProofPreparation(preparedPaymentProofRequest)
-                    preparedPaymentProofRequest = null
+                    cancelPaymentProofPreparation(preparedPaymentProof)
                 }
 
                 // Create pre-activity metadata before sending
@@ -3439,7 +3457,6 @@ class AppViewModel @Inject constructor(
                 }
 
                 sendLightning(bolt11, paymentAmount).onSuccess { actualPaymentHash ->
-                    preparedPaymentProofRequest = null
                     Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
                     onSendSuccess(
                         NewTransactionSheetDetails(
@@ -3451,7 +3468,6 @@ class AppViewModel @Inject constructor(
                     )
                 }.onFailure {
                     if (it is PaymentPendingException) {
-                        preparedPaymentProofRequest = null
                         Logger.info("Lightning payment pending", context = TAG)
                         pendingPaymentRepo.track(it.paymentHash)
                         preserveContactPaymentContext(it.paymentHash)
@@ -3459,7 +3475,7 @@ class AppViewModel @Inject constructor(
                         return@onFailure
                     }
                     paykitPaymentProofRepo.failLightningPayment(paymentHash)
-                    cancelPaymentProofPreparation(preparedPaymentProofRequest)
+                    cancelPaymentProofPreparation(preparedPaymentProof)
                     // Delete pre-activity metadata on failure
                     if (createdMetadataPaymentId != null) {
                         preActivityMetadataRepo.deletePreActivityMetadata(createdMetadataPaymentId)
@@ -3501,14 +3517,14 @@ class AppViewModel @Inject constructor(
         contactPaymentContext != null &&
             synchronized(contactPaymentContextLock) { preparedContactPaymentContext == contactPaymentContext }
 
-    private suspend fun preparePaymentProof(request: PaykitPaymentRequest?): Result<PaykitPaymentRequest?> {
+    private suspend fun preparePaymentProof(request: PaykitPaymentRequest?): Result<PreparedPaymentProof?> {
         if (request == null) return Result.success(null)
         val preparation = paymentProofPreparation()
         return paykitPaymentProofRepo.prepare(
             request = request,
             paymentEndpointIdentifier = preparation.endpointIdentifier,
             kind = preparation.kind,
-        ).map { request }
+        ).map { PreparedPaymentProof(it) }
     }
 
     private suspend fun associateLightningPaymentProof(
@@ -3523,6 +3539,31 @@ class AppViewModel @Inject constructor(
     }
         ?: Result.success(Unit)
 
+    private suspend fun associateOnchainPaymentProof(
+        request: PaykitPaymentRequest?,
+        txid: String,
+        preparationId: String?,
+    ): Result<Unit> = request?.let {
+        paykitPaymentProofRepo.associateOnchainPayment(
+            request = it,
+            txid = txid,
+            paymentEndpointIdentifier = paymentProofPreparation().endpointIdentifier,
+            preparationId = preparationId,
+        )
+    }
+        ?: Result.success(Unit)
+
+    private fun showPendingOnchainBroadcast(txid: String) {
+        toast(
+            type = Toast.ToastType.WARNING,
+            title = context.getString(R.string.wallet__send_broadcast_unknown__title),
+            description = context.getString(R.string.wallet__send_broadcast_unknown__description)
+                .replace("{txid}", txid),
+            autoHide = false,
+            testTag = "OnchainBroadcastPendingToast",
+        )
+    }
+
     private fun completeOnchainPaymentProofInBackground(request: PaykitPaymentRequest?, txId: String) {
         val paymentRequest = request ?: return
         val endpointIdentifier = paymentProofPreparation().endpointIdentifier
@@ -3535,8 +3576,8 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun cancelPaymentProofPreparation(request: PaykitPaymentRequest?) {
-        request?.let { paykitPaymentProofRepo.cancelPreparation(it) }
+    private suspend fun cancelPaymentProofPreparation(preparation: PreparedPaymentProof?) {
+        preparation?.let { paykitPaymentProofRepo.cancelPreparation(it.id) }
     }
 
     private fun paymentProofPreparation(): PaymentProofPreparation {
@@ -4343,9 +4384,9 @@ class AppViewModel @Inject constructor(
         if (isPreparedContactPayment(contactPaymentContext)) return true
 
         val incomingPaymentRequest = contactPaymentContext?.incomingPaymentRequest
-        val preparedPaymentProofRequest = preparePaymentProof(incomingPaymentRequest).getOrNull()
+        val preparedPaymentProof = preparePaymentProof(incomingPaymentRequest).getOrNull()
         if (!prepareContactPayment(contactPaymentContext)) {
-            cancelPaymentProofPreparation(preparedPaymentProofRequest)
+            cancelPaymentProofPreparation(preparedPaymentProof)
             return false
         }
         return true
@@ -4865,6 +4906,10 @@ data class ContactPaymentContext(
 private data class PaymentProofPreparation(
     val endpointIdentifier: String,
     val kind: PaykitPaymentProofKind,
+)
+
+private data class PreparedPaymentProof(
+    val id: String,
 )
 
 private data class PaykitContactSyncState(

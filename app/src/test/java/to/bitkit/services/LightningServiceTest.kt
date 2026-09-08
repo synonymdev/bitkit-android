@@ -4,6 +4,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
@@ -22,6 +24,9 @@ import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.OnchainPayment
 import org.lightningdevkit.ldknode.OnchainWalletAccount
+import org.lightningdevkit.ldknode.PendingBroadcastInfo
+import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
@@ -43,11 +48,14 @@ import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.LoggerLdk
+import to.bitkit.utils.PendingOnchainBroadcast
 import to.bitkit.utils.ServiceError
+import to.bitkit.utils.asPendingOnchainBroadcast
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
@@ -106,6 +114,80 @@ class LightningServiceTest : BaseUnitTest() {
         whenever(node.listChannels()).thenReturn(listOf(usableChannel))
 
         assertTrue(sut.canReceive())
+    }
+
+    @Test
+    fun `send blocks while a broadcast is pending`() = test {
+        val txid = "ab".repeat(32)
+        val onchainPayment = mock<OnchainPayment>()
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.listPendingBroadcasts())
+            .thenReturn(listOf(PendingBroadcastInfo(txid, listOf(txid))))
+
+        val result = runCatching { sut.send("bcrt1qpending", 1_000uL, 1uL) }
+
+        val pending = assertIs<PendingOnchainBroadcast.Existing>(
+            result.exceptionOrNull()?.asPendingOnchainBroadcast(),
+        )
+        assertEquals(txid, pending.txid)
+        verify(onchainPayment, never()).sendToAddress(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `send blocks when pending broadcast lookup fails`() = test {
+        val onchainPayment = mock<OnchainPayment>()
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.listPendingBroadcasts()).thenThrow(NodeException.PersistenceFailed())
+
+        val result = runCatching { sut.send("bcrt1qlookupfailure", 1_000uL, 1uL) }
+
+        assertTrue(result.isFailure)
+        verify(onchainPayment, never()).sendToAddress(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `concurrent sends create only one transaction after an unknown broadcast`() = test {
+        val txid = "ab".repeat(32)
+        val pending = AtomicBoolean(false)
+        val onchainPayment = mock<OnchainPayment>()
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.listPendingBroadcasts()).thenAnswer {
+            if (pending.get()) listOf(PendingBroadcastInfo(txid, listOf(txid))) else emptyList()
+        }
+        whenever(onchainPayment.sendToAddress(any(), any(), anyOrNull(), anyOrNull())).thenAnswer {
+            pending.set(true)
+            throw NodeException.OnchainTxBroadcastTimeout(txid)
+        }
+
+        val results = listOf(
+            async { runCatching { sut.send("bcrt1qfirst", 1_000uL, 1uL) } },
+            async { runCatching { sut.send("bcrt1qsecond", 2_000uL, 1uL) } },
+        ).awaitAll()
+
+        assertEquals(
+            setOf(PendingOnchainBroadcast.Current(txid), PendingOnchainBroadcast.Existing(txid)),
+            results.mapNotNull { it.exceptionOrNull()?.asPendingOnchainBroadcast() }.toSet(),
+        )
+        verify(onchainPayment, times(1)).sendToAddress(any(), any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `conclusive broadcast failure allows a later send`() = test {
+        val rejectedTxid = "ab".repeat(32)
+        val acceptedTxid = "cd".repeat(32)
+        val onchainPayment = mock<OnchainPayment>()
+        whenever(node.onchainPayment()).thenReturn(onchainPayment)
+        whenever(onchainPayment.listPendingBroadcasts()).thenReturn(emptyList())
+        whenever(onchainPayment.sendToAddress(any(), any(), anyOrNull(), anyOrNull()))
+            .thenThrow(NodeException.OnchainTxBroadcastNotDispatched(rejectedTxid))
+            .thenReturn(acceptedTxid)
+
+        val first = runCatching { sut.send("bcrt1qnotdispatched", 1_000uL, 1uL) }
+        val second = sut.send("bcrt1qaccepted", 1_000uL, 1uL)
+
+        assertTrue(first.isFailure)
+        assertEquals(acceptedTxid, second)
+        verify(onchainPayment, times(2)).sendToAddress(any(), any(), anyOrNull(), anyOrNull())
     }
 
     @Test

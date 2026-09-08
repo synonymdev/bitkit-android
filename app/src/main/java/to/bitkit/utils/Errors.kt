@@ -4,6 +4,7 @@ package to.bitkit.utils
 
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.NodeException
+import org.lightningdevkit.ldknode.Txid
 
 open class AppError(
     override val message: String? = null,
@@ -28,6 +29,18 @@ sealed class ServiceError(message: String) : AppError(message) {
 }
 
 class HttpError(message: String, val code: Int = 500, cause: Throwable? = null) : AppError(message, cause)
+
+class PendingOnchainBroadcastError(val txid: Txid) : AppError(
+    "On-chain transaction '$txid' has unresolved broadcast status",
+)
+
+sealed interface PendingOnchainBroadcast {
+    val txid: Txid
+
+    data class Current(override val txid: Txid) : PendingOnchainBroadcast
+
+    data class Existing(override val txid: Txid) : PendingOnchainBroadcast
+}
 
 // region ldk
 class LdkError(private val inner: LdkException) : AppError("Unknown LDK error.") {
@@ -134,6 +147,22 @@ fun Throwable.asNodeException(): NodeException? = when (this) {
     is NodeException -> this
     is LdkError -> nodeExceptionOrNull()
     else -> cause?.asNodeException()
+}
+
+fun Throwable.asPendingOnchainBroadcast(): PendingOnchainBroadcast? {
+    val existing = asPendingOnchainBroadcastError()
+    if (existing != null) return PendingOnchainBroadcast.Existing(existing.txid)
+
+    return when (val nodeException = asNodeException()) {
+        is NodeException.OnchainTxBroadcastFailed -> PendingOnchainBroadcast.Current(nodeException.txid)
+        is NodeException.OnchainTxBroadcastTimeout -> PendingOnchainBroadcast.Current(nodeException.txid)
+        else -> null
+    }
+}
+
+private fun Throwable.asPendingOnchainBroadcastError(): PendingOnchainBroadcastError? = when (this) {
+    is PendingOnchainBroadcastError -> this
+    else -> cause?.asPendingOnchainBroadcastError()
 }
 // endregion
 

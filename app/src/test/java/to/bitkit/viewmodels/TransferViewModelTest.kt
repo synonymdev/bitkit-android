@@ -80,6 +80,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.screens.transfer.previewBtOrder
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
+import to.bitkit.utils.PendingOnchainBroadcastError
 import kotlin.math.roundToLong
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -1170,6 +1171,53 @@ class TransferViewModelTest : BaseUnitTest() {
             isMaxAmount = eq(true),
             tags = any(),
         )
+        verify(cacheStore, never()).addPaidOrder(any(), any())
+    }
+
+    @Test
+    fun `onTransferToSpendingConfirm keeps an unknown broadcast warning visible`() = test {
+        val txid = "ab".repeat(32)
+        val order = previewBtOrder(feeSat = 98_000uL)
+        val selected = listOf(stubUtxo(100_000u))
+        stubSpendableBalances(spendable = 100_000u)
+        whenever(lightningRepo.estimateSendAllFee(any(), any(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever {
+            lightningRepo.selectUtxosWithAlgorithm(any(), any(), any(), anyOrNull())
+        }.thenReturn(Result.success(selected))
+        whenever(lightningRepo.calculateTotalFee(any(), any(), any(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(1_000uL))
+        whenever(
+            lightningRepo.sendOnChain(
+                any(),
+                any(),
+                any(),
+                anyOrNull(),
+                anyOrNull(),
+                any(),
+                anyOrNull(),
+                any(),
+                any(),
+            ),
+        ).thenReturn(Result.failure(AppError(PendingOnchainBroadcastError(txid))))
+        whenever(context.getString(R.string.wallet__send_broadcast_unknown__title))
+            .thenReturn("Payment Status Unknown")
+        whenever(context.getString(R.string.wallet__send_broadcast_unknown__description))
+            .thenReturn("Transaction {txid} is unknown. Do not send again.")
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.onTransferToSpendingConfirm(order)
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertFalse(sut.spendingUiState.value.isConfirmPaying)
+        assertEquals(1, toasts.size)
+        assertEquals(Toast.ToastType.WARNING, toasts.single().type)
+        assertEquals("Payment Status Unknown", toasts.single().title)
+        assertEquals("Transaction $txid is unknown. Do not send again.", toasts.single().description)
+        assertFalse(toasts.single().autoHide)
+        assertEquals("OnchainBroadcastPendingToast", toasts.single().testTag)
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
 

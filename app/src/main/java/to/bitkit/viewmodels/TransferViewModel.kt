@@ -71,6 +71,7 @@ import to.bitkit.services.BoltzService
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
+import to.bitkit.utils.asPendingOnchainBroadcast
 import javax.inject.Inject
 import kotlin.math.min
 import kotlin.math.roundToLong
@@ -398,7 +399,21 @@ class TransferViewModel @Inject constructor(
                     )
                 }
             }
-            .onFailure { ToastEventBus.send(it) }
+            .onFailure {
+                val pendingBroadcast = it.asPendingOnchainBroadcast()
+                if (pendingBroadcast == null) {
+                    ToastEventBus.send(it)
+                    return@onFailure
+                }
+                ToastEventBus.send(
+                    type = Toast.ToastType.WARNING,
+                    title = context.getString(R.string.wallet__send_broadcast_unknown__title),
+                    description = context.getString(R.string.wallet__send_broadcast_unknown__description)
+                        .replace("{txid}", pendingBroadcast.txid),
+                    autoHide = false,
+                    testTag = "OnchainBroadcastPendingToast",
+                )
+            }
             .isSuccess
     }
 

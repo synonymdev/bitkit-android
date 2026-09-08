@@ -317,6 +317,42 @@ class PaykitPaymentProofRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     }
 
     @Test
+    fun `associated onchain proof remains unsubmitted after repository restart`() = test {
+        val txid = "ab".repeat(32)
+        val endpoint = MethodId.P2wpkh.rawValue
+        val request = paymentRequest(endpoint)
+        val firstRepo = paymentProofRepo()
+
+        val preparationId = firstRepo
+            .prepare(request, endpoint, PaykitPaymentProofKind.Onchain)
+            .getOrThrow()
+        firstRepo.associateOnchainPayment(request, txid, endpoint, preparationId).getOrThrow()
+
+        assertEquals(txid, storedProofs.single().paymentIdentifier)
+        assertNull(storedProofs.single().proofData)
+
+        paymentProofRepo().reconcile()
+
+        assertEquals(txid, storedProofs.single().paymentIdentifier)
+        assertNull(storedProofs.single().proofData)
+        verify(lightningRepo, never()).getPayments()
+        verify(paykitSdkService, never()).submitPaymentProof(any(), any(), any(), any(), any())
+    }
+
+    @Test
+    fun `cancel preparation preserves an earlier unassociated proof`() = test {
+        val endpoint = MethodId.P2wpkh.rawValue
+        val request = paymentRequest(endpoint)
+        val repo = paymentProofRepo()
+        val earlierPreparationId = repo.prepare(request, endpoint, PaykitPaymentProofKind.Onchain).getOrThrow()
+        val currentPreparationId = repo.prepare(request, endpoint, PaykitPaymentProofKind.Onchain).getOrThrow()
+
+        repo.cancelPreparation(currentPreparationId)
+
+        assertEquals(listOf(earlierPreparationId), storedProofs.map { it.preparationId })
+    }
+
+    @Test
     fun `lightning retry preserves earlier payment correlation`() = test {
         val record = paymentRequestRecord()
         val request = paymentRequest(MethodId.Bolt11.rawValue)
