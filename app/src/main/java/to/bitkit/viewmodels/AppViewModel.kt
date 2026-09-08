@@ -998,6 +998,29 @@ class AppViewModel @Inject constructor(
         if (restorePaymentRequestSheet && currentSheet.value == null) showSheet(Sheet.PaymentRequests)
     }
 
+    private fun finishUnavailablePaymentRequestPresentation(request: PaykitPaymentRequest) {
+        paykitPaymentRequestDiagnostics.logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.ResolutionFailed,
+        )
+        val restorePaymentRequestSheet =
+            requestedPaymentRequestId == request.id && shouldRestorePaymentRequestSheet
+        val showUnavailableToast = requestedPaymentRequestId == request.id
+        if (requestedPaymentRequestId == request.id) {
+            invalidatePaymentRequestPresentation()
+            clearRequestedPaymentRequestPresentation()
+        }
+        clearPaymentRequestPresentationRetry(request.id)
+        if (!showUnavailableToast) return
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.wallet__payment_request),
+            description = context.getString(R.string.wallet__payment_request_unavailable),
+            testTag = "PaymentRequestUnavailableToast",
+        )
+        if (restorePaymentRequestSheet && currentSheet.value == null) showSheet(Sheet.PaymentRequests)
+    }
+
     private fun retainPaymentRequestPresentationState(requests: List<PaykitPaymentRequest>) {
         val requestIds = requests.mapTo(mutableSetOf()) { it.id }
         paymentRequestPresentationRetryAttempts.keys.retainAll(requestIds)
@@ -1010,8 +1033,7 @@ class AppViewModel @Inject constructor(
                 finishExpiredPaymentRequestPresentation(requestedRequest)
                 return
             }
-            invalidatePaymentRequestPresentation()
-            clearRequestedPaymentRequestPresentation()
+            finishUnavailablePaymentRequestPresentation(requestedRequest)
         }
     }
 
