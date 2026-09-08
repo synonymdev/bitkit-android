@@ -4,15 +4,18 @@
     receives, approves, pays, and confirms the resulting marketplace Payment Request on regtest.
     Precondition: two clean wallets and the integration fixture runtime described in this suite's
     README.
-    Configure the fixture Electrum endpoint, Android emulator port mappings, and Paykit UI before
-    either wallet's first launch. Start with the seller wallet open and the fixture's fresh setup
-    auth URL available.
+    Configure the fixture Electrum endpoint and Android emulator port mappings before either
+    wallet's first launch. After creating both wallets, enable Paykit UI in Dev Settings (testTag
+    "PaykitUiToggle"), confirm the warning, and verify activation (testTag "PaykitUiEnabledToast").
+    Then create a Bitkit-generated Pubky identity in each wallet. Pubky Ring-imported identities
+    cannot approve the fixture setup auth URL. Start with the seller wallet open and the fixture's
+    fresh setup auth URL available.
   </description>
   <actions>
     <action>Open the fixture setup auth URL in the seller wallet</action>
     <action>Verify the watch-only consent screen (testTag "PubkyAuthWatchOnlyConsent") is visible</action>
     <action>Capture the watch-only consent evidence, then tap Approve (testTag "PubkyAuthWatchOnlyApprove")</action>
-    <action>Verify the authorization screen shows only the requested Paykit capabilities</action>
+    <action>Verify the authorization screen shows exactly /pub/paykit/v0/bitkit/server and /pub/paykit/v0/private/bitkit/server, each with READ, WRITE access</action>
     <action>Tap Authorize (testTag "PubkyAuthAuthorize")</action>
     <action>Verify authorization succeeds (testTag "PubkyAuthOK")</action>
     <action>Verify the fixture completes setup with the seller account xpub and no spending authority</action>
