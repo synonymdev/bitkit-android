@@ -267,7 +267,6 @@ class HwSendViewModel @Inject constructor(
     }
 
     private suspend fun handleFailure(error: Throwable, walletId: String) {
-        // A signed transaction stays behind for a retry
         _uiState.update { it.copy(isBroadcastUnresolved = false) }
         when {
             error.isTrezorUserCancellation() -> {
