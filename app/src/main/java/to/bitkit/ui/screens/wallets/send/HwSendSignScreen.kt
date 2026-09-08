@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.wallets.send
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -54,19 +55,23 @@ fun HwSendSignScreen(
         tags = sendUiState.selectedTags,
     )
 
+    val onBackRequest: () -> Unit = { if (!uiState.isSigning && !uiState.isBroadcastUnresolved) onBack() }
+
     LaunchedEffect(walletId) {
         viewModel.warmUp(walletId)
     }
     DisposableEffect(viewModel) {
         onDispose(viewModel::cancel)
     }
+    // Without this the sheet's NavHost pops the route itself, ignoring the guard and skipping onBack
+    BackHandler(onBack = onBackRequest)
 
     HwSendSignContent(
         amountSats = sendUiState.amount,
         address = sendUiState.address,
         isSigning = uiState.isSigning,
         hasPendingBroadcast = uiState.hasPendingBroadcast,
-        onBack = { if (!uiState.isSigning && !uiState.isBroadcastUnresolved) onBack() },
+        onBack = onBackRequest,
         onOpenConnect = { viewModel.signAndBroadcast(request, prepareContactPayment) },
     )
 
