@@ -267,9 +267,11 @@ class PubkyAuthApprovalViewModel @Inject constructor(
     private fun resetForLoad(authUrl: String): Boolean {
         while (true) {
             val currentState = _uiState.value
+            val isAuthorizing = currentState.state == ApprovalState.Authorizing &&
+                inFlightAuthorization.get()?.authUrl == authUrl
             if (
                 currentState.authUrl == authUrl &&
-                currentState.state in setOf(ApprovalState.Authenticating, ApprovalState.Authorizing)
+                (currentState.state == ApprovalState.Authenticating || isAuthorizing)
             ) {
                 return false
             }

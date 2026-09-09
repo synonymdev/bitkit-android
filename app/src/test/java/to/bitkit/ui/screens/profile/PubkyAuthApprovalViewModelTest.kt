@@ -14,6 +14,7 @@ import org.junit.Test
 import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.argThat
+import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
@@ -31,6 +32,7 @@ import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.WatchOnlyAccountRecord
 import to.bitkit.models.WatchOnlyAccountSetupState
+import to.bitkit.repositories.PubkyAlreadySignedInError
 import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.WatchOnlyAccountAuthorizationStartError
 import to.bitkit.repositories.WatchOnlyAccountRepo
@@ -212,6 +214,12 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
                 sut.requestAuthorize(authUrl)
                 advanceUntilIdle()
                 assertEquals(PubkyAuthApprovalEffect.RequestLocalAuth(authUrl), awaitItem())
+                val authenticatingState = sut.uiState.value
+                sut.load(authUrl)
+                sut.requestAuthorize(authUrl)
+                advanceUntilIdle()
+                assertEquals(authenticatingState, sut.uiState.value)
+                expectNoEvents()
                 verifyBlocking(pubkyRepo, never()) { approveSignupAuth(request) }
                 sut.cancelLocalAuth(authUrl)
                 assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
@@ -224,6 +232,39 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
                 advanceUntilIdle()
                 verifyBlocking(pubkyRepo) { approveSignupAuth(request) }
                 assertEquals(PubkyAuthApprovalEffect.Dismiss, awaitItem())
+            }
+        }
+    }
+
+    @Test
+    fun `terminal signup outcomes allow the same URL to reload for consent`() = test {
+        listOf(Result.success(Unit), Result.failure(PubkyAlreadySignedInError)).forEach { outcome ->
+            val authUrl = "pubkyauth://direct_signup?hs=homeserver"
+            val request = PubkyAuthRequest.parseSignup(authUrl).getOrThrow()
+            whenever(pubkyRepo.parseAuthUrl(authUrl)).thenReturn(Result.success(request))
+            whenever(pubkyRepo.approveSignupAuth(request)).thenReturn(outcome)
+            whenever(context.getString(R.string.pubky_auth__already_signed_in)).thenReturn("Already signed in")
+            val sut = createSut()
+
+            sut.effects.test {
+                sut.load(authUrl)
+                advanceUntilIdle()
+                sut.confirmAuthorize(authUrl)
+                advanceUntilIdle()
+                assertEquals(PubkyAuthApprovalEffect.Dismiss, awaitItem())
+                clearInvocations(pubkyRepo)
+
+                sut.load(authUrl)
+                advanceUntilIdle()
+
+                assertEquals(authUrl, sut.uiState.value.authUrl)
+                assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+                verifyBlocking(pubkyRepo) { parseAuthUrl(authUrl) }
+                verifyBlocking(pubkyRepo, never()) { approveSignupAuth(request) }
+                expectNoEvents()
+                sut.requestAuthorize(authUrl)
+                advanceUntilIdle()
+                assertEquals(PubkyAuthApprovalEffect.RequestLocalAuth(authUrl), awaitItem())
             }
         }
     }
