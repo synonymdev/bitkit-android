@@ -223,6 +223,9 @@ class PubkyAuthApprovalViewModelTest : BaseUnitTest() {
                 verifyBlocking(pubkyRepo, never()) { approveSignupAuth(request) }
                 sut.cancelLocalAuth(authUrl)
                 assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
+                sut.load(authUrl)
+                advanceUntilIdle()
+                assertEquals(ApprovalState.Authorize, sut.uiState.value.state)
                 verifyBlocking(pubkyRepo, never()) { approveSignupAuth(request) }
 
                 sut.requestAuthorize(authUrl)

@@ -420,6 +420,8 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    private val toastManager = toastManagerProvider(viewModelScope)
+
     init {
         viewModelScope.launch {
             ToastEventBus.events.collect {
@@ -4505,7 +4507,6 @@ class AppViewModel @Inject constructor(
     // endregion
 
     // region Toasts
-    private val toastManager = toastManagerProvider(viewModelScope)
     val currentToast: StateFlow<Toast?> = toastManager.currentToast
 
     fun toast(

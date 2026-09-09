@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.core.net.toUri
+import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.FeeRates
@@ -23,9 +24,11 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -33,10 +36,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Before
@@ -87,6 +92,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.SendFailureDetails
+import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransportType
 import to.bitkit.models.USD
@@ -260,6 +266,34 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.stopPaykitPaymentRequestPolling()
         App.currentActivity = null
     }
+
+    @Test
+    fun `session recovery failure during construction shows a toast`() =
+        runTest(StandardTestDispatcher(testDispatcher.scheduler)) {
+            sut.viewModelScope.cancel()
+            val sessionRestorationFailed = MutableStateFlow(true)
+            whenever(pubkyRepo.sessionRestorationFailed).thenReturn(sessionRestorationFailed)
+            whenever(context.getString(R.string.profile__session_expired)).thenReturn("Session expired")
+            whenever(pubkyRepo.clearSessionRestorationFailed()).thenAnswer {
+                sessionRestorationFailed.value = false
+            }
+            clearInvocations(toastManager)
+
+            withContext(Dispatchers.Default) {
+                sut = createViewModel()
+            }
+            try {
+                verify(toastManager).enqueue(
+                    check {
+                        assertEquals(Toast.ToastType.ERROR, it.type)
+                        assertEquals("Session expired", it.title)
+                    }
+                )
+                assertFalse(sessionRestorationFailed.value)
+            } finally {
+                sut.viewModelScope.cancel()
+            }
+        }
 
     @Suppress("LongMethod")
     private fun stubRepositories() {
