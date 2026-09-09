@@ -5,6 +5,7 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,6 +32,16 @@ class PaykitPaymentProofStore @Inject constructor(
                 emptyList()
             }
     }
+
+    fun completedRequestProofKindsAwaitingSubmission(
+        identity: String,
+    ): Map<PaykitPaymentRequestId, PaykitPaymentProofKind> = load()
+        .filter { PubkyPublicKeyFormat.matches(it.identity, identity) && it.proofData != null }
+        .associate { it.requestId to it.kind }
+
+    fun inFlightRequestIds(identity: String): Set<PaykitPaymentRequestId> = load()
+        .filter { PubkyPublicKeyFormat.matches(it.identity, identity) && it.paymentStarted }
+        .mapTo(mutableSetOf()) { it.requestId }
 
     suspend fun save(proofs: List<PendingPaykitPaymentProof>) {
         if (proofs.isEmpty()) {

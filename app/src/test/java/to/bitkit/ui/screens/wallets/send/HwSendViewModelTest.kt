@@ -34,6 +34,7 @@ import to.bitkit.ui.shared.toast.ToastEventBus
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -211,6 +212,83 @@ class HwSendViewModelTest : BaseUnitTest() {
         sut.completeBroadcast()
 
         assertFalse(sut.uiState.value.isBroadcastUnresolved)
+    }
+
+    @Test
+    fun `broadcast connectivity failure unblocks navigation`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+            .thenReturn(Result.failure(BroadcastException.ElectrumException("connection failed")))
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isBroadcastUnresolved)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertFalse(sut.uiState.value.isSigning)
+    }
+
+    @Test
+    fun `broadcast timeout unblocks navigation`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        val timeout = runCatching { withTimeout(Duration.ZERO) { Unit } }
+            .exceptionOrNull() as TimeoutCancellationException
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(Result.failure(timeout))
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.isBroadcastUnresolved)
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+        assertFalse(sut.uiState.value.isSigning)
+    }
+
+    @Test
+    fun `broadcast failure warns the payment was not confirmed`() = test {
+        val toasts = mutableListOf<Toast>()
+        val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx))
+            .thenReturn(Result.failure(BroadcastException.ElectrumException("connection failed")))
+        whenever(context.getString(R.string.hardware__send_broadcast_failed_title)).thenReturn("Payment not confirmed")
+        whenever(context.getString(R.string.hardware__send_broadcast_failed_text))
+            .thenReturn("Check your connection and try again.")
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        toastJob.cancel()
+
+        assertEquals(Toast.ToastType.WARNING, toasts.single().type)
+        assertEquals("Payment not confirmed", toasts.single().title)
+        assertEquals("Check your connection and try again.", toasts.single().description)
+    }
+
+    @Test
+    fun `cancel drops the signed transaction after a failed broadcast`() = test {
+        whenever(context.getString(any())).thenReturn("message")
+        val fixture = stubSuccessfulPayment()
+        whenever(hwWalletRepo.disconnectStaleSession(WALLET_ID)).thenReturn(Result.success(Unit))
+        whenever(hwWalletRepo.broadcastFunding(fixture.signedTx)).thenReturn(
+            Result.failure(BroadcastException.ElectrumException("connection failed")),
+            Result.success(fixture.broadcast),
+        )
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+        assertTrue(sut.uiState.value.hasPendingBroadcast)
+
+        sut.cancel()
+        advanceUntilIdle()
+
+        assertFalse(sut.uiState.value.hasPendingBroadcast)
+        verify(hwWalletRepo).disconnectStaleSession(WALLET_ID)
+
+        sut.signAndBroadcast(request())
+        advanceUntilIdle()
+
+        verify(hwWalletRepo, times(2)).signFunding(WALLET_ID, fixture.funding)
     }
 
     private suspend fun stubSuccessfulPayment(): PaymentFixture {

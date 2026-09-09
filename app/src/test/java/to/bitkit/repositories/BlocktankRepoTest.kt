@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.FundingTx
 import com.synonym.bitkitcore.IBtChannel
 import com.synonym.bitkitcore.IBtInfo
+import com.synonym.bitkitcore.IBtInfoOptions
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,6 +16,7 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.OutPoint
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
@@ -24,7 +26,9 @@ import to.bitkit.models.BlocktankBackupV1
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.ServiceError
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -188,6 +192,58 @@ class BlocktankRepoTest : BaseUnitTest() {
             val result = sut.refreshOrders()
             assertTrue(result.isFailure)
         }
+    }
+
+    @Test
+    fun `createCjit refreshes max channel size before checking amount`() = test {
+        sut = createSut()
+        val staleInfo = btInfo(maxChannelSizeSat = 1_000_000u)
+        val freshInfo = btInfo(maxChannelSizeSat = 50_000u)
+        whenever(coreService.blocktank.info(refresh = false)).thenReturn(staleInfo)
+        whenever(coreService.blocktank.info(refresh = true)).thenReturn(staleInfo, freshInfo)
+        whenever(coreService.isGeoBlocked()).thenReturn(false)
+        whenever(lightningService.nodeId).thenReturn("node-id")
+
+        sut.refreshInfo()
+        val result = sut.createCjit(amountSats = 100_000u)
+
+        assertIs<ServiceError.ChannelSizeExceedsMaximum>(result.exceptionOrNull())
+        verify(coreService.blocktank, times(3)).info(refresh = true)
+    }
+
+    @Test
+    fun `createCjit uses cached max channel size when fresh info refresh fails`() = test {
+        sut = createSut()
+        val cachedInfo = btInfo(maxChannelSizeSat = 1_000_000u)
+        whenever(coreService.blocktank.info(refresh = false)).thenReturn(cachedInfo)
+        whenever(coreService.blocktank.info(refresh = true)).thenReturn(cachedInfo)
+            .thenThrow(RuntimeException("Network error"))
+        whenever(coreService.isGeoBlocked()).thenReturn(false)
+        whenever(lightningService.nodeId).thenReturn("node-id")
+
+        sut.refreshInfo()
+        val result = sut.createCjit(amountSats = 1_000_001uL)
+
+        assertIs<ServiceError.ChannelSizeExceedsMaximum>(result.exceptionOrNull())
+        verify(coreService.blocktank, times(3)).info(refresh = true)
+    }
+
+    @Test
+    fun `toCjitError maps node capacity limit to max channel size error`() {
+        val error = RuntimeException("Node capacity is above our capacity limit.")
+
+        val result = error.toCjitError()
+
+        assertIs<ServiceError.ChannelSizeExceedsMaximum>(result)
+    }
+
+    @Test
+    fun `toCjitError does not map generic channel size field error to max channel size error`() {
+        val error = RuntimeException("channelSizeSat must be above minimum")
+
+        val result = error.toCjitError()
+
+        assertEquals(error, result)
     }
 
     @Test
@@ -398,6 +454,14 @@ class BlocktankRepoTest : BaseUnitTest() {
     private fun pendingCjitEntry(): IcJitEntry = mock<IcJitEntry>().apply {
         whenever(channel).thenReturn(null)
         whenever(state).thenReturn(CJitStateEnum.CREATED)
+    }
+
+    private fun btInfo(maxChannelSizeSat: ULong): IBtInfo {
+        val options = mock<IBtInfoOptions>()
+        whenever(options.maxChannelSizeSat).thenReturn(maxChannelSizeSat)
+        return mock<IBtInfo>().also {
+            whenever(it.options).thenReturn(options)
+        }
     }
 
     private suspend fun seedCjitEntries(vararg entries: IcJitEntry) {

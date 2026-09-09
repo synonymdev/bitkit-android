@@ -25,16 +25,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import kotlinx.serialization.Serializable
 import to.bitkit.R
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDraft
+import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.WalletState
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.components.modelNameRes
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.openNotificationSettings
+import to.bitkit.ui.screens.paymentrequests.PaymentRequestAmountScreen
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestDetailsScreen
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestRecipientScreen
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestSentScreen
@@ -53,6 +57,7 @@ import kotlin.time.Duration.Companion.days
 import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
+@Suppress("CyclomaticComplexMethod")
 @Composable
 fun ReceiveSheet(
     appViewModel: AppViewModel,
@@ -74,11 +79,13 @@ fun ReceiveSheet(
     LaunchedEffect(startRoute) { navController.navigateToReceiveStart(startRoute) }
 
     val cjitInvoice = remember { mutableStateOf<String?>(null) }
-    val showCreateCjit = remember { mutableStateOf(false) }
     val cjitEntryDetails = remember { mutableStateOf<CjitEntryDetails?>(null) }
     val invoiceEditState = remember { ReceiveInvoiceEditState() }
+    var editInvoiceSourceTab by remember { mutableStateOf(ReceiveTab.SAVINGS) }
+    var isAdditionalLiquidityAmountEntry by remember { mutableStateOf(false) }
     val lightningState: LightningState by wallet.lightningState.collectAsStateWithLifecycle()
     val paymentRequestTargets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
+    val paymentRequestContacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     var paymentRequestDraft by remember {
         mutableStateOf(
             PaykitPaymentRequestDraft(
@@ -96,6 +103,17 @@ fun ReceiveSheet(
     DisposableEffect(hwReceiveViewModel) {
         onDispose(hwReceiveViewModel::cancel)
     }
+    var selectedPaymentRequestTarget by remember(startRoute) {
+        mutableStateOf(
+            (startRoute as? ReceiveRoute.PaymentRequestAmount)?.let {
+                val publicKey = it.publicKey ?: return@let null
+                val receiverPath = it.receiverPath ?: return@let null
+                PaykitPaymentRequestTarget(publicKey, receiverPath)
+            }
+        )
+    }
+    var skipPaymentRequestAmount by remember { mutableStateOf(false) }
+    var isEditingPaymentRequestAmount by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         wallet.resetPreActivityMetadataTagsForCurrentInvoice()
@@ -118,10 +136,6 @@ fun ReceiveSheet(
                 startDestination = rootRoute,
             ) {
                 composableWithDefaultTransitions<ReceiveRoute.QR> {
-                    LaunchedEffect(cjitInvoice.value) {
-                        showCreateCjit.value = !cjitInvoice.value.isNullOrBlank()
-                    }
-
                     ReceiveQrScreen(
                         cjitInvoice = cjitInvoice.value,
                         walletState = walletState,
@@ -130,15 +144,17 @@ fun ReceiveSheet(
                             if (lightningState.isGeoBlocked) {
                                 navController.navigateTo(ReceiveRoute.GeoBlock)
                             } else {
-                                showCreateCjit.value = true
+                                isAdditionalLiquidityAmountEntry = lightningState.channels.isNotEmpty()
                                 navController.navigateTo(ReceiveRoute.Amount)
                             }
                         },
                         onClickEditInvoice = {
-                            invoiceEditState.beginSoftwareEdit()
+                            editInvoiceSourceTab = it
+                            invoiceEditState.beginSoftwareEdit(it)
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         onClickHardwareEditInvoice = {
+                            editInvoiceSourceTab = ReceiveTab.TREZOR
                             invoiceEditState.beginHardwareEdit()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
@@ -150,44 +166,90 @@ fun ReceiveSheet(
                         onLoadHardwareAddress = hwReceiveViewModel::loadAddress,
                         onRetryHardwareAddress = hwReceiveViewModel::retryAddress,
                         onVerifyHardwareAddress = hwReceiveViewModel::verifyAddress,
-                    )
-                }
-                composableWithDefaultTransitions<ReceiveRoute.PaymentRequestDetails> {
-                    PaymentRequestDetailsScreen(
-                        amountInputViewModel = paymentRequestAmountViewModel,
-                        initialDraft = paymentRequestDraft,
-                        onBack = {
-                            if (!navController.popBackStack()) appViewModel.hideSheet()
-                        },
-                        onContinue = {
-                            paymentRequestDraft = it
+                        showPaymentRequestContacts = paymentRequestTargets.isNotEmpty(),
+                        onClickPaymentRequestContacts = {
+                            paymentRequestDraft = paymentRequestDraft.copy(
+                                amountSats = 0uL,
+                                note = "",
+                                expiresAt = Clock.System.now() + 7.days,
+                            )
+                            selectedPaymentRequestTarget = null
+                            skipPaymentRequestAmount = false
+                            isEditingPaymentRequestAmount = false
                             navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
                         },
                     )
                 }
-                composableWithDefaultTransitions<ReceiveRoute.PaymentRequestExpiration> {
-                    PaymentRequestDetailsScreen(
+                composableWithDefaultTransitions<ReceiveRoute.PaymentRequestAmount> { backStackEntry ->
+                    val route = backStackEntry.toRoute<ReceiveRoute.PaymentRequestAmount>()
+                    val routeTarget = route.publicKey?.let { publicKey ->
+                        route.receiverPath?.let { receiverPath -> PaykitPaymentRequestTarget(publicKey, receiverPath) }
+                    }
+                    val contact = (routeTarget ?: selectedPaymentRequestTarget)?.let { target ->
+                        paymentRequestContacts.firstOrNull {
+                            PubkyPublicKeyFormat.matches(it.publicKey, target.publicKey)
+                        }
+                    }
+                    PaymentRequestAmountScreen(
                         amountInputViewModel = paymentRequestAmountViewModel,
                         initialDraft = paymentRequestDraft,
-                        onBack = { navController.popBackStack() },
+                        contact = contact,
+                        onBack = {
+                            isEditingPaymentRequestAmount = false
+                            if (!navController.popBackStack()) appViewModel.hideSheet()
+                        },
                         onContinue = {
                             paymentRequestDraft = it
-                            navController.popBackStack()
+                            if (isEditingPaymentRequestAmount) {
+                                isEditingPaymentRequestAmount = false
+                                navController.popBackStack()
+                            } else {
+                                navController.navigateTo(ReceiveRoute.PaymentRequestDetails)
+                            }
                         },
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestRecipient> {
                     PaymentRequestRecipientScreen(
                         appViewModel = appViewModel,
-                        draft = paymentRequestDraft,
-                        onEditExpiration = {
-                            navController.navigateTo(ReceiveRoute.PaymentRequestExpiration)
+                        onBack = {
+                            if (!navController.popBackStack()) appViewModel.hideSheet()
                         },
-                        onSent = {
-                            createdPaymentRequest = it
-                            navController.navigateToPaymentRequestSent()
+                        onSelected = { target ->
+                            selectedPaymentRequestTarget = target
+                            navController.navigateTo(
+                                if (skipPaymentRequestAmount) {
+                                    ReceiveRoute.PaymentRequestDetails
+                                } else {
+                                    ReceiveRoute.PaymentRequestAmount()
+                                }
+                            )
                         },
                     )
+                }
+                composableWithDefaultTransitions<ReceiveRoute.PaymentRequestDetails> {
+                    val target = selectedPaymentRequestTarget
+                    if (target != null) {
+                        PaymentRequestDetailsScreen(
+                            appViewModel = appViewModel,
+                            draft = paymentRequestDraft,
+                            target = target,
+                            onBack = { navController.popBackStack() },
+                            onEditAmount = {
+                                paymentRequestDraft = it
+                                isEditingPaymentRequestAmount = true
+                                navController.navigateTo(ReceiveRoute.PaymentRequestAmount())
+                            },
+                            onSent = {
+                                createdPaymentRequest = it
+                                navController.navigateToPaymentRequestSent()
+                            },
+                        )
+                    } else {
+                        LaunchedEffect(Unit) {
+                            if (!navController.popBackStack()) appViewModel.hideSheet()
+                        }
+                    }
                 }
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestSent> {
                     createdPaymentRequest?.let {
@@ -202,7 +264,13 @@ fun ReceiveSheet(
                     ReceiveAmountScreen(
                         onCjitCreated = { entry ->
                             cjitEntryDetails.value = entry
-                            navController.navigateTo(ReceiveRoute.Confirm)
+                            navController.navigateTo(
+                                if (isAdditionalLiquidityAmountEntry) {
+                                    ReceiveRoute.ConfirmIncreaseInbound
+                                } else {
+                                    ReceiveRoute.Confirm
+                                }
+                            )
                         },
                         onBack = { navController.popBackStack() },
                     )
@@ -289,6 +357,8 @@ fun ReceiveSheet(
                     EditInvoiceScreen(
                         amountInputViewModel = editInvoiceAmountViewModel,
                         walletUiState = walletUiState,
+                        lightningState = lightningState,
+                        sourceTab = editInvoiceSourceTab,
                         onBack = { navController.popBackStack() },
                         updateInvoice = wallet::updateBip21Invoice,
                         onClickAddTag = { navController.navigateTo(ReceiveRoute.AddTag) },
@@ -301,6 +371,9 @@ fun ReceiveSheet(
                                 note = note,
                                 expiresAt = Clock.System.now() + 7.days,
                             )
+                            selectedPaymentRequestTarget = null
+                            skipPaymentRequestAmount = true
+                            isEditingPaymentRequestAmount = false
                             navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
                         },
                         navigateReceiveConfirm = { entry ->
@@ -309,6 +382,11 @@ fun ReceiveSheet(
                         },
                         onchainOnly = invoiceEditState.isHardwareInvoice,
                         updateOnchainInvoice = wallet::setBip21AmountSats,
+                        navigateCjitAmount = {
+                            isAdditionalLiquidityAmountEntry = true
+                            navController.navigateTo(ReceiveRoute.Amount)
+                        },
+                        navigateGeoBlock = { navController.navigateTo(ReceiveRoute.GeoBlock) },
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.AddTag> {
@@ -347,17 +425,20 @@ fun ReceiveSheet(
 internal class ReceiveInvoiceEditState {
     var isHardwareInvoice by mutableStateOf(false)
         private set
+    private var returnTab by mutableStateOf<ReceiveTab?>(null)
 
-    fun beginSoftwareEdit() {
+    fun beginSoftwareEdit(sourceTab: ReceiveTab) {
         isHardwareInvoice = false
+        returnTab = sourceTab
     }
 
     fun beginHardwareEdit() {
         isHardwareInvoice = true
+        returnTab = ReceiveTab.TREZOR
     }
 
     fun initialTab(hardwareWalletId: String?): ReceiveTab? =
-        ReceiveTab.HARDWARE.takeIf { hardwareWalletId != null || isHardwareInvoice }
+        returnTab ?: ReceiveTab.HARDWARE.takeIf { hardwareWalletId != null || isHardwareInvoice }
 }
 
 @Composable
@@ -406,13 +487,16 @@ sealed interface ReceiveRoute {
     data object AddTag : DeepLinkStart
 
     @Serializable
-    data object PaymentRequestDetails : InternalOnly
-
-    @Serializable
-    data object PaymentRequestExpiration : InternalOnly
-
-    @Serializable
     data object PaymentRequestRecipient : InternalOnly
+
+    @Serializable
+    data class PaymentRequestAmount(
+        val publicKey: String? = null,
+        val receiverPath: String? = null,
+    ) : InternalOnly
+
+    @Serializable
+    data object PaymentRequestDetails : InternalOnly
 
     @Serializable
     data object PaymentRequestSent : InternalOnly

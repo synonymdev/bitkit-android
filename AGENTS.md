@@ -170,7 +170,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - Use narrower checks earlier only when they answer an immediate risk, e.g. a single unit test after touching focused business logic or a Kotlin compile after a risky refactor.
 - ALWAYS ask clarifying questions to ensure an optimal plan when encountering functional or technical uncertainties in requests
 - ALWAYS when fixing lint or test failures prefer to do the minimal amount of changes to fix the issues
-- USE single-line commit messages under 50 chars; use conventional commit messages template format: `feat: add something new`
+- USE single-line commit messages under 72 chars; use conventional commit messages template format: `feat: add something new`
 - USE `git diff HEAD sourceFilePath` to diff an uncommitted file against the last commit
 - NEVER capitalize words in commit messages
 - ALWAYS create a `*-backup` branch before performing a rebase
@@ -185,6 +185,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS remove unused code after refactors
 - ALWAYS follow Material3 design guidelines for UI components
 - When building from a Figma frame, reuse only scaffolding (sheet host, `SheetTopBar`, buttons, typography); NEVER swap a design-specific illustration/animation for a lookalike. Export the frame's assets via the Figma MCP and read animation timing/easing/direction from prototype reactions (`use_figma` → `node.reactions`)
+- ALWAYS resolve a changed `*Screen.kt` to its Figma frame through `docs/screens-map.md` (`Flow › Frame` on the latest `Bitkit - Handoff vNN` page). When adding or removing a `*Screen.kt`, add or drop its row there (`todo` when the design does not exist yet); `ScreensMapTest` fails otherwise
 - ALWAYS ensure proper error handling in coroutines
 - ALWAYS acknowledge datastore async operations run synchronously in a suspend context
 - NEVER use `runBlocking` in suspend functions

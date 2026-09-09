@@ -274,6 +274,7 @@ class HwSendViewModel @Inject constructor(
     }
 
     private suspend fun handleFailure(error: Throwable, walletId: String) {
+        _uiState.update { it.copy(isBroadcastUnresolved = false) }
         when {
             error.isHwUserCancellation() -> {
                 Logger.info("Hardware send cancelled on device for '$walletId'", context = TAG)
@@ -293,8 +294,8 @@ class HwSendViewModel @Inject constructor(
             pendingBroadcast != null &&
                 (error.isBroadcastConnectivityFailure() || error is TimeoutCancellationException) -> ToastEventBus.send(
                 type = Toast.ToastType.WARNING,
-                title = context.getString(R.string.other__connection_issue),
-                description = context.getString(R.string.other__connection_issues_explain),
+                title = context.getString(R.string.hardware__send_broadcast_failed_title),
+                description = context.getString(R.string.hardware__send_broadcast_failed_text),
             )
             error is TimeoutCancellationException -> ToastEventBus.send(
                 type = Toast.ToastType.ERROR,
@@ -304,12 +305,7 @@ class HwSendViewModel @Inject constructor(
             else -> {
                 if (pendingBroadcast != null) {
                     pendingBroadcast = null
-                    _uiState.update {
-                        it.copy(
-                            hasPendingBroadcast = false,
-                            isBroadcastUnresolved = false,
-                        )
-                    }
+                    _uiState.update { it.copy(hasPendingBroadcast = false) }
                 }
                 ToastEventBus.send(
                     type = Toast.ToastType.ERROR,

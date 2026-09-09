@@ -23,6 +23,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -56,8 +57,10 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
+import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.ReceiveLiquidityDecision
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletState
 import to.bitkit.ui.components.BodyM
@@ -92,9 +95,9 @@ fun ReceiveQrScreen(
     cjitInvoice: String?,
     walletState: WalletState,
     lightningState: LightningState,
-    onClickEditInvoice: () -> Unit,
+    onClickEditInvoice: (ReceiveTab) -> Unit,
     onClickReceiveCjit: () -> Unit,
-    onClickHardwareEditInvoice: () -> Unit = onClickEditInvoice,
+    onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.TREZOR) },
     modifier: Modifier = Modifier,
     initialTab: ReceiveTab? = null,
     hardwareWalletId: String? = null,
@@ -104,25 +107,44 @@ fun ReceiveQrScreen(
     onLoadHardwareAddress: (String) -> Unit = {},
     onRetryHardwareAddress: () -> Unit = {},
     onVerifyHardwareAddress: () -> Unit = {},
+    showPaymentRequestContacts: Boolean = false,
+    onClickPaymentRequestContacts: () -> Unit = {},
 ) {
     SetMaxBrightness()
 
     val haptic = LocalHapticFeedback.current
-    val hasUsableChannels = lightningState.channels.any { it.isChannelReady }
+    val hasUsableChannels = lightningState.channels.any { it.isUsable }
+    val usableInboundLiquiditySats = remember(lightningState.channels) {
+        lightningState.channels.filter { it.isUsable }.calculateRemoteBalance()
+    }
+    val canCreateLightningInvoice = remember(
+        hasUsableChannels,
+        usableInboundLiquiditySats,
+        walletState.bip21AmountSats,
+    ) {
+        ReceiveLiquidityDecision.canCreateLightningInvoice(
+            hasUsableChannels = hasUsableChannels,
+            inboundCapacitySats = usableInboundLiquiditySats,
+            invoiceAmountSats = walletState.bip21AmountSats,
+        )
+    }
 
     var showDetails by remember { mutableStateOf(false) }
 
-    val visibleTabs = remember(hasUsableChannels, hardwareWalletId) {
+    val visibleTabs = remember(canCreateLightningInvoice, cjitInvoice, hardwareWalletId) {
         buildList {
             if (hardwareWalletId != null) {
                 add(ReceiveTab.HARDWARE)
             }
             add(ReceiveTab.SAVINGS)
-            if (hasUsableChannels) {
+            if (canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()) {
                 add(ReceiveTab.AUTO)
             }
             add(ReceiveTab.SPENDING)
         }.toImmutableList()
+    }
+    val defaultTab = remember(visibleTabs, initialTab) {
+        initialTab?.takeIf { it in visibleTabs } ?: visibleTabs.defaultReceiveTab()
     }
 
     val invoicesByTab = remember(
@@ -143,6 +165,7 @@ fun ReceiveQrScreen(
                 bolt11 = walletState.bolt11,
                 cjitInvoice = cjitInvoice,
                 isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
+                canCreateLightningInvoice = canCreateLightningInvoice,
                 onchainAddress = walletState.onchainAddress,
                 hardwareAddress = hardwareReceiveState.address?.address.orEmpty(),
                 hardwareAmountSats = walletState.bip21AmountSats,
@@ -154,7 +177,7 @@ fun ReceiveQrScreen(
     // LazyRow state with snap behavior
     val scope = rememberCoroutineScope()
     val lazyListState = rememberLazyListState(
-        initialFirstVisibleItemIndex = visibleTabs.indexOf(initialTab ?: ReceiveTab.SAVINGS).coerceAtLeast(0),
+        initialFirstVisibleItemIndex = visibleTabs.indexOf(defaultTab).coerceAtLeast(0),
     )
 
     val snapBehavior = rememberSnapFlingBehavior(
@@ -164,20 +187,35 @@ fun ReceiveQrScreen(
 
     // Calculate current tab based on scroll position for smooth indicator and color updates
     var selectedTab by remember {
-        mutableStateOf(initialTab ?: ReceiveTab.SAVINGS)
+        mutableStateOf(defaultTab)
     }
     var hasAppliedInitialTab by remember { mutableStateOf(false) }
+    var appliedInitialTab by remember { mutableStateOf<ReceiveTab?>(null) }
 
     LaunchedEffect(visibleTabs, initialTab) {
-        if (!hasAppliedInitialTab) {
+        val requestedTab = initialTab?.takeIf { it in visibleTabs }
+        val shouldApplyInitialTab = !hasAppliedInitialTab || requestedTab != null && requestedTab != appliedInitialTab
+        if (shouldApplyInitialTab) {
             hasAppliedInitialTab = true
-            initialTab?.takeIf { it in visibleTabs }?.let { requestedTab ->
-                selectedTab = requestedTab
-                lazyListState.scrollToItem(visibleTabs.indexOf(requestedTab))
+            appliedInitialTab = requestedTab
+            requestedTab?.let {
+                selectedTab = it
+                lazyListState.scrollToItem(visibleTabs.indexOf(it))
+                return@LaunchedEffect
             }
         }
         if (selectedTab !in visibleTabs) {
-            selectedTab = visibleTabs.first()
+            val fallbackTab = visibleTabs.defaultReceiveTab()
+            selectedTab = fallbackTab
+            lazyListState.scrollToItem(visibleTabs.indexOf(fallbackTab).coerceAtLeast(0))
+        }
+    }
+
+    LaunchedEffect(canCreateLightningInvoice, cjitInvoice, initialTab) {
+        if (initialTab == ReceiveTab.TREZOR) return@LaunchedEffect
+        if (!canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()) {
+            selectedTab = ReceiveTab.SAVINGS
+            lazyListState.scrollToItem(visibleTabs.indexOf(ReceiveTab.SAVINGS).coerceAtLeast(0))
         }
     }
 
@@ -193,8 +231,9 @@ fun ReceiveQrScreen(
     }
 
     // Auto-switch to AUTO tab when it becomes available for the first time
-    LaunchedEffect(hasUsableChannels) {
-        if (initialTab == null && hasUsableChannels && visibleTabs.contains(ReceiveTab.AUTO)) {
+    LaunchedEffect(canCreateLightningInvoice, cjitInvoice) {
+        val shouldAutoSwitch = initialTab == null && canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()
+        if (shouldAutoSwitch && visibleTabs.contains(ReceiveTab.AUTO)) {
             val autoIndex = visibleTabs.indexOf(ReceiveTab.AUTO)
             if (autoIndex != -1) {
                 lazyListState.animateScrollToItem(autoIndex)
@@ -221,8 +260,8 @@ fun ReceiveQrScreen(
         }
     }
 
-    val showingCjitOnboarding = remember(lightningState, cjitInvoice, hasUsableChannels) {
-        !hasUsableChannels &&
+    val showingCjitOnboarding = remember(lightningState, cjitInvoice, canCreateLightningInvoice) {
+        !canCreateLightningInvoice &&
             lightningState.nodeLifecycleState.isRunning() &&
             cjitInvoice.isNullOrEmpty()
     }
@@ -234,7 +273,26 @@ fun ReceiveQrScreen(
             .navigationBarsPadding()
             .keepScreenOn()
     ) {
-        SheetTopBar(stringResource(R.string.wallet__receive_bitcoin))
+        SheetTopBar(
+            titleText = stringResource(R.string.wallet__receive_bitcoin),
+            action = if (showPaymentRequestContacts) {
+                {
+                    IconButton(
+                        onClick = onClickPaymentRequestContacts,
+                        modifier = Modifier.testTag("ReceivePaymentRequestContacts"),
+                    ) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_users),
+                            contentDescription = stringResource(R.string.wallet__payment_request_choose_recipient),
+                            tint = Colors.White,
+                            modifier = Modifier.size(24.dp),
+                        )
+                    }
+                }
+            } else {
+                null
+            },
+        )
         Column {
             VerticalSpacer(16.dp)
 
@@ -258,7 +316,7 @@ fun ReceiveQrScreen(
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
 
-            VerticalSpacer(24.dp)
+            VerticalSpacer(16.dp)
 
             // Content area (QR or Details) with LazyRow
             LazyRow(
@@ -303,7 +361,7 @@ fun ReceiveQrScreen(
                                     walletState = walletState,
                                     cjitInvoice = cjitInvoice,
                                     isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
-                                    onClickEditInvoice = onClickEditInvoice,
+                                    onClickEditInvoice = { onClickEditInvoice(tab) },
                                     onClickHardwareEditInvoice = onClickHardwareEditInvoice,
                                     hardwareAddress = hardwareReceiveState.address?.address,
                                     hardwareInvoice = invoicesByTab[ReceiveTab.HARDWARE].orEmpty(),
@@ -332,7 +390,7 @@ fun ReceiveQrScreen(
                                     onClickEditInvoice = if (tab == ReceiveTab.HARDWARE) {
                                         onClickHardwareEditInvoice
                                     } else if (cjitInvoice.isNullOrEmpty()) {
-                                        onClickEditInvoice
+                                        { onClickEditInvoice(tab) }
                                     } else {
                                         onClickReceiveCjit
                                     },
@@ -407,7 +465,7 @@ fun ReceiveQrScreen(
                         )
                     }
 
-                    BottomButtonVariant.SHOW_DETAILS -> TertiaryButton(
+                    BottomButtonVariant.SHOW_DETAILS -> PrimaryButton(
                         text = stringResource(R.string.wallet__receive_show_details),
                         onClick = { showDetails = true },
                         enabled = selectedTab != ReceiveTab.HARDWARE || hardwareReceiveState.address != null,
@@ -422,6 +480,10 @@ fun ReceiveQrScreen(
             VerticalSpacer(16.dp)
         }
     }
+}
+
+private fun List<ReceiveTab>.defaultReceiveTab(): ReceiveTab {
+    return if (contains(ReceiveTab.AUTO)) ReceiveTab.AUTO else ReceiveTab.SAVINGS
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -455,7 +517,7 @@ private fun ReceiveQrView(
 
         VerticalSpacer(16.dp)
         Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.Top,
         ) {
             PrimaryButton(
@@ -585,7 +647,10 @@ private fun ReceiveDetailsView(
         shape = AppShapes.small,
         modifier = modifier
     ) {
-        Column {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(32.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
             when (tab) {
                 ReceiveTab.SAVINGS -> {
                     if (walletState.onchainAddress.isNotEmpty()) {
@@ -725,19 +790,18 @@ private fun CopyAddressCard(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(24.dp)
     ) {
         Caption13Up(text = title, color = Colors.White64)
         VerticalSpacer(16.dp)
         BodyS(
-            text = (body ?: address).uppercase(),
-            maxLines = 1,
-            overflow = TextOverflow.MiddleEllipsis,
+            text = (body ?: address),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
             modifier = testTag?.let { Modifier.testTag(it) } ?: Modifier
         )
         VerticalSpacer(16.dp)
         Row(
-            horizontalArrangement = Arrangement.spacedBy(16.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             PrimaryButton(
                 text = stringResource(R.string.common__edit),
