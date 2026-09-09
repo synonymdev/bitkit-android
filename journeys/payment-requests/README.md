@@ -6,7 +6,7 @@ Cover incoming Paykit Payment Requests from a linked issuer. The issuer contract
 
 ## Setup
 
-Run Bitkit against regtest with Paykit UI enabled. Authenticate a Pubky identity, save the fixture issuer as a contact, link it on receiver path `bitkit/server`, and give the wallet enough on-chain balance to pay 100,000 sats. The fixture issuer must be able to publish a Paykit endpoint and send a one-time Payment Request to that linked peer.
+Run Bitkit against regtest with Paykit UI enabled. Authenticate a Pubky identity, save the fixture issuer as a contact, link it on receiver path `bitkit/server`, and give the wallet enough on-chain balance to pay 100,000 sats. The fixture issuer must be able to publish a Paykit endpoint and send a one-time Payment Request to that linked peer. The `bitkit/server` path belongs to the third-party fixture issuer; use `bitkit/wallet` when another Bitkit instance is the issuer.
 
 The accepted journey uses:
 
@@ -35,3 +35,5 @@ That run established the issuer shapes captured by the fixture: lowercase `btc`,
 - Payment confirmation: `PaymentRequestConfirm`
 - Confirmation details: `SendConfirmToggleDetails`
 - Saved-contact recipient: `ReviewContactRecipient`
+
+`android layout` can omit test tags applied to plain `Box` and `Column` containers. Use the raw UI Automator hierarchy when a documented container tag is not present in the formatted layout output.
