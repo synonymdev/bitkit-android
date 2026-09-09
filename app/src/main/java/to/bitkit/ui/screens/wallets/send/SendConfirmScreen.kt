@@ -35,11 +35,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -66,6 +61,7 @@ import to.bitkit.ext.formatInvoiceExpiryRelative
 import to.bitkit.models.FeeRate
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.TransactionSpeed
+import to.bitkit.ui.components.AddTagButton
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BiometricsView
 import to.bitkit.ui.components.BodySSB
@@ -89,7 +85,6 @@ import to.bitkit.ui.settingsViewModel
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
-import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.rememberBiometricAuthSupported
@@ -114,6 +109,7 @@ fun SendConfirmScreen(
     savedStateHandle: SavedStateHandle,
     uiState: SendUiState,
     isNodeRunning: Boolean,
+    canAutoStart: Boolean,
     canGoBack: Boolean,
     onBack: () -> Unit,
     onEvent: (SendEvent) -> Unit,
@@ -139,6 +135,9 @@ fun SendConfirmScreen(
             .collect { isSuccess ->
                 isLoading = isSuccess
                 savedStateHandle.remove<Boolean>(PIN_CHECK_RESULT_KEY)
+                if (!isSuccess && uiState.isInitialSubscriptionPayment) {
+                    currentOnEvent(SendEvent.CancelInitialSubscriptionPayment)
+                }
             }
     }
 
@@ -166,12 +165,19 @@ fun SendConfirmScreen(
         }
     }
 
-    Content(
+    LaunchedEffect(uiState.initialSubscriptionPaymentAutoStartPending, canAutoStart) {
+        if (!uiState.initialSubscriptionPaymentAutoStartPending || !canAutoStart) return@LaunchedEffect
+        isLoading = uiState.shouldAutomaticallyPay
+        currentOnEvent(SendEvent.StartInitialSubscriptionPayment)
+    }
+
+    SendConfirmContent(
         uiState = uiState,
         isNodeRunning = isNodeRunning,
         isLoading = isLoading,
         showBiometrics = showBiometrics,
         canGoBack = canGoBack,
+        initialShowDetails = uiState.isInitialSubscriptionPayment && !uiState.shouldAutomaticallyPay,
         onBack = onBack,
         onEvent = onEvent,
         onClickAddTag = onClickAddTag,
@@ -197,7 +203,7 @@ fun SendConfirmScreen(
 }
 
 @Composable
-private fun Content(
+internal fun SendConfirmContent(
     uiState: SendUiState,
     isNodeRunning: Boolean,
     isLoading: Boolean,
@@ -228,6 +234,8 @@ private fun Content(
 
             SendContactTopBar(
                 titleText = when {
+                    uiState.isInitialSubscriptionPayment -> stringResource(R.string.subscriptions__review_and_subscribe)
+                    uiState.isSubscriptionPayment -> stringResource(R.string.subscriptions__subscription)
                     uiState.isPaymentRequest -> stringResource(R.string.wallet__payment_request)
                     isLnurlPay -> stringResource(R.string.wallet__lnurl_p_title)
                     else -> stringResource(R.string.wallet__send_review)
@@ -238,7 +246,11 @@ private fun Content(
 
             Spacer(Modifier.height(16.dp))
 
-            if (isNodeRunning) {
+            if (uiState.shouldAutomaticallyPay && (uiState.initialSubscriptionPaymentAutoStartPending || isLoading)) {
+                FillHeight()
+                GradientCircularProgressIndicator(modifier = Modifier.size(32.dp).align(Alignment.CenterHorizontally))
+                FillHeight()
+            } else if (isNodeRunning) {
                 ContentRunning(
                     uiState = uiState,
                     isLoading = isLoading,
@@ -274,7 +286,11 @@ private fun Content(
                 onConfirm = { onEvent(SendEvent.ConfirmAmountWarning(dialog)) },
                 onDismiss = {
                     onEvent(SendEvent.DismissAmountWarning)
-                    onBack()
+                    if (uiState.isInitialSubscriptionPayment) {
+                        onEvent(SendEvent.CancelInitialSubscriptionPayment)
+                    } else {
+                        onBack()
+                    }
                 },
                 modifier = Modifier
                     .semantics { testTagsAsResourceId = true }
@@ -285,6 +301,7 @@ private fun Content(
 }
 
 @Composable
+@Suppress("CyclomaticComplexMethod")
 private fun ContentRunning(
     uiState: SendUiState,
     isLoading: Boolean,
@@ -399,7 +416,13 @@ private fun ContentRunning(
         }
 
         SwipeToConfirm(
-            text = stringResource(R.string.wallet__send_swipe),
+            text = stringResource(
+                if (uiState.isInitialSubscriptionPayment) {
+                    R.string.subscriptions__swipe_to_subscribe_and_pay
+                } else {
+                    R.string.wallet__send_swipe
+                }
+            ),
             color = accentColor,
             enabled = uiState.isAmountInputValid &&
                 !uiState.isFundingSourceLoading &&
@@ -461,44 +484,6 @@ private fun TagsSection(
                 modifier = Modifier.testTag("TagsAddSend")
             )
         }
-    }
-}
-
-@Composable
-private fun AddTagButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val shape = AppShapes.small
-    val cornerRadius = 8.dp
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-        modifier = modifier
-            .clip(shape)
-            .drawBehind {
-                drawRoundRect(
-                    color = Colors.White64,
-                    style = Stroke(
-                        width = 1.dp.toPx(),
-                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)),
-                    ),
-                    cornerRadius = CornerRadius(cornerRadius.toPx()),
-                )
-            }
-            .clickableAlpha(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp)
-    ) {
-        BodySSB(
-            text = stringResource(R.string.wallet__tags_add_button),
-            color = Colors.White,
-        )
-        Icon(
-            painter = painterResource(R.drawable.ic_plus),
-            contentDescription = null,
-            tint = Colors.White64,
-            modifier = Modifier.size(16.dp)
-        )
     }
 }
 
@@ -890,7 +875,7 @@ private fun sendUiState() = SendUiState(
 private fun PreviewOnChain() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
                     speed = TransactionSpeed.Medium,
@@ -914,7 +899,7 @@ private fun PreviewOnChain() {
 private fun PreviewOnChainDetails() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
                     speed = TransactionSpeed.Medium,
@@ -939,7 +924,7 @@ private fun PreviewOnChainDetails() {
 private fun PreviewLightningDetails() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     amount = 6_543u,
                     payMethod = SendMethod.LIGHTNING,
@@ -962,7 +947,7 @@ private fun PreviewLightningDetails() {
 private fun PreviewOnChainLongFeeSmallScreen() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     amount = 2_345_678u,
                     selectedTags = persistentListOf("car", "house", "uber"),
@@ -986,7 +971,7 @@ private fun PreviewOnChainLongFeeSmallScreen() {
 private fun PreviewOnChainFeeLoading() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
                     onchainFeeUi = OnchainFeeUi(isLoading = true),
@@ -1006,7 +991,7 @@ private fun PreviewOnChainFeeLoading() {
 private fun PreviewLightning() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     amount = 6_543u,
                     payMethod = SendMethod.LIGHTNING,
@@ -1027,7 +1012,7 @@ private fun PreviewLightning() {
 private fun PreviewLnurl() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     payMethod = SendMethod.LIGHTNING,
                     lnurl = LnurlParams.LnurlPay(
@@ -1058,7 +1043,7 @@ private fun PreviewLnurl() {
 private fun PreviewLnurlDetails() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     amount = 5_000u,
                     payMethod = SendMethod.LIGHTNING,
@@ -1091,7 +1076,7 @@ private fun PreviewLnurlDetails() {
 private fun PreviewBio() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState(),
                 isNodeRunning = true,
                 isLoading = false,
@@ -1107,7 +1092,7 @@ private fun PreviewBio() {
 private fun PreviewDialog() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     showSanityWarningDialog = SanityWarning.VALUE_OVER_100_USD,
                 ),
@@ -1125,7 +1110,7 @@ private fun PreviewDialog() {
 private fun PreviewNodeNotRunning() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendConfirmContent(
                 uiState = sendUiState().copy(
                     payMethod = SendMethod.LIGHTNING,
                     lnurl = LnurlParams.LnurlPay(

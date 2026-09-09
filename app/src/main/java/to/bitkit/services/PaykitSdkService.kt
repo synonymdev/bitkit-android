@@ -84,6 +84,7 @@ import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.Endpoint
+import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitIssuerInterop
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.utils.AppError
@@ -663,12 +664,14 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
+    @Suppress("LongParameterList")
     suspend fun submitPaymentProof(
         counterparty: String,
         counterpartyReceiverPath: String,
         paymentRequestId: String,
         paymentEndpointIdentifier: String,
         proofJson: String,
+        billingPeriod: PaykitBillingPeriod? = null,
     ): PaymentRequestRecord {
         isSetup.await()
         return operationMutex.withLock {
@@ -678,7 +681,7 @@ class PaykitSdkService @Inject constructor(
                     counterpartyReceiverPath,
                     paymentRequestId,
                     PaymentProofSubmission(
-                        billingPeriod = null,
+                        billingPeriod = billingPeriod?.sdkValue,
                         paymentEndpointIdentifier = paymentEndpointIdentifier,
                         proof = PrivateJsonObject(proofJson),
                     ),
@@ -697,6 +700,20 @@ class PaykitSdkService @Inject constructor(
         return operationMutex.withLock {
             withStateRevisionTracking { handle ->
                 handle.rejectPaymentRequest(counterparty, counterpartyReceiverPath, paymentRequestId, reason)
+            }
+        }
+    }
+
+    suspend fun cancelPaymentRequest(
+        counterparty: String,
+        counterpartyReceiverPath: String,
+        paymentRequestId: String,
+        reason: String? = null,
+    ): PaymentRequestRecord {
+        isSetup.await()
+        return operationMutex.withLock {
+            withStateRevisionTracking { handle ->
+                handle.cancelPaymentRequest(counterparty, counterpartyReceiverPath, paymentRequestId, reason)
             }
         }
     }

@@ -32,6 +32,8 @@ fun SendErrorScreen(
     title: String,
     message: String?,
     isRetrying: Boolean,
+    retryText: String? = null,
+    secondaryText: String? = null,
     onRetry: () -> Unit,
     onContactSupport: () -> Unit,
 ) {
@@ -39,6 +41,8 @@ fun SendErrorScreen(
         title = title,
         message,
         isRetrying = isRetrying,
+        retryText = retryText,
+        secondaryText = secondaryText,
         onRetry = onRetry,
         onContactSupport = onContactSupport,
     )
@@ -50,6 +54,8 @@ private fun Content(
     message: String?,
     modifier: Modifier = Modifier,
     isRetrying: Boolean = false,
+    retryText: String? = null,
+    secondaryText: String? = null,
     onRetry: () -> Unit = {},
     onContactSupport: () -> Unit = {},
 ) {
@@ -84,7 +90,7 @@ private fun Content(
             FillHeight()
 
             SecondaryButton(
-                text = stringResource(R.string.wallet__send_error_support),
+                text = secondaryText ?: stringResource(R.string.wallet__send_error_support),
                 onClick = onContactSupport,
                 enabled = !isRetrying,
                 modifier = Modifier
@@ -95,7 +101,7 @@ private fun Content(
             VerticalSpacer(16.dp)
 
             PrimaryButton(
-                text = stringResource(R.string.common__try_again),
+                text = retryText ?: stringResource(R.string.common__try_again),
                 onClick = onRetry,
                 isLoading = isRetrying,
                 modifier = Modifier
