@@ -33,6 +33,7 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
@@ -143,6 +144,15 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         assertFalse(request.requiresAcceptance)
         assertEquals(Instant.parse("2027-01-01T08:00:00Z"), request.billingPeriod?.startsAt)
         assertEquals(Instant.parse("2027-02-01T08:00:00Z"), request.billingPeriod?.endsAt)
+    }
+
+    @Test
+    fun `refresh does not report subscription proposals as one time parse failures`() = test {
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+
+        sut.refresh().getOrThrow()
+
+        verify(diagnostics, never()).logParseRejection(any(), any())
     }
 
     @Test
