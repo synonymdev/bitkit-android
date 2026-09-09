@@ -23,7 +23,9 @@ jobs:
 
     permissions:
       contents: read
-      pull-requests: write
+
+    outputs:
+      artifact-url: ${{ steps.upload-apk.outputs.artifact-url }}
 
     steps:
       - name: Checkout
@@ -66,11 +68,29 @@ jobs:
           retention-days: 30
           if-no-files-found: error
 
+      - name: Run tests
+        run: ./gradlew testDevDebugUnitTest
+
+      - name: Upload test report
+        uses: actions/upload-artifact@v7
+        with:
+          name: unit_test_report_${{ github.run_number }}
+          path: app/build/reports/tests/testDevDebugUnitTest/
+          retention-days: 30
+
+  apk-comment:
+    needs: build
+    if: always() && needs.build.outputs.artifact-url != '' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
+    runs-on: ubuntu-latest
+
+    permissions:
+      pull-requests: write
+
+    steps:
       - name: Comment APK link on PR
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false
         uses: actions/github-script@v8
         env:
-          ARTIFACT_URL: ${{ steps.upload-apk.outputs.artifact-url }}
+          ARTIFACT_URL: ${{ needs.build.outputs.artifact-url }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         with:
           script: |
@@ -84,7 +104,7 @@ jobs:
               '',
               `[Download bitkit-dev-debug universal APK](${process.env.ARTIFACT_URL}) (expires in 30 days).`,
             ].join('\n');
-            const { data: comments } = await github.rest.issues.listComments({
+            const comments = await github.paginate(github.rest.issues.listComments, {
               ...context.repo,
               issue_number: context.issue.number,
               per_page: 100,
@@ -95,13 +115,3 @@ jobs:
             } else {
               await github.rest.issues.createComment({ ...context.repo, issue_number: context.issue.number, body });
             }
-
-      - name: Run tests
-        run: ./gradlew testDevDebugUnitTest
-
-      - name: Upload test report
-        uses: actions/upload-artifact@v7
-        with:
-          name: unit_test_report_${{ github.run_number }}
-          path: app/build/reports/tests/testDevDebugUnitTest/
-          retention-days: 30
