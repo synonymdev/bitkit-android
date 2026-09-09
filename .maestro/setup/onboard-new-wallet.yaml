@@ -1,0 +1,17 @@
+appId: to.bitkit.dev
+name: onboard new wallet
+---
+- extendedWaitUntil:
+    visible:
+      id: "Continue"
+    timeout: 30000
+- tapOn:
+    id: "Continue"
+- tapOn:
+    id: "SkipIntro"
+- tapOn:
+    id: "NewWallet"
+- extendedWaitUntil:
+    visible:
+      id: "TotalBalance-primary"
+    timeout: 180000
