@@ -520,7 +520,7 @@ internal fun PaymentRequestCard(
             if (request.showsPaymentRailIcon(isOutgoingPayment)) {
                 PaymentRailIcon(request = request, paymentWasSent = request.paymentWasSent(isOutgoingPayment))
             } else {
-                PubkyContactAvatar(profile = displayContact)
+                PubkyContactAvatar(profile = displayContact, size = 40.dp)
             }
             Column(modifier = Modifier.weight(1f)) {
                 BodyMSB(

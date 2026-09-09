@@ -47,7 +47,6 @@ internal object PaymentRequestFixtureRuntime {
         )
     }
 
-
     private fun target(profile: PubkyProfile) = PaykitPaymentRequestTarget(
         publicKey = profile.publicKey,
         receiverPath = RECEIVER_PATH,

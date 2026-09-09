@@ -154,6 +154,7 @@ class PaymentRequestsScreenTest {
         composeTestRule.onNodeWithText("Dinner").assertIsDisplayed()
         composeTestRule.onNodeWithText("INCOMING").assertDoesNotExist()
         composeTestRule.onNodeWithText("OUTGOING").assertIsDisplayed()
+        composeTestRule.onNodeWithText("pending").assertIsDisplayed()
         composeTestRule.onNodeWithText("TODAY").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestCreate").assertIsDisplayed()
     }

@@ -88,6 +88,12 @@ import kotlin.time.Instant
 /** Keypad height for four 88dp key rows, matching the Figma amount frame. */
 private val NUMBER_PAD_HEIGHT = 352.dp
 
+/** Keypad height for four rows at the NumberPad minimum key height. */
+private val NUMBER_PAD_MIN_HEIGHT = 200.dp
+
+/** Space the amount step needs besides the keypad: amount field, toggle, divider, button, spacers. */
+private val AMOUNT_STEP_FIXED_HEIGHT = 264.dp
+
 /** Checkmark illustration height as a fraction of the sent screen body. */
 private const val SENT_CHECK_HEIGHT_FRACTION = 0.43f
 
@@ -163,47 +169,50 @@ internal fun PaymentRequestAmountContent(
                 }
             },
         )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 16.dp)
-        ) {
-            VerticalSpacer(16.dp)
-            NumberPadTextField(
-                viewModel = amountInputViewModel,
+        BoxWithConstraints(modifier = Modifier.weight(1f)) {
+            val keypadHeight = (maxHeight - AMOUNT_STEP_FIXED_HEIGHT).coerceIn(NUMBER_PAD_MIN_HEIGHT, NUMBER_PAD_HEIGHT)
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("PaymentRequestAmountField")
-            )
-            FillHeight(weight = 4f, min = 12.dp)
-            Row(modifier = Modifier.fillMaxWidth()) {
-                FillWidth()
-                UnitButton(
-                    onClick = { amountInputViewModel.switchUnit(currencies) },
-                    color = Colors.Brand,
-                    modifier = Modifier.testTag("PaymentRequestAmountUnit")
+                    .fillMaxSize()
+                    .padding(horizontal = 16.dp)
+            ) {
+                VerticalSpacer(16.dp)
+                NumberPadTextField(
+                    viewModel = amountInputViewModel,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("PaymentRequestAmountField")
                 )
+                FillHeight(weight = 4f, min = 12.dp)
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    FillWidth()
+                    UnitButton(
+                        onClick = { amountInputViewModel.switchUnit(currencies) },
+                        color = Colors.Brand,
+                        modifier = Modifier.testTag("PaymentRequestAmountUnit")
+                    )
+                }
+                VerticalSpacer(12.dp)
+                HorizontalDivider(color = Colors.White10)
+                VerticalSpacer(16.dp)
+                NumberPad(
+                    viewModel = amountInputViewModel,
+                    currencies = currencies,
+                    modifier = Modifier
+                        .height(keypadHeight)
+                        .testTag("PaymentRequestNumberPad")
+                )
+                FillHeight(min = 12.dp)
+                PrimaryButton(
+                    text = stringResource(R.string.common__continue),
+                    enabled = amountState.sats > 0,
+                    onClick = {
+                        onContinue(initialDraft.copy(amountSats = amountState.sats.toULong()))
+                    },
+                    modifier = Modifier.testTag("PaymentRequestAmountContinue")
+                )
+                VerticalSpacer(22.dp)
             }
-            VerticalSpacer(12.dp)
-            HorizontalDivider(color = Colors.White10)
-            VerticalSpacer(16.dp)
-            NumberPad(
-                viewModel = amountInputViewModel,
-                currencies = currencies,
-                modifier = Modifier
-                    .height(NUMBER_PAD_HEIGHT)
-                    .testTag("PaymentRequestNumberPad")
-            )
-            FillHeight(min = 12.dp)
-            PrimaryButton(
-                text = stringResource(R.string.common__continue),
-                enabled = amountState.sats > 0,
-                onClick = {
-                    onContinue(initialDraft.copy(amountSats = amountState.sats.toULong()))
-                },
-                modifier = Modifier.testTag("PaymentRequestAmountContinue")
-            )
-            VerticalSpacer(22.dp)
         }
     }
 }
@@ -554,7 +563,7 @@ internal fun PaymentRequestSentContent(
                     textAlign = TextAlign.Start,
                     modifier = Modifier.fillMaxWidth()
                 )
-                VerticalSpacer(16.dp)
+                VerticalSpacer(24.dp)
                 PaymentRequestCard(
                     request = request,
                     contact = contact,
