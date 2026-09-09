@@ -1067,6 +1067,8 @@ class TransferViewModelTest : BaseUnitTest() {
             channelId = anyOrNull(),
             isMaxAmount = eq(true),
             tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
     }
@@ -1101,6 +1103,8 @@ class TransferViewModelTest : BaseUnitTest() {
             channelId = anyOrNull(),
             isMaxAmount = eq(false),
             tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1112,6 +1116,8 @@ class TransferViewModelTest : BaseUnitTest() {
             channelId = anyOrNull(),
             isMaxAmount = eq(true),
             tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
         )
         verify(cacheStore).addPaidOrder(eq(order.id), eq(TXID))
     }
@@ -1141,6 +1147,8 @@ class TransferViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 any(),
                 any(),
+                any(),
+                any(),
             ),
         ).thenReturn(Result.failure(AppError("Coin selection failed")))
 
@@ -1158,6 +1166,8 @@ class TransferViewModelTest : BaseUnitTest() {
             channelId = anyOrNull(),
             isMaxAmount = eq(false),
             tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
         )
         verify(lightningRepo, never()).sendOnChain(
             address = any(),
@@ -1169,6 +1179,8 @@ class TransferViewModelTest : BaseUnitTest() {
             channelId = anyOrNull(),
             isMaxAmount = eq(true),
             tags = any(),
+            beforeSendAttempt = any(),
+            onBroadcast = any(),
         )
         verify(cacheStore, never()).addPaidOrder(any(), any())
     }
@@ -2434,6 +2446,8 @@ class TransferViewModelTest : BaseUnitTest() {
                 anyOrNull(),
                 any(),
                 anyOrNull(),
+                any(),
+                any(),
                 any(),
                 any(),
             ),
