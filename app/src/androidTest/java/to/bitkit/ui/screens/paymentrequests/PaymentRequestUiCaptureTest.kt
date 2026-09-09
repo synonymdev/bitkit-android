@@ -68,7 +68,6 @@ class PaymentRequestUiCaptureTest {
                 contacts = PaymentRequestFigmaFixtures.recipientContacts,
                 isCreating = false,
                 onBack = {},
-                onEditExpiration = {},
                 onPaste = { "" },
                 onSend = {},
                 modifier = modifier
@@ -84,7 +83,6 @@ class PaymentRequestUiCaptureTest {
                 contacts = PaymentRequestFigmaFixtures.recipientInvoiceContacts,
                 isCreating = false,
                 onBack = {},
-                onEditExpiration = {},
                 onPaste = { "" },
                 onSend = {},
                 showContactsHeader = false,

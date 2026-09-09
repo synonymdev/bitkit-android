@@ -158,26 +158,10 @@ fun ReceiveSheet(
                         },
                     )
                 }
-                composableWithDefaultTransitions<ReceiveRoute.PaymentRequestExpiration> {
-                    PaymentRequestDetailsScreen(
-                        amountInputViewModel = paymentRequestAmountViewModel,
-                        initialDraft = paymentRequestDraft,
-                        recipient = paymentRequestRecipient,
-                        isCreating = isCreatingPaymentRequest,
-                        onBack = { navController.popBackStack() },
-                        onContinue = {
-                            paymentRequestDraft = it
-                            navController.popBackStack()
-                        },
-                    )
-                }
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestRecipient> {
                     PaymentRequestRecipientScreen(
                         appViewModel = appViewModel,
                         onBack = { navController.popBackStack() },
-                        onEditExpiration = {
-                            navController.navigateTo(ReceiveRoute.PaymentRequestExpiration)
-                        },
                         onRecipientSelected = { target ->
                             paymentRequestTarget = target
                             navController.navigateTo(ReceiveRoute.PaymentRequestDetails) {
@@ -365,9 +349,6 @@ sealed interface ReceiveRoute {
 
     @Serializable
     data object PaymentRequestDetails : InternalOnly
-
-    @Serializable
-    data object PaymentRequestExpiration : InternalOnly
 
     @Serializable
     data object PaymentRequestRecipient : InternalOnly

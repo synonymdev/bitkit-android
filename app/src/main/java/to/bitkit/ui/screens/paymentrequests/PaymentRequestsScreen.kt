@@ -244,7 +244,7 @@ internal fun PaymentRequestsContent(
             }
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(top = 24.dp, bottom = 16.dp),
+                contentPadding = PaddingValues(top = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
                     .weight(1f)
@@ -255,6 +255,7 @@ internal fun PaymentRequestsContent(
                         Caption13Up(
                             text = stringResource(R.string.wallet__payment_requests_incoming),
                             color = Colors.White64,
+                            modifier = Modifier.padding(top = 12.dp)
                         )
                     }
                     items(sections.incoming, key = { it.lazyListKey }) { request ->
@@ -272,6 +273,7 @@ internal fun PaymentRequestsContent(
                         Caption13Up(
                             text = stringResource(R.string.wallet__payment_requests_outgoing),
                             color = Colors.White64,
+                            modifier = Modifier.padding(top = 24.dp)
                         )
                     }
                     items(sections.outgoing, key = { it.lazyListKey }) { request ->
@@ -311,6 +313,7 @@ internal fun PaymentRequestsContent(
                     .padding(horizontal = 16.dp)
                     .testTag("PaymentRequestCreate")
             )
+            VerticalSpacer(16.dp)
         }
     }
 }

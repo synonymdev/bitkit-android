@@ -82,7 +82,6 @@ class CreatePaymentRequestScreenTest {
                     contacts = contacts,
                     isCreating = false,
                     onBack = {},
-                    onEditExpiration = {},
                     onPaste = { PaymentRequestFigmaFixtures.anna.publicKey },
                     onSend = {},
                 )
@@ -96,9 +95,8 @@ class CreatePaymentRequestScreenTest {
         composeTestRule.onNodeWithText("John Carvalho").performScrollTo().assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRecipientSearch").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestContactsHeader").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestEditExpiration").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRecipientPaste", useUnmergedTree = true).assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestSend").assertDoesNotExist()
 
         composeTestRule.onNodeWithTag("PaymentRequestRecipientSearch").performTextInput("not this contact")
 
@@ -115,7 +113,6 @@ class CreatePaymentRequestScreenTest {
                     contacts = PaymentRequestFigmaFixtures.recipientInvoiceContacts,
                     isCreating = false,
                     onBack = {},
-                    onEditExpiration = {},
                     onPaste = { PaymentRequestFigmaFixtures.anna.publicKey },
                     onSend = {},
                     showContactsHeader = false,
