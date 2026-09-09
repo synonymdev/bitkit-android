@@ -17,7 +17,8 @@ import to.bitkit.models.ElectrumProtocol
 import to.bitkit.models.ElectrumServer
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
-import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.io.Writer
 import java.net.InetSocketAddress
 import java.net.Socket
@@ -47,6 +48,9 @@ class ElectrumProbeService @Inject constructor(
         /** Budget for each JSON-RPC response line. */
         private val RESPONSE_TIMEOUT = 5.seconds
 
+        /** Maximum JSON-RPC response line accepted from a probed Electrum endpoint. */
+        internal const val MAX_RESPONSE_LINE_BYTES = 16 * 1024
+
         private const val CLIENT_NAME = "bitkit"
         private const val PROTOCOL_VERSION = "1.4"
 
@@ -72,7 +76,7 @@ class ElectrumProbeService @Inject constructor(
         runSuspendCatching {
             openSocket(server).use { socket ->
                 socket.soTimeout = RESPONSE_TIMEOUT.inWholeMilliseconds.toInt()
-                val reader = socket.getInputStream().bufferedReader()
+                val input = socket.getInputStream()
                 val writer = socket.getOutputStream().bufferedWriter()
 
                 // A host that accepts the connection but does not speak electrum drops or resets it
@@ -80,9 +84,9 @@ class ElectrumProbeService @Inject constructor(
                 runCatching {
                     // Version negotiation has to succeed before server.features may be treated as
                     // optional, otherwise a server erroring on both would probe clean.
-                    request(reader, writer, VERSION_REQUEST_ID, "server.version", versionParams()).getOrThrow()
+                    request(input, writer, VERSION_REQUEST_ID, "server.version", versionParams()).getOrThrow()
 
-                    val features = request(reader, writer, FEATURES_REQUEST_ID, "server.features")
+                    val features = request(input, writer, FEATURES_REQUEST_ID, "server.features")
                     verifyNetwork(features.getOrNull(), server, network)
                 }.getOrElse {
                     throw it as? ElectrumProbeError ?: ElectrumProbeError.NotElectrum(server, it)
@@ -118,7 +122,7 @@ class ElectrumProbeService @Inject constructor(
     }
 
     private fun request(
-        reader: BufferedReader,
+        input: InputStream,
         writer: Writer,
         id: Int,
         method: String,
@@ -127,7 +131,7 @@ class ElectrumProbeService @Inject constructor(
         writer.appendLine(json.encodeToString(RpcRequest(id = id, method = method, params = params)))
         writer.flush()
 
-        val line = reader.readLine() ?: throw AppError("Closed connection before answering '$method'")
+        val line = readLineBounded(input, method)
         val response = json.decodeFromString<RpcResponse>(line)
 
         when {
@@ -141,6 +145,30 @@ class ElectrumProbeService @Inject constructor(
                 throw AppError("Answered '$method' without a result")
 
             else -> response
+        }
+    }
+
+    private fun readLineBounded(input: InputStream, method: String): String {
+        val buffer = ByteArrayOutputStream(256)
+        while (true) {
+            val b = input.read()
+            when {
+                b == -1 -> throw AppError(
+                    if (buffer.size() == 0) {
+                        "Closed connection before answering '$method'"
+                    } else {
+                        "Closed connection before a complete response to '$method'"
+                    },
+                )
+                b == '\n'.code -> {
+                    val raw = buffer.toByteArray()
+                    val end = if (raw.isNotEmpty() && raw.last() == '\r'.code.toByte()) raw.size - 1 else raw.size
+                    return raw.decodeToString(endIndex = end)
+                }
+                buffer.size() >= MAX_RESPONSE_LINE_BYTES ->
+                    throw AppError("Response to '$method' exceeded '$MAX_RESPONSE_LINE_BYTES' bytes")
+                else -> buffer.write(b)
+            }
         }
     }
 

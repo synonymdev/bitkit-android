@@ -29,8 +29,9 @@ import java.math.BigDecimal
 fun MoneyDisplay(
     sats: Long,
     onClick: (() -> Unit)? = null,
+    showSymbol: Boolean? = null,
 ) {
-    val text = rememberMoneyText(sats)
+    val text = showSymbol?.let { rememberMoneyText(sats, showSymbol = it) } ?: rememberMoneyText(sats)
     text?.let {
         Display(
             text = it.withAccent(accentColor = Colors.White64),
@@ -45,18 +46,19 @@ fun MoneyDisplay(
 fun MoneyCell(
     sats: Long,
     modifier: Modifier = Modifier,
+    prefix: String = "",
     secondaryText: String? = null,
 ) {
     val currencies = LocalCurrencies.current
     Column(
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(2.dp),
-        modifier = modifier
+        modifier = modifier,
     ) {
         rememberMoneyText(sats = sats, unit = currencies.primaryDisplay, showSymbol = true)?.let { text ->
             BodyMSB(
-                text = text.withAccent(accentColor = Colors.White64),
-                modifier = Modifier.testTag("MoneyPrimary")
+                text = "$prefix$text".withAccent(accentColor = Colors.White64),
+                modifier = Modifier.testTag("MoneyPrimary"),
             )
         }
         if (secondaryText != null) {

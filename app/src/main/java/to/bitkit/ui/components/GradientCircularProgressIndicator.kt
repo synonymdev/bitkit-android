@@ -24,6 +24,7 @@ import to.bitkit.ui.theme.Colors
 fun GradientCircularProgressIndicator(
     modifier: Modifier = Modifier,
     strokeWidth: Dp = 1.dp,
+    tint: Color = Colors.White,
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "rotation")
     val angle by infiniteTransition.animateFloat(
@@ -35,7 +36,7 @@ fun GradientCircularProgressIndicator(
         label = "rotation"
     )
 
-    val brush = remember { Brush.sweepGradient(listOf(Color.Transparent, Colors.White)) }
+    val brush = remember { Brush.sweepGradient(listOf(Color.Transparent, tint)) }
     val strokeWidthPx = with(LocalDensity.current) { strokeWidth.toPx() }
     val stroke = remember(strokeWidthPx) { Stroke(width = strokeWidthPx, cap = StrokeCap.Round) }
 

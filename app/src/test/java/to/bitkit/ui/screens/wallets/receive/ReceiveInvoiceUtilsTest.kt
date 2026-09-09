@@ -5,6 +5,54 @@ import kotlin.test.assertEquals
 
 class ReceiveInvoiceUtilsTest {
 
+    @Test
+    fun `getInvoiceForTab TREZOR returns only the hardware address`() {
+        val result = getInvoiceForTab(
+            tab = ReceiveTab.TREZOR,
+            bip21 = "bitcoin:software?lightning=lnbc1software",
+            bolt11 = "lnbc1software",
+            cjitInvoice = null,
+            isNodeRunning = true,
+            onchainAddress = "bc1qsoftware",
+            hardwareAddress = "bc1qhardware",
+        )
+
+        assertEquals("bitcoin:bc1qhardware", result)
+    }
+
+    @Test
+    fun `getInvoiceForTab TREZOR applies hardware invoice details`() {
+        val result = getInvoiceForTab(
+            tab = ReceiveTab.TREZOR,
+            bip21 = "bitcoin:software",
+            bolt11 = "",
+            cjitInvoice = null,
+            isNodeRunning = true,
+            onchainAddress = "bc1qsoftware",
+            hardwareAddress = "bc1qhardware",
+            hardwareAmountSats = 12_345uL,
+            hardwareMessage = "Cold storage",
+        )
+
+        assertEquals("bitcoin:bc1qhardware?amount=0.00012345&message=Cold+storage", result)
+    }
+
+    @Test
+    fun `getInvoiceForTab TREZOR omits a zero amount`() {
+        val result = getInvoiceForTab(
+            tab = ReceiveTab.TREZOR,
+            bip21 = "bitcoin:bc1qsoftware",
+            bolt11 = "",
+            cjitInvoice = null,
+            isNodeRunning = true,
+            onchainAddress = "bc1qsoftware",
+            hardwareAddress = "bc1qhardware",
+            hardwareAmountSats = 0uL,
+        )
+
+        assertEquals("bitcoin:bc1qhardware", result)
+    }
+
     private val testAddress = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq"
     private val testBolt11 = "lnbc1500n1pn2s39xpp5wyxw0e9fvvf..."
     private val testCjitInvoice = "lnbc2000n1pn2s39xpp5zyxw0e9fvvf..."
@@ -104,7 +152,7 @@ class ReceiveInvoiceUtilsTest {
     }
 
     @Test
-    fun `getInvoiceForTab AUTO returns empty when has lightning but node not running`() {
+    fun `getInvoiceForTab AUTO returns onchain BIP21 when has lightning but node not running`() {
         val bip21 = "bitcoin:$testAddress?amount=0.001&lightning=$testBolt11"
 
         val result = getInvoiceForTab(
@@ -116,11 +164,11 @@ class ReceiveInvoiceUtilsTest {
             onchainAddress = testAddress
         )
 
-        assertEquals("", result)
+        assertEquals("bitcoin:$testAddress?amount=0.001", result)
     }
 
     @Test
-    fun `getInvoiceForTab AUTO returns empty when BIP21 has no lightning even if node running`() {
+    fun `getInvoiceForTab AUTO returns onchain BIP21 when BIP21 has no lightning even if node running`() {
         val bip21WithoutLightning = "bitcoin:$testAddress?amount=0.001&message=Test"
 
         val result = getInvoiceForTab(
@@ -132,11 +180,11 @@ class ReceiveInvoiceUtilsTest {
             onchainAddress = testAddress
         )
 
-        assertEquals("", result)
+        assertEquals(bip21WithoutLightning, result)
     }
 
     @Test
-    fun `getInvoiceForTab AUTO returns empty when no lightning and node not running`() {
+    fun `getInvoiceForTab AUTO returns onchain BIP21 when no lightning and node not running`() {
         val bip21WithoutLightning = "bitcoin:$testAddress?amount=0.001&message=Test"
 
         val result = getInvoiceForTab(
@@ -148,7 +196,24 @@ class ReceiveInvoiceUtilsTest {
             onchainAddress = testAddress
         )
 
-        assertEquals("", result)
+        assertEquals(bip21WithoutLightning, result)
+    }
+
+    @Test
+    fun `getInvoiceForTab AUTO returns onchain BIP21 when lightning invoice cannot be created`() {
+        val bip21 = "bitcoin:$testAddress?amount=0.001&lightning=$testBolt11"
+
+        val result = getInvoiceForTab(
+            tab = ReceiveTab.AUTO,
+            bip21 = bip21,
+            bolt11 = testBolt11,
+            cjitInvoice = null,
+            isNodeRunning = true,
+            canCreateLightningInvoice = false,
+            onchainAddress = testAddress
+        )
+
+        assertEquals("bitcoin:$testAddress?amount=0.001", result)
     }
 
     @Test
@@ -184,7 +249,7 @@ class ReceiveInvoiceUtilsTest {
     }
 
     @Test
-    fun `getInvoiceForTab SPENDING returns bolt11 when CJIT unavailable`() {
+    fun `getInvoiceForTab SPENDING returns bolt11 when CJIT unavailable and lightning invoice can be created`() {
         val bip21 = "bitcoin:$testAddress?lightning=$testBolt11"
 
         val result = getInvoiceForTab(
@@ -197,6 +262,23 @@ class ReceiveInvoiceUtilsTest {
         )
 
         assertEquals(testBolt11, result)
+    }
+
+    @Test
+    fun `getInvoiceForTab SPENDING returns empty when lightning invoice cannot be created`() {
+        val bip21 = "bitcoin:$testAddress?lightning=$testBolt11"
+
+        val result = getInvoiceForTab(
+            tab = ReceiveTab.SPENDING,
+            bip21 = bip21,
+            bolt11 = testBolt11,
+            cjitInvoice = null,
+            isNodeRunning = true,
+            canCreateLightningInvoice = false,
+            onchainAddress = testAddress
+        )
+
+        assertEquals("", result)
     }
 
     @Test

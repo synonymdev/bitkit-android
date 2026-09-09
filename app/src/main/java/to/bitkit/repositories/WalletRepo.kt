@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.Bolt11Invoice
+import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.WordCount
 import to.bitkit.async.appScope
@@ -28,7 +29,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
-import to.bitkit.ext.filterOpen
+import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
@@ -36,8 +37,8 @@ import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.AddressModel
 import to.bitkit.models.BalanceState
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
+import to.bitkit.models.ReceiveLiquidityDecision
 import to.bitkit.models.WalletScope
-import to.bitkit.models.msatFloorOf
 import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toBalance
 import to.bitkit.models.toDerivationPath
@@ -319,10 +320,17 @@ class WalletRepo @Inject constructor(
         settledReceiveAddress: SettledReceiveAddress? = null,
     ) = withContext(bgDispatcher) {
         when (event) {
+            is Event.ChannelReady,
+            is Event.ChannelClosed,
+            -> lightningRepo.syncState()
+            else -> Unit
+        }
+
+        when (event) {
             is Event.ChannelReady -> {
                 // Only refresh bolt11 if we can now receive on lightning
                 Logger.debug("refreshBip21ForEvent: $event", context = TAG)
-                if (lightningRepo.canReceive()) {
+                if (canCreateLightningInvoice(_walletState.value.bip21AmountSats)) {
                     lightningRepo.createInvoice(
                         amountSats = _walletState.value.bip21AmountSats,
                         description = _walletState.value.bip21Description,
@@ -336,7 +344,7 @@ class WalletRepo @Inject constructor(
             is Event.ChannelClosed -> {
                 // Clear bolt11 if we can no longer receive on lightning
                 Logger.debug("refreshBip21ForEvent: $event", context = TAG)
-                if (!lightningRepo.canReceive()) {
+                if (!canCreateLightningInvoice(_walletState.value.bip21AmountSats)) {
                     setBolt11("")
                     updateBip21Url()
                 }
@@ -727,8 +735,7 @@ class WalletRepo @Inject constructor(
             setBip21AmountSats(amountSats)
             setBip21Description(description)
 
-            val canReceive = lightningRepo.canReceive()
-            if (canReceive) {
+            if (canCreateLightningInvoice(amountSats)) {
                 lightningRepo.createInvoice(amountSats, description).onSuccess {
                     setBolt11(it)
                 }
@@ -748,19 +755,25 @@ class WalletRepo @Inject constructor(
         }
     }
 
-    suspend fun shouldRequestAdditionalLiquidity(): Result<Boolean> = withContext(bgDispatcher) {
-        runCatching {
-            if (coreService.isGeoBlocked()) return@runCatching false
+    suspend fun inboundLiquiditySats(): ULong = withContext(bgDispatcher) {
+        return@withContext currentUsableChannels().calculateRemoteBalance()
+    }
 
-            val channels = lightningRepo.lightningState.value.channels
-            if (channels.filterOpen().isEmpty()) return@runCatching false
+    private fun canCreateLightningInvoice(amountSats: ULong?): Boolean {
+        val usableChannels = currentUsableChannels()
+        return ReceiveLiquidityDecision.canCreateLightningInvoice(
+            hasUsableChannels = usableChannels.isNotEmpty(),
+            inboundCapacitySats = usableChannels.calculateRemoteBalance(),
+            invoiceAmountSats = amountSats,
+        )
+    }
 
-            val inboundBalanceSats = channels.sumOf { msatFloorOf(it.inboundCapacityMsat) }
+    private fun currentChannels(): List<ChannelDetails> {
+        return lightningRepo.getChannels() ?: lightningRepo.lightningState.value.channels
+    }
 
-            return@runCatching (_walletState.value.bip21AmountSats ?: 0uL) >= inboundBalanceSats
-        }.onFailure {
-            Logger.error("shouldRequestAdditionalLiquidity error", it, context = TAG)
-        }
+    private fun currentUsableChannels(): List<ChannelDetails> {
+        return currentChannels().filter { it.isUsable }
     }
 
     private suspend fun Scanner.OnChain.extractLightningHash(): String? {

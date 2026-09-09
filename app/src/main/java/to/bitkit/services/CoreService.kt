@@ -27,6 +27,7 @@ import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.Scanner
 import com.synonym.bitkitcore.SortDirection
+import com.synonym.bitkitcore.ValidationResult
 import com.synonym.bitkitcore.WordCount
 import com.synonym.bitkitcore.addTags
 import com.synonym.bitkitcore.createCjitEntry
@@ -221,6 +222,10 @@ class CoreService @Inject constructor(
 
     suspend fun decode(input: String): Scanner = ServiceQueue.CORE.background {
         com.synonym.bitkitcore.decode(input)
+    }
+
+    suspend fun validateBitcoinAddress(address: String): ValidationResult = ServiceQueue.CORE.background {
+        com.synonym.bitkitcore.validateBitcoinAddress(address)
     }
 
     suspend fun getLnurlInvoiceForPayData(

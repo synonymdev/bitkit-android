@@ -580,6 +580,10 @@ class WalletViewModel @Inject constructor(
         walletRepo.setBip21Description(newText)
     }
 
+    fun setBip21AmountSats(amountSats: ULong?) {
+        walletRepo.setBip21AmountSats(amountSats?.takeIf { it > 0uL })
+    }
+
     suspend fun handleHideBalanceOnOpen() {
         val hideBalanceOnOpen = settingsStore.data.map { it.hideBalanceOnOpen }.first()
         if (hideBalanceOnOpen) {

@@ -3,8 +3,8 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -18,8 +18,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -32,10 +34,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.selected
-import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -46,7 +45,6 @@ import to.bitkit.R
 import to.bitkit.ext.getClipboardText
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
-import to.bitkit.repositories.AmountInputHandler
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestDraft
@@ -60,9 +58,12 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
+import to.bitkit.ui.components.MoneyCell
+import to.bitkit.ui.components.MoneyDisplay
 import to.bitkit.ui.components.NumberPad
 import to.bitkit.ui.components.NumberPadTextField
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.PubkyContactRow
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.UnitButton
@@ -71,7 +72,6 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
-import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -108,41 +108,33 @@ enum class PaymentRequestExpiration(val duration: Duration) {
 }
 
 @Composable
-fun PaymentRequestDetailsScreen(
+fun PaymentRequestAmountScreen(
     amountInputViewModel: AmountInputViewModel,
     initialDraft: PaykitPaymentRequestDraft,
+    contact: PubkyProfile?,
     onBack: () -> Unit,
     onContinue: (PaykitPaymentRequestDraft) -> Unit,
-    recipient: PubkyProfile? = null,
-    isCreating: Boolean = false,
 ) {
-    PaymentRequestDetailsContent(
+    PaymentRequestAmountContent(
         amountInputViewModel = amountInputViewModel,
         initialDraft = initialDraft,
+        contact = contact,
         onBack = onBack,
         onContinue = onContinue,
-        recipient = recipient,
-        isCreating = isCreating,
     )
 }
 
 @Composable
-internal fun PaymentRequestDetailsContent(
+internal fun PaymentRequestAmountContent(
     modifier: Modifier = Modifier,
     amountInputViewModel: AmountInputViewModel,
     initialDraft: PaykitPaymentRequestDraft,
+    contact: PubkyProfile?,
     onBack: () -> Unit,
     onContinue: (PaykitPaymentRequestDraft) -> Unit,
-    recipient: PubkyProfile? = null,
-    isCreating: Boolean = false,
 ) {
     val currencies = LocalCurrencies.current
     val amountState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
-    var note by remember(initialDraft.note) { mutableStateOf(initialDraft.note) }
-    var isEditingAmount by remember { mutableStateOf(false) }
-    var expiration by remember(initialDraft.expiresAt) {
-        mutableStateOf(PaymentRequestExpiration.from(initialDraft.expiresAt, Clock.System.now()))
-    }
 
     LaunchedEffect(initialDraft.amountSats) {
         amountInputViewModel.setSats(
@@ -150,191 +142,219 @@ internal fun PaymentRequestDetailsContent(
             currencies,
         )
     }
-    BackHandler(enabled = isCreating) {}
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("PaymentRequestDetails")
+            .testTag("PaymentRequestAmount")
     ) {
         SheetTopBar(
-            titleText = stringResource(
-                if (isEditingAmount) {
-                    R.string.wallet__payment_request_amount
-                } else {
-                    R.string.wallet__payment_request
+            titleText = stringResource(R.string.wallet__payment_request_amount),
+            onBack = onBack,
+            action = contact?.let {
+                {
+                    PubkyContactAvatar(
+                        profile = it,
+                        size = 24.dp,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
                 }
-            ),
-            onBack = onBack.takeIf { isEditingAmount },
+            },
         )
-        BoxWithConstraints {
-            val maxHeight = this.maxHeight
-            Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-                VerticalSpacer(16.dp)
-                if (isEditingAmount) {
-                    NumberPadTextField(
-                        viewModel = amountInputViewModel,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("PaymentRequestAmountField")
-                    )
-                    FillHeight(weight = 4f, min = 12.dp)
-                    Row(
-                        verticalAlignment = Alignment.Bottom,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        FillWidth()
-                        UnitButton(
-                            onClick = { amountInputViewModel.switchUnit(currencies) },
-                            modifier = Modifier.testTag("PaymentRequestNumberPadUnit")
-                        )
-                    }
-                    VerticalSpacer(12.dp)
-                    HorizontalDivider()
-                    VerticalSpacer(16.dp)
-                    NumberPad(
-                        viewModel = amountInputViewModel,
-                        currencies = currencies,
-                        modifier = Modifier
-                            .height(NUMBER_PAD_HEIGHT)
-                            .testTag("PaymentRequestNumberPad")
-                    )
-                    FillHeight(min = 12.dp)
-                    PrimaryButton(
-                        text = stringResource(R.string.common__continue),
-                        enabled = amountState.sats > 0,
-                        onClick = { isEditingAmount = false },
-                        modifier = Modifier.testTag("PaymentRequestAmountDone")
-                    )
-                } else {
-                    Caption13Up(
-                        text = stringResource(R.string.wallet__payment_request_amount),
-                        color = Colors.White64,
-                    )
-                    VerticalSpacer(16.dp)
-                    Row(
-                        verticalAlignment = Alignment.Bottom,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        NumberPadTextField(
-                            viewModel = amountInputViewModel,
-                            showSecondaryField = false,
-                            onClick = { isEditingAmount = true },
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("PaymentRequestAmountField")
-                        )
-                        Icon(
-                            painter = painterResource(R.drawable.ic_pencil_simple),
-                            contentDescription = stringResource(R.string.common__edit),
-                            tint = Colors.White,
-                            modifier = Modifier
-                                .size(24.dp)
-                                .clickableAlpha { isEditingAmount = true }
-                                .testTag("PaymentRequestEditAmount")
-                        )
-                    }
-                    VerticalSpacer(24.dp)
-                    Caption13Up(
-                        text = stringResource(R.string.wallet__payment_request_note),
-                        color = Colors.White64,
-                    )
-                    VerticalSpacer(8.dp)
-                    TextInput(
-                        value = note,
-                        onValueChange = { note = it.take(256) },
-                        placeholder = stringResource(R.string.wallet__payment_request_note_placeholder),
-                        minLines = 1,
-                        maxLines = 1,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("PaymentRequestNote")
-                    )
-                    if (recipient != null) {
-                        VerticalSpacer(30.dp)
-                        Caption13Up(
-                            text = stringResource(R.string.wallet__payment_request_recipient),
-                            color = Colors.White64,
-                        )
-                        VerticalSpacer(12.dp)
-                        PaymentRequestCard(
-                            request = PaykitPaymentRequest(
-                                paymentRequestId = "preview",
-                                counterparty = recipient.publicKey,
-                                counterpartyReceiverPath = "",
-                                amountValue = amountState.sats.toString(),
-                                amountSats = amountState.sats.toULong(),
-                                note = note.trim().ifBlank { null },
-                                expiresAt = Clock.System.now() + expiration.duration,
-                                acceptedPaymentEndpointIdentifiers = emptyList(),
-                            ),
-                            contact = recipient,
-                            compactSubtitle = note.trim().ifBlank { recipient.name },
-                        )
-                    }
-                    VerticalSpacer(30.dp)
-                    Caption13Up(
-                        text = stringResource(R.string.wallet__payment_request_expires),
-                        color = Colors.White64,
-                    )
-                    VerticalSpacer(20.dp)
-                    Row(modifier = Modifier.fillMaxWidth()) {
-                        PaymentRequestExpiration.entries.forEach { option ->
-                            val isSelected = option == expiration
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .clickableAlpha { expiration = option }
-                                    .semantics {
-                                        role = Role.RadioButton
-                                        selected = isSelected
-                                    }
-                                    .testTag("PaymentRequestExpiry${option.name}")
-                            ) {
-                                BodyS(
-                                    text = option.title(),
-                                    color = if (isSelected) Colors.White else Colors.White64,
-                                )
-                                VerticalSpacer(12.dp)
-                                HorizontalDivider(
-                                    thickness = 2.dp,
-                                    color = if (isSelected) Colors.White else Colors.White16,
-                                )
-                            }
-                        }
-                    }
-                    FillHeight()
-                    PrimaryButton(
-                        text = stringResource(
-                            if (recipient != null) {
-                                R.string.wallet__payment_request_send_request
-                            } else {
-                                R.string.wallet__payment_request_choose_recipient
-                            }
-                        ),
-                        enabled = amountState.sats > 0 && !isCreating,
-                        isLoading = isCreating,
-                        onClick = {
-                            onContinue(
-                                PaykitPaymentRequestDraft(
-                                    amountSats = amountState.sats.toULong(),
-                                    note = note.trim(),
-                                    expiresAt = Clock.System.now() + expiration.duration,
-                                )
-                            )
-                        },
-                        modifier = Modifier.testTag(
-                            if (recipient != null) "PaymentRequestSend" else "PaymentRequestAmountContinue"
-                        )
-                    )
-                }
-                VerticalSpacer(22.dp)
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 16.dp)
+        ) {
+            VerticalSpacer(16.dp)
+            NumberPadTextField(
+                viewModel = amountInputViewModel,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("PaymentRequestAmountField")
+            )
+            FillHeight(weight = 4f, min = 12.dp)
+            Row(modifier = Modifier.fillMaxWidth()) {
+                FillWidth()
+                UnitButton(
+                    onClick = { amountInputViewModel.switchUnit(currencies) },
+                    color = Colors.Brand,
+                    modifier = Modifier.testTag("PaymentRequestAmountUnit")
+                )
+            }
+            VerticalSpacer(12.dp)
+            HorizontalDivider(color = Colors.White10)
+            VerticalSpacer(16.dp)
+            NumberPad(
+                viewModel = amountInputViewModel,
+                currencies = currencies,
+                modifier = Modifier
+                    .height(NUMBER_PAD_HEIGHT)
+                    .testTag("PaymentRequestNumberPad")
+            )
+            FillHeight(min = 12.dp)
+            PrimaryButton(
+                text = stringResource(R.string.common__continue),
+                enabled = amountState.sats > 0,
+                onClick = {
+                    onContinue(initialDraft.copy(amountSats = amountState.sats.toULong()))
+                },
+                modifier = Modifier.testTag("PaymentRequestAmountContinue")
+            )
+            VerticalSpacer(22.dp)
+        }
+    }
+}
+
+@Composable
+fun PaymentRequestDetailsScreen(
+    appViewModel: AppViewModel,
+    draft: PaykitPaymentRequestDraft,
+    target: PaykitPaymentRequestTarget,
+    onEditAmount: (PaykitPaymentRequestDraft) -> Unit,
+    onSent: (PaykitPaymentRequest) -> Unit,
+) {
+    val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
+    val isCreating by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
+    val contact = contacts.firstOrNull { PubkyPublicKeyFormat.matches(it.publicKey, target.publicKey) }
+        ?: PubkyProfile.placeholder(target.publicKey)
+
+    PaymentRequestDetailsContent(
+        initialDraft = draft,
+        contact = contact,
+        isCreating = isCreating,
+        onEditAmount = onEditAmount,
+        onSend = { updatedDraft -> appViewModel.createPaymentRequest(updatedDraft, target, onSent) },
+    )
+}
+
+@Composable
+internal fun PaymentRequestDetailsContent(
+    initialDraft: PaykitPaymentRequestDraft,
+    contact: PubkyProfile,
+    isCreating: Boolean,
+    onEditAmount: (PaykitPaymentRequestDraft) -> Unit,
+    onSend: (PaykitPaymentRequestDraft) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    var note by remember(initialDraft.note) { mutableStateOf(initialDraft.note) }
+    var expiration by remember(initialDraft.expiresAt) {
+        mutableStateOf(PaymentRequestExpiration.from(initialDraft.expiresAt, Clock.System.now()))
+    }
+    fun updatedDraft(trimNote: Boolean = false) = initialDraft.copy(
+        note = if (trimNote) note.trim() else note,
+        expiresAt = Clock.System.now() + expiration.duration,
+    )
+
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .gradientBackground()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp)
+            .testTag("PaymentRequestDetails")
+    ) {
+        SheetTopBar(titleText = stringResource(R.string.wallet__payment_request))
+        VerticalSpacer(16.dp)
+        Caption13Up(text = stringResource(R.string.wallet__payment_request_amount), color = Colors.White64)
+        VerticalSpacer(16.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            MoneyDisplay(
+                sats = initialDraft.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
+                showSymbol = true,
+            )
+            FillWidth()
+            IconButton(
+                onClick = { onEditAmount(updatedDraft()) },
+                modifier = Modifier
+                    .size(48.dp)
+                    .testTag("PaymentRequestEditAmount"),
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_pencil_simple),
+                    contentDescription = stringResource(R.string.common__edit),
+                    tint = Colors.White,
+                    modifier = Modifier.size(24.dp),
+                )
             }
         }
+        VerticalSpacer(24.dp)
+        Caption13Up(text = stringResource(R.string.wallet__payment_request_note), color = Colors.White64)
+        VerticalSpacer(8.dp)
+        TextInput(
+            value = note,
+            onValueChange = { note = it.take(256) },
+            placeholder = stringResource(R.string.wallet__payment_request_note_placeholder),
+            maxLines = 2,
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("PaymentRequestNote"),
+        )
+        VerticalSpacer(30.dp)
+        Caption13Up(text = stringResource(R.string.wallet__payment_request_recipient), color = Colors.White64)
+        VerticalSpacer(12.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Colors.Gray6, RoundedCornerShape(16.dp))
+                .padding(20.dp),
+        ) {
+            PubkyContactAvatar(profile = contact, size = 40.dp)
+            Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
+                BodyMSB(text = contact.name, maxLines = 1)
+                BodyS(
+                    text = note.ifBlank { stringResource(R.string.wallet__payment_request) },
+                    color = Colors.White64,
+                    maxLines = 1,
+                )
+            }
+            MoneyCell(sats = initialDraft.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong())
+        }
+        VerticalSpacer(30.dp)
+        Caption13Up(text = stringResource(R.string.wallet__payment_request_expires), color = Colors.White64)
+        VerticalSpacer(20.dp)
+        Row(modifier = Modifier.fillMaxWidth()) {
+            PaymentRequestExpiration.entries.forEach { option ->
+                val isSelected = option == expiration
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .weight(1f)
+                        .clickableAlpha { expiration = option }
+                        .testTag("PaymentRequestExpiry${option.name}"),
+                ) {
+                    BodyS(text = option.title(), color = if (isSelected) Colors.White else Colors.White64)
+                    VerticalSpacer(12.dp)
+                    HorizontalDivider(
+                        thickness = 2.dp,
+                        color = if (isSelected) Colors.White else Colors.White16,
+                    )
+                }
+            }
+        }
+        FillHeight()
+        PrimaryButton(
+            text = stringResource(R.string.wallet__payment_request_send_request),
+            enabled = !isCreating,
+            isLoading = isCreating,
+            onClick = { onSend(updatedDraft(trimNote = true)) },
+            icon = {
+                Icon(
+                    painter = painterResource(R.drawable.ic_sent),
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+            },
+            modifier = Modifier.testTag("PaymentRequestSend"),
+        )
+        VerticalSpacer(22.dp)
     }
 }
 
@@ -342,7 +362,7 @@ internal fun PaymentRequestDetailsContent(
 fun PaymentRequestRecipientScreen(
     appViewModel: AppViewModel,
     onBack: () -> Unit,
-    onRecipientSelected: (PaykitPaymentRequestTarget) -> Unit,
+    onSelected: (PaykitPaymentRequestTarget) -> Unit,
     showContactsHeader: Boolean = true,
 ) {
     val context = LocalContext.current
@@ -352,10 +372,9 @@ fun PaymentRequestRecipientScreen(
     PaymentRequestRecipientContent(
         targets = targets.toImmutableList(),
         contacts = contacts.toImmutableList(),
-        isCreating = false,
         onBack = onBack,
         onPaste = { context.getClipboardText()?.trim().orEmpty() },
-        onSend = onRecipientSelected,
+        onSelected = onSelected,
         showContactsHeader = showContactsHeader,
     )
 }
@@ -365,10 +384,9 @@ internal fun PaymentRequestRecipientContent(
     modifier: Modifier = Modifier,
     targets: ImmutableList<PaykitPaymentRequestTarget>,
     contacts: ImmutableList<PubkyProfile>,
-    isCreating: Boolean,
     onBack: () -> Unit,
     onPaste: () -> String,
-    onSend: (PaykitPaymentRequestTarget) -> Unit,
+    onSelected: (PaykitPaymentRequestTarget) -> Unit,
     showContactsHeader: Boolean = true,
 ) {
     var query by remember { mutableStateOf("") }
@@ -384,65 +402,61 @@ internal fun PaymentRequestRecipientContent(
         }
     }
 
-    BackHandler(enabled = isCreating) {}
-
     Column(
         modifier = modifier
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
+            .padding(horizontal = 16.dp)
             .testTag("PaymentRequestRecipient")
     ) {
         SheetTopBar(
             titleText = stringResource(R.string.wallet__payment_request_choose_recipient),
             onBack = onBack,
         )
-        Column(modifier = Modifier.padding(horizontal = 16.dp)) {
-            VerticalSpacer(16.dp)
-            Caption13Up(text = stringResource(R.string.wallet__payment_request_recipient), color = Colors.White64)
-            VerticalSpacer(8.dp)
-            TextInput(
-                value = query,
-                onValueChange = { query = it },
-                placeholder = stringResource(R.string.wallet__payment_request_enter_pubky),
-                singleLine = true,
-                textStyle = AppTextStyles.BodyM,
-                trailingIcon = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier
-                            .clickableAlpha {
-                                query = PubkyPublicKeyFormat.bounded(onPaste())
-                            }
-                            .padding(horizontal = 12.dp)
-                            .testTag("PaymentRequestRecipientPaste")
-                    ) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_clipboard_text),
-                            contentDescription = null,
-                            tint = Colors.White,
-                            modifier = Modifier.size(24.dp)
-                        )
-                        BodyMSB(text = stringResource(R.string.wallet__payment_request_paste))
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("PaymentRequestRecipientSearch")
-            )
-            VerticalSpacer(16.dp)
-        }
+        VerticalSpacer(16.dp)
+        Caption13Up(text = stringResource(R.string.wallet__payment_request_recipient), color = Colors.White64)
+        VerticalSpacer(8.dp)
+        TextInput(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = stringResource(R.string.wallet__payment_request_enter_pubky),
+            singleLine = true,
+            trailingIcon = {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .clickableAlpha {
+                            query = PubkyPublicKeyFormat.bounded(onPaste())
+                        }
+                        .padding(horizontal = 12.dp)
+                        .testTag("PaymentRequestRecipientPaste"),
+                ) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_clipboard_text),
+                        contentDescription = null,
+                        tint = Colors.White,
+                        modifier = Modifier.size(24.dp),
+                    )
+                    BodyMSB(text = stringResource(R.string.wallet__payment_request_paste))
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .testTag("PaymentRequestRecipientSearch"),
+        )
+        VerticalSpacer(16.dp)
         if (showContactsHeader) {
             Caption13Up(
                 text = stringResource(R.string.contacts__contacts_header),
                 color = Colors.White64,
                 modifier = Modifier
-                    .padding(horizontal = 16.dp, vertical = 20.dp)
+                    .padding(vertical = 20.dp)
                     .testTag("PaymentRequestContactsHeader")
             )
         }
-        HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+        HorizontalDivider(color = Colors.White10)
         LazyColumn(
             contentPadding = PaddingValues(top = 6.dp),
             modifier = Modifier.weight(1f)
@@ -458,10 +472,11 @@ internal fun PaymentRequestRecipientContent(
                             }
                         ),
                         color = Colors.White64,
+                        textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 16.dp)
-                            .testTag("PaymentRequestRecipientUnavailable")
+                            .padding(top = 24.dp)
+                            .testTag("PaymentRequestRecipientUnavailable"),
                     )
                 }
             }
@@ -471,14 +486,11 @@ internal fun PaymentRequestRecipientContent(
             ) { (target, contact) ->
                 PubkyContactRow(
                     profile = contact,
-                    onClick = { onSend(target) },
-                    isEnabled = !isCreating,
+                    onClick = { onSelected(target) },
                     verticalPadding = 30.dp,
-                    modifier = Modifier
-                        .padding(horizontal = 16.dp)
-                        .testTag("PaymentRequestContact${contact.publicKey}")
+                    modifier = Modifier.testTag("PaymentRequestContact${contact.publicKey}"),
                 )
-                HorizontalDivider(modifier = Modifier.padding(horizontal = 16.dp))
+                HorizontalDivider(color = Colors.White10)
             }
         }
     }
@@ -503,21 +515,18 @@ internal fun PaymentRequestSentContent(
     onDone: () -> Unit,
 ) {
     Column(
+        horizontalAlignment = Alignment.Start,
         modifier = modifier
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
-            .testTag("PaymentRequestSent")
+            .padding(horizontal = 16.dp)
+            .testTag("PaymentRequestSent"),
     ) {
         SheetTopBar(titleText = stringResource(R.string.wallet__payment_request_sent_title))
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        BoxWithConstraints(modifier = Modifier.weight(1f)) {
             val checkSize = maxHeight * SENT_CHECK_HEIGHT_FRACTION
-            Column(
-                horizontalAlignment = Alignment.Start,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp)
-            ) {
+            Column(modifier = Modifier.fillMaxSize()) {
                 FillHeight()
                 Image(
                     painter = painterResource(R.drawable.check),
@@ -534,19 +543,28 @@ internal fun PaymentRequestSentContent(
                 )
                 VerticalSpacer(8.dp)
                 BodyM(
-                    text = stringResource(R.string.wallet__payment_request_sent_description),
+                    text = stringResource(
+                        if (request.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
+                            R.string.wallet__payment_request_sent_description
+                        } else {
+                            R.string.wallet__payment_request_queued_description
+                        }
+                    ),
                     color = Colors.White64,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth()
                 )
                 VerticalSpacer(16.dp)
                 PaymentRequestCard(
                     request = request,
                     contact = contact,
-                    compactSubtitle = request.note?.takeIf { it.isNotBlank() }
-                        ?: if (request.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
-                            stringResource(R.string.wallet__payment_request_waiting)
-                        } else {
-                            stringResource(R.string.wallet__payment_request_sending)
-                        },
+                    compactSubtitle = request.note?.takeIf(String::isNotBlank) ?: if (
+                        request.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent
+                    ) {
+                        stringResource(R.string.wallet__payment_request_waiting)
+                    } else {
+                        stringResource(R.string.wallet__payment_request_sending)
+                    },
                 )
                 VerticalSpacer(44.dp)
                 PrimaryButton(
@@ -598,28 +616,12 @@ private fun PaymentRequestDetailsPreview() {
     AppThemeSurface {
         BottomSheetPreview {
             PaymentRequestDetailsContent(
-                amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub()),
                 initialDraft = previewDraft,
-                onBack = {},
-                onContinue = {},
-                modifier = Modifier.sheetHeight()
-            )
-        }
-    }
-}
-
-@Preview(showSystemUi = true)
-@Composable
-private fun PaymentRequestDetailsContactPreview() {
-    AppThemeSurface {
-        BottomSheetPreview {
-            PaymentRequestDetailsContent(
-                amountInputViewModel = AmountInputViewModel(AmountInputHandler.stub()),
-                initialDraft = previewDraft,
-                onBack = {},
-                onContinue = {},
-                recipient = PubkyProfile.placeholder(previewTarget.publicKey),
-                modifier = Modifier.sheetHeight()
+                contact = PubkyProfile.placeholder(previewTarget.publicKey),
+                isCreating = false,
+                onEditAmount = {},
+                onSend = {},
+                modifier = Modifier.sheetHeight(),
             )
         }
     }
@@ -633,11 +635,10 @@ private fun PaymentRequestRecipientPreview() {
             PaymentRequestRecipientContent(
                 targets = persistentListOf(previewTarget),
                 contacts = persistentListOf(PubkyProfile.placeholder(previewTarget.publicKey)),
-                isCreating = false,
                 onBack = {},
                 onPaste = { "" },
-                onSend = {},
-                modifier = Modifier.sheetHeight()
+                onSelected = {},
+                modifier = Modifier.sheetHeight(),
             )
         }
     }
@@ -652,7 +653,7 @@ private fun PaymentRequestSentPreview() {
                 request = previewCreatedRequest,
                 contact = PubkyProfile.placeholder(previewTarget.publicKey),
                 onDone = {},
-                modifier = Modifier.sheetHeight()
+                modifier = Modifier.sheetHeight(),
             )
         }
     }

@@ -56,7 +56,6 @@ fun SyncNodeView(modifier: Modifier) {
         VerticalSpacer(45.dp)
 
         GradientCircularProgressIndicator(
-            strokeWidth = 1.dp,
             modifier = Modifier.size(24.dp)
         )
 

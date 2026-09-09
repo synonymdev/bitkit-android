@@ -186,8 +186,8 @@ android {
         applicationId = "to.bitkit"
         minSdk = 28
         targetSdk = 36
-        versionCode = 187
-        versionName = "2.4.0"
+        versionCode = 188
+        versionName = "2.4.1"
         testInstrumentationRunner = "to.bitkit.test.HiltTestRunner"
         bitkitAndroidTestAnnotation?.let {
             testInstrumentationRunnerArguments["annotation"] = it
@@ -580,6 +580,7 @@ dependencies {
     implementation(libs.ktor.client.logging)
     implementation(libs.ktor.client.content.negotiation)
     implementation(libs.ktor.serialization.kotlinx.json)
+    testImplementation(libs.ktor.client.mock)
     // Logging
     runtimeOnly(libs.slf4j.simple)
     implementation(libs.slf4j.api)

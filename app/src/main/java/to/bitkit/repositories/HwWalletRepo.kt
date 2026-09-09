@@ -15,6 +15,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableSet
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -47,6 +48,7 @@ import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.HwReceiveAddress
 import to.bitkit.models.HwWallet
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.KnownDevice
@@ -330,13 +332,89 @@ class HwWalletRepo @Inject constructor(
             }
             val balanceSats = _watcherData.value
                 .values
-                .filter { it.addressType == addressType.settingsKey && it.walletId == walletId }
+                .filter { it.addressType == addressType && it.walletId == walletId }
                 .fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
             HwFundingAccount.Trezor(
                 xpub = xpub,
                 addressType = addressType,
                 balanceSats = balanceSats,
             )
+        }
+    }
+
+    /** Resolves the next unused external address from watcher state, falling back to an account scan. */
+    suspend fun getReceiveAddress(
+        walletId: String,
+        addressType: HwFundingAddressType = HwFundingAddressType.DEFAULT,
+    ): Result<HwReceiveAddress> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            watcherReceiveAddress(walletId, addressType)?.let { return@runSuspendCatching it }
+            val account = getFundingAccount(walletId, addressType).getOrThrow()
+            val accountInfo = trezorRepo.getAccountInfo(
+                extendedKey = account.xpub,
+                network = Env.network.toCoreNetwork(),
+                scriptType = account.accountType,
+            ).getOrThrow()
+            val unused = requireNotNull(accountInfo.account.addresses.unused.firstOrNull()) {
+                "No unused external address returned for hardware wallet '$walletId'"
+            }
+            val scannedAddress = HwReceiveAddress(
+                address = unused.address,
+                path = unused.path,
+                addressType = addressType,
+            )
+            watcherReceiveAddress(walletId, addressType) ?: scannedAddress
+        }
+    }
+
+    fun observeReceiveAddress(
+        walletId: String,
+        addressType: HwFundingAddressType = HwFundingAddressType.DEFAULT,
+    ): Flow<HwReceiveAddress?> = _watcherData
+        .map { watcherData -> watcherData.receiveAddress(walletId, addressType) }
+        .distinctUntilChanged()
+
+    private fun watcherReceiveAddress(
+        walletId: String,
+        addressType: HwFundingAddressType,
+    ): HwReceiveAddress? = _watcherData.value.receiveAddress(walletId, addressType)
+
+    /** Displays the exact address currently shown by Bitkit on the device and rejects a mismatch. */
+    suspend fun verifyReceiveAddress(
+        walletId: String,
+        receiveAddress: HwReceiveAddress,
+    ): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching {
+            suspend fun readOnDevice() = trezorRepo.getAddress(
+                path = receiveAddress.path,
+                showOnTrezor = true,
+                scriptType = receiveAddress.addressType.trezorScriptType,
+                coin = Env.network.toTrezorCoinType(),
+            ).getOrThrow()
+
+            ensureConnected(walletId).getOrThrow()
+            val firstAttempt = runSuspendCatching { readOnDevice() }
+            val firstError = firstAttempt.exceptionOrNull()
+            val response = if (firstError == null) {
+                firstAttempt.getOrThrow()
+            } else {
+                if (!firstError.isTrezorSessionFailure()) throw firstError
+                disconnectStaleSession(walletId).getOrThrow()
+                ensureConnected(walletId).getOrThrow()
+                runSuspendCatching { readOnDevice() }
+                    .onFailure {
+                        if (it.isTrezorSessionFailure()) {
+                            disconnectStaleSession(walletId).getOrThrow()
+                        }
+                    }
+                    .getOrThrow()
+            }
+            if (response.address != receiveAddress.address) {
+                throw HwReceiveAddressMismatchError(
+                    "Address verification failed: Trezor returned '${response.address}' for " +
+                        "'${receiveAddress.path}', expected '${receiveAddress.address}'"
+                )
+            }
         }
     }
 
@@ -585,7 +663,7 @@ class HwWalletRepo @Inject constructor(
                 val ids = devices.map { it.id }.toSet()
                 val walletWatchers = watcherData.values.filter { it.walletId == walletId }
                 val fundingBalanceSats = walletWatchers
-                    .filter { it.addressType == HwFundingAddressType.DEFAULT.settingsKey }
+                    .filter { it.addressType == HwFundingAddressType.DEFAULT }
                     .fold(0uL) { acc, watcher -> acc + watcher.balanceSats }
                 HwWallet(
                     id = walletId,
@@ -649,11 +727,13 @@ class HwWalletRepo @Inject constructor(
                     val transactionDetails = event.transactionDetails
                         .filter { it.walletId == walletId }
                         .toImmutableList()
+                    val addressType = watcherId.toFundingAddressType() ?: return@withLock emptyList()
                     val watcher = HwWatcherData(
                         walletId = walletId,
-                        addressType = watcherId.toAddressTypeKey(),
+                        addressType = addressType,
                         balanceSats = event.balance.total,
                         activities = activities,
+                        receiveAddress = event.toReceiveAddress(addressType),
                     )
                     _watcherData.update { it + (watcherId to watcher) }
                     val previousIds = persistedActivityIds.getOrPut(watcherId) {
@@ -686,7 +766,6 @@ class HwWalletRepo @Inject constructor(
                     val persistedWatcher = watcher.copy(activities = immutablePersistedActivities)
                     val updatedWatcherData = _watcherData.value + (watcherId to persistedWatcher)
                     _watcherData.update { updatedWatcherData }
-
                     persistedActivityIds[watcherId] = persistedActivities.map { it.scopedId() }.toSet()
                     buildReceivedTxs(previousIds, persistedActivities, updatedWatcherData)
                 }
@@ -915,6 +994,9 @@ class HwWalletRepo @Inject constructor(
     private fun String.toWalletId(): String = substringBefore(WATCHER_ID_SEPARATOR)
 
     private fun String.toAddressTypeKey(): String = substringAfter(WATCHER_ID_SEPARATOR)
+
+    private fun String.toFundingAddressType(): HwFundingAddressType? =
+        HwFundingAddressType.entries.firstOrNull { it.settingsKey == toAddressTypeKey() }
 }
 
 private data class WatcherSettings(
@@ -957,6 +1039,8 @@ class HwPassphraseRequiredError : AppError("Passphrase needed to reopen this wal
 /** The entered passphrase opened a different wallet than the one being signed from. */
 class HwPassphraseMismatchError : AppError("Passphrase opened a different wallet")
 
+class HwReceiveAddressMismatchError(message: String) : AppError(message)
+
 /**
  * A removal asked to keep the wallet's backup data, but its tags could not be read. Raised before
  * anything is deleted, so the wallet is untouched and the removal can be retried or repeated without
@@ -966,9 +1050,25 @@ class HwBackupDataUnreadableError(cause: Throwable) : AppError("Could not read t
 
 private data class HwWatcherData(
     val walletId: String,
-    val addressType: String,
+    val addressType: HwFundingAddressType,
     val balanceSats: ULong,
     val activities: ImmutableList<Activity>,
+    val receiveAddress: HwReceiveAddress,
+)
+
+private fun Map<String, HwWatcherData>.receiveAddress(
+    walletId: String,
+    addressType: HwFundingAddressType,
+): HwReceiveAddress? = values.firstOrNull {
+    it.walletId == walletId && it.addressType == addressType
+}?.receiveAddress
+
+private fun WatcherEvent.TransactionsChanged.toReceiveAddress(
+    addressType: HwFundingAddressType,
+) = HwReceiveAddress(
+    address = nextUnusedExternalAddress.address,
+    path = nextUnusedExternalAddress.path,
+    addressType = addressType,
 )
 
 private data class HwSnapshot(

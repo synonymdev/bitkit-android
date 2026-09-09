@@ -1,6 +1,8 @@
 package to.bitkit.ui.components
 
 import androidx.annotation.DrawableRes
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -10,7 +12,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -20,9 +21,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.ui.shared.modifiers.alphaFeedback
+import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.util.primaryButtonStyle
-import to.bitkit.ui.theme.AppButtonDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -34,6 +34,7 @@ fun NumberPadActionButton(
     color: Color = Colors.Brand,
     enabled: Boolean = true,
     isLoading: Boolean = false,
+    clickable: Boolean = true,
     @DrawableRes icon: Int? = null,
 ) {
     val contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp)
@@ -41,47 +42,39 @@ fun NumberPadActionButton(
     val buttonShape = RoundedCornerShape(8.dp)
 
     if (enabled || isLoading) {
-        Button(
-            onClick = onClick,
-            enabled = enabled && !isLoading,
-            colors = AppButtonDefaults.primaryColors.copy(
-                containerColor = Color.Transparent,
-                disabledContainerColor = Color.Transparent
-            ),
-            contentPadding = contentPadding,
-            shape = buttonShape,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             modifier = modifier
                 .requiredHeight(height)
                 .primaryButtonStyle(
-                    isEnabled = enabled && !isLoading,
+                    isEnabled = enabled || isLoading,
                     shape = buttonShape,
                 )
-                .alphaFeedback(enabled = enabled && !isLoading)
+                .animateContentSize(animationSpec = tween(durationMillis = 200))
+                .clickableAlpha(enabled = enabled && clickable && !isLoading, onClick = onClick)
+                .padding(contentPadding)
         ) {
             if (isLoading) {
                 GradientCircularProgressIndicator(
                     strokeWidth = 2.dp,
+                    tint = color,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .padding(3.dp)
+                )
+            } else if (icon != null) {
+                Icon(
+                    painter = painterResource(icon),
+                    contentDescription = text,
+                    tint = color,
                     modifier = Modifier.size(16.dp)
                 )
-            } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    if (icon != null) {
-                        Icon(
-                            painter = painterResource(icon),
-                            contentDescription = text,
-                            tint = color,
-                            modifier = Modifier.size(16.dp)
-                        )
-                    }
-                    Caption13Up(
-                        text = text,
-                        color = color,
-                    )
-                }
             }
+            Caption13Up(
+                text = text,
+                color = color,
+            )
         }
     } else {
         Row(

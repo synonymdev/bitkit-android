@@ -1,13 +1,18 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.AccountAddresses
+import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.AddressInfo
+import com.synonym.bitkitcore.ComposeAccount
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.TransactionDetails
+import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorSignedTx
@@ -37,8 +42,10 @@ import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.create
+import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.HwReceiveAddress
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
@@ -61,6 +68,11 @@ class HwWalletRepoTest : BaseUnitTest() {
     private companion object {
         const val HARDWARE_WALLET_ID = "hardware-wallet"
         const val HIDDEN_WALLET_ID = "hidden-wallet"
+        val WATCHER_RECEIVE_ADDRESS = AddressInfo(
+            address = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8",
+            path = "m/84'/1'/0'/0/0",
+            transfers = 0u,
+        )
     }
 
     private val trezorRepo = mock<TrezorRepo>()
@@ -187,6 +199,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 850_000u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -312,6 +325,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         watcherEvents.emit(
@@ -321,6 +335,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -345,6 +360,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 2u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -366,6 +382,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         watcherEvents.emit(
@@ -376,6 +393,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -407,6 +425,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         watcherEvents.emit(
@@ -419,6 +438,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -444,6 +464,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         watcherEvents.emit(
@@ -456,6 +477,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -484,6 +506,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         val firstTimestamp = (sut.wallets.value.single().activities.single() as Activity.Onchain).v1.timestamp
@@ -496,6 +519,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         val refreshedTimestamp = (sut.wallets.value.single().activities.single() as Activity.Onchain).v1.timestamp
@@ -660,31 +684,23 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         // Baseline: full history delivered on watcher start must not emit.
         watcherEvents.emit(
-            "hardware-wallet|nativeSegwit" to WatcherEvent.TransactionsChanged(
-                balance = walletBalance(total = 100uL),
+            "hardware-wallet|nativeSegwit" to transactionsChanged(
+                total = 100uL,
                 activities = listOf(watcherActivity(amount = 100uL)),
-                transactionDetails = emptyList(),
-                txCount = 1u,
-                blockHeight = 1u,
-                accountType = AccountType.NATIVE_SEGWIT,
-            )
+            ),
         )
         runCurrent()
         assertEquals(0, received.size)
 
         // New inbound tx after the baseline emits once.
         watcherEvents.emit(
-            "hardware-wallet|nativeSegwit" to WatcherEvent.TransactionsChanged(
-                balance = walletBalance(total = 150uL),
+            "hardware-wallet|nativeSegwit" to transactionsChanged(
+                total = 150uL,
                 activities = listOf(
                     watcherActivity(amount = 100uL),
                     watcherActivity(amount = 50uL, txid = "t2"),
                 ),
-                transactionDetails = emptyList(),
-                txCount = 2u,
-                blockHeight = 2u,
-                accountType = AccountType.NATIVE_SEGWIT,
-            )
+            ),
         )
         runCurrent()
         assertEquals(listOf("t1", "t2"), sut.activities.value.map { (it as Activity.Onchain).v1.txId })
@@ -700,17 +716,13 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         // Re-delivering the same set (e.g. confirmation update) must not emit again.
         watcherEvents.emit(
-            "hardware-wallet|nativeSegwit" to WatcherEvent.TransactionsChanged(
-                balance = walletBalance(total = 150uL),
+            "hardware-wallet|nativeSegwit" to transactionsChanged(
+                total = 150uL,
                 activities = listOf(
                     watcherActivity(amount = 100uL),
                     watcherActivity(amount = 50uL, txid = "t2"),
                 ),
-                transactionDetails = emptyList(),
-                txCount = 2u,
-                blockHeight = 3u,
-                accountType = AccountType.NATIVE_SEGWIT,
-            )
+            ),
         )
         runCurrent()
         assertEquals(1, received.size)
@@ -783,6 +795,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         runCurrent()
@@ -793,6 +806,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         runCurrent()
@@ -805,6 +819,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         runCurrent()
@@ -816,6 +831,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         runCurrent()
@@ -840,6 +856,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         watcherEvents.emit(
@@ -852,6 +869,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -888,6 +906,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -1338,6 +1357,126 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `receive address uses synchronized watcher state without account scan`() = test {
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        val sut = createRepo()
+        runCurrent()
+
+        watcherEvents.emit(
+            "$HARDWARE_WALLET_ID|nativeSegwit" to transactionsChanged(total = 0uL),
+        )
+        runCurrent()
+
+        val address = sut.getReceiveAddress(HARDWARE_WALLET_ID).getOrThrow()
+
+        assertEquals(WATCHER_RECEIVE_ADDRESS.address, address.address)
+        assertEquals(WATCHER_RECEIVE_ADDRESS.path, address.path)
+        assertEquals(HwFundingAddressType.NATIVE_SEGWIT, address.addressType)
+        verify(trezorRepo, never()).getAccountInfo(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `receive address falls back to the stored account xpub`() = test {
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        whenever { trezorRepo.getAccountInfo(eq("zpubNS"), any(), eq(AccountType.NATIVE_SEGWIT)) }
+            .thenReturn(
+                Result.success(
+                    AccountInfoResult(
+                        account = ComposeAccount(
+                            path = "m/84'/1'/0'",
+                            addresses = AccountAddresses(
+                                used = emptyList(),
+                                unused = listOf(WATCHER_RECEIVE_ADDRESS),
+                                change = emptyList(),
+                            ),
+                            utxo = emptyList(),
+                        ),
+                        balance = 0uL,
+                        utxoCount = 0u,
+                        accountType = AccountType.NATIVE_SEGWIT,
+                        blockHeight = 1u,
+                    )
+                )
+            )
+        val sut = createRepo()
+        runCurrent()
+
+        val address = sut.getReceiveAddress(HARDWARE_WALLET_ID).getOrThrow()
+
+        assertEquals(WATCHER_RECEIVE_ADDRESS.address, address.address)
+        assertEquals(WATCHER_RECEIVE_ADDRESS.path, address.path)
+        assertEquals(HwFundingAddressType.NATIVE_SEGWIT, address.addressType)
+    }
+
+    @Test
+    fun `receive address verification rejects a device mismatch`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HARDWARE_WALLET_ID),
+        )
+        whenever { trezorRepo.ensureConnected("dev1") }.thenReturn(Result.success(mock()))
+        whenever { trezorRepo.getAddress(any(), any(), any(), any()) }.thenReturn(
+            Result.success(
+                TrezorAddressResponse(
+                    address = "bcrt1qdifferent",
+                    path = WATCHER_RECEIVE_ADDRESS.path,
+                )
+            )
+        )
+        val sut = createRepo()
+
+        val result = sut.verifyReceiveAddress(
+            HARDWARE_WALLET_ID,
+            HwReceiveAddress(
+                address = WATCHER_RECEIVE_ADDRESS.address,
+                path = WATCHER_RECEIVE_ADDRESS.path,
+                addressType = HwFundingAddressType.NATIVE_SEGWIT,
+            ),
+        )
+
+        assertTrue(result.exceptionOrNull() is HwReceiveAddressMismatchError)
+    }
+
+    @Test
+    fun `receive address verification reconnects after a session failure`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HARDWARE_WALLET_ID),
+        )
+        whenever { trezorRepo.ensureConnected("dev1") }.thenReturn(Result.success(mock()))
+        whenever { trezorRepo.getAddress(any(), any(), any(), any()) }.thenReturn(
+            Result.failure(TrezorException.ProtocolException("THP decryption error: aead::Error")),
+            Result.success(
+                TrezorAddressResponse(
+                    address = WATCHER_RECEIVE_ADDRESS.address,
+                    path = WATCHER_RECEIVE_ADDRESS.path,
+                )
+            ),
+        )
+        whenever { trezorRepo.disconnectStaleSession("dev1") }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.verifyReceiveAddress(
+            HARDWARE_WALLET_ID,
+            HwReceiveAddress(
+                address = WATCHER_RECEIVE_ADDRESS.address,
+                path = WATCHER_RECEIVE_ADDRESS.path,
+                addressType = HwFundingAddressType.NATIVE_SEGWIT,
+            ),
+        )
+
+        assertTrue(result.isSuccess)
+        inOrder(trezorRepo) {
+            verify(trezorRepo).ensureConnected("dev1")
+            verify(trezorRepo).getAddress(any(), any(), any(), any())
+            verify(trezorRepo).disconnectStaleSession("dev1")
+            verify(trezorRepo).ensureConnected("dev1")
+            verify(trezorRepo).getAddress(any(), any(), any(), any())
+        }
+    }
+
+    @Test
     fun `keeps a stale watcher until stopping it succeeds`() = test {
         storeData.value = HwWalletData(
             knownDevices = listOf(
@@ -1356,6 +1495,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         runCurrent()
@@ -1452,6 +1592,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -2007,6 +2148,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     private fun transactionsChanged(
         total: ULong,
         activities: List<Activity> = emptyList(),
+        receiveAddress: AddressInfo = WATCHER_RECEIVE_ADDRESS,
     ) = WatcherEvent.TransactionsChanged(
         balance = walletBalance(total),
         activities = activities,
@@ -2014,6 +2156,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         txCount = activities.size.toUInt(),
         blockHeight = 1u,
         accountType = AccountType.NATIVE_SEGWIT,
+        nextUnusedExternalAddress = receiveAddress,
     )
 
     @Suppress("LongParameterList")
