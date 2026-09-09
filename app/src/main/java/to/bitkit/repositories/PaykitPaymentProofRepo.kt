@@ -198,20 +198,7 @@ class PaykitPaymentProofRepo @Inject constructor(
             operationMutex.withLock {
                 val proofs = loadProofs().toMutableList()
                 val index = proofs.indexOfLast {
-                    if (preparationId != null) {
-                        it.preparationId == preparationId &&
-                            PubkyPublicKeyFormat.matches(it.identity, identity) &&
-                            it.requestId == request.id &&
-                            it.kind == PaykitPaymentProofKind.Onchain &&
-                            it.paymentIdentifier == null &&
-                            it.proofData == null
-                    } else {
-                        PubkyPublicKeyFormat.matches(it.identity, identity) &&
-                            it.requestId == request.id &&
-                            it.kind == PaykitPaymentProofKind.Onchain &&
-                            it.paymentIdentifier == null &&
-                            it.proofData == null
-                    }
+                    it.matchesOnchainPreparation(identity, request.id, preparationId)
                 }
                 val proof = if (index >= 0) {
                     proofs[index].copy(
@@ -547,8 +534,7 @@ class PaykitPaymentProofRepo @Inject constructor(
             requiresBroadcastOutcome = true,
             broadcastLineage = listOf(txid.lowercase()),
         )
-        if (!replaceProofLocked(proof, recovered)) return null
-        return recovered
+        return if (replaceProofLocked(proof, recovered)) recovered else null
     }
 
     private suspend fun handleAcceptedBroadcastOutcome(
@@ -805,6 +791,17 @@ private fun endpointSupports(identifier: String, kind: PaykitPaymentProofKind): 
 
 private fun PendingPaykitPaymentProof.matchesRequest(other: PendingPaykitPaymentProof): Boolean =
     PubkyPublicKeyFormat.matches(identity, other.identity) && requestId == other.requestId
+
+private fun PendingPaykitPaymentProof.matchesOnchainPreparation(
+    identity: String,
+    requestId: PaykitPaymentRequestId,
+    preparationId: String?,
+): Boolean = PubkyPublicKeyFormat.matches(this.identity, identity) &&
+    this.requestId == requestId &&
+    kind == PaykitPaymentProofKind.Onchain &&
+    paymentIdentifier == null &&
+    proofData == null &&
+    (preparationId == null || this.preparationId == preparationId)
 
 private fun PendingPaykitPaymentProof.isStartedFor(
     identity: String,
