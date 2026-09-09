@@ -185,12 +185,13 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS remove unused code after refactors
 - ALWAYS follow Material3 design guidelines for UI components
 - When building from a Figma frame, reuse only scaffolding (sheet host, `SheetTopBar`, buttons, typography); NEVER swap a design-specific illustration/animation for a lookalike. Export the frame's assets via the Figma MCP and read animation timing/easing/direction from prototype reactions (`use_figma` → `node.reactions`)
+- ALWAYS resolve a changed `*Screen.kt` to its Figma frame through `docs/screens-map.md` (`Flow › Frame` on the latest `Bitkit - Handoff vNN` page). When adding or removing a `*Screen.kt`, add or drop its row there (`todo` when the design does not exist yet); `ScreensMapTest` fails otherwise
 - ALWAYS fill the PR `### Design` section:
-  - UI changes with existing designs: link the relevant Figma frames, using `docs/screens-map.md` as the starting point.
-  - UI changes without an available design, including new features: use `N/A — no design available.`
+  - UI changes mapped to a `Flow › Frame`: link the relevant Figma frames.
+  - UI changes mapped to `todo` or `n/a`, including new features without a design: use `N/A — no design available.`
   - Changes without user-visible UI changes: use `N/A — no UI changes.`
-  - Missing or uncertain screens-map entries: report the uncertainty honestly; never invent links or require new designs.
-- Code review may make at most one advisory request when a UI PR omits an existing-design link. Explicit `N/A` cases require no request. Missing links never block approval or CI.
+  - UI changes outside the map's `*Screen.kt` scope or with an uncertain match: report the uncertainty honestly; never invent links or require new designs.
+- Code review may make at most one advisory request when a UI PR omits a link for a mapped `Flow › Frame`. Valid explicit `N/A` cases require no request. Missing links never block approval or CI.
 - ALWAYS ensure proper error handling in coroutines
 - ALWAYS acknowledge datastore async operations run synchronously in a suspend context
 - NEVER use `runBlocking` in suspend functions

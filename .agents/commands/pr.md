@@ -160,12 +160,12 @@ When the user provides custom instructions after `--`:
 
 **Design Section:**
 Always include `### Design` and apply exactly one case:
-- UI changes with existing designs: link the relevant Figma frames, using `docs/screens-map.md` as the starting point.
-- UI changes without an available design, including new features: write `N/A — no design available.`
+- UI changes mapped to a `Flow › Frame` in `docs/screens-map.md`: link the relevant Figma frames.
+- UI changes mapped to `todo` or `n/a`, including new features without a design: write `N/A — no design available.`
 - Changes without user-visible UI changes: write `N/A — no UI changes.`
-- Missing or uncertain screens-map entries: report the uncertainty honestly; never invent links or require new designs.
+- UI changes outside the map's `*Screen.kt` scope or with an uncertain match: report the uncertainty honestly; never invent links or require new designs.
 
-Reviewers may make at most one advisory request when a UI PR omits an existing-design link. Explicit `N/A` cases require no request. Missing links never block approval, CI, PR creation, or review readiness.
+Reviewers may make at most one advisory request when a UI PR omits a link for a mapped `Flow › Frame`. Valid explicit `N/A` cases require no request. Missing links never block approval, CI, PR creation, or review readiness.
 
 **For library repos (has `bindings/` directory or `Cargo.toml`):**
 Structure manual QA around integration validation only. Automated checks belong under `#### Automated Checks`.

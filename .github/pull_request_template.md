@@ -8,10 +8,10 @@
 
 ### Design
 
-<!-- UI change with an existing design: link the relevant Figma frame(s), starting from docs/screens-map.md. -->
-<!-- UI change without an available design, including a new feature: N/A — no design available. -->
+<!-- UI change mapped to a Flow › Frame in docs/screens-map.md: link the relevant Figma frame(s). -->
+<!-- UI change mapped to todo or n/a, including a new feature without a design: N/A — no design available. -->
 <!-- No user-visible UI change: N/A — no UI changes. -->
-<!-- If the screens map is missing or uncertain, state that honestly; never invent a link or require a new design. -->
+<!-- UI change outside the map's *Screen.kt scope or with an uncertain match: state that honestly; never invent a link or require a new design. -->
 
 ### Preview
 
