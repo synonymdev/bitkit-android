@@ -1115,12 +1115,8 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
         runCatching { Instant.parse(it) }.getOrNull()
             ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.InvalidExpiration)
     }
-    if (
-        requiresActionableRequest &&
-        state == PaymentRequestLifecycleState.PROPOSED &&
-        expiresAt != null &&
-        expiresAt <= now
-    ) {
+    val isExpiredProposal = state == PaymentRequestLifecycleState.PROPOSED && expiresAt?.let { it <= now } == true
+    if (requiresActionableRequest && isExpiredProposal) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.Expired)
     }
 
