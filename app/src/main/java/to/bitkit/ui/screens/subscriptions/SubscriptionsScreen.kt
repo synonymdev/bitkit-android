@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -44,7 +44,6 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.airbnb.lottie.compose.LottieAnimation
@@ -74,12 +73,9 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
-import to.bitkit.ui.components.MoneyCell
 import to.bitkit.ui.components.MoneyDisplay
 import to.bitkit.ui.components.MoneyMSB
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.PubkyContactAvatar
-import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
@@ -174,7 +170,7 @@ internal fun SubscriptionsContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .gradientBackground()
+            .background(Colors.Black)
             .navigationBarsPadding()
             .testTag("SubscriptionsScreen")
     ) {
@@ -240,17 +236,10 @@ internal fun SubscriptionsContent(
         }
 
         if (selectedTab == SubscriptionTab.Overview) {
-            PrimaryButton(
+            SecondaryButton(
                 text = stringResource(R.string.subscriptions__create),
                 onClick = onCreateSubscription,
-                modifier = Modifier.padding(horizontal = 16.dp).testTag("SubscriptionCreate"),
-                icon = {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_plus),
-                        contentDescription = null,
-                        modifier = Modifier.size(16.dp),
-                    )
-                },
+                modifier = Modifier.padding(horizontal = 16.dp).testTag("SubscriptionCreate")
             )
             VerticalSpacer(16.dp)
         }
@@ -272,7 +261,7 @@ private fun LazyListScope.subscriptionSection(
                 SubscriptionRow(
                     subscription = subscription,
                     contact = contacts.contactFor(subscription),
-                    now = now,
+                    subtitle = subscription.rowSubtitle(now),
                     faded = subscription.isExpired(now),
                     onClick = { onSubscription(subscription) },
                 )
@@ -315,21 +304,21 @@ private fun SubscriptionEmptyState(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 24.dp)
+            .padding(horizontal = 16.dp, vertical = 32.dp)
     ) {
         FillHeight()
         Image(
-            painter = painterResource(R.drawable.subscription_clock),
+            painter = painterResource(R.drawable.subscription_intro_clock),
             contentDescription = null,
             modifier = Modifier
                 .size(256.dp)
-                .align(Alignment.CenterHorizontally),
+                .align(Alignment.CenterHorizontally)
         )
-        FillHeight()
+        VerticalSpacer(32.dp)
         Display(
             text = stringResource(R.string.subscriptions__empty_headline).withAccent(accentColor = Colors.Purple),
         )
-        VerticalSpacer(12.dp)
+        VerticalSpacer(8.dp)
         BodyM(text = stringResource(R.string.subscriptions__empty_description), color = Colors.White64)
     }
 }
@@ -338,18 +327,24 @@ private fun SubscriptionEmptyState(modifier: Modifier = Modifier) {
 private fun SubscriptionMetrics(monthlyCostSats: Long, activeCount: Int, createdCount: Int) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Caption13Up(text = stringResource(R.string.subscriptions__monthly_cost), color = Colors.White64)
             VerticalSpacer(8.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(painterResource(R.drawable.ic_calendar), contentDescription = null, tint = Colors.Purple)
-                MoneyMSB(sats = monthlyCostSats)
+                Icon(
+                    painterResource(R.drawable.ic_calendar),
+                    contentDescription = null,
+                    tint = Colors.Purple,
+                    modifier = Modifier.size(24.dp)
+                )
+                MoneyMSB(sats = monthlyCostSats, showSymbol = true)
             }
         }
-        Spacer(Modifier.size(width = 1.dp, height = 50.dp).background(Colors.White16))
-        Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+        VerticalDivider(color = Colors.White16, modifier = Modifier.height(50.dp))
+        Column {
             Caption13Up(text = stringResource(R.string.subscriptions__active), color = Colors.White64)
             VerticalSpacer(8.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -357,72 +352,15 @@ private fun SubscriptionMetrics(monthlyCostSats: Long, activeCount: Int, created
                 BodyMSB(text = activeCount.toString())
             }
         }
-        Spacer(Modifier.size(width = 1.dp, height = 50.dp).background(Colors.White16))
-        Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+        VerticalDivider(color = Colors.White16, modifier = Modifier.height(50.dp))
+        Column {
             Caption13Up(text = stringResource(R.string.subscriptions__created), color = Colors.White64)
             VerticalSpacer(8.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(painterResource(R.drawable.ic_plus), contentDescription = null, tint = Colors.Purple)
+                Icon(painterResource(R.drawable.ic_asterisk), contentDescription = null, tint = Colors.Purple)
                 BodyMSB(text = createdCount.toString())
             }
         }
-    }
-}
-
-@Composable
-private fun SubscriptionRow(
-    subscription: PaykitSubscription,
-    contact: PubkyProfile,
-    now: Instant,
-    faded: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .alpha(if (faded) 0.5f else 1f)
-            .clip(RoundedCornerShape(16.dp))
-            .background(Colors.Gray6)
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-    ) {
-        SubscriptionAvatar(subscription = subscription, contact = contact, size = 40.dp)
-        Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
-            BodyMSB(
-                text = subscription.note ?: stringResource(R.string.subscriptions__subscription),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            BodyS(
-                text = subscription.rowSubtitle(now),
-                color = Colors.White64,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-        MoneyCell(sats = subscription.displaySats)
-    }
-}
-
-@Composable
-private fun SubscriptionAvatar(
-    subscription: PaykitSubscription,
-    contact: PubkyProfile,
-    size: Dp,
-) {
-    val iconUri = subscription.metadata.iconUri
-    if (iconUri == null && subscription.isCreatedByUser) {
-        Image(
-            painter = painterResource(R.drawable.subscription_default_icon),
-            contentDescription = null,
-            modifier = Modifier.size(size).clip(RoundedCornerShape(size / 5))
-                .background(Colors.White).padding(size / 8),
-        )
-    } else if (iconUri == null) {
-        PubkyContactAvatar(profile = contact, size = size)
-    } else {
-        PubkyImage(uri = iconUri, size = size)
     }
 }
 
@@ -1036,7 +974,7 @@ private fun PaykitSubscription.frequencyValue(): String {
 }
 
 @Composable
-private fun PaykitSubscription.subscriptionFrequencyText(): String {
+internal fun PaykitSubscription.subscriptionFrequencyText(): String {
     if (recurrence.every != 1) return cadenceText()
     return when (recurrence.unit) {
         PaykitRecurrenceUnit.Day -> stringResource(R.string.subscriptions__daily_subscription)
@@ -1149,7 +1087,7 @@ private fun Instant.formatShortDate(): String = dateTimeFormatterOf("MMMM d")
 private fun Instant.formatFullDate(): String = dateTimeFormatterOf("MMMM d, yyyy")
     .format(java.time.Instant.ofEpochMilli(toEpochMilliseconds()))
 
-private val PaykitSubscription.displaySats: Long
+internal val PaykitSubscription.displaySats: Long
     get() = amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
 
 internal fun subscriptionMonthlyCostSats(

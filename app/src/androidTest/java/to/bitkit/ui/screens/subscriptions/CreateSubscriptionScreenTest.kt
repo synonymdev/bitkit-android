@@ -79,8 +79,11 @@ class CreateSubscriptionScreenTest {
         composeTestRule.onNodeWithTag("SubscriptionChooseRecipient").assertIsNotEnabled()
         composeTestRule.runOnIdle { amount = 1000uL }
         composeTestRule.onNodeWithTag("SubscriptionChooseRecipient").assertIsEnabled()
-        composeTestRule.onNodeWithTag("SubscriptionFrequencyWeek").performClick()
-        assertEquals(PaykitRecurrenceUnit.Week, frequency)
+        listOf(PaykitRecurrenceUnit.Day, PaykitRecurrenceUnit.Week, PaykitRecurrenceUnit.Month, PaykitRecurrenceUnit.Year)
+            .forEach { option ->
+                composeTestRule.onNodeWithTag("Tab-${option.name.lowercase()}").performClick()
+                assertEquals(option, frequency)
+            }
         composeTestRule.runOnIdle { isLoadingIcon = true }
         composeTestRule.onNodeWithTag("SubscriptionChooseRecipient").assertIsNotEnabled()
         composeTestRule.runOnIdle { isLoadingIcon = false }
@@ -145,6 +148,12 @@ class CreateSubscriptionScreenTest {
         composeTestRule.onAllNodesWithText("Sent", substring = true, ignoreCase = true).assertCountEquals(0)
         composeTestRule.runOnIdle { delivery = PaykitPaymentRequestDeliveryStatus.Sent }
         composeTestRule.onNodeWithText("Sent").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("SubscriptionConfirmationBody")
+            .performScrollToNode(hasText("You have sent a subscription proposal to"))
+        composeTestRule.onNodeWithText("You have sent a subscription proposal to").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("SubscriptionConfirmationBody")
+            .performScrollToNode(hasText("Monthly subscription"))
+        composeTestRule.onNodeWithText("Monthly subscription").assertIsDisplayed()
         composeTestRule.onAllNodesWithText("Queued", substring = true, ignoreCase = true).assertCountEquals(0)
         composeTestRule.onNodeWithText("OK").assertIsDisplayed()
     }

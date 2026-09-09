@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -54,6 +55,7 @@ import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
+import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
@@ -434,25 +436,26 @@ internal fun PaymentRequestRecipientContent(
                         .clickableAlpha {
                             query = PubkyPublicKeyFormat.bounded(onPaste())
                         }
-                        .padding(horizontal = 12.dp)
-                        .testTag("${testTagPrefix}RecipientPaste"),
+                        .padding(horizontal = 24.dp)
+                        .testTag("${testTagPrefix}RecipientPaste")
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_clipboard_text),
                         contentDescription = null,
                         tint = Colors.White,
-                        modifier = Modifier.size(24.dp),
+                        modifier = Modifier.size(16.dp),
                     )
-                    BodyMSB(text = stringResource(R.string.wallet__payment_request_paste))
+                    CaptionB(text = stringResource(R.string.wallet__payment_request_paste))
                 }
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("${testTagPrefix}RecipientSearch"),
+                .height(52.dp)
+                .testTag("${testTagPrefix}RecipientSearch")
         )
-        VerticalSpacer(24.dp)
+        VerticalSpacer(32.dp)
         Caption13Up(text = stringResource(R.string.contacts__contacts_header), color = Colors.White64)
-        VerticalSpacer(8.dp)
+        VerticalSpacer(16.dp)
         HorizontalDivider(color = Colors.White10)
         LazyColumn(modifier = Modifier.weight(1f)) {
             if (recipients.isEmpty()) {
@@ -481,7 +484,7 @@ internal fun PaymentRequestRecipientContent(
                 PubkyContactRow(
                     profile = contact,
                     onClick = { onSelected(target) },
-                    verticalPadding = 16.dp,
+                    verticalPadding = 24.dp,
                     isSelected = selectedTarget?.let { it == target },
                     selectionColor = Colors.Brand,
                     modifier = Modifier.testTag("${testTagPrefix}Contact${contact.publicKey}"),
