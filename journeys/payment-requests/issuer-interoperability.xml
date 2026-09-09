@@ -1,6 +1,6 @@
 <journey name="Paykit Issuer Interoperability">
   <description>
-    Verifies that the canonical accepted regtest issuer fixture reaches Bitkit and opens the payment confirmation flow. Requires the saved and linked fixture issuer plus the funded regtest wallet described in README.md. Rejected shapes are covered by the shared fixture unit tests because Bitkit intentionally does not present them.
+    Verifies that the canonical accepted regtest issuer fixture reaches Bitkit and opens the payment confirmation flow. Requires the saved and linked fixture issuer plus the funded regtest wallet described in README.md. Rejected shapes are covered by the shared fixture unit tests because Bitkit intentionally does not present them. The canonical fixture uses "bitkit/server"; a Bitkit app acting as issuer uses its negotiated "bitkit/wallet" path instead.
   </description>
   <actions>
     <action>Launch the E2E Bitkit app with Paykit UI enabled and the fixture issuer saved as a contact and linked on receiver path "bitkit/server"</action>
