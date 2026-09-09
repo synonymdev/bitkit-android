@@ -375,24 +375,36 @@ class BlocktankRepo @Inject constructor(
         lightningRepo.revealReceiveAddresses(index, AddressType.P2WPKH).getOrThrow()
         if (!coreService.isAddressUsed(cached.address)) return@withLock cached.address
 
-        allocateBlocktankRefundAddress()
+        allocateBlocktankRefundAddress(afterIndex = index)
     }
 
-    private suspend fun allocateBlocktankRefundAddress(): String {
-        val derived = lightningRepo.newAddressInfoForType(AddressType.P2WPKH).getOrThrow()
-        if (derived.index !in 0..Int.MAX_VALUE || derived.address.isBlank()) {
-            throw AppError("Failed to allocate a valid Blocktank refund address")
+    private suspend fun allocateBlocktankRefundAddress(afterIndex: Int? = null): String {
+        var previousIndex = afterIndex
+        repeat(REFUND_ADDRESS_ALLOCATION_LIMIT) {
+            val derived = lightningRepo.newAddressInfoForType(AddressType.P2WPKH).getOrThrow()
+            if (derived.index !in 0..Int.MAX_VALUE || derived.address.isBlank()) {
+                throw AppError("Failed to allocate a valid Blocktank refund address")
+            }
+            val lastIndex = previousIndex
+            if (lastIndex != null && derived.index <= lastIndex) {
+                throw AppError("Blocktank refund address allocation did not advance")
+            }
+            previousIndex = derived.index
+
+            if (coreService.isAddressUsed(derived.address)) return@repeat
+
+            cacheStore.update {
+                it.copy(
+                    blocktankRefundAddress = BlocktankRefundAddress(
+                        address = derived.address,
+                        index = derived.index.toLong(),
+                    ),
+                )
+            }
+            return derived.address
         }
 
-        cacheStore.update {
-            it.copy(
-                blocktankRefundAddress = BlocktankRefundAddress(
-                    address = derived.address,
-                    index = derived.index.toLong(),
-                ),
-            )
-        }
-        return derived.address
+        throw AppError("Failed to allocate an unused Blocktank refund address")
     }
 
     suspend fun estimateOrderFee(
@@ -704,6 +716,7 @@ class BlocktankRepo @Inject constructor(
 
     companion object {
         private const val TAG = "BlocktankRepo"
+        private const val REFUND_ADDRESS_ALLOCATION_LIMIT = 20
         private const val DEFAULT_CHANNEL_EXPIRY_WEEKS = 6u
         private const val DEFAULT_SOURCE = "bitkit-android"
         private const val PEER_CONNECTION_DELAY_MS = 2_000L
