@@ -41,6 +41,7 @@ import to.bitkit.services.BlocktankService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -234,18 +235,18 @@ class BlocktankRepoTest : BaseUnitTest() {
         val candidates = (1..20).map {
             AddressDerivationInfo(address = "bcrt1qrefund$it", index = it)
         }
-        val candidateIterator = candidates.iterator()
         cacheData.value = AppCacheData(blocktankRefundAddress = BlocktankRefundAddress(oldInfo.address, 0))
         whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 0)).thenReturn(Result.success(oldInfo))
         whenever(coreService.isAddressUsed(oldInfo.address)).thenReturn(true)
         candidates.forEach { whenever(coreService.isAddressUsed(it.address)).thenReturn(true) }
-        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenAnswer {
-            Result.success(candidateIterator.next())
-        }
+        candidates.fold(
+            initial = whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)),
+        ) { stubbing, candidate -> stubbing.thenReturn(Result.success(candidate)) }
         sut = createSut()
 
-        assertTrue(sut.createOrder(50_000u).isFailure)
+        val error = assertIs<AppError>(sut.createOrder(50_000u).exceptionOrNull())
 
+        assertEquals("Failed to allocate an unused Blocktank refund address", error.message)
         verify(lightningRepo, times(20)).newAddressInfoForType(AddressType.P2WPKH)
         verify(cacheStore, never()).update(any())
         assertEquals(BlocktankRefundAddress(oldInfo.address, 0), cacheData.value.blocktankRefundAddress)
