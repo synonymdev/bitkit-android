@@ -23,6 +23,7 @@ jobs:
 
     permissions:
       contents: read
+      packages: read
 
     outputs:
       artifact-url: ${{ steps.upload-apk.outputs.artifact-url }}
@@ -53,20 +54,12 @@ jobs:
           GOOGLE_SERVICES_JSON_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
 
       - name: Build debug app
+        id: build
         env:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CHATWOOT_API: ${{ secrets.CHATWOOT_API }}
         run: ./gradlew assembleDevDebug
-
-      - name: Upload APK
-        id: upload-apk
-        uses: actions/upload-artifact@v7
-        with:
-          name: bitkit-dev-debug-apk_${{ github.run_number }}
-          path: app/build/outputs/bitkit/devDebug/bitkit-dev-debug-*-universal.apk
-          retention-days: 30
-          if-no-files-found: error
 
       - name: Run tests
         run: ./gradlew testDevDebugUnitTest
@@ -77,6 +70,16 @@ jobs:
           name: unit_test_report_${{ github.run_number }}
           path: app/build/reports/tests/testDevDebugUnitTest/
           retention-days: 30
+
+      - name: Upload APK
+        id: upload-apk
+        if: always() && steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: bitkit-dev-debug-apk_${{ github.run_number }}
+          path: app/build/outputs/bitkit/devDebug/bitkit-dev-debug-*-universal.apk
+          retention-days: 30
+          if-no-files-found: error
 
   apk-comment:
     needs: build
