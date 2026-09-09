@@ -212,7 +212,8 @@ data class PaykitSubscription(
     fun isActive(now: Instant): Boolean =
         lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING && recurrence.endsAt?.let { it > now } != false
 
-    fun isCreatedVisible(now: Instant): Boolean = isCreatedByUser && (isProposalVisible(now) || isActive(now))
+    fun isCreatedVisible(now: Instant): Boolean =
+        isCreatedByUser && (isProposalVisible(now) || isActive(now) || paidPeriods.isNotEmpty())
 
     fun canCancel(now: Instant): Boolean = recurrence.endsAt == null && if (isCreatedByUser) {
         isProposalVisible(now) || isActive(now)
