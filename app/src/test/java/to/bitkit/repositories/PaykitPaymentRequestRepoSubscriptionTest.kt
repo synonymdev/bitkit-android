@@ -333,6 +333,47 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             cancelPaymentRequest(COUNTERPARTY, PaykitReceiverPaths.SERVER, PAYMENT_REQUEST_ID)
         }
         assertEquals(PaymentRequestLifecycleState.CANCELED, sut.subscriptions.value.single().lifecycleState)
+        assertFalse(sut.subscriptions.value.single().isCreatedVisible(clock.now()))
+    }
+
+    @Test
+    fun `deleting a paid creator subscription keeps received history accessible`() = test {
+        val period = BillingPeriod("2027-01-01T08:00:00Z", "2027-02-01T08:00:00Z")
+        val proof = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn period
+            on { paymentEndpointIdentifier } doReturn MethodId.Bolt11.rawValue
+        }
+        val active = paymentRequestRecord(
+            role = PaymentRequestLocalRole.PAYEE,
+            state = PaymentRequestLifecycleState.ACTIVE_RECURRING,
+            paymentProofs = listOf(proof),
+        )
+        val canceled = paymentRequestRecord(
+            role = PaymentRequestLocalRole.PAYEE,
+            state = PaymentRequestLifecycleState.CANCELED,
+            paymentProofs = listOf(proof),
+        )
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(active), listOf(canceled))
+        whenever(
+            paykitSdkService.cancelPaymentRequest(COUNTERPARTY, PaykitReceiverPaths.SERVER, PAYMENT_REQUEST_ID)
+        ).thenReturn(canceled)
+        sut.refresh().getOrThrow()
+        val subscription = sut.subscriptions.value.single()
+        val received = subscription.receivedPaymentRequests()
+        assertEquals(1, received.size)
+
+        sut.cancel(subscription).getOrThrow()
+        sut.refresh().getOrThrow()
+
+        val retained = sut.subscriptions.value.single()
+        assertTrue(retained.isCreatedVisible(clock.now()))
+        assertTrue(retained.isExpired(clock.now()))
+        assertFalse(retained.isActive(clock.now()))
+        assertFalse(retained.canCancel(clock.now()))
+        assertFalse(retained.copy(role = PaykitSubscriptionRole.Payer).isCreatedVisible(clock.now()))
+        assertEquals(received, retained.receivedPaymentRequests())
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertTrue(sut.paymentRequestHistory.value.isEmpty())
     }
 
     @Test
