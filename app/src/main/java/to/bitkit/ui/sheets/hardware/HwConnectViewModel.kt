@@ -173,9 +173,14 @@ class HwConnectViewModel @Inject constructor(
     }
 
     fun cancelConnect() {
+        val state = _uiState.value
+        val wasConnecting = connectJob?.isActive == true || state.isConnecting
         connectJob?.cancel()
         connectJob = null
-        hwWalletRepo.cancelPairingCode()
+        if (wasConnecting) {
+            state.foundDeviceId?.let { hwWalletRepo.cancelPendingConnection(it, state.vendor) }
+                ?: hwWalletRepo.cancelPairingCode()
+        }
         _uiState.update { it.copy(isConnecting = false) }
     }
 
@@ -292,11 +297,16 @@ class HwConnectViewModel @Inject constructor(
     }
 
     fun resetState() {
+        val state = _uiState.value
+        val wasConnecting = connectJob?.isActive == true || state.isConnecting
         searchJob?.cancel()
         searchJob = null
         connectJob?.cancel()
         connectJob = null
-        hwWalletRepo.cancelPairingCode()
+        if (wasConnecting) {
+            state.foundDeviceId?.let { hwWalletRepo.cancelPendingConnection(it, state.vendor) }
+                ?: hwWalletRepo.cancelPairingCode()
+        }
         labelInitialized = false
         includeBluetoothInScan = true
         scanUsbBeforeConnect = false

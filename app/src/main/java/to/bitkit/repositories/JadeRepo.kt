@@ -120,6 +120,9 @@ class JadeRepo @Inject constructor(
     @Volatile
     private var backgroundReleaseJob: Job? = null
 
+    @Volatile
+    private var connectingPath: String? = null
+
     init {
         observeExternalDisconnects()
         observeTransportRestored()
@@ -247,9 +250,9 @@ class JadeRepo @Inject constructor(
                 awaitSetup()
                 if (forceSession) disconnectStaleSession(deviceId)
                 val entry = knownDevice(deviceId) ?: throw AppError("Unknown Jade '$deviceId'")
-                val device = findKnownDeviceNearby(entry, requestUsbPermission = requestUsbPermission)
-                val connected = connectDevice(
-                    device = device,
+                val devices = findKnownDeviceCandidates(entry, requestUsbPermission = requestUsbPermission)
+                val connected = connectExpectedDevice(
+                    devices = devices,
                     requestUsbPermission = requestUsbPermission,
                     unlock = unlock,
                     expected = entry,
@@ -259,7 +262,7 @@ class JadeRepo @Inject constructor(
             }.onFailure {
                 Logger.error("Jade reconnect failed", it, context = TAG)
                 _state.update { s -> s.copy(error = errorMessage(it)) }
-                if (!forceSession) disconnectStaleSession(deviceId)
+                disconnectStaleSession(deviceId)
             }
         } finally {
             if (startedConnecting) {
@@ -389,6 +392,24 @@ class JadeRepo @Inject constructor(
         }
     }
 
+    suspend fun cancelPendingConnection(deviceId: String): Result<Unit> = withContext(NonCancellable) {
+        withContext(ioDispatcher) {
+            val fallbackPath = deviceId.takeIf { it.isNotBlank() }
+            val path = connectingPath ?: _state.value.connected?.path ?: fallbackPath?.let {
+                knownDevice(it)?.path ?: it
+            }
+            val result = runSuspendCatching {
+                path?.let { jadeTransport.disconnectDevice(it) }
+                runSuspendCatching { jadeService.cancel() }
+                jadeService.disconnect()
+            }.onFailure {
+                Logger.warn("Failed to cancel pending Jade connection for '$deviceId'", it, context = TAG)
+            }
+            _state.update { it.copy(isConnecting = false, isUnlocking = false, connected = null) }
+            result
+        }
+    }
+
     /**
      * Forgets a paired entry. [walletKey] scopes the removal to one wallet identity; the same Jade
      * paired over both transports is stored once per transport and both entries go together.
@@ -504,7 +525,10 @@ class JadeRepo @Inject constructor(
             )
     }
 
-    private suspend fun findKnownDeviceNearby(entry: KnownDevice, requestUsbPermission: Boolean): JadeDeviceInfo {
+    private suspend fun findKnownDeviceCandidates(
+        entry: KnownDevice,
+        requestUsbPermission: Boolean,
+    ): List<JadeDeviceInfo> {
         val transport = entry.transportType.toJadeTransportKind()
         val includeBluetooth = transport == JadeTransportKind.BLUETOOTH
         val scanned = runSuspendCatching {
@@ -513,17 +537,40 @@ class JadeRepo @Inject constructor(
             Logger.warn("Scan before Jade reconnect failed", it, context = TAG)
             emptyList()
         }
-        scanned.firstOrNull { it.path == entry.path && it.transport == transport }?.let { return it }
         if (includeBluetooth) {
+            scanned.firstOrNull { it.path == entry.path && it.transport == transport }?.let { return listOf(it) }
             // A Jade advertises under a fresh random address after a reboot, but its name carries
             // the tail of the efuse MAC, so a renamed entry is still recognisable in the scan.
-            scanned.firstOrNull { it.transport == transport && entry.advertisesAs(it.name) }?.let { return it }
+            scanned.firstOrNull { it.transport == transport && entry.advertisesAs(it.name) }
+                ?.let { return listOf(it) }
             // Otherwise the stored address is tried directly: the transport resolves it without a scan hit.
-            return JadeDeviceInfo(path = entry.path, transport = transport, name = entry.name, serialNumber = null)
+            return listOf(
+                JadeDeviceInfo(path = entry.path, transport = transport, name = entry.name, serialNumber = null)
+            )
         }
         val candidates = scanned.filter { it.transport == JadeTransportKind.SERIAL }
             .filter { requestUsbPermission || jadeTransport.hasUsbPermission(it.path) }
-        return candidates.firstOrNull() ?: throw AppError("Jade not found nearby: is it plugged in?")
+            .sortedByDescending { it.path == entry.path }
+        return candidates.ifEmpty { throw AppError("Jade not found nearby: is it plugged in?") }
+    }
+
+    private suspend fun connectExpectedDevice(
+        devices: List<JadeDeviceInfo>,
+        requestUsbPermission: Boolean,
+        unlock: Boolean,
+        expected: KnownDevice,
+    ): ConnectedJadeDevice {
+        var lastError: Throwable? = null
+        for (device in devices) {
+            val result = runSuspendCatching {
+                connectDevice(device, requestUsbPermission, unlock, expected)
+            }
+            if (result.isSuccess) return result.getOrThrow()
+            val error = result.exceptionOrNull() ?: error("Jade connection failed without an error")
+            if (error !is JadeIdentityMismatchError) throw error
+            lastError = error
+        }
+        throw checkNotNull(lastError) { "No Jade connection was attempted" }
     }
 
     private suspend fun connectDevice(
@@ -532,46 +579,63 @@ class JadeRepo @Inject constructor(
         unlock: Boolean,
         expected: KnownDevice? = null,
     ): ConnectedJadeDevice {
-        var version = jadeService.connect(device.transport, device.path, requestUsbPermission = requestUsbPermission)
-        Logger.info(
-            "Connected Jade '${device.path}' firmware '${version.jadeVersion}' state '${version.jadeState}'",
-            context = TAG,
-        )
-        rejectUnusableDevice(version, expected)
-        if (unlock && version.jadeState == JadeState.LOCKED) {
-            version = unlockConnected()
+        connectingPath = device.path
+        var succeeded = false
+        try {
+            var version = jadeService.connect(
+                device.transport,
+                device.path,
+                requestUsbPermission = requestUsbPermission
+            )
+            Logger.info(
+                "Connected Jade '${device.path}' firmware '${version.jadeVersion}' state '${version.jadeState}'",
+                context = TAG,
+            )
+            rejectUnusableDevice(version, expected)
+            if (unlock && version.jadeState == JadeState.LOCKED) {
+                version = unlockConnected()
+            }
+            val known = if (version.jadeState.isUnlocked()) {
+                val xpubs = exportAccounts()
+                addOrUpdateKnownDevice(device, version, xpubs)
+            } else {
+                // Still locked, so its keys cannot be read: only an entry already holding them is usable.
+                val entry = expected ?: knownDevice(deviceIdFor(device.transport, version.efuseMac) ?: device.path)
+                entry?.let { refreshKnownDevice(it, device) } ?: rejectDevice(JadeException.DeviceLocked())
+            }
+            val connected = ConnectedJadeDevice(
+                id = known.id,
+                path = device.path,
+                transport = device.transport,
+                versionInfo = version,
+                walletId = known.walletId.takeIf { it.isNotBlank() },
+            )
+            _state.update { it.copy(connected = connected) }
+            succeeded = true
+            return connected
+        } finally {
+            if (!succeeded) cleanupFailedConnection(device.path)
+            if (connectingPath == device.path) connectingPath = null
         }
-        val known = if (version.jadeState.isUnlocked()) {
-            val xpubs = exportAccounts()
-            addOrUpdateKnownDevice(device, version, xpubs)
-        } else {
-            // Still locked, so its keys cannot be read: only an entry already holding them is usable.
-            val entry = expected ?: knownDevice(deviceIdFor(device.transport, version.efuseMac) ?: device.path)
-            entry?.let { refreshKnownDevice(it, device) } ?: rejectDevice(JadeException.DeviceLocked())
-        }
-        val connected = ConnectedJadeDevice(
-            id = known.id,
-            path = device.path,
-            transport = device.transport,
-            versionInfo = version,
-            walletId = known.walletId.takeIf { it.isNotBlank() },
-        )
-        _state.update { it.copy(connected = connected) }
-        return connected
     }
 
-    private suspend fun rejectUnusableDevice(version: JadeVersionInfo, expected: KnownDevice?) {
+    private fun rejectUnusableDevice(version: JadeVersionInfo, expected: KnownDevice?) {
         if (version.jadeState == JadeState.UNINIT) rejectDevice(HwDeviceUninitializedError())
         val expectedHardwareId = expected?.jadeDeviceId
         val hardwareId = version.efuseMac
         if (expectedHardwareId != null && hardwareId != null && expectedHardwareId != hardwareId) {
-            rejectDevice(AppError("A different Jade is connected"))
+            rejectDevice(JadeIdentityMismatchError())
         }
     }
 
-    private suspend fun rejectDevice(error: Throwable): Nothing {
-        runSuspendCatching { jadeService.disconnect() }
-        throw error
+    private fun rejectDevice(error: Throwable): Nothing = throw error
+
+    private suspend fun cleanupFailedConnection(path: String) = withContext(NonCancellable) {
+        withContext(ioDispatcher) {
+            jadeTransport.disconnectDevice(path)
+            runSuspendCatching { jadeService.disconnect() }
+            _state.update { it.copy(connected = null) }
+        }
     }
 
     private suspend fun unlockConnected(): JadeVersionInfo {
@@ -771,6 +835,8 @@ class JadeRepo @Inject constructor(
         JadeTransportKind.SERIAL -> transportType == TransportType.USB
     }
 }
+
+private class JadeIdentityMismatchError : AppError("A different Jade is connected")
 
 @Stable
 data class JadeRepoState(

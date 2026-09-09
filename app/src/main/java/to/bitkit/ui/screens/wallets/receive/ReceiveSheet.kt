@@ -154,7 +154,7 @@ fun ReceiveSheet(
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         onClickHardwareEditInvoice = {
-                            editInvoiceSourceTab = ReceiveTab.TREZOR
+                            editInvoiceSourceTab = ReceiveTab.HARDWARE
                             invoiceEditState.beginHardwareEdit()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
@@ -434,7 +434,7 @@ internal class ReceiveInvoiceEditState {
 
     fun beginHardwareEdit() {
         isHardwareInvoice = true
-        returnTab = ReceiveTab.TREZOR
+        returnTab = ReceiveTab.HARDWARE
     }
 
     fun initialTab(hardwareWalletId: String?): ReceiveTab? =

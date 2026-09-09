@@ -97,7 +97,7 @@ fun ReceiveQrScreen(
     lightningState: LightningState,
     onClickEditInvoice: (ReceiveTab) -> Unit,
     onClickReceiveCjit: () -> Unit,
-    onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.TREZOR) },
+    onClickHardwareEditInvoice: () -> Unit = { onClickEditInvoice(ReceiveTab.HARDWARE) },
     modifier: Modifier = Modifier,
     initialTab: ReceiveTab? = null,
     hardwareWalletId: String? = null,
@@ -212,7 +212,7 @@ fun ReceiveQrScreen(
     }
 
     LaunchedEffect(canCreateLightningInvoice, cjitInvoice, initialTab) {
-        if (initialTab == ReceiveTab.TREZOR) return@LaunchedEffect
+        if (initialTab == ReceiveTab.HARDWARE) return@LaunchedEffect
         if (!canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()) {
             selectedTab = ReceiveTab.SAVINGS
             lazyListState.scrollToItem(visibleTabs.indexOf(ReceiveTab.SAVINGS).coerceAtLeast(0))

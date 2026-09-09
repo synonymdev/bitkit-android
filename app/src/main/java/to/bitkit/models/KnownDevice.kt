@@ -53,6 +53,10 @@ internal fun KnownDevice.matches(deviceId: String) = id == deviceId || path == d
 internal val KnownDevice.walletKey: String
     get() = walletKey(xpubs, id)
 
+/** Wallet identity scoped to its signing protocol, so equal seeds on two vendors stay independent. */
+internal val KnownDevice.vendorWalletKey: String
+    get() = "${vendor.deviceType}:$walletKey"
+
 internal fun walletKey(xpubs: Map<String, String>, fallback: String): String =
     xpubs.values.sorted().joinToString().ifEmpty { fallback }
 
@@ -64,6 +68,7 @@ internal fun walletKey(xpubs: Map<String, String>, fallback: String): String =
  * material. An unknown device id proves nothing, so those entries are left alone.
  */
 internal fun KnownDevice.isReplacedBy(known: KnownDevice, refreshed: KnownDevice?): Boolean {
+    if (vendor != known.vendor) return false
     if (id != known.id) return false
     if (walletKey == known.walletKey) return true
     if (refreshed != null && walletKey == refreshed.walletKey) return true
@@ -83,18 +88,20 @@ internal fun List<KnownDevice>.findHardwareWalletId(
     vendor: HwWalletVendor,
 ): String {
     val walletKey = walletKey(xpubs, fallback)
-    return firstOrNull { it.walletKey == walletKey }?.walletId?.takeIf { it.isNotBlank() }
+    return firstOrNull { it.vendor == vendor && it.walletKey == walletKey }
+        ?.walletId
+        ?.takeIf { it.isNotBlank() }
         ?: deriveHardwareWalletId(xpubs, vendor).orEmpty()
 }
 
 internal fun List<KnownDevice>.withHardwareWalletIds(): List<KnownDevice> {
     val existingByWallet = filter { it.walletId.isNotBlank() }
-        .associate { it.walletKey to it.walletId }
+        .associate { it.vendorWalletKey to it.walletId }
     val generatedByWallet = mutableMapOf<String, String>()
 
     return map {
-        val walletId = existingByWallet[it.walletKey]
-            ?: generatedByWallet.getOrPut(it.walletKey) {
+        val walletId = existingByWallet[it.vendorWalletKey]
+            ?: generatedByWallet.getOrPut(it.vendorWalletKey) {
                 deriveHardwareWalletId(it.xpubs, it.vendor).orEmpty()
             }
         if (it.walletId == walletId) it else it.copy(walletId = walletId)

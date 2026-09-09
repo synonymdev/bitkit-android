@@ -3,6 +3,7 @@ package to.bitkit.models
 import org.junit.Test
 import to.bitkit.di.json
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -77,4 +78,35 @@ class KnownDeviceTest {
         // The native derivation is unavailable in unit tests; the call must not throw either way.
         assertTrue(jade == null || jade.startsWith("jade:"))
     }
+
+    @Test
+    fun `wallet ids with the same keys remain isolated by vendor`() {
+        val trezor = device(vendor = HwWalletVendor.TREZOR, walletId = "trezor:wallet")
+        val jade = device(vendor = HwWalletVendor.BLOCKSTREAM, walletId = "jade:wallet")
+
+        val migrated = listOf(trezor, jade).withHardwareWalletIds()
+
+        assertEquals(listOf("trezor:wallet", "jade:wallet"), migrated.map { it.walletId })
+    }
+
+    @Test
+    fun `a device from another vendor never replaces an entry`() {
+        val trezor = device(vendor = HwWalletVendor.TREZOR, walletId = "trezor:wallet")
+        val jade = device(vendor = HwWalletVendor.BLOCKSTREAM, walletId = "jade:wallet")
+
+        assertFalse(trezor.isReplacedBy(jade, refreshed = null))
+    }
+
+    private fun device(vendor: HwWalletVendor, walletId: String) = KnownDevice(
+        id = "shared-device",
+        name = null,
+        path = "shared-path",
+        transportType = TransportType.USB,
+        label = null,
+        model = null,
+        lastConnectedAt = 0L,
+        xpubs = mapOf("nativeSegwit" to "shared-zpub"),
+        walletId = walletId,
+        vendor = vendor,
+    )
 }

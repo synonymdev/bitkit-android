@@ -6,6 +6,7 @@ import com.synonym.bitkitcore.TrezorException
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -13,6 +14,7 @@ import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
@@ -213,6 +215,23 @@ class HwConnectViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.isConnecting)
         assertEquals(CONNECT_ERROR, sut.uiState.value.errorMessage)
         assertEquals("dev1", sut.uiState.value.foundDeviceId)
+    }
+
+    @Test
+    fun `cancelConnect cancels the pending jade transport operation`() = test {
+        val pending = CompletableDeferred<Result<HwConnectedDevice>>()
+        whenever(hwWalletRepo.connect("jade-path", HwWalletVendor.BLOCKSTREAM)).doSuspendableAnswer {
+            pending.await()
+        }
+        sut.onFoundRoute("jade-path", "Blockstream Jade", HwWalletVendor.BLOCKSTREAM)
+        sut.onConnectClick()
+        runCurrent()
+
+        sut.cancelConnect()
+        runCurrent()
+
+        verify(hwWalletRepo).cancelPendingConnection("jade-path", HwWalletVendor.BLOCKSTREAM)
+        assertFalse(sut.uiState.value.isConnecting)
     }
 
     @Test

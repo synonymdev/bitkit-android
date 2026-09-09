@@ -116,7 +116,7 @@ class HwReceiveViewModel @Inject constructor(
                     }
                 }.onFailure {
                     if (it is CancellationException && it !is TimeoutCancellationException) throw it
-                    handleVerifyFailure(it)
+                    handleVerifyFailure(walletId, it)
                 }
             } finally {
                 _uiState.update { it.copy(isVerifyingAddress = false) }
@@ -146,7 +146,7 @@ class HwReceiveViewModel @Inject constructor(
                                 description = context.getString(R.string.hardware__passphrase_mismatch),
                             )
                         } else {
-                            handleVerifyFailure(error)
+                            handleVerifyFailure(walletId, error)
                         }
                     }
             } finally {
@@ -157,12 +157,15 @@ class HwReceiveViewModel @Inject constructor(
     }
 
     fun dismissPassphrase() {
+        val walletId = _uiState.value.walletId
         passphraseJob?.cancel()
         passphraseJob = null
         _uiState.update { it.copy(isPassphraseRequired = false, isVerifyingPassphrase = false) }
+        disconnect(walletId)
     }
 
     fun cancel() {
+        val walletId = _uiState.value.walletId
         loadJob?.cancel()
         addressUpdatesJob?.cancel()
         verifyJob?.cancel()
@@ -172,15 +175,26 @@ class HwReceiveViewModel @Inject constructor(
         verifyJob = null
         passphraseJob = null
         _uiState.update { HwReceiveUiState() }
+        disconnect(walletId)
     }
 
     private fun invalidateVerification() {
+        val walletId = _uiState.value.walletId
         verifyJob?.cancel()
         passphraseJob?.cancel()
         _uiState.update { it.copy(isPassphraseRequired = false) }
+        disconnect(walletId)
     }
 
-    private suspend fun handleVerifyFailure(error: Throwable) {
+    private fun disconnect(walletId: String?) {
+        walletId ?: return
+        viewModelScope.launch { hwWalletRepo.disconnectStaleSession(walletId) }
+    }
+
+    private suspend fun handleVerifyFailure(walletId: String, error: Throwable) {
+        if (error is TimeoutCancellationException) {
+            hwWalletRepo.disconnectStaleSession(walletId)
+        }
         when {
             error.isHwUserCancellation() -> Unit
             generateSequence(error) { it.cause }.any { it is HwPassphraseRequiredError } -> {

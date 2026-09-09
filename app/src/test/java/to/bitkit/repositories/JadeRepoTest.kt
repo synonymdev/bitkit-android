@@ -25,6 +25,7 @@ import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.HwWalletStore
@@ -144,6 +145,22 @@ class JadeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `failed account export closes native transport and core session`() = test {
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.READY))
+        whenever { jadeService.getAccountExport(any(), any(), any()) }.thenThrow(IllegalStateException("export failed"))
+        val sut = createRepo()
+        sut.scan()
+
+        val result = sut.connect(USB_PATH)
+
+        assertTrue(result.isFailure)
+        verify(jadeTransport).disconnectDevice(USB_PATH)
+        verify(jadeService).disconnect()
+        assertNull(sut.state.value.connected)
+    }
+
+    @Test
     fun `connect reads the accounts again without taproot on old firmware`() = test {
         whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
         whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.READY))
@@ -193,6 +210,58 @@ class JadeRepoTest : BaseUnitTest() {
         assertTrue(result.isFailure)
         verify(jadeService, atLeastOnce()).disconnect()
         verify(jadeService, never()).getAccountExport(any(), any(), any())
+        assertNull(sut.state.value.connected)
+    }
+
+    @Test
+    fun `known usb reconnect skips another jade and connects the expected device`() = test {
+        val otherUsb = usbDevice.copy(path = USB_PATH)
+        val expectedUsb = usbDevice.copy(path = USB_PATH_2)
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(otherUsb, expectedUsb))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(
+            versionInfo(JadeState.LOCKED, efuseMac = "other"),
+            versionInfo(JadeState.READY),
+        )
+        val sut = createRepo()
+
+        val connected = sut.connectKnownDevice(knownUsb.id).getOrThrow()
+
+        assertEquals(USB_PATH_2, connected.path)
+        verify(jadeService, times(2)).connect(eq(JadeTransportKind.SERIAL), any(), any())
+        verify(jadeTransport).disconnectDevice(USB_PATH)
+        verify(jadeService, never()).unlock(any())
+    }
+
+    @Test
+    fun `known usb reconnect stops after the expected jade fails`() = test {
+        val expectedUsb = usbDevice.copy(path = USB_PATH)
+        val otherUsb = usbDevice.copy(path = USB_PATH_2)
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(expectedUsb, otherUsb))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.LOCKED))
+        whenever { jadeService.unlock(any()) }.thenThrow(IllegalStateException("unlock failed"))
+        val sut = createRepo()
+
+        val result = sut.connectKnownDevice(knownUsb.id)
+
+        assertTrue(result.isFailure)
+        verify(jadeService).connect(eq(JadeTransportKind.SERIAL), eq(USB_PATH), any())
+        verify(jadeService, times(1)).connect(any(), any(), any())
+        verify(jadeTransport).disconnectDevice(USB_PATH)
+    }
+
+    @Test
+    fun `cancelling a pending connection closes transport and core session`() = test {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        val sut = createRepo()
+
+        val result = sut.cancelPendingConnection(knownUsb.id)
+
+        assertTrue(result.isSuccess)
+        verify(jadeTransport).disconnectDevice(knownUsb.path)
+        verify(jadeService).cancel()
+        verify(jadeService).disconnect()
         assertNull(sut.state.value.connected)
     }
 
@@ -387,6 +456,7 @@ class JadeRepoTest : BaseUnitTest() {
 
     private companion object {
         const val USB_PATH = "/dev/bus/usb/001/007"
+        const val USB_PATH_2 = "/dev/bus/usb/001/008"
         const val EFUSE_MAC = "246F288F6B64"
         const val WALLET_ID = "jade:wallet"
         val ALL_ACCOUNT_TYPES = listOf(
