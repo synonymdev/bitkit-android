@@ -36,6 +36,7 @@ class SubscriptionsScreenTest {
                     initialTab = SubscriptionTab.Payments,
                     pendingPaymentRequestCount = 0,
                     onSubscription = {},
+                    onCreateSubscription = {},
                     paymentsContent = {
                         PaymentRequestsContent(
                             requests = persistentListOf(),

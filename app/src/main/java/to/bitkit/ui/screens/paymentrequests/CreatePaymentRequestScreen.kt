@@ -3,9 +3,11 @@
 
 package to.bitkit.ui.screens.paymentrequests
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -386,6 +388,11 @@ internal fun PaymentRequestRecipientContent(
     onBack: () -> Unit,
     onPaste: () -> String,
     onSelected: (PaykitPaymentRequestTarget) -> Unit,
+    @StringRes titleRes: Int = R.string.wallet__payment_request_choose_recipient,
+    selectedTarget: PaykitPaymentRequestTarget? = null,
+    testTagPrefix: String = "PaymentRequest",
+    action: (@Composable () -> Unit)? = null,
+    footer: @Composable () -> Unit = {},
 ) {
     var query by remember { mutableStateOf("") }
 
@@ -406,10 +413,11 @@ internal fun PaymentRequestRecipientContent(
             .gradientBackground()
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
-            .testTag("PaymentRequestRecipient")
+            .testTag("${testTagPrefix}Recipient")
     ) {
         SheetTopBar(
-            titleText = stringResource(R.string.wallet__payment_request_choose_recipient),
+            titleText = stringResource(titleRes),
+            action = action,
             onBack = onBack,
         )
         Caption13Up(text = stringResource(R.string.wallet__payment_request_recipient), color = Colors.White64)
@@ -428,7 +436,7 @@ internal fun PaymentRequestRecipientContent(
                             query = PubkyPublicKeyFormat.bounded(onPaste())
                         }
                         .padding(horizontal = 12.dp)
-                        .testTag("PaymentRequestRecipientPaste"),
+                        .testTag("${testTagPrefix}RecipientPaste"),
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_clipboard_text),
@@ -441,7 +449,7 @@ internal fun PaymentRequestRecipientContent(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .testTag("PaymentRequestRecipientSearch"),
+                .testTag("${testTagPrefix}RecipientSearch"),
         )
         VerticalSpacer(24.dp)
         Caption13Up(text = stringResource(R.string.contacts__contacts_header), color = Colors.White64)
@@ -463,7 +471,7 @@ internal fun PaymentRequestRecipientContent(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 24.dp)
-                            .testTag("PaymentRequestRecipientUnavailable"),
+                            .testTag("${testTagPrefix}RecipientUnavailable"),
                     )
                 }
             }
@@ -471,15 +479,26 @@ internal fun PaymentRequestRecipientContent(
                 items = recipients,
                 key = { (target, _) -> "${target.publicKey}|${target.receiverPath}" },
             ) { (target, contact) ->
-                PubkyContactRow(
-                    profile = contact,
-                    onClick = { onSelected(target) },
-                    verticalPadding = 16.dp,
-                    modifier = Modifier.testTag("PaymentRequestContact${contact.publicKey}"),
-                )
+                Box(contentAlignment = Alignment.CenterEnd) {
+                    PubkyContactRow(
+                        profile = contact,
+                        onClick = { onSelected(target) },
+                        verticalPadding = 16.dp,
+                        modifier = Modifier.testTag("${testTagPrefix}Contact${contact.publicKey}"),
+                    )
+                    if (target == selectedTarget) {
+                        Icon(
+                            painter = painterResource(R.drawable.ic_check),
+                            contentDescription = null,
+                            tint = Colors.Purple,
+                            modifier = Modifier.padding(end = 16.dp).size(24.dp),
+                        )
+                    }
+                }
                 HorizontalDivider(color = Colors.White10)
             }
         }
+        footer()
     }
 }
 

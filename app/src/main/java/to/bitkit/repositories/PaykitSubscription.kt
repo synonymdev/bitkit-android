@@ -3,6 +3,7 @@
 package to.bitkit.repositories
 
 import com.synonym.paykit.BillingPeriod
+import com.synonym.paykit.OutboundPrivateMessageStatus
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
@@ -157,7 +158,10 @@ data class PaykitSubscriptionRecurrence(
 data class PaykitSubscriptionMetadata(
     val description: String?,
     val benefits: List<String>,
+    val iconUri: String? = null,
 )
+
+enum class PaykitSubscriptionRole { Payer, Payee }
 
 @Serializable
 data class PaykitSubscriptionId(
@@ -178,12 +182,20 @@ data class PaykitSubscription(
     val recurrence: PaykitSubscriptionRecurrence,
     val metadata: PaykitSubscriptionMetadata,
     val acceptedPaymentEndpointIdentifiers: List<String>,
+    val role: PaykitSubscriptionRole = PaykitSubscriptionRole.Payer,
+    val deliveryStatus: PaykitPaymentRequestDeliveryStatus? = null,
     val lifecycleState: PaymentRequestLifecycleState,
     val paidPeriods: List<PaykitBillingPeriod>,
     val paymentProofKinds: Map<PaykitBillingPeriod, PaykitPaymentProofKind> = emptyMap(),
 ) {
     val id: PaykitSubscriptionId
         get() = PaykitSubscriptionId(paymentRequestId, counterparty, counterpartyReceiverPath)
+
+    val isPayer: Boolean
+        get() = role == PaykitSubscriptionRole.Payer
+
+    val isCreatedByUser: Boolean
+        get() = role == PaykitSubscriptionRole.Payee
 
     fun isProposalVisible(now: Instant): Boolean =
         lifecycleState == PaymentRequestLifecycleState.PROPOSED &&
@@ -198,6 +210,14 @@ data class PaykitSubscription(
 
     fun isActive(now: Instant): Boolean =
         lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING && recurrence.endsAt?.let { it > now } != false
+
+    fun isCreatedVisible(now: Instant): Boolean = isCreatedByUser && (isProposalVisible(now) || isActive(now))
+
+    fun canCancel(now: Instant): Boolean = recurrence.endsAt == null && if (isCreatedByUser) {
+        isProposalVisible(now) || isActive(now)
+    } else {
+        isActive(now)
+    }
 
     fun isExpired(now: Instant): Boolean = lifecycleState in setOf(
         PaymentRequestLifecycleState.CANCELED,
@@ -214,8 +234,9 @@ data class PaykitSubscription(
         else -> this
     }
 
-    fun requestsThrough(date: Instant, acceptedAt: Instant): List<PaykitPaymentRequest> =
-        recurrence.periodsThrough(date, acceptedAt).map { period ->
+    fun requestsThrough(date: Instant, acceptedAt: Instant): List<PaykitPaymentRequest> {
+        if (!isPayer) return emptyList()
+        return recurrence.periodsThrough(date, acceptedAt).map { period ->
             PaykitPaymentRequest(
                 paymentRequestId = paymentRequestId,
                 counterparty = counterparty,
@@ -235,13 +256,37 @@ data class PaykitSubscription(
                 paymentProofKind = paymentProofKinds[period],
             )
         }
+    }
 
     fun paymentDueOnAcceptance(now: Instant): PaykitPaymentRequest? = requestsThrough(now, now).firstOrNull()
+
+    fun receivedPaymentRequests(): List<PaykitPaymentRequest> {
+        if (!isCreatedByUser) return emptyList()
+        return paidPeriods.map { period ->
+            PaykitPaymentRequest(
+                paymentRequestId = paymentRequestId,
+                counterparty = counterparty,
+                counterpartyReceiverPath = counterpartyReceiverPath,
+                amountValue = amountValue,
+                amountSats = amountSats,
+                note = note,
+                createdAt = period.startsAt,
+                expiresAt = null,
+                acceptedPaymentEndpointIdentifiers = acceptedPaymentEndpointIdentifiers,
+                direction = PaykitPaymentRequestDirection.Outgoing,
+                lifecycleState = PaymentRequestLifecycleState.PROOF_SUBMITTED,
+                billingPeriod = period,
+                paymentProofKind = paymentProofKinds[period],
+            )
+        }
+    }
 }
 
 @Suppress("CyclomaticComplexMethod", "ReturnCount")
-internal fun PaymentRequestRecord.toPaykitSubscription(): PaykitSubscription? {
-    if (localRole != PaymentRequestLocalRole.PAYER) return null
+internal fun PaymentRequestRecord.toPaykitSubscription(
+    deliveryStatusOverride: PaykitPaymentRequestDeliveryStatus? = null,
+): PaykitSubscription? {
+    val role = localRole.toSubscriptionRole() ?: return null
     val requestTerms = terms ?: return null
     val sdkRecurrence = requestTerms.recurrence ?: return null
     if (
@@ -292,24 +337,48 @@ internal fun PaymentRequestRecord.toPaykitSubscription(): PaykitSubscription? {
         ),
         metadata = metadataObject,
         acceptedPaymentEndpointIdentifiers = endpoints,
+        role = role,
+        deliveryStatus = subscriptionDeliveryStatus(role, deliveryStatusOverride),
         lifecycleState = state,
         paidPeriods = payments.map { it.first },
         paymentProofKinds = payments.mapNotNull { (period, kind) -> kind?.let { period to it } }.toMap(),
     )
 }
 
+private fun PaymentRequestLocalRole?.toSubscriptionRole(): PaykitSubscriptionRole? = when (this) {
+    PaymentRequestLocalRole.PAYER -> PaykitSubscriptionRole.Payer
+    PaymentRequestLocalRole.PAYEE -> PaykitSubscriptionRole.Payee
+    PaymentRequestLocalRole.UNKNOWN, null -> null
+}
+
+private fun PaymentRequestRecord.subscriptionDeliveryStatus(
+    role: PaykitSubscriptionRole,
+    override: PaykitPaymentRequestDeliveryStatus?,
+): PaykitPaymentRequestDeliveryStatus? {
+    if (role != PaykitSubscriptionRole.Payee) return null
+    if (override != null) return override
+    return if (proposalOutboundStatus == OutboundPrivateMessageStatus.SENT) {
+        PaykitPaymentRequestDeliveryStatus.Sent
+    } else {
+        PaykitPaymentRequestDeliveryStatus.Queued
+    }
+}
+
 private fun PrivateJsonObject.subscriptionMetadata(): PaykitSubscriptionMetadata = runCatching {
     val subscription = Json.parseToJsonElement(exportText()).jsonObject["subscription"]?.jsonObject
-        ?: return@runCatching PaykitSubscriptionMetadata(null, emptyList())
+        ?: return@runCatching PaykitSubscriptionMetadata(null, emptyList(), null)
     if (subscription["version"]?.jsonPrimitive?.contentOrNull != "1") {
-        return@runCatching PaykitSubscriptionMetadata(null, emptyList())
+        return@runCatching PaykitSubscriptionMetadata(null, emptyList(), null)
     }
     val description = subscription["description"]?.jsonPrimitive?.contentOrNull?.clean(1024)
     val benefits = subscription["benefits"]?.jsonArray.orEmpty()
         .take(8)
         .mapNotNull { it.jsonPrimitive.contentOrNull?.clean(160) }
-    PaykitSubscriptionMetadata(description, benefits)
-}.getOrDefault(PaykitSubscriptionMetadata(null, emptyList()))
+    val iconUri = subscription["icon_uri"]?.jsonPrimitive?.contentOrNull
+        ?.clean(512)
+        ?.takeIf { it.startsWith("pubky://") }
+    PaykitSubscriptionMetadata(description, benefits, iconUri)
+}.getOrDefault(PaykitSubscriptionMetadata(null, emptyList(), null))
 
 private fun String.clean(limit: Int): String? = trim().take(limit).takeIf(String::isNotEmpty)
 
