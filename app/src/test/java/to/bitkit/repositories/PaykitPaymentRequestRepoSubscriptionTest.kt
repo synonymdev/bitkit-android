@@ -183,6 +183,36 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     }
 
     @Test
+    fun `creator payments aggregate duplicate proof events for one billing period`() = test {
+        val period = BillingPeriod("2027-01-01T08:00:00Z", "2027-02-01T08:00:00Z")
+        val first = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn period
+            on { paymentEndpointIdentifier } doReturn MethodId.Bolt11.rawValue
+        }
+        val second = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn period
+            on { paymentEndpointIdentifier } doReturn MethodId.Bolt11.rawValue
+        }
+        val offSchedule = mock<PaymentProofRecord> {
+            on { billingPeriod } doReturn BillingPeriod(period.startsAt, "2027-02-02T08:00:00Z")
+            on { paymentEndpointIdentifier } doReturn MethodId.Bolt11.rawValue
+        }
+        val subscription = requireNotNull(
+            paymentRequestRecord(
+                role = PaymentRequestLocalRole.PAYEE,
+                state = PaymentRequestLifecycleState.ACTIVE_RECURRING,
+                paymentProofs = listOf(first, second, offSchedule),
+            ).toPaykitSubscription()
+        )
+
+        assertEquals(1, subscription.paidPeriods.size)
+        val received = subscription.receivedPaymentRequests().single()
+        assertEquals(PaykitPaymentRequestDirection.Outgoing, received.direction)
+        assertEquals(PaymentRequestLifecycleState.PROOF_SUBMITTED, received.lifecycleState)
+        assertEquals(PaykitPaymentProofKind.Lightning, received.paymentProofKind)
+    }
+
+    @Test
     fun `creator proposal sends recurring terms and stays queued until delivery`() = test {
         val target = PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)
         whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
@@ -243,6 +273,38 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         assertTrue(creation.subscription.isCreatedByUser)
         assertEquals(PaykitPaymentRequestDeliveryStatus.Queued, creation.subscription.deliveryStatus)
         assertEquals(listOf(creation.subscription), sut.subscriptions.value)
+    }
+
+    @Test
+    fun `oversized creator proposal is rejected before icon upload or enqueue`() = test {
+        val target = PaykitPaymentRequestTarget(COUNTERPARTY, PaykitReceiverPaths.SERVER)
+        whenever(paykitSdkService.identityStatus()).thenReturn(IdentityStatus(LOCAL_IDENTITY, true))
+        whenever(paykitSdkService.linkedPeers()).thenReturn(
+            listOf(linkedPeer(COUNTERPARTY, LinkedPeerState.LINKED, PaykitReceiverPaths.SERVER)),
+        )
+        whenever(paykitSdkService.paymentRequestReceiverPaths(COUNTERPARTY))
+            .thenReturn(listOf(PaykitReceiverPaths.SERVER))
+
+        listOf(null, byteArrayOf(0, 1, 2)).forEach { icon ->
+            val result = sut.proposeSubscription(
+                draft = PaykitSubscriptionDraft(
+                    amountSats = 1000uL,
+                    name = "Support",
+                    description = "💜".repeat(256),
+                    frequency = PaykitRecurrenceUnit.Month,
+                    expiresAt = clock.now() + 60.seconds,
+                    iconBytes = icon,
+                ),
+                target = target,
+                savedPublicKeys = listOf(COUNTERPARTY),
+            )
+            assertEquals(PaykitPaymentRequestError.SubscriptionTooLong, result.exceptionOrNull())
+        }
+
+        verifyBlocking(paykitSdkService, never()) { uploadProfileAvatar(any(), any(), anyOrNull()) }
+        verifyBlocking(paykitSdkService, never()) { proposePaymentRequest(any(), any(), any(), any()) }
+        assertTrue(sut.subscriptions.value.isEmpty())
+        assertFalse(sut.isCreatingRequest.value)
     }
 
     @Test

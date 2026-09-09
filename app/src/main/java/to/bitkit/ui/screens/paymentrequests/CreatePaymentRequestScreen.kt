@@ -7,7 +7,6 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -479,22 +478,14 @@ internal fun PaymentRequestRecipientContent(
                 items = recipients,
                 key = { (target, _) -> "${target.publicKey}|${target.receiverPath}" },
             ) { (target, contact) ->
-                Box(contentAlignment = Alignment.CenterEnd) {
-                    PubkyContactRow(
-                        profile = contact,
-                        onClick = { onSelected(target) },
-                        verticalPadding = 16.dp,
-                        modifier = Modifier.testTag("${testTagPrefix}Contact${contact.publicKey}"),
-                    )
-                    if (target == selectedTarget) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_check),
-                            contentDescription = null,
-                            tint = Colors.Purple,
-                            modifier = Modifier.padding(end = 16.dp).size(24.dp),
-                        )
-                    }
-                }
+                PubkyContactRow(
+                    profile = contact,
+                    onClick = { onSelected(target) },
+                    verticalPadding = 16.dp,
+                    isSelected = selectedTarget?.let { it == target },
+                    selectionColor = Colors.Brand,
+                    modifier = Modifier.testTag("${testTagPrefix}Contact${contact.publicKey}"),
+                )
                 HorizontalDivider(color = Colors.White10)
             }
         }
@@ -579,7 +570,7 @@ internal fun PaymentRequestSentContent(
 }
 
 @Composable
-private fun PaymentRequestExpiration.title(): String = stringResource(
+internal fun PaymentRequestExpiration.title(): String = stringResource(
     when (this) {
         PaymentRequestExpiration.Hour -> R.string.wallet__payment_request_expiry_hour
         PaymentRequestExpiration.Day -> R.string.wallet__payment_request_expiry_day

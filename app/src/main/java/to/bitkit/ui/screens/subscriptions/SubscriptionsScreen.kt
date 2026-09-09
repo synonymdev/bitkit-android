@@ -412,7 +412,14 @@ private fun SubscriptionAvatar(
     size: Dp,
 ) {
     val iconUri = subscription.metadata.iconUri
-    if (iconUri == null) {
+    if (iconUri == null && subscription.isCreatedByUser) {
+        Image(
+            painter = painterResource(R.drawable.subscription_default_icon),
+            contentDescription = null,
+            modifier = Modifier.size(size).clip(RoundedCornerShape(size / 5))
+                .background(Colors.White).padding(size / 8),
+        )
+    } else if (iconUri == null) {
         PubkyContactAvatar(profile = contact, size = size)
     } else {
         PubkyImage(uri = iconUri, size = size)

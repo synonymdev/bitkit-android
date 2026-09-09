@@ -4885,7 +4885,17 @@ class AppViewModel @Inject constructor(
                         testTag = "SubscriptionProposalQueuedToast",
                     )
                 }
-            }.onFailure(::toast)
+            }.onFailure {
+                if (it is PaykitPaymentRequestError.SubscriptionTooLong) {
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.common__error),
+                        description = context.getString(R.string.subscriptions__content_too_long),
+                    )
+                } else {
+                    toast(it)
+                }
+            }
         }
     }
 

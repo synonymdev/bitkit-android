@@ -4,6 +4,7 @@ package to.bitkit.repositories
 
 import com.synonym.paykit.BillingPeriod
 import com.synonym.paykit.OutboundPrivateMessageStatus
+import com.synonym.paykit.PaymentProofRecord
 import com.synonym.paykit.PaymentRequestLifecycleState
 import com.synonym.paykit.PaymentRequestLocalRole
 import com.synonym.paykit.PaymentRequestRecord
@@ -311,14 +312,14 @@ internal fun PaymentRequestRecord.toPaykitSubscription(
         .filter { MethodId.fromRawValue(it) != null }
         .distinct()
     val metadataObject = requestTerms.metadata.subscriptionMetadata()
-    val payments = paymentProofs.mapNotNull { proof ->
-        val period = proof.billingPeriod ?: return@mapNotNull null
-        val periodStart = period.startsAt.parseInstant() ?: return@mapNotNull null
-        val periodEnd = period.endsAt.parseInstant() ?: return@mapNotNull null
-        val billingPeriod = PaykitBillingPeriod(periodStart, periodEnd).takeIf { periodStart < periodEnd }
-            ?: return@mapNotNull null
-        billingPeriod to PaykitPaymentProofKind.fromPaymentEndpointIdentifier(proof.paymentEndpointIdentifier)
-    }
+    val recurrence = PaykitSubscriptionRecurrence(
+        every = sdkRecurrence.every.toInt(),
+        unit = recurrenceUnit,
+        startsAt = startsAt,
+        anchor = anchor,
+        endsAt = recurrenceEndsAt,
+    )
+    val payments = paymentProofs.mapNotNull { it.toSubscriptionPayment(recurrence) }
     return PaykitSubscription(
         paymentRequestId = paymentRequestId,
         counterparty = counterparty,
@@ -328,21 +329,27 @@ internal fun PaymentRequestRecord.toPaykitSubscription(
         note = requestTerms.metadata.note()?.take(256),
         createdAt = lastEventAt?.parseInstant(),
         proposalExpiresAt = proposalExpiresAt,
-        recurrence = PaykitSubscriptionRecurrence(
-            every = sdkRecurrence.every.toInt(),
-            unit = recurrenceUnit,
-            startsAt = startsAt,
-            anchor = anchor,
-            endsAt = recurrenceEndsAt,
-        ),
+        recurrence = recurrence,
         metadata = metadataObject,
         acceptedPaymentEndpointIdentifiers = endpoints,
         role = role,
         deliveryStatus = subscriptionDeliveryStatus(role, deliveryStatusOverride),
         lifecycleState = state,
-        paidPeriods = payments.map { it.first },
+        paidPeriods = payments.map { it.first }.distinct(),
         paymentProofKinds = payments.mapNotNull { (period, kind) -> kind?.let { period to it } }.toMap(),
     )
+}
+
+@Suppress("ReturnCount")
+private fun PaymentProofRecord.toSubscriptionPayment(
+    recurrence: PaykitSubscriptionRecurrence,
+): Pair<PaykitBillingPeriod, PaykitPaymentProofKind?>? {
+    val period = billingPeriod ?: return null
+    val start = period.startsAt.parseInstant() ?: return null
+    val end = period.endsAt.parseInstant() ?: return null
+    val parsedPeriod = PaykitBillingPeriod(start, end).takeIf { start < end } ?: return null
+    if (recurrence.periodsThrough(date = start, acceptedAt = start).firstOrNull() != parsedPeriod) return null
+    return parsedPeriod to PaykitPaymentProofKind.fromPaymentEndpointIdentifier(paymentEndpointIdentifier)
 }
 
 private fun PaymentRequestLocalRole?.toSubscriptionRole(): PaykitSubscriptionRole? = when (this) {

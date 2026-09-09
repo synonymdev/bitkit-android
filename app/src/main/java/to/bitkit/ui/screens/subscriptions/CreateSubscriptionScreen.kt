@@ -19,7 +19,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -53,8 +55,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import to.bitkit.R
 import to.bitkit.ext.getClipboardText
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.models.Toast
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestTarget
@@ -67,27 +71,25 @@ import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.MoneyCell
 import to.bitkit.ui.components.MoneyDisplay
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.PubkyContactRow
 import to.bitkit.ui.components.PubkyImage
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestAmountContent
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestExpiration
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestRecipientContent
+import to.bitkit.ui.screens.paymentrequests.title
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.utils.SubscriptionIcon
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.AppViewModel
 import kotlin.time.Clock
@@ -131,12 +133,18 @@ fun CreateSubscriptionSheet(
                 isLoadingIcon = true
                 scope.launch {
                     val bytes = withContext(Dispatchers.IO) {
-                        runCatching {
-                            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
-                        }.getOrNull()
+                        runSuspendCatching { SubscriptionIcon.load(context.contentResolver, uri) }
                     }
-                    iconBytes = bytes
-                    selectedIconUri = uri.takeIf { bytes != null }
+                    bytes.onSuccess {
+                        iconBytes = it
+                        selectedIconUri = uri
+                    }.onFailure {
+                        appViewModel.toast(
+                            type = Toast.ToastType.ERROR,
+                            title = context.getString(R.string.common__error),
+                            description = context.getString(R.string.subscriptions__icon_error),
+                        )
+                    }
                     isLoadingIcon = false
                 }
             },
@@ -200,7 +208,7 @@ fun CreateSubscriptionSheet(
 }
 
 @Composable
-private fun CreateSubscriptionDetails(
+internal fun CreateSubscriptionDetails(
     amountSats: ULong,
     name: String,
     description: String,
@@ -240,11 +248,7 @@ private fun CreateSubscriptionDetails(
         SheetTopBar(titleText = stringResource(R.string.subscriptions__create_subscription))
         LazyColumn(modifier = Modifier.weight(1f)) {
             item {
-                rememberMoneyText(
-                    sats = amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
-                    reversed = true,
-                    showSymbol = true,
-                )?.let { Caption13Up(text = it.removeAccentTags(), color = Colors.White64) }
+                Caption13Up(text = stringResource(R.string.wallet__payment_request_amount), color = Colors.White64)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -291,33 +295,29 @@ private fun CreateSubscriptionDetails(
                         .fillMaxWidth()
                         .clip(RoundedCornerShape(16.dp))
                         .background(Colors.Gray6)
-                        .clickable(onClick = launchPhotoPicker)
+                        .clickable(enabled = !isLoadingIcon, onClick = launchPhotoPicker)
                         .padding(16.dp)
                         .testTag("SubscriptionIconPicker"),
                 ) {
                     if (selectedIconUri == null) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_image_square),
+                        Image(
+                            painter = painterResource(R.drawable.subscription_default_icon),
                             contentDescription = null,
-                            tint = Colors.Purple,
-                            modifier = Modifier.size(48.dp).padding(10.dp),
+                            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp))
+                                .background(Colors.White).padding(5.dp),
                         )
                     } else {
                         AsyncImage(
                             model = selectedIconUri,
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
-                            modifier = Modifier.size(48.dp).clip(RoundedCornerShape(12.dp)),
+                            modifier = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)),
                         )
                     }
-                    Column(Modifier.padding(start = 16.dp).weight(1f)) {
-                        BodyMSB(stringResource(R.string.subscriptions__custom_icon))
-                        BodyS(stringResource(R.string.subscriptions__custom_icon_description), color = Colors.White64)
-                    }
-                    Icon(
-                        painter = painterResource(R.drawable.ic_chevron_right),
-                        contentDescription = null,
-                        tint = Colors.White64,
+                    BodyM(
+                        text = stringResource(R.string.subscriptions__custom_icon_description),
+                        modifier = Modifier.padding(start = 16.dp).weight(1f),
+                        color = Colors.White64,
                     )
                 }
                 VerticalSpacer(24.dp)
@@ -326,13 +326,6 @@ private fun CreateSubscriptionDetails(
         PrimaryButton(
             text = stringResource(R.string.subscriptions__choose_recipient),
             onClick = onChooseRecipient,
-            icon = {
-                Icon(
-                    painter = painterResource(R.drawable.ic_user_plus),
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                )
-            },
             enabled = amountSats > 0uL && name.isNotBlank() && !isLoadingIcon,
             modifier = Modifier.testTag("SubscriptionChooseRecipient")
         )
@@ -367,7 +360,7 @@ private fun SubscriptionFrequencyPicker(
 }
 
 @Composable
-private fun SubscriptionRecipient(
+internal fun SubscriptionRecipient(
     targets: ImmutableList<PaykitPaymentRequestTarget>,
     contacts: ImmutableList<PubkyProfile>,
     selectedTarget: PaykitPaymentRequestTarget?,
@@ -429,7 +422,7 @@ private fun SubscriptionExpirationMenu(
         DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
             PaymentRequestExpiration.entries.forEach { option ->
                 DropdownMenuItem(
-                    text = { BodyM(option.creationTitle()) },
+                    text = { BodyM(option.title()) },
                     onClick = {
                         onExpirationChange(option)
                         expanded = false
@@ -452,7 +445,7 @@ private fun SubscriptionExpirationMenu(
 }
 
 @Composable
-private fun SubscriptionProposalSent(
+internal fun SubscriptionProposalSent(
     subscription: PaykitSubscription,
     contact: PubkyProfile,
     onDone: () -> Unit,
@@ -465,57 +458,95 @@ private fun SubscriptionProposalSent(
             .padding(horizontal = 16.dp)
             .testTag("SubscriptionProposalSent")
     ) {
-        SheetTopBar(titleText = stringResource(R.string.wallet__payment_request_sent_title))
-        FillHeight()
-        Image(
-            painter = painterResource(R.drawable.check),
-            contentDescription = null,
-            modifier = Modifier.size(256.dp).align(Alignment.CenterHorizontally),
-        )
-        FillHeight()
-        Display(
-            text = stringResource(R.string.subscriptions__proposal_sent_headline)
-                .withAccent(accentColor = Colors.Purple),
-        )
-        VerticalSpacer(12.dp)
-        BodyM(
-            text = stringResource(
+        SheetTopBar(
+            titleText = stringResource(
                 if (subscription.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
-                    R.string.subscriptions__proposal_sent_description
+                    R.string.wallet__payment_request_sent_title
                 } else {
-                    R.string.subscriptions__proposal_queued_description
+                    R.string.subscriptions__proposal_queued_title
                 }
             ),
-            color = Colors.White64,
         )
-        VerticalSpacer(16.dp)
-        PubkyContactRow(profile = contact, onClick = {}, verticalPadding = 12.dp)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(16.dp))
-                .background(Colors.Gray6)
-                .padding(16.dp),
+        Column(
+            modifier = Modifier.weight(
+                1f
+            ).verticalScroll(rememberScrollState()).testTag("SubscriptionConfirmationBody"),
         ) {
-            val iconUri = subscription.metadata.iconUri
-            if (iconUri == null) {
-                PubkyContactAvatar(profile = contact, size = 40.dp)
-            } else {
-                PubkyImage(uri = iconUri, size = 40.dp)
-            }
-            Column(Modifier.padding(start = 16.dp).weight(1f)) {
-                BodyMSB(subscription.note ?: stringResource(R.string.subscriptions__subscription))
-                BodyS(
-                    text = subscription.frequencyTitle(),
-                    color = Colors.White64,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+            VerticalSpacer(16.dp)
+            Image(
+                painter = painterResource(R.drawable.check),
+                contentDescription = null,
+                modifier = Modifier.size(256.dp).align(Alignment.CenterHorizontally),
+            )
+            VerticalSpacer(16.dp)
+            Display(
+                text = stringResource(
+                    if (subscription.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
+                        R.string.subscriptions__proposal_sent_headline
+                    } else {
+                        R.string.subscriptions__proposal_queued_headline
+                    }
                 )
+                    .withAccent(accentColor = Colors.Purple),
+            )
+            VerticalSpacer(12.dp)
+            BodyM(
+                text = stringResource(
+                    if (subscription.deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
+                        R.string.subscriptions__proposal_sent_description
+                    } else {
+                        R.string.subscriptions__proposal_queued_description
+                    }
+                ),
+                color = Colors.White64,
+            )
+            VerticalSpacer(16.dp)
+            PubkyContactRow(
+                profile = contact,
+                onClick = {},
+                verticalPadding = 16.dp,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Colors.Gray6)
+                    .padding(horizontal = 16.dp),
+            )
+            VerticalSpacer(8.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Colors.Gray6)
+                    .padding(16.dp),
+            ) {
+                val iconUri = subscription.metadata.iconUri
+                if (iconUri == null) {
+                    Image(
+                        painter = painterResource(R.drawable.subscription_default_icon),
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp).clip(RoundedCornerShape(8.dp))
+                            .background(Colors.White).padding(5.dp),
+                    )
+                } else {
+                    PubkyImage(uri = iconUri, size = 40.dp)
+                }
+                Column(Modifier.padding(start = 16.dp).weight(1f)) {
+                    BodyMSB(
+                        text = subscription.note ?: stringResource(R.string.subscriptions__subscription),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    BodyS(
+                        text = subscription.frequencyTitle(),
+                        color = Colors.White64,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                MoneyCell(sats = subscription.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong())
             }
-            MoneyCell(sats = subscription.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong())
+            VerticalSpacer(24.dp)
         }
-        VerticalSpacer(24.dp)
         PrimaryButton(
             text = stringResource(R.string.common__ok),
             onClick = onDone,

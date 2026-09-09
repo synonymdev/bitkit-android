@@ -2,8 +2,6 @@
 
 package to.bitkit.repositories
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import com.synonym.paykit.LinkedPeerState
 import com.synonym.paykit.OutboundPrivateCounterpartySendReport
 import com.synonym.paykit.OutboundPrivateMessageStatus
@@ -48,7 +46,7 @@ import to.bitkit.services.PaykitReceiverPaths
 import to.bitkit.services.PaykitSdkService
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
-import java.io.ByteArrayOutputStream
+import to.bitkit.utils.SubscriptionIcon
 import java.math.BigDecimal
 import java.util.UUID
 import java.util.concurrent.atomic.AtomicLong
@@ -163,6 +161,7 @@ sealed class PaykitPaymentRequestError(message: String) : AppError(message) {
     data object RequestUnavailable : PaykitPaymentRequestError("Payment request is unavailable")
     data object RequestExpired : PaykitPaymentRequestError("Payment request has expired")
     data object OperationInProgress : PaykitPaymentRequestError("Payment request operation is already in progress")
+    data object SubscriptionTooLong : PaykitPaymentRequestError("Subscription proposal exceeds the message size limit")
 }
 
 @Suppress("TooManyFunctions", "LongParameterList", "LargeClass")
@@ -179,8 +178,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
 ) {
     companion object {
         private const val TAG = "PaykitPaymentRequestRepo"
-        private const val SUBSCRIPTION_ICON_MAX_SIZE = 400
-        private const val SUBSCRIPTION_ICON_QUALITY = 80
         private val TARGET_DISCOVERY_TIMEOUT = 5.seconds
     }
 
@@ -471,20 +468,25 @@ class PaykitPaymentRequestRepo @Inject constructor(
         val generation = stateGeneration.get()
         val expectedIdentity = activeIdentity ?: throw PaykitPaymentRequestError.RequestUnavailable
         val validationDate = clock.now()
-        val name = draft.name.trim().take(256)
-        val description = draft.description.trim().take(1024)
+        val name = draft.name.trim()
+        val description = draft.description.trim()
         validateSubscriptionDraft(draft, name, validationDate)
 
         val endpoints = subscriptionProposalEndpoints(target, savedPublicKeys, expectedIdentity)
+        val reservedIconUri = PaykitSubscriptionProposal.reservedIconUri.takeIf { draft.iconBytes != null }
+        val preflight = buildSubscriptionProposal(draft, name, description, reservedIconUri, endpoints, validationDate)
+        PaykitSubscriptionProposal.validate(preflight)
         val iconUri = draft.iconBytes?.let {
             paykitSdkService.uploadProfileAvatar(
-                bytes = compressSubscriptionIcon(it),
+                bytes = SubscriptionIcon.compress(it),
                 contentType = "image/jpeg",
+                expectedIdentity = expectedIdentity,
             )
         }
         val proposalDate = clock.now()
         validateProposalExpiration(draft.expiresAt, proposalDate)
         val proposal = buildSubscriptionProposal(draft, name, description, iconUri, endpoints, proposalDate)
+        PaykitSubscriptionProposal.validate(proposal)
         val record = paykitSdkService.proposePaymentRequest(
             counterparty = target.publicKey,
             counterpartyReceiverPath = target.receiverPath,
@@ -553,7 +555,7 @@ class PaykitPaymentRequestRepo @Inject constructor(
             "benefits" to JsonArray(emptyList()),
         )
         iconUri?.let { subscriptionMetadata["icon_uri"] = JsonPrimitive(it) }
-        val timestamp = proposalDate.toString()
+        val timestamp = Instant.fromEpochSeconds(proposalDate.epochSeconds).toString()
         return PaykitPaymentRequestProposalTerms(
             amountValue = draft.amountSats.toBitcoinAmount(),
             paymentReference = "bitkit-${UUID.randomUUID()}",
@@ -927,32 +929,6 @@ class PaykitPaymentRequestRepo @Inject constructor(
         if (PublicPaykitRepo.isLightningPaymentOptionEnabled(settings)) add(MethodId.Bolt11.rawValue)
         if (PublicPaykitRepo.isOnchainPaymentOptionEnabled(settings)) {
             addAll(MethodId.entries.filter { it.isOnchain }.map(MethodId::rawValue))
-        }
-    }
-
-    private fun compressSubscriptionIcon(bytes: ByteArray): ByteArray {
-        val original = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-            ?: throw PaykitPaymentRequestError.RequestUnavailable
-        val scale = minOf(
-            SUBSCRIPTION_ICON_MAX_SIZE.toFloat() / original.width,
-            SUBSCRIPTION_ICON_MAX_SIZE.toFloat() / original.height,
-            1f,
-        )
-        val scaled = if (scale < 1f) {
-            Bitmap.createScaledBitmap(
-                original,
-                (original.width * scale).toInt().coerceAtLeast(1),
-                (original.height * scale).toInt().coerceAtLeast(1),
-                true,
-            )
-        } else {
-            original
-        }
-        return ByteArrayOutputStream().use { output ->
-            if (!scaled.compress(Bitmap.CompressFormat.JPEG, SUBSCRIPTION_ICON_QUALITY, output)) {
-                throw PaykitPaymentRequestError.RequestUnavailable
-            }
-            output.toByteArray()
         }
     }
 
