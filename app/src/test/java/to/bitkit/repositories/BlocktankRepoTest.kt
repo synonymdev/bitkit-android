@@ -231,17 +231,16 @@ class BlocktankRepoTest : BaseUnitTest() {
     @Test
     fun `refund address allocation stops after twenty used candidates`() = test {
         val oldInfo = AddressDerivationInfo(address = "bcrt1qrefund0", index = 0)
-        var candidateIndex = 1
+        val candidates = (1..20).map {
+            AddressDerivationInfo(address = "bcrt1qrefund$it", index = it)
+        }
+        val candidateIterator = candidates.iterator()
         cacheData.value = AppCacheData(blocktankRefundAddress = BlocktankRefundAddress(oldInfo.address, 0))
         whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 0)).thenReturn(Result.success(oldInfo))
-        whenever(coreService.isAddressUsed(any())).thenReturn(true)
+        whenever(coreService.isAddressUsed(oldInfo.address)).thenReturn(true)
+        candidates.forEach { whenever(coreService.isAddressUsed(it.address)).thenReturn(true) }
         whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenAnswer {
-            Result.success(
-                AddressDerivationInfo(
-                    address = "bcrt1qrefund$candidateIndex",
-                    index = candidateIndex++,
-                ),
-            )
+            Result.success(candidateIterator.next())
         }
         sut = createSut()
 
