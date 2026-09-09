@@ -71,6 +71,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | Android | Figma |
 | - | - |
 | CreatePaymentRequestScreen.kt | Payment Request (from Receive > Contacts OR Contact profile OR Payment Requests) › Request payment enter amount |
+| IncomingPaymentRequestDetailsScreen.kt | `todo` |
 | PaymentRequestsScreen.kt | Payment Requests › Payment Requests |
 
 ## ui/screens/profile
@@ -115,6 +116,13 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | ShopIntroScreen.kt | Shop (Bitrefill & BTCMaps) › Shop Onboarding |
 | shopDiscover/ShopDiscoverScreen.kt | Shop (Bitrefill & BTCMaps) › Shop Discover |
 | shopWebView/ShopWebViewScreen.kt | Shop (Bitrefill & BTCMaps) › Shop Gift Cards |
+
+## ui/screens/subscriptions
+
+| Android | Figma |
+| - | - |
+| CreateSubscriptionScreen.kt | Subscriptions › Create Subscription / Choose Subscription Recipient / Sent Subscription Proposal |
+| SubscriptionsScreen.kt | Subscriptions › Subscriptions Intro / Subscriptions overview |
 
 ## ui/screens/transfer
 
