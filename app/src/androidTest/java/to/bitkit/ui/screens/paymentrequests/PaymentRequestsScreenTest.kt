@@ -15,9 +15,15 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.models.PubkyProfile
+import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestDirection
+import to.bitkit.repositories.PaykitRecurrenceUnit
+import to.bitkit.repositories.PaykitSubscription
+import to.bitkit.repositories.PaykitSubscriptionMetadata
+import to.bitkit.repositories.PaykitSubscriptionRecurrence
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
 import kotlin.time.Clock
@@ -38,11 +44,13 @@ class PaymentRequestsScreenTest {
                 PaymentRequestsSheetContent(
                     requests = persistentListOf(request),
                     contacts = persistentListOf(),
-                    rejectingRequestIds = persistentSetOf(),
+                    subscriptions = persistentListOf(),
+                    dismissingRequestIds = persistentSetOf(),
                     onNotNow = {},
                     onSeeAll = {},
                     onPay = {},
-                    onReject = {},
+                    onDismiss = { Result.success(Unit) },
+                    onDetails = {},
                 )
             }
         }
@@ -55,25 +63,59 @@ class PaymentRequestsScreenTest {
     }
 
     @Test
-    fun queueDisablesActionsWhileRequestIsRejecting() {
-        val request = request(id = "rejecting")
+    fun queueDisablesActionsWhileRequestIsDismissing() {
+        val request = request(id = "dismissing")
 
         composeTestRule.setContent {
             PaymentRequestsTestSurface {
                 PaymentRequestsSheetContent(
                     requests = persistentListOf(request),
                     contacts = persistentListOf(),
-                    rejectingRequestIds = persistentSetOf(request.id),
+                    subscriptions = persistentListOf(),
+                    dismissingRequestIds = persistentSetOf(request.id),
                     onNotNow = {},
                     onSeeAll = {},
                     onPay = {},
-                    onReject = {},
+                    onDismiss = { Result.success(Unit) },
+                    onDetails = {},
                 )
             }
         }
 
         composeTestRule.onNodeWithText("Dismiss").assertDoesNotExist()
         composeTestRule.onNodeWithText("Pay").assertIsNotEnabled()
+    }
+
+    @Test
+    fun recurringQueueCardShowsProviderThenSubscriptionName() {
+        val contact = PubkyProfile.forDisplay(request().counterparty, "Coffee House", imageUrl = null)
+        val subscription = subscription(note = "Weekly coffee")
+        val recurringRequest = request(id = subscription.paymentRequestId).copy(
+            lifecycleState = PaymentRequestLifecycleState.ACTIVE_RECURRING,
+            billingPeriod = PaykitBillingPeriod(
+                startsAt = Instant.parse("2027-01-15T08:00:00Z"),
+                endsAt = Instant.parse("2027-01-22T08:00:00Z"),
+            ),
+        )
+
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                PaymentRequestsSheetContent(
+                    requests = persistentListOf(recurringRequest),
+                    contacts = persistentListOf(contact),
+                    subscriptions = persistentListOf(subscription),
+                    dismissingRequestIds = persistentSetOf(),
+                    onNotNow = {},
+                    onSeeAll = {},
+                    onPay = {},
+                    onDismiss = { Result.success(Unit) },
+                    onDetails = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("Coffee House").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Weekly coffee").assertIsDisplayed()
     }
 
     @Test
@@ -95,12 +137,14 @@ class PaymentRequestsScreenTest {
                     requests = persistentListOf(outgoing, accepted),
                     pending = persistentListOf(),
                     contacts = persistentListOf(),
-                    rejectingRequestIds = persistentSetOf(),
+                    subscriptions = persistentListOf(),
+                    dismissingRequestIds = persistentSetOf(),
                     canRequestPayment = true,
                     onBack = {},
                     onRequestPayment = {},
                     onPay = {},
-                    onReject = {},
+                    onDismiss = { Result.success(Unit) },
+                    onDetails = {},
                 )
             }
         }
@@ -121,12 +165,14 @@ class PaymentRequestsScreenTest {
                     requests = persistentListOf(),
                     pending = persistentListOf(),
                     contacts = persistentListOf(),
-                    rejectingRequestIds = persistentSetOf(),
+                    subscriptions = persistentListOf(),
+                    dismissingRequestIds = persistentSetOf(),
                     canRequestPayment = true,
                     onBack = {},
                     onRequestPayment = {},
                     onPay = {},
-                    onReject = {},
+                    onDismiss = { Result.success(Unit) },
+                    onDetails = {},
                 )
             }
         }
@@ -147,12 +193,14 @@ class PaymentRequestsScreenTest {
                     requests = persistentListOf(),
                     pending = persistentListOf(),
                     contacts = persistentListOf(),
-                    rejectingRequestIds = persistentSetOf(),
+                    subscriptions = persistentListOf(),
+                    dismissingRequestIds = persistentSetOf(),
                     canRequestPayment = false,
                     onBack = {},
                     onRequestPayment = {},
                     onPay = {},
-                    onReject = {},
+                    onDismiss = { Result.success(Unit) },
+                    onDetails = {},
                 )
             }
         }
@@ -160,7 +208,7 @@ class PaymentRequestsScreenTest {
         composeTestRule.onNodeWithTag("PaymentRequestCreate").assertDoesNotExist()
     }
 
-    private fun request(id: String) = PaykitPaymentRequest(
+    private fun request(id: String = "request") = PaykitPaymentRequest(
         paymentRequestId = id,
         counterparty = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
         counterpartyReceiverPath = "bitkit/wallet",
@@ -170,6 +218,28 @@ class PaymentRequestsScreenTest {
         createdAt = Instant.parse("2027-01-15T08:00:00Z"),
         expiresAt = null,
         acceptedPaymentEndpointIdentifiers = listOf("btc-lightning-bolt11"),
+    )
+
+    private fun subscription(note: String) = PaykitSubscription(
+        paymentRequestId = "subscription",
+        counterparty = request().counterparty,
+        counterpartyReceiverPath = "bitkit/wallet",
+        amountValue = "0.00025",
+        amountSats = 25_000uL,
+        note = note,
+        createdAt = Instant.parse("2027-01-15T08:00:00Z"),
+        proposalExpiresAt = null,
+        recurrence = PaykitSubscriptionRecurrence(
+            every = 1,
+            unit = PaykitRecurrenceUnit.Week,
+            startsAt = Instant.parse("2027-01-15T08:00:00Z"),
+            anchor = Instant.parse("2027-01-15T08:00:00Z"),
+            endsAt = null,
+        ),
+        metadata = PaykitSubscriptionMetadata(description = null, benefits = emptyList()),
+        acceptedPaymentEndpointIdentifiers = listOf("btc-lightning-bolt11"),
+        lifecycleState = PaymentRequestLifecycleState.ACTIVE_RECURRING,
+        paidPeriods = emptyList(),
     )
 }
 
