@@ -20,16 +20,19 @@ parse successfully but cannot be opened.
   showing terminal feedback.
 
 The parse reasons are `missing_local_role`, `outgoing_request`, `unsupported_local_role`,
-`non_actionable_state`, `missing_terms`, `recurring_request`, `unsupported_asset`, `invalid_amount`,
-`amount_out_of_range`, `no_supported_endpoint`, `invalid_expiration`, and `expired`.
+`non_actionable_state`, `missing_terms`, `recurring_request`, `unsupported_recurrence`,
+`unsupported_asset`, `invalid_amount`, `amount_out_of_range`, `no_supported_endpoint`,
+`invalid_expiration`, and `expired`.
 
 The resolution reasons are `no_supported_endpoint`, `endpoint_not_payable`,
 `payment_details_pending`, and `resolution_failed`. The presentation reasons are
 `invalid_payment_target`, `payment_target_not_routable`, and `request_expired`.
 
 `outgoing_request`, `non_actionable_state`, `recurring_request`, and `expired` are expected filtering
-of outgoing, completed, subscription, or elapsed records, so they do not emit incoming-rejection
-warnings.
+of outgoing, completed, valid subscription, or elapsed records, so they do not emit
+incoming-rejection warnings.
+`unsupported_recurrence` identifies recurring records that cannot be represented as subscriptions
+and emits a privacy-safe warning with only the redacted counterparty.
 `unsupported_local_role` identifies an unknown role and emits a privacy-safe warning with only the
 redacted counterparty.
 

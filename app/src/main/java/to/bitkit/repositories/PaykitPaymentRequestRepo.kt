@@ -89,6 +89,7 @@ data class PaykitPaymentRequest(
         NonActionableState("non_actionable_state", shouldLogIncomingRejection = false),
         MissingTerms("missing_terms"),
         RecurringRequest("recurring_request", shouldLogIncomingRejection = false),
+        UnsupportedRecurrence("unsupported_recurrence"),
         UnsupportedAsset("unsupported_asset"),
         InvalidAmount("invalid_amount"),
         AmountOutOfRange("amount_out_of_range"),
@@ -1094,7 +1095,13 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
     val requestTerms = terms
         ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.MissingTerms)
     if (requestTerms.recurrence != null) {
-        return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.RecurringRequest)
+        return PaykitPaymentRequestParseResult.Rejected(
+            if (toPaykitSubscription() != null) {
+                PaykitPaymentRequest.ParseFailure.RecurringRequest
+            } else {
+                PaykitPaymentRequest.ParseFailure.UnsupportedRecurrence
+            },
+        )
     }
     if (requestTerms.amount.asset != "btc") {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
