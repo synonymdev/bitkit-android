@@ -153,7 +153,7 @@ class DrawerMenuWidgetsTest {
     }
 
     @Test
-    fun paymentRequestsIsAvailableFromDrawerWhenPaykitIsEnabled() {
+    fun subscriptionsIsTheOnlyPaykitEntryInDrawerWhenPaykitIsEnabled() {
         composeTestRule.setContent {
             val navController = rememberNavController()
             val drawerState = rememberDrawerState(DrawerValue.Open)
@@ -166,8 +166,8 @@ class DrawerMenuWidgetsTest {
                     composable<Routes.Home> {
                         Text("Home", modifier = Modifier.testTag("HomeRoute"))
                     }
-                    composable<Routes.PaymentRequests> {
-                        Text("Payment Requests", modifier = Modifier.testTag("PaymentRequestsRoute"))
+                    composable<Routes.Subscriptions> {
+                        Text("Subscriptions", modifier = Modifier.testTag("SubscriptionsRoute"))
                     }
                 }
                 DrawerMenu(
@@ -182,14 +182,13 @@ class DrawerMenuWidgetsTest {
             }
         }
 
-        composeTestRule.onNodeWithText("REQUESTS").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("DrawerPaymentRequests").performClick()
+        composeTestRule.onNodeWithTag("DrawerSubscriptions").performClick()
 
-        composeTestRule.onNodeWithTag("PaymentRequestsRoute").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("SubscriptionsRoute").assertIsDisplayed()
     }
 
     @Test
-    fun paymentRequestsIsHiddenFromDrawerWhenPaykitIsDisabled() {
+    fun paykitEntriesAreHiddenFromDrawerWhenPaykitIsDisabled() {
         composeTestRule.setContent {
             val navController = rememberNavController()
             val drawerState = rememberDrawerState(DrawerValue.Open)
@@ -207,7 +206,7 @@ class DrawerMenuWidgetsTest {
             }
         }
 
-        composeTestRule.onNodeWithTag("DrawerPaymentRequests").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("DrawerSubscriptions").assertDoesNotExist()
     }
 }
 
