@@ -1048,7 +1048,7 @@
     <string name="subscriptions__custom_icon">Icon</string>
     <string name="subscriptions__custom_icon_description">Tap to upload a custom icon</string>
     <string name="subscriptions__daily">Daily</string>
-    <string name="subscriptions__daily_subscription">Daily Subscription</string>
+    <string name="subscriptions__daily_subscription">Daily subscription</string>
     <string name="subscriptions__delete_subscription">Delete Subscription</string>
     <string name="subscriptions__description">Description</string>
     <string name="subscriptions__description_placeholder">What is this subscription for?</string>
@@ -1069,7 +1069,7 @@
     <string name="subscriptions__icon_error">Could not load this image. Choose another image and try again.</string>
     <string name="subscriptions__monthly">Monthly</string>
     <string name="subscriptions__monthly_cost">Monthly Cost</string>
-    <string name="subscriptions__monthly_subscription">Monthly Subscription</string>
+    <string name="subscriptions__monthly_subscription">Monthly subscription</string>
     <string name="subscriptions__more_info">More Info</string>
     <string name="subscriptions__name">Subscription Name</string>
     <string name="subscriptions__name_placeholder">Subscription name</string>
@@ -1087,7 +1087,7 @@
     <string name="subscriptions__proposal_queued_headline"><![CDATA[Queued\n<accent>Proposal</accent>]]></string>
     <string name="subscriptions__proposal_queued_status">Proposal queued</string>
     <string name="subscriptions__proposal_queued_title">Queued</string>
-    <string name="subscriptions__proposal_sent_description">You have sent a subscription proposal.</string>
+    <string name="subscriptions__proposal_sent_description">You have sent a subscription proposal to</string>
     <string name="subscriptions__proposal_sent_headline"><![CDATA[Sent\n<accent>Proposal</accent>]]></string>
     <string name="subscriptions__proposal_sent_status">Proposal sent</string>
     <string name="subscriptions__proposals">Proposals</string>
@@ -1110,9 +1110,9 @@
     <string name="subscriptions__unsupported_frequency">Unsupported Frequency</string>
     <string name="subscriptions__unsupported_payment_description">This subscription uses payment details that Bitkit does not support yet.</string>
     <string name="subscriptions__weekly">Weekly</string>
-    <string name="subscriptions__weekly_subscription">Weekly Subscription</string>
+    <string name="subscriptions__weekly_subscription">Weekly subscription</string>
     <string name="subscriptions__yearly">Yearly</string>
-    <string name="subscriptions__yearly_subscription">Yearly Subscription</string>
+    <string name="subscriptions__yearly_subscription">Yearly subscription</string>
     <string name="sweep__balance_format">%1$s sats</string>
     <string name="sweep__checking_description">Please wait while Bitkit looks for funds in unsupported addresses (Legacy, Nested SegWit, and Taproot).</string>
     <string name="sweep__checking_loading">LOOKING FOR FUNDS...</string>

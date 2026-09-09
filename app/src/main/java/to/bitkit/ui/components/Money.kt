@@ -28,6 +28,7 @@ import java.math.BigDecimal
 @Composable
 fun MoneyDisplay(
     sats: Long,
+    modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null,
     showSymbol: Boolean? = null,
 ) {
@@ -35,7 +36,7 @@ fun MoneyDisplay(
     text?.let {
         Display(
             text = it.withAccent(accentColor = Colors.White64),
-            modifier = Modifier
+            modifier = modifier
                 .clickableAlpha(onClick = onClick)
                 .testTag("MoneyText")
         )
@@ -95,8 +96,9 @@ fun MoneyMSB(
     unit: PrimaryDisplay = LocalCurrencies.current.primaryDisplay,
     color: Color = MaterialTheme.colorScheme.primary,
     accent: Color = Colors.White64,
+    showSymbol: Boolean = unit == PrimaryDisplay.FIAT,
 ) {
-    rememberMoneyText(sats = sats, unit = unit)?.let { text ->
+    rememberMoneyText(sats = sats, unit = unit, showSymbol = showSymbol)?.let { text ->
         BodyMSB(
             text = text.withAccent(accentColor = accent),
             color = color,
