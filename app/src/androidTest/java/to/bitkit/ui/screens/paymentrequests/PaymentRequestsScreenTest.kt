@@ -119,6 +119,34 @@ class PaymentRequestsScreenTest {
     }
 
     @Test
+    fun listShowsIncomingSectionWithPayAndDismiss() {
+        val incoming = request(id = "incoming")
+
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface {
+                PaymentRequestsContent(
+                    requests = persistentListOf(incoming),
+                    pending = persistentListOf(incoming),
+                    contacts = persistentListOf(),
+                    subscriptions = persistentListOf(),
+                    dismissingRequestIds = persistentSetOf(),
+                    canRequestPayment = true,
+                    onBack = {},
+                    onRequestPayment = {},
+                    onPay = {},
+                    onDismiss = { Result.success(Unit) },
+                    onDetails = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("INCOMING").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestRowincoming").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Pay").assertIsDisplayed()
+        composeTestRule.onNodeWithText("Dismiss").assertIsDisplayed()
+    }
+
+    @Test
     fun historyGroupsCompletedRequestsAndKeepsActiveOutgoingRequests() {
         val now = Clock.System.now()
         val accepted = request(id = "accepted").copy(

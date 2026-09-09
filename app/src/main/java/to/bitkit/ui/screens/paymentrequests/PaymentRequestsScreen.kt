@@ -308,7 +308,7 @@ internal fun PaymentRequestsContent(
                         Caption13Up(
                             text = stringResource(R.string.wallet__payment_requests_outgoing),
                             color = Colors.White64,
-                            modifier = Modifier.padding(top = 24.dp)
+                            modifier = Modifier.padding(top = 16.dp)
                         )
                     }
                     items(sections.outgoing, key = { it.lazyListKey }) { request ->

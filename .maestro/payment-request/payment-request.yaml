@@ -42,9 +42,13 @@ tags:
     id: "PaymentRequestCreate"
 - extendedWaitUntil:
     visible:
-      id: "PaymentRequestContactsHeader"
+      id: "PaymentRequestRecipientSearch"
     timeout: 10000
-- assertVisible: "Alex Stronghand"
+- extendedWaitUntil:
+    visible: "Alex Stronghand"
+    timeout: 5000
+- assertNotVisible:
+    id: "PaymentRequestContactsHeader"
 - assertVisible: "Anna Pleb"
 - assertVisible: "Areem Holden"
 - assertVisible: "Craig Wrong"
@@ -163,10 +167,8 @@ tags:
     id: "PaymentRequestSendButton"
 - extendedWaitUntil:
     visible:
-      id: "PaymentRequestRecipient"
+      id: "PaymentRequestContactsHeader"
     timeout: 10000
-- assertNotVisible:
-    id: "PaymentRequestContactsHeader"
 - assertVisible: "Alex Stronghand"
 - assertVisible: "Anna Pleb"
 - assertVisible: "Craig Wrong"

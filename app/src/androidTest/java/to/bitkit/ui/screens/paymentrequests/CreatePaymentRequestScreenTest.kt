@@ -59,6 +59,7 @@ class CreatePaymentRequestScreenTest {
         composeTestRule.onNodeWithTag("PaymentRequestExpiryWeek").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestSend").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestNumberPad").assertDoesNotExist()
+        composeTestRule.onNodeWithText("AMOUNT").assertDoesNotExist()
     }
 
     @Test
@@ -116,7 +117,7 @@ class CreatePaymentRequestScreenTest {
         composeTestRule.onNodeWithTag("PaymentRequestContact${target.publicKey}").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRecipientSearch").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRecipientPaste", useUnmergedTree = true).assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestContactsHeader").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestContactsHeader").assertDoesNotExist()
         composeTestRule.onNodeWithTag("PaymentRequestSend").assertDoesNotExist()
         composeTestRule.onNodeWithTag("PaymentRequestContact${target.publicKey}").performClick()
         assertEquals(target, selectedTarget)
@@ -128,7 +129,7 @@ class CreatePaymentRequestScreenTest {
     }
 
     @Test
-    fun recipientFromInvoiceHidesContactsHeader() {
+    fun recipientFromInvoiceShowsContactsHeader() {
         composeTestRule.setContent {
             AppThemeSurface {
                 PaymentRequestRecipientContent(
@@ -137,13 +138,31 @@ class CreatePaymentRequestScreenTest {
                     onBack = {},
                     onPaste = { target.publicKey },
                     onSelected = {},
-                    showContactsHeader = false,
+                    showContactsHeader = true,
                 )
             }
         }
 
-        composeTestRule.onNodeWithTag("PaymentRequestContactsHeader").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("PaymentRequestContactsHeader").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestContact${target.publicKey}").assertIsDisplayed()
+    }
+
+    @Test
+    fun detailsFromInvoiceShowsAmountLabelInsteadOfFiat() {
+        composeTestRule.setContent {
+            AppThemeSurface {
+                PaymentRequestDetailsContent(
+                    initialDraft = draft,
+                    contact = PubkyProfile.placeholder(target.publicKey),
+                    isCreating = false,
+                    onEditAmount = {},
+                    onSend = {},
+                    fromInvoiceEditor = true,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("AMOUNT").assertIsDisplayed()
     }
 
     @Test

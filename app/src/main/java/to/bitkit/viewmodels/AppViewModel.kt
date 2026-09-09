@@ -5093,10 +5093,19 @@ class AppViewModel @Inject constructor(
     }
 
     private fun processDeeplink(uri: Uri) = viewModelScope.launch {
-        PaymentRequestFixtureRuntime.fixtureFor(uri)?.let { fixture ->
-            settingsStore.setIsPaykitEnabled(true)
-            paymentRequestFixture.update { fixture }
-            return@launch
+        when (val link = PaymentRequestFixtureRuntime.linkFor(uri)) {
+            is PaymentRequestFixtureLink.Seed -> {
+                settingsStore.setIsPaykitEnabled(true)
+                paymentRequestFixture.update { link.fixture }
+                return@launch
+            }
+
+            PaymentRequestFixtureLink.Clear -> {
+                paymentRequestFixture.update { null }
+                return@launch
+            }
+
+            null -> Unit
         }
 
         val value = uri.toString()

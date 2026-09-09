@@ -68,12 +68,14 @@ import to.bitkit.ui.components.PubkyContactRow
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.UnitButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.AppViewModel
@@ -85,14 +87,14 @@ import kotlin.time.Duration.Companion.hours
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
-/** Keypad height for four 88dp key rows, matching the Figma amount frame. */
+/** Design keypad height: the 347dp Keyboard/NumPad instance of the v62 amount frames, four rows of 88dp. */
 private val NUMBER_PAD_HEIGHT = 352.dp
-
-/** Keypad height for four rows at the NumberPad minimum key height. */
-private val NUMBER_PAD_MIN_HEIGHT = 200.dp
 
 /** Space the amount step needs besides the keypad: amount field, toggle, divider, button, spacers. */
 private val AMOUNT_STEP_FIXED_HEIGHT = 264.dp
+
+/** Space the sent step needs below the illustration: headline, subtitle, card, OK button, spacers. */
+private val SENT_FIXED_CONTENT_HEIGHT = 376.dp
 
 /** Checkmark illustration height as a fraction of the sent screen body. */
 private const val SENT_CHECK_HEIGHT_FRACTION = 0.43f
@@ -170,7 +172,7 @@ internal fun PaymentRequestAmountContent(
             },
         )
         BoxWithConstraints(modifier = Modifier.weight(1f)) {
-            val keypadHeight = (maxHeight - AMOUNT_STEP_FIXED_HEIGHT).coerceIn(NUMBER_PAD_MIN_HEIGHT, NUMBER_PAD_HEIGHT)
+            val keypadHeight = (maxHeight - AMOUNT_STEP_FIXED_HEIGHT).coerceIn(0.dp, NUMBER_PAD_HEIGHT)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -183,7 +185,7 @@ internal fun PaymentRequestAmountContent(
                         .fillMaxWidth()
                         .testTag("PaymentRequestAmountField")
                 )
-                FillHeight(weight = 4f, min = 12.dp)
+                FillHeight(min = 12.dp)
                 Row(modifier = Modifier.fillMaxWidth()) {
                     FillWidth()
                     UnitButton(
@@ -224,6 +226,7 @@ fun PaymentRequestDetailsScreen(
     target: PaykitPaymentRequestTarget,
     onEditAmount: (PaykitPaymentRequestDraft) -> Unit,
     onSent: (PaykitPaymentRequest) -> Unit,
+    fromInvoiceEditor: Boolean = false,
 ) {
     val contacts by appViewModel.pubkyContacts.collectAsStateWithLifecycle()
     val isCreating by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
@@ -236,6 +239,7 @@ fun PaymentRequestDetailsScreen(
         isCreating = isCreating,
         onEditAmount = onEditAmount,
         onSend = { updatedDraft -> appViewModel.createPaymentRequest(updatedDraft, target, onSent) },
+        fromInvoiceEditor = fromInvoiceEditor,
     )
 }
 
@@ -247,6 +251,7 @@ internal fun PaymentRequestDetailsContent(
     onEditAmount: (PaykitPaymentRequestDraft) -> Unit,
     onSend: (PaykitPaymentRequestDraft) -> Unit,
     modifier: Modifier = Modifier,
+    fromInvoiceEditor: Boolean = false,
 ) {
     var note by remember(initialDraft.note) { mutableStateOf(initialDraft.note) }
     var expiration by remember(initialDraft.expiresAt) {
@@ -267,7 +272,16 @@ internal fun PaymentRequestDetailsContent(
     ) {
         SheetTopBar(titleText = stringResource(R.string.wallet__payment_request))
         VerticalSpacer(16.dp)
-        Caption13Up(text = stringResource(R.string.wallet__payment_request_amount), color = Colors.White64)
+        val fiatCaption = rememberMoneyText(
+            sats = initialDraft.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
+            reversed = true,
+            showSymbol = true,
+        )?.removeAccentTags()
+        Caption13Up(
+            text = fiatCaption.takeUnless { fromInvoiceEditor }
+                ?: stringResource(R.string.wallet__payment_request_amount),
+            color = Colors.White64,
+        )
         VerticalSpacer(16.dp)
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -372,7 +386,7 @@ fun PaymentRequestRecipientScreen(
     appViewModel: AppViewModel,
     onBack: () -> Unit,
     onSelected: (PaykitPaymentRequestTarget) -> Unit,
-    showContactsHeader: Boolean = true,
+    showContactsHeader: Boolean = false,
 ) {
     val context = LocalContext.current
     val targets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
@@ -396,7 +410,7 @@ internal fun PaymentRequestRecipientContent(
     onBack: () -> Unit,
     onPaste: () -> String,
     onSelected: (PaykitPaymentRequestTarget) -> Unit,
-    showContactsHeader: Boolean = true,
+    showContactsHeader: Boolean = false,
 ) {
     var query by remember { mutableStateOf("") }
 
@@ -496,7 +510,7 @@ internal fun PaymentRequestRecipientContent(
                 PubkyContactRow(
                     profile = contact,
                     onClick = { onSelected(target) },
-                    verticalPadding = 30.dp,
+                    verticalPadding = 28.dp,
                     modifier = Modifier.testTag("PaymentRequestContact${contact.publicKey}"),
                 )
                 HorizontalDivider(color = Colors.White10)
@@ -534,7 +548,8 @@ internal fun PaymentRequestSentContent(
     ) {
         SheetTopBar(titleText = stringResource(R.string.wallet__payment_request_sent_title))
         BoxWithConstraints(modifier = Modifier.weight(1f)) {
-            val checkSize = maxHeight * SENT_CHECK_HEIGHT_FRACTION
+            val checkSize = minOf(maxHeight * SENT_CHECK_HEIGHT_FRACTION, maxHeight - SENT_FIXED_CONTENT_HEIGHT)
+                .coerceAtLeast(0.dp)
             Column(modifier = Modifier.fillMaxSize()) {
                 FillHeight()
                 Image(

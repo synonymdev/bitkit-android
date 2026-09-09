@@ -32,3 +32,9 @@ data class PaymentRequestFixture(
         )
     }
 }
+
+/** What a `bitkit://dev-fixture/payment-request` link asks for: seed the fixture or clear it. */
+sealed interface PaymentRequestFixtureLink {
+    data class Seed(val fixture: PaymentRequestFixture) : PaymentRequestFixtureLink
+    data object Clear : PaymentRequestFixtureLink
+}

@@ -113,7 +113,6 @@ fun ReceiveSheet(
     }
     var skipPaymentRequestAmount by remember { mutableStateOf(false) }
     var isEditingPaymentRequestAmount by remember { mutableStateOf(false) }
-    var showRecipientContactsHeader by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         wallet.resetPreActivityMetadataTagsForCurrentInvoice()
@@ -174,7 +173,6 @@ fun ReceiveSheet(
                             selectedPaymentRequestTarget = null
                             skipPaymentRequestAmount = false
                             isEditingPaymentRequestAmount = false
-                            showRecipientContactsHeader = true
                             navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
                         },
                     )
@@ -224,7 +222,7 @@ fun ReceiveSheet(
                                 }
                             )
                         },
-                        showContactsHeader = showRecipientContactsHeader,
+                        showContactsHeader = skipPaymentRequestAmount,
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestDetails> {
@@ -234,6 +232,7 @@ fun ReceiveSheet(
                             appViewModel = appViewModel,
                             draft = paymentRequestDraft,
                             target = target,
+                            fromInvoiceEditor = skipPaymentRequestAmount,
                             onEditAmount = {
                                 paymentRequestDraft = it
                                 isEditingPaymentRequestAmount = true
@@ -373,7 +372,6 @@ fun ReceiveSheet(
                             selectedPaymentRequestTarget = null
                             skipPaymentRequestAmount = true
                             isEditingPaymentRequestAmount = false
-                            showRecipientContactsHeader = false
                             navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
                         },
                         navigateReceiveConfirm = { entry ->

@@ -2,6 +2,8 @@ package to.bitkit.viewmodels
 
 import android.net.Uri
 import com.synonym.paykit.PaymentRequestLifecycleState
+import org.lightningdevkit.ldknode.Network
+import to.bitkit.env.Env
 import to.bitkit.models.PubkyProfile
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
@@ -12,10 +14,15 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.Instant
 
-/** Figma frames 48185:303457, 48185:303440, 48185:303376. */
+/**
+ * Figma frames on Bitkit - Handoff v62: list 48056:274346, recipient 48030:206543,
+ * recipient with contacts header 48049:273376, amount 48030:206614 and 48030:206606,
+ * details 47993:199959 and 48049:273665, sent 48030:206596 and 46920:240230.
+ */
 internal object PaymentRequestFixtureRuntime {
     private const val HOST = "dev-fixture"
     private const val PATH = "payment-request"
+    private const val CLEAR = "clear"
     private const val RECEIVER_PATH = "bitkit/wallet"
     private const val BOLT11 = "btc-lightning-bolt11"
 
@@ -27,11 +34,21 @@ internal object PaymentRequestFixtureRuntime {
     private val paola = profile("pubkynrsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg", "Paola Andina")
     private val ben = profile("pubky8rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg", "Ben")
 
-    fun fixtureFor(uri: Uri): PaymentRequestFixture? {
+    fun linkFor(uri: Uri): PaymentRequestFixtureLink? {
+        if (Env.network != Network.REGTEST) return null
         if (uri.scheme?.lowercase() != ScreenDeepLinks.SCHEME) return null
         if (uri.host?.lowercase() != HOST) return null
-        if (uri.pathSegments.singleOrNull()?.lowercase() != PATH) return null
+        val segments = uri.pathSegments.map { it.lowercase() }
+        if (segments.firstOrNull() != PATH) return null
+        val isClear = segments.getOrNull(1) == CLEAR || uri.queryParameterNames.any { it.lowercase() == CLEAR }
+        return when {
+            isClear -> PaymentRequestFixtureLink.Clear
+            segments.size == 1 -> PaymentRequestFixtureLink.Seed(fixture())
+            else -> null
+        }
+    }
 
+    private fun fixture(): PaymentRequestFixture {
         val now = Clock.System.now()
         return PaymentRequestFixture(
             contacts = listOf(alex, anna, areem, ben, craig, john, paola),
