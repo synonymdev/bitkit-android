@@ -382,12 +382,11 @@ class BlocktankRepo @Inject constructor(
         var previousIndex = afterIndex
         repeat(REFUND_ADDRESS_ALLOCATION_LIMIT) {
             val derived = lightningRepo.newAddressInfoForType(AddressType.P2WPKH).getOrThrow()
-            if (derived.index !in 0..Int.MAX_VALUE || derived.address.isBlank()) {
-                throw AppError("Failed to allocate a valid Blocktank refund address")
-            }
             val lastIndex = previousIndex
-            if (lastIndex != null && derived.index <= lastIndex) {
-                throw AppError("Blocktank refund address allocation did not advance")
+            val hasInvalidIndex = derived.index !in 0..Int.MAX_VALUE
+            val didNotAdvance = lastIndex != null && derived.index <= lastIndex
+            if (hasInvalidIndex || derived.address.isBlank() || didNotAdvance) {
+                throw AppError("Failed to allocate a valid advancing Blocktank refund address")
             }
             previousIndex = derived.index
 

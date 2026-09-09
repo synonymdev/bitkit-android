@@ -238,7 +238,7 @@ class BlocktankRepoTest : BaseUnitTest() {
         whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenAnswer {
             Result.success(
                 AddressDerivationInfo(
-                    address = "bcrt1qrefund${candidateIndex}",
+                    address = "bcrt1qrefund$candidateIndex",
                     index = candidateIndex++,
                 ),
             )
