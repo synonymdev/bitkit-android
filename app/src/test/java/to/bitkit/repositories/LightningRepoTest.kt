@@ -155,6 +155,19 @@ class LightningRepoTest : BaseUnitTest() {
         sut.sync()
     }
 
+    @Test
+    fun `node startup failures do not dispatch invoice payment`() = test {
+        var dispatched = false
+        val beforeSend: suspend () -> Boolean = {
+            dispatched = true
+            true
+        }
+        assertIs<NodeNotRunningError>(sut.payInvoice("invoice", null, onBeforeSend = beforeSend).exceptionOrNull())
+        sut.setInitNodeLifecycleState()
+        assertIs<NodeRunTimeoutError>(sut.payInvoice("invoice", null, onBeforeSend = beforeSend).exceptionOrNull())
+        assertFalse(dispatched)
+    }
+
     private suspend fun startNodeAndCaptureEvents(): NodeEventHandler {
         var capturedHandler: NodeEventHandler? = null
         whenever { lightningService.start(anyOrNull(), any()) }.thenAnswer {

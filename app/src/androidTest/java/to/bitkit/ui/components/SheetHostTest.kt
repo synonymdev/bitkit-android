@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.testTag
@@ -83,5 +84,40 @@ class SheetHostTest {
         composeTestRule.onNodeWithTag("LockedSheet").assertIsDisplayed()
         assertEquals(0, dismissCount)
         assertEquals(0, backgroundClickCount)
+    }
+
+    @Test
+    fun programmaticHideDoesNotInvokeDismissalCallback() {
+        val shouldExpand = mutableStateOf(true)
+        val visibilityKey = mutableStateOf<Any?>("subscription")
+        var dismissCount = 0
+        composeTestRule.setContent {
+            AppThemeSurface {
+                SheetHost(
+                    shouldExpand = shouldExpand.value,
+                    onDismiss = { dismissCount++ },
+                    visibilityKey = visibilityKey.value,
+                    sheets = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(320.dp)
+                                .testTag("ProgrammaticSheet")
+                        )
+                    },
+                    content = { Box(Modifier.fillMaxSize()) },
+                )
+            }
+        }
+        composeTestRule.onNodeWithTag("ProgrammaticSheet").assertIsDisplayed()
+
+        composeTestRule.runOnIdle {
+            shouldExpand.value = false
+            visibilityKey.value = null
+        }
+        composeTestRule.mainClock.advanceTimeBy(1_000)
+        composeTestRule.waitForIdle()
+
+        assertEquals(0, dismissCount)
     }
 }
