@@ -252,7 +252,7 @@ class LightningRepo @Inject constructor(
         // If node is not in a state that can become running, fail fast
         if (!nodeLifecycleState.canRun()) {
             return@withContext Result.failure(
-                AppError("Cannot execute '$operationName': node is '$nodeLifecycleState' and not starting")
+                NodeNotRunningError(operationName, nodeLifecycleState)
             )
         }
 
@@ -1358,6 +1358,8 @@ class LightningRepo @Inject constructor(
         channelId: String? = null,
         isMaxAmount: Boolean = false,
         tags: List<String> = emptyList(),
+        beforeSendAttempt: suspend () -> Unit = {},
+        onBroadcast: suspend (Txid) -> Unit = {},
     ): Result<Txid> = executeWhenNodeRunning("sendOnChain") {
         require(address.isNotEmpty()) { "Send address cannot be empty" }
 
@@ -1382,7 +1384,9 @@ class LightningRepo @Inject constructor(
 
         Logger.debug("UTXOs selected to spend: $utxosForSend", context = TAG)
 
+        beforeSendAttempt()
         val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount)
+        onBroadcast(txId)
 
         val preActivityMetadata = PreActivityMetadata(
             walletId = WalletScope.default,
@@ -2111,6 +2115,8 @@ class NodeSetupError : AppError("Unknown node setup error")
 class NodeStopTimeoutError : AppError("Timeout waiting for node to stop")
 class NodeConfigNotAppliedError : AppError("Node already running, requested config was not applied")
 class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node to run and execute: '$opName'")
+class NodeNotRunningError(opName: String, state: NodeLifecycleState) :
+    AppError("Cannot execute '$opName': node is '$state' and not starting")
 class GetPaymentsError : AppError("It wasn't possible get the payments")
 class SyncUnhealthyError : AppError("Wallet sync failed before send")
 class PaymentAbortedBeforeSend : AppError("Payment aborted before send")
