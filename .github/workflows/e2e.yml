@@ -75,7 +75,6 @@ jobs:
           CHATWOOT_API: ${{ secrets.CHATWOOT_API }}
           E2E: true
           GEO: false
-          PUSH: false
         run: ./gradlew assembleDevDebug
 
       - name: Rename APK
@@ -127,7 +126,6 @@ jobs:
           E2E: true
           E2E_BACKEND: network
           GEO: false
-          PUSH: false
           TREZOR_BRIDGE: true
           TREZOR_BRIDGE_URL: http://10.0.2.2:21325
         run: ./gradlew assembleDevDebug

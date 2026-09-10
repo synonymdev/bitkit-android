@@ -1672,8 +1672,8 @@ class LightningRepo @Inject constructor(
 
     @Suppress("KotlinConstantConditions")
     suspend fun registerForNotifications(token: String? = null) = executeWhenNodeRunning("registerForNotifications") {
-        if (!Env.isPushEnabled) {
-            Logger.info("Skipped push registration, disabled via build config", context = TAG)
+        if (Env.isE2eTest) {
+            Logger.info("Skipped push registration in E2E build", context = TAG)
             return@executeWhenNodeRunning Result.success(Unit)
         }
 
