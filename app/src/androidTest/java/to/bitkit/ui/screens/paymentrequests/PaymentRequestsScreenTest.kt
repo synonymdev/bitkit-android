@@ -56,11 +56,11 @@ class PaymentRequestsScreenTest {
         }
 
         composeTestRule.onNodeWithTag("PaymentRequestRow-incoming").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestDismiss-incoming").assertIsDisplayed()
-        composeTestRule.onNodeWithTag("PaymentRequestPay-incoming").assertIsDisplayed()
         composeTestRule.onNodeWithTag("MoneyPrimary").assertIsDisplayed()
         composeTestRule.onNodeWithTag("MoneySecondary").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestsSeeAll").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestDismiss-incoming").assertIsDisplayed()
+        composeTestRule.onNodeWithTag("PaymentRequestPay-incoming").assertIsDisplayed()
         composeTestRule.onNodeWithText("Dismiss").assertIsDisplayed()
     }
 

@@ -1242,6 +1242,41 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `explicit request expiring before sheet visible closes its send sheet`() = test {
+        sut.setIsAuthenticated(true)
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1expiredrequestsend"
+        whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
+        whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
+            "The payment request has expired."
+        )
+        stubOpenedPaymentRequest(request, bolt11)
+        stubLightningScan(bolt11 = bolt11, amountSats = request.amountSats)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        runCurrent()
+        clearInvocations(toastManager)
+
+        sut.openIncomingPaymentRequest(request.id)
+        sut.currentSheet.first { it is Sheet.Send }
+        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(true)
+        pendingPaykitPaymentRequests.value = emptyList()
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        assertNull(activeContactPaymentContext())
+        verify(paykitPaymentRequestDiagnostics).logPresentationRejection(
+            request.counterparty,
+            IncomingPaykitPaymentRequestFailureReason.RequestExpired,
+        )
+        val toastCaptor = argumentCaptor<Toast>()
+        verify(toastManager).enqueue(toastCaptor.capture())
+        assertEquals("PaymentRequestExpiredToast", toastCaptor.lastValue.testTag)
+    }
+
+    @Test
     fun `failed explicit request logs a redacted resolution error`() = test {
         sut.setIsAuthenticated(true)
         val request = paymentRequest()

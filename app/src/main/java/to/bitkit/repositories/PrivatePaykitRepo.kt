@@ -551,7 +551,9 @@ class PrivatePaykitRepo @Inject constructor(
                 val consumedVersion = ensureState().contacts[publicKey]
                     ?.consumedPrivatePaymentListVersionsByReceiverPath
                     ?.get(receiverPath)
-                val amount = paymentRequest?.let { PaymentAmountContext(it.amountValue, "btc") }
+                val amount = paymentRequest?.let {
+                    PaymentAmountContext(it.amountValue, PaykitIssuerInterop.BITCOIN_ASSET)
+                }
                 val prepared = preparePrivateContactPayment(
                     publicKey = publicKey,
                     receiverPath = receiverPath,

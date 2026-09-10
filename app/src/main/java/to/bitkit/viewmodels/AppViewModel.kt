@@ -1115,8 +1115,9 @@ class AppViewModel @Inject constructor(
             requestedPaymentRequestId == request.id && shouldRestorePaymentRequestSheet
         val showExpiredToast = requestedPaymentRequestId == request.id
         if (requestedPaymentRequestId == request.id) {
-            invalidatePaymentRequestPresentation(requestId = request.id)
+            val hideExpiredRequestSendSheet = invalidatePaymentRequestPresentation(requestId = request.id)
             clearRequestedPaymentRequest()
+            if (hideExpiredRequestSendSheet) hideSheet()
         }
         clearPaymentRequestPresentationRetry(request.id)
         if (!showExpiredToast) return
@@ -1204,7 +1205,7 @@ class AppViewModel @Inject constructor(
     private fun invalidatePaymentRequestPresentation(
         dismissActiveRequest: Boolean = false,
         requestId: PaykitPaymentRequestId? = null,
-    ) {
+    ): Boolean {
         fun targetsRequest(context: ContactPaymentContext?): Boolean {
             val scanRequestId = context?.incomingPaymentRequest?.id ?: return false
             return requestId == null || scanRequestId == requestId
@@ -1220,15 +1221,19 @@ class AppViewModel @Inject constructor(
                 deferredScan = null
             }
         }
-        if (requestId != null) {
+        val shouldHideRequestSendSheet = if (requestId != null) {
             synchronized(contactPaymentContextLock) {
-                if (activeContactPaymentContext?.incomingPaymentRequest?.id == requestId) {
+                val ownsActiveContext = activeContactPaymentContext?.incomingPaymentRequest?.id == requestId
+                if (ownsActiveContext) {
                     activeContactPaymentContext = null
                 }
                 if (preparedContactPaymentContext?.incomingPaymentRequest?.id == requestId) {
                     preparedContactPaymentContext = null
                 }
+                ownsActiveContext && currentSheet.value is Sheet.Send
             }
+        } else {
+            false
         }
         if (dismissActiveRequest && activeIncomingPaymentRequest() != null) {
             if (currentSheet.value is Sheet.Send) {
@@ -1237,6 +1242,7 @@ class AppViewModel @Inject constructor(
                 clearActiveContactPaymentContext()
             }
         }
+        return shouldHideRequestSendSheet
     }
 
     private suspend fun refreshPrivateOnlyPaykitReceiverMarker(reason: String) {

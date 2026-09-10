@@ -31,10 +31,12 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.lightningdevkit.ldknode.Network
 import to.bitkit.async.appScope
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.flags.PaykitFeatureFlags
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -1065,11 +1067,24 @@ internal fun PaymentRequestRecord.parseIncomingPaykitPaymentRequest(
     requiresActionableRequest = true,
 )
 
-@Suppress("CyclomaticComplexMethod", "ReturnCount")
+internal fun PaymentRequestRecord.toPaykitPaymentRequest(
+    expectedRole: PaymentRequestLocalRole,
+    now: Instant,
+    requiresActionableRequest: Boolean = true,
+    network: Network = Env.network,
+): PaykitPaymentRequest? = when (
+    val result = parsePaykitPaymentRequest(expectedRole, now, requiresActionableRequest, network)
+) {
+    is PaykitPaymentRequestParseResult.Parsed -> result.request
+    is PaykitPaymentRequestParseResult.Rejected -> null
+}
+
+@Suppress("CyclomaticComplexMethod", "ReturnCount", "LongMethod")
 private fun PaymentRequestRecord.parsePaykitPaymentRequest(
     expectedRole: PaymentRequestLocalRole,
     now: Instant,
     requiresActionableRequest: Boolean = true,
+    network: Network = Env.network,
 ): PaykitPaymentRequestParseResult {
     val role = localRole
         ?: return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.MissingLocalRole)
@@ -1103,7 +1118,7 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
             },
         )
     }
-    if (requestTerms.amount.asset != "btc") {
+    if (requestTerms.amount.asset != PaykitIssuerInterop.BITCOIN_ASSET) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
     }
     val amountSats = requestTerms.amount.value.toPaykitSats()
@@ -1111,9 +1126,10 @@ private fun PaymentRequestRecord.parsePaykitPaymentRequest(
     if (amountSats > ULong.MAX_VALUE / 1000uL) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.AmountOutOfRange)
     }
-    val endpoints = requestTerms.acceptedPaymentEndpointIdentifiers
-        .filter { MethodId.fromRawValue(it) != null }
-        .distinct()
+    val endpoints = PaykitIssuerInterop.supportedEndpointIdentifiers(
+        requestTerms.acceptedPaymentEndpointIdentifiers,
+        network,
+    )
     if (requiresActionableRequest && endpoints.isEmpty()) {
         return PaykitPaymentRequestParseResult.Rejected(PaykitPaymentRequest.ParseFailure.NoSupportedEndpoint)
     }
