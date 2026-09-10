@@ -62,7 +62,7 @@ fun SpendingAmountScreen(
     viewModel: TransferViewModel,
     isOffline: Boolean,
     onBackClick: () -> Unit = {},
-    onOrderCreated: () -> Unit = {},
+    onQuoteReady: () -> Unit = {},
     toastException: (Throwable) -> Unit,
     toast: (title: String, description: String) -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
@@ -82,7 +82,7 @@ fun SpendingAmountScreen(
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
             when (effect) {
-                TransferEffect.OnOrderCreated -> onOrderCreated()
+                TransferEffect.OnQuoteReady -> onQuoteReady()
                 is TransferEffect.ToastError -> toast(effect.title, effect.description)
                 is TransferEffect.ToastException -> toastException(effect.e)
                 else -> Unit

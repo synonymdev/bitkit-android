@@ -127,9 +127,8 @@ class TransferViewModel @Inject constructor(
     private var pendingHwFundingBroadcast: PendingHwFundingBroadcast? = null
     private var activeHwTransferWalletId: String? = null
 
-    // region Spending
-
     fun onConfirmAmount(satsAmount: Long) {
+        if (_spendingUiState.value.isBusy) return
         val values = blocktankRepo.calculateLiquidityOptions(satsAmount.toULong()).getOrNull()
         if (values == null || values.maxLspBalanceSat == 0uL) {
             setTransferEffect(
@@ -152,7 +151,17 @@ class TransferViewModel @Inject constructor(
                 isNodeRunning.first { it }
             }
 
-            if (!canFundOrder(satsAmount.toULong())) {
+            val feeSat = estimateSpendingFee(
+                clientBalanceSat = satsAmount.toULong(),
+                lspBalanceSat = lspBalance,
+            ).getOrElse { e ->
+                setTransferEffect(TransferEffect.ToastException(e))
+                delay(1.seconds)
+                _spendingUiState.update { it.copy(isLoading = false) }
+                return@launch
+            }
+
+            if (!canFundOrder(feeSat)) {
                 Logger.info("Rejected spending amount '$satsAmount' over funding budget", context = TAG)
                 setTransferEffect(
                     TransferEffect.ToastError(
@@ -166,21 +175,20 @@ class TransferViewModel @Inject constructor(
                 return@launch
             }
 
-            blocktankRepo.createOrder(
-                spendingBalanceSats = satsAmount.toULong(),
-                receivingBalanceSats = lspBalance,
-            )
-                .onSuccess { order ->
-                    settingsStore.update { it.copy(lightningSetupStep = 0) }
-                    onOrderCreated(order)
-                    delay(1.seconds) // Give time to settle the UI
-                    _spendingUiState.update { it.copy(isLoading = false) }
-                }.onFailure { e ->
-                    setTransferEffect(TransferEffect.ToastException(e))
-                    delay(1.seconds) // Give time to settle the UI
-                    _spendingUiState.update { it.copy(isLoading = false) }
-                }
+            onEstimateReady(satsAmount.toULong(), lspBalance, feeSat)
+            delay(1.seconds)
+            _spendingUiState.update { it.copy(isLoading = false) }
         }
+    }
+
+    private suspend fun estimateSpendingFee(
+        clientBalanceSat: ULong,
+        lspBalanceSat: ULong,
+    ): Result<ULong> = blocktankRepo.estimateOrderFee(
+        spendingBalanceSats = clientBalanceSat,
+        receivingBalanceSats = lspBalanceSat,
+    ).map { estimate ->
+        (clientBalanceSat.safe() + estimate.networkFeeSat.safe()).safe() + estimate.serviceFeeSat.safe()
     }
 
     fun updateLimits(satsAmount: Long = 0) {
@@ -204,7 +212,7 @@ class TransferViewModel @Inject constructor(
             if (!isValid) return@launch
 
             val result = blocktankRepo.estimateOrderFee(
-                spendingBalanceSats = _spendingUiState.value.order?.clientBalanceSat ?: 0u,
+                spendingBalanceSats = _spendingUiState.value.clientBalanceSat,
                 receivingBalanceSats = amount.toULong(),
             )
 
@@ -224,29 +232,16 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private suspend fun canFundAdvancedOrder(clientBalance: ULong, receivingAmount: ULong): Boolean {
-        val budget = currentFundingBudget()
-        if (budget == null) {
-            Logger.warn("Skipped advanced capacity check, no sized budget available", context = TAG)
-            return true
-        }
-        val fee = quoteAdvancedOrderFee(clientBalance, receivingAmount)
-        if (fee == null) {
-            Logger.warn("Skipped advanced capacity check, fee quote unavailable", context = TAG)
-            return true
-        }
-        val canFund = clientBalance.safe() + fee.safe() <= budget
-        if (!canFund) {
-            Logger.info("Priced advanced capacity '$receivingAmount' over funding budget '$budget'", context = TAG)
-        }
-        return canFund
-    }
-
     fun onSpendingAdvancedContinue(receivingAmountSats: Long) {
+        if (_spendingUiState.value.isBusy) return
         viewModelScope.launch {
             runSuspendCatching {
-                val oldOrder = _spendingUiState.value.order ?: return@runSuspendCatching
-                if (!canFundAdvancedOrder(oldOrder.clientBalanceSat, receivingAmountSats.toULong())) {
+                val state = _spendingUiState.value
+                val feeSat = estimateSpendingFee(
+                    clientBalanceSat = state.clientBalanceSat,
+                    lspBalanceSat = receivingAmountSats.toULong(),
+                ).getOrThrow()
+                if (!canFundOrder(feeSat)) {
                     Logger.info("Rejected advanced capacity '$receivingAmountSats' over funding budget", context = TAG)
                     setTransferEffect(
                         TransferEffect.ToastError(
@@ -258,38 +253,38 @@ class TransferViewModel @Inject constructor(
                     )
                     return@runSuspendCatching
                 }
-                val newOrder = blocktankRepo.createOrder(
-                    spendingBalanceSats = oldOrder.clientBalanceSat,
-                    receivingBalanceSats = receivingAmountSats.toULong(),
-                ).getOrThrow()
+                if (_spendingUiState.value.isBusy) return@runSuspendCatching
                 hwFeeEstimateJob?.cancel()
                 hwFeeEstimateJob = null
                 _spendingUiState.update {
                     it.copy(
-                        order = newOrder,
-                        defaultOrder = oldOrder,
+                        lspBalanceSat = receivingAmountSats.toULong(),
+                        feeSat = feeSat,
+                        order = it.order.takeIf { order -> order?.lspBalanceSat == receivingAmountSats.toULong() },
                         isAdvanced = true,
                         hwMiningFeeSats = 0uL,
                     )
                 }
-                setTransferEffect(TransferEffect.OnOrderCreated)
+                setTransferEffect(TransferEffect.OnQuoteReady)
             }.onFailure { e ->
                 setTransferEffect(TransferEffect.ToastException(e))
             }
         }
     }
 
-    /**
-     * Match iOS SpendingConfirm.task: compute real mining fee + drain decision before swipe,
-     * so confirm UI can show fees up-front.
-     */
-    fun prepareSpendingConfirmFunding(order: IBtOrder) {
+    fun prepareSpendingConfirmFunding() {
         confirmFeeJob?.cancel()
         confirmFeeJob = viewModelScope.launch {
             _spendingUiState.update {
                 it.copy(isConfirmFeeReady = false, miningFeeSats = 0uL)
             }
-            buildSpendingConfirmFundingPlan(order)
+            val order = _spendingUiState.value.order
+            val target = SpendingFundingTarget(
+                feeSat = _spendingUiState.value.feeSat,
+                address = order?.fundingAddress ?: spendingSizingAddress() ?: return@launch,
+                orderId = order?.id,
+            )
+            buildSpendingConfirmFundingPlan(target)
                 .onSuccess { plan ->
                     spendingConfirmFundingPlan = plan
                     _spendingUiState.update {
@@ -318,14 +313,16 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    /** Pays for the order using the prepared confirm plan and starts watching it. */
-    fun onTransferToSpendingConfirm(order: IBtOrder) {
-        if (confirmPayJob?.isActive == true) return
+    fun onTransferToSpendingConfirm() {
+        if (confirmPayJob?.isActive == true || _spendingUiState.value.isBusy) return
+        val state = _spendingUiState.value
+        if (state.feeSat == 0uL) return
 
+        _spendingUiState.update { it.copy(isConfirmPaying = true) }
         confirmPayJob = viewModelScope.launch {
-            _spendingUiState.update { it.copy(isConfirmPaying = true) }
             try {
                 val paid = runSuspendCatching {
+                    val order = ensureSpendingOrder() ?: return@runSuspendCatching false
                     paySpendingConfirmOrder(order)
                 }.onFailure {
                     Logger.error("Failed to pay spending confirm order", it, context = TAG)
@@ -333,7 +330,6 @@ class TransferViewModel @Inject constructor(
                 }.getOrDefault(false)
 
                 if (paid) {
-                    // Emit from this job (not a nested launch) so navigation is not raced/lost.
                     transferEffects.emit(TransferEffect.OnSpendingFundingPaid)
                 } else {
                     _spendingUiState.update { it.copy(isConfirmPaying = false) }
@@ -343,6 +339,23 @@ class TransferViewModel @Inject constructor(
             }
         }
     }
+
+    private suspend fun ensureSpendingOrder(): IBtOrder? {
+        _spendingUiState.value.order?.let { return it }
+        val state = _spendingUiState.value
+        val order = blocktankRepo.createOrder(
+            spendingBalanceSats = state.clientBalanceSat,
+            receivingBalanceSats = state.lspBalanceSat,
+        ).getOrElse {
+            ToastEventBus.send(it)
+            return null
+        }
+        _spendingUiState.update { it.copy(order = order) }
+        return order
+    }
+
+    private suspend fun spendingSizingAddress(): String? =
+        walletRepo.getAddresses(count = 1).onFailure { ToastEventBus.send(it) }.getOrNull()?.firstOrNull()?.address
 
     private suspend fun paySpendingConfirmOrder(order: IBtOrder): Boolean {
         val plan = spendingConfirmFundingPlan?.takeIf { it.orderId == order.id }
@@ -402,11 +415,15 @@ class TransferViewModel @Inject constructor(
             .isSuccess
     }
 
+    private suspend fun buildSpendingConfirmFundingPlan(order: IBtOrder): Result<SpendingConfirmFundingPlan> =
+        buildSpendingConfirmFundingPlan(
+            SpendingFundingTarget(feeSat = order.feeSat, address = order.fundingAddress, orderId = order.id),
+        )
+
     private suspend fun buildSpendingConfirmFundingPlan(
-        order: IBtOrder,
+        target: SpendingFundingTarget,
     ): Result<SpendingConfirmFundingPlan> = runSuspendCatching {
-        val address = order.payment?.onchain?.address.orEmpty()
-        require(address.isNotEmpty()) { "Order payment onchain address is nil" }
+        require(target.address.isNotEmpty()) { "Funding address is empty" }
 
         val speed = TransactionSpeed.Fast
         val balanceDetails = lightningRepo.getBalancesAsync().getOrThrow()
@@ -414,17 +431,14 @@ class TransferViewModel @Inject constructor(
         val totalOnchainBalance = balanceDetails.totalOnchainBalanceSats
         val satsPerVByte = lightningRepo.getFeeRateForSpeed(speed).getOrThrow()
 
-        // Match iOS SpendingConfirm: normal coin selection + fee first; drain only for real dust.
         resolveNormalSpendingConfirmFunding(
-            order = order,
-            address = address,
+            target = target,
             speed = speed,
             satsPerVByte = satsPerVByte,
             spendableBalance = spendableBalance,
             totalOnchainBalance = totalOnchainBalance,
         ) ?: resolveSendAllSpendingConfirmFunding(
-            order = order,
-            address = address,
+            target = target,
             speed = speed,
             spendableBalance = spendableBalance,
             totalOnchainBalance = totalOnchainBalance,
@@ -432,15 +446,14 @@ class TransferViewModel @Inject constructor(
     }
 
     private suspend fun resolveNormalSpendingConfirmFunding(
-        order: IBtOrder,
-        address: String,
+        target: SpendingFundingTarget,
         speed: TransactionSpeed,
         satsPerVByte: ULong,
         spendableBalance: ULong,
         totalOnchainBalance: ULong,
     ): SpendingConfirmFundingPlan? {
         val utxos = lightningRepo.selectUtxosWithAlgorithm(
-            targetAmountSats = order.feeSat,
+            targetAmountSats = target.feeSat,
             satsPerVByte = satsPerVByte,
             algorithm = CoinSelectionAlgorithm.LARGEST_FIRST,
         ).getOrElse {
@@ -449,8 +462,8 @@ class TransferViewModel @Inject constructor(
         }
 
         val normalFee = lightningRepo.calculateTotalFee(
-            amountSats = order.feeSat,
-            address = address,
+            amountSats = target.feeSat,
+            address = target.address,
             speed = speed,
             utxosToSpend = utxos,
         ).getOrElse {
@@ -458,12 +471,12 @@ class TransferViewModel @Inject constructor(
             0uL
         }
         val totalInput = utxos.fold(0uL) { acc, utxo -> acc.safe() + utxo.valueSats.safe() }
-        if (wouldCreateDustChange(totalInput = totalInput, amountSats = order.feeSat, normalFee = normalFee)) {
+        if (wouldCreateDustChange(totalInput = totalInput, amountSats = target.feeSat, normalFee = normalFee)) {
             return null
         }
 
         return SpendingConfirmFundingPlan(
-            orderId = order.id,
+            orderId = target.orderId,
             miningFeeSats = normalFee,
             shouldUseSendAll = false,
             selectedUtxos = utxos,
@@ -474,23 +487,22 @@ class TransferViewModel @Inject constructor(
     }
 
     private suspend fun resolveSendAllSpendingConfirmFunding(
-        order: IBtOrder,
-        address: String,
+        target: SpendingFundingTarget,
         speed: TransactionSpeed,
         spendableBalance: ULong,
         totalOnchainBalance: ULong,
     ): SpendingConfirmFundingPlan {
         val sendAllFee = lightningRepo.estimateSendAllFee(
-            address = address,
+            address = target.address,
             speed = speed,
         ).getOrThrow()
         val maxSendable = spendableBalance.safe() - sendAllFee.safe()
-        if (maxSendable < order.feeSat) {
+        if (maxSendable < target.feeSat) {
             throw AppError(context.getString(R.string.other__pay_insufficient_savings))
         }
 
         return SpendingConfirmFundingPlan(
-            orderId = order.id,
+            orderId = target.orderId,
             miningFeeSats = sendAllFee,
             shouldUseSendAll = true,
             selectedUtxos = null,
@@ -626,21 +638,26 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    private suspend fun onOrderCreated(order: IBtOrder) {
+    private suspend fun onEstimateReady(clientBalanceSat: ULong, lspBalanceSat: ULong, feeSat: ULong) {
         settingsStore.update { it.copy(lightningSetupStep = 0) }
+        if (_spendingUiState.value.isBusy) return
         pendingHwFundingBroadcast = null
         hwFeeEstimateJob?.cancel()
         hwFeeEstimateJob = null
         _spendingUiState.update {
             it.copy(
-                order = order,
+                clientBalanceSat = clientBalanceSat,
+                lspBalanceSat = lspBalanceSat,
+                feeSat = feeSat,
+                order = it.order.takeIf { order ->
+                    order != null && order.clientBalanceSat == clientBalanceSat && order.lspBalanceSat == lspBalanceSat
+                },
                 isAdvanced = false,
-                defaultOrder = null,
                 hasPendingHwBroadcast = false,
                 hwMiningFeeSats = 0uL,
             )
         }
-        setTransferEffect(TransferEffect.OnOrderCreated)
+        setTransferEffect(TransferEffect.OnQuoteReady)
     }
 
     private fun updateAvailableAmount() {
@@ -867,33 +884,19 @@ class TransferViewModel @Inject constructor(
         return balance.safe() - hwFundingFeeReserve(balance).safe()
     }
 
-    /**
-     * Whether an order at [clientBalance] still fits what the wallet can fund.
-     *
-     * The advertised max can be a settled estimate rather than a verified one when a re-quote fails
-     * or does not converge, so both sides are taken fresh before the order is placed: the fee is
-     * re-quoted and the budget comes from [currentFundingBudget]. A budget that was never sized, or
-     * a quote the LSP will not give, leaves the decision to the confirm step rather than blocking
-     * the user here.
-     */
-    private suspend fun canFundOrder(clientBalance: ULong): Boolean {
+    private suspend fun canFundOrder(feeSat: ULong): Boolean {
         val budget = currentFundingBudget()
         if (budget == null) {
             Logger.warn("Skipped funding check, no sized budget available", context = TAG)
             return true
         }
-        val fee = quoteOrderFee(clientBalance)
-        if (fee == null) {
-            Logger.warn("Skipped funding check, fee quote unavailable", context = TAG)
-            return true
+        val canFund = feeSat <= budget
+        if (!canFund) {
+            Logger.info("Priced order '$feeSat' over funding budget '$budget'", context = TAG)
         }
-        return clientBalance.safe() + fee.safe() <= budget
+        return canFund
     }
 
-    /**
-     * LSP fee for an order at [clientBalance], priced against the channel split that order creation
-     * will pick for that same balance, so the settled max is checked against the order it produces.
-     */
     private suspend fun quoteOrderFee(clientBalance: ULong): ULong? {
         val liquidity = blocktankRepo.calculateLiquidityOptions(clientBalance).getOrNull() ?: return null
         val receivingAmount = maxOf(liquidity.defaultLspBalanceSat, liquidity.minLspBalanceSat)
@@ -904,27 +907,40 @@ class TransferViewModel @Inject constructor(
     }
 
     fun onUseDefaultLspBalanceClick() {
-        val defaultOrder = _spendingUiState.value.defaultOrder
-        hwFeeEstimateJob?.cancel()
-        hwFeeEstimateJob = null
-        _spendingUiState.update {
-            it.copy(
-                order = defaultOrder,
-                defaultOrder = null,
-                isAdvanced = false,
-                hwMiningFeeSats = 0uL,
-            )
+        if (_spendingUiState.value.isBusy) return
+        viewModelScope.launch {
+            val state = _spendingUiState.value
+            val values = blocktankRepo.calculateLiquidityOptions(state.clientBalanceSat).getOrNull()
+                ?: return@launch
+            val lspBalance = maxOf(values.defaultLspBalanceSat, values.minLspBalanceSat)
+            estimateSpendingFee(state.clientBalanceSat, lspBalance)
+                .onSuccess { feeSat ->
+                    if (_spendingUiState.value.isBusy) return@onSuccess
+                    hwFeeEstimateJob?.cancel()
+                    _spendingUiState.update {
+                        it.copy(
+                            lspBalanceSat = lspBalance,
+                            feeSat = feeSat,
+                            order = it.order.takeIf { order -> order?.lspBalanceSat == lspBalance },
+                            isAdvanced = false,
+                            hwMiningFeeSats = 0uL,
+                        )
+                    }
+                }
+                .onFailure { ToastEventBus.send(it) }
         }
     }
 
     fun resetSpendingState() {
+        if (confirmPayJob?.isActive == true || hwTransferSignJob?.isActive == true) {
+            return
+        }
         hwTransferSignJob?.cancel()
         hwTransferSignJob = null
         hwFeeEstimateJob?.cancel()
         hwFeeEstimateJob = null
         confirmFeeJob?.cancel()
         confirmFeeJob = null
-        // Do not cancel confirmPayJob: broadcast + paid-order cache must finish.
         spendingConfirmFundingPlan = null
         pendingHwFundingBroadcast = null
         activeHwTransferWalletId = null
@@ -985,30 +1001,29 @@ class TransferViewModel @Inject constructor(
         hwWalletRepo.warmUpKnownDevice(walletId)
     }
 
-    /** Best-effort offline mining-fee estimate for the Sign screen (xpub compose, no device session). */
-    fun updateHwFundingFeeEstimate(order: IBtOrder, walletId: String) {
+    fun updateHwFundingFeeEstimate(walletId: String) {
         hwFeeEstimateJob?.cancel()
         hwFeeEstimateJob = viewModelScope.launch {
-            if (_spendingUiState.value.hasPendingHwBroadcast) return@launch
-            val address = order.payment?.onchain?.address.orEmpty()
+            val state = _spendingUiState.value
+            if (state.hasPendingHwBroadcast) return@launch
+            if (state.feeSat == 0uL) return@launch
+            val address = state.order?.fundingAddress ?: spendingSizingAddress() ?: return@launch
             if (address.isEmpty()) return@launch
-            val orderId = order.id
 
             runSuspendCatching {
                 val satsPerVByte = hwFundingSatsPerVByte()
                 hwWalletRepo.composeFundingTransaction(
                     walletId = walletId,
                     address = address,
-                    sats = order.feeSat,
+                    sats = state.feeSat,
                     satsPerVByte = satsPerVByte,
                 ).getOrThrow().miningFeeSats
             }.onSuccess { miningFeeSats ->
-                _spendingUiState.update { state ->
-                    val activeOrderId = state.order?.id
-                    if ((activeOrderId != null && activeOrderId != orderId) || state.hasPendingHwBroadcast) {
-                        state
+                _spendingUiState.update { current ->
+                    if (current.feeSat != state.feeSat || current.hasPendingHwBroadcast) {
+                        current
                     } else {
-                        state.copy(hwMiningFeeSats = miningFeeSats)
+                        current.copy(hwMiningFeeSats = miningFeeSats)
                     }
                 }
             }.onFailure {
@@ -1020,24 +1035,24 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    fun onTransferToSpendingHwConfirm(order: IBtOrder, walletId: String) {
-        if (hwTransferSignJob?.isActive == true) return
+    fun onTransferToSpendingHwConfirm(walletId: String) {
+        if (hwTransferSignJob?.isActive == true || _spendingUiState.value.isBusy) return
+        val state = _spendingUiState.value
+        if (state.feeSat == 0uL) return
 
         activeHwTransferWalletId = walletId
+        _spendingUiState.update { it.copy(isSigning = true) }
         hwTransferSignJob = viewModelScope.launch {
-            // A hidden wallet whose session is gone can only be reopened with its passphrase, and
-            // the device would otherwise sign from whichever wallet the current session holds.
-            // Rebroadcasting an already signed transaction never reaches the device, so it must not
-            // be held behind that prompt; a different order still asks.
-            val address = order.payment?.onchain?.address.orEmpty()
-            val isBroadcastRetry = pendingHwFundingBroadcast?.matches(order, walletId, address) == true
-            if (!isBroadcastRetry && hwWalletRepo.needsPassphrase(walletId)) {
-                _spendingUiState.update { it.copy(isHwPassphraseRequired = true) }
-                hwTransferSignJob = null
-                return@launch
-            }
-            _spendingUiState.update { it.copy(isSigning = true) }
             try {
+                val signedOrder = _spendingUiState.value.order
+                val isBroadcastRetry = signedOrder != null &&
+                    pendingHwFundingBroadcast?.matches(signedOrder, walletId, signedOrder.fundingAddress) == true
+                if (!isBroadcastRetry && hwWalletRepo.needsPassphrase(walletId)) {
+                    _spendingUiState.update { it.copy(isHwPassphraseRequired = true) }
+                    return@launch
+                }
+                val order = ensureSpendingOrder() ?: return@launch
+                val address = order.fundingAddress
                 if (address.isEmpty()) {
                     ToastEventBus.send(type = Toast.ToastType.ERROR, title = context.getString(R.string.common__error))
                     return@launch
@@ -1071,12 +1086,7 @@ class TransferViewModel @Inject constructor(
         }
     }
 
-    /**
-     * Reopens the hidden wallet with the entered passphrase and, once its accounts prove it is the
-     * wallet the transfer is for, continues into signing. The passphrase is passed straight through
-     * to the device session; it is never kept in UI state.
-     */
-    fun onHwPassphraseSubmit(order: IBtOrder, walletId: String, passphrase: String) {
+    fun onHwPassphraseSubmit(walletId: String, passphrase: String) {
         if (passphrase.isEmpty() || hwTransferSignJob?.isActive == true) return
 
         hwTransferSignJob = viewModelScope.launch {
@@ -1086,11 +1096,9 @@ class TransferViewModel @Inject constructor(
             hwTransferSignJob = null
             result
                 .onSuccess {
-                    // The prompt can be swiped away while the device is still reopening the wallet,
-                    // and the confirm below starts a new job that a late cancel would not reach.
                     if (!_spendingUiState.value.isHwPassphraseRequired) return@launch
                     _spendingUiState.update { it.copy(isHwPassphraseRequired = false) }
-                    onTransferToSpendingHwConfirm(order, walletId)
+                    onTransferToSpendingHwConfirm(walletId)
                 }
                 .onFailure { handleHardwarePassphraseFailure(it, walletId) }
         }
@@ -1373,13 +1381,11 @@ class TransferViewModel @Inject constructor(
 
     // endregion
 
-    // region Balance Calc
-
-    fun updateAdvancedTransferValues(order: IBtOrder) {
+    fun updateAdvancedTransferValues(clientBalanceSat: ULong) {
         advancedLimitsJob?.cancel()
         advancedLimitsJob = viewModelScope.launch {
             _spendingUiState.update { it.copy(isLoading = true) }
-            updateTransferValues(order.clientBalanceSat)
+            updateTransferValues(clientBalanceSat)
 
             val values = _transferValues.value
             val budget = currentFundingBudget()
@@ -1389,7 +1395,7 @@ class TransferViewModel @Inject constructor(
             }
 
             val affordableMax = resolveAffordableLspBalance(
-                clientBalance = order.clientBalanceSat,
+                clientBalance = clientBalanceSat,
                 budget = budget,
                 minLspBalance = values.minLspBalance,
                 maxLspBalance = values.maxLspBalance,
@@ -1881,10 +1887,14 @@ private data class PendingHwFundingBroadcast(
             amountSats == order.feeSat
 }
 
-// region state
+private val IBtOrder.fundingAddress: String
+    get() = payment?.onchain?.address.orEmpty()
+
 data class TransferToSpendingUiState(
+    val clientBalanceSat: ULong = 0uL,
+    val lspBalanceSat: ULong = 0uL,
+    val feeSat: ULong = 0uL,
     val order: IBtOrder? = null,
-    val defaultOrder: IBtOrder? = null,
     val isAdvanced: Boolean = false,
     val maxAllowedToSend: Long = 0,
     val balanceAfterFee: Long = 0,
@@ -1892,25 +1902,29 @@ data class TransferToSpendingUiState(
     val isLoading: Boolean = false,
     val isSigning: Boolean = false,
     val hasPendingHwBroadcast: Boolean = false,
-    /** The hidden wallet needs its passphrase before the device can sign for it. */
     val isHwPassphraseRequired: Boolean = false,
     val isVerifyingHwPassphrase: Boolean = false,
     val hwMiningFeeSats: ULong = 0uL,
-    /** Real on-chain mining fee for soft-wallet confirm (iOS transactionFee). */
     val miningFeeSats: ULong = 0uL,
     val isConfirmFeeReady: Boolean = false,
     val isConfirmPaying: Boolean = false,
     val shouldUseSendAll: Boolean = false,
     val receivingAmount: Long = 0,
     val feeEstimate: Long? = null,
-    /** Budget the transfer limits were sized against, or null while unknown. */
     val fundingBudgetSats: ULong? = null,
-    /** Hardware wallet the budget was sized from, or null when it came from this wallet's savings. */
     val hwFundingWalletId: String? = null,
+) {
+    val isBusy: Boolean get() = isConfirmPaying || isSigning
+}
+
+private data class SpendingFundingTarget(
+    val feeSat: ULong,
+    val address: String,
+    val orderId: String?,
 )
 
 private data class SpendingConfirmFundingPlan(
-    val orderId: String,
+    val orderId: String?,
     val miningFeeSats: ULong,
     val shouldUseSendAll: Boolean,
     val selectedUtxos: List<SpendableUtxo>?,
@@ -1927,7 +1941,7 @@ data class TransferValues(
 )
 
 sealed interface TransferEffect {
-    data object OnOrderCreated : TransferEffect
+    data object OnQuoteReady : TransferEffect
     data object OnSpendingFundingPaid : TransferEffect
     data object OnHwTxSigned : TransferEffect
     data class ToastException(val e: Throwable) : TransferEffect
