@@ -38,6 +38,11 @@ If no base branch argument provided, detect the repo's default branch:
 - Use result as default (typically `main` or `master`)
 - If command fails, fall back to `master`
 
+### 2.6. Regenerate the Journeys Index
+- Run `python3 scripts/journeys_index.py`
+- If `journeys/index.json` changed, commit it as `chore: update journeys index`
+- If it reports an identifier that no source file declares, stop and report the journey and the identifier
+
 ### 3. Gather Context
 - Get current branch name: `git branch --show-current`
 - Extract repo identifier: `git remote get-url origin | sed 's/\.git$//' | sed -E 's#.*[:/]([^/]+/[^/]+)$#\1#'` (e.g., `synonymdev/bitkit-android`)
@@ -45,6 +50,8 @@ If no base branch argument provided, detect the repo's default branch:
 - Fetch 10 most recent PRs (open or closed) from the extracted repo for writing style reference
 - Run `git log $base..HEAD --oneline` for commit messages
 - Run `git diff $base...HEAD --stat` for understanding scope of changes
+- List the journeys the branch adds or updates: `git diff --name-only --diff-filter=d $base...HEAD -- journeys | grep '\.xml$'`
+- List the journeys whose route the branch may change: the `journeys/index.json` entries that name an identifier declared in a file from `git diff --name-only $base...HEAD`
 - Read `docs/screens-map.md` as the starting point for locating relevant Figma frames when the diff has user-visible UI changes
 - **If custom instructions provided:**
   - If instructions reference a specific commit SHA (pattern like `commit [a-f0-9]{7,40}`):
@@ -133,9 +140,14 @@ When the user provides custom instructions after `--`:
 - Always use this structure:
   ```md
   ### QA Notes
+  #### Journeys
   #### Manual Tests
   #### Automated Checks
   ```
+- Under `#### Journeys`, list every journey the branch adds or updates (Step 3) as a list item with its repo path, e.g. `journeys/widgets/widgets-intro.xml`.
+- Write `N/A — no user-visible behaviour change.` under `#### Journeys` only when the diff changes no user-visible behaviour. When it does and the branch adds or updates no journey, stop and report the flows that need one.
+- Check each journey whose route the branch may change (Step 3) against the diff. If one no longer matches, stop and report it; the branch updates that journey first.
+- Under `#### Manual Tests`, keep only what a journey cannot express, such as hardware, push notifications, or a companion app, and end each item with the reason. Write no manual test for a flow a listed journey covers.
 - Keep local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, CI coverage, or similar automated checks out of `#### Manual Tests`; summarize them under `#### Automated Checks` when they add useful context.
 - Use `#### Automated Checks` to summarize automated verification evidence, prioritizing coverage added, modified, or removed, each with the test file name and a short explanation.
 - Reference test files by bare file name only (e.g. `HwWalletRepoTest.kt`), never the full path. Only when two referenced test files share the same name, prefix the shortest leading path segment(s) that disambiguate them (e.g. `repositories/FooTest.kt` vs `viewmodels/FooTest.kt`).
@@ -147,7 +159,7 @@ When the user provides custom instructions after `--`:
 - If no automated checks were run and no automated coverage changed, write `N/A` under `#### Automated Checks`.
 - Write manual tests using this template:
   ```md
-  - [ ] **{numbering}.** {optional_condition + →} {screen_action} → {next_screen_action}: expectation
+  - [ ] **{numbering}.** {optional_condition + →} {screen_action} → {next_screen_action}: expectation — {reason a journey cannot express it}
   ```
 - Use a list of unchecked checkboxes for each individual test.
 - Use a numbered prefix for each test, in bold, for example `**1.**`, `**2.**`.
@@ -184,16 +196,13 @@ Example:
 Concrete style target:
 ```md
 ### QA Notes
+#### Journeys
+- `journeys/amount-limits/send-amount-over-balance.xml`
+- `journeys/widgets/add-widgets-flow.xml`
 #### Manual Tests
-- [ ] **1.** No usable channels/spending balance → scan LN invoice: error shows immediately, not after 15s.
-- [ ] **2.** Scanner → scan fixed amount LN invoice: Send Confirm or QuickPay opens directly.
-- [ ] **3a.** `regression:` Send → scanner/paste fixed amount LN invoice: in-sheet nav to Confirm or QuickPay.
-  - [ ] **3b.** `regression:` Variable amount LN invoice/LNURL-pay: lands on Amount view.
-- [ ] **4a.** Activity Detail of LN transfer → tap Connection: lands on Channel Detail.
-  - [ ] **4b.** back: returns to Activity Detail.
-- [ ] **5a.** Settings → Lightning Connections → tap channel: still opens Channel Detail.
-  - [ ] **5b.** back: returns to Connections List.
-- [ ] **6.** `regression:` Channel Detail → tap Close Connection: works.
+- [ ] **1a.** Physical device → Scanner → scan a printed fixed amount LN invoice QR: Send Confirm opens directly — needs a device camera.
+  - [ ] **1b.** `regression:` Printed LNURL-pay QR: lands on Amount view — needs a device camera.
+- [ ] **2.** Pubky Ring installed → Profile → sign in with Pubky Ring: profile shows as connected — needs the Pubky Ring app.
 #### Automated Checks
 - Unit tests added: cover invoice timeout handling in `SendInvoiceTest.kt`.
 - Unit tests modified: update channel navigation assertions in `ChannelDetailTest.kt`.
