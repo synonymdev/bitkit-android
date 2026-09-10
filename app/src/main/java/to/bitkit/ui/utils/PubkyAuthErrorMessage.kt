@@ -15,7 +15,7 @@ fun Throwable.localizedPubkyAuthMessage(context: Context): String? {
         }
         current = current.cause
     }
-    return message
+    return null
 }
 
 private fun Throwable.pubkyAuthMessageResource() = when (this) {
