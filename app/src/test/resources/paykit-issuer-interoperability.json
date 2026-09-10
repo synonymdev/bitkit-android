@@ -1,0 +1,372 @@
+{
+  "schemaVersion": 1,
+  "requestFixtures": [
+    {
+      "name": "bitcoin-p2tr",
+      "network": "bitcoin",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-bitcoin-p2tr"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-bitcoin-p2tr"]
+    },
+    {
+      "name": "bitcoin-p2wpkh",
+      "network": "bitcoin",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-bitcoin-p2wpkh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-bitcoin-p2wpkh"]
+    },
+    {
+      "name": "bitcoin-p2sh",
+      "network": "bitcoin",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-bitcoin-p2sh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-bitcoin-p2sh"]
+    },
+    {
+      "name": "bitcoin-p2pkh",
+      "network": "bitcoin",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-bitcoin-p2pkh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-bitcoin-p2pkh"]
+    },
+    {
+      "name": "testnet-p2tr",
+      "network": "testnet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-testnet-p2tr"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-testnet-p2tr"]
+    },
+    {
+      "name": "testnet-p2wpkh",
+      "network": "testnet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-testnet-p2wpkh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-testnet-p2wpkh"]
+    },
+    {
+      "name": "testnet-p2sh",
+      "network": "testnet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-testnet-p2sh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-testnet-p2sh"]
+    },
+    {
+      "name": "testnet-p2pkh",
+      "network": "testnet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-testnet-p2pkh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-testnet-p2pkh"]
+    },
+    {
+      "name": "signet-p2tr",
+      "network": "signet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-signet-p2tr"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-signet-p2tr"]
+    },
+    {
+      "name": "signet-p2wpkh",
+      "network": "signet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-signet-p2wpkh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-signet-p2wpkh"]
+    },
+    {
+      "name": "signet-p2sh",
+      "network": "signet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-signet-p2sh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-signet-p2sh"]
+    },
+    {
+      "name": "signet-p2pkh",
+      "network": "signet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-signet-p2pkh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-signet-p2pkh"]
+    },
+    {
+      "name": "regtest-p2tr",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-regtest-p2tr"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-regtest-p2tr"]
+    },
+    {
+      "name": "regtest-p2wpkh",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-regtest-p2wpkh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-regtest-p2wpkh"]
+    },
+    {
+      "name": "regtest-p2sh",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-regtest-p2sh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-regtest-p2sh"]
+    },
+    {
+      "name": "regtest-p2pkh",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-regtest-p2pkh"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-regtest-p2pkh"]
+    },
+    {
+      "name": "bitcoin-bolt11",
+      "network": "bitcoin",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-lightning-bolt11"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-lightning-bolt11"]
+    },
+    {
+      "name": "testnet-bolt11",
+      "network": "testnet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-lightning-bolt11"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-lightning-bolt11"]
+    },
+    {
+      "name": "signet-bolt11",
+      "network": "signet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-lightning-bolt11"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-lightning-bolt11"]
+    },
+    {
+      "name": "regtest-bolt11",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-lightning-bolt11"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-lightning-bolt11"]
+    },
+    {
+      "name": "bitcoin-lnurl",
+      "network": "bitcoin",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-lightning-lnurl"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-lightning-lnurl"]
+    },
+    {
+      "name": "testnet-lnurl",
+      "network": "testnet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-lightning-lnurl"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-lightning-lnurl"]
+    },
+    {
+      "name": "signet-lnurl",
+      "network": "signet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-lightning-lnurl"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-lightning-lnurl"]
+    },
+    {
+      "name": "regtest-lnurl",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-lightning-lnurl"],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-lightning-lnurl"]
+    },
+    {
+      "name": "regtest-filters-and-deduplicates",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": [
+        "btc-lightning-bolt11",
+        "btc-lightning-bolt11",
+        "btc-bitcoin-p2wpkh",
+        "btc-regtest-p2wpkh",
+        "btc-unsupported-method"
+      ],
+      "accepted": true,
+      "expectedIdentifiers": ["btc-lightning-bolt11", "btc-regtest-p2wpkh"]
+    },
+    {
+      "name": "uppercase-asset",
+      "network": "regtest",
+      "asset": "BTC",
+      "acceptedPaymentEndpointIdentifiers": ["btc-regtest-p2wpkh"],
+      "accepted": false,
+      "expectedIdentifiers": []
+    },
+    {
+      "name": "bitcoin-foreign-onchain",
+      "network": "bitcoin",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-testnet-p2wpkh"],
+      "accepted": false,
+      "expectedIdentifiers": []
+    },
+    {
+      "name": "testnet-foreign-onchain",
+      "network": "testnet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-signet-p2wpkh"],
+      "accepted": false,
+      "expectedIdentifiers": []
+    },
+    {
+      "name": "signet-foreign-onchain",
+      "network": "signet",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-regtest-p2wpkh"],
+      "accepted": false,
+      "expectedIdentifiers": []
+    },
+    {
+      "name": "regtest-foreign-onchain",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-bitcoin-p2wpkh"],
+      "accepted": false,
+      "expectedIdentifiers": []
+    },
+    {
+      "name": "uppercase-identifier",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["BTC-regtest-p2wpkh"],
+      "accepted": false,
+      "expectedIdentifiers": []
+    },
+    {
+      "name": "unknown-identifier",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": ["btc-unsupported-method"],
+      "accepted": false,
+      "expectedIdentifiers": []
+    },
+    {
+      "name": "empty-identifiers",
+      "network": "regtest",
+      "asset": "btc",
+      "acceptedPaymentEndpointIdentifiers": [],
+      "accepted": false,
+      "expectedIdentifiers": []
+    }
+  ],
+  "endpointFixtures": [
+    {
+      "name": "onchain-json-value",
+      "identifier": "btc-regtest-p2wpkh",
+      "payload": "{\"value\":\"bcrt1qissuerfixture\"}",
+      "accepted": true,
+      "expectedValue": "bcrt1qissuerfixture"
+    },
+    {
+      "name": "foreign-network-endpoint",
+      "identifier": "btc-bitcoin-p2wpkh",
+      "payload": "{\"value\":\"bc1qissuerfixture\"}",
+      "accepted": false
+    },
+    {
+      "name": "bolt11-json-value-with-bounds",
+      "identifier": "btc-lightning-bolt11",
+      "payload": "{\"value\":\"lnbc1issuerfixture\",\"min\":\"1000\",\"max\":\"2000\"}",
+      "accepted": true,
+      "expectedValue": "lnbc1issuerfixture",
+      "expectedMin": "1000",
+      "expectedMax": "2000"
+    },
+    {
+      "name": "numeric-min",
+      "identifier": "btc-regtest-p2wpkh",
+      "payload": "{\"value\":\"bcrt1qissuerfixture\",\"min\":1000}",
+      "accepted": false
+    },
+    {
+      "name": "boolean-max",
+      "identifier": "btc-regtest-p2wpkh",
+      "payload": "{\"value\":\"bcrt1qissuerfixture\",\"max\":true}",
+      "accepted": false
+    },
+    {
+      "name": "lnurl-trims-value",
+      "identifier": "btc-lightning-lnurl",
+      "payload": "  {\"value\":\"  lnurl1issuerfixture  \"}  ",
+      "accepted": true,
+      "expectedValue": "lnurl1issuerfixture"
+    },
+    {
+      "name": "raw-string",
+      "identifier": "btc-regtest-p2wpkh",
+      "payload": "bcrt1qissuerfixture",
+      "accepted": false
+    },
+    {
+      "name": "empty-payload",
+      "identifier": "btc-regtest-p2wpkh",
+      "payload": "",
+      "accepted": false
+    },
+    {
+      "name": "missing-value",
+      "identifier": "btc-regtest-p2wpkh",
+      "payload": "{}",
+      "accepted": false
+    },
+    {
+      "name": "empty-value",
+      "identifier": "btc-regtest-p2wpkh",
+      "payload": "{\"value\":\"\"}",
+      "accepted": false
+    },
+    {
+      "name": "whitespace-value",
+      "identifier": "btc-regtest-p2wpkh",
+      "payload": "{\"value\":\"   \"}",
+      "accepted": false
+    },
+    {
+      "name": "numeric-value",
+      "identifier": "btc-regtest-p2wpkh",
+      "payload": "{\"value\":713}",
+      "accepted": false
+    },
+    {
+      "name": "top-level-array",
+      "identifier": "btc-regtest-p2wpkh",
+      "payload": "[{\"value\":\"bcrt1qissuerfixture\"}]",
+      "accepted": false
+    },
+    {
+      "name": "malformed-json",
+      "identifier": "btc-regtest-p2wpkh",
+      "payload": "{\"value\":",
+      "accepted": false
+    },
+    {
+      "name": "unsupported-identifier",
+      "identifier": "btc-lightning-bolt12",
+      "payload": "{\"value\":\"lno1issuerfixture\"}",
+      "accepted": false
+    }
+  ]
+}

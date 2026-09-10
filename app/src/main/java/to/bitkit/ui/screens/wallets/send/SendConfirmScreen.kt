@@ -219,7 +219,11 @@ internal fun SendConfirmContent(
     onBiometricsSuccess: () -> Unit = {},
     onBiometricsFailure: () -> Unit = {},
 ) {
-    Box(modifier = modifier) {
+    Box(
+        modifier = modifier.testTag(
+            if (uiState.isPaymentRequest) "PaymentRequestConfirm" else "SendConfirm",
+        )
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
