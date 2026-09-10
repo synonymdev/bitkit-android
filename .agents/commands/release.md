@@ -233,6 +233,75 @@ Do not share with individual emails and never use `type: anyone` (public).
 
 Store the doc URL for the summary.
 
+### 6c. Draft #bitkit-native Slack Announcement
+
+Prepare a footer-free Slack announcement for Jacobo / the team in `#bitkit-native` (`C07BJ7DNPCG`). **Never call `slack_send_message`** — it always appends `Sent using Cursor`. Use `slack_send_message_draft` only, and the user must send each draft **from the Slack app** (sending from the Cursor-side draft widget also adds the footer).
+
+**Write the local draft** to `.ai/slack-release-{newVersionName}.md` (create `.ai/` if needed). Format: Slack MCP markdown (`- ` lists, `[text](url)` links, `<@UID>` mentions). Fill this platform from the current release; fill the sibling platform if its release branch / PR / tag / Google Doc already exists, otherwise leave `TODO` and print that the file can be updated after the sibling cut.
+
+Template (Android is this platform; iOS is the sibling):
+
+```markdown
+# Slack draft — #bitkit-native — Release {newVersionName}
+
+Format: Slack MCP markdown (`- ` lists, `[text](url)` links, `<@UID>` mentions).
+Post via `slack_send_message_draft` only (never `slack_send_message`).
+Send each draft from the Slack app, not the Cursor widget.
+
+## Thread parent
+
+Release `{newVersionName}` :thread:
+
+## Reply
+
+Release candidates:
+- iOS {newVersionName} ({iOS build or TODO}) - available in TestFlight ([github.com/synonymdev/bitkit-ios/releases](https://github.com/synonymdev/bitkit-ios/releases))
+- Android {newVersionName} ({newVersionCode}) - available on [github.com/synonymdev/bitkit-android/releases](https://github.com/synonymdev/bitkit-android/releases)
+
+cc: <@U04NN8MV2GY> <@U03DQKN95BK>
+cc: <@U031TCP84D8> <@U06UXSF134N> for design review
+
+Proposed Store Release notes:
+- Android: [v{newVersionName} Android]({Android Google Doc URL from 6b})
+- iOS: [v{newVersionName} iOS]({iOS Google Doc URL or TODO})
+
+cc: <@U07D3A8RSPN>
+
+Please find GH release notes for both platforms for detailed changes:
+- [github.com/synonymdev/bitkit-android/releases](https://github.com/synonymdev/bitkit-android/releases)
+- [github.com/synonymdev/bitkit-ios/releases](https://github.com/synonymdev/bitkit-ios/releases)
+
+Version bump PRs (release branches, merged into master after the store release):
+- Android: [{Android PR URL label}]({Android PR URL from step 4})
+- iOS: [{iOS PR URL label or TODO}]({iOS PR URL or TODO})
+
+These builds will be used for testing following the [testing framework](https://docs.google.com/spreadsheets/d/10_DufEPwKUCExkXF-jTY7njE0mh5ZspwhRw42NBBd-o).
+
+## Mentions
+
+- U04NN8MV2GY Jean-Christophe
+- U03DQKN95BK Pav
+- U031TCP84D8 Aldert
+- U06UXSF134N Oliver Toledo
+- U07D3A8RSPN Jacobo
+```
+
+Print the path to the local draft.
+
+**Post as Slack drafts (two-step; one attached draft per channel at a time):**
+
+1. Create the **parent** draft in `#bitkit-native` (`channel_id`: `C07BJ7DNPCG`) with body exactly: `Release \`{newVersionName}\` :thread:`
+2. Tell the user: send that draft **from the Slack app** (not the Cursor widget), then confirm when done — or just proceed to poll.
+3. Poll with `slack_read_channel` on `C07BJ7DNPCG` every **5 seconds** until a message appears whose text is `Release \`{newVersionName}\` :thread:` and that does **not** include `Sent using`. Cap at ~2 minutes; if not found, ask the user to send and keep polling.
+4. Create the **reply** draft with `thread_ts` set to that parent's message `ts`, body = the `## Reply` section from `.ai/slack-release-{newVersionName}.md` (markdown body only, no headings).
+5. Tell the user: open the new thread in `#bitkit-native` and send the reply draft **from Slack**.
+
+If the parent draft already exists in the channel from the sibling platform's `/release` run (same `Release \`{newVersionName}\` :thread:` already posted), skip steps 1–3 and attach the reply draft to that existing parent instead (or skip the whole Slack post if the sibling already created the reply).
+
+**Fallbacks (never block the release):** Slack MCP unavailable → print `⚠ Slack draft not created — post manually from .ai/slack-release-{newVersionName}.md` and continue.
+
+Store the local draft path for the summary.
+
 ### 7. Build Mainnet Release
 
 ```bash
@@ -274,8 +343,10 @@ APK uploaded: bitkit-mainnet-release-{newVersionCode}-universal.apk
 Native debug symbols uploaded: native-debug-symbols-{newVersionCode}.zip
 Store release notes: .ai/release-notes-{newVersionName}.md
 Release notes doc: {Google Doc URL} (shared with Synonym)
+Slack draft: .ai/slack-release-{newVersionName}.md (#bitkit-native parent+reply drafts)
 
 Next steps:
+- Send the #bitkit-native Slack drafts from the Slack app (if not already)
 - Share the release notes doc with Jacobo for review
 - QA the APK
 - If patching the release branch: increment only versionCode, re-tag, rebuild, and re-upload
