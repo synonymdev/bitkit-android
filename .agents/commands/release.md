@@ -206,6 +206,33 @@ gh release edit v{newVersionName} --notes-file /tmp/release-notes.md
 
 Print the path to the release notes file so the user can share it for review.
 
+### 6b. Create Shared Google Doc for Release Notes
+
+Publish the release notes as a Google Doc that can be shared with Jacobo. The doc must be readable by everyone at Synonym ("Anyone at Synonym with the link can view"), matching earlier release notes docs.
+
+**Create the doc** with the Google Drive MCP `create_file` tool. Drive converts Markdown into a native Google Doc, so pass the notes file verbatim:
+- `title`: `v{newVersionName} Android`
+- `contentMimeType`: `text/markdown`
+- `textContent`: full contents of `.ai/release-notes-{newVersionName}.md`
+
+Store the returned `id` and `viewUrl`.
+
+**Share with the Synonym domain.** The Drive MCP `share_file` tool only accepts user/group emails, so use Composio's Google Drive toolkit instead (`COMPOSIO_SEARCH_TOOLS` → `COMPOSIO_MULTI_EXECUTE_TOOL`, tool `GOOGLEDRIVE_CREATE_PERMISSION`):
+- `file_id`: the document id
+- `type`: `domain`
+- `domain`: `synonym.to`
+- `role`: `reader`
+
+Do not share with individual emails and never use `type: anyone` (public).
+
+**Verify** with the Google Drive MCP `get_file_permissions`: the result must contain a permission with `type: domain`, `emailAddress: synonym.to`, `role: reader`.
+
+**Fallbacks (never block the release on this step):**
+- Google Drive MCP unavailable: print `⚠ Google Drive MCP unavailable — create the doc manually from .ai/release-notes-{newVersionName}.md` and continue.
+- Composio has no active `googledrive` connection: keep the doc and print `⚠ Domain sharing not applied — open the doc, Share → General access → "Synonym" → Viewer`, then continue.
+
+Store the doc URL for the summary.
+
 ### 7. Build Mainnet Release
 
 ```bash
@@ -246,9 +273,10 @@ Draft release: {release URL}
 APK uploaded: bitkit-mainnet-release-{newVersionCode}-universal.apk
 Native debug symbols uploaded: native-debug-symbols-{newVersionCode}.zip
 Store release notes: .ai/release-notes-{newVersionName}.md
+Release notes doc: {Google Doc URL} (shared with Synonym)
 
 Next steps:
-- Share release notes with Jacobo for review
+- Share the release notes doc with Jacobo for review
 - QA the APK
 - If patching the release branch: increment only versionCode, re-tag, rebuild, and re-upload
 - Submit to Play Store when QA passes
