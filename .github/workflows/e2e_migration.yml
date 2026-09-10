@@ -56,6 +56,7 @@ jobs:
           E2E: true
           E2E_BACKEND: network
           GEO: false
+          PUSH_REGISTRATION_ENABLED: false
         run: ./gradlew assembleDevDebug
 
       - name: Rename APK

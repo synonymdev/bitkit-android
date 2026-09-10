@@ -1666,7 +1666,15 @@ class LightningRepo @Inject constructor(
 
     fun separateTrustedChannels(channels: List<ChannelDetails>) = lightningService.separateTrustedChannels(channels)
 
-    suspend fun registerForNotifications(token: String? = null) = executeWhenNodeRunning("registerForNotifications") {
+    suspend fun registerForNotifications(
+        token: String? = null,
+        isPushRegistrationEnabled: Boolean = Env.isPushRegistrationEnabled,
+    ) = executeWhenNodeRunning("registerForNotifications") {
+        if (!isPushRegistrationEnabled) {
+            Logger.info("Skipped push registration, disabled via build config", context = TAG)
+            return@executeWhenNodeRunning Result.success(Unit)
+        }
+
         runCatching {
             val token = token ?: firebaseMessaging.token.await()
             val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)

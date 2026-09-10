@@ -959,6 +959,29 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `registerForNotifications should register new device token`() = test {
+        startNodeForTesting()
+        val token = "fcm-token"
+        whenever(keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)).thenReturn(null)
+        whenever { lspNotificationsService.registerDevice(token) }.thenReturn(Unit)
+
+        val result = sut.registerForNotifications(token = token)
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(lspNotificationsService) { registerDevice(token) }
+    }
+
+    @Test
+    fun `registerForNotifications should skip device registration when push registration is disabled`() = test {
+        startNodeForTesting()
+
+        val result = sut.registerForNotifications(token = "fcm-token", isPushRegistrationEnabled = false)
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(lspNotificationsService, never()) { registerDevice(any()) }
+    }
+
+    @Test
     fun `restartWithElectrumServer should setup with new server`() = test {
         startNodeForTesting()
         val customServerUrl = "ssl://test.example.com:50002"
