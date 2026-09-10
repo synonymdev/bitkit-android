@@ -2623,9 +2623,9 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext?,
         allowPubkyAuth: Boolean,
     ) = withContext(bgDispatcher) {
-        val input = result.removeLightningSchemes()
+        if (rejectPubkyAuthScan(result, allowPubkyAuth, contactPaymentContext)) return@withContext
 
-        if (rejectPubkyAuthScan(input, allowPubkyAuth, contactPaymentContext)) return@withContext
+        val input = result.removeLightningSchemes()
 
         val contactPaymentProfile = activeContactPaymentProfile()
         val incomingPaymentRequest = activeIncomingPaymentRequest()
@@ -2820,7 +2820,9 @@ class AppViewModel @Inject constructor(
         allowPubkyAuth: Boolean,
         contactPaymentContext: ContactPaymentContext?,
     ): Boolean {
-        if (!PubkyAuthRequest.isProtocolUrl(input) || allowPubkyAuth) return false
+        val unwrappedInput = input.removeLightningSchemes()
+        if (!PubkyAuthRequest.isProtocolUrl(unwrappedInput)) return false
+        if (allowPubkyAuth && input == unwrappedInput) return false
         toast(
             type = Toast.ToastType.ERROR,
             title = context.getString(R.string.other__qr_error_header),

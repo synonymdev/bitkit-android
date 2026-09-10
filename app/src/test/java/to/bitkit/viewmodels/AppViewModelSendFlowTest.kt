@@ -2041,6 +2041,44 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `payment scheme wrapped pubky auth deeplinks preserve payment state without authorization`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
+        setSendState(paymentState)
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw&relay=https://relay&secret=request"
+        val wrappedUrls = listOf("lightning", "LIGHTNING", "lnurl", "lnurlw", "lnurlc", "lnurlp")
+            .map { "$it:$authUrl" } + "lightning:${authUrl.replace("signin_grant", "signin")}"
+
+        wrappedUrls.forEach {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, it.toUri()))
+            advanceUntilIdle()
+
+            assertNull(sut.currentSheet.value, it)
+            assertEquals(paymentState, sut.sendUiState.value, it)
+        }
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `global scanner rejects payment scheme wrapped signup without an identity`() = test {
+        enablePaykitUi()
+
+        listOf(signupAuthUrl, legacyAuthorizedSignupAuthUrl, directSignupAuthUrl, legacyDirectSignupAuthUrl).forEach {
+            sut.showScannerSheet()
+            advanceUntilIdle()
+            sut.onScannerSheetResult("lnurl:$it")
+            advanceUntilIdle()
+
+            assertNull(sut.currentSheet.value, it)
+        }
+        verify(pubkyRepo, never()).hasIdentity()
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
     fun `pubky auth deeplink shows identity required toast without a Pubky identity`() = test {
         enablePaykitUi()
         whenever(context.getString(R.string.pubky_auth__no_identity)).thenReturn("Pubky Identity Required")
