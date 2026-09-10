@@ -1190,43 +1190,50 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `explicit request expiration cancels a suspended target scan`() = test {
+    fun `expiring request cancels its scan and preserves a queued request`() = test {
         sut.setIsAuthenticated(true)
-        val request = paymentRequest()
-        val bolt11 = "lnbcrt1expiredrequestscan"
+        val expiredRequest = paymentRequest()
+        val queuedRequest = paymentRequest().copy(paymentRequestId = "queued-request")
+        val expiredBolt11 = "lnbcrt1expiredrequestscan"
+        val queuedBolt11 = "lnbcrt1queuedrequestscan"
         val scanStarted = CompletableDeferred<Unit>()
-        val resumeScan = CompletableDeferred<Unit>()
         whenever(context.getString(R.string.wallet__payment_request)).thenReturn("Payment Request")
         whenever(context.getString(R.string.wallet__payment_request_expired)).thenReturn(
             "The payment request has expired."
         )
-        stubOpenedPaymentRequest(request, bolt11)
-        whenever(coreService.decode(bolt11)).doSuspendableAnswer {
+        stubOpenedPaymentRequest(expiredRequest, expiredBolt11)
+        whenever(coreService.decode(expiredBolt11)).doSuspendableAnswer {
             scanStarted.complete(Unit)
-            resumeScan.await()
-            Scanner.Lightning(lightningInvoice(bolt11, request.amountSats))
+            awaitCancellation()
         }
+        stubLightningScan(bolt11 = queuedBolt11, amountSats = queuedRequest.amountSats)
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
-        pendingPaykitPaymentRequests.value = listOf(request)
+        pendingPaykitPaymentRequests.value = listOf(expiredRequest, queuedRequest)
         enablePaykitUi()
         pubkyPublicKey.value = testPublicKey
         runCurrent()
         clearInvocations(toastManager)
 
-        sut.showPaymentRequests()
-        sut.openIncomingPaymentRequest(request.id)
-        advanceTimeBy(TRANSITION_SCREEN_MS)
+        sut.openIncomingPaymentRequest(expiredRequest.id)
         scanStarted.await()
-        whenever(paykitPaymentRequestRepo.isExpired(request)).thenReturn(true)
-        pendingPaykitPaymentRequests.value = emptyList()
+        sut.setIsAuthenticated(false)
+        sut.openContactPayment(
+            paymentRequest = queuedBolt11,
+            publicKey = queuedRequest.counterparty,
+            incomingPaymentRequest = queuedRequest,
+        )
+        whenever(paykitPaymentRequestRepo.isExpired(expiredRequest)).thenReturn(true)
+        pendingPaykitPaymentRequests.value = listOf(queuedRequest)
         runCurrent()
-        resumeScan.complete(Unit)
-        advanceTimeBy(TRANSITION_SCREEN_MS)
+        assertNull(activeContactPaymentContext())
+
+        sut.setIsAuthenticated(true)
         runCurrent()
 
-        assertEquals(Sheet.PaymentRequests, sut.currentSheet.value)
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(queuedRequest, activeContactPaymentContext()?.incomingPaymentRequest)
         verify(paykitPaymentRequestDiagnostics).logPresentationRejection(
-            request.counterparty,
+            expiredRequest.counterparty,
             IncomingPaykitPaymentRequestFailureReason.RequestExpired,
         )
         val toastCaptor = argumentCaptor<Toast>()

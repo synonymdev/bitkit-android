@@ -1115,7 +1115,7 @@ class AppViewModel @Inject constructor(
             requestedPaymentRequestId == request.id && shouldRestorePaymentRequestSheet
         val showExpiredToast = requestedPaymentRequestId == request.id
         if (requestedPaymentRequestId == request.id) {
-            invalidatePaymentRequestPresentation()
+            invalidatePaymentRequestPresentation(requestId = request.id)
             clearRequestedPaymentRequest()
         }
         clearPaymentRequestPresentationRetry(request.id)
@@ -1201,15 +1201,33 @@ class AppViewModel @Inject constructor(
         requestedPaymentRequestTags = persistentListOf()
     }
 
-    private fun invalidatePaymentRequestPresentation(dismissActiveRequest: Boolean = false) {
+    private fun invalidatePaymentRequestPresentation(
+        dismissActiveRequest: Boolean = false,
+        requestId: PaykitPaymentRequestId? = null,
+    ) {
+        fun targetsRequest(context: ContactPaymentContext?): Boolean {
+            val scanRequestId = context?.incomingPaymentRequest?.id ?: return false
+            return requestId == null || scanRequestId == requestId
+        }
+
         paymentRequestPresentationGeneration++
         scheduledScan
-            ?.takeIf { it.contactPaymentContext?.incomingPaymentRequest != null }
+            ?.takeIf { targetsRequest(it.contactPaymentContext) }
             ?.job
             ?.cancel()
         synchronized(deferredScanLock) {
-            if (deferredScan?.contactPaymentContext?.incomingPaymentRequest != null) {
+            if (targetsRequest(deferredScan?.contactPaymentContext)) {
                 deferredScan = null
+            }
+        }
+        if (requestId != null) {
+            synchronized(contactPaymentContextLock) {
+                if (activeContactPaymentContext?.incomingPaymentRequest?.id == requestId) {
+                    activeContactPaymentContext = null
+                }
+                if (preparedContactPaymentContext?.incomingPaymentRequest?.id == requestId) {
+                    preparedContactPaymentContext = null
+                }
             }
         }
         if (dismissActiveRequest && activeIncomingPaymentRequest() != null) {
