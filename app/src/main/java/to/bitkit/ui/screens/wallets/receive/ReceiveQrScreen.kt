@@ -110,18 +110,18 @@ fun ReceiveQrScreen(
     SetMaxBrightness()
 
     val haptic = LocalHapticFeedback.current
-    val hasUsableChannels = lightningState.channels.any { it.isUsable }
-    val usableInboundLiquiditySats = remember(lightningState.channels) {
-        lightningState.channels.filter { it.isUsable }.calculateRemoteBalance()
+    val hasReadyChannels = lightningState.channels.any { it.isChannelReady }
+    val readyInboundLiquiditySats = remember(lightningState.channels) {
+        lightningState.channels.filter { it.isChannelReady }.calculateRemoteBalance()
     }
     val canCreateLightningInvoice = remember(
-        hasUsableChannels,
-        usableInboundLiquiditySats,
+        hasReadyChannels,
+        readyInboundLiquiditySats,
         walletState.bip21AmountSats,
     ) {
         ReceiveLiquidityDecision.canCreateLightningInvoice(
-            hasUsableChannels = hasUsableChannels,
-            inboundCapacitySats = usableInboundLiquiditySats,
+            hasReadyChannels = hasReadyChannels,
+            inboundCapacitySats = readyInboundLiquiditySats,
             invoiceAmountSats = walletState.bip21AmountSats,
         )
     }
@@ -383,10 +383,8 @@ fun ReceiveQrScreen(
                                     qrLogoPainter = painterResource(getQrLogoResource(tab)),
                                     onClickEditInvoice = if (tab == ReceiveTab.TREZOR) {
                                         onClickHardwareEditInvoice
-                                    } else if (cjitInvoice.isNullOrEmpty()) {
-                                        { onClickEditInvoice(tab) }
                                     } else {
-                                        onClickReceiveCjit
+                                        { onClickEditInvoice(tab) }
                                     },
                                     tab = tab,
                                     modifier = Modifier.fillMaxWidth()

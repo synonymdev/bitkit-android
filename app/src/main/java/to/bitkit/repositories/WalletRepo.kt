@@ -756,14 +756,14 @@ class WalletRepo @Inject constructor(
     }
 
     suspend fun inboundLiquiditySats(): ULong = withContext(bgDispatcher) {
-        return@withContext currentUsableChannels().calculateRemoteBalance()
+        return@withContext currentReadyChannels().calculateRemoteBalance()
     }
 
     private fun canCreateLightningInvoice(amountSats: ULong?): Boolean {
-        val usableChannels = currentUsableChannels()
+        val readyChannels = currentReadyChannels()
         return ReceiveLiquidityDecision.canCreateLightningInvoice(
-            hasUsableChannels = usableChannels.isNotEmpty(),
-            inboundCapacitySats = usableChannels.calculateRemoteBalance(),
+            hasReadyChannels = readyChannels.isNotEmpty(),
+            inboundCapacitySats = readyChannels.calculateRemoteBalance(),
             invoiceAmountSats = amountSats,
         )
     }
@@ -772,8 +772,8 @@ class WalletRepo @Inject constructor(
         return lightningRepo.getChannels() ?: lightningRepo.lightningState.value.channels
     }
 
-    private fun currentUsableChannels(): List<ChannelDetails> {
-        return currentChannels().filter { it.isUsable }
+    private fun currentReadyChannels(): List<ChannelDetails> {
+        return currentChannels().filter { it.isChannelReady }
     }
 
     private suspend fun Scanner.OnChain.extractLightningHash(): String? {

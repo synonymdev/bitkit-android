@@ -32,6 +32,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -103,6 +104,7 @@ fun EditInvoiceScreen(
     editInvoiceVM: EditInvoiceVM = hiltViewModel(),
 ) {
     val app = appViewModel ?: return
+    val context = LocalContext.current
     val blocktankVM = blocktankViewModel ?: return
     var keyboardVisible by remember { mutableStateOf(false) }
     var isSoftKeyboardVisible by keyboardAsState()
@@ -129,19 +131,12 @@ fun EditInvoiceScreen(
                         is ReceiveAdditionalLiquidityAction.CreateCjit -> {
                             isCreatingCjit = true
                             runSuspendCatching { blocktankVM.createCjit(action.amountSats) }.onSuccess { entry ->
-                                navigateReceiveConfirm(
-                                    CjitEntryDetails(
-                                        networkFeeSat = entry.networkFeeSat.toLong(),
-                                        serviceFeeSat = entry.serviceFeeSat.toLong(),
-                                        channelSizeSat = entry.channelSizeSat.toLong(),
-                                        feeSat = entry.feeSat.toLong(),
-                                        receiveAmountSats = action.amountSats.toLong(),
-                                        invoice = entry.invoice.request,
-                                    )
-                                )
+                                navigateReceiveConfirm(CjitEntryDetails.from(entry, action.amountSats).getOrThrow())
                             }.onFailure {
                                 Logger.error("Failed to create CJIT invoice", it, context = "EditInvoiceScreen")
-                                if (it !is ServiceError.ChannelSizeExceedsMaximum) {
+                                if (!app.toastReceiveCjitError(context, it) &&
+                                    it !is ServiceError.ChannelSizeExceedsMaximum
+                                ) {
                                     app.toast(it)
                                 }
                                 navigateCjitAmount()

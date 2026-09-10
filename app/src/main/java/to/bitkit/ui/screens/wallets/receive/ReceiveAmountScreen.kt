@@ -143,23 +143,17 @@ fun ReceiveAmountScreen(
                     }
 
                     val entry = blocktank.createCjit(amountSats = sats.toULong())
-                    onCjitCreated(
-                        CjitEntryDetails(
-                            networkFeeSat = entry.networkFeeSat.toLong(),
-                            serviceFeeSat = entry.serviceFeeSat.toLong(),
-                            channelSizeSat = entry.channelSizeSat.toLong(),
-                            feeSat = entry.feeSat.toLong(),
-                            receiveAmountSats = sats,
-                            invoice = entry.invoice.request,
-                        )
-                    )
+                    onCjitCreated(CjitEntryDetails.from(entry, sats.toULong()).getOrThrow())
                 }.onFailure { e ->
                     Logger.error("Failed to create CJIT", e)
-                    if (e is ServiceError.ChannelSizeExceedsMaximum) {
-                        maxCjitAmountSats = runSuspendCatching { blocktank.maxCjitAmountSats() }.getOrNull()
-                        maxCjitAmountSats?.let { showMaxExceededToast(it) } ?: app.toast(e)
-                    } else {
-                        app.toast(e)
+                    when {
+                        e is ServiceError.ChannelSizeExceedsMaximum -> {
+                            maxCjitAmountSats = runSuspendCatching { blocktank.maxCjitAmountSats() }.getOrNull()
+                            maxCjitAmountSats?.let { showMaxExceededToast(it) } ?: app.toast(e)
+                        }
+                        !app.toastReceiveCjitError(context, e) -> {
+                            app.toast(e)
+                        }
                     }
                 }
                 isCreatingInvoice = false
