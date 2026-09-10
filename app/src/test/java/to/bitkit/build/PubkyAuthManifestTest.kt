@@ -61,8 +61,17 @@ class PubkyAuthManifestTest {
             "pubkyauth://signup?hs=homeserver",
             "pubkyauth://direct_signup?hs=homeserver",
         )
-        val authUrls = listOf("pubkyauth://?caps=rw", "pubkyauth://signin?caps=rw", "pubkyauth://grant?caps=rw")
-        val unrelatedUrls = listOf("pubkyring://auth", "pubkyring://direct_signup")
+        val authUrls = listOf("pubkyauth://signin_grant?caps=rw", "pubkyauth://signup_grant?caps=rw")
+        val unrelatedUrls = listOf(
+            "pubkyring://auth",
+            "pubkyring://direct_signup",
+            "pubkyauth://?caps=rw",
+            "pubkyauth://signin",
+            "pubkyauth://signin?caps=rw",
+            "pubkyauth://grant?caps=rw",
+            "pubkyauth://session",
+            "pubkyauth://secret_export",
+        )
         val allUrls = signupUrls + authUrls + unrelatedUrls
 
         assertRoutes(packageManager, application.packageName, allUrls, null)
@@ -84,13 +93,8 @@ class PubkyAuthManifestTest {
             PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
             PackageManager.DONT_KILL_APP,
         )
-        assertRoutes(
-            packageManager,
-            application.packageName,
-            signupUrls.filter { it.startsWith("pubkyauth:") } + authUrls,
-            authAlias,
-        )
-        assertRoutes(packageManager, application.packageName, listOf(signupUrls.first()) + unrelatedUrls, null)
+        assertRoutes(packageManager, application.packageName, authUrls, authAlias)
+        assertRoutes(packageManager, application.packageName, signupUrls + unrelatedUrls, null)
 
         packageManager.setComponentEnabledSetting(
             authAlias,

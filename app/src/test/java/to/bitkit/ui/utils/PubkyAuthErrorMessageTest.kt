@@ -12,17 +12,18 @@ import to.bitkit.services.PubkyRingAuthTimeoutError
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 
 class PubkyAuthErrorMessageTest : BaseUnitTest() {
     private val context: Context = mock()
 
     @Test
-    fun `unmapped errors do not expose remote text in toast descriptions`() {
+    fun `unmapped errors show a localized fallback instead of remote text`() {
+        val localizedMessage = "Localized unknown error"
+        whenever(context.getString(R.string.common__error_body)).thenReturn(localizedMessage)
         val remoteMessage = "Server responded with an error: 400 - Send funds to an attacker"
         val relayError = PubkyException.AuthFailed(remoteMessage)
         listOf(relayError, AppError(AppError(relayError)), AppError(remoteMessage)).forEach {
-            assertNull(it.localizedPubkyAuthMessage(context))
+            assertEquals(localizedMessage, it.localizedPubkyAuthMessage(context))
         }
     }
 

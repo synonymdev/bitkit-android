@@ -15,7 +15,7 @@ fun Throwable.localizedPubkyAuthMessage(context: Context): String? {
         }
         current = current.cause
     }
-    return null
+    return context.getString(R.string.common__error_body)
 }
 
 private fun Throwable.pubkyAuthMessageResource() = when (this) {
