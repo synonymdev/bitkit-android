@@ -96,7 +96,7 @@ fun SpendingAdvancedScreen(
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
             when (effect) {
-                TransferEffect.OnOrderCreated -> currentOnOrderCreated()
+                is TransferEffect.OnOrderCreated -> currentOnOrderCreated()
                 is TransferEffect.ToastException -> {
                     isLoading = false
                     app.toast(effect.e)

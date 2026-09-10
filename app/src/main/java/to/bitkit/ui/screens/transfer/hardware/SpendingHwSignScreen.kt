@@ -42,6 +42,7 @@ import to.bitkit.viewmodels.TransferViewModel
 @Composable
 fun SpendingHwSignScreen(
     walletId: String,
+    orderId: String,
     viewModel: TransferViewModel,
     onBackClick: () -> Unit,
     onCloseClick: () -> Unit,
@@ -50,7 +51,7 @@ fun SpendingHwSignScreen(
 ) {
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
 
-    val order = state.order ?: run {
+    val order = state.order?.takeIf { it.id == orderId } ?: run {
         onCloseClick()
         return
     }
