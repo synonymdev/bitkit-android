@@ -1,33 +1,50 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
+import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.CJitStateEnum
+import com.synonym.bitkitcore.CreateOrderOptions
 import com.synonym.bitkitcore.FundingTx
 import com.synonym.bitkitcore.IBtChannel
+import com.synonym.bitkitcore.IBtEstimateFeeResponse2
 import com.synonym.bitkitcore.IBtInfo
 import com.synonym.bitkitcore.IBtInfoOptions
 import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.IcJitEntry
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.OutPoint
+import org.mockito.kotlin.any
+import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import org.mockito.kotlin.wheneverBlocking
 import to.bitkit.data.AppCacheData
+import to.bitkit.data.BlocktankRefundAddress
 import to.bitkit.data.CacheStore
 import to.bitkit.models.BlocktankBackupV1
+import to.bitkit.services.AddressDerivationInfo
+import to.bitkit.services.BlocktankService
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.utils.ServiceError
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -35,10 +52,12 @@ import kotlin.test.assertTrue
 class BlocktankRepoTest : BaseUnitTest() {
 
     private val coreService: CoreService = mock()
+    private val blocktankService: BlocktankService = mock()
     private val lightningService: LightningService = mock()
     private val currencyRepo: CurrencyRepo = mock()
     private val cacheStore: CacheStore = mock()
     private val lightningRepo: LightningRepo = mock()
+    private val cacheData = MutableStateFlow(AppCacheData())
 
     private lateinit var sut: BlocktankRepo
 
@@ -46,18 +65,28 @@ class BlocktankRepoTest : BaseUnitTest() {
 
     @Before
     fun setUp() {
-        whenever(cacheStore.data).thenReturn(flowOf(AppCacheData()))
+        cacheData.value = AppCacheData()
+        whenever(cacheStore.data).thenReturn(cacheData)
+        whenever { cacheStore.update(any()) }.thenAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            cacheData.value = transform(cacheData.value)
+        }
         whenever(currencyRepo.currencyState).thenReturn(MutableStateFlow(CurrencyState()))
-        whenever(coreService.blocktank).thenReturn(mock())
+        whenever(coreService.blocktank).thenReturn(blocktankService)
+        whenever { coreService.isGeoBlocked() }.thenReturn(false)
+        whenever { coreService.isAddressUsed(any()) }.thenReturn(false)
+        whenever(lightningService.nodeId).thenReturn("node-id")
+        whenever { lightningService.sign(any()) }.thenReturn("signature")
 
-        wheneverBlocking { coreService.blocktank.info(refresh = false) }.thenReturn(mock())
-        wheneverBlocking { coreService.blocktank.info(refresh = true) }.thenReturn(mock())
+        whenever { blocktankService.info(refresh = false) }.thenReturn(mock())
+        whenever { blocktankService.info(refresh = true) }.thenReturn(mock())
 
-        wheneverBlocking { coreService.blocktank.orders(refresh = false) }.thenReturn(emptyList())
-        wheneverBlocking { coreService.blocktank.orders(refresh = true) }.thenReturn(emptyList())
+        whenever { blocktankService.orders(refresh = false) }.thenReturn(emptyList())
+        whenever { blocktankService.orders(refresh = true) }.thenReturn(emptyList())
 
-        wheneverBlocking { coreService.blocktank.cjitEntries(refresh = false) }.thenReturn(emptyList())
-        wheneverBlocking { coreService.blocktank.cjitEntries(refresh = true) }.thenReturn(emptyList())
+        whenever { blocktankService.cjitEntries(refresh = false) }.thenReturn(emptyList())
+        whenever { blocktankService.cjitEntries(refresh = true) }.thenReturn(emptyList())
+        whenever { lightningRepo.revealReceiveAddresses(any(), any()) }.thenReturn(Result.success(Unit))
     }
 
     private fun createSut(): BlocktankRepo {
@@ -70,6 +99,295 @@ class BlocktankRepoTest : BaseUnitTest() {
             enablePolling = false,
             lightningRepo = lightningRepo,
         )
+    }
+
+    @Test
+    fun `createOrder sends a persisted native SegWit refund address`() = test {
+        val addressInfo = AddressDerivationInfo(address = "bcrt1qrefund0", index = 0)
+        val order = mock<IBtOrder>()
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenReturn(Result.success(addressInfo))
+        whenever(blocktankService.newOrder(any(), any(), any())).thenReturn(order)
+        sut = createSut()
+
+        val result = sut.createOrder(spendingBalanceSats = 50_000u, receivingBalanceSats = 100_000u)
+
+        assertEquals(order, result.getOrThrow())
+        assertEquals(BlocktankRefundAddress(addressInfo.address, 0), cacheData.value.blocktankRefundAddress)
+        val options = argumentCaptor<CreateOrderOptions>()
+        verify(blocktankService).newOrder(any(), any(), options.capture())
+        assertEquals(addressInfo.address, options.firstValue.refundOnchainAddress)
+        verify(lightningRepo).newAddressInfoForType(AddressType.P2WPKH)
+        verify(coreService).isAddressUsed(addressInfo.address)
+    }
+
+    @Test
+    fun `estimateOrderFee never allocates a refund address`() = test {
+        val estimate = mock<IBtEstimateFeeResponse2>()
+        whenever(blocktankService.estimateFee(any(), any(), any())).thenReturn(estimate)
+        sut = createSut()
+
+        repeat(10) {
+            assertEquals(
+                estimate,
+                sut.estimateOrderFee(spendingBalanceSats = 50_000u, receivingBalanceSats = 100_000u)
+                    .getOrThrow(),
+            )
+        }
+
+        verify(lightningRepo, never()).newAddressInfoForType(any())
+        verify(lightningRepo, never()).addressInfoForType(any(), any())
+        verify(lightningRepo, never()).revealReceiveAddresses(any(), any())
+        assertNull(cacheData.value.blocktankRefundAddress)
+    }
+
+    @Test
+    fun `failed and repeated orders reuse one unused persisted refund address across repo instances`() = test {
+        val addressInfo = AddressDerivationInfo(address = "bcrt1qrefund0", index = 0)
+        val order = mock<IBtOrder>()
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenReturn(Result.success(addressInfo))
+        whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 0)).thenReturn(Result.success(addressInfo))
+        whenever(blocktankService.newOrder(any(), any(), any()))
+            .thenThrow(RuntimeException("backend unavailable"))
+            .thenReturn(order)
+        sut = createSut()
+
+        assertTrue(sut.createOrder(50_000u).isFailure)
+        sut = createSut()
+        repeat(3) { assertEquals(order, sut.createOrder(50_000u).getOrThrow()) }
+
+        verify(lightningRepo, times(1)).newAddressInfoForType(AddressType.P2WPKH)
+        verify(lightningRepo, times(3)).addressInfoForType(AddressType.P2WPKH, 0)
+        verify(lightningRepo, times(3)).revealReceiveAddresses(0, AddressType.P2WPKH)
+        verify(coreService, times(4)).isAddressUsed(addressInfo.address)
+    }
+
+    @Test
+    fun `recorded refund payment skips used candidates and rotates to the first unused address`() = test {
+        val oldInfo = AddressDerivationInfo(address = "bcrt1qrefund0", index = 0)
+        val firstUsedInfo = AddressDerivationInfo(address = "bcrt1qrefund1", index = 1)
+        val secondUsedInfo = AddressDerivationInfo(address = "bcrt1qrefund2", index = 2)
+        val unusedInfo = AddressDerivationInfo(address = "bcrt1qrefund3", index = 3)
+        val order = mock<IBtOrder>()
+        cacheData.value = AppCacheData(blocktankRefundAddress = BlocktankRefundAddress(oldInfo.address, 0))
+        whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 0)).thenReturn(Result.success(oldInfo))
+        whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 3)).thenReturn(Result.success(unusedInfo))
+        whenever(coreService.isAddressUsed(oldInfo.address)).thenReturn(true)
+        whenever(coreService.isAddressUsed(firstUsedInfo.address)).thenReturn(true)
+        whenever(coreService.isAddressUsed(secondUsedInfo.address)).thenReturn(true)
+        whenever(coreService.isAddressUsed(unusedInfo.address)).thenReturn(false)
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH))
+            .thenReturn(Result.success(firstUsedInfo))
+            .thenReturn(Result.success(secondUsedInfo))
+            .thenReturn(Result.success(unusedInfo))
+        whenever(blocktankService.newOrder(any(), any(), any())).thenReturn(order)
+        sut = createSut()
+
+        assertEquals(order, sut.createOrder(50_000u).getOrThrow())
+        assertEquals(order, sut.createOrder(50_000u).getOrThrow())
+
+        verify(lightningRepo, times(3)).newAddressInfoForType(AddressType.P2WPKH)
+        verify(cacheStore, times(1)).update(any())
+        assertEquals(BlocktankRefundAddress(unusedInfo.address, 3), cacheData.value.blocktankRefundAddress)
+        val options = argumentCaptor<CreateOrderOptions>()
+        verify(blocktankService, times(2)).newOrder(any(), any(), options.capture())
+        assertEquals(listOf(unusedInfo.address, unusedInfo.address), options.allValues.map { it.refundOnchainAddress })
+    }
+
+    @Test
+    fun `concurrent orders allocate one shared refund address`() = test {
+        val allocationStarted = CompletableDeferred<Unit>()
+        val allowAllocation = CompletableDeferred<Unit>()
+        val addressInfo = AddressDerivationInfo(address = "bcrt1qrefund0", index = 0)
+        val order = mock<IBtOrder>()
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).doSuspendableAnswer {
+            allocationStarted.complete(Unit)
+            allowAllocation.await()
+            Result.success(addressInfo)
+        }
+        whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 0)).thenReturn(Result.success(addressInfo))
+        whenever(blocktankService.newOrder(any(), any(), any())).thenReturn(order)
+        sut = createSut()
+
+        val first = async { sut.createOrder(50_000u) }
+        allocationStarted.await()
+        val second = async { sut.createOrder(50_000u) }
+        allowAllocation.complete(Unit)
+
+        assertEquals(order, first.await().getOrThrow())
+        assertEquals(order, second.await().getOrThrow())
+        verify(lightningRepo, times(1)).newAddressInfoForType(AddressType.P2WPKH)
+    }
+
+    @Test
+    fun `refund address allocation failure blocks order submission`() = test {
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH))
+            .thenReturn(Result.failure(RuntimeException("node persistence failed")))
+        sut = createSut()
+
+        assertTrue(sut.createOrder(50_000u).isFailure)
+
+        verify(blocktankService, never()).newOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `refund address allocation stops after twenty used candidates`() = test {
+        val oldInfo = AddressDerivationInfo(address = "bcrt1qrefund0", index = 0)
+        val candidates = (1..20).map {
+            AddressDerivationInfo(address = "bcrt1qrefund$it", index = it)
+        }
+        cacheData.value = AppCacheData(blocktankRefundAddress = BlocktankRefundAddress(oldInfo.address, 0))
+        whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 0)).thenReturn(Result.success(oldInfo))
+        whenever(coreService.isAddressUsed(oldInfo.address)).thenReturn(true)
+        candidates.forEach { whenever(coreService.isAddressUsed(it.address)).thenReturn(true) }
+        candidates.fold(
+            initial = whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)),
+        ) { stubbing, candidate -> stubbing.thenReturn(Result.success(candidate)) }
+        sut = createSut()
+
+        val error = assertIs<AppError>(sut.createOrder(50_000u).exceptionOrNull())
+
+        assertEquals("Failed to allocate an unused Blocktank refund address", error.message)
+        verify(lightningRepo, times(20)).newAddressInfoForType(AddressType.P2WPKH)
+        verify(cacheStore, never()).update(any())
+        assertEquals(BlocktankRefundAddress(oldInfo.address, 0), cacheData.value.blocktankRefundAddress)
+        verify(blocktankService, never()).newOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `refund address candidate usage lookup failure preserves cached pointer and blocks submission`() = test {
+        val oldInfo = AddressDerivationInfo(address = "bcrt1qrefund0", index = 0)
+        val candidate = AddressDerivationInfo(address = "bcrt1qrefund1", index = 1)
+        cacheData.value = AppCacheData(blocktankRefundAddress = BlocktankRefundAddress(oldInfo.address, 0))
+        whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 0)).thenReturn(Result.success(oldInfo))
+        whenever(coreService.isAddressUsed(oldInfo.address)).thenReturn(true)
+        whenever(coreService.isAddressUsed(candidate.address)).thenThrow(RuntimeException("activity lookup failed"))
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenReturn(Result.success(candidate))
+        sut = createSut()
+
+        assertTrue(sut.createOrder(50_000u).isFailure)
+
+        verify(lightningRepo, times(1)).newAddressInfoForType(AddressType.P2WPKH)
+        verify(cacheStore, never()).update(any())
+        assertEquals(BlocktankRefundAddress(oldInfo.address, 0), cacheData.value.blocktankRefundAddress)
+        verify(blocktankService, never()).newOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `refund address allocation rejects a nonadvancing candidate index`() = test {
+        val oldInfo = AddressDerivationInfo(address = "bcrt1qrefund4", index = 4)
+        val repeatedIndexCandidate = AddressDerivationInfo(address = "bcrt1qrefund-repeated", index = 4)
+        cacheData.value = AppCacheData(blocktankRefundAddress = BlocktankRefundAddress(oldInfo.address, 4))
+        whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 4)).thenReturn(Result.success(oldInfo))
+        whenever(coreService.isAddressUsed(oldInfo.address)).thenReturn(true)
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH))
+            .thenReturn(Result.success(repeatedIndexCandidate))
+        sut = createSut()
+
+        assertTrue(sut.createOrder(50_000u).isFailure)
+
+        verify(lightningRepo, times(1)).newAddressInfoForType(AddressType.P2WPKH)
+        verify(coreService, never()).isAddressUsed(repeatedIndexCandidate.address)
+        verify(cacheStore, never()).update(any())
+        assertEquals(BlocktankRefundAddress(oldInfo.address, 4), cacheData.value.blocktankRefundAddress)
+        verify(blocktankService, never()).newOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `refund address allocation cancellation blocks order submission and propagates`() = test {
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).doSuspendableAnswer {
+            throw CancellationException("cancelled")
+        }
+        sut = createSut()
+
+        assertFailsWith<CancellationException> { sut.createOrder(50_000u) }
+
+        verify(blocktankService, never()).newOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `cancellation after refund cache persistence blocks order submission`() = test {
+        val addressInfo = AddressDerivationInfo(address = "bcrt1qrefund0", index = 0)
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenReturn(Result.success(addressInfo))
+        whenever { cacheStore.update(any()) }.doSuspendableAnswer {
+            val transform = it.getArgument<(AppCacheData) -> AppCacheData>(0)
+            cacheData.value = transform(cacheData.value)
+            currentCoroutineContext().cancel()
+        }
+        sut = createSut()
+
+        val result = async { sut.createOrder(50_000u) }
+
+        assertFailsWith<CancellationException> { result.await() }
+        verify(blocktankService, never()).newOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `cached refund lookup failure blocks order submission`() = test {
+        cacheData.value = AppCacheData(
+            blocktankRefundAddress = BlocktankRefundAddress("bcrt1qrefund0", 0),
+        )
+        whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 0))
+            .thenReturn(Result.failure(RuntimeException("lookup failed")))
+        sut = createSut()
+
+        assertTrue(sut.createOrder(50_000u).isFailure)
+
+        verify(blocktankService, never()).newOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `cached refund reveal failure blocks order submission`() = test {
+        val addressInfo = AddressDerivationInfo(address = "bcrt1qrefund0", index = 0)
+        cacheData.value = AppCacheData(blocktankRefundAddress = BlocktankRefundAddress(addressInfo.address, 0))
+        whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 0)).thenReturn(Result.success(addressInfo))
+        whenever(lightningRepo.revealReceiveAddresses(0, AddressType.P2WPKH))
+            .thenReturn(Result.failure(RuntimeException("reveal failed")))
+        sut = createSut()
+
+        assertTrue(sut.createOrder(50_000u).isFailure)
+
+        verify(blocktankService, never()).newOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `refund cache write failure blocks order submission`() = test {
+        val addressInfo = AddressDerivationInfo(address = "bcrt1qrefund0", index = 0)
+        whenever(lightningRepo.newAddressInfoForType(AddressType.P2WPKH)).thenReturn(Result.success(addressInfo))
+        whenever { cacheStore.update(any()) }.thenThrow(RuntimeException("cache write failed"))
+        sut = createSut()
+
+        assertTrue(sut.createOrder(50_000u).isFailure)
+
+        verify(blocktankService, never()).newOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `invalid cached refund index blocks order submission`() = test {
+        cacheData.value = AppCacheData(
+            blocktankRefundAddress = BlocktankRefundAddress("bcrt1qrefund", Int.MAX_VALUE.toLong() + 1),
+        )
+        sut = createSut()
+
+        assertTrue(sut.createOrder(50_000u).isFailure)
+
+        verify(lightningRepo, never()).addressInfoForType(any(), any())
+        verify(blocktankService, never()).newOrder(any(), any(), any())
+    }
+
+    @Test
+    fun `cached refund ownership mismatch blocks order submission`() = test {
+        cacheData.value = AppCacheData(
+            blocktankRefundAddress = BlocktankRefundAddress("bcrt1qwrongwallet", 0),
+        )
+        whenever(lightningRepo.addressInfoForType(AddressType.P2WPKH, 0)).thenReturn(
+            Result.success(AddressDerivationInfo(address = "bcrt1qactivewallet", index = 0)),
+        )
+        sut = createSut()
+
+        assertTrue(sut.createOrder(50_000u).isFailure)
+
+        verify(lightningRepo, never()).revealReceiveAddresses(any(), any())
+        verify(blocktankService, never()).newOrder(any(), any(), any())
     }
 
     @Test
