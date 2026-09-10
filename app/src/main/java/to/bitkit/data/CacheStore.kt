@@ -166,6 +166,7 @@ data class AppCacheData(
     val addressSearchLastUsedReceiveIndexes: Map<String, Int> = mapOf(),
     val addressSearchLastUsedChangeIndexes: Map<String, Int> = mapOf(),
     val quickPayLedger: QuickPayLedger? = null,
+    val blocktankRefundAddress: BlocktankRefundAddress? = null,
 ) {
     fun isActivityDeleted(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in deletedActivities ||
@@ -177,3 +178,9 @@ data class AppCacheData(
 
     fun invalidateReceiveOnchainAddress() = copy(bip21 = "", onchainAddress = "")
 }
+
+@Serializable
+data class BlocktankRefundAddress(
+    val address: String,
+    val index: Long,
+)
