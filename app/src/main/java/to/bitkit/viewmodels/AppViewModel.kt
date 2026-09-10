@@ -1115,7 +1115,7 @@ class AppViewModel @Inject constructor(
             requestedPaymentRequestId == request.id && shouldRestorePaymentRequestSheet
         val showExpiredToast = requestedPaymentRequestId == request.id
         if (requestedPaymentRequestId == request.id) {
-            paymentRequestPresentationGeneration++
+            invalidatePaymentRequestPresentation()
             clearRequestedPaymentRequest()
         }
         clearPaymentRequestPresentationRetry(request.id)
