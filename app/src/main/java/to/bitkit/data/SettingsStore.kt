@@ -50,7 +50,9 @@ class SettingsStore @Inject constructor(
 
     suspend fun restoreFromBackup(payload: SettingsBackupV1) =
         runCatching {
-            val data = payload.settings.resetPin().withDefaultPaykitPaymentMethods()
+            val data = payload.settings.resetPin()
+                .withDefaultPaykitPaymentMethods()
+                .withRequiredNativeSegwitMonitoring()
             store.updateData { data }
 
             val monitored = data.addressTypesToMonitor
@@ -62,7 +64,7 @@ class SettingsStore @Inject constructor(
         }
 
     suspend fun update(transform: (SettingsData) -> SettingsData) {
-        store.updateData(transform)
+        store.updateData { transform(it).withRequiredNativeSegwitMonitoring() }
     }
 
     suspend fun setIsPaykitEnabled(value: Boolean) {
@@ -180,6 +182,10 @@ fun SettingsData.areContactPaymentsEnabled(): Boolean =
 fun SettingsData.withDefaultPaykitPaymentMethods() = copy(
     publicPaykitLightningEnabled = true,
     publicPaykitOnchainEnabled = true,
+)
+
+fun SettingsData.withRequiredNativeSegwitMonitoring() = copy(
+    addressTypesToMonitor = (addressTypesToMonitor + DEFAULT_ADDRESS_TYPE_STRING).distinct(),
 )
 
 fun SettingsData.hasPublicPaykitPublicationState(): Boolean =

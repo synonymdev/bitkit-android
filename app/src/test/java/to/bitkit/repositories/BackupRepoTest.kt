@@ -28,6 +28,7 @@ import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.AppDb
+import to.bitkit.data.BlocktankRefundAddress
 import to.bitkit.data.CacheStore
 import to.bitkit.data.HwWalletData
 import to.bitkit.data.HwWalletStore
@@ -471,6 +472,34 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `metadata backup carries the Blocktank refund address pointer`() = test {
+        val refundAddress = BlocktankRefundAddress(address = "bcrt1qrefund", index = 7)
+        cacheData.value = AppCacheData(blocktankRefundAddress = refundAddress)
+        stubMetadataBackupReads()
+        val dataCaptor = argumentCaptor<ByteArray>()
+
+        sut.triggerBackup(BackupCategory.METADATA)
+
+        verifyBlocking(vssBackupClient) {
+            putObject(eq(BackupCategory.METADATA.name), dataCaptor.capture())
+        }
+        val payload = json.decodeFromString<MetadataBackupV1>(dataCaptor.firstValue.decodeToString())
+        assertEquals(refundAddress, payload.cache.blocktankRefundAddress)
+    }
+
+    @Test
+    fun `metadata restore preserves the Blocktank refund address pointer`() = test {
+        val refundAddress = BlocktankRefundAddress(address = "bcrt1qrefund", index = 7)
+        stubMetadataRestore(envelope = metadataEnvelope(cache = AppCacheData(blocktankRefundAddress = refundAddress)))
+        val cacheTransform = argumentCaptor<(AppCacheData) -> AppCacheData>()
+
+        sut.performFullRestoreFromLatestBackup()
+
+        verifyBlocking(cacheStore) { update(cacheTransform.capture()) }
+        assertEquals(refundAddress, cacheTransform.firstValue(AppCacheData()).blocktankRefundAddress)
+    }
+
+    @Test
     fun `metadata backup carries the hardware wallet names`() = test {
         stubMetadataBackupReads()
         whenever { hwWalletStore.backupSnapshot() }.thenReturn(mapOf(HARDWARE_WALLET_ID to "Cold Storage"))
@@ -772,12 +801,13 @@ class BackupRepoTest : BaseUnitTest() {
 
     private fun metadataEnvelope(
         metadata: List<PreActivityMetadata> = emptyList(),
+        cache: AppCacheData = AppCacheData(),
         hwWalletNames: Map<String, String>? = null,
     ) = json.encodeToString(
         MetadataBackupV1(
             createdAt = 123,
             tagMetadata = metadata,
-            cache = AppCacheData(),
+            cache = cache,
             hwWalletNames = hwWalletNames,
         )
     )
