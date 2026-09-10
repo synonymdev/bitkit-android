@@ -71,7 +71,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 | Android | Figma |
 | - | - |
 | CreatePaymentRequestScreen.kt | Payment Request (from Receive > Contacts OR Contact profile OR Payment Requests) › Request payment enter amount |
-| IncomingPaymentRequestDetailsScreen.kt | `todo` |
+| IncomingPaymentRequestDetailsScreen.kt | Subscriptions › Payment Request Details |
 | PaymentRequestsScreen.kt | Payment Requests › Payment Requests |
 
 ## ui/screens/profile
@@ -121,7 +121,7 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| SubscriptionsScreen.kt | `todo` |
+| SubscriptionsScreen.kt | Subscriptions › Subscriptions overview |
 
 ## ui/screens/transfer
 
