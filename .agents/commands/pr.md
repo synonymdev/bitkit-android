@@ -51,7 +51,6 @@ If no base branch argument provided, detect the repo's default branch:
 - Run `git log $base..HEAD --oneline` for commit messages
 - Run `git diff $base...HEAD --stat` for understanding scope of changes
 - List the journeys the branch adds or updates: `git diff --name-only --diff-filter=d $base...HEAD -- journeys | grep '\.xml$'`
-- List the journeys whose route the branch may change: the `journeys/index.json` entries that name an identifier declared in a file from `git diff --name-only $base...HEAD`
 - Read `docs/screens-map.md` as the starting point for locating relevant Figma frames when the diff has user-visible UI changes
 - **If custom instructions provided:**
   - If instructions reference a specific commit SHA (pattern like `commit [a-f0-9]{7,40}`):
@@ -144,9 +143,8 @@ When the user provides custom instructions after `--`:
   #### Manual Tests
   #### Automated Checks
   ```
-- Under `#### Journeys`, list every journey the branch adds or updates (Step 3) as a list item with its repo path, e.g. `journeys/widgets/widgets-intro.xml`.
-- Write `N/A — no user-visible behaviour change.` under `#### Journeys` only when the diff changes no user-visible behaviour. When it does and the branch adds or updates no journey, stop and report the flows that need one.
-- Check each journey whose route the branch may change (Step 3) against the diff. If one no longer matches, stop and report it; the branch updates that journey first.
+- Under `#### Journeys`, list each journey the branch adds or updates (Step 3) as a list item with its repo path. Write `N/A — no user-visible behaviour change.` only when the diff changes no user-visible behaviour; when it does and the list is empty, stop and report the flows that need a journey.
+- Stop and report any journey whose `sources` in `journeys/index.json` include a file the branch changes and whose route no longer matches the diff.
 - Under `#### Manual Tests`, keep only what a journey cannot express, such as hardware, push notifications, or a companion app, and end each item with the reason. Write no manual test for a flow a listed journey covers.
 - Keep local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, CI coverage, or similar automated checks out of `#### Manual Tests`; summarize them under `#### Automated Checks` when they add useful context.
 - Use `#### Automated Checks` to summarize automated verification evidence, prioritizing coverage added, modified, or removed, each with the test file name and a short explanation.

@@ -266,11 +266,10 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 
 `journeys/` holds XML walkthroughs of app behaviour that an agent evaluates on a running emulator. They are the QA contract for PRs.
 
-- ALWAYS add or update the journeys that prove a user-visible behaviour change in the same PR
-- ALWAYS update a journey in the same PR when the PR changes the route it walks; `journeys/index.json` lists the source files that declare each identifier a journey names
+- ALWAYS add or update, in the same PR, the journeys that prove a user-visible behaviour change and every journey whose route the PR changes; `journeys/index.json` lists the source files each journey's identifiers are declared in
 - ALWAYS name an identifier in a journey action as `testTag "Name"`
-- ALWAYS run `python3 scripts/journeys_index.py` after changing a journey or an identifier a journey names, and commit `journeys/index.json`; CI runs it with `--check` and fails on a stale index or on an identifier that no source file declares
-- ALWAYS list every journey the PR adds or updates under `#### Journeys` in its QA Notes; `#### Manual Tests` keeps only what a journey cannot express
+- ALWAYS run `python3 scripts/journeys_index.py` after changing a journey or an identifier it names, and commit `journeys/index.json`; CI fails on a stale index or an undeclared identifier
+- ALWAYS list the journeys a PR adds or updates under `#### Journeys` in its QA Notes
 
 ### Changelog
 

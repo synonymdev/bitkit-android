@@ -21,11 +21,11 @@
 
 #### Journeys
 
-<!-- Each journey this PR adds or updates, one repo path per line, e.g. journeys/widgets/widgets-intro.xml. No user-visible behaviour change: N/A — no user-visible behaviour change. -->
+<!-- Repo path of each journey this PR adds or updates, one per line, or: N/A — no user-visible behaviour change. -->
 
 #### Manual Tests
 
-<!-- Only what a journey cannot express, such as hardware, push notifications, or a companion app. End each item with the reason. -->
+<!-- Only what a journey cannot express (hardware, push notifications, a companion app), each item ending with the reason. -->
 
 #### Automated Checks
 
