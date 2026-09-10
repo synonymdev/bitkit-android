@@ -7,11 +7,14 @@ import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PaykitPublicKeys
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkySessionBootstrapResult
+import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.async.ServiceQueue
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.AppError
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 import com.synonym.bitkitcore.parsePubkyAuthUrl as parseLegacyPubkyAuthUrl
 
 @Suppress("TooManyFunctions")
@@ -19,6 +22,11 @@ import com.synonym.bitkitcore.parsePubkyAuthUrl as parseLegacyPubkyAuthUrl
 class PubkyService @Inject constructor(
     private val paykitSdkService: PaykitSdkService,
 ) {
+    companion object {
+        /** Maximum wait for a Ring relay approval response. */
+        private val RING_AUTH_TIMEOUT = 30.seconds
+    }
+
     suspend fun initialize() = ServiceQueue.CORE.background {
         paykitSdkService.initialize()
     }
@@ -139,8 +147,14 @@ class PubkyService @Inject constructor(
         paykitSdkService.approveAuth(authUrl, expectedCapabilities, approvedClientId, secretKeyHex)
     }
 
-    suspend fun approveRingAuth(authUrl: String, secretKeyHex: String) = ServiceQueue.CORE.background {
-        approvePubkyAuth(authUrl, secretKeyHex)
+    suspend fun approveRingAuth(
+        authUrl: String,
+        secretKeyHex: String,
+        timeout: Duration = RING_AUTH_TIMEOUT,
+    ) = ServiceQueue.CORE.background {
+        withTimeoutOrNull(timeout) {
+            approvePubkyAuth(authUrl, secretKeyHex)
+        } ?: throw PubkyRingAuthTimeoutError()
     }
 
     suspend fun approveAuthWithCompanionClaim(
@@ -216,3 +230,5 @@ class PubkyService @Inject constructor(
 
     // endregion
 }
+
+class PubkyRingAuthTimeoutError : AppError("Ring authorization timed out")

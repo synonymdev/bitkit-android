@@ -623,6 +623,7 @@
     <string name="profile__auth_error_invalid_capabilities">The requested access does not match this Bitkit claim.</string>
     <string name="profile__auth_error_invalid_url">This Pubky authorization link is invalid.</string>
     <string name="profile__auth_error_missing_claim">This authorization is missing its required Bitkit claim.</string>
+    <string name="profile__auth_error_timeout">The authorization relay did not respond in time. Please try again.</string>
     <string name="profile__auth_error_title">Authorization Failed</string>
     <string name="profile__auth_error_unsupported_claim">This Bitkit claim is not supported.</string>
     <string name="profile__avatar_read_error">Failed to read selected image</string>

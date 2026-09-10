@@ -51,6 +51,7 @@ import to.bitkit.models.PubkyRingAuthCallback
 import to.bitkit.models.PubkyRingAuthCallbackHandlingResult
 import to.bitkit.models.PubkySessionBackupKind
 import to.bitkit.models.PubkySessionBackupV1
+import to.bitkit.services.PubkyRingAuthTimeoutError
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
@@ -156,6 +157,27 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `Ring signup can retry after relay timeout without activating the timed out session`() = test {
+        val registeredSession = mock<PubkySessionBootstrapResult>()
+        val request = ringSignupRequest()
+        stubSignupKeys()
+        whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
+        whenever(pubkyService.approveRingAuth(requireNotNull(request.authorizationUrl), "secret"))
+            .thenAnswer { throw AppError(PubkyRingAuthTimeoutError()) }
+            .thenReturn(Unit)
+
+        assertTrue(sut.approveSignupAuth(request).isFailure)
+        verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
+        assertNull(sut.publicKey.value)
+        assertFalse(profileSetupPending.value)
+
+        assertTrue(sut.approveSignupAuth(request).isSuccess)
+        verifyBlocking(pubkyService) { activateRegisteredIdentity(registeredSession) }
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertTrue(profileSetupPending.value)
+    }
+
+    @Test
     fun `Ring signup clears profile setup state when local activation fails`() = test {
         val registeredSession = mock<PubkySessionBootstrapResult>()
         val request = ringSignupRequest()
@@ -179,7 +201,7 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(pubkyService.registerIdentity("secret", "homeserver", "invite")).thenReturn(registeredSession)
 
         assertTrue(sut.approveSignupAuth(request).isSuccess)
-        verifyBlocking(pubkyService, never()) { approveRingAuth(any(), any()) }
+        verifyBlocking(pubkyService, never()) { approveRingAuth(any(), any(), any()) }
         verifyBlocking(pubkyService) { activateRegisteredIdentity(registeredSession) }
         assertTrue(profileSetupPending.value)
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
@@ -193,7 +215,7 @@ class PubkyRepoTest : BaseUnitTest() {
             .thenThrow(IllegalStateException("registration failed"))
 
         assertTrue(sut.approveSignupAuth(request).isFailure)
-        verifyBlocking(pubkyService, never()) { approveRingAuth(any(), any()) }
+        verifyBlocking(pubkyService, never()) { approveRingAuth(any(), any(), any()) }
         verifyBlocking(pubkyService, never()) { activateRegisteredIdentity(any()) }
         assertFalse(profileSetupPending.value)
     }
