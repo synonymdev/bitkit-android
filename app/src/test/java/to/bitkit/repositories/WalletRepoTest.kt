@@ -330,26 +330,26 @@ class WalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `updateBip21Invoice should not create bolt11 when channels are ready but not usable`() = test {
+    fun `updateBip21Invoice should create bolt11 when channels are ready but not usable`() = test {
         whenever(lightningRepo.lightningState)
             .thenReturn(MutableStateFlow(LightningState(channels = readyButNotUsableChannels)))
         whenever(lightningRepo.getChannels()).thenReturn(readyButNotUsableChannels)
+        whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
 
         sut.updateBip21Invoice(amountSats = SATS, description = "test").let { result ->
             assertTrue(result.isSuccess)
-            assertEquals("", sut.walletState.value.bolt11)
+            assertEquals(INVOICE, sut.walletState.value.bolt11)
         }
-        verify(lightningRepo, never()).createInvoice(anyOrNull(), any(), any())
     }
 
     @Test
-    fun `inboundLiquiditySats should only count usable channels`() = test {
+    fun `inboundLiquiditySats should count ready channels`() = test {
         val mixedChannels = (channels + readyButNotUsableChannels).toImmutableList()
         whenever(lightningRepo.lightningState)
             .thenReturn(MutableStateFlow(LightningState(channels = mixedChannels)))
         whenever(lightningRepo.getChannels()).thenReturn(mixedChannels)
 
-        assertEquals(1_000uL, sut.inboundLiquiditySats())
+        assertEquals(2_000uL, sut.inboundLiquiditySats())
     }
 
     @Test

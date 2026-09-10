@@ -21,8 +21,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.synonym.bitkitcore.IcJitEntry
 import kotlinx.serialization.Serializable
 import to.bitkit.R
+import to.bitkit.models.CjitQuoteValidator
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.BalanceHeaderView
@@ -201,7 +203,26 @@ data class CjitEntryDetails(
     val feeSat: Long,
     val receiveAmountSats: Long,
     val invoice: String,
-)
+) {
+    companion object {
+        fun from(entry: IcJitEntry, receiveAmountSats: ULong): Result<CjitEntryDetails> {
+            return CjitQuoteValidator.validate(
+                invoiceSat = receiveAmountSats,
+                feeSat = entry.feeSat,
+                channelSizeSat = entry.channelSizeSat,
+            ).map {
+                CjitEntryDetails(
+                    networkFeeSat = entry.networkFeeSat.toLong(),
+                    serviceFeeSat = entry.serviceFeeSat.toLong(),
+                    channelSizeSat = entry.channelSizeSat.toLong(),
+                    feeSat = entry.feeSat.toLong(),
+                    receiveAmountSats = receiveAmountSats.toLong(),
+                    invoice = entry.invoice.request,
+                )
+            }
+        }
+    }
+}
 
 @Preview(showSystemUi = true)
 @Composable

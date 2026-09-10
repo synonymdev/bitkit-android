@@ -75,11 +75,13 @@ fun ReceiveSheet(
     val rootRoute = startRoute.rootRoute()
 
     LaunchedEffect(Unit) { editInvoiceAmountViewModel.clearInput() }
-    LaunchedEffect(startRoute) { navController.navigateToReceiveStart(startRoute) }
-
-    val cjitInvoice = remember { mutableStateOf<String?>(null) }
-    val cjitEntryDetails = remember { mutableStateOf<CjitEntryDetails?>(null) }
+    val cjitSessionState = remember { ReceiveCjitSessionState() }
     val invoiceEditState = remember { ReceiveInvoiceEditState() }
+
+    LaunchedEffect(startRoute) {
+        cjitSessionState.clear()
+        navController.navigateToReceiveStart(startRoute)
+    }
     var editInvoiceSourceTab by remember { mutableStateOf(ReceiveTab.SAVINGS) }
     var isAdditionalLiquidityAmountEntry by remember { mutableStateOf(false) }
     val lightningState: LightningState by wallet.lightningState.collectAsStateWithLifecycle()
@@ -136,7 +138,7 @@ fun ReceiveSheet(
             ) {
                 composableWithDefaultTransitions<ReceiveRoute.QR> {
                     ReceiveQrScreen(
-                        cjitInvoice = cjitInvoice.value,
+                        cjitInvoice = cjitSessionState.cjitInvoice,
                         walletState = walletState,
                         lightningState = lightningState,
                         onClickReceiveCjit = {
@@ -150,11 +152,13 @@ fun ReceiveSheet(
                         onClickEditInvoice = {
                             editInvoiceSourceTab = it
                             invoiceEditState.beginSoftwareEdit(it)
+                            cjitSessionState.beginReceiveEdit()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         onClickHardwareEditInvoice = {
                             editInvoiceSourceTab = ReceiveTab.TREZOR
                             invoiceEditState.beginHardwareEdit()
+                            cjitSessionState.beginReceiveEdit()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         initialTab = invoiceEditState.initialTab(hardwareWalletId),
@@ -260,7 +264,7 @@ fun ReceiveSheet(
                 composableWithDefaultTransitions<ReceiveRoute.Amount> {
                     ReceiveAmountScreen(
                         onCjitCreated = { entry ->
-                            cjitEntryDetails.value = entry
+                            cjitSessionState.onCjitCreated(entry)
                             navController.navigateTo(
                                 if (isAdditionalLiquidityAmountEntry) {
                                     ReceiveRoute.ConfirmIncreaseInbound
@@ -279,12 +283,12 @@ fun ReceiveSheet(
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.Confirm> {
-                    cjitEntryDetails.value?.let { entryDetails ->
+                    cjitSessionState.entryDetails?.let { entryDetails ->
                         ReceiveConfirmScreen(
                             entry = entryDetails,
                             onLearnMore = { navController.navigateTo(ReceiveRoute.Liquidity) },
                             onContinue = { invoice ->
-                                cjitInvoice.value = invoice
+                                cjitSessionState.onCjitConfirmed(invoice)
                                 navController.navigateTo(
                                     ReceiveRoute.QR
                                 ) { popUpTo(ReceiveRoute.QR) { inclusive = true } }
@@ -294,12 +298,12 @@ fun ReceiveSheet(
                     }
                 }
                 composableWithDefaultTransitions<ReceiveRoute.ConfirmIncreaseInbound> {
-                    cjitEntryDetails.value?.let { entryDetails ->
+                    cjitSessionState.entryDetails?.let { entryDetails ->
                         ReceiveConfirmScreen(
                             entry = entryDetails,
                             onLearnMore = { navController.navigateTo(ReceiveRoute.LiquidityAdditional) },
                             onContinue = { invoice ->
-                                cjitInvoice.value = invoice
+                                cjitSessionState.onCjitConfirmed(invoice)
                                 navController.navigateTo(
                                     ReceiveRoute.QR
                                 ) { popUpTo(ReceiveRoute.QR) { inclusive = true } }
@@ -310,7 +314,7 @@ fun ReceiveSheet(
                     }
                 }
                 composableWithDefaultTransitions<ReceiveRoute.Liquidity> {
-                    cjitEntryDetails.value?.let { entryDetails ->
+                    cjitSessionState.entryDetails?.let { entryDetails ->
                         val context = LocalContext.current
                         val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
                         val onNotificationSwitchClick = rememberNotificationToggleClick(
@@ -329,7 +333,7 @@ fun ReceiveSheet(
                     }
                 }
                 composableWithDefaultTransitions<ReceiveRoute.LiquidityAdditional> {
-                    cjitEntryDetails.value?.let { entryDetails ->
+                    cjitSessionState.entryDetails?.let { entryDetails ->
                         val context = LocalContext.current
                         val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
                         val onNotificationSwitchClick = rememberNotificationToggleClick(
@@ -374,7 +378,7 @@ fun ReceiveSheet(
                             navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
                         },
                         navigateReceiveConfirm = { entry ->
-                            cjitEntryDetails.value = entry
+                            cjitSessionState.onCjitCreated(entry)
                             navController.navigateTo(ReceiveRoute.ConfirmIncreaseInbound)
                         },
                         onchainOnly = invoiceEditState.isHardwareInvoice,
@@ -415,6 +419,32 @@ fun ReceiveSheet(
         ) {
             ConnectionIssuesView(titleText = stringResource(R.string.wallet__receive_bitcoin))
         }
+    }
+}
+
+@Stable
+internal class ReceiveCjitSessionState {
+    var cjitInvoice by mutableStateOf<String?>(null)
+        private set
+    var entryDetails by mutableStateOf<CjitEntryDetails?>(null)
+        private set
+
+    fun beginReceiveEdit() {
+        clear()
+    }
+
+    fun onCjitCreated(entry: CjitEntryDetails) {
+        cjitInvoice = null
+        entryDetails = entry
+    }
+
+    fun onCjitConfirmed(invoice: String) {
+        cjitInvoice = invoice
+    }
+
+    fun clear() {
+        cjitInvoice = null
+        entryDetails = null
     }
 }
 

@@ -547,12 +547,12 @@ class BlocktankRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `toCjitError maps node capacity limit to max channel size error`() {
+    fun `toCjitError maps node capacity limit to node capacity error`() {
         val error = RuntimeException("Node capacity is above our capacity limit.")
 
         val result = error.toCjitError()
 
-        assertIs<ServiceError.ChannelSizeExceedsMaximum>(result)
+        assertIs<ServiceError.NodeCapacityUnavailable>(result)
     }
 
     @Test

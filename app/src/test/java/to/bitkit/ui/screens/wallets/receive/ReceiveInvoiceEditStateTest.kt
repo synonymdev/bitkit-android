@@ -40,4 +40,52 @@ class ReceiveInvoiceEditStateTest {
 
         assertNull(state.initialTab(hardwareWalletId = null))
     }
+
+    @Test
+    fun `receive CJIT session clears stale invoice when editing starts`() {
+        val state = ReceiveCjitSessionState()
+        val entry = cjitEntryDetails(invoice = "first")
+
+        state.onCjitCreated(entry)
+        state.onCjitConfirmed("first")
+        state.beginReceiveEdit()
+
+        assertNull(state.cjitInvoice)
+        assertNull(state.entryDetails)
+    }
+
+    @Test
+    fun `receive CJIT session clears old invoice when fresh CJIT is created`() {
+        val state = ReceiveCjitSessionState()
+        val first = cjitEntryDetails(invoice = "first")
+        val second = cjitEntryDetails(invoice = "second")
+
+        state.onCjitCreated(first)
+        state.onCjitConfirmed("first")
+        state.onCjitCreated(second)
+
+        assertNull(state.cjitInvoice)
+        assertEquals(second, state.entryDetails)
+    }
+
+    @Test
+    fun `receive CJIT session exposes confirmed fresh invoice`() {
+        val state = ReceiveCjitSessionState()
+        val entry = cjitEntryDetails(invoice = "fresh")
+
+        state.onCjitCreated(entry)
+        state.onCjitConfirmed("fresh")
+
+        assertEquals("fresh", state.cjitInvoice)
+        assertEquals(entry, state.entryDetails)
+    }
+
+    private fun cjitEntryDetails(invoice: String) = CjitEntryDetails(
+        networkFeeSat = 1,
+        serviceFeeSat = 1,
+        channelSizeSat = 10_000,
+        feeSat = 2,
+        receiveAmountSats = 1_000,
+        invoice = invoice,
+    )
 }
