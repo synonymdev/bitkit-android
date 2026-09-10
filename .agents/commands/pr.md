@@ -159,7 +159,7 @@ When the user provides custom instructions after `--`:
 - Use short-form wording like `in-sheet` for sheet screens, `nav` for navigation, `back` for back nav, and `LN` for Lightning Network.
 
 **Design Section:**
-Always include `### Design` and apply exactly one case:
+Include `### Design` when the PR template contains a `### Design` heading, and apply exactly one case:
 - User-visible UI changes with an existing design: link the relevant Figma frames. Start with `docs/screens-map.md` for mapped screens; link known handoff frames directly for sheets, dialogs, reusable views, and other UI outside the map.
 - UI changes mapped to `todo` or `n/a`, or other UI changes without an available design, including new features: write `N/A — no design available.` Creating a design is never required.
 - Changes without user-visible UI changes: write `N/A — no UI changes.`

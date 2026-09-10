@@ -191,7 +191,7 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
   - UI changes mapped to `todo` or `n/a`, or other UI changes without an available design, including new features: use `N/A — no design available.`; creating a design is never required.
   - Changes without user-visible UI changes: use `N/A — no UI changes.`
   - Genuinely uncertain frame matches: report the uncertainty honestly; never invent links.
-- Code review may make at most one advisory request per PR when an existing-design UI link is omitted or an out-of-map `N/A — no design available.` claim is unverified. Valid mapped `todo`/`n/a` cases and `N/A — no UI changes.` require no request. Missing links never block approval or CI.
+- Code review may make at most one advisory request per PR when an existing-design UI link is omitted or an out-of-map `N/A — no design available.` claim is unverified. Valid mapped `todo`/`n/a` cases and `N/A — no UI changes.` require no request. Missing links never block approval, CI, PR creation, or review readiness.
 - ALWAYS ensure proper error handling in coroutines
 - ALWAYS acknowledge datastore async operations run synchronously in a suspend context
 - NEVER use `runBlocking` in suspend functions
