@@ -20,7 +20,7 @@ internal object Env {
     val isDebug = BuildConfig.DEBUG
     const val isE2eTest = BuildConfig.E2E
     const val isGeoblockingEnabled = BuildConfig.GEO
-    const val isPushRegistrationEnabled = BuildConfig.PUSH_REGISTRATION_ENABLED
+    const val isPushEnabled = BuildConfig.PUSH
     val e2eBackend = BuildConfig.E2E_BACKEND.lowercase()
     val isLocalE2eBackend = isE2eTest && e2eBackend == "local"
     const val e2eLocalHost = BuildConfig.E2E_LOCAL_HOST

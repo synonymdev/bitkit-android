@@ -59,10 +59,6 @@ class DevSettingsViewModel @Inject constructor(
     private val blocktankRepo: BlocktankRepo,
     private val appDb: AppDb,
 ) : ViewModel() {
-    companion object {
-        private const val TAG = "DevSettingsViewModel"
-    }
-
     private val _legacyRnRecoveryState = MutableStateFlow(LegacyRnRecoveryUiState())
     val legacyRnRecoveryState = _legacyRnRecoveryState.asStateFlow()
 
@@ -171,13 +167,7 @@ class DevSettingsViewModel @Inject constructor(
             .onFailure { ToastEventBus.send(it) }
     }
 
-    @Suppress("KotlinConstantConditions")
     fun registerForNotifications() = viewModelScope.launch {
-        if (!Env.isPushRegistrationEnabled) {
-            Logger.info("Skipped manual push registration, disabled via build config", context = TAG)
-            ToastEventBus.send(type = Toast.ToastType.INFO, title = "Push registration disabled in this build")
-            return@launch
-        }
         lightningRepo.registerForNotifications()
             .onSuccess {
                 ToastEventBus.send(type = Toast.ToastType.INFO, title = "Registered for notifications")
