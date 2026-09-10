@@ -222,6 +222,7 @@ fun ReceiveSheet(
                                 }
                             )
                         },
+                        showContactsHeader = skipPaymentRequestAmount,
                     )
                 }
                 composableWithDefaultTransitions<ReceiveRoute.PaymentRequestDetails> {
@@ -231,7 +232,7 @@ fun ReceiveSheet(
                             appViewModel = appViewModel,
                             draft = paymentRequestDraft,
                             target = target,
-                            onBack = { navController.popBackStack() },
+                            fromInvoiceEditor = skipPaymentRequestAmount,
                             onEditAmount = {
                                 paymentRequestDraft = it
                                 isEditingPaymentRequestAmount = true

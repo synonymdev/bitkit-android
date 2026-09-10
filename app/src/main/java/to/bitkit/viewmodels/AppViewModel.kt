@@ -328,9 +328,10 @@ class AppViewModel @Inject constructor(
 
     private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
     val currentSheet = _currentSheet.asStateFlow()
-    val pendingPaymentRequests = paykitPaymentRequestRepo.pendingRequests
-    val paymentRequestHistory = paykitPaymentRequestRepo.paymentRequestHistory
-    val eligiblePaymentRequestTargets = paykitPaymentRequestRepo.eligibleTargets
+    private val paymentRequestFixture = MutableStateFlow<PaymentRequestFixture?>(null)
+    val pendingPaymentRequests = fixtureOr(paykitPaymentRequestRepo.pendingRequests) { it.pending }
+    val paymentRequestHistory = fixtureOr(paykitPaymentRequestRepo.paymentRequestHistory) { it.history }
+    val eligiblePaymentRequestTargets = fixtureOr(paykitPaymentRequestRepo.eligibleTargets) { it.targets }
     val isCreatingPaymentRequest = paykitPaymentRequestRepo.isCreatingRequest
     private val _rejectingPaymentRequestIds = MutableStateFlow<Set<PaykitPaymentRequestId>>(emptySet())
     val rejectingPaymentRequestIds = _rejectingPaymentRequestIds.asStateFlow()
@@ -339,7 +340,7 @@ class AppViewModel @Inject constructor(
     private val _isRetryingInitialSubscriptionPayment = MutableStateFlow(false)
     val isRetryingInitialSubscriptionPayment = _isRetryingInitialSubscriptionPayment.asStateFlow()
     val subscriptions = paykitPaymentRequestRepo.subscriptions
-    val pubkyContacts = pubkyRepo.contacts
+    val pubkyContacts = fixtureOr(pubkyRepo.contacts) { it.contacts }
     private var sheetTransitionJob: Job? = null
     private var paymentRequestSheetTransitionJob: Job? = null
     private var queuedPairingCodeRequestId: Long? = null
@@ -384,6 +385,10 @@ class AppViewModel @Inject constructor(
     private val isPaykitEnabled = settingsStore.isPaykitEnabled
         .map { PaykitFeatureFlags.isUiEnabled(it) }
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
+    private fun <T> fixtureOr(source: StateFlow<T>, select: (PaymentRequestFixture) -> T): StateFlow<T> =
+        combine(paymentRequestFixture, source) { fixture, value -> fixture?.let(select) ?: value }
+            .stateIn(viewModelScope, SharingStarted.Eagerly, source.value)
 
     fun setShowForgotPin(value: Boolean) {
         _showForgotPinSheet.value = value
@@ -4962,6 +4967,10 @@ class AppViewModel @Inject constructor(
         target: PaykitPaymentRequestTarget,
         onCreated: (PaykitPaymentRequest) -> Unit,
     ) {
+        paymentRequestFixture.value?.let {
+            onCreated(it.created(draft, target))
+            return
+        }
         val sourceReceiveSheet = currentSheet.value as? Sheet.Receive
         viewModelScope.launch {
             createPaymentRequest(draft, target)
@@ -5084,6 +5093,21 @@ class AppViewModel @Inject constructor(
     }
 
     private fun processDeeplink(uri: Uri) = viewModelScope.launch {
+        when (val link = PaymentRequestFixtureRuntime.linkFor(uri)) {
+            is PaymentRequestFixtureLink.Seed -> {
+                settingsStore.setIsPaykitEnabled(true)
+                paymentRequestFixture.update { link.fixture }
+                return@launch
+            }
+
+            PaymentRequestFixtureLink.Clear -> {
+                paymentRequestFixture.update { null }
+                return@launch
+            }
+
+            null -> Unit
+        }
+
         val value = uri.toString()
         if (SamRockSetupRequest.isProtocolUrl(value)) {
             if (!walletRepo.walletExists()) return@launch

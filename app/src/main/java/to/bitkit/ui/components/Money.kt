@@ -47,6 +47,7 @@ fun MoneyCell(
     sats: Long,
     modifier: Modifier = Modifier,
     prefix: String = "",
+    secondaryText: String? = null,
 ) {
     val currencies = LocalCurrencies.current
     Column(
@@ -60,12 +61,20 @@ fun MoneyCell(
                 modifier = Modifier.testTag("MoneyPrimary"),
             )
         }
-        rememberMoneyText(sats = sats, unit = currencies.primaryDisplay.not(), showSymbol = true)?.let { text ->
+        if (secondaryText != null) {
             CaptionB(
-                text = text.withAccent(accentColor = Colors.White64),
+                text = secondaryText,
                 color = Colors.White64,
-                modifier = Modifier.testTag("MoneySecondary"),
+                modifier = Modifier.testTag("MoneySecondary")
             )
+        } else {
+            rememberMoneyText(sats = sats, unit = currencies.primaryDisplay.not(), showSymbol = true)?.let { text ->
+                CaptionB(
+                    text = text.withAccent(accentColor = Colors.White64),
+                    color = Colors.White64,
+                    modifier = Modifier.testTag("MoneySecondary")
+                )
+            }
         }
     }
 }

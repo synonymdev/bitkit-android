@@ -32,7 +32,7 @@ fun PubkyContactRow(
     modifier: Modifier = Modifier,
     isSelected: Boolean? = null,
     isEnabled: Boolean = true,
-    verticalPadding: Dp = 12.dp,
+    verticalPadding: Dp = 24.dp,
     selectionColor: Color = Colors.PubkyGreen,
 ) {
     Row(
@@ -59,13 +59,13 @@ fun PubkyContactRow(
             verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.weight(1f)
         ) {
-            BodyS(
+            Text13Up(
                 text = profile.truncatedPublicKey,
                 color = Colors.White64,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            BodySSB(
+            BodyMSB(
                 text = profile.name,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

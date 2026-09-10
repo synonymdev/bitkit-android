@@ -1,0 +1,177 @@
+appId: to.bitkit.dev
+name: payment request figma frames
+tags:
+  - visual
+---
+- launchApp:
+    clearState: true
+- runFlow: ../setup/onboard-new-wallet.yaml
+
+# seed paykit contacts, incoming and outgoing requests (debug builds only)
+- openLink: bitkit://dev-fixture/payment-request
+- extendedWaitUntil:
+    visible:
+      id: "TotalBalance-primary"
+    timeout: 10000
+
+# list (payments tab of the subscriptions screen)
+- tapOn:
+    id: "HeaderMenu"
+- tapOn:
+    id: "DrawerSubscriptions"
+- extendedWaitUntil:
+    visible:
+      id: "SubscriptionsScreen"
+    timeout: 10000
+- tapOn: "Payments"
+- extendedWaitUntil:
+    visible: "Areem Holden"
+    timeout: 10000
+- assertVisible: "Ben"
+- assertVisible: "Anna Pleb"
+- assertVisible: "Snacks at conference"
+- assertVisible: "John Carvalho"
+- assertVisible: "Steaks & Burgers"
+- assertVisible:
+    id: "PaymentRequestCreate"
+- takeScreenshot:
+    path: list-after
+
+# recipient with contacts header, entered from the list
+- tapOn:
+    id: "PaymentRequestCreate"
+- extendedWaitUntil:
+    visible:
+      id: "PaymentRequestRecipientSearch"
+    timeout: 10000
+- extendedWaitUntil:
+    visible: "Alex Stronghand"
+    timeout: 5000
+- assertNotVisible:
+    id: "PaymentRequestContactsHeader"
+- assertVisible: "Anna Pleb"
+- assertVisible: "Areem Holden"
+- assertVisible: "Craig Wrong"
+- assertVisible: "John Carvalho"
+- takeScreenshot:
+    path: recipient-after
+
+# amount
+- tapOn:
+    id: "PaymentRequestContactpubky1rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+- extendedWaitUntil:
+    visible:
+      id: "PaymentRequestNumberPad"
+    timeout: 10000
+- assertVisible:
+    id: "PaymentRequestAmountUnit"
+- takeScreenshot:
+    path: amount-empty-after
+- tapOn:
+    id: "N5"
+- tapOn:
+    id: "N0"
+- tapOn:
+    id: "N0"
+- tapOn:
+    id: "N0"
+- tapOn:
+    id: "N0"
+- assertVisible: "50 000"
+- takeScreenshot:
+    path: amount-filled-after
+- repeat:
+    times: 5
+    commands:
+      - tapOn:
+          id: "NRemove"
+- tapOn:
+    id: "N1"
+- tapOn:
+    id: "N4"
+- tapOn:
+    id: "N5"
+- tapOn:
+    id: "N0"
+- tapOn:
+    id: "N0"
+- tapOn:
+    id: "PaymentRequestAmountContinue"
+
+# details
+- extendedWaitUntil:
+    visible:
+      id: "PaymentRequestNote"
+    timeout: 5000
+- tapOn:
+    id: "PaymentRequestNote"
+- inputText: "Snacks at conference"
+- hideKeyboard
+- assertVisible: ".*14 500"
+- assertVisible: "Anna Pleb"
+- assertVisible: "1 week"
+- assertVisible:
+    id: "PaymentRequestSend"
+- takeScreenshot:
+    path: details-after
+
+# sent
+- tapOn:
+    id: "PaymentRequestSend"
+- extendedWaitUntil:
+    visible:
+      id: "PaymentRequestSentCheck"
+    timeout: 10000
+- assertVisible: "Anna Pleb"
+- assertVisible: "Snacks at conference"
+- takeScreenshot:
+    path: sent-after
+- tapOn: "OK"
+- extendedWaitUntil:
+    notVisible:
+      id: "ReceiveScreen"
+    timeout: 5000
+- runFlow:
+    when:
+      visible:
+        id: "SubscriptionsScreen"
+    commands:
+      - tapOn:
+          id: "NavigationBack"
+- extendedWaitUntil:
+    visible:
+      id: "TotalBalance-primary"
+    timeout: 5000
+
+# recipient without contacts header, entered from the invoice editor
+- openLink: bitkit://screen/receive/edit-invoice
+- extendedWaitUntil:
+    visible:
+      id: "PaymentRequestSendButton"
+    timeout: 10000
+- tapOn:
+    id: "ReceiveNumberPadTextField"
+- extendedWaitUntil:
+    visible:
+      id: "ReceiveNumberPad"
+    timeout: 5000
+- tapOn:
+    id: "N1"
+- tapOn:
+    id: "ReceiveNumberPadSubmit"
+- extendedWaitUntil:
+    visible:
+      id: "PaymentRequestSendButton"
+    timeout: 5000
+- tapOn:
+    id: "PaymentRequestSendButton"
+- extendedWaitUntil:
+    visible:
+      id: "PaymentRequestContactsHeader"
+    timeout: 10000
+- assertVisible: "Alex Stronghand"
+- assertVisible: "Anna Pleb"
+- assertVisible: "Craig Wrong"
+- assertVisible: "John Carvalho"
+- takeScreenshot:
+    path: recipient-invoice-after

@@ -278,29 +278,48 @@ internal fun PaymentRequestsContent(
             }
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(top = 24.dp, bottom = 16.dp),
+                contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
                 modifier = Modifier
                     .weight(1f)
                     .padding(horizontal = 16.dp),
             ) {
-                if (sections.active.isNotEmpty()) {
+                if (sections.incoming.isNotEmpty()) {
                     item {
                         Caption13Up(
-                            text = stringResource(R.string.wallet__payment_requests_section),
+                            text = stringResource(R.string.wallet__payment_requests_incoming),
                             color = Colors.White64,
                         )
                     }
-                    items(sections.active, key = { it.lazyListKey }) { request ->
-                        ActivePaymentRequestCard(
+                    items(sections.incoming, key = { it.lazyListKey }) { request ->
+                        PaymentRequestCard(
                             request = request,
-                            isIncoming = pending.any { it.id == request.id },
-                            isDismissing = request.id in dismissingRequestIds,
                             contact = contacts.contactFor(request),
-                            subscriptionNote = subscriptions.nameFor(request),
-                            onPay = onPay,
-                            onDismiss = onDismiss,
-                            onDetails = onDetails,
+                            compactSubtitle = subscriptions.nameFor(request),
+                            onClick = { onDetails(request.id) },
+                            isDismissing = request.id in dismissingRequestIds,
+                            onPay = { onPay(request.id) },
+                            onDismiss = { onDismiss(request) },
+                        )
+                    }
+                }
+                if (sections.outgoing.isNotEmpty()) {
+                    item {
+                        Caption13Up(
+                            text = stringResource(R.string.wallet__payment_requests_outgoing),
+                            color = Colors.White64,
+                            modifier = Modifier.padding(top = 16.dp)
+                        )
+                    }
+                    items(sections.outgoing, key = { it.lazyListKey }) { request ->
+                        PaymentRequestCard(
+                            request = request,
+                            contact = contacts.contactFor(request),
+                            compactSubtitle = subscriptions.nameFor(request)
+                                ?: request.note?.takeIf(String::isNotBlank)
+                                ?: paymentRequestStatus(request),
+                            secondaryText = stringResource(R.string.wallet__payment_request_pending),
+                            onClick = { onDetails(request.id) },
                         )
                     }
                 }
@@ -340,7 +359,8 @@ internal fun PaymentRequestsContent(
 }
 
 private data class PaymentRequestSections(
-    val active: List<PaykitPaymentRequest>,
+    val incoming: List<PaykitPaymentRequest>,
+    val outgoing: List<PaykitPaymentRequest>,
     val history: List<PaymentRequestHistorySection>,
 )
 
@@ -363,13 +383,14 @@ private fun paymentRequestSections(
     now: Instant,
 ): PaymentRequestSections {
     val pendingIds = pending.mapTo(mutableSetOf()) { it.id }
-    val active = requests.filter { request ->
-        request.id in pendingIds ||
-            request.direction == PaykitPaymentRequestDirection.Outgoing &&
+    val incoming = requests.filter { it.id in pendingIds }
+    val outgoing = requests.filter { request ->
+        request.direction == PaykitPaymentRequestDirection.Outgoing &&
             request.lifecycleState == PaymentRequestLifecycleState.PROPOSED &&
-            !request.isExpired(now)
+            !request.isExpired(now) &&
+            request.id !in pendingIds
     }
-    val activeIds = active.mapTo(mutableSetOf()) { it.id }
+    val activeIds = (incoming + outgoing).mapTo(mutableSetOf()) { it.id }
     val groupedHistory = requests
         .filterNot { it.id in activeIds }
         .sortedWith { first, second -> compareValues(second.createdAt, first.createdAt) }
@@ -377,41 +398,7 @@ private fun paymentRequestSections(
     val history = PaymentRequestHistoryPeriod.entries.mapNotNull { period ->
         groupedHistory[period]?.let { PaymentRequestHistorySection(period, it) }
     }
-    return PaymentRequestSections(active, history)
-}
-
-@Composable
-private fun ActivePaymentRequestCard(
-    request: PaykitPaymentRequest,
-    isIncoming: Boolean,
-    isDismissing: Boolean,
-    contact: PubkyProfile?,
-    subscriptionNote: String?,
-    onPay: (PaykitPaymentRequestId) -> Unit,
-    onDismiss: suspend (PaykitPaymentRequest) -> Result<Unit>,
-    onDetails: (PaykitPaymentRequestId) -> Unit,
-) {
-    if (isIncoming) {
-        PaymentRequestCard(
-            request = request,
-            contact = contact,
-            compactSubtitle = subscriptionNote,
-            onClick = { onDetails(request.id) },
-            isDismissing = isDismissing,
-            onPay = { onPay(request.id) },
-            onDismiss = { onDismiss(request) },
-        )
-    } else {
-        PaymentRequestCard(
-            request = request,
-            contact = contact,
-            onClick = { onDetails(request.id) },
-            compactSubtitle = stringResource(
-                R.string.wallet__payment_request_waiting_for_recipient,
-                contact?.name ?: PubkyProfile.placeholder(request.counterparty).name,
-            ),
-        )
-    }
+    return PaymentRequestSections(incoming, outgoing, history)
 }
 
 @Composable
@@ -488,6 +475,7 @@ internal fun PaymentRequestCard(
     request: PaykitPaymentRequest,
     contact: PubkyProfile?,
     compactSubtitle: String? = null,
+    secondaryText: String? = null,
     isOutgoingPayment: Boolean = false,
     showSignedAmount: Boolean = false,
     onClick: (() -> Unit)? = null,
@@ -513,7 +501,7 @@ internal fun PaymentRequestCard(
                         .outerGlow(
                             glowColor = Colors.Brand,
                             glowOpacity = 0.16f,
-                            glowRadius = 64.dp,
+                            glowRadius = 16.dp,
                             cornerRadius = 16.dp,
                         )
                         .border(1.dp, Colors.Brand.copy(alpha = 0.5f), MaterialTheme.shapes.medium)
@@ -550,6 +538,7 @@ internal fun PaymentRequestCard(
             MoneyCell(
                 sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
                 prefix = amountPrefix,
+                secondaryText = secondaryText,
             )
         }
         if (onPay != null || onDismiss != null) {
