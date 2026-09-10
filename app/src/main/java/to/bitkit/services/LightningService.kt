@@ -138,9 +138,7 @@ class LightningService @Inject constructor(
         private const val TAG = "LightningService"
         private const val NODE_ID_PREVIEW_LEN = 20
 
-        private const val SCORING_BASE_PENALTY_MSAT = 30_000uL
-        private const val SCORING_LIQUIDITY_PENALTY_MULTIPLIER_MSAT = 10_000uL
-        private const val SCORING_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT = 10_000uL
+        private const val SCORING_BASE_PENALTY_MSAT = 40_000uL
         private const val SCORING_HISTORICAL_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT = 20_000uL
         private const val SCORING_CONSIDERED_IMPOSSIBLE_PENALTY_MSAT = 1_000_000_000_000uL
 
@@ -1059,8 +1057,6 @@ class LightningService @Inject constructor(
 
     private fun scorerFeeParameters(): ScoringFeeParameters = DEFAULT_SCORING_FEE_PARAMETERS.copy(
         basePenaltyMsat = SCORING_BASE_PENALTY_MSAT,
-        liquidityPenaltyMultiplierMsat = SCORING_LIQUIDITY_PENALTY_MULTIPLIER_MSAT,
-        liquidityPenaltyAmountMultiplierMsat = SCORING_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT,
         historicalLiquidityPenaltyAmountMultiplierMsat =
         SCORING_HISTORICAL_LIQUIDITY_PENALTY_AMOUNT_MULTIPLIER_MSAT,
         consideredImpossiblePenaltyMsat = SCORING_CONSIDERED_IMPOSSIBLE_PENALTY_MSAT,
