@@ -522,7 +522,7 @@ internal fun PaymentRequestCard(
                 }
             )
             .clickableAlpha(enabled = onClick != null) { onClick?.invoke() }
-            .testTag("PaymentRequestRow-${request.paymentRequestId}"),
+            .testTag("PaymentRequestRow-${request.paymentRequestId}")
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
