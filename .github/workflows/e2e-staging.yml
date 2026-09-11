@@ -9,6 +9,11 @@ on:
         description: "Branch of synonymdev/bitkit-e2e-tests to use (main | default-feature-branch | custom branch name)"
         required: false
         default: "default-feature-branch"
+      notify_slack:
+        description: "Post failure result to Slack (#bitkit-staging-nightly)"
+        type: boolean
+        required: false
+        default: false
 
 env:
   TERM: xterm-256color
@@ -231,7 +236,8 @@ jobs:
   notify-failure:
     if: >-
       always() &&
-      github.event_name != 'pull_request' &&
+      (github.event_name == 'schedule' ||
+       (github.event_name == 'workflow_dispatch' && inputs.notify_slack)) &&
       (needs.build-staging.result == 'failure' ||
        needs.e2e-branch.result == 'failure' ||
        needs.e2e-tests-staging.result == 'failure')
