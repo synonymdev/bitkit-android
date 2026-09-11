@@ -33,6 +33,7 @@ import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
@@ -69,6 +70,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
     private val paykitSdkService = mock<PaykitSdkService>()
     private val settingsStore = mock<SettingsStore>()
     private val presentationStore = mock<PaykitPaymentRequestPresentationStore>()
+    private val diagnostics = mock<PaykitPaymentRequestDiagnostics>()
     private val paymentProofStore = mock<PaykitPaymentProofStore>()
     private val paymentProofRepo = mock<PaykitPaymentProofRepo>()
     private val subscriptionNotificationScheduler = mock<PaykitSubscriptionNotificationScheduler>()
@@ -101,6 +103,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
             paykitSdkService,
             settingsStore,
             presentationStore,
+            diagnostics,
             paymentProofStore,
             paymentProofRepo,
             subscriptionNotificationScheduler,
@@ -124,6 +127,85 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         val request = sut.pendingRequests.value.single()
         assertEquals(100_000uL, request.amountSats)
         assertEquals(listOf(MethodId.Bolt11.rawValue), request.acceptedPaymentEndpointIdentifiers)
+    }
+
+    @Test
+    fun `incoming parse failures are reason specific`() {
+        val cases = listOf(
+            paymentRequestRecord(role = null) to PaykitPaymentRequest.ParseFailure.MissingLocalRole,
+            paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE) to
+                PaykitPaymentRequest.ParseFailure.OutgoingRequest,
+            paymentRequestRecord(role = PaymentRequestLocalRole.UNKNOWN) to
+                PaykitPaymentRequest.ParseFailure.UnsupportedLocalRole,
+            paymentRequestRecord(state = PaymentRequestLifecycleState.REJECTED) to
+                PaykitPaymentRequest.ParseFailure.NonActionableState,
+            paymentRequestRecord().copy(terms = null) to PaykitPaymentRequest.ParseFailure.MissingTerms,
+            paymentRequestRecord(asset = "BTC") to PaykitPaymentRequest.ParseFailure.UnsupportedAsset,
+            paymentRequestRecord(amount = "not-bitcoin") to PaykitPaymentRequest.ParseFailure.InvalidAmount,
+            paymentRequestRecord(amount = "184467440737.09551615") to
+                PaykitPaymentRequest.ParseFailure.AmountOutOfRange,
+            paymentRequestRecord(endpoints = listOf("btc-unsupported-method")) to
+                PaykitPaymentRequest.ParseFailure.NoSupportedEndpoint,
+            paymentRequestRecord(expiresAt = "not-a-timestamp") to
+                PaykitPaymentRequest.ParseFailure.InvalidExpiration,
+            paymentRequestRecord(expiresAt = clock.now().toString()) to PaykitPaymentRequest.ParseFailure.Expired,
+        )
+
+        cases.forEach { (record, expectedReason) ->
+            val result = record.parseIncomingPaykitPaymentRequest(clock.now())
+                as PaykitPaymentRequestParseResult.Rejected
+
+            assertEquals(expectedReason, result.reason)
+        }
+    }
+
+    @Test
+    fun `refresh emits reason specific parse rejection diagnostic`() = test {
+        val record = paymentRequestRecord(
+            asset = "BTC",
+            counterparty = "secret",
+        )
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+
+        sut.refresh().getOrThrow()
+
+        verify(diagnostics).logParseRejection("secret", PaykitPaymentRequest.ParseFailure.UnsupportedAsset)
+    }
+
+    @Test
+    fun `refresh logs unknown local role as unsupported_local_role`() = test {
+        val record = paymentRequestRecord(
+            role = PaymentRequestLocalRole.UNKNOWN,
+            counterparty = "secret",
+        )
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(record))
+
+        sut.refresh().getOrThrow()
+
+        verify(diagnostics).logParseRejection("secret", PaykitPaymentRequest.ParseFailure.UnsupportedLocalRole)
+        assertTrue(sut.pendingRequests.value.isEmpty())
+    }
+
+    @Test
+    fun `refresh does not log outgoing payee requests`() = test {
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(paymentRequestRecord(role = PaymentRequestLocalRole.PAYEE, counterparty = "secret")),
+        )
+
+        sut.refresh().getOrThrow()
+
+        verify(diagnostics, never()).logParseRejection(any(), any())
+    }
+
+    @Test
+    fun `refresh does not log expired requests`() = test {
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(paymentRequestRecord(expiresAt = clock.now().toString())),
+        )
+
+        sut.refresh().getOrThrow()
+
+        verify(diagnostics, never()).logParseRejection(any(), any())
     }
 
     @Test
@@ -713,6 +795,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         role: PaymentRequestLocalRole? = PaymentRequestLocalRole.PAYER,
         state: PaymentRequestLifecycleState = PaymentRequestLifecycleState.PROPOSED,
         amount: String = "0.001",
+        asset: String = "btc",
         expiresAt: String? = null,
         endpoints: List<String> = listOf(MethodId.Bolt11.rawValue),
         counterparty: String = COUNTERPARTY,
@@ -731,7 +814,7 @@ class PaykitPaymentRequestRepoTest : BaseUnitTest(StandardTestDispatcher()) {
         proposalOutboundStatus = null,
         proposalEventId = "proposal-event",
         terms = PaymentRequestTerms(
-            amount = PaymentRequestAmount(value = amount, asset = "btc"),
+            amount = PaymentRequestAmount(value = amount, asset = asset),
             paymentReference = PAYMENT_REFERENCE,
             proposalExpiresAt = expiresAt,
             recurrence = recurrence,

@@ -231,6 +231,28 @@ class PublicPaykitRepoTest : BaseUnitTest() {
         assertEquals(PublicPaykitPaymentResult.Opened(PUBLIC_BOLT11), result)
     }
 
+    @Test
+    fun `payment launch results have reason specific incoming request failures`() {
+        assertEquals(
+            null,
+            PublicPaykitPaymentResult.Opened(PUBLIC_BOLT11).incomingPaymentRequestFailureReason,
+        )
+        assertEquals(
+            IncomingPaykitPaymentRequestFailureReason.NoSupportedEndpoint,
+            PublicPaykitPaymentResult.NoEndpoint.incomingPaymentRequestFailureReason,
+        )
+        assertEquals(
+            IncomingPaykitPaymentRequestFailureReason.EndpointNotPayable,
+            PublicPaykitPaymentResult.NotOpened.incomingPaymentRequestFailureReason,
+        )
+        assertEquals(
+            IncomingPaykitPaymentRequestFailureReason.PaymentDetailsPending,
+            PublicPaykitPaymentResult.WaitingForUpdatedPaymentList.incomingPaymentRequestFailureReason,
+        )
+        assertEquals("presentation", IncomingPaykitPaymentRequestFailureReason.RequestExpired.category)
+        assertEquals("request_expired", IncomingPaykitPaymentRequestFailureReason.RequestExpired.logValue)
+    }
+
     @Suppress("LongParameterList")
     private fun createRepo(
         pubkyRepo: PubkyRepo = this.pubkyRepo,
