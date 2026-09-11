@@ -234,12 +234,17 @@ jobs:
         uses: jwalton/gh-docker-logs@v2
 
   notify-failure:
-    if: always() && github.event_name != 'pull_request' && needs.e2e-tests-staging.result == 'failure'
-    needs: [e2e-tests-staging]
+    if: >-
+      always() &&
+      github.event_name != 'pull_request' &&
+      (needs.build-staging.result == 'failure' ||
+       needs.e2e-branch.result == 'failure' ||
+       needs.e2e-tests-staging.result == 'failure')
+    needs: [build-staging, e2e-branch, e2e-tests-staging]
     runs-on: ubuntu-latest
     steps:
       - name: Notify Slack on failure
-        uses: slackapi/slack-github-action@v2.0.0
+        uses: slackapi/slack-github-action@e598089eaef53883a2d9b325e044899548518a03
         with:
           webhook: ${{ secrets.SLACK_WEBHOOK_URL_STAGING }}
           webhook-type: incoming-webhook
