@@ -519,6 +519,16 @@ class WalletViewModel @Inject constructor(
         }
     }
 
+    suspend fun updateOnchainBip21Amount(amountSats: ULong?) {
+        walletRepo.updateOnchainBip21Amount(amountSats).onFailure { error ->
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.wallet__error_invoice_update),
+                description = error.message ?: context.getString(R.string.common__error_body)
+            )
+        }
+    }
+
     fun refreshReceiveState() = viewModelScope.launch {
         launch { blocktankRepo.refreshInfo() }
         lightningRepo.syncState()

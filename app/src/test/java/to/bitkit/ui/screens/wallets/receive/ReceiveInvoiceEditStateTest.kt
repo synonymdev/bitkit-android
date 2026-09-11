@@ -42,13 +42,25 @@ class ReceiveInvoiceEditStateTest {
     }
 
     @Test
-    fun `receive CJIT session clears stale invoice when editing starts`() {
+    fun `receive CJIT session keeps invoice when edit is cancelled`() {
         val state = ReceiveCjitSessionState()
         val entry = cjitEntryDetails(invoice = "first")
 
         state.onCjitCreated(entry)
         state.onCjitConfirmed("first")
-        state.beginReceiveEdit()
+
+        assertEquals("first", state.cjitInvoice)
+        assertEquals(entry, state.entryDetails)
+    }
+
+    @Test
+    fun `receive CJIT session clears stale invoice when edit is applied`() {
+        val state = ReceiveCjitSessionState()
+        val entry = cjitEntryDetails(invoice = "first")
+
+        state.onCjitCreated(entry)
+        state.onCjitConfirmed("first")
+        state.clear()
 
         assertNull(state.cjitInvoice)
         assertNull(state.entryDetails)

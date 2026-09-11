@@ -130,8 +130,11 @@ fun EditInvoiceScreen(
                         }
                         is ReceiveAdditionalLiquidityAction.CreateCjit -> {
                             isCreatingCjit = true
-                            runSuspendCatching { blocktankVM.createCjit(action.amountSats) }.onSuccess { entry ->
-                                navigateReceiveConfirm(CjitEntryDetails.from(entry, action.amountSats).getOrThrow())
+                            runSuspendCatching {
+                                val entry = blocktankVM.createCjit(action.amountSats)
+                                CjitEntryDetails.from(entry, action.amountSats).getOrThrow()
+                            }.onSuccess {
+                                navigateReceiveConfirm(it)
                             }.onFailure {
                                 Logger.error("Failed to create CJIT invoice", it, context = "EditInvoiceScreen")
                                 if (!app.toastReceiveCjitError(context, it) &&

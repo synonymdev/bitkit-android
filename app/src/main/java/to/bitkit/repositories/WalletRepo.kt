@@ -630,6 +630,19 @@ class WalletRepo @Inject constructor(
 
     fun setBip21AmountSats(amount: ULong?) = _walletState.update { it.copy(bip21AmountSats = amount) }
 
+    suspend fun updateOnchainBip21Amount(amountSats: ULong?): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val normalizedAmount = amountSats?.takeIf { it > 0uL }
+            setBip21AmountSats(normalizedAmount)
+            val newBip21 = buildBip21Url(
+                bitcoinAddress = getOnchainAddress(),
+                amountSats = normalizedAmount,
+                message = walletState.value.bip21Description,
+            )
+            setBip21(newBip21)
+        }
+    }
+
     fun setBip21Description(description: String) = _walletState.update { it.copy(bip21Description = description) }
 
     fun clearBip21State(clearTags: Boolean = true) {
