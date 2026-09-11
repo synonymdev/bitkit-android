@@ -170,7 +170,9 @@ class DevSettingsViewModel @Inject constructor(
     fun registerForNotifications() = viewModelScope.launch {
         lightningRepo.registerForNotifications()
             .onSuccess {
-                ToastEventBus.send(type = Toast.ToastType.INFO, title = "Registered for notifications")
+                @Suppress("KotlinConstantConditions")
+                val title = if (Env.isE2eTest) "Skipped push registration" else "Registered for notifications"
+                ToastEventBus.send(type = Toast.ToastType.INFO, title = title)
             }
             .onFailure { ToastEventBus.send(it) }
     }
