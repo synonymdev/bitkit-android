@@ -2142,11 +2142,14 @@ class AppViewModel @Inject constructor(
         allowPubkyAuth: Boolean,
     ): Boolean {
         if (source != ScanSource.DEEPLINK || !allowPubkyAuth) return true
-        if (!PubkyAuthRequest.isProtocolUrl(data) || PubkyAuthRequest.isSignupUrl(data)) return true
+        if (!PubkyAuthRequest.isProtocolUrl(data)) return true
 
-        pubkyRepo.awaitInitialization()
-        return isPaykitEnabled.value && walletRepo.walletExists()
+        if (!PubkyAuthRequest.isSignupUrl(data)) pubkyRepo.awaitInitialization()
+        return isPaykitUiEnabledFromSettings() && walletRepo.walletExists()
     }
+
+    private suspend fun isPaykitUiEnabledFromSettings() =
+        PaykitFeatureFlags.isUiEnabled(settingsStore.isPaykitEnabled.first())
 
     private fun deferLockedScan(
         source: ScanSource,
@@ -2706,7 +2709,7 @@ class AppViewModel @Inject constructor(
 
         if (PubkyAuthRequest.isProtocolUrl(input)) {
             clearActiveContactPaymentContext()
-            if (isPaykitEnabled.value) {
+            if (isPaykitUiEnabledFromSettings()) {
                 handlePubkyAuth(input)
             } else {
                 hideSheet()
@@ -5204,11 +5207,10 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
-        if (PubkyAuthRequest.isProtocolUrl(uri.toString())) {
-            if (!isPaykitEnabled.value || !walletRepo.walletExists()) return@launch
+        if (PubkyAuthRequest.isProtocolUrl(value)) {
             launchScan(
                 source = ScanSource.DEEPLINK,
-                data = uri.toString(),
+                data = value,
                 startDelay = SCREEN_TRANSITION_DELAY,
                 allowPubkyAuth = true,
             )

@@ -33,6 +33,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -2041,8 +2042,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `cold pubky auth deeplink waits for identity and wallet unlock`() = test {
-        enablePaykitUi()
+    fun `cold pubky auth deeplink waits for settings identity and wallet unlock`() = test {
         val initialized = CompletableDeferred<Unit>()
         whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
         whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
@@ -2055,6 +2055,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         verify(context, never()).getString(R.string.pubky_auth__no_identity)
         settingsData.value = SettingsData(isPinEnabled = true)
         sut.resetIsAuthenticatedState()
+        isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
         initialized.complete(Unit)
         advanceUntilIdle()
@@ -2065,6 +2066,34 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
         verify(pubkyRepo, never()).approveAuth(any(), any(), any())
+    }
+
+    @Test
+    fun `cold pubky auth deeplink reads settings before cached state is ready`() = test {
+        sut.viewModelScope.cancel()
+        val cachedSettingsRelease = CompletableDeferred<Unit>()
+        var collectorIndex = 0
+        whenever(settingsStore.isPaykitEnabled).thenReturn(
+            flow {
+                if (collectorIndex++ == 0) cachedSettingsRelease.await()
+                emit(true)
+            },
+        )
+        whenever(pubkyRepo.awaitInitialization()).thenReturn(Unit)
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        pubkyPublicKey.value = testPublicKey
+        sut = createViewModel()
+        sut.setIsAuthenticated(true)
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw"
+
+        try {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+            advanceUntilIdle()
+
+            assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+        } finally {
+            cachedSettingsRelease.complete(Unit)
+        }
     }
 
     @Test
@@ -2141,6 +2170,30 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertNull(sut.currentSheet.value)
         verify(pubkyRepo, never()).hasSecretKey()
+
+        isPaykitEnabled.value = true
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
+    }
+
+    @Test
+    fun `pubky auth deeplinks stop when wallet does not exist`() = test {
+        enablePaykitUi()
+        whenever(walletRepo.walletExists()).thenReturn(false)
+
+        listOf(
+            "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw",
+            legacyAuthorizedSignupAuthUrl,
+        ).forEach {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, it.toUri()))
+            advanceUntilIdle()
+
+            assertNull(sut.currentSheet.value, it)
+        }
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(pubkyRepo, never()).hasIdentity()
     }
 
     @Test
