@@ -16,6 +16,28 @@ import kotlin.test.assertTrue
 @RunWith(RobolectricTestRunner::class)
 class ContentViewTest {
     @Test
+    fun `pending profile opens once and rearms after completion or cold start`() {
+        val navigation = PubkyProfileSetupNavigation()
+
+        assertTrue(navigation.shouldNavigate(true, true, true, true))
+        assertFalse(navigation.shouldNavigate(true, true, true, false))
+        assertFalse(navigation.shouldNavigate(true, true, true, true))
+        assertFalse(navigation.shouldNavigate(true, false, true, true))
+        assertTrue(navigation.shouldNavigate(true, true, true, true))
+        assertTrue(PubkyProfileSetupNavigation().shouldNavigate(true, true, true, true))
+    }
+
+    @Test
+    fun `pending profile waits for auth feature and sheet gates`() {
+        val navigation = PubkyProfileSetupNavigation()
+
+        assertFalse(navigation.shouldNavigate(false, true, true, true))
+        assertFalse(navigation.shouldNavigate(true, true, false, true))
+        assertFalse(navigation.shouldNavigate(true, true, true, false))
+        assertTrue(navigation.shouldNavigate(true, true, true, true))
+    }
+
+    @Test
     fun `spending start route uses intro until seen`() {
         assertEquals(Routes.SpendingIntro, transferSpendingStartRoute(hasSeenSpendingIntro = false))
         assertEquals(Routes.SpendingAmount, transferSpendingStartRoute(hasSeenSpendingIntro = true))

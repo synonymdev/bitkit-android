@@ -1,20 +1,32 @@
 package to.bitkit.services
 
+import com.synonym.bitkitcore.approvePubkyAuth
 import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactRecord
 import com.synonym.paykit.PaykitProfile
+import com.synonym.paykit.PaykitPublicKeys
 import com.synonym.paykit.PubkyAuthCompanionClaim
+import com.synonym.paykit.PubkySessionBootstrapResult
+import kotlinx.coroutines.withTimeoutOrNull
 import to.bitkit.async.ServiceQueue
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.utils.AppError
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
+import com.synonym.bitkitcore.parsePubkyAuthUrl as parseLegacyPubkyAuthUrl
 
 @Suppress("TooManyFunctions")
 @Singleton
 class PubkyService @Inject constructor(
     private val paykitSdkService: PaykitSdkService,
 ) {
+    companion object {
+        /** Maximum wait for a Ring relay approval response. */
+        private val RING_AUTH_TIMEOUT = 30.seconds
+    }
+
     suspend fun initialize() = ServiceQueue.CORE.background {
         paykitSdkService.initialize()
     }
@@ -76,6 +88,19 @@ class PubkyService @Inject constructor(
             Unit
         }
 
+    suspend fun registerIdentity(
+        secretKeyHex: String,
+        homeserverZ32: String,
+        signupCode: String?,
+    ): PubkySessionBootstrapResult =
+        ServiceQueue.CORE.background {
+            paykitSdkService.registerIdentity(secretKeyHex, homeserverZ32, signupCode)
+        }
+
+    suspend fun activateRegisteredIdentity(result: PubkySessionBootstrapResult) = ServiceQueue.CORE.background {
+        paykitSdkService.activateRegisteredIdentity(result)
+    }
+
     suspend fun signIn(secretKeyHex: String): Unit = ServiceQueue.CORE.background {
         paykitSdkService.signIn(secretKeyHex)
         Unit
@@ -106,6 +131,13 @@ class PubkyService @Inject constructor(
         PaykitSdkService.parseAuthUrl(url)
     }
 
+    suspend fun validateSignupRequest(authorizationUrl: String?, homeserverPublicKey: String): Unit =
+        ServiceQueue.CORE.background {
+            authorizationUrl?.let { parseLegacyPubkyAuthUrl(it) }
+            PaykitPublicKeys.normalize(homeserverPublicKey)
+            Unit
+        }
+
     suspend fun approveAuth(
         authUrl: String,
         expectedCapabilities: String,
@@ -113,6 +145,16 @@ class PubkyService @Inject constructor(
         secretKeyHex: String,
     ) = ServiceQueue.CORE.background {
         paykitSdkService.approveAuth(authUrl, expectedCapabilities, approvedClientId, secretKeyHex)
+    }
+
+    suspend fun approveRingAuth(
+        authUrl: String,
+        secretKeyHex: String,
+        timeout: Duration = RING_AUTH_TIMEOUT,
+    ) = ServiceQueue.CORE.background {
+        withTimeoutOrNull(timeout) {
+            approvePubkyAuth(authUrl, secretKeyHex)
+        } ?: throw PubkyRingAuthTimeoutError()
     }
 
     suspend fun approveAuthWithCompanionClaim(
@@ -188,3 +230,5 @@ class PubkyService @Inject constructor(
 
     // endregion
 }
+
+class PubkyRingAuthTimeoutError : AppError("Ring authorization timed out")

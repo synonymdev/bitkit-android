@@ -8,6 +8,7 @@ import android.content.Intent
 import android.net.Uri
 import android.nfc.NfcAdapter
 import androidx.core.net.toUri
+import androidx.lifecycle.viewModelScope
 import app.cash.turbine.test
 import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.FeeRates
@@ -23,20 +24,25 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentMapOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
 import org.junit.After
 import org.junit.Before
@@ -59,6 +65,7 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
+import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
@@ -86,6 +93,7 @@ import to.bitkit.models.PubkyProfile
 import to.bitkit.models.SamRockPaymentMethod
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.SendFailureDetails
+import to.bitkit.models.Toast
 import to.bitkit.models.TransactionSpeed
 import to.bitkit.models.TransportType
 import to.bitkit.models.USD
@@ -235,6 +243,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val onchainPaymentResolutions = MutableStateFlow<List<PaykitOnchainPaymentProofResolution>>(emptyList())
     private val surfacedPaykitPaymentRequestIds = mutableSetOf<PaykitPaymentRequestId>()
     private val testPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+    private val signupAuthUrl =
+        "pubkyring://signup?hs=homeserver&relay=https://relay&secret=request&caps=/pub/example/:rw"
+    private val legacyAuthorizedSignupAuthUrl = signupAuthUrl.replace("pubkyring://", "pubkyauth://")
+    private val directSignupAuthUrl = "pubkyauth://direct_signup?hs=homeserver&st=invite"
+    private val legacyDirectSignupAuthUrl = "pubkyauth://signup?hs=homeserver&st=invite"
 
     private val timedSheetManager = mock<TimedSheetManager>()
     private val timedSheetType = MutableStateFlow<TimedSheetType?>(null)
@@ -254,6 +267,34 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.stopPaykitPaymentRequestPolling()
         App.currentActivity = null
     }
+
+    @Test
+    fun `session recovery failure during construction shows a toast`() =
+        runTest(StandardTestDispatcher(testDispatcher.scheduler)) {
+            sut.viewModelScope.cancel()
+            val sessionRestorationFailed = MutableStateFlow(true)
+            whenever(pubkyRepo.sessionRestorationFailed).thenReturn(sessionRestorationFailed)
+            whenever(context.getString(R.string.profile__session_expired)).thenReturn("Session expired")
+            whenever(pubkyRepo.clearSessionRestorationFailed()).thenAnswer {
+                sessionRestorationFailed.value = false
+            }
+            clearInvocations(toastManager)
+
+            withContext(Dispatchers.Default) {
+                sut = createViewModel()
+            }
+            try {
+                verify(toastManager).enqueue(
+                    check {
+                        assertEquals(Toast.ToastType.ERROR, it.type)
+                        assertEquals("Session expired", it.title)
+                    }
+                )
+                assertFalse(sessionRestorationFailed.value)
+            } finally {
+                sut.viewModelScope.cancel()
+            }
+        }
 
     @Suppress("LongMethod")
     private fun stubRepositories() {
@@ -296,6 +337,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
+        whenever { pubkyRepo.hasIdentity() }.thenAnswer { pubkyPublicKey.value != null }
         whenever(pubkyRepo.contacts).thenReturn(pubkyContacts)
         whenever { refreshContactPaykitReceivers(any()) }.thenReturn(Result.success(Unit))
         whenever { publicPaykitRepo.syncLocalReceiverMarker(anyOrNull(), anyOrNull()) }
@@ -2000,14 +2042,213 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `cold pubky auth deeplink waits for settings identity and wallet unlock`() = test {
+        val initialized = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw"
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(context, never()).getString(R.string.pubky_auth__no_identity)
+        settingsData.value = SettingsData(isPinEnabled = true)
+        sut.resetIsAuthenticatedState()
+        isPaykitEnabled.value = true
+        pubkyPublicKey.value = testPublicKey
+        initialized.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+        verify(pubkyRepo, never()).approveAuth(any(), any(), any())
+    }
+
+    @Test
+    fun `cold pubky auth deeplink reads settings before cached state is ready`() = test {
+        sut.viewModelScope.cancel()
+        val cachedSettingsRelease = CompletableDeferred<Unit>()
+        var collectorIndex = 0
+        whenever(settingsStore.isPaykitEnabled).thenReturn(
+            flow {
+                if (collectorIndex++ == 0) cachedSettingsRelease.await()
+                emit(true)
+            },
+        )
+        whenever(pubkyRepo.awaitInitialization()).thenReturn(Unit)
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        pubkyPublicKey.value = testPublicKey
+        sut = createViewModel()
+        sut.setIsAuthenticated(true)
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw"
+
+        try {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+            advanceUntilIdle()
+
+            assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+        } finally {
+            cachedSettingsRelease.complete(Unit)
+        }
+    }
+
+    @Test
+    fun `new payment scan supersedes a cold pubky auth deeplink`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        val initialized = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val bolt11 = "lnbcrt1replacementscan"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
+        advanceUntilIdle()
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+
+        pubkyPublicKey.value = testPublicKey
+        initialized.complete(Unit)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(bolt11, sut.sendUiState.value.addressInput)
+        verify(pubkyRepo, never()).hasSecretKey()
+    }
+
+    @Test
+    fun `new locked payment scan supersedes a pubky auth deeplink waiting for identity`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        val initialized = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val bolt11 = "lnbcrt1lockedreplacementscan"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
+        advanceUntilIdle()
+        settingsData.value = SettingsData(isPinEnabled = true)
+        sut.resetIsAuthenticatedState()
+        advanceUntilIdle()
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+        pubkyPublicKey.value = testPublicKey
+        initialized.complete(Unit)
+        advanceUntilIdle()
+        assertNull(sut.currentSheet.value)
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(bolt11, sut.sendUiState.value.addressInput)
+        verify(pubkyRepo, never()).hasSecretKey()
+    }
+
+    @Test
+    fun `cold pubky auth deeplink stops when Paykit is disabled during initialization`() = test {
+        enablePaykitUi()
+        val initialized = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
+        advanceUntilIdle()
+
+        isPaykitEnabled.value = false
+        pubkyPublicKey.value = testPublicKey
+        initialized.complete(Unit)
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
+
+        isPaykitEnabled.value = true
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
+    }
+
+    @Test
+    fun `pubky auth deeplinks stop when wallet does not exist`() = test {
+        enablePaykitUi()
+        whenever(walletRepo.walletExists()).thenReturn(false)
+
+        listOf(
+            "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw",
+            legacyAuthorizedSignupAuthUrl,
+        ).forEach {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, it.toUri()))
+            advanceUntilIdle()
+
+            assertNull(sut.currentSheet.value, it)
+        }
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(pubkyRepo, never()).hasIdentity()
+    }
+
+    @Test
+    fun `payment scheme wrapped pubky auth deeplinks preserve payment state without authorization`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+        val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
+        setSendState(paymentState)
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw&relay=https://relay&secret=request"
+        val wrappedUrls = listOf("lightning", "LIGHTNING", "lnurl", "lnurlw", "lnurlc", "lnurlp")
+            .map { "$it:$authUrl" } + "lightning:${authUrl.replace("signin_grant", "signin")}"
+
+        wrappedUrls.forEach {
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, it.toUri()))
+            advanceUntilIdle()
+
+            assertNull(sut.currentSheet.value, it)
+            assertEquals(paymentState, sut.sendUiState.value, it)
+        }
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
+    fun `global scanner rejects payment scheme wrapped signup without an identity`() = test {
+        enablePaykitUi()
+
+        listOf(signupAuthUrl, legacyAuthorizedSignupAuthUrl, directSignupAuthUrl, legacyDirectSignupAuthUrl).forEach {
+            sut.showScannerSheet()
+            advanceUntilIdle()
+            sut.onScannerSheetResult("lnurl:$it")
+            advanceUntilIdle()
+
+            assertNull(sut.currentSheet.value, it)
+        }
+        verify(pubkyRepo, never()).hasIdentity()
+        verify(coreService, never()).decode(any())
+    }
+
+    @Test
     fun `pubky auth deeplink shows identity required toast without a Pubky identity`() = test {
         enablePaykitUi()
+        val initialized = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
         whenever(context.getString(R.string.pubky_auth__no_identity)).thenReturn("Pubky Identity Required")
         whenever(context.getString(R.string.pubky_auth__no_identity_desc)).thenReturn("Create a Pubky identity")
         advanceUntilIdle()
 
         val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
         sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        advanceUntilIdle()
+
+        verify(toastManager, never()).enqueue(any())
+        initialized.complete(Unit)
         advanceUntilIdle()
 
         assertNull(sut.currentSheet.value)
@@ -2059,20 +2300,92 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `signup deeplink opens authorization without an existing identity`() = test {
+        enablePaykitUi()
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, legacyAuthorizedSignupAuthUrl.toUri()))
+        advanceUntilIdle()
+
+        assertEquals(Sheet.PubkyAuth(legacyAuthorizedSignupAuthUrl), sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
+    }
+
+    @Test
+    fun `global scanner accepts authorized signup without an existing identity`() = test {
+        enablePaykitUi()
+
+        listOf(signupAuthUrl, legacyAuthorizedSignupAuthUrl).forEach { authUrl ->
+            scanSignup(authUrl)
+            assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+        }
+        verify(pubkyRepo, never()).hasSecretKey()
+    }
+
+    @Test
+    fun `global scanner requires approval for direct signup`() = test {
+        enablePaykitUi()
+        listOf(directSignupAuthUrl, legacyDirectSignupAuthUrl).forEach { authUrl ->
+            scanSignup(authUrl)
+
+            assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+            verifyBlocking(pubkyRepo, never()) { approveSignupAuth(any()) }
+        }
+    }
+
+    @Test
+    fun `signup deeplinks wait for unlock then require approval`() = test {
+        enablePaykitUi()
+        listOf(directSignupAuthUrl, legacyDirectSignupAuthUrl, signupAuthUrl).forEach { authUrl ->
+            sut.hideSheet()
+            settingsData.value = SettingsData(isPinEnabled = true)
+            sut.resetIsAuthenticatedState()
+            advanceUntilIdle()
+            assertFalse(sut.isAuthenticated.value)
+
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+            advanceUntilIdle()
+
+            assertNull(sut.currentSheet.value)
+            verifyBlocking(pubkyRepo, never()) { approveSignupAuth(any()) }
+
+            sut.setIsAuthenticated(true)
+            advanceUntilIdle()
+
+            assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
+            verifyBlocking(pubkyRepo, never()) { approveSignupAuth(any()) }
+        }
+    }
+
+    @Test
+    fun `signup scan stops when already signed in`() = test {
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(context.getString(R.string.pubky_auth__already_signed_in)).thenReturn("Already signed in")
+        scanSignup(directSignupAuthUrl)
+
+        assertNull(sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(toastManager).enqueue(check { assertEquals("Already signed in", it.title) })
+    }
+
+    @Test
     fun `send paste rejects pubky auth`() = test {
-        val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
+        val authUrl = directSignupAuthUrl
+        val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
         val clipData = mock<ClipData>()
         val item = mock<ClipData.Item>()
         whenever(item.text).thenReturn(authUrl)
         whenever(clipData.getItemAt(0)).thenReturn(item)
         whenever(clipboardManager.primaryClip).thenReturn(clipData)
         sut.showSheet(Sheet.Send())
+        setSendState(paymentState)
         advanceUntilIdle()
 
         sut.setSendEvent(SendEvent.Paste)
         advanceUntilIdle()
 
-        assertNull(sut.currentSheet.value)
+        assertEquals(Sheet.Send(), sut.currentSheet.value)
+        assertEquals(paymentState, sut.sendUiState.value)
         verify(pubkyRepo, never()).hasSecretKey()
         verify(coreService, never()).decode(any())
         verify(toastManager).enqueue(any())
@@ -2081,15 +2394,83 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     @Test
     fun `send scanner rejects pubky auth`() = test {
         val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
+        val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
         sut.showSheet(Sheet.Send())
+        setSendState(paymentState)
+        setActiveContactPaymentContext(testPublicKey)
         advanceUntilIdle()
 
         sut.onScanResult(authUrl)
         advanceUntilIdle()
 
-        assertNull(sut.currentSheet.value)
+        assertEquals(Sheet.Send(), sut.currentSheet.value)
+        assertEquals(paymentState, sut.sendUiState.value)
+        assertEquals(testPublicKey, activeContactPaymentContext()?.publicKey)
         verify(pubkyRepo, never()).hasSecretKey()
         verify(coreService, never()).decode(any())
+        verify(toastManager).enqueue(any())
+    }
+
+    @Test
+    fun `contact payment rejects pubky auth without blocking later incoming requests`() = test {
+        val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
+        setSendState(paymentState)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+
+        sut.openContactPayment(paymentRequest = signupAuthUrl, publicKey = testPublicKey)
+        advanceUntilIdle()
+
+        assertEquals(paymentState, sut.sendUiState.value)
+        assertNull(activeContactPaymentContext())
+        verify(paykitPaymentRequestRepo, never()).markPresented(any())
+        verify(pubkyRepo, never()).parseAuthUrl(any())
+
+        val request = paymentRequest()
+        val bolt11 = "lnbcrt1afterrejectedcontact"
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        stubLightningScan(bolt11 = bolt11, amountSats = 0u)
+        whenever(lightningRepo.canSend(request.amountSats)).thenReturn(true)
+        stubOpenedPaymentRequest(request, bolt11)
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        pendingPaykitPaymentRequests.value = listOf(request)
+
+        sut.onHomeResumed()
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        assertEquals(request, activeContactPaymentContext()?.incomingPaymentRequest)
+        assertEquals(request.amountSats, sut.sendUiState.value.amount)
+    }
+
+    @Test
+    fun `incoming payment target rejects pubky auth without clearing payment state`() = test {
+        val request = paymentRequest()
+        val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
+        setSendState(paymentState)
+        pendingPaykitPaymentRequests.value = listOf(request)
+        enablePaykitUi()
+        pubkyPublicKey.value = testPublicKey
+        whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
+        stubOpenedPaymentRequest(request, signupAuthUrl)
+
+        sut.onHomeResumed()
+        advanceUntilIdle()
+
+        assertEquals(paymentState, sut.sendUiState.value)
+        assertNull(activeContactPaymentContext())
+        verify(privatePaykitRepo).beginPaymentRequest(request)
+        verify(paykitPaymentRequestRepo).markPresented(request)
+        verify(pubkyRepo, never()).parseAuthUrl(any())
+    }
+
+    @Test
+    fun `signup scan stops when secure identity storage is unavailable`() = test {
+        enablePaykitUi()
+        whenever(pubkyRepo.hasIdentity()).thenThrow(IllegalStateException("storage unavailable"))
+        scanSignup()
+
+        assertNull(sut.currentSheet.value)
         verify(toastManager).enqueue(any())
     }
 
@@ -5774,6 +6155,13 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private fun enablePaykitUi() {
         isPaykitEnabled.value = true
+    }
+
+    private suspend fun TestScope.scanSignup(authUrl: String = signupAuthUrl) {
+        sut.showScannerSheet()
+        advanceUntilIdle()
+        sut.onScannerSheetResult(authUrl)
+        advanceUntilIdle()
     }
 
     private fun samRockSetupRequest() = SamRockSetupRequest(
