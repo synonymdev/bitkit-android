@@ -61,6 +61,7 @@ import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.nowTimestamp
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BlocktankBackupV1
+import to.bitkit.models.CjitQuoteValidator
 import to.bitkit.models.EUR
 import to.bitkit.models.msatCeilOf
 import to.bitkit.models.safe
@@ -279,6 +280,11 @@ class BlocktankRepo @Inject constructor(
                 channelExpiryWeeks = DEFAULT_CHANNEL_EXPIRY_WEEKS,
                 options = CreateCjitOptions(source = DEFAULT_SOURCE, discountCode = null)
             )
+            CjitQuoteValidator.validate(
+                invoiceSat = amountSats,
+                feeSat = cjitEntry.feeSat,
+                channelSizeSat = cjitEntry.channelSizeSat,
+            ).getOrThrow()
 
             repoScope.launch { refreshOrders() }
 
@@ -728,13 +734,22 @@ class BlocktankRepo @Inject constructor(
 }
 
 internal fun Throwable.toCjitError(): Throwable {
-    if (this is ServiceError.ChannelSizeExceedsMaximum) return this
-
-    return if (isMaxChannelSizeError()) {
-        ServiceError.ChannelSizeExceedsMaximum()
-    } else {
-        this
+    if (this is ServiceError.ChannelSizeExceedsMaximum ||
+        this is ServiceError.CjitQuoteInvalid ||
+        this is ServiceError.NodeCapacityUnavailable
+    ) {
+        return this
     }
+
+    return when {
+        isNodeCapacityError() -> ServiceError.NodeCapacityUnavailable()
+        isMaxChannelSizeError() -> ServiceError.ChannelSizeExceedsMaximum()
+        else -> this
+    }
+}
+
+private fun Throwable.isNodeCapacityError(): Boolean {
+    return toString().contains("capacity is above our capacity limit", ignoreCase = true)
 }
 
 private fun Throwable.isMaxChannelSizeError(): Boolean {
@@ -743,7 +758,6 @@ private fun Throwable.isMaxChannelSizeError(): Boolean {
         "Channel size is too big",
         "channelSizeExceedsMaximum",
         "maxChannelSizeSat",
-        "capacity is above our capacity limit",
     )
     return maximumErrors.any { description.contains(it, ignoreCase = true) }
 }

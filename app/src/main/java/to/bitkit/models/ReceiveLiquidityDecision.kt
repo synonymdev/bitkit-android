@@ -24,11 +24,11 @@ data class ReceiveAdditionalLiquidityParams(
 
 object ReceiveLiquidityDecision {
     fun canCreateLightningInvoice(
-        hasUsableChannels: Boolean,
+        hasReadyChannels: Boolean,
         inboundCapacitySats: ULong?,
         invoiceAmountSats: ULong?,
     ): Boolean {
-        if (!hasUsableChannels || inboundCapacitySats == null) return false
+        if (!hasReadyChannels || inboundCapacitySats == null) return false
 
         if (invoiceAmountSats == null || invoiceAmountSats == 0uL) {
             return inboundCapacitySats > 0uL
