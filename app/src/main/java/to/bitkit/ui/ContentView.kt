@@ -120,6 +120,7 @@ import to.bitkit.ui.screens.settings.VssDebugScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
 import to.bitkit.ui.screens.shop.shopDiscover.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.shopWebView.ShopWebViewScreen
+import to.bitkit.ui.screens.subscriptions.CreateSubscriptionSheet
 import to.bitkit.ui.screens.subscriptions.SubscriptionDetailScreen
 import to.bitkit.ui.screens.subscriptions.SubscriptionSheet
 import to.bitkit.ui.screens.subscriptions.SubscriptionsScreen
@@ -555,6 +556,8 @@ fun ContentView(
                             },
                         )
 
+                        Sheet.CreateSubscription -> CreateSubscriptionSheet(appViewModel)
+
                         is Sheet.Subscription -> SubscriptionSheet(appViewModel, sheet.route)
 
                         is Sheet.ActivityDateRangeSelector -> DateRangeSelectorSheet()
@@ -778,6 +781,7 @@ private fun RootNavHost(
                     onRequestPayment = {
                         appViewModel.showSheet(Sheet.Receive(route = ReceiveRoute.PaymentRequestRecipient))
                     },
+                    onCreateSubscription = appViewModel::showSubscriptionCreator,
                     onDetails = {
                         navController.navigateTo(
                             Routes.SubscriptionDetail(

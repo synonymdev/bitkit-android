@@ -26,6 +26,7 @@ import com.synonym.paykit.PaymentReference
 import com.synonym.paykit.PaymentRequestAmount
 import com.synonym.paykit.PaymentRequestFilter
 import com.synonym.paykit.PaymentRequestRecord
+import com.synonym.paykit.PaymentRequestRecurrence
 import com.synonym.paykit.PaymentRequestTerms
 import com.synonym.paykit.PaymentTarget
 import com.synonym.paykit.PrivateContactPaymentResolution
@@ -123,6 +124,15 @@ data class PaykitPaymentRequestProposalTerms(
     val proposalExpiresAt: String,
     val acceptedPaymentEndpointIdentifiers: List<String>,
     val metadataJson: String,
+    val recurrence: PaykitPaymentRequestRecurrenceTerms? = null,
+)
+
+data class PaykitPaymentRequestRecurrenceTerms(
+    val every: UInt,
+    val unit: String,
+    val startsAt: String,
+    val anchor: String,
+    val endsAt: String? = null,
 )
 
 data class PaykitPrivateReceiverPathSelection(
@@ -376,9 +386,16 @@ class PaykitSdkService @Inject constructor(
         }
     }
 
-    suspend fun uploadProfileAvatar(bytes: ByteArray, contentType: String): String {
+    suspend fun uploadProfileAvatar(bytes: ByteArray, contentType: String, expectedIdentity: String? = null): String {
         isSetup.await()
         return operationMutex.withLock {
+            if (expectedIdentity != null) {
+                val identityStatus = handle().identityStatus()
+                check(
+                    identityStatus?.liveSessionAvailable == true &&
+                        PubkyPublicKeyFormat.matches(identityStatus.publicKey, expectedIdentity)
+                ) { "Paykit identity changed before uploading the subscription icon" }
+            }
             handle().uploadProfileAvatar(bytes, contentType).uri.also {
                 notifyBackupStateChanged()
             }
@@ -642,7 +659,15 @@ class PaykitSdkService @Inject constructor(
                     amount = PaymentRequestAmount(proposal.amountValue, PaykitIssuerInterop.BITCOIN_ASSET),
                     paymentReference = PaymentReference(proposal.paymentReference),
                     proposalExpiresAt = proposal.proposalExpiresAt,
-                    recurrence = null,
+                    recurrence = proposal.recurrence?.let {
+                        PaymentRequestRecurrence(
+                            every = it.every,
+                            unit = it.unit,
+                            startsAt = it.startsAt,
+                            anchor = it.anchor,
+                            endsAt = it.endsAt,
+                        )
+                    },
                     acceptedPaymentEndpointIdentifiers = proposal.acceptedPaymentEndpointIdentifiers,
                     metadata = PrivateJsonObject(proposal.metadataJson),
                 )

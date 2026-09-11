@@ -160,6 +160,7 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitPaymentRequestRepo
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.PaykitSubscription
+import to.bitkit.repositories.PaykitSubscriptionDraft
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.repositories.PaymentPendingException
 import to.bitkit.repositories.PendingPaymentNotification
@@ -4940,6 +4941,11 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
     }
 
+    fun showSubscriptionCreator() {
+        showSheet(Sheet.CreateSubscription)
+        viewModelScope.launch { refreshPaymentRequestTargets(force = true) }
+    }
+
     fun subscription(id: PaykitSubscriptionId): PaykitSubscription? =
         paykitPaymentRequestRepo.subscriptions.value.firstOrNull { it.id == id }
 
@@ -5035,6 +5041,47 @@ class AppViewModel @Inject constructor(
         paykitPaymentRequestRepo.cancel(subscription)
             .onFailure(::toast)
     }.await()
+
+    fun createSubscription(
+        draft: PaykitSubscriptionDraft,
+        target: PaykitPaymentRequestTarget,
+        onCreated: (PaykitSubscription) -> Unit,
+    ) {
+        val sourceSheet = currentSheet.value.takeIf { it is Sheet.CreateSubscription }
+        viewModelScope.launch {
+            paykitPaymentRequestRepo.proposeSubscription(
+                draft = draft,
+                target = target,
+                savedPublicKeys = pubkyRepo.contacts.value.map { it.publicKey },
+            ).onSuccess { creation ->
+                val creatorIsCurrent = PubkyPublicKeyFormat.matches(
+                    creation.creatorIdentity,
+                    pubkyRepo.publicKey.value,
+                )
+                if (creation.wasPublishedToActiveState && creatorIsCurrent) {
+                    onCreated(creation.subscription)
+                } else {
+                    if (sourceSheet != null && currentSheet.value === sourceSheet) hideSheet()
+                    toast(
+                        type = Toast.ToastType.INFO,
+                        title = context.getString(R.string.subscriptions__title),
+                        description = context.getString(R.string.subscriptions__proposal_queued_description),
+                        testTag = "SubscriptionProposalQueuedToast",
+                    )
+                }
+            }.onFailure {
+                if (it is PaykitPaymentRequestError.SubscriptionTooLong) {
+                    toast(
+                        type = Toast.ToastType.ERROR,
+                        title = context.getString(R.string.common__error),
+                        description = context.getString(R.string.subscriptions__content_too_long),
+                    )
+                } else {
+                    toast(it)
+                }
+            }
+        }
+    }
 
     fun openIncomingPaymentRequest(id: PaykitPaymentRequestId) {
         openIncomingPaymentRequestWithTags(id, emptyList())

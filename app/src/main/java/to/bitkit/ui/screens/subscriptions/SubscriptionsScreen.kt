@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -26,6 +25,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,6 +49,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.rememberLottieComposition
+import com.synonym.paykit.PaymentRequestLifecycleState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -59,6 +60,7 @@ import to.bitkit.ext.dateTimeFormatterOf
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
+import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
@@ -71,11 +73,9 @@ import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.FillWidth
-import to.bitkit.ui.components.MoneyCell
 import to.bitkit.ui.components.MoneyDisplay
 import to.bitkit.ui.components.MoneyMSB
 import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
@@ -107,6 +107,7 @@ fun SubscriptionsScreen(
     appViewModel: AppViewModel,
     onBack: () -> Unit,
     onRequestPayment: () -> Unit,
+    onCreateSubscription: () -> Unit,
     onDetails: (PaykitSubscriptionId) -> Unit,
     onPaymentRequestDetails: (PaykitPaymentRequestId) -> Unit,
     showPayments: Boolean = false,
@@ -125,12 +126,13 @@ fun SubscriptionsScreen(
         initialTab = if (showPayments) SubscriptionTab.Payments else SubscriptionTab.Overview,
         pendingPaymentRequestCount = pendingPaymentRequests.size,
         onSubscription = { subscription ->
-            if (subscription.isProposalVisible(now)) {
+            if (subscription.isPayer && subscription.isProposalVisible(now)) {
                 appViewModel.showSheet(Sheet.Subscription(SubscriptionRoute.Review(subscription.id)))
             } else {
                 onDetails(subscription.id)
             }
         },
+        onCreateSubscription = onCreateSubscription,
         paymentsContent = {
             PaymentRequestsScreen(
                 appViewModel = appViewModel,
@@ -153,19 +155,22 @@ internal fun SubscriptionsContent(
     initialTab: SubscriptionTab,
     pendingPaymentRequestCount: Int,
     onSubscription: (PaykitSubscription) -> Unit,
+    onCreateSubscription: () -> Unit,
     paymentsContent: @Composable () -> Unit,
 ) {
-    val proposals = subscriptions.filter { it.isProposalVisible(now) }
-    val active = subscriptions.filter { it.isActive(now) }
-    val expired = subscriptions.filter { it.isExpired(now) && acceptedAt(it.id) != null }
-    val hasVisibleSubscriptions = proposals.isNotEmpty() || active.isNotEmpty() || expired.isNotEmpty()
+    val proposals = subscriptions.filter { it.isPayer && it.isProposalVisible(now) }
+    val active = subscriptions.filter { it.isPayer && it.isActive(now) }
+    val expired = subscriptions.filter { it.isPayer && it.isExpired(now) && acceptedAt(it.id) != null }
+    val created = subscriptions.filter { it.isCreatedVisible(now) }
+    val hasVisibleSubscriptions =
+        proposals.isNotEmpty() || active.isNotEmpty() || expired.isNotEmpty() || created.isNotEmpty()
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(initialTab.ordinal) }
     val selectedTab = SubscriptionTab.entries[selectedTabIndex]
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .gradientBackground()
+            .background(Colors.Black)
             .navigationBarsPadding()
             .testTag("SubscriptionsScreen")
     ) {
@@ -196,6 +201,7 @@ internal fun SubscriptionsContent(
                     SubscriptionMetrics(
                         monthlyCostSats = subscriptionMonthlyCostSats(subscriptions, now),
                         activeCount = active.size,
+                        createdCount = created.size,
                     )
                 }
                 subscriptionSection(
@@ -219,7 +225,23 @@ internal fun SubscriptionsContent(
                     now = now,
                     onSubscription = onSubscription,
                 )
+                subscriptionSection(
+                    titleRes = R.string.subscriptions__created,
+                    subscriptions = created,
+                    contacts = contacts,
+                    now = now,
+                    onSubscription = onSubscription,
+                )
             }
+        }
+
+        if (selectedTab == SubscriptionTab.Overview) {
+            SecondaryButton(
+                text = stringResource(R.string.subscriptions__create),
+                onClick = onCreateSubscription,
+                modifier = Modifier.padding(horizontal = 16.dp).testTag("SubscriptionCreate")
+            )
+            VerticalSpacer(16.dp)
         }
     }
 }
@@ -239,7 +261,7 @@ private fun LazyListScope.subscriptionSection(
                 SubscriptionRow(
                     subscription = subscription,
                     contact = contacts.contactFor(subscription),
-                    now = now,
+                    subtitle = subscription.rowSubtitle(now),
                     faded = subscription.isExpired(now),
                     onClick = { onSubscription(subscription) },
                 )
@@ -282,41 +304,47 @@ private fun SubscriptionEmptyState(modifier: Modifier = Modifier) {
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 24.dp)
+            .padding(horizontal = 16.dp, vertical = 32.dp)
     ) {
         FillHeight()
         Image(
-            painter = painterResource(R.drawable.subscription_clock),
+            painter = painterResource(R.drawable.subscription_intro_clock),
             contentDescription = null,
             modifier = Modifier
                 .size(256.dp)
-                .align(Alignment.CenterHorizontally),
+                .align(Alignment.CenterHorizontally)
         )
-        FillHeight()
+        VerticalSpacer(32.dp)
         Display(
             text = stringResource(R.string.subscriptions__empty_headline).withAccent(accentColor = Colors.Purple),
         )
-        VerticalSpacer(12.dp)
+        VerticalSpacer(8.dp)
         BodyM(text = stringResource(R.string.subscriptions__empty_description), color = Colors.White64)
     }
 }
 
 @Composable
-private fun SubscriptionMetrics(monthlyCostSats: Long, activeCount: Int) {
+private fun SubscriptionMetrics(monthlyCostSats: Long, activeCount: Int, createdCount: Int) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Caption13Up(text = stringResource(R.string.subscriptions__monthly_cost), color = Colors.White64)
             VerticalSpacer(8.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Icon(painterResource(R.drawable.ic_calendar), contentDescription = null, tint = Colors.Purple)
-                MoneyMSB(sats = monthlyCostSats)
+                Icon(
+                    painterResource(R.drawable.ic_calendar),
+                    contentDescription = null,
+                    tint = Colors.Purple,
+                    modifier = Modifier.size(24.dp)
+                )
+                MoneyMSB(sats = monthlyCostSats, showSymbol = true)
             }
         }
-        Spacer(Modifier.size(width = 1.dp, height = 50.dp).background(Colors.White16))
-        Column(modifier = Modifier.weight(1f).padding(start = 16.dp)) {
+        VerticalDivider(color = Colors.White16, modifier = Modifier.height(50.dp))
+        Column {
             Caption13Up(text = stringResource(R.string.subscriptions__active), color = Colors.White64)
             VerticalSpacer(8.dp)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -324,42 +352,15 @@ private fun SubscriptionMetrics(monthlyCostSats: Long, activeCount: Int) {
                 BodyMSB(text = activeCount.toString())
             }
         }
-    }
-}
-
-@Composable
-private fun SubscriptionRow(
-    subscription: PaykitSubscription,
-    contact: PubkyProfile,
-    now: Instant,
-    faded: Boolean,
-    onClick: () -> Unit,
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .alpha(if (faded) 0.5f else 1f)
-            .clip(RoundedCornerShape(16.dp))
-            .background(Colors.Gray6)
-            .clickable(onClick = onClick)
-            .padding(16.dp),
-    ) {
-        PubkyContactAvatar(profile = contact, size = 40.dp)
-        Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
-            BodyMSB(
-                text = subscription.note ?: stringResource(R.string.subscriptions__subscription),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            BodyS(
-                text = subscription.rowSubtitle(now),
-                color = Colors.White64,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        VerticalDivider(color = Colors.White16, modifier = Modifier.height(50.dp))
+        Column {
+            Caption13Up(text = stringResource(R.string.subscriptions__created), color = Colors.White64)
+            VerticalSpacer(8.dp)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Icon(painterResource(R.drawable.ic_asterisk), contentDescription = null, tint = Colors.Purple)
+                BodyMSB(text = createdCount.toString())
+            }
         }
-        MoneyCell(sats = subscription.displaySats)
     }
 }
 
@@ -410,12 +411,20 @@ fun SubscriptionDetailScreen(
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         MoneyDisplay(sats = subscription.displaySats, showSymbol = true)
                         FillWidth()
-                        PubkyContactAvatar(profile = contacts.contactFor(subscription), size = 48.dp)
+                        SubscriptionAvatar(
+                            subscription = subscription,
+                            contact = contacts.contactFor(subscription),
+                            size = 48.dp,
+                        )
                     }
                 }
             }
             item { SubscriptionDetailsGrid(subscription, now) }
-            val payments = paymentHistory.filter { it.belongsTo(subscription) }
+            val payments = if (subscription.isCreatedByUser) {
+                subscription.receivedPaymentRequests()
+            } else {
+                paymentHistory.filter { it.belongsTo(subscription) }
+            }
             if (payments.isNotEmpty()) {
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -426,7 +435,8 @@ fun SubscriptionDetailScreen(
                                 contact = contacts.contactFor(subscription),
                                 compactSubtitle = subscription.note?.takeIf(String::isNotBlank)
                                     ?: stringResource(R.string.subscriptions__subscription),
-                                isOutgoingPayment = true,
+                                isOutgoingPayment = !subscription.isCreatedByUser,
+                                showSignedAmount = subscription.isCreatedByUser,
                             )
                         }
                     }
@@ -457,11 +467,7 @@ private fun SubscriptionDetailsGrid(subscription: PaykitSubscription, now: Insta
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
             SubscriptionDetailCell(
                 stringResource(R.string.subscriptions__status),
-                if (subscription.isActive(now)) {
-                    stringResource(R.string.subscriptions__active)
-                } else {
-                    stringResource(R.string.subscriptions__expired)
-                },
+                subscription.statusText(now),
                 R.drawable.ic_check,
                 Modifier.weight(1f),
             )
@@ -474,6 +480,22 @@ private fun SubscriptionDetailsGrid(subscription: PaykitSubscription, now: Insta
                 )
             } else {
                 FillWidth()
+            }
+        }
+        if (subscription.isCreatedByUser) {
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                SubscriptionDetailCell(
+                    stringResource(R.string.subscriptions__subscribers),
+                    if (subscription.lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING) "1" else "0",
+                    R.drawable.ic_users,
+                    Modifier.weight(1f),
+                )
+                SubscriptionDetailCell(
+                    stringResource(R.string.subscriptions__payments),
+                    subscription.paidPeriods.size.toString(),
+                    R.drawable.ic_received,
+                    Modifier.weight(1f),
+                )
             }
         }
     }
@@ -513,13 +535,13 @@ private fun SubscriptionDetailFooter(
     now: Instant,
 ) {
     val hasMoreInfo = subscription.metadata.description != null || subscription.metadata.benefits.isNotEmpty()
-    val canCancel = subscription.canCancel(now)
+    val canCancel = subscription.canCancel(now) && subscription.recurrence.endsAt == null
     if (!hasMoreInfo && !canCancel) return
     Row(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
     ) {
-        if (hasMoreInfo) {
+        if (hasMoreInfo && !subscription.isCreatedByUser) {
             SecondaryButton(
                 text = stringResource(R.string.subscriptions__more_info),
                 onClick = { appViewModel.showSheet(Sheet.Subscription(SubscriptionRoute.Details(subscription.id))) },
@@ -528,7 +550,9 @@ private fun SubscriptionDetailFooter(
         }
         if (canCancel) {
             PrimaryButton(
-                text = stringResource(R.string.subscriptions__cancel),
+                text = stringResource(
+                    if (subscription.isCreatedByUser) R.string.common__delete else R.string.subscriptions__cancel
+                ),
                 onClick = { appViewModel.showSheet(Sheet.Subscription(SubscriptionRoute.Cancel(subscription.id))) },
                 modifier = Modifier.weight(1f),
                 icon = {
@@ -749,7 +773,7 @@ private fun SubscriptionProviderCard(
         verticalAlignment = Alignment.CenterVertically,
         modifier = cardModifier
     ) {
-        PubkyContactAvatar(profile = contact, size = 40.dp)
+        SubscriptionAvatar(subscription = subscription, contact = contact, size = 40.dp)
         Column(Modifier.padding(start = 16.dp).weight(1f)) {
             BodyMSB(
                 text = subscription.note ?: stringResource(R.string.subscriptions__subscription),
@@ -856,7 +880,15 @@ private fun SubscriptionCancel(
             .navigationBarsPadding()
             .padding(horizontal = 16.dp)
     ) {
-        SheetTopBar(titleText = stringResource(R.string.subscriptions__cancel_subscription))
+        SheetTopBar(
+            titleText = stringResource(
+                if (subscription.isCreatedByUser) {
+                    R.string.subscriptions__delete_subscription
+                } else {
+                    R.string.subscriptions__cancel_subscription
+                }
+            )
+        )
         rememberMoneyText(sats = subscription.displaySats, reversed = true, showSymbol = true)?.let {
             Caption13Up(text = it.removeAccentTags(), color = Colors.White64)
         }
@@ -878,7 +910,13 @@ private fun SubscriptionCancel(
         )
         FillHeight()
         SwipeToConfirm(
-            text = stringResource(R.string.subscriptions__swipe_to_cancel),
+            text = stringResource(
+                if (subscription.isCreatedByUser) {
+                    R.string.subscriptions__swipe_to_delete
+                } else {
+                    R.string.subscriptions__swipe_to_cancel
+                }
+            ),
             color = Colors.Red,
             loading = loading,
             onConfirm = {
@@ -936,7 +974,7 @@ private fun PaykitSubscription.frequencyValue(): String {
 }
 
 @Composable
-private fun PaykitSubscription.subscriptionFrequencyText(): String {
+internal fun PaykitSubscription.subscriptionFrequencyText(): String {
     if (recurrence.every != 1) return cadenceText()
     return when (recurrence.unit) {
         PaykitRecurrenceUnit.Day -> stringResource(R.string.subscriptions__daily_subscription)
@@ -949,33 +987,63 @@ private fun PaykitSubscription.subscriptionFrequencyText(): String {
 }
 
 @Composable
-private fun PaykitSubscription.rowSubtitle(now: Instant): String = when {
-    isProposalVisible(now) || !recurrence.unit.isSupported -> subscriptionFrequencyText()
-    isExpired(now) -> recurrence.endsAt?.let {
-        stringResource(R.string.subscriptions__expires_date, it.formatShortDate())
-    } ?: stringResource(R.string.subscriptions__expired)
-    recurrence.endsAt != null -> stringResource(
-        R.string.subscriptions__expires_date,
-        recurrence.endsAt.formatShortDate(),
-    )
-    else -> {
-        val renewal = recurrence.nextPeriodAfter(now)?.startsAt
-        if (renewal == null) {
-            subscriptionFrequencyText()
-        } else {
-            stringResource(
-                R.string.subscriptions__renews_date,
-                renewal.formatShortDate(),
-            )
+private fun PaykitSubscription.rowSubtitle(now: Instant): String {
+    createdRowSubtitle(now)?.let { return it }
+    return when {
+        isProposalVisible(now) || !recurrence.unit.isSupported -> subscriptionFrequencyText()
+        isExpired(now) -> recurrence.endsAt?.let {
+            stringResource(R.string.subscriptions__expires_date, it.formatShortDate())
+        } ?: stringResource(R.string.subscriptions__expired)
+        recurrence.endsAt != null -> stringResource(
+            R.string.subscriptions__expires_date,
+            recurrence.endsAt.formatShortDate(),
+        )
+        else -> {
+            val renewal = recurrence.nextPeriodAfter(now)?.startsAt
+            if (renewal == null) {
+                subscriptionFrequencyText()
+            } else {
+                stringResource(
+                    R.string.subscriptions__renews_date,
+                    renewal.formatShortDate(),
+                )
+            }
         }
+    }
+}
+
+@Composable
+private fun PaykitSubscription.createdRowSubtitle(now: Instant): String? {
+    if (!isCreatedByUser) return null
+    return when {
+        isProposalVisible(now) -> stringResource(
+            if (deliveryStatus == PaykitPaymentRequestDeliveryStatus.Sent) {
+                R.string.subscriptions__proposal_sent_status
+            } else {
+                R.string.subscriptions__proposal_queued_status
+            }
+        )
+        isActive(now) -> stringResource(
+            if (paidPeriods.size == 1) {
+                R.string.subscriptions__created_summary_single_payment
+            } else {
+                R.string.subscriptions__created_summary
+            },
+            paidPeriods.size,
+        )
+        else -> null
     }
 }
 
 internal fun PaykitSubscription.shouldShowTiming(now: Instant): Boolean =
     isActive(now) || recurrence.endsAt != null
 
-internal fun PaykitSubscription.canCancel(now: Instant): Boolean =
-    isActive(now) && recurrence.endsAt == null
+@Composable
+private fun PaykitSubscription.statusText(now: Instant): String = when {
+    isProposalVisible(now) -> stringResource(R.string.subscriptions__pending)
+    isActive(now) -> stringResource(R.string.subscriptions__active)
+    else -> stringResource(R.string.subscriptions__expired)
+}
 
 @Composable
 private fun PaykitSubscription.timingTitle(now: Instant): String = when {
@@ -1019,14 +1087,14 @@ private fun Instant.formatShortDate(): String = dateTimeFormatterOf("MMMM d")
 private fun Instant.formatFullDate(): String = dateTimeFormatterOf("MMMM d, yyyy")
     .format(java.time.Instant.ofEpochMilli(toEpochMilliseconds()))
 
-private val PaykitSubscription.displaySats: Long
+internal val PaykitSubscription.displaySats: Long
     get() = amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong()
 
 internal fun subscriptionMonthlyCostSats(
     subscriptions: List<PaykitSubscription>,
     now: Instant,
 ): Long {
-    val total = subscriptions.filter { it.isActive(now) }.fold(BigDecimal.ZERO) { total, subscription ->
+    val total = subscriptions.filter { it.isPayer && it.isActive(now) }.fold(BigDecimal.ZERO) { total, subscription ->
         val annualPeriods = when (subscription.recurrence.unit) {
             PaykitRecurrenceUnit.Minute -> 525_600L
             PaykitRecurrenceUnit.Hour -> 8_760L

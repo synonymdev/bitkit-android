@@ -73,6 +73,7 @@ sealed interface Sheet {
         val presentationId: String = UUID.randomUUID().toString(),
     ) : Sheet
     data object PaymentRequests : Sheet
+    data object CreateSubscription : Sheet
     data class Subscription(val route: SubscriptionRoute) : Sheet
     data class Pin(val route: PinRoute = PinRoute.Prompt()) : Sheet
     data object ChangePin : Sheet
