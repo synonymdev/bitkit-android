@@ -87,6 +87,7 @@ jobs:
           - { name: multi_address_2_regtest, grep: "@multi_address_2" }
           - { name: pubky_paykit, grep: "@pubky" }
           - { name: hardware_wallet, grep: "@hardware_wallet" }
+          - { name: transfer_max, grep: "@transfer_max" }
 
     name: e2e-tests-staging - ${{ matrix.shard.name }}
 
