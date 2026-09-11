@@ -1354,6 +1354,8 @@
     <string name="wallet__send_available_savings">Available (savings)</string>
     <string name="wallet__send_available_spending">Available (spending)</string>
     <string name="wallet__send_bitcoin">Send Bitcoin</string>
+    <string name="wallet__send_broadcast_unknown__description">Bitkit cannot confirm whether transaction {txid} was accepted. Do not send this payment again.</string>
+    <string name="wallet__send_broadcast_unknown__title">Payment Status Unknown</string>
     <string name="wallet__send_clipboard_empty_text">Please copy an address or an invoice.</string>
     <string name="wallet__send_clipboard_empty_title">Clipboard Empty</string>
     <string name="wallet__send_confirming_in">Confirming in</string>

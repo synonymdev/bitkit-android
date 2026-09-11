@@ -68,7 +68,6 @@ import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ClosureReason
 import org.lightningdevkit.ldknode.Event
-import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.PaymentFailureReason
 import org.lightningdevkit.ldknode.PaymentId
 import org.lightningdevkit.ldknode.SpendableUtxo
@@ -197,7 +196,8 @@ import to.bitkit.utils.AppError
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
 import to.bitkit.utils.NetworkValidationHelper
-import to.bitkit.utils.ServiceError
+import to.bitkit.utils.PendingOnchainBroadcast
+import to.bitkit.utils.asPendingOnchainBroadcast
 import to.bitkit.utils.jsonLogOf
 import to.bitkit.utils.timedsheets.TimedSheetManager
 import to.bitkit.utils.timedsheets.sheets.AppUpdateTimedSheet
@@ -366,7 +366,6 @@ class AppViewModel @Inject constructor(
     private var preparedContactPaymentContext: ContactPaymentContext? = null
     private var requestedPaymentRequestIdentity: String? = null
     private var requestedPaymentRequestTags: ImmutableList<String> = persistentListOf()
-    private var uncertainOnchainPaymentRequestId: PaykitPaymentRequestId? = null
     private var isPresentingPaymentRequest = false
     private var paymentRequestPresentationGeneration = 0L
     private var activePaymentRequestPresentationGeneration: Long? = null
@@ -758,29 +757,7 @@ class AppViewModel @Inject constructor(
     private fun handlePaykitOnchainPaymentResolution(resolution: PaykitOnchainPaymentProofResolution) {
         if (!PubkyPublicKeyFormat.matches(pubkyRepo.publicKey.value, resolution.identity)) return
         paykitPaymentProofRepo.consumeOnchainPaymentResolution(resolution)
-        val resolvesCurrentPayment = uncertainOnchainPaymentRequestId == resolution.requestId
-        if (!resolvesCurrentPayment) {
-            synchronizeResolvedPaykitOnchainPayment(resolution, updateSendDetails = false)
-            return
-        }
-        uncertainOnchainPaymentRequestId = null
-        if (
-            _currentSheet.value !is Sheet.Send ||
-            _sendUiState.value.incomingPaymentRequestId != resolution.requestId
-        ) {
-            synchronizeResolvedPaykitOnchainPayment(resolution, updateSendDetails = false)
-            return
-        }
-        onSendSuccess(
-            NewTransactionSheetDetails(
-                type = NewTransactionSheetType.ONCHAIN,
-                direction = NewTransactionSheetDirection.SENT,
-                paymentHashOrTxId = resolution.transactionId,
-                sats = _sendUiState.value.amount.toLong(),
-                isLoadingDetails = true,
-            )
-        )
-        synchronizeResolvedPaykitOnchainPayment(resolution, updateSendDetails = true)
+        synchronizeResolvedPaykitOnchainPayment(resolution, updateSendDetails = false)
     }
 
     private fun synchronizeResolvedPaykitOnchainPayment(
@@ -901,7 +878,7 @@ class AppViewModel @Inject constructor(
             paykitPaymentRequestRepo.pendingRequests.drop(1).collect { requests ->
                 retainPaymentRequestPresentationState(requests)
                 val activeRequest = activeIncomingPaymentRequest() ?: return@collect
-                if (isSubmittingPaymentRequest || uncertainOnchainPaymentRequestId == activeRequest.id) return@collect
+                if (isSubmittingPaymentRequest) return@collect
                 if (
                     currentSheet.value is Sheet.Send &&
                     requests.none { it.id == activeRequest.id }
@@ -2964,7 +2941,6 @@ class AppViewModel @Inject constructor(
         failureReason: IncomingPaykitPaymentRequestFailureReason,
         retryIncomingRequest: Boolean = true,
     ) {
-        uncertainOnchainPaymentRequestId = null
         val interruptedRequest = synchronized(contactPaymentContextLock) {
             val request = activeContactPaymentContext?.incomingPaymentRequest
             activeContactPaymentContext = null
@@ -3706,16 +3682,16 @@ class AppViewModel @Inject constructor(
             handlePaymentPreparationFailure(PaykitPaymentRequestError.OperationInProgress, contactPaymentContext)
             return
         }
-        val preparedPaymentProofRequest = proofPreparation.getOrNull()
+        val preparedPaymentProof = proofPreparation.getOrNull()
 
         consumePrivatePaymentListIfNeeded(contactPaymentContext).onFailure {
-            cancelPaymentProofPreparation(preparedPaymentProofRequest)
+            cancelPaymentProofPreparation(preparedPaymentProof)
             handlePaymentPreparationFailure(it, contactPaymentContext)
             return
         }
 
         acceptIncomingPaymentRequestIfNeeded(contactPaymentContext).onFailure {
-            cancelPaymentProofPreparation(preparedPaymentProofRequest)
+            cancelPaymentProofPreparation(preparedPaymentProof)
             handlePaymentPreparationFailure(it, contactPaymentContext)
             return
         }
@@ -3736,7 +3712,7 @@ class AppViewModel @Inject constructor(
                     it.copy(decodedInvoice = invoice)
                 }
             }.onFailure {
-                cancelPaymentProofPreparation(preparedPaymentProofRequest)
+                cancelPaymentProofPreparation(preparedPaymentProof)
                 val message = getLnurlInvoiceFetchErrorMessage(it)
                 handlePaymentPreparationFailure(AppError(message, it), contactPaymentContext)
                 return
@@ -3746,14 +3722,14 @@ class AppViewModel @Inject constructor(
         when (_sendUiState.value.payMethod) {
             SendMethod.ONCHAIN -> proceedWithOnchainPayment(
                 incomingPaymentRequest,
-                preparedPaymentProofRequest,
+                preparedPaymentProof,
                 contactPaymentContext,
                 amount,
             )
 
             SendMethod.LIGHTNING -> proceedWithLightningPayment(
                 incomingPaymentRequest,
-                preparedPaymentProofRequest,
+                preparedPaymentProof,
                 amount,
             )
         }
@@ -3761,26 +3737,24 @@ class AppViewModel @Inject constructor(
 
     private suspend fun proceedWithOnchainPayment(
         incomingPaymentRequest: PaykitPaymentRequest?,
-        preparedPaymentProofRequest: PaykitPaymentRequest?,
+        preparedPaymentProof: PreparedPaymentProof?,
         contactPaymentContext: ContactPaymentContext?,
         amount: ULong,
     ) {
         val address = _sendUiState.value.address
         val tags = _sendUiState.value.selectedTags
-        var proofRequest = preparedPaymentProofRequest
-        var onchainPaymentStarted = false
+        var proofPreparation = preparedPaymentProof
         sendOnchain(
             address = address,
             amount = amount,
             tags = tags,
             beforeSendAttempt = {
-                if (preparedPaymentProofRequest != null) {
+                if (preparedPaymentProof != null) {
                     markOnchainPaymentStarted(incomingPaymentRequest, address).getOrThrow()
-                    onchainPaymentStarted = true
                 }
             },
             onBroadcast = { txId ->
-                proofRequest = null
+                proofPreparation = null
                 completeOnchainPaymentProofInBackground(incomingPaymentRequest, txId)
             },
         ).onSuccess { txId ->
@@ -3800,9 +3774,8 @@ class AppViewModel @Inject constructor(
         }.onFailure { error ->
             handleOnchainPaymentFailure(
                 error = error,
-                paymentStarted = onchainPaymentStarted,
                 incomingPaymentRequest = incomingPaymentRequest,
-                preparedPaymentProofRequest = proofRequest,
+                preparedPaymentProof = proofPreparation,
                 contactPaymentContext = contactPaymentContext,
             )
         }
@@ -3810,33 +3783,30 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleOnchainPaymentFailure(
         error: Throwable,
-        paymentStarted: Boolean,
         incomingPaymentRequest: PaykitPaymentRequest?,
-        preparedPaymentProofRequest: PaykitPaymentRequest?,
+        preparedPaymentProof: PreparedPaymentProof?,
         contactPaymentContext: ContactPaymentContext?,
     ) {
-        val amount = _sendUiState.value.amount
-        if (paymentStarted && !error.isDefiniteOnchainPreBroadcastFailure()) {
-            Logger.warn("On-chain payment outcome is uncertain after send started", error, context = TAG)
-            uncertainOnchainPaymentRequestId = incomingPaymentRequest?.id
-            paykitPaymentProofRepo.onchainPaymentResolutions.value
-                .firstOrNull { it.requestId == incomingPaymentRequest?.id }
-                ?.let(::handlePaykitOnchainPaymentResolution)
-            if (uncertainOnchainPaymentRequestId == null) return
-            setSendEffect(
-                SendEffect.NavigateToPending(
-                    paymentHash = incomingPaymentRequest?.paymentRequestId.orEmpty(),
-                    amount = amount.toLong(),
-                    observeResolution = false,
-                )
-            )
-            return
-        }
-        if (paymentStarted) {
-            incomingPaymentRequest?.let { paykitPaymentProofRepo.failOnchainPayment(it) }
-        }
-        cancelPaymentProofPreparation(preparedPaymentProofRequest)
         Logger.error("Error sending onchain payment", error, context = TAG)
+        when (val pendingBroadcast = error.asPendingOnchainBroadcast()) {
+            is PendingOnchainBroadcast.Current -> {
+                associateOnchainPaymentProof(
+                    request = incomingPaymentRequest,
+                    txid = pendingBroadcast.txid,
+                    preparationId = preparedPaymentProof?.id,
+                )
+                showPendingOnchainBroadcast(pendingBroadcast.txid)
+                hideSheet()
+                return
+            }
+            is PendingOnchainBroadcast.Existing -> {
+                cancelPaymentProofPreparation(preparedPaymentProof)
+                showPendingOnchainBroadcast(pendingBroadcast.txid)
+                hideSheet()
+                return
+            }
+            null -> cancelPaymentProofPreparation(preparedPaymentProof)
+        }
         if (contactPaymentContext?.isInitialSubscriptionPayment == true) {
             setSendEffect(SendEffect.NavigateToError(error.toSendFailureDetails(context, _sendUiState.value.address)))
         } else {
@@ -3844,6 +3814,7 @@ class AppViewModel @Inject constructor(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.wallet__error_sending_title),
                 description = error.message ?: context.getString(R.string.common__error_body),
+                testTag = "OnchainSendFailedToast",
             )
             hideSheet()
         }
@@ -3851,18 +3822,18 @@ class AppViewModel @Inject constructor(
 
     private suspend fun proceedWithLightningPayment(
         incomingPaymentRequest: PaykitPaymentRequest?,
-        preparedPaymentProofRequest: PaykitPaymentRequest?,
+        preparedPaymentProof: PreparedPaymentProof?,
         amount: ULong,
     ) {
         val decodedInvoice = requireNotNull(_sendUiState.value.decodedInvoice)
         val paymentAmount = if (decodedInvoice.amountSatoshis > 0uL) null else amount
         val displayAmountSats = decodedInvoice.amountSatoshis.takeIf { it > 0uL } ?: amount
-        var proofRequest = preparedPaymentProofRequest
+        var proofPreparation = preparedPaymentProof
         var createdMetadataPaymentId: String? = null
         val paymentHash = decodedInvoice.paymentHash.toHex()
         associateLightningPaymentProof(incomingPaymentRequest, paymentHash).onFailure {
-            cancelPaymentProofPreparation(proofRequest)
-            proofRequest = null
+            cancelPaymentProofPreparation(proofPreparation)
+            proofPreparation = null
         }
 
         val tags = _sendUiState.value.selectedTags
@@ -3879,7 +3850,7 @@ class AppViewModel @Inject constructor(
         }
 
         sendLightning(decodedInvoice.bolt11, paymentAmount).onSuccess { actualPaymentHash ->
-            proofRequest = null
+            proofPreparation = null
             Logger.info("Lightning send result payment hash: $actualPaymentHash", context = TAG)
             onSendSuccess(
                 NewTransactionSheetDetails(
@@ -3892,7 +3863,7 @@ class AppViewModel @Inject constructor(
         }.onFailure { error ->
             if (!clearFailedLightningPayment(paymentHash, error, incomingPaymentRequest != null)) {
                 val pendingHash = (error as? PaymentPendingException)?.paymentHash ?: paymentHash
-                proofRequest = null
+                proofPreparation = null
                 Logger.info("Lightning payment pending", context = TAG)
                 pendingPaymentRepo.track(pendingHash)
                 preserveContactPaymentContext(pendingHash)
@@ -3900,7 +3871,7 @@ class AppViewModel @Inject constructor(
                 setSendEffect(SendEffect.NavigateToPending(pendingHash, displayAmountSats.toLong()))
                 return@onFailure
             }
-            cancelPaymentProofPreparation(proofRequest)
+            cancelPaymentProofPreparation(proofPreparation)
             createdMetadataPaymentId?.let { preActivityMetadataRepo.deletePreActivityMetadata(it) }
             Logger.error("Error sending lightning payment", error, context = TAG)
             val failure = when (error) {
@@ -3952,14 +3923,14 @@ class AppViewModel @Inject constructor(
         contactPaymentContext != null &&
             synchronized(contactPaymentContextLock) { preparedContactPaymentContext == contactPaymentContext }
 
-    private suspend fun preparePaymentProof(request: PaykitPaymentRequest?): Result<PaykitPaymentRequest?> {
+    private suspend fun preparePaymentProof(request: PaykitPaymentRequest?): Result<PreparedPaymentProof?> {
         if (request == null) return Result.success(null)
         val preparation = paymentProofPreparation()
         return paykitPaymentProofRepo.prepare(
             request = request,
             paymentEndpointIdentifier = preparation.endpointIdentifier,
             kind = preparation.kind,
-        ).map { request }
+        ).map { PreparedPaymentProof(it) }
     }
 
     private suspend fun associateLightningPaymentProof(
@@ -3973,6 +3944,31 @@ class AppViewModel @Inject constructor(
         )
     }
         ?: Result.success(Unit)
+
+    private suspend fun associateOnchainPaymentProof(
+        request: PaykitPaymentRequest?,
+        txid: String,
+        preparationId: String?,
+    ): Result<Unit> = request?.let {
+        paykitPaymentProofRepo.associateOnchainPayment(
+            request = it,
+            txid = txid,
+            paymentEndpointIdentifier = paymentProofPreparation().endpointIdentifier,
+            preparationId = preparationId,
+        )
+    }
+        ?: Result.success(Unit)
+
+    private fun showPendingOnchainBroadcast(txid: String) {
+        toast(
+            type = Toast.ToastType.WARNING,
+            title = context.getString(R.string.wallet__send_broadcast_unknown__title),
+            description = context.getString(R.string.wallet__send_broadcast_unknown__description)
+                .replace("{txid}", txid),
+            autoHide = false,
+            testTag = "OnchainBroadcastPendingToast",
+        )
+    }
 
     private fun completeOnchainPaymentProofInBackground(request: PaykitPaymentRequest?, txId: String) {
         val paymentRequest = request ?: return
@@ -3994,8 +3990,8 @@ class AppViewModel @Inject constructor(
     ): Result<Unit> = request?.let { paykitPaymentProofRepo.markOnchainPaymentStarted(it, address, walletId) }
         ?: Result.success(Unit)
 
-    private suspend fun cancelPaymentProofPreparation(request: PaykitPaymentRequest?) {
-        request?.let { paykitPaymentProofRepo.cancelPreparation(it) }
+    private suspend fun cancelPaymentProofPreparation(preparation: PreparedPaymentProof?) {
+        preparation?.let { paykitPaymentProofRepo.cancelPreparation(it.id) }
     }
 
     private fun paymentProofPreparation(): PaymentProofPreparation {
@@ -4825,18 +4821,18 @@ class AppViewModel @Inject constructor(
             handlePaymentPreparationFailure(PaykitPaymentRequestError.OperationInProgress, contactPaymentContext)
             return false
         }
-        val preparedPaymentProofRequest = proofPreparation.getOrNull()
+        val preparedPaymentProof = proofPreparation.getOrNull()
         if (!prepareContactPayment(contactPaymentContext)) {
-            cancelPaymentProofPreparation(preparedPaymentProofRequest)
+            cancelPaymentProofPreparation(preparedPaymentProof)
             return false
         }
-        if (preparedPaymentProofRequest != null) {
+        if (preparedPaymentProof != null) {
             val walletId = _sendUiState.value.hardwareWalletId ?: WalletScope.default
             markOnchainPaymentStarted(incomingPaymentRequest, _sendUiState.value.address, walletId).onFailure {
                 synchronized(contactPaymentContextLock) {
                     if (preparedContactPaymentContext == contactPaymentContext) preparedContactPaymentContext = null
                 }
-                cancelPaymentProofPreparation(preparedPaymentProofRequest)
+                cancelPaymentProofPreparation(preparedPaymentProof)
                 handlePaymentPreparationFailure(it, contactPaymentContext)
                 return false
             }
@@ -5552,6 +5548,10 @@ private data class PaymentProofPreparation(
     val kind: PaykitPaymentProofKind,
 )
 
+private data class PreparedPaymentProof(
+    val id: String,
+)
+
 private data class PaykitContactSyncState(
     val publicKey: String?,
     val contactKeys: Set<String>,
@@ -5630,24 +5630,6 @@ private class LightningPaymentFailedError(
     val paymentRequest: String?,
 ) : AppError(reason?.name)
 
-private fun Throwable.isDefiniteOnchainPreBroadcastFailure(): Boolean =
-    generateSequence(this as Throwable?) { it.cause }
-        .any {
-            it is ServiceError.NodeNotSetup ||
-                it is ServiceError.NodeNotStarted ||
-                it is NodeException.NotRunning ||
-                it is NodeException.OnchainTxCreationFailed ||
-                it is NodeException.OnchainTxSigningFailed ||
-                it is NodeException.WalletOperationFailed ||
-                it is NodeException.PersistenceFailed ||
-                it is NodeException.InvalidAddress ||
-                it is NodeException.InvalidAmount ||
-                it is NodeException.InvalidNetwork ||
-                it is NodeException.InvalidFeeRate ||
-                it is NodeException.InsufficientFunds ||
-                it is NodeException.CoinSelectionFailed ||
-                it is NodeException.NoSpendableOutputs
-        }
 
 sealed interface LnurlParams {
     data class LnurlPay(val data: LnurlPayData) : LnurlParams

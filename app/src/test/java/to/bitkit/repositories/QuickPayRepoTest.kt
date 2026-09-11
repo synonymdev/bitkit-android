@@ -291,7 +291,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     @Test
     fun `acknowledge during delivery clears the unacked failure`() = test {
         val (bolt11, _) = testInvoice()
-        stubPayInvoiceFailure(NodeException.InvalidInvoice("bad"))
+        stubPayInvoiceFailure(NodeException.InvalidInvoice())
         val session = QuickPaySession()
         val flushed = mutableListOf<Throwable>()
         val flushJob = launch { sut.unhandledFailures.collect { flushed += it } }
@@ -507,7 +507,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     @Test
     fun `lookup throw on duplicate still emits pending`() = test {
         val (bolt11, _) = testInvoice()
-        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        stubPayInvoiceFailure(NodeException.DuplicatePayment())
         whenever { lightningRepo.listPaymentsOrNull() }.thenAnswer { error("uniffi") }
         val session = QuickPaySession()
         sut.attach(session).test {
@@ -561,27 +561,27 @@ class QuickPayRepoTest : BaseUnitTest() {
     fun `classifies wrapped and unwrapped ldk errors`() {
         assertEquals(
             QuickPayDispatchClass.PRE_DISPATCH_REJECTION,
-            classifyDispatchError(NodeException.InvalidInvoice("bad")),
+            classifyDispatchError(NodeException.InvalidInvoice()),
         )
         assertEquals(
             QuickPayDispatchClass.PRE_DISPATCH_REJECTION,
-            classifyDispatchError(LdkError(NodeException.InvalidInvoice("bad"))),
+            classifyDispatchError(LdkError(NodeException.InvalidInvoice())),
         )
         assertEquals(
             QuickPayDispatchClass.DUPLICATE_PAYMENT,
-            classifyDispatchError(NodeException.DuplicatePayment("dup")),
+            classifyDispatchError(NodeException.DuplicatePayment()),
         )
         assertEquals(
             QuickPayDispatchClass.DUPLICATE_PAYMENT,
-            classifyDispatchError(LdkError(NodeException.DuplicatePayment("dup"))),
+            classifyDispatchError(LdkError(NodeException.DuplicatePayment())),
         )
         assertEquals(
             QuickPayDispatchClass.AMBIGUOUS,
-            classifyDispatchError(NodeException.PersistenceFailed("io")),
+            classifyDispatchError(NodeException.PersistenceFailed()),
         )
         assertEquals(
             QuickPayDispatchClass.AMBIGUOUS,
-            classifyDispatchError(LdkError(NodeException.PaymentSendingFailed("send"))),
+            classifyDispatchError(LdkError(NodeException.PaymentSendingFailed())),
         )
     }
 
@@ -597,7 +597,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     @Test
     fun `duplicate payment with pending ldk does not refund`() = test {
         val (bolt11, hash) = testInvoice()
-        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        stubPayInvoiceFailure(NodeException.DuplicatePayment())
         paymentRows = listOf(pendingRow(hash))
         val session = QuickPaySession()
 
@@ -613,7 +613,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     @Test
     fun `duplicate payment with succeeded ldk refunds a fresh reserve and emits already paid`() = test {
         val (bolt11, hash) = testInvoice()
-        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        stubPayInvoiceFailure(NodeException.DuplicatePayment())
         paymentRows = listOf(succeededRow(hash))
         val session = QuickPaySession()
 
@@ -633,7 +633,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         assertNotNull(sut.reserveBound(hash, 500u).getOrThrow())
         sut.signalCompletion(paymentId = null, paymentHash = hash, success = true)
         assertEquals(250L, spentCents())
-        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        stubPayInvoiceFailure(NodeException.DuplicatePayment())
         paymentRows = listOf(succeededRow(hash))
         val session = QuickPaySession()
 
@@ -649,7 +649,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     @Test
     fun `ambiguous pending emits pending and keeps spend`() = test {
         val (bolt11, hash) = testInvoice()
-        stubPayInvoiceFailure(NodeException.PaymentSendingFailed("send"))
+        stubPayInvoiceFailure(NodeException.PaymentSendingFailed())
         paymentRows = listOf(pendingRow(hash))
         val session = QuickPaySession()
 
@@ -665,7 +665,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     @Test
     fun `sync dispatch failure with failed ldk row refunds immediately`() = test {
         val (bolt11, hash) = testInvoice()
-        stubPayInvoiceFailure(NodeException.PaymentSendingFailed("send"))
+        stubPayInvoiceFailure(NodeException.PaymentSendingFailed())
         paymentRows = listOf(failedRow(hash))
         val session = QuickPaySession()
 
@@ -720,7 +720,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     @Test
     fun `rescan of a pending hash replays pending to a new session`() = test {
         val (bolt11, hash) = testInvoice()
-        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        stubPayInvoiceFailure(NodeException.DuplicatePayment())
         paymentRows = listOf(pendingRow(hash))
         val first = QuickPaySession()
         val second = QuickPaySession()
@@ -741,7 +741,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     @Test
     fun `rescan pending then success settles once`() = test {
         val (bolt11, hash) = testInvoice()
-        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        stubPayInvoiceFailure(NodeException.DuplicatePayment())
         paymentRows = listOf(pendingRow(hash))
         val first = QuickPaySession()
         val second = QuickPaySession()
@@ -797,7 +797,7 @@ class QuickPayRepoTest : BaseUnitTest() {
         val first = QuickPaySession()
         sut.attach(first)
         sut.detachAll()
-        stubPayInvoiceFailure(NodeException.InvalidInvoice("bad"))
+        stubPayInvoiceFailure(NodeException.InvalidInvoice())
         val second = QuickPaySession()
         sut.attach(second).test {
             sut.payNow(second, QuickPayPayRequest.Bolt11(bolt11 = testInvoice().first, amountSats = 500u))
@@ -809,7 +809,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     fun `hasOpen is true for a live op or recovered row`() = test {
         val (bolt11, hash) = testInvoice()
         assertFalse(sut.hasOpen(hash))
-        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        stubPayInvoiceFailure(NodeException.DuplicatePayment())
         paymentRows = listOf(pendingRow(hash))
         val session = QuickPaySession()
         sut.attach(session)
@@ -887,7 +887,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             assertEquals(250L, spentCents())
             assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
-            Result.failure(LdkError(NodeException.InvalidInvoice("done")))
+            Result.failure(LdkError(NodeException.InvalidInvoice()))
         }
         val session = QuickPaySession()
         sut.attach(session)
@@ -958,7 +958,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     @Test
     fun `pre-dispatch rejection refunds after dispatch`() = test {
         val (bolt11, _) = testInvoice()
-        stubPayInvoiceFailure(NodeException.InvalidInvoice("bad"))
+        stubPayInvoiceFailure(NodeException.InvalidInvoice())
         val session = QuickPaySession()
         sut.attach(session).test {
             sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
@@ -971,7 +971,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     @Test
     fun `null payment rows mutate nothing on duplicate`() = test {
         val (bolt11, _) = testInvoice()
-        stubPayInvoiceFailure(NodeException.DuplicatePayment("dup"))
+        stubPayInvoiceFailure(NodeException.DuplicatePayment())
         val session = QuickPaySession()
         sut.attach(session).test {
             sut.payNow(session, QuickPayPayRequest.Bolt11(bolt11 = bolt11, amountSats = 500u))
