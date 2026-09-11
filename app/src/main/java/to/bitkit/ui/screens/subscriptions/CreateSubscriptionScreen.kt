@@ -147,6 +147,7 @@ fun CreateSubscriptionSheet(
                 }
             },
             onChooseRecipient = { step = SubscriptionCreationStep.Recipient },
+            modifier = Modifier.sheetHeight()
         )
         SubscriptionCreationStep.Amount -> PaymentRequestAmountContent(
             amountInputViewModel = amountInputViewModel,
@@ -200,6 +201,7 @@ fun CreateSubscriptionSheet(
                     PubkyPublicKeyFormat.matches(contact.publicKey, it.counterparty)
                 } ?: PubkyProfile.placeholder(it.counterparty),
                 onDone = appViewModel::hideSheet,
+                modifier = Modifier.sheetHeight()
             )
         }
     }
@@ -428,9 +430,10 @@ internal fun SubscriptionProposalSent(
     subscription: PaykitSubscription,
     contact: PubkyProfile,
     onDone: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .gradientBackground()
             .navigationBarsPadding()
