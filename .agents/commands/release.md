@@ -121,6 +121,10 @@ Bump version to {newVersionName} (build {newVersionCode}) for release.
 - `versionCode`: {oldVersionCode} → {newVersionCode}
 - `versionName`: {oldVersionName} → {newVersionName}
 
+### Design
+
+N/A — no UI changes.
+
 ### Preview
 
 N/A

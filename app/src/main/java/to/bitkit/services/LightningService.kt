@@ -53,6 +53,7 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.backup.VssStoreIdProvider
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.data.withRequiredNativeSegwitMonitoring
 import to.bitkit.di.BgDispatcher
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Defaults
@@ -246,7 +247,11 @@ class LightningService @Inject constructor(
         config: Config,
         channelMigration: ChannelDataMigration? = null,
     ): Node = ServiceQueue.LDK.background {
-        val settings = settingsStore.data.first()
+        val storedSettings = settingsStore.data.first()
+        val settings = storedSettings.withRequiredNativeSegwitMonitoring()
+        if (settings != storedSettings) {
+            settingsStore.update { it.withRequiredNativeSegwitMonitoring() }
+        }
         val selectedType = settings.selectedAddressType.toAddressType()?.toLdkAddressType()
             ?: LdkAddressType.NATIVE_SEGWIT
         val monitoredTypes = settings.addressTypesToMonitor
