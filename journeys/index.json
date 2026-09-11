@@ -1,0 +1,670 @@
+[
+  {
+    "file": "journeys/amount-limits/external-amount-over-max.xml",
+    "name": "external node amount over max is blocked",
+    "identifiers": [
+      "FundManual",
+      "NodeIdInput",
+      "HostInput",
+      "PortInput",
+      "ExternalContinue",
+      "ExternalAmount",
+      "N9",
+      "ExternalAmountNumberField",
+      "NRemove"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/components/NumberPad.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/FundingAdvancedScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/FundingScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/external/ExternalAmountScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/external/ExternalConnectionScreen.kt",
+      "app/src/main/java/to/bitkit/ui/settings/advanced/ElectrumConfigScreen.kt"
+    ],
+    "screens": [
+      "funding options screen",
+      "external node amount screen"
+    ]
+  },
+  {
+    "file": "journeys/amount-limits/send-amount-over-balance.xml",
+    "name": "send amount over balance is blocked",
+    "identifiers": [
+      "Send",
+      "RecipientManual",
+      "RecipientInput",
+      "AddressContinue",
+      "send_amount_screen",
+      "available_balance",
+      "N9",
+      "SendNumberField",
+      "NRemove"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/components/NumberPad.kt",
+      "app/src/main/java/to/bitkit/ui/components/TabBar.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/send/SendAddressScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/send/SendAmountScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/send/SendRecipientScreen.kt"
+    ],
+    "screens": [
+      "Send amount screen"
+    ]
+  },
+  {
+    "file": "journeys/amount-limits/transfer-spending-advanced-over-max.xml",
+    "name": "receiving capacity amount over max is blocked",
+    "identifiers": [
+      "SpendingAmount",
+      "SpendingAmountAvailable",
+      "SpendingAmountQuarter",
+      "SpendingAmountContinue",
+      "SpendingAdvanced",
+      "N9",
+      "SpendingAdvancedNumberField",
+      "NRemove"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/components/NumberPad.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/SpendingAdvancedScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/SpendingAmountScreen.kt"
+    ],
+    "screens": [
+      "home screen",
+      "transfer intro screen",
+      "spending amount screen",
+      "confirm screen",
+      "receiving capacity screen"
+    ]
+  },
+  {
+    "file": "journeys/amount-limits/transfer-spending-over-max.xml",
+    "name": "transfer to spending amount over max is blocked",
+    "identifiers": [
+      "SpendingAmount",
+      "SpendingAmountAvailable",
+      "N9",
+      "SpendingAmountNumberField",
+      "NRemove"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/components/NumberPad.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/SpendingAmountScreen.kt"
+    ],
+    "screens": [
+      "home screen",
+      "transfer intro screen",
+      "spending amount screen"
+    ]
+  },
+  {
+    "file": "journeys/cjit-notifications/cjit-foreground-service-notification.xml",
+    "name": "cjit notification via foreground service is single and formatted",
+    "identifiers": [],
+    "sources": [],
+    "screens": [
+      "wallet home screen",
+      "received-transaction sheet"
+    ]
+  },
+  {
+    "file": "journeys/cjit-notifications/cjit-push-single-notification.xml",
+    "name": "cjit push notification is delivered exactly once",
+    "identifiers": [],
+    "sources": [],
+    "screens": []
+  },
+  {
+    "file": "journeys/cjit-notifications/non-cjit-channel-no-payment-notification.xml",
+    "name": "non-cjit channel opening shows no payment notification",
+    "identifiers": [
+      "SpendingBalanceReadyToast"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/viewmodels/AppViewModel.kt"
+    ],
+    "screens": [
+      "wallet home screen"
+    ]
+  },
+  {
+    "file": "journeys/deeplinks/screen-deeplink.xml",
+    "name": "screen deeplink",
+    "identifiers": [],
+    "sources": [],
+    "screens": [
+      "Settings screen",
+      "log detail screen"
+    ]
+  },
+  {
+    "file": "journeys/deeplinks/sheet-deeplink.xml",
+    "name": "sheet deeplink",
+    "identifiers": [],
+    "sources": [],
+    "screens": [
+      "Send sheet"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/activity-blue-icons.xml",
+    "name": "Hardware Wallet Activity Blue Icons",
+    "identifiers": [],
+    "sources": [],
+    "screens": [
+      "wallet home screen",
+      "detail screen"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/activity-detail-hw-tags.xml",
+    "name": "Hardware Wallet Activity Tags And Inputs Outputs",
+    "identifiers": [],
+    "sources": [],
+    "screens": [
+      "wallet home screen",
+      "activity detail screen",
+      "Activity Explorer screen"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/connect-flow.xml",
+    "name": "Hardware Wallet Connect Flow From Settings",
+    "identifiers": [
+      "HardwareWalletsScreen",
+      "AddHardwareWallet",
+      "HardwareWalletIntroScreen",
+      "HardwareWalletIntroContinue",
+      "HardwareWalletSearchingScreen",
+      "HardwareWalletFoundScreen",
+      "HardwareWalletFoundConnect",
+      "HardwareWalletPairedScreen",
+      "HardwareWalletLabelInput",
+      "HardwareWalletPairedFinish"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/settings/general/HardwareWalletsSettingsScreen.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwFoundSheet.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwIntroSheet.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwPairedSheet.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwSearchingSheet.kt"
+    ],
+    "screens": [
+      "Hardware Wallets screen"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/connect-home-tile.xml",
+    "name": "Hardware Wallet Connect and Home Tile",
+    "identifiers": [
+      "HardwareWalletScreen"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/screens/wallets/HardwareWalletScreen.kt"
+    ],
+    "screens": [
+      "wallet home screen",
+      "hardware wallet detail screen"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/detail-overview.xml",
+    "name": "Hardware Wallet Detail Overview",
+    "identifiers": [
+      "HardwareWalletScreen",
+      "HardwareTransferToSpending",
+      "HardwareTransferAmount",
+      "RemoveHardwareWallet"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingAmountHwScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/HardwareWalletScreen.kt"
+    ],
+    "screens": [
+      "wallet home screen",
+      "hardware wallet detail screen",
+      "transfer amount screen",
+      "activity detail screen"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/passphrase-duplicate.xml",
+    "name": "Hardware Wallet Passphrase Duplicate",
+    "identifiers": [
+      "AddHardwareWallet",
+      "HardwareWalletIntroContinue",
+      "HardwareWalletFoundConnect",
+      "HardwareWalletPairedPassphrase",
+      "HardwareWalletPassphraseInput",
+      "HardwareWalletPassphraseContinue",
+      "HardwareWalletPassphraseScreen"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/settings/general/HardwareWalletsSettingsScreen.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwFoundSheet.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwIntroSheet.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwPairedSheet.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwPassphraseSheet.kt"
+    ],
+    "screens": [
+      "wallet home screen"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/passphrase-pairing.xml",
+    "name": "Hardware Wallet Passphrase Pairing",
+    "identifiers": [
+      "AddHardwareWallet",
+      "HardwareWalletIntroContinue",
+      "HardwareWalletFoundScreen",
+      "HardwareWalletFoundConnect",
+      "HardwareWalletPairedScreen",
+      "HardwareWalletPairedPassphrase",
+      "HardwareWalletPairedFinish",
+      "HardwareWalletPassphraseScreen",
+      "HardwareWalletPassphraseContinue",
+      "HardwareWalletPassphraseInput",
+      "HardwareWalletPassphrasePairedScreen",
+      "HardwareWalletLabelInput",
+      "HardwareWalletScreen"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/screens/wallets/HardwareWalletScreen.kt",
+      "app/src/main/java/to/bitkit/ui/settings/general/HardwareWalletsSettingsScreen.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwFoundSheet.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwIntroSheet.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwPairedSheet.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwPassphrasePairedSheet.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwPassphraseSheet.kt"
+    ],
+    "screens": [
+      "wallet home screen",
+      "hardware wallet detail screen"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/passphrase-settings-remove.xml",
+    "name": "Hardware Wallet Passphrase Settings And Remove",
+    "identifiers": [
+      "HardwareWalletsScreen",
+      "RenameHardwareWalletInput",
+      "RenameHardwareWalletSave"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/settings/general/HardwareWalletsSettingsScreen.kt"
+    ],
+    "screens": [
+      "rename sheet",
+      "Hardware Wallets screen",
+      "wallet home screen",
+      "detail screen"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/passphrase-transfer-to-spending.xml",
+    "name": "Hardware Wallet Passphrase Transfer To Spending",
+    "identifiers": [
+      "HardwareWalletScreen",
+      "HardwareTransferToSpending",
+      "HardwareTransferAmountQuarter",
+      "HardwareTransferAmountContinue",
+      "HardwareTransferSign",
+      "HardwareTransferOpenTrezorConnect",
+      "HardwareTransferSigned",
+      "HwTransferPassphraseSheet",
+      "HwTransferPassphraseInput",
+      "HwTransferPassphraseContinue"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/screens/transfer/hardware/HwPassphrasePromptSheet.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingAmountHwScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingHwSignScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingHwSignedScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/HardwareWalletScreen.kt"
+    ],
+    "screens": [
+      "wallet home screen",
+      "detail screen",
+      "sign screen",
+      "transaction signed screen",
+      "Processing Payment screen",
+      "home screen",
+      "passphrase sheet"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/receive-onchain.xml",
+    "name": "Hardware Wallet On-chain Receive",
+    "identifiers": [
+      "Receive",
+      "ReceiveScreen",
+      "QRCode",
+      "ShowDetails",
+      "ReceiveHardwareAddress",
+      "HardwareVerifyAddress"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/components/TabBar.kt",
+      "app/src/main/java/to/bitkit/ui/screens/settings/LegacyRnRecoveryScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveQrScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveSheet.kt"
+    ],
+    "screens": [
+      "wallet home screen",
+      "Receive sheet"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/send-onchain.xml",
+    "name": "Hardware Wallet On-chain Send",
+    "identifiers": [
+      "Send",
+      "RecipientManual",
+      "RecipientInput",
+      "AddressContinue",
+      "send_amount_screen",
+      "AssetButton-switch",
+      "ContinueAmount",
+      "SendConfirmAssetButton",
+      "HardwareSendAmount",
+      "HardwareSendAddress",
+      "HardwareSendOpenTrezorConnect",
+      "SendSuccess"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/components/TabBar.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveAmountScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/send/HwSendSignScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/send/SendAddressScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/send/SendAmountScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/send/SendConfirmScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/send/SendRecipientScreen.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/SendSheet.kt"
+    ],
+    "screens": [
+      "wallet home screen",
+      "Send amount screen",
+      "Send review screen",
+      "hardware sign screen",
+      "success screen"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/settings-hardware-wallets.xml",
+    "name": "Hardware Wallet Settings",
+    "identifiers": [
+      "HardwareWalletsScreen",
+      "RenameHardwareWalletInput",
+      "RenameHardwareWalletSave",
+      "AddHardwareWallet",
+      "HardwareWalletIntroScreen"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/settings/general/HardwareWalletsSettingsScreen.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwIntroSheet.kt"
+    ],
+    "screens": [
+      "Hardware Wallets screen",
+      "Rename Hardware Wallet bottom sheet"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/suggestion-intro-sheet.xml",
+    "name": "Hardware Wallet Suggestion Card and Intro Sheet",
+    "identifiers": [
+      "HardwareWalletIntroScreen",
+      "HardwareWalletIntroContinue",
+      "HardwareWalletSearchingScreen",
+      "HardwareWalletSearchingCancel",
+      "HardwareWalletFoundScreen",
+      "HardwareWalletFoundConnect",
+      "HardwareWalletPairedScreen",
+      "HardwareWalletLabelInput",
+      "HardwareWalletPairedFinish"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwFoundSheet.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwIntroSheet.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwPairedSheet.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/hardware/HwSearchingSheet.kt"
+    ],
+    "screens": [
+      "wallet home screen",
+      "home screen"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/transfer-to-spending-max-lsp-cap.xml",
+    "name": "Hardware Wallet Transfer To Spending MAX LSP Cap",
+    "identifiers": [
+      "HardwareWalletScreen",
+      "HardwareTransferToSpending",
+      "HardwareTransferAmount",
+      "HardwareTransferAmountMax",
+      "HardwareTransferAmountContinue",
+      "HardwareTransferSign",
+      "HardwareTransferOpenTrezorConnect",
+      "HardwareTransferSigned"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingAmountHwScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingHwSignScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingHwSignedScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/HardwareWalletScreen.kt"
+    ],
+    "screens": [
+      "wallet home screen",
+      "hardware wallet detail screen",
+      "transfer amount screen",
+      "sign screen",
+      "transaction signed screen"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/transfer-to-spending-node-warmup.xml",
+    "name": "Hardware Wallet Transfer To Spending Node Warmup",
+    "identifiers": [
+      "HardwareTransferToSpending",
+      "HardwareTransferAmountQuarter",
+      "HardwareTransferAmountContinue",
+      "HardwareTransferSign"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingAmountHwScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingHwSignScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/HardwareWalletScreen.kt"
+    ],
+    "screens": [
+      "wallet home screen",
+      "transfer amount screen",
+      "amount screen",
+      "sign screen"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/transfer-to-spending.xml",
+    "name": "Hardware Wallet Transfer To Spending",
+    "identifiers": [
+      "HardwareWalletScreen",
+      "HardwareTransferToSpending",
+      "HardwareTransferAmount",
+      "HardwareTransferAmountQuarter",
+      "HardwareTransferAmountContinue",
+      "HardwareTransferSign",
+      "HardwareTransferOpenTrezorConnect",
+      "HardwareTransferSigned"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingAmountHwScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingHwSignScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/hardware/SpendingHwSignedScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/HardwareWalletScreen.kt"
+    ],
+    "screens": [
+      "wallet home screen",
+      "hardware wallet detail screen",
+      "transfer amount screen",
+      "sign screen",
+      "transaction signed screen",
+      "detail screen"
+    ]
+  },
+  {
+    "file": "journeys/hardware-wallet/usb-reconnect.xml",
+    "name": "Hardware Wallet USB Reconnect",
+    "identifiers": [],
+    "sources": [],
+    "screens": [
+      "wallet home screen"
+    ]
+  },
+  {
+    "file": "journeys/notification-permission/receive-cjit-confirm-notification-toggle.xml",
+    "name": "receive cjit confirm toggle requests notification permission",
+    "identifiers": [
+      "ReceiveConfirmNotificationSwitch"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveConfirmScreen.kt"
+    ],
+    "screens": [
+      "home screen",
+      "Receive sheet",
+      "amount screen",
+      "confirm screen"
+    ]
+  },
+  {
+    "file": "journeys/notification-permission/receive-cjit-liquidity-notification-toggle.xml",
+    "name": "receive cjit liquidity toggle requests notification permission",
+    "identifiers": [
+      "ReceiveLiquidityNotificationSwitch"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveLiquidityScreen.kt"
+    ],
+    "screens": [
+      "home screen",
+      "Receive sheet",
+      "amount screen",
+      "confirm screen",
+      "liquidity screen"
+    ]
+  },
+  {
+    "file": "journeys/notification-permission/toggle-off-opens-system-settings.xml",
+    "name": "notification toggle off opens system settings",
+    "identifiers": [
+      "ReceiveConfirmNotificationSwitch"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/screens/wallets/receive/ReceiveConfirmScreen.kt"
+    ],
+    "screens": [
+      "home screen",
+      "Receive sheet",
+      "amount screen",
+      "confirm screen",
+      "Android system notification settings screen"
+    ]
+  },
+  {
+    "file": "journeys/notification-permission/transfer-spending-confirm-notification-toggle.xml",
+    "name": "transfer spending confirm toggle requests notification permission",
+    "identifiers": [
+      "SpendingAmount",
+      "SpendingAmountAvailable",
+      "SpendingAmountContinue",
+      "SpendingConfirmNotificationSwitch"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/screens/transfer/SpendingAmountScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/transfer/SpendingConfirmScreen.kt"
+    ],
+    "screens": [
+      "home screen",
+      "transfer intro screen",
+      "spending amount screen",
+      "spending confirm screen"
+    ]
+  },
+  {
+    "file": "journeys/payment-requests/issuer-interoperability.xml",
+    "name": "Paykit Issuer Interoperability",
+    "identifiers": [
+      "PaymentRequestConfirm",
+      "PaymentRequestsBell",
+      "PaymentRequestsSheet",
+      "PaymentRequestRow-71300000-0000-4000-8000-000000000001",
+      "PaymentRequestPay-71300000-0000-4000-8000-000000000001",
+      "SendConfirmToggleDetails",
+      "ReviewContactRecipient"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/screens/paymentrequests/PaymentRequestsScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/HomeScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/send/SendConfirmScreen.kt"
+    ],
+    "screens": [
+      "Payment Request confirmation screen",
+      "incoming Payment Requests sheet"
+    ]
+  },
+  {
+    "file": "journeys/pubky-marketplace/wallet-leg.xml",
+    "name": "pubky marketplace wallet leg",
+    "identifiers": [
+      "PubkyAuthWatchOnlyConsent",
+      "PubkyAuthWatchOnlyApprove",
+      "PubkyAuthAuthorize",
+      "PubkyAuthOK",
+      "ContactPaymentsToggle",
+      "Contact_<seller-public-key>",
+      "Contact_<buyer-public-key>",
+      "ReviewAmount",
+      "PaymentRequestsBell",
+      "PaymentRequestsSheet",
+      "PaymentRequestRow-<payment-request-id>",
+      "PaymentRequestPay-<payment-request-id>",
+      "ReviewContactRecipient",
+      "GRAB",
+      "SendSuccess",
+      "ActivityAmount",
+      "ActivityTxDetails"
+    ],
+    "sources": [
+      "app/src/main/java/to/bitkit/ui/components/SwipeToConfirm.kt",
+      "app/src/main/java/to/bitkit/ui/screens/contacts/ContactsScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/paymentrequests/PaymentRequestsScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/profile/PubkyAuthApprovalSheet.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/HomeScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/activity/ActivityDetailScreen.kt",
+      "app/src/main/java/to/bitkit/ui/screens/wallets/send/SendConfirmScreen.kt",
+      "app/src/main/java/to/bitkit/ui/settings/SettingsScreen.kt",
+      "app/src/main/java/to/bitkit/ui/sheets/SendSheet.kt"
+    ],
+    "screens": [
+      "watch-only consent screen",
+      "authorization screen",
+      "incoming requests sheet"
+    ]
+  },
+  {
+    "file": "journeys/widgets/add-widgets-flow.xml",
+    "name": "add widgets flow",
+    "identifiers": [],
+    "sources": [],
+    "screens": [
+      "Add Widget bottom sheet"
+    ]
+  },
+  {
+    "file": "journeys/widgets/widgets-intro.xml",
+    "name": "widgets intro",
+    "identifiers": [],
+    "sources": [],
+    "screens": [
+      "Add Widget bottom sheet"
+    ]
+  }
+]

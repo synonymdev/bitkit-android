@@ -19,5 +19,14 @@
 
 ### QA Notes
 
-<!-- Add testing instructions for the PR reviewer to validate the changes. -->
+#### Journeys
+
+<!-- Repo path of each journey this PR adds or updates, one per line, or: N/A — no user-visible behaviour change. -->
+
+#### Manual Tests
+
+<!-- Only what a journey cannot express (hardware, push notifications, a companion app), each item ending with the reason. -->
+
+#### Automated Checks
+
 <!-- List the tests you ran, including regression tests if applicable. -->
