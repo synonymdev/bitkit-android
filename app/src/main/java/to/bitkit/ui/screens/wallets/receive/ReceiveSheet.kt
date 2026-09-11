@@ -15,6 +15,7 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -26,6 +27,7 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -73,6 +75,7 @@ fun ReceiveSheet(
     val wallet = requireNotNull(walletViewModel)
     val navController = rememberNavController()
     val rootRoute = startRoute.rootRoute()
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(Unit) { editInvoiceAmountViewModel.clearInput() }
     val cjitSessionState = remember { ReceiveCjitSessionState() }
@@ -152,13 +155,11 @@ fun ReceiveSheet(
                         onClickEditInvoice = {
                             editInvoiceSourceTab = it
                             invoiceEditState.beginSoftwareEdit(it)
-                            cjitSessionState.beginReceiveEdit()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         onClickHardwareEditInvoice = {
                             editInvoiceSourceTab = ReceiveTab.TREZOR
                             invoiceEditState.beginHardwareEdit()
-                            cjitSessionState.beginReceiveEdit()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         initialTab = invoiceEditState.initialTab(hardwareWalletId),
@@ -361,7 +362,10 @@ fun ReceiveSheet(
                         lightningState = lightningState,
                         sourceTab = editInvoiceSourceTab,
                         onBack = { navController.popBackStack() },
-                        updateInvoice = wallet::updateBip21Invoice,
+                        updateInvoice = {
+                            cjitSessionState.clear()
+                            wallet.updateBip21Invoice(it)
+                        },
                         onClickAddTag = { navController.navigateTo(ReceiveRoute.AddTag) },
                         onClickTag = wallet::removeTag,
                         onDescriptionUpdate = wallet::updateBip21Description,
@@ -378,8 +382,11 @@ fun ReceiveSheet(
                             navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
                         },
                         navigateReceiveConfirm = { entry ->
-                            cjitSessionState.onCjitCreated(entry)
-                            navController.navigateTo(ReceiveRoute.ConfirmIncreaseInbound)
+                            scope.launch {
+                                wallet.updateOnchainBip21Amount(entry.receiveAmountSats.toULong())
+                                cjitSessionState.onCjitCreated(entry)
+                                navController.navigateTo(ReceiveRoute.ConfirmIncreaseInbound)
+                            }
                         },
                         onchainOnly = invoiceEditState.isHardwareInvoice,
                         updateOnchainInvoice = wallet::setBip21AmountSats,
@@ -428,10 +435,6 @@ internal class ReceiveCjitSessionState {
         private set
     var entryDetails by mutableStateOf<CjitEntryDetails?>(null)
         private set
-
-    fun beginReceiveEdit() {
-        clear()
-    }
 
     fun onCjitCreated(entry: CjitEntryDetails) {
         cjitInvoice = null
