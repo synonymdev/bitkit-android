@@ -3,6 +3,7 @@ package to.bitkit.services
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runCurrent
@@ -12,6 +13,7 @@ import org.junit.runner.RunWith
 import org.mockito.kotlin.any
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doNothing
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -47,6 +49,24 @@ class PubkyAuthHandlerRegistrarTest : BaseUnitTest() {
         whenever(context.packageManager).thenReturn(packageManager)
         whenever(settingsStore.isPaykitEnabled).thenReturn(isPaykitEnabled)
         whenever(pubkyRepo.publicKey).thenReturn(publicKey)
+    }
+
+    @Test
+    fun `handler preserves component states until initial identity load finishes`() = test {
+        isPaykitEnabled.value = true
+        val initialized = CompletableDeferred<Unit>()
+        whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
+        whenever(pubkyRepo.hasSecretKey()).thenReturn(true)
+
+        createSut().start(backgroundScope)
+        runCurrent()
+
+        verify(packageManager, never()).setComponentEnabledSetting(any(), any(), any())
+        publicKey.value = "pubkylocal"
+        initialized.complete(Unit)
+        runCurrent()
+
+        verifyComponentStates(authEnabled = true, signupEnabled = false)
     }
 
     @Test

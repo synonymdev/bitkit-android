@@ -158,11 +158,13 @@ class PubkyRepo @Inject constructor(
         data object RestorationFailed : InitResult
     }
 
-    init {
-        scope.launch { initialize() }
-    }
+    private val initializationJob = scope.launch { initialize() }
 
     // region Initialization
+
+    suspend fun awaitInitialization() = withContext(ioDispatcher) {
+        initializationJob.join()
+    }
 
     suspend fun initialize() = withContext(ioDispatcher) {
         runSuspendCatching {

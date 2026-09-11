@@ -1296,6 +1296,36 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `awaitInitialization shares startup and preserves it when a waiter is cancelled`() = test {
+        val imported = CompletableDeferred<String>()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.importSession("saved_session")).doSuspendableAnswer { imported.await() }
+        val repo = createSut()
+        val cancelledWaiter = async { repo.awaitInitialization() }
+        val waiter = async { repo.awaitInitialization() }
+
+        assertFalse(waiter.isCompleted)
+        assertNull(repo.publicKey.value)
+        cancelledWaiter.cancelAndJoin()
+        imported.complete(VALID_SELF_KEY)
+        waiter.await()
+
+        assertEquals(VALID_SELF_KEY, repo.publicKey.value)
+        verify(pubkyService).importSession("saved_session")
+    }
+
+    @Test
+    fun `awaitInitialization completes without identity after startup failure`() = test {
+        whenever(pubkyService.initialize()).thenAnswer { throw TestAppError("Startup failed") }
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertNull(repo.publicKey.value)
+        verify(pubkyService, never()).importSession(any())
+    }
+
+    @Test
     fun `initialize should restore saved session with prefixed public key`() = test {
         val session = "saved_session"
         val unprefixedPublicKey = VALID_SELF_KEY.removePrefix("pubky")

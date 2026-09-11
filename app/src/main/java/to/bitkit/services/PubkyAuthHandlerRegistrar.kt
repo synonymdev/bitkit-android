@@ -47,6 +47,7 @@ internal class PubkyAuthHandlerRegistrar @Inject constructor(
         if (!started.compareAndSet(false, true)) return
 
         collectionScope.launch {
+            pubkyRepo.awaitInitialization()
             combine(settingsStore.isPaykitEnabled, pubkyRepo.publicKey) { localFlagEnabled, publicKey ->
                 localFlagEnabled to publicKey
             }

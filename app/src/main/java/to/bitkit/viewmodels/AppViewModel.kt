@@ -2104,6 +2104,10 @@ class AppViewModel @Inject constructor(
         val previousJob = scheduled?.job
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             scanMutex.withLock {
+                if (!awaitPubkyDeeplinkInitialization(source, data, allowPubkyAuth)) return@withLock
+                if (deferLockedScan(source, data, startDelay, routePubkyKeys, contactPaymentContext, allowPubkyAuth)) {
+                    return@withLock
+                }
                 prepareContactPaymentContextForScan(normalized, allowPubkyAuth, contactPaymentContext)
                 if (startDelay > Duration.ZERO) delay(startDelay)
                 handleScan(data, routePubkyKeys, contactPaymentContext, allowPubkyAuth)
@@ -2130,6 +2134,36 @@ class AppViewModel @Inject constructor(
             it.cancel()
         }
         return nextJob
+    }
+
+    private suspend fun awaitPubkyDeeplinkInitialization(
+        source: ScanSource,
+        data: String,
+        allowPubkyAuth: Boolean,
+    ): Boolean {
+        if (source != ScanSource.DEEPLINK || !allowPubkyAuth) return true
+        if (!PubkyAuthRequest.isProtocolUrl(data) || PubkyAuthRequest.isSignupUrl(data)) return true
+
+        pubkyRepo.awaitInitialization()
+        return isPaykitEnabled.value && walletRepo.walletExists()
+    }
+
+    private fun deferLockedScan(
+        source: ScanSource,
+        data: String,
+        startDelay: Duration,
+        routePubkyKeys: Boolean,
+        contactPaymentContext: ContactPaymentContext?,
+        allowPubkyAuth: Boolean,
+    ): Boolean {
+        if (_isAuthenticated.value) return false
+
+        synchronized(deferredScanLock) {
+            if (deferredScan == null) {
+                enqueueDeferredScan(source, data, startDelay, routePubkyKeys, contactPaymentContext, allowPubkyAuth)
+            }
+        }
+        return true
     }
 
     private fun scanLogId(data: String): String {
