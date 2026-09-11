@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.transfer
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -30,17 +31,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.synonym.bitkitcore.BtBolt11InvoiceState
-import com.synonym.bitkitcore.BtOrderState
-import com.synonym.bitkitcore.BtOrderState2
-import com.synonym.bitkitcore.BtPaymentState
-import com.synonym.bitkitcore.BtPaymentState2
-import com.synonym.bitkitcore.IBtBolt11Invoice
-import com.synonym.bitkitcore.IBtOnchainTransaction
-import com.synonym.bitkitcore.IBtOnchainTransactions
-import com.synonym.bitkitcore.IBtOrder
-import com.synonym.bitkitcore.IBtPayment
-import com.synonym.bitkitcore.ILspNode
 import to.bitkit.R
 import to.bitkit.models.safe
 import to.bitkit.ui.components.ButtonSize
@@ -65,6 +55,7 @@ import to.bitkit.ui.utils.RequestNotificationPermissions
 import to.bitkit.ui.utils.rememberNotificationToggleClick
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.SettingsViewModel
+import to.bitkit.viewmodels.TransferToSpendingUiState
 import to.bitkit.viewmodels.TransferViewModel
 
 @Composable
@@ -81,17 +72,19 @@ fun SpendingConfirmScreen(
 
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
 
-    val order = state.order ?: run {
+    if (state.feeSat == 0uL) {
         onCloseClick()
         return
     }
     val isAdvanced = state.isAdvanced
     val miningFeeSats = state.miningFeeSats
     val isConfirmFeeReady = state.isConfirmFeeReady
-    val isConfirmPaying = state.isConfirmPaying
+    val isConfirmPaying = state.isBusy
 
-    LaunchedEffect(order.id, order.feeSat) {
-        viewModel.prepareSpendingConfirmFunding(order)
+    BackHandler(enabled = state.isBusy) {}
+
+    LaunchedEffect(state.feeSat) {
+        viewModel.prepareSpendingConfirmFunding()
     }
 
     val notificationsGranted by settingsViewModel.notificationsGranted.collectAsStateWithLifecycle()
@@ -111,12 +104,12 @@ fun SpendingConfirmScreen(
 
     Box {
         Content(
-            onBackClick = onBackClick,
-            onLearnMoreClick = onLearnMoreClick,
-            onAdvancedClick = onAdvancedClick,
+            onBackClick = { if (!state.isBusy) onBackClick() },
+            onLearnMoreClick = { if (!state.isBusy) onLearnMoreClick() },
+            onAdvancedClick = { if (!state.isBusy) onAdvancedClick() },
             onUseDefaultLspBalanceClick = viewModel::onUseDefaultLspBalanceClick,
-            onTransferToSpendingConfirm = { viewModel.onTransferToSpendingConfirm(order) },
-            order = order,
+            onTransferToSpendingConfirm = viewModel::onTransferToSpendingConfirm,
+            state = state,
             miningFeeSats = miningFeeSats,
             isConfirmFeeReady = isConfirmFeeReady,
             isConfirmPaying = isConfirmPaying,
@@ -147,7 +140,7 @@ private fun Content(
     onSwitchClick: () -> Unit,
     hasNotificationPermission: Boolean,
     onTransferToSpendingConfirm: () -> Unit,
-    order: IBtOrder,
+    state: TransferToSpendingUiState,
     miningFeeSats: ULong,
     isConfirmFeeReady: Boolean,
     isConfirmPaying: Boolean,
@@ -157,7 +150,7 @@ private fun Content(
         AppTopBar(
             titleText = stringResource(R.string.lightning__transfer__nav_title),
             onBackClick = onBackClick,
-            actions = { DrawerNavIcon() },
+            actions = { if (!isConfirmPaying) DrawerNavIcon() },
         )
         Box(modifier = Modifier.fillMaxSize()) {
             if (!isAdvanced) {
@@ -179,11 +172,10 @@ private fun Content(
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Match iOS SpendingConfirm: network fee = mining fee, lsp fee = order fee - client.
-                val clientBalance = order.clientBalanceSat
-                val lspFee = order.feeSat.safe() - clientBalance.safe()
-                val total = order.feeSat.safe() + miningFeeSats.safe()
-                val lspBalance = order.lspBalanceSat
+                val clientBalance = state.clientBalanceSat
+                val lspFee = state.feeSat.safe() - clientBalance.safe()
+                val total = state.feeSat.safe() + miningFeeSats.safe()
+                val lspBalance = state.lspBalanceSat
 
                 VerticalSpacer(32.dp)
                 Display(stringResource(R.string.lightning__transfer__confirm).withAccent(accentColor = Colors.Purple))
@@ -271,7 +263,6 @@ private fun Content(
 
                 FillHeight()
 
-                // Match iOS: keep swipe in loading state until mining fee is ready.
                 val canConfirm = isConfirmFeeReady && miningFeeSats > 0uL && !isConfirmPaying
                 SwipeToConfirm(
                     text = stringResource(R.string.lightning__transfer__swipe),
@@ -298,64 +289,11 @@ private fun Preview() {
             onAdvancedClick = {},
             onUseDefaultLspBalanceClick = {},
             onTransferToSpendingConfirm = {},
-            order = IBtOrder(
-                id = "order_7e6f3b7c-486a-4f5a-8b1e-2c9d7f0a8b9d",
-                state = BtOrderState.CREATED,
-                state2 = BtOrderState2.CREATED,
-                feeSat = 1000UL,
-                networkFeeSat = 250UL,
-                serviceFeeSat = 750UL,
-                lspBalanceSat = 2000000UL,
-                clientBalanceSat = 500000UL,
-                zeroConf = false,
-                zeroReserve = true,
-                clientNodeId = null,
-                channelExpiryWeeks = 8u,
-                channelExpiresAt = "2025-09-22T08:29:03Z",
-                orderExpiresAt = "2025-07-29T08:29:03Z",
-                channel = null,
-                lspNode = ILspNode(
-                    alias = "Bitkit LSP",
-                    pubkey = "02f12451995802149b1855a7948305763328e9304337b51e45e7f1b637956424e8",
-                    connectionStrings = listOf("mock@127.0.0.1:9735"),
-                    readonly = null
-                ),
-                lnurl = null,
-                payment = IBtPayment(
-                    state = BtPaymentState.CREATED,
-                    state2 = BtPaymentState2.CREATED,
-                    paidSat = 0UL,
-                    bolt11Invoice = IBtBolt11Invoice(
-                        request = "lnmock",
-                        state = BtBolt11InvoiceState.PENDING,
-                        expiresAt = "2025-07-28T12:00:00Z",
-                        updatedAt = "2025-07-28T08:30:00Z"
-                    ),
-                    onchain = IBtOnchainTransactions(
-                        address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
-                        confirmedSat = 0UL,
-                        requiredConfirmations = 1u,
-                        transactions = listOf(
-                            IBtOnchainTransaction(
-                                amountSat = 50000UL,
-                                txId = "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
-                                vout = 0u,
-                                blockHeight = null,
-                                blockConfirmationCount = 0u,
-                                feeRateSatPerVbyte = 12.5,
-                                confirmed = false,
-                                suspicious0ConfReason = ""
-                            )
-                        )
-                    ),
-                    isManuallyPaid = null,
-                    manualRefunds = null
-                ),
-                couponCode = null,
-                source = null,
-                discount = null,
-                updatedAt = "2025-07-28T08:29:03Z",
-                createdAt = "2025-07-28T08:29:03Z"
+            state = TransferToSpendingUiState(
+                clientBalanceSat = 500_000uL,
+                lspBalanceSat = 2_000_000uL,
+                feeSat = 1_000uL,
+
             ),
             onSwitchClick = {},
             hasNotificationPermission = true,
@@ -377,64 +315,11 @@ private fun Preview2() {
             onAdvancedClick = {},
             onUseDefaultLspBalanceClick = {},
             onTransferToSpendingConfirm = {},
-            order = IBtOrder(
-                id = "order_7e6f3b7c-486a-4f5a-8b1e-2c9d7f0a8b9d",
-                state = BtOrderState.CREATED,
-                state2 = BtOrderState2.CREATED,
-                feeSat = 1000UL,
-                networkFeeSat = 250UL,
-                serviceFeeSat = 750UL,
-                lspBalanceSat = 2000000UL,
-                clientBalanceSat = 500000UL,
-                zeroConf = false,
-                zeroReserve = true,
-                clientNodeId = null,
-                channelExpiryWeeks = 8u,
-                channelExpiresAt = "2025-09-22T08:29:03Z",
-                orderExpiresAt = "2025-07-29T08:29:03Z",
-                channel = null,
-                lspNode = ILspNode(
-                    alias = "Bitkit LSP",
-                    pubkey = "02f12451995802149b1855a7948305763328e9304337b51e45e7f1b637956424e8",
-                    connectionStrings = listOf("mock@127.0.0.1:9735"),
-                    readonly = null
-                ),
-                lnurl = null,
-                payment = IBtPayment(
-                    state = BtPaymentState.CREATED,
-                    state2 = BtPaymentState2.CREATED,
-                    paidSat = 0UL,
-                    bolt11Invoice = IBtBolt11Invoice(
-                        request = "lnmock",
-                        state = BtBolt11InvoiceState.PENDING,
-                        expiresAt = "2025-07-28T12:00:00Z",
-                        updatedAt = "2025-07-28T08:30:00Z"
-                    ),
-                    onchain = IBtOnchainTransactions(
-                        address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
-                        confirmedSat = 0UL,
-                        requiredConfirmations = 1u,
-                        transactions = listOf(
-                            IBtOnchainTransaction(
-                                amountSat = 50000UL,
-                                txId = "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
-                                vout = 0u,
-                                blockHeight = null,
-                                blockConfirmationCount = 0u,
-                                feeRateSatPerVbyte = 12.5,
-                                confirmed = false,
-                                suspicious0ConfReason = ""
-                            )
-                        )
-                    ),
-                    isManuallyPaid = null,
-                    manualRefunds = null
-                ),
-                couponCode = null,
-                source = null,
-                discount = null,
-                updatedAt = "2025-07-28T08:29:03Z",
-                createdAt = "2025-07-28T08:29:03Z"
+            state = TransferToSpendingUiState(
+                clientBalanceSat = 500_000uL,
+                lspBalanceSat = 2_000_000uL,
+                feeSat = 1_000uL,
+
             ),
             onSwitchClick = {},
             hasNotificationPermission = true,
@@ -456,64 +341,11 @@ private fun Preview3() {
             onAdvancedClick = {},
             onUseDefaultLspBalanceClick = {},
             onTransferToSpendingConfirm = {},
-            order = IBtOrder(
-                id = "order_7e6f3b7c-486a-4f5a-8b1e-2c9d7f0a8b9d",
-                state = BtOrderState.CREATED,
-                state2 = BtOrderState2.CREATED,
-                feeSat = 1000UL,
-                networkFeeSat = 250UL,
-                serviceFeeSat = 750UL,
-                lspBalanceSat = 2000000UL,
-                clientBalanceSat = 500000UL,
-                zeroConf = false,
-                zeroReserve = true,
-                clientNodeId = null,
-                channelExpiryWeeks = 8u,
-                channelExpiresAt = "2025-09-22T08:29:03Z",
-                orderExpiresAt = "2025-07-29T08:29:03Z",
-                channel = null,
-                lspNode = ILspNode(
-                    alias = "Bitkit LSP",
-                    pubkey = "02f12451995802149b1855a7948305763328e9304337b51e45e7f1b637956424e8",
-                    connectionStrings = listOf("mock@127.0.0.1:9735"),
-                    readonly = null
-                ),
-                lnurl = null,
-                payment = IBtPayment(
-                    state = BtPaymentState.CREATED,
-                    state2 = BtPaymentState2.CREATED,
-                    paidSat = 0UL,
-                    bolt11Invoice = IBtBolt11Invoice(
-                        request = "lnmock",
-                        state = BtBolt11InvoiceState.PENDING,
-                        expiresAt = "2025-07-28T12:00:00Z",
-                        updatedAt = "2025-07-28T08:30:00Z"
-                    ),
-                    onchain = IBtOnchainTransactions(
-                        address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
-                        confirmedSat = 0UL,
-                        requiredConfirmations = 1u,
-                        transactions = listOf(
-                            IBtOnchainTransaction(
-                                amountSat = 50000UL,
-                                txId = "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
-                                vout = 0u,
-                                blockHeight = null,
-                                blockConfirmationCount = 0u,
-                                feeRateSatPerVbyte = 12.5,
-                                confirmed = false,
-                                suspicious0ConfReason = ""
-                            )
-                        )
-                    ),
-                    isManuallyPaid = null,
-                    manualRefunds = null
-                ),
-                couponCode = null,
-                source = null,
-                discount = null,
-                updatedAt = "2025-07-28T08:29:03Z",
-                createdAt = "2025-07-28T08:29:03Z"
+            state = TransferToSpendingUiState(
+                clientBalanceSat = 500_000uL,
+                lspBalanceSat = 2_000_000uL,
+                feeSat = 1_000uL,
+
             ),
             onSwitchClick = {},
             hasNotificationPermission = false,
@@ -535,64 +367,11 @@ private fun Preview4() {
             onAdvancedClick = {},
             onUseDefaultLspBalanceClick = {},
             onTransferToSpendingConfirm = {},
-            order = IBtOrder(
-                id = "order_7e6f3b7c-486a-4f5a-8b1e-2c9d7f0a8b9d",
-                state = BtOrderState.CREATED,
-                state2 = BtOrderState2.CREATED,
-                feeSat = 1000UL,
-                networkFeeSat = 250UL,
-                serviceFeeSat = 750UL,
-                lspBalanceSat = 2000000UL,
-                clientBalanceSat = 500000UL,
-                zeroConf = false,
-                zeroReserve = true,
-                clientNodeId = null,
-                channelExpiryWeeks = 8u,
-                channelExpiresAt = "2025-09-22T08:29:03Z",
-                orderExpiresAt = "2025-07-29T08:29:03Z",
-                channel = null,
-                lspNode = ILspNode(
-                    alias = "Bitkit LSP",
-                    pubkey = "02f12451995802149b1855a7948305763328e9304337b51e45e7f1b637956424e8",
-                    connectionStrings = listOf("mock@127.0.0.1:9735"),
-                    readonly = null
-                ),
-                lnurl = null,
-                payment = IBtPayment(
-                    state = BtPaymentState.CREATED,
-                    state2 = BtPaymentState2.CREATED,
-                    paidSat = 0UL,
-                    bolt11Invoice = IBtBolt11Invoice(
-                        request = "lnmock",
-                        state = BtBolt11InvoiceState.PENDING,
-                        expiresAt = "2025-07-28T12:00:00Z",
-                        updatedAt = "2025-07-28T08:30:00Z"
-                    ),
-                    onchain = IBtOnchainTransactions(
-                        address = "bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq",
-                        confirmedSat = 0UL,
-                        requiredConfirmations = 1u,
-                        transactions = listOf(
-                            IBtOnchainTransaction(
-                                amountSat = 50000UL,
-                                txId = "f4184fc596403b9d638783cf57adfe4c75c605f6356fbc91338530e9831e9e16",
-                                vout = 0u,
-                                blockHeight = null,
-                                blockConfirmationCount = 0u,
-                                feeRateSatPerVbyte = 12.5,
-                                confirmed = false,
-                                suspicious0ConfReason = ""
-                            )
-                        )
-                    ),
-                    isManuallyPaid = null,
-                    manualRefunds = null
-                ),
-                couponCode = null,
-                source = null,
-                discount = null,
-                updatedAt = "2025-07-28T08:29:03Z",
-                createdAt = "2025-07-28T08:29:03Z"
+            state = TransferToSpendingUiState(
+                clientBalanceSat = 500_000uL,
+                lspBalanceSat = 2_000_000uL,
+                feeSat = 1_000uL,
+
             ),
             onSwitchClick = {},
             hasNotificationPermission = true,

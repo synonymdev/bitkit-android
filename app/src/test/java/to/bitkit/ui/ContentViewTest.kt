@@ -33,7 +33,7 @@ class ContentViewTest {
     fun `transfer effect destinations cover funding paid and hw signed`() {
         assertEquals(Routes.SettingUp, transferEffectDestination(TransferEffect.OnSpendingFundingPaid))
         assertEquals(Routes.SpendingHwSigned, transferEffectDestination(TransferEffect.OnHwTxSigned))
-        assertNull(transferEffectDestination(TransferEffect.OnOrderCreated))
+        assertNull(transferEffectDestination(TransferEffect.OnQuoteReady))
     }
 
     @Test

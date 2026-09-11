@@ -14,7 +14,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import com.synonym.bitkitcore.IBtOrder
 import kotlinx.coroutines.delay
 import to.bitkit.R
 import to.bitkit.ui.components.Display
@@ -24,13 +23,13 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
-import to.bitkit.ui.screens.transfer.previewBtOrder
+import to.bitkit.ui.screens.transfer.previewSpendingState
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import to.bitkit.viewmodels.TransferToSpendingUiState
 import to.bitkit.viewmodels.TransferViewModel
 
-/** Figma handoff delay before forwarding from signed confirmation. */
 private const val SIGNED_AUTO_NAV_DELAY_MS = 1_000L
 
 @Composable
@@ -41,7 +40,7 @@ fun SpendingHwSignedScreen(
 ) {
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
 
-    val order = state.order ?: run {
+    if (state.feeSat == 0uL) {
         onCloseClick()
         return
     }
@@ -52,7 +51,7 @@ fun SpendingHwSignedScreen(
     }
 
     Content(
-        order = order,
+        state = state,
         miningFeeSats = state.hwMiningFeeSats,
         onBackClick = onCloseClick,
     )
@@ -60,7 +59,7 @@ fun SpendingHwSignedScreen(
 
 @Composable
 private fun Content(
-    order: IBtOrder,
+    state: TransferToSpendingUiState,
     miningFeeSats: ULong = 0uL,
     onBackClick: () -> Unit = {},
 ) {
@@ -91,7 +90,7 @@ private fun Content(
                 VerticalSpacer(16.dp)
 
                 SpendingHwFeeGrid(
-                    order = order,
+                    state = state,
                     miningFeeSats = miningFeeSats,
                 )
             }
@@ -104,7 +103,7 @@ private fun Content(
 private fun Preview() {
     AppThemeSurface {
         Content(
-            order = previewBtOrder(),
+            state = previewSpendingState(),
         )
     }
 }

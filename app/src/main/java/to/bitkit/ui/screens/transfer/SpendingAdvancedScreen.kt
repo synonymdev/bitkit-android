@@ -26,7 +26,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
-import to.bitkit.ext.mockOrder
 import to.bitkit.models.Toast
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyState
@@ -61,15 +60,15 @@ import to.bitkit.viewmodels.previewAmountInputViewModel
 fun SpendingAdvancedScreen(
     viewModel: TransferViewModel,
     onBackClick: () -> Unit = {},
-    onOrderCreated: () -> Unit = {},
+    onQuoteReady: () -> Unit = {},
     currencies: CurrencyState = LocalCurrencies.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
-    val currentOnOrderCreated by rememberUpdatedState(onOrderCreated)
+    val currentOnQuoteReady by rememberUpdatedState(onQuoteReady)
     val app = appViewModel ?: return
     val context = LocalContext.current
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
-    val order = state.order ?: return
+    if (state.feeSat == 0uL) return
     val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     var isLoading by remember { mutableStateOf(false) }
 
@@ -77,8 +76,8 @@ fun SpendingAdvancedScreen(
     val currentMaxLspBalance by rememberUpdatedState(transferValues.maxLspBalance)
     val currentCurrencies by rememberUpdatedState(currencies)
 
-    LaunchedEffect(order.clientBalanceSat) {
-        viewModel.updateAdvancedTransferValues(order)
+    LaunchedEffect(state.clientBalanceSat) {
+        viewModel.updateAdvancedTransferValues(state.clientBalanceSat)
     }
 
     LaunchedEffect(amountUiState.sats) {
@@ -96,7 +95,7 @@ fun SpendingAdvancedScreen(
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
             when (effect) {
-                TransferEffect.OnOrderCreated -> currentOnOrderCreated()
+                TransferEffect.OnQuoteReady -> currentOnQuoteReady()
                 is TransferEffect.ToastException -> {
                     isLoading = false
                     app.toast(effect.e)
@@ -137,7 +136,7 @@ fun SpendingAdvancedScreen(
         val amount = amountUiState.sats.toULong()
         amount > 0u && it.maxLspBalance > 0u && amount in it.minLspBalance..it.maxLspBalance
     }
-    val isValid = isInRange && state.canAfford(order.clientBalanceSat)
+    val isValid = isInRange && state.canAfford(state.clientBalanceSat)
 
     Content(
         uiState = state,
@@ -169,11 +168,6 @@ private fun AmountInputViewModel.applyMaxLspBalance(
     }
 }
 
-/**
- * The max is settled on an affordable capacity before it is offered, so the quote for the typed
- * amount only has to catch what moves after that. Until it lands the confirm step is the authority,
- * so continue is left enabled.
- */
 private fun TransferToSpendingUiState.canAfford(clientBalanceSat: ULong): Boolean {
     val budget = fundingBudgetSats ?: return true
     val fee = feeEstimate ?: return true
@@ -300,7 +294,7 @@ private fun Preview() {
     AppThemeSurface {
         Content(
             uiState = TransferToSpendingUiState(
-                order = mockOrder().copy(clientBalanceSat = 100_000u),
+                clientBalanceSat = 100_000uL,
                 receivingAmount = 55_000L,
                 feeEstimate = 2_500L,
             ),
@@ -324,7 +318,7 @@ private fun PreviewLoading() {
     AppThemeSurface {
         Content(
             uiState = TransferToSpendingUiState(
-                order = mockOrder().copy(clientBalanceSat = 50_000u),
+                clientBalanceSat = 50_000uL,
                 receivingAmount = 20_000L,
                 feeEstimate = null,
                 isLoading = true,
