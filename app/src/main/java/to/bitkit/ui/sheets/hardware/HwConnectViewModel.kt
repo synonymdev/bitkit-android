@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.synonym.bitkitcore.TrezorFeatures
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -13,11 +12,15 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import to.bitkit.R
-import to.bitkit.ext.isTrezorDeviceBusy
+import to.bitkit.ext.isHwDeviceBusy
+import to.bitkit.models.HwConnectedDevice
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.Toast
 import to.bitkit.repositories.HwPassphraseAlreadyAddedError
 import to.bitkit.repositories.HwPassphraseDisabledError
@@ -25,8 +28,8 @@ import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.HwWalletRepo.Companion.DEVICE_LABEL_MAX_LENGTH
 import to.bitkit.repositories.resolveHwWalletName
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.HwErrorPresenter
 import to.bitkit.utils.Logger
-import to.bitkit.utils.TrezorErrorPresenter
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
@@ -49,8 +52,8 @@ class HwConnectViewModel @Inject constructor(
     companion object {
         private const val TAG = "HwConnectViewModel"
 
-        /** Delay between scan attempts while searching for a nearby device. */
-        private val SCAN_INTERVAL = 2.seconds
+        /** Delay between scan attempts; Android throttles apps that start Bluetooth scans too often. */
+        private val SCAN_INTERVAL = 4.seconds
 
         /** Prefix used by Android USB attach intents for [android.hardware.usb.UsbDevice.deviceName]. */
         private const val USB_DEVICE_PATH_PREFIX = "/dev/"
@@ -71,6 +74,7 @@ class HwConnectViewModel @Inject constructor(
     init {
         observePairingCode()
         observeConnectedWallet()
+        observeUnlocking()
     }
 
     fun onIntroContinue(includeBluetooth: Boolean = true) {
@@ -84,7 +88,7 @@ class HwConnectViewModel @Inject constructor(
         includeBluetoothInScan = true
     }
 
-    fun onFoundRoute(deviceId: String?, deviceModel: String) {
+    fun onFoundRoute(deviceId: String?, deviceModel: String, vendor: HwWalletVendor = HwWalletVendor.TREZOR) {
         if (deviceId == null) return
         searchJob?.cancel()
         searchJob = null
@@ -92,7 +96,8 @@ class HwConnectViewModel @Inject constructor(
             it.copy(
                 isSearching = false,
                 foundDeviceId = deviceId,
-                deviceModel = deviceModel.ifBlank { resolveHwWalletName(label = null, model = null) },
+                deviceModel = deviceModel.ifBlank { resolveHwWalletName(label = null, model = null, vendor = vendor) },
+                vendor = vendor,
                 errorMessage = null,
             )
         }
@@ -109,58 +114,73 @@ class HwConnectViewModel @Inject constructor(
         connectJob = viewModelScope.launch {
             var resolvedDeviceId = deviceId
             var resolvedDeviceModel = state.deviceModel
+            var resolvedVendor = state.vendor
             if (shouldScanUsbBeforeConnect) {
                 hwWalletRepo.scan(includeBluetooth = false)
                     .onSuccess { devices ->
                         devices.firstOrNull { it.id == deviceId || it.path == deviceId }?.let { device ->
                             resolvedDeviceId = device.id
-                            resolvedDeviceModel = resolveHwWalletName(label = null, model = device.model)
+                            resolvedVendor = device.vendor
+                            resolvedDeviceModel = resolveHwWalletName(
+                                label = null,
+                                model = device.model,
+                                vendor = device.vendor,
+                            )
                             _uiState.update {
                                 it.copy(
                                     foundDeviceId = resolvedDeviceId,
                                     deviceModel = resolvedDeviceModel,
+                                    vendor = resolvedVendor,
                                 )
                             }
                         }
                     }
                     .onFailure { error ->
-                        onConnectFailed(resolvedDeviceId, resolvedDeviceModel, error)
+                        onConnectFailed(resolvedDeviceId, resolvedDeviceModel, resolvedVendor, error)
                         return@launch
                     }
             }
-            hwWalletRepo.connect(resolvedDeviceId)
+            hwWalletRepo.connect(resolvedDeviceId, resolvedVendor)
                 .onSuccess { onConnected(resolvedDeviceId, it) }
-                .onFailure { error -> onConnectFailed(resolvedDeviceId, resolvedDeviceModel, error) }
+                .onFailure { error -> onConnectFailed(resolvedDeviceId, resolvedDeviceModel, resolvedVendor, error) }
             connectJob = null
         }
     }
 
-    private fun onConnectFailed(deviceId: String, deviceModel: String, error: Throwable) {
+    private fun onConnectFailed(deviceId: String, deviceModel: String, vendor: HwWalletVendor, error: Throwable) {
         _uiState.update {
             it.copy(
                 isConnecting = false,
                 foundDeviceId = deviceId,
                 deviceModel = deviceModel,
-                errorMessage = if (error.isTrezorDeviceBusy()) {
-                    TrezorErrorPresenter.userMessage(context, error)
-                } else {
-                    context.getString(R.string.hardware__connect_error)
-                },
+                vendor = vendor,
+                errorMessage = HwErrorPresenter.userMessage(
+                    context = context,
+                    error = error,
+                    fallback = context.getString(R.string.hardware__connect_error),
+                ).takeIf { error.isHwDeviceBusy() || vendor == HwWalletVendor.BLOCKSTREAM }
+                    ?: context.getString(R.string.hardware__connect_error),
             )
         }
         setEffect(
             HwConnectEffect.NavigateToFound(
                 deviceId = deviceId,
                 deviceModel = deviceModel,
+                vendor = vendor,
             )
         )
         connectJob = null
     }
 
     fun cancelConnect() {
+        val state = _uiState.value
+        val wasConnecting = connectJob?.isActive == true || state.isConnecting
         connectJob?.cancel()
         connectJob = null
-        hwWalletRepo.cancelPairingCode()
+        if (wasConnecting) {
+            state.foundDeviceId?.let { hwWalletRepo.cancelPendingConnection(it, state.vendor) }
+                ?: hwWalletRepo.cancelPairingCode()
+        }
         _uiState.update { it.copy(isConnecting = false) }
     }
 
@@ -175,6 +195,7 @@ class HwConnectViewModel @Inject constructor(
         // Each identity is labelled on its own paired step, so persist the one being left before
         // the next passphrase wallet takes over the field.
         val state = _uiState.value
+        if (state.vendor != HwWalletVendor.TREZOR) return
         state.pairedWalletId?.let { walletId ->
             viewModelScope.launch { persistLabel(walletId, state.labelInput) }
         }
@@ -244,7 +265,7 @@ class HwConnectViewModel @Inject constructor(
         val description = when (error) {
             is HwPassphraseDisabledError -> context.getString(R.string.hardware__passphrase_disabled)
             is HwPassphraseAlreadyAddedError -> context.getString(R.string.hardware__passphrase_duplicate)
-            else if error.isTrezorDeviceBusy() -> TrezorErrorPresenter.userMessage(context, error)
+            else if error.isHwDeviceBusy() -> HwErrorPresenter.userMessage(context, error)
             else -> context.getString(R.string.hardware__passphrase_error)
         }
         ToastEventBus.send(
@@ -276,11 +297,16 @@ class HwConnectViewModel @Inject constructor(
     }
 
     fun resetState() {
+        val state = _uiState.value
+        val wasConnecting = connectJob?.isActive == true || state.isConnecting
         searchJob?.cancel()
         searchJob = null
         connectJob?.cancel()
         connectJob = null
-        hwWalletRepo.cancelPairingCode()
+        if (wasConnecting) {
+            state.foundDeviceId?.let { hwWalletRepo.cancelPendingConnection(it, state.vendor) }
+                ?: hwWalletRepo.cancelPairingCode()
+        }
         labelInitialized = false
         includeBluetoothInScan = true
         scanUsbBeforeConnect = false
@@ -307,16 +333,17 @@ class HwConnectViewModel @Inject constructor(
                 val device = hwWalletRepo.deviceState.value.nearbyDevices.firstOrNull()
                     ?: scanResult.getOrNull().orEmpty().firstOrNull { hwWalletRepo.hasKnownDevice(it.id) }
                 if (device != null) {
-                    val deviceModel = resolveHwWalletName(label = null, model = device.model)
+                    val deviceModel = resolveHwWalletName(label = null, model = device.model, vendor = device.vendor)
                     _uiState.update {
                         it.copy(
                             isSearching = false,
                             foundDeviceId = device.id,
                             deviceModel = deviceModel,
+                            vendor = device.vendor,
                             errorMessage = null,
                         )
                     }
-                    setEffect(HwConnectEffect.NavigateToFound(device.id, deviceModel))
+                    setEffect(HwConnectEffect.NavigateToFound(device.id, deviceModel, device.vendor))
                     return@launch
                 }
                 delay(SCAN_INTERVAL)
@@ -324,25 +351,36 @@ class HwConnectViewModel @Inject constructor(
         }
     }
 
-    private fun onConnected(deviceId: String, features: TrezorFeatures) {
+    private fun onConnected(deviceId: String, device: HwConnectedDevice) {
         // The device may hold several identities, so take the one this session opened rather than
         // any wallet sharing its transport id, and show the name it was already saved under.
-        val walletId = hwWalletRepo.deviceState.value.connectedWalletId()
+        val walletId = device.walletId ?: hwWalletRepo.deviceState.value.connectedWalletId()
         val wallet = walletId?.let { id -> hwWalletRepo.wallets.value.firstOrNull { it.id == id } }
-        val name = wallet?.name ?: resolveHwWalletName(label = features.label, model = features.model)
+        val name = wallet?.name
+            ?: resolveHwWalletName(label = device.label, model = device.model, vendor = device.vendor)
         labelInitialized = wallet != null
         _uiState.update {
             it.copy(
                 isConnecting = false,
-                pairedDeviceId = deviceId,
+                pairedDeviceId = device.id,
                 pairedWalletId = walletId,
                 deviceName = name,
+                vendor = device.vendor,
                 balanceSats = wallet?.balanceSats ?: it.balanceSats,
                 labelInput = name,
                 errorMessage = null,
             )
         }
+        Logger.debug("Paired hardware device '$deviceId' as '${device.id}'", context = TAG)
         setEffect(HwConnectEffect.NavigateToPaired)
+    }
+
+    private fun observeUnlocking() {
+        viewModelScope.launch {
+            hwWalletRepo.deviceState.map { it.isUnlocking }.distinctUntilChanged().collect { isUnlocking ->
+                _uiState.update { it.copy(isUnlocking = isUnlocking) }
+            }
+        }
     }
 
     private fun observePairingCode() {
@@ -404,6 +442,9 @@ data class HwConnectUiState(
     val isSubmittingPassphrase: Boolean = false,
     val deviceName: String = "",
     val deviceModel: String = "",
+    val vendor: HwWalletVendor = HwWalletVendor.TREZOR,
+    /** A Jade is waiting for its PIN on the device while connecting. */
+    val isUnlocking: Boolean = false,
     val balanceSats: ULong = 0uL,
     val labelInput: String = "",
     val errorMessage: String? = null,
@@ -411,7 +452,11 @@ data class HwConnectUiState(
 
 sealed interface HwConnectEffect {
     data object NavigateToSearching : HwConnectEffect
-    data class NavigateToFound(val deviceId: String, val deviceModel: String) : HwConnectEffect
+    data class NavigateToFound(
+        val deviceId: String,
+        val deviceModel: String,
+        val vendor: HwWalletVendor = HwWalletVendor.TREZOR,
+    ) : HwConnectEffect
     data class NavigateToPairCode(val requestId: Long) : HwConnectEffect
     data object NavigateToPaired : HwConnectEffect
     data object NavigateToPassphrase : HwConnectEffect

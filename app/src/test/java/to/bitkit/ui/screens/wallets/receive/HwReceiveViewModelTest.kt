@@ -4,8 +4,10 @@ import android.content.Context
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.coroutines.withTimeout
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
@@ -23,6 +25,7 @@ import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HwReceiveViewModelTest : BaseUnitTest() {
@@ -38,6 +41,9 @@ class HwReceiveViewModelTest : BaseUnitTest() {
     fun setUp() {
         whenever(hwWalletRepo.wallets).thenReturn(wallets)
         whenever(hwWalletRepo.observeReceiveAddress(any(), any())).thenReturn(receiveAddress)
+        whenever { hwWalletRepo.reconnectTimeout(any()) }.thenReturn(30.seconds)
+        whenever { hwWalletRepo.disconnectStaleSession(any()) }.thenReturn(Result.success(Unit))
+        whenever(context.getString(any())).thenReturn("message")
         sut = HwReceiveViewModel(context, hwWalletRepo)
     }
 
@@ -105,8 +111,10 @@ class HwReceiveViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         sut.cancel()
+        advanceUntilIdle()
 
         assertEquals(HwReceiveUiState(), sut.uiState.value)
+        verify(hwWalletRepo).disconnectStaleSession(WALLET_ID)
     }
 
     @Test
@@ -161,6 +169,26 @@ class HwReceiveViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(NEXT_RECEIVE_ADDRESS, sut.uiState.value.address)
+        assertFalse(sut.uiState.value.isVerifyingAddress)
+        verify(hwWalletRepo).disconnectStaleSession(WALLET_ID)
+    }
+
+    @Test
+    fun `verification timeout closes the hardware session`() = test {
+        val timeout = runCatching {
+            withTimeout(0.seconds) { awaitCancellation() }
+        }.exceptionOrNull()!!
+        whenever(hwWalletRepo.getReceiveAddress(WALLET_ID)).thenReturn(Result.success(RECEIVE_ADDRESS))
+        whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
+        whenever(hwWalletRepo.verifyReceiveAddress(WALLET_ID, RECEIVE_ADDRESS))
+            .thenReturn(Result.failure(timeout))
+        sut.loadAddress(WALLET_ID)
+        advanceUntilIdle()
+
+        sut.verifyAddress()
+        advanceUntilIdle()
+
+        verify(hwWalletRepo).disconnectStaleSession(WALLET_ID)
         assertFalse(sut.uiState.value.isVerifyingAddress)
     }
 

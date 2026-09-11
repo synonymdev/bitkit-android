@@ -3,7 +3,6 @@ package to.bitkit.ui.screens.wallets.send
 import android.content.Context
 import com.synonym.bitkitcore.BroadcastException
 import com.synonym.bitkitcore.TrezorException
-import com.synonym.bitkitcore.TrezorFeatures
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.first
@@ -19,9 +18,11 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.models.HwConnectedDevice
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.Toast
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.HwWalletRepo
@@ -34,6 +35,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class HwSendViewModelTest : BaseUnitTest() {
@@ -50,6 +52,7 @@ class HwSendViewModelTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever(coreService.activity).thenReturn(activityService)
+        whenever { hwWalletRepo.reconnectTimeout(any()) }.thenReturn(30.seconds)
         sut = HwSendViewModel(
             context = context,
             hwWalletRepo = hwWalletRepo,
@@ -81,7 +84,7 @@ class HwSendViewModelTest : BaseUnitTest() {
             totalSpent = signedTx.totalSpent,
         )
         whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
-        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.success(connectedDevice()))
         whenever(hwWalletRepo.composeFundingTransaction(WALLET_ID, ADDRESS, AMOUNT_SATS, SATS_PER_VBYTE))
             .thenReturn(Result.success(funding))
         whenever(hwWalletRepo.signFunding(WALLET_ID, funding)).thenReturn(
@@ -179,7 +182,7 @@ class HwSendViewModelTest : BaseUnitTest() {
         val toasts = mutableListOf<Toast>()
         val toastJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
         whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
-        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.success(connectedDevice()))
         whenever(hwWalletRepo.composeFundingTransaction(WALLET_ID, ADDRESS, AMOUNT_SATS, SATS_PER_VBYTE))
             .thenReturn(Result.failure(timeout))
         whenever(context.getString(R.string.common__error)).thenReturn("Error")
@@ -309,7 +312,7 @@ class HwSendViewModelTest : BaseUnitTest() {
             totalSpent = signedTx.totalSpent,
         )
         whenever(hwWalletRepo.needsPassphrase(WALLET_ID)).thenReturn(false)
-        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.success(mock<TrezorFeatures>()))
+        whenever(hwWalletRepo.ensureConnected(WALLET_ID)).thenReturn(Result.success(connectedDevice()))
         whenever(hwWalletRepo.composeFundingTransaction(WALLET_ID, ADDRESS, AMOUNT_SATS, SATS_PER_VBYTE))
             .thenReturn(Result.success(funding))
         whenever(hwWalletRepo.signFunding(WALLET_ID, funding)).thenReturn(Result.success(signedTx))
@@ -330,6 +333,8 @@ class HwSendViewModelTest : BaseUnitTest() {
         val signedTx: HwFundingSignedTx,
         val broadcast: HwFundingBroadcastResult,
     )
+
+    private fun connectedDevice() = HwConnectedDevice(vendor = HwWalletVendor.TREZOR, id = "dev1")
 
     private companion object {
         const val WALLET_ID = "hardware-wallet"

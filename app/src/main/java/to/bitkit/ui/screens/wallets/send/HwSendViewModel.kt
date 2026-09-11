@@ -6,10 +6,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.collections.immutable.ImmutableList
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.update
@@ -17,14 +19,15 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import to.bitkit.R
 import to.bitkit.ext.isBroadcastConnectivityFailure
-import to.bitkit.ext.isTrezorDeviceBusy
-import to.bitkit.ext.isTrezorFirmwareError
-import to.bitkit.ext.isTrezorSessionFailure
-import to.bitkit.ext.isTrezorUserCancellation
+import to.bitkit.ext.isHwDeviceBusy
+import to.bitkit.ext.isHwFirmwareError
+import to.bitkit.ext.isHwSessionFailure
+import to.bitkit.ext.isHwUserCancellation
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HwFundingBroadcastResult
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.HwWallet
 import to.bitkit.models.Toast
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.HwPassphraseMismatchError
@@ -33,6 +36,7 @@ import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PreActivityMetadataRepo
 import to.bitkit.services.CoreService
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.HwErrorPresenter
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
@@ -47,11 +51,13 @@ class HwSendViewModel @Inject constructor(
 ) : ViewModel() {
     private companion object {
         const val TAG = "HwSendViewModel"
-        val RECONNECT_TIMEOUT = 30.seconds
         val COMPOSE_TIMEOUT = 45.seconds
         val SIGN_TIMEOUT = 120.seconds
         val BROADCAST_TIMEOUT = 120.seconds
     }
+
+    val wallets: StateFlow<ImmutableList<HwWallet>>
+        get() = hwWalletRepo.wallets
 
     private val _uiState = MutableStateFlow(HwSendUiState())
     val uiState = _uiState.asStateFlow()
@@ -211,14 +217,15 @@ class HwSendViewModel @Inject constructor(
     private suspend fun sign(walletId: String, funding: HwFundingTransaction): HwFundingSignedTx {
         val firstAttempt = runSuspendCatching { signWithTimeoutCleanup(walletId, funding) }
         val error = firstAttempt.exceptionOrNull() ?: return firstAttempt.getOrThrow()
-        if (!error.isTrezorSessionFailure()) throw error
+        if (!error.isHwSessionFailure()) throw error
 
         ensureConnected(walletId)
         return signWithTimeoutCleanup(walletId, funding)
     }
 
     private suspend fun ensureConnected(walletId: String) {
-        withTimeout(RECONNECT_TIMEOUT) {
+        // A Jade reconnect may include entering the PIN on the device, so the budget is per vendor.
+        withTimeout(hwWalletRepo.reconnectTimeout(walletId)) {
             hwWalletRepo.ensureConnected(walletId).getOrThrow()
         }
     }
@@ -269,17 +276,17 @@ class HwSendViewModel @Inject constructor(
     private suspend fun handleFailure(error: Throwable, walletId: String) {
         _uiState.update { it.copy(isBroadcastUnresolved = false) }
         when {
-            error.isTrezorUserCancellation() -> {
+            error.isHwUserCancellation() -> {
                 Logger.info("Hardware send cancelled on device for '$walletId'", context = TAG)
             }
             generateSequence(error) { it.cause }.any { it is HwPassphraseRequiredError } -> {
                 _uiState.update { it.copy(isPassphraseRequired = true) }
             }
-            error.isTrezorDeviceBusy() -> ToastEventBus.send(
+            error.isHwDeviceBusy() -> ToastEventBus.send(
                 type = Toast.ToastType.INFO,
-                title = context.getString(R.string.hardware__device_busy),
+                title = HwErrorPresenter.userMessage(context, error),
             )
-            error.isTrezorFirmwareError() -> ToastEventBus.send(
+            error.isHwFirmwareError() -> ToastEventBus.send(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.lightning__transfer_hw__reconnect_error_title),
                 description = context.getString(R.string.lightning__transfer_hw__reconnect_error_description),
@@ -300,7 +307,15 @@ class HwSendViewModel @Inject constructor(
                     pendingBroadcast = null
                     _uiState.update { it.copy(hasPendingBroadcast = false) }
                 }
-                ToastEventBus.send(error)
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.common__error),
+                    description = HwErrorPresenter.userMessage(
+                        context = context,
+                        error = error,
+                        fallback = context.getString(R.string.hardware__connect_error),
+                    ),
+                )
             }
         }
     }

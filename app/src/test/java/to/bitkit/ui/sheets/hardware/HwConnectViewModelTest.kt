@@ -2,13 +2,11 @@ package to.bitkit.ui.sheets.hardware
 
 import android.content.Context
 import app.cash.turbine.test
-import com.synonym.bitkitcore.TrezorDeviceInfo
 import com.synonym.bitkitcore.TrezorException
-import com.synonym.bitkitcore.TrezorFeatures
-import com.synonym.bitkitcore.TrezorTransportType
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.TestScope
@@ -16,17 +14,20 @@ import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
+import to.bitkit.models.HwConnectedDevice
+import to.bitkit.models.HwDeviceState
+import to.bitkit.models.HwNearbyDevice
 import to.bitkit.models.HwWallet
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.TransportType
-import to.bitkit.repositories.ConnectedTrezorDevice
 import to.bitkit.repositories.HwPassphraseAlreadyAddedError
 import to.bitkit.repositories.HwWalletRepo
-import to.bitkit.repositories.TrezorState
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.AppError
@@ -41,7 +42,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
     private val context = mock<Context>()
     private val pairingCodeRequestId = MutableStateFlow<Long?>(null)
     private val wallets = MutableStateFlow<ImmutableList<HwWallet>>(persistentListOf())
-    private val deviceState = MutableStateFlow(TrezorState())
+    private val deviceState = MutableStateFlow(HwDeviceState())
 
     private lateinit var sut: HwConnectViewModel
 
@@ -62,7 +63,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onIntroContinue searches then advances to found with the first discovered device`() = test {
-        deviceState.value = TrezorState(nearbyDevices = persistentListOf(deviceInfo("dev1", model = "Safe 3")))
+        deviceState.value = HwDeviceState(nearbyDevices = persistentListOf(deviceInfo("dev1", model = "Safe 3")))
         whenever(hwWalletRepo.scan(includeBluetooth = true)).thenReturn(Result.success(emptyList()))
 
         sut.effects.test {
@@ -79,7 +80,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onIntroContinue can search without bluetooth`() = test {
-        deviceState.value = TrezorState(nearbyDevices = persistentListOf(deviceInfo("usb1", model = "Safe 5")))
+        deviceState.value = HwDeviceState(nearbyDevices = persistentListOf(deviceInfo("usb1", model = "Safe 5")))
         whenever(hwWalletRepo.scan(includeBluetooth = false)).thenReturn(Result.success(emptyList()))
 
         sut.effects.test {
@@ -130,7 +131,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
 
     @Test
     fun `onConnectClick does not usb rescan before connecting a bluetooth route device`() = test {
-        val connectedFeatures = features(model = "Safe 7")
+        val connectedFeatures = features(model = "Safe 7", id = "ble-device-id")
         whenever(hwWalletRepo.connect("ble-device-id")).thenReturn(Result.success(connectedFeatures))
         sut.onFoundRoute(deviceId = "ble-device-id", deviceModel = "Trezor Safe 7")
 
@@ -147,11 +148,11 @@ class HwConnectViewModelTest : BaseUnitTest() {
     @Test
     fun `onConnectClick uses scanned device id for usb route path`() = test {
         val path = "/dev/bus/usb/001/002"
-        val connectedFeatures = features(model = "Safe 5")
+        val connectedFeatures = features(model = "Safe 5", id = "core-usb-id")
         val usbDevice = deviceInfo(
             id = "core-usb-id",
             model = "Safe 5",
-            transportType = TrezorTransportType.USB,
+            transportType = TransportType.USB,
             path = path,
         )
         whenever(hwWalletRepo.scan(includeBluetooth = false)).thenReturn(Result.success(listOf(usbDevice)))
@@ -214,6 +215,23 @@ class HwConnectViewModelTest : BaseUnitTest() {
         assertFalse(sut.uiState.value.isConnecting)
         assertEquals(CONNECT_ERROR, sut.uiState.value.errorMessage)
         assertEquals("dev1", sut.uiState.value.foundDeviceId)
+    }
+
+    @Test
+    fun `cancelConnect cancels the pending jade transport operation`() = test {
+        val pending = CompletableDeferred<Result<HwConnectedDevice>>()
+        whenever(hwWalletRepo.connect("jade-path", HwWalletVendor.BLOCKSTREAM)).doSuspendableAnswer {
+            pending.await()
+        }
+        sut.onFoundRoute("jade-path", "Blockstream Jade", HwWalletVendor.BLOCKSTREAM)
+        sut.onConnectClick()
+        runCurrent()
+
+        sut.cancelConnect()
+        runCurrent()
+
+        verify(hwWalletRepo).cancelPendingConnection("jade-path", HwWalletVendor.BLOCKSTREAM)
+        assertFalse(sut.uiState.value.isConnecting)
     }
 
     @Test
@@ -292,7 +310,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
         // Discovery skips known devices, so a paired Trezor only reaches the paired step — where
         // its passphrase wallets are added — through this fallback.
         val paired = deviceInfo("dev1", model = "Safe 3")
-        deviceState.value = TrezorState(nearbyDevices = persistentListOf())
+        deviceState.value = HwDeviceState(nearbyDevices = persistentListOf())
         whenever(hwWalletRepo.scan(includeBluetooth = true)).thenReturn(Result.success(listOf(paired)))
         whenever { hwWalletRepo.hasKnownDevice("dev1") }.thenReturn(true)
 
@@ -308,7 +326,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
 
     @Test
     fun `keeps searching when the only device found is neither new nor paired`() = test {
-        deviceState.value = TrezorState(nearbyDevices = persistentListOf())
+        deviceState.value = HwDeviceState(nearbyDevices = persistentListOf())
         whenever(hwWalletRepo.scan(includeBluetooth = true))
             .thenReturn(Result.success(listOf(deviceInfo("other", model = "Safe 3"))))
         whenever { hwWalletRepo.hasKnownDevice("other") }.thenReturn(false)
@@ -370,9 +388,9 @@ class HwConnectViewModelTest : BaseUnitTest() {
         val hidden = hwWallet("dev1", name = "Pass A", balance = 10_000uL, walletId = "hidden-wallet")
         val standard = hwWallet("dev1", name = "No Pass", balance = 27uL, walletId = "standard-wallet")
         wallets.value = persistentListOf(hidden, standard)
-        deviceState.value = TrezorState(
+        deviceState.value = HwDeviceState(
             nearbyDevices = persistentListOf(deviceInfo("dev1", model = "Safe 3")),
-            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = "standard-wallet"),
+            connected = HwConnectedDevice(vendor = HwWalletVendor.TREZOR, id = "dev1", walletId = "standard-wallet"),
         )
         val connectedFeatures = features(model = "Safe 3")
         whenever(hwWalletRepo.scan(includeBluetooth = true)).thenReturn(Result.success(emptyList()))
@@ -393,9 +411,9 @@ class HwConnectViewModelTest : BaseUnitTest() {
         // The paired wallet has not reached the list yet, so the typed name would otherwise be
         // dropped and the flow closed instead of finished.
         val connectedFeatures = features(model = "Safe 3")
-        deviceState.value = TrezorState(
+        deviceState.value = HwDeviceState(
             nearbyDevices = persistentListOf(deviceInfo("dev1", model = "Safe 3")),
-            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = "wallet-1"),
+            connected = HwConnectedDevice(vendor = HwWalletVendor.TREZOR, id = "dev1", walletId = "wallet-1"),
         )
         whenever(hwWalletRepo.scan(includeBluetooth = true)).thenReturn(Result.success(emptyList()))
         whenever(hwWalletRepo.connect("dev1")).thenReturn(Result.success(connectedFeatures))
@@ -549,7 +567,7 @@ class HwConnectViewModelTest : BaseUnitTest() {
     }
 
     private suspend fun givenDeviceFound() {
-        deviceState.value = TrezorState(nearbyDevices = persistentListOf(deviceInfo("dev1", model = "Safe 3")))
+        deviceState.value = HwDeviceState(nearbyDevices = persistentListOf(deviceInfo("dev1", model = "Safe 3")))
         whenever(hwWalletRepo.scan(includeBluetooth = true)).thenReturn(Result.success(emptyList()))
         sut.onIntroContinue()
     }
@@ -557,24 +575,23 @@ class HwConnectViewModelTest : BaseUnitTest() {
     private fun deviceInfo(
         id: String,
         model: String?,
-        transportType: TrezorTransportType = TrezorTransportType.BLUETOOTH,
+        transportType: TransportType = TransportType.BLUETOOTH,
         path: String = "ble:$id",
-    ) = TrezorDeviceInfo(
+    ) = HwNearbyDevice(
+        vendor = HwWalletVendor.TREZOR,
         id = id,
+        path = path,
         transportType = transportType,
         name = null,
-        path = path,
-        label = null,
         model = model,
-        isBootloader = false,
     )
 
-    private fun features(model: String?): TrezorFeatures {
-        val features = mock<TrezorFeatures>()
-        whenever(features.label).thenReturn(null)
-        whenever(features.model).thenReturn(model)
-        return features
-    }
+    private fun features(model: String?, id: String = "dev1") = HwConnectedDevice(
+        vendor = HwWalletVendor.TREZOR,
+        id = id,
+        label = null,
+        model = model,
+    )
 
     private fun hwWallet(
         deviceId: String,

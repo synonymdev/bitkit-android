@@ -12,6 +12,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -19,6 +20,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import to.bitkit.R
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
@@ -27,6 +29,8 @@ import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HardwareTransferIllustration
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.illustrationRes
+import to.bitkit.ui.components.sendOpenConnectRes
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.screens.transfer.hardware.HwPassphrasePromptSheet
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -47,6 +51,10 @@ fun HwSendSignScreen(
     onBack: () -> Unit,
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val wallets by viewModel.wallets.collectAsStateWithLifecycle()
+    val vendor = remember(wallets, walletId) {
+        wallets.firstOrNull { it.id == walletId }?.vendor ?: HwWalletVendor.TREZOR
+    }
     val request = HwSendRequest(
         walletId = walletId,
         address = sendUiState.address,
@@ -71,6 +79,7 @@ fun HwSendSignScreen(
         address = sendUiState.address,
         isSigning = uiState.isSigning,
         hasPendingBroadcast = uiState.hasPendingBroadcast,
+        vendor = vendor,
         onBack = onBackRequest,
         onOpenConnect = { viewModel.signAndBroadcast(request, prepareContactPayment) },
     )
@@ -93,6 +102,7 @@ private fun HwSendSignContent(
     isSigning: Boolean,
     hasPendingBroadcast: Boolean,
     modifier: Modifier = Modifier,
+    vendor: HwWalletVendor = HwWalletVendor.TREZOR,
     onBack: () -> Unit = {},
     onOpenConnect: () -> Unit = {},
 ) {
@@ -103,7 +113,7 @@ private fun HwSendSignContent(
             .navigationBarsPadding()
     ) {
         HardwareTransferIllustration(
-            drawableRes = R.drawable.trezor,
+            drawableRes = vendor.illustrationRes(),
             topRatio = SEND_SIGN_VISUAL_TOP_RATIO,
         )
 
@@ -139,7 +149,7 @@ private fun HwSendSignContent(
                 FillHeight()
                 PrimaryButton(
                     text = stringResource(
-                        if (hasPendingBroadcast) R.string.common__retry else R.string.hardware__send_open_connect
+                        if (hasPendingBroadcast) R.string.common__retry else vendor.sendOpenConnectRes()
                     ),
                     enabled = !isSigning,
                     isLoading = isSigning,

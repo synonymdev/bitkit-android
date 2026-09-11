@@ -1,7 +1,6 @@
 package to.bitkit.services
 
 import android.annotation.SuppressLint
-import android.app.PendingIntent
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothGatt
@@ -14,10 +13,7 @@ import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
-import android.content.IntentFilter
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
 import android.hardware.usb.UsbDeviceConnection
@@ -27,7 +23,6 @@ import android.hardware.usb.UsbManager
 import android.os.Handler
 import android.os.Looper
 import android.os.ParcelUuid
-import androidx.core.content.ContextCompat
 import androidx.core.content.edit
 import com.synonym.bitkitcore.NativeDeviceInfo
 import com.synonym.bitkitcore.TrezorCallMessageResult
@@ -618,58 +613,16 @@ class TrezorTransport @Inject constructor(
         return File(credentialDir, "$sanitizedId.json")
     }
 
-    /**
-     * Request USB permission for a device and block until the user responds.
-     * Returns true if permission was granted, false otherwise.
-     *
-     * This uses a BroadcastReceiver + CountDownLatch pattern because openDevice
-     * runs on a background thread (Rust FFI callback), not the main thread.
-     */
-    @Suppress("TooGenericExceptionCaught")
-    private fun requestUsbPermission(device: UsbDevice): Boolean {
-        val latch = CountDownLatch(1)
-        var granted = false
-
-        val receiver = object : BroadcastReceiver() {
-            override fun onReceive(ctx: Context, intent: Intent) {
-                if (intent.action == ACTION_USB_PERMISSION) {
-                    granted = intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)
-                    latch.countDown()
-                }
-            }
-        }
-
-        val permissionIntent = PendingIntent.getBroadcast(
-            context,
-            0,
-            Intent(ACTION_USB_PERMISSION).apply { setPackage(context.packageName) },
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE,
+    private val usbPermissionRequester by lazy {
+        UsbPermissionRequester(
+            context = context,
+            usbManager = usbManager,
+            action = ACTION_USB_PERMISSION,
+            timeoutMs = USB_PERMISSION_TIMEOUT_MS,
         )
-
-        ContextCompat.registerReceiver(
-            context,
-            receiver,
-            IntentFilter(ACTION_USB_PERMISSION),
-            ContextCompat.RECEIVER_NOT_EXPORTED,
-        )
-
-        try {
-            Logger.info("Requesting USB permission for '${device.deviceName}'", context = TAG)
-            usbManager.requestPermission(device, permissionIntent)
-
-            val responded = latch.await(USB_PERMISSION_TIMEOUT_MS, TimeUnit.MILLISECONDS)
-            if (!responded) {
-                Logger.warn("USB permission request timed out", context = TAG)
-                return false
-            }
-
-            val status = if (granted) "granted" else "denied"
-            Logger.info("USB permission '$status' for '${device.deviceName}'", context = TAG)
-            return granted
-        } finally {
-            try { context.unregisterReceiver(receiver) } catch (_: Exception) {}
-        }
     }
+
+    private fun requestUsbPermission(device: UsbDevice): Boolean = usbPermissionRequester.request(device)
 
     private data class UsbEndpoints(val read: UsbEndpoint, val write: UsbEndpoint)
 

@@ -24,6 +24,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.ImmutableMap
+import kotlinx.collections.immutable.persistentMapOf
 import to.bitkit.ui.components.CaptionB
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.theme.Colors
@@ -35,6 +37,8 @@ fun <T : TabItem> CustomTabRowWithSpacing(
     onTabChange: (T) -> Unit,
     modifier: Modifier = Modifier,
     selectedColor: Color = Colors.Brand,
+    /** Labels that replace a tab's own text, for tabs whose name depends on runtime data. */
+    labelOverrides: ImmutableMap<T, String> = persistentMapOf(),
     badgeCount: (T) -> Int? = { null },
 ) {
     Column(modifier = modifier) {
@@ -62,7 +66,7 @@ fun <T : TabItem> CustomTabRowWithSpacing(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             CaptionB(
-                                tab.uiText,
+                                labelOverrides[tab] ?: tab.uiText,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 color = if (isSelected) Colors.White else Colors.White50

@@ -15,9 +15,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import to.bitkit.R
-import to.bitkit.ext.isTrezorDeviceBusy
-import to.bitkit.ext.isTrezorFirmwareError
-import to.bitkit.ext.isTrezorUserCancellation
+import to.bitkit.ext.isHwDeviceBusy
+import to.bitkit.ext.isHwFirmwareError
+import to.bitkit.ext.isHwUserCancellation
 import to.bitkit.models.HwReceiveAddress
 import to.bitkit.models.Toast
 import to.bitkit.repositories.HwPassphraseMismatchError
@@ -25,6 +25,7 @@ import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwReceiveAddressMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.HwErrorPresenter
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
@@ -109,12 +110,13 @@ class HwReceiveViewModel @Inject constructor(
                     return@launch
                 }
                 runCatching {
-                    withTimeout(VERIFY_TIMEOUT) {
+                    // Verification reconnects first, and a Jade reconnect may wait for its PIN.
+                    withTimeout(VERIFY_TIMEOUT + hwWalletRepo.reconnectTimeout(walletId)) {
                         hwWalletRepo.verifyReceiveAddress(walletId, address).getOrThrow()
                     }
                 }.onFailure {
                     if (it is CancellationException && it !is TimeoutCancellationException) throw it
-                    handleVerifyFailure(it)
+                    handleVerifyFailure(walletId, it)
                 }
             } finally {
                 _uiState.update { it.copy(isVerifyingAddress = false) }
@@ -144,7 +146,7 @@ class HwReceiveViewModel @Inject constructor(
                                 description = context.getString(R.string.hardware__passphrase_mismatch),
                             )
                         } else {
-                            handleVerifyFailure(error)
+                            handleVerifyFailure(walletId, error)
                         }
                     }
             } finally {
@@ -155,12 +157,15 @@ class HwReceiveViewModel @Inject constructor(
     }
 
     fun dismissPassphrase() {
+        val walletId = _uiState.value.walletId
         passphraseJob?.cancel()
         passphraseJob = null
         _uiState.update { it.copy(isPassphraseRequired = false, isVerifyingPassphrase = false) }
+        disconnect(walletId)
     }
 
     fun cancel() {
+        val walletId = _uiState.value.walletId
         loadJob?.cancel()
         addressUpdatesJob?.cancel()
         verifyJob?.cancel()
@@ -170,25 +175,36 @@ class HwReceiveViewModel @Inject constructor(
         verifyJob = null
         passphraseJob = null
         _uiState.update { HwReceiveUiState() }
+        disconnect(walletId)
     }
 
     private fun invalidateVerification() {
+        val walletId = _uiState.value.walletId
         verifyJob?.cancel()
         passphraseJob?.cancel()
         _uiState.update { it.copy(isPassphraseRequired = false) }
+        disconnect(walletId)
     }
 
-    private suspend fun handleVerifyFailure(error: Throwable) {
+    private fun disconnect(walletId: String?) {
+        walletId ?: return
+        viewModelScope.launch { hwWalletRepo.disconnectStaleSession(walletId) }
+    }
+
+    private suspend fun handleVerifyFailure(walletId: String, error: Throwable) {
+        if (error is TimeoutCancellationException) {
+            hwWalletRepo.disconnectStaleSession(walletId)
+        }
         when {
-            error.isTrezorUserCancellation() -> Unit
+            error.isHwUserCancellation() -> Unit
             generateSequence(error) { it.cause }.any { it is HwPassphraseRequiredError } -> {
                 _uiState.update { it.copy(isPassphraseRequired = true) }
             }
-            error.isTrezorDeviceBusy() -> ToastEventBus.send(
+            error.isHwDeviceBusy() -> ToastEventBus.send(
                 type = Toast.ToastType.INFO,
-                title = context.getString(R.string.hardware__device_busy),
+                title = HwErrorPresenter.userMessage(context, error),
             )
-            error.isTrezorFirmwareError() -> ToastEventBus.send(
+            error.isHwFirmwareError() -> ToastEventBus.send(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.common__error),
                 description = context.getString(R.string.hardware__connect_error),
@@ -203,7 +219,15 @@ class HwReceiveViewModel @Inject constructor(
                 title = context.getString(R.string.common__error),
                 description = context.getString(R.string.hardware__verify_address_error),
             )
-            else -> ToastEventBus.send(error)
+            else -> ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.common__error),
+                description = HwErrorPresenter.userMessage(
+                    context = context,
+                    error = error,
+                    fallback = context.getString(R.string.hardware__connect_error),
+                ),
+            )
         }
     }
 }
