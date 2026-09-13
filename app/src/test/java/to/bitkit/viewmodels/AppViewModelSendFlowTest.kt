@@ -151,6 +151,7 @@ import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
+import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
@@ -2049,7 +2050,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw"
 
         sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
-        advanceUntilIdle()
+        runCurrent()
 
         assertNull(sut.currentSheet.value)
         verify(context, never()).getString(R.string.pubky_auth__no_identity)
@@ -2066,6 +2067,31 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertEquals(Sheet.PubkyAuth(authUrl), sut.currentSheet.value)
         verify(pubkyRepo, never()).approveAuth(any(), any(), any())
+    }
+
+    @Test
+    fun `cold pubky auth deeplink times out while initialization is stalled`() = test {
+        enablePaykitUi()
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { awaitCancellation() }
+        whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
+        whenever(context.getString(R.string.profile__auth_error_timeout)).thenReturn("Authorization timed out")
+        val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw"
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
+        advanceTimeBy(PubkyService.AUTHORIZATION_TIMEOUT.inWholeMilliseconds)
+        runCurrent()
+
+        assertNull(sut.currentSheet.value)
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(toastManager).enqueue(
+            check {
+                assertEquals(Toast.ToastType.ERROR, it.type)
+                assertEquals("Authorization failed", it.title)
+                assertEquals("Authorization timed out", it.description)
+            }
+        )
     }
 
     @Test
@@ -2109,7 +2135,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
 
         sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
-        advanceUntilIdle()
+        runCurrent()
         sut.onScanResult(bolt11)
         advanceUntilIdle()
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
@@ -2121,6 +2147,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         assertEquals(bolt11, sut.sendUiState.value.addressInput)
         verify(pubkyRepo, never()).hasSecretKey()
+        verify(toastManager, never()).enqueue(any())
     }
 
     @Test
@@ -2136,12 +2163,12 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
 
         sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
-        advanceUntilIdle()
+        runCurrent()
         settingsData.value = SettingsData(isPinEnabled = true)
         sut.resetIsAuthenticatedState()
-        advanceUntilIdle()
+        runCurrent()
         sut.onScanResult(bolt11)
-        advanceUntilIdle()
+        runCurrent()
         pubkyPublicKey.value = testPublicKey
         initialized.complete(Unit)
         advanceUntilIdle()
@@ -2153,6 +2180,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         assertEquals(bolt11, sut.sendUiState.value.addressInput)
         verify(pubkyRepo, never()).hasSecretKey()
+        verify(toastManager, never()).enqueue(any())
     }
 
     @Test
@@ -2161,7 +2189,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val initialized = CompletableDeferred<Unit>()
         whenever(pubkyRepo.awaitInitialization()).doSuspendableAnswer { initialized.await() }
         sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "pubkyauth://signin_grant".toUri()))
-        advanceUntilIdle()
+        runCurrent()
 
         isPaykitEnabled.value = false
         pubkyPublicKey.value = testPublicKey
@@ -2170,6 +2198,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertNull(sut.currentSheet.value)
         verify(pubkyRepo, never()).hasSecretKey()
+        verify(toastManager, never()).enqueue(any())
 
         isPaykitEnabled.value = true
         advanceUntilIdle()
@@ -2245,7 +2274,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         val authUrl = "pubkyauth://auth?caps=/pub/paykit/v0/:rw"
         sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
-        advanceUntilIdle()
+        runCurrent()
 
         verify(toastManager, never()).enqueue(any())
         initialized.complete(Unit)

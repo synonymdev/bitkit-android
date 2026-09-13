@@ -10,6 +10,7 @@ import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.request.post
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
@@ -158,12 +159,18 @@ class PubkyRepo @Inject constructor(
         data object RestorationFailed : InitResult
     }
 
-    private val initializationJob = scope.launch { initialize() }
+    private val initializationReady = CompletableDeferred<Unit>()
+
+    init {
+        scope.launch { initialize() }.invokeOnCompletion {
+            initializationReady.complete(Unit)
+        }
+    }
 
     // region Initialization
 
     suspend fun awaitInitialization() = withContext(ioDispatcher) {
-        initializationJob.join()
+        initializationReady.await()
     }
 
     suspend fun initialize() = withContext(ioDispatcher) {
@@ -200,13 +207,17 @@ class PubkyRepo @Inject constructor(
                     _publicKey.update { result.publicKey }
                     _authState.update { PubkyAuthState.Authenticated }
                     Logger.info("Restored paykit session for '${redacted(result.publicKey)}'", context = TAG)
-                    loadProfile()
-                    loadContacts()
                 }
                 is InitResult.RestorationFailed -> {
                     clearAuthenticatedState()
                     _sessionRestorationFailed.update { true }
                 }
+            }
+            initializationReady.complete(Unit)
+
+            if (result is InitResult.Restored) {
+                loadProfile()
+                loadContacts()
             }
         }
     }

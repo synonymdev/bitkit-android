@@ -64,6 +64,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.ChannelDataMigration
 import org.lightningdevkit.ldknode.ClosureReason
@@ -181,6 +182,7 @@ import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
+import to.bitkit.services.PubkyService
 import to.bitkit.ui.Routes
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SubscriptionRoute
@@ -2144,7 +2146,21 @@ class AppViewModel @Inject constructor(
         if (source != ScanSource.DEEPLINK || !allowPubkyAuth) return true
         if (!PubkyAuthRequest.isProtocolUrl(data)) return true
 
-        if (!PubkyAuthRequest.isSignupUrl(data)) pubkyRepo.awaitInitialization()
+        if (!PubkyAuthRequest.isSignupUrl(data)) {
+            val isInitializationReady = withTimeoutOrNull(PubkyService.AUTHORIZATION_TIMEOUT) {
+                pubkyRepo.awaitInitialization()
+                true
+            } ?: false
+            if (!isInitializationReady) {
+                Logger.warn("Timed out waiting for Pubky initialization", context = TAG)
+                ToastEventBus.send(
+                    type = Toast.ToastType.ERROR,
+                    title = context.getString(R.string.profile__auth_error_title),
+                    description = context.getString(R.string.profile__auth_error_timeout),
+                )
+                return false
+            }
+        }
         return isPaykitUiEnabledFromSettings() && walletRepo.walletExists()
     }
 
@@ -2164,6 +2180,11 @@ class AppViewModel @Inject constructor(
         synchronized(deferredScanLock) {
             if (deferredScan == null) {
                 enqueueDeferredScan(source, data, startDelay, routePubkyKeys, contactPaymentContext, allowPubkyAuth)
+            } else {
+                Logger.info(
+                    "Skipping '${source.label}' scan because another deferred scan is queued: '${scanLogId(data)}'",
+                    context = TAG,
+                )
             }
         }
         return true

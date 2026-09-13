@@ -1315,6 +1315,27 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `awaitInitialization completes before startup profile loading`() = test {
+        val profileLoad = CompletableDeferred<Unit>()
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.importSession("saved_session")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            profileLoad.await()
+            createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile())
+        }
+        val repo = createSut()
+        val waiter = async { repo.awaitInitialization() }
+
+        try {
+            assertTrue(waiter.isCompleted)
+            assertEquals(VALID_SELF_KEY, repo.publicKey.value)
+        } finally {
+            profileLoad.complete(Unit)
+        }
+        waiter.await()
+    }
+
+    @Test
     fun `awaitInitialization completes without identity after startup failure`() = test {
         whenever(pubkyService.initialize()).thenAnswer { throw TestAppError("Startup failed") }
         val repo = createSut()

@@ -23,8 +23,8 @@ class PubkyService @Inject constructor(
     private val paykitSdkService: PaykitSdkService,
 ) {
     companion object {
-        /** Maximum wait for a Ring relay approval response. */
-        private val RING_AUTH_TIMEOUT = 30.seconds
+        /** Maximum wait for a Pubky authorization network response. */
+        internal val AUTHORIZATION_TIMEOUT = 30.seconds
     }
 
     suspend fun initialize() = ServiceQueue.CORE.background {
@@ -150,7 +150,7 @@ class PubkyService @Inject constructor(
     suspend fun approveRingAuth(
         authUrl: String,
         secretKeyHex: String,
-        timeout: Duration = RING_AUTH_TIMEOUT,
+        timeout: Duration = AUTHORIZATION_TIMEOUT,
     ) = ServiceQueue.CORE.background {
         withTimeoutOrNull(timeout) {
             approvePubkyAuth(authUrl, secretKeyHex)
