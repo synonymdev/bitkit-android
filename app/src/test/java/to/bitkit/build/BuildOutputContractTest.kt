@@ -22,6 +22,7 @@ class BuildOutputContractTest {
             "Justfile",
             ".github/workflows/e2e.yml",
             ".github/workflows/e2e_migration.yml",
+            ".github/workflows/e2e-staging.yml",
             ".github/workflows/release.yml",
             ".github/workflows/release-internal.yml",
             ".agents/commands/release.md",

@@ -9,8 +9,8 @@ on:
         description: "Branch of synonymdev/bitkit-e2e-tests to use (main | default-feature-branch | custom branch name)"
         required: false
         default: "default-feature-branch"
-      notify_slack:
-        description: "Post failure result to Slack (#bitkit-staging-nightly)"
+      post_to_slack:
+        description: "Post E2E staging summary to Slack (#bitkit-staging-nightly)"
         type: boolean
         required: false
         default: false
@@ -21,7 +21,7 @@ env:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name != 'schedule' }}
 
 jobs:
   build-staging:
@@ -84,6 +84,7 @@ jobs:
   e2e-tests-staging:
     runs-on: ubuntu-latest
     needs: [build-staging, e2e-branch]
+    timeout-minutes: 90
 
     strategy:
       fail-fast: false
@@ -233,26 +234,29 @@ jobs:
         if: failure()
         uses: jwalton/gh-docker-logs@v2
 
-  notify-failure:
+  slack-report:
     if: >-
       always() &&
       (github.event_name == 'schedule' ||
-       (github.event_name == 'workflow_dispatch' && inputs.notify_slack)) &&
-      (needs.build-staging.result == 'failure' ||
-       needs.e2e-branch.result == 'failure' ||
-       needs.e2e-tests-staging.result == 'failure')
+       (github.event_name == 'workflow_dispatch' && inputs.post_to_slack == true))
     needs: [build-staging, e2e-branch, e2e-tests-staging]
     runs-on: ubuntu-latest
     steps:
-      - name: Notify Slack on failure
-        uses: slackapi/slack-github-action@e598089eaef53883a2d9b325e044899548518a03
+      - name: Checkout E2E tests
+        uses: actions/checkout@v7
         with:
-          webhook: ${{ secrets.SLACK_WEBHOOK_URL_STAGING }}
-          webhook-type: incoming-webhook
-          payload: |
-            text: "❌ E2E Staging nightly failed"
-            blocks:
-              - type: "section"
-                text:
-                  type: "mrkdwn"
-                  text: "❌ *E2E Staging nightly failed*\n<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View workflow run>"
+          repository: synonymdev/bitkit-e2e-tests
+          ref: ${{ needs.e2e-branch.outputs.branch }}
+
+      - name: Post Slack summary
+        run: python3 scripts/slack_summary.py e2e-staging
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL_STAGING }}
+          PLATFORM: android
+          STAGING_RESULT: ${{ needs.build-staging.result == 'success' && needs.e2e-branch.result == 'success' && needs.e2e-tests-staging.result == 'success' && 'success' || 'failure' }}
+          BUILD_RESULT: ${{ needs.build-staging.result }}
+          E2E_BRANCH_RESULT: ${{ needs.e2e-branch.result }}
+          E2E_TESTS_RESULT: ${{ needs.e2e-tests-staging.result }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          E2E_TESTS_REF: ${{ needs.e2e-branch.outputs.branch }}
