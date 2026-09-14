@@ -52,6 +52,92 @@ just install
 just clean
 ```
 
+### Agent CLI (android)
+
+Agents can drive a connected emulator or device with the `android` CLI, which wraps the SDK tooling
+and adds a semantic UI dump. It is not provisioned by this repo — install it if it is missing
+(`curl -fsSL https://dl.google.com/android/cli/latest/darwin_arm64/install.sh | bash`), and discover
+arguments with `--help` rather than memorizing them.
+
+```sh
+# Emulators
+android emulator list                  # AVD names; `start` requires one, it has no default
+android emulator start Pixel_9
+
+# Inspect the screen
+android layout --pretty                # flat JSON of on-screen elements
+android layout --diff                  # only what changed, to keep context small
+android screen capture -o shot.png     # secondary; use when layout hits a WebView or animation
+android screen capture --annotate -o shot.png   # numbered boxes, for elements layout cannot name
+
+# Interact
+adb shell input tap <x> <y>            # use an element's `center`
+```
+
+`android layout` reports each element's `resource-id`, `text`, `content-desc`, `interactions`,
+`bounds` and `center`. Compose `testTag`s land in `resource-id`. **The JSON keys are hyphenated, not
+camelCase** — the `android-cli` skill's `references/interact.md` documents `resourceId` and
+`contentDesc`, and a filter written against those names matches nothing.
+
+Prefer `android layout` over screenshots: it names elements by their test tag, and full-resolution
+screenshots can exceed image size limits.
+
+## Journeys
+
+`journeys/` holds XML walkthroughs of app behaviour that an agent evaluates by driving a running
+emulator or device — number pad caps, notification permission, widget flows, deeplinks, hardware
+wallet pairing and transfers. Read [`journeys/README.md`](journeys/README.md) before running or
+writing one; it has the format, the runner commands and the per-suite preconditions.
+
+- Journeys are **developer-assistance specs, not a QA gate**. Nothing in `.github/workflows` reads
+  `journeys/`; `ui-tests.yml` runs the instrumented tests and never touches them. They are
+  agent-evaluated and non-deterministic, so they belong on a manual, developer-triggered run rather
+  than a blocking gate. An agent runs one on request.
+- A journey is **not the source of truth** for app behaviour, despite what the `android-cli` skill's
+  own `references/journeys.md` says. A journey that disagrees with the app is most likely stale. Say
+  what you found and update the journey; escalate only once you have separately confirmed the app is
+  wrong. A crash, exit or freeze is the exception — stop there and escalate.
+- **PORT the journeys whenever a feature crosses to or from iOS.** If a change ships or touches a
+  journey under `journeys/`, the matching `bitkit-ios` PR carries it, and vice versa. A ported
+  feature without its journey is an incomplete port.
+- KEEP the file name, `<journey name>` and `<action>` prose identical across the two repos so the
+  specs stay diffable. Change only what the platform forces.
+- MATCH the iOS identifier string when adding a `testTag` a journey asserts on — the vocabulary is
+  deliberately shared (`N9`, `NRemove`, `SpendingAmountContinue`, `HardwareTransferSign`). Record any
+  name that cannot match in the identifier table in `journeys/README.md`.
+- ADAPT rather than transcribe when a platform genuinely behaves differently, and say so in the
+  journey's `<description>` and the suite README — never assert behaviour the platform does not have.
+- SKIP a journey only when the feature does not exist on the other side, and record it under the
+  cross-platform table in `journeys/README.md` with what is missing.
+
+### Running a journey on both platforms
+
+A journey is a shared spec, so when a behaviour is meant to match iOS, run the same file on both
+sides rather than reasoning about the difference. Android uses the `android` CLI above; iOS uses the
+XcodeBuildMCP CLI against a `bitkit-ios` checkout:
+
+```sh
+xcodebuildmcp simulator build-and-run                 # build, install, launch, capture logs
+xcodebuildmcp simulator snapshot-ui                   # the `android layout` equivalent
+xcodebuildmcp ui-automation tap --element-ref e12     # tap one ref from the latest snapshot
+xcodebuildmcp ui-automation wait-for-ui --identifier SpendingAmount --predicate exists
+```
+
+`snapshot-ui` names elements by `accessibilityIdentifier` the way `android layout` names them by
+`resource-id`, so a journey's tag assertions map onto both. The vocabulary really is shared —
+Settings on both platforms agrees on `Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`,
+`HeaderMenu`, `CurrenciesSettings`, `UnitSettings`, `WidgetsSettings` and `QuickpaySettings` — so a
+comparison run is mostly signal and the rows that disagree stand out.
+
+A cross-platform Lightning payment is the sharpest single check that the two builds agree: take an
+invoice from one side and pay it from the other (`xcrun simctl pbpaste <udid>` after tapping Copy on
+iOS, then the `lightning:` URI route above on Android).
+
+When the two platforms disagree on a journey, write down which it looks like — an intentional
+platform difference, or something worth a closer look — in the journey's `<description>` and the
+suite README, on both sides, so the next reader does not rediscover it. A disagreement is a prompt to
+investigate, not a bug report on its own.
+
 ## Architecture Overview
 
 ### Tech Stack
@@ -289,6 +375,12 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS download device files to `.ai/{name}_{timestamp}/` when needed for debugging (e.g. `.ai/logs_1770671066/`)
 - To download: `adb shell "run-as to.bitkit.dev cat files/path/to/file" > .ai/folder_timestamp/filename`
 - ALWAYS try reading device logs automatically via adb BEFORE asking user to provide log files
+- NEVER type long strings with `adb shell input text` — it silently drops characters (it lost 54 of a
+  397-character invoice), and `adb shell cmd clipboard` is not implemented on the emulator image.
+  Hand an address or invoice to the app as a URI instead, which also skips the recipient screen:
+  `adb shell am start -a android.intent.action.VIEW -d "lightning:<invoice>" to.bitkit.dev`
+- For short strings that must be typed, enter digit groups and separators separately, then verify —
+  dotted strings such as host IPs are where the dropping shows up first
 
 ### Architecture Guidelines
 
