@@ -318,6 +318,7 @@ private fun ContentRunning(
     val isHardwareFeeLoading = uiState.hardwareWalletId != null && uiState.onchainFeeUi.isLoading
 
     val accentColor = when (uiState.payMethod) {
+        SendMethod.ONCHAIN if uiState.hardwareWalletId != null -> Colors.Blue
         SendMethod.ONCHAIN -> Colors.Brand
         SendMethod.LIGHTNING -> Colors.Purple
     }
@@ -902,6 +903,33 @@ private fun PreviewOnChainDetails() {
             SendConfirmContent(
                 uiState = sendUiState().copy(
                     selectedTags = persistentListOf("car", "house", "uber"),
+                    speed = TransactionSpeed.Medium,
+                    onchainFeeUi = OnchainFeeUi(
+                        rate = FeeRate.NORMAL,
+                        sats = 1_234,
+                    ),
+                ),
+                isNodeRunning = true,
+                isLoading = false,
+                showBiometrics = false,
+                initialShowDetails = true,
+                modifier = Modifier.sheetHeight()
+            )
+        }
+    }
+}
+
+@Suppress("MagicNumber")
+@Preview(showSystemUi = true, group = "onchain details")
+@Composable
+private fun PreviewOnChainHardwareDetails() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            SendConfirmContent(
+                uiState = sendUiState().copy(
+                    hardwareWalletId = "wallet-id",
+                    hardwareWalletName = "Trezor Safe 7",
+                    canSwitchFundingSource = true,
                     speed = TransactionSpeed.Medium,
                     onchainFeeUi = OnchainFeeUi(
                         rate = FeeRate.NORMAL,
