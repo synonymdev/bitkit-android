@@ -1670,7 +1670,13 @@ class LightningRepo @Inject constructor(
 
     fun separateTrustedChannels(channels: List<ChannelDetails>) = lightningService.separateTrustedChannels(channels)
 
+    @Suppress("KotlinConstantConditions")
     suspend fun registerForNotifications(token: String? = null) = executeWhenNodeRunning("registerForNotifications") {
+        if (Env.isE2eTest) {
+            Logger.info("Skipped push registration in E2E build", context = TAG)
+            return@executeWhenNodeRunning Result.success(Unit)
+        }
+
         runCatching {
             val token = token ?: firebaseMessaging.token.await()
             val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
