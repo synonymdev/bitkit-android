@@ -985,11 +985,12 @@ class QuickPayRepoTest : BaseUnitTest() {
     fun `reconcile during live dispatched op does not steal completion`() = test {
         val (bolt11, hash) = testInvoice()
         val dispatched = CompletableDeferred<Unit>()
+        val hold = CompletableDeferred<Result<String>>()
         whenever { lightningRepo.payInvoice(any(), anyOrNull(), any()) }.doSuspendableAnswer { invocation ->
             val onBeforeSend = invocation.getArgument<suspend () -> Boolean>(2)
             if (!onBeforeSend()) return@doSuspendableAnswer Result.failure(PaymentAbortedBeforeSend())
             dispatched.complete(Unit)
-            Result.success("pid")
+            hold.await()
         }
         val session = QuickPaySession()
 
@@ -1002,6 +1003,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             sut.reconcileAgainstLdk()
             assertEquals(250L, spentCents())
             assertEquals(1, cacheStore.data.first().quickPayLedger!!.records.size)
+            hold.complete(Result.success("pid"))
             val outcome = sut.signalCompletion(paymentId = "pid", paymentHash = hash, success = true)
             assertEquals(QuickPayCompletionKind.SETTLED_SUCCESS, outcome.kind)
             assertTrue(outcome.wasQuickPay)

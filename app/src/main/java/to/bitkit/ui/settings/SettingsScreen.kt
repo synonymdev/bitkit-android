@@ -343,7 +343,7 @@ private fun GeneralTabContent(
                 icon = { SettingsIcon(R.drawable.ic_coins) },
                 onClick = { onEvent(SettingsEvent.ContactPaymentsClick) },
                 enabled = !state.isUpdatingContactPayments,
-                switchTestTag = "ContactPaymentsSwitch",
+                switchTestTag = "ContactPaymentsToggle",
                 modifier = Modifier.testTag("ContactPaymentsSettings")
             )
         }

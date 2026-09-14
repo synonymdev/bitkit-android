@@ -33,6 +33,7 @@ import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.verifyBlocking
 import org.mockito.kotlin.whenever
 import to.bitkit.data.SettingsData
@@ -67,6 +68,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
     private val paykitSdkService = mock<PaykitSdkService>()
     private val settingsStore = mock<SettingsStore>()
     private val presentationStore = mock<PaykitPaymentRequestPresentationStore>()
+    private val diagnostics = mock<PaykitPaymentRequestDiagnostics>()
     private val paymentProofStore = mock<PaykitPaymentProofStore>()
     private val paymentProofRepo = mock<PaykitPaymentProofRepo>()
     private val notificationScheduler = mock<PaykitSubscriptionNotificationScheduler>()
@@ -99,6 +101,7 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
             paykitSdkService,
             settingsStore,
             presentationStore,
+            diagnostics,
             paymentProofStore,
             paymentProofRepo,
             notificationScheduler,
@@ -141,6 +144,40 @@ class PaykitPaymentRequestRepoSubscriptionTest : BaseUnitTest(StandardTestDispat
         assertFalse(request.requiresAcceptance)
         assertEquals(Instant.parse("2027-01-01T08:00:00Z"), request.billingPeriod?.startsAt)
         assertEquals(Instant.parse("2027-02-01T08:00:00Z"), request.billingPeriod?.endsAt)
+    }
+
+    @Test
+    fun `refresh does not report subscription proposals as one time parse failures`() = test {
+        whenever(paykitSdkService.paymentRequests()).thenReturn(listOf(paymentRequestRecord()))
+
+        sut.refresh().getOrThrow()
+
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertEquals(1, sut.subscriptions.value.size)
+        verify(diagnostics, never()).logParseRejection(any(), any())
+    }
+
+    @Test
+    fun `refresh reports unsupported subscription recurrence`() = test {
+        val unsupportedRecurrence = PaymentRequestRecurrence(
+            every = 1u,
+            unit = "fortnight",
+            startsAt = "2027-01-01T08:00:00Z",
+            anchor = "2027-01-01T08:00:00Z",
+            endsAt = null,
+        )
+        whenever(paykitSdkService.paymentRequests()).thenReturn(
+            listOf(paymentRequestRecord(recurrence = unsupportedRecurrence)),
+        )
+
+        sut.refresh().getOrThrow()
+
+        assertTrue(sut.pendingRequests.value.isEmpty())
+        assertTrue(sut.subscriptions.value.isEmpty())
+        verify(diagnostics).logParseRejection(
+            COUNTERPARTY,
+            PaykitPaymentRequest.ParseFailure.UnsupportedRecurrence,
+        )
     }
 
     @Test

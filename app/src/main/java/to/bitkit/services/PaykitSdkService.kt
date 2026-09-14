@@ -85,6 +85,7 @@ import to.bitkit.models.PubkyAuthRequestError
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.repositories.Endpoint
 import to.bitkit.repositories.PaykitBillingPeriod
+import to.bitkit.repositories.PaykitIssuerInterop
 import to.bitkit.repositories.PublicPaykitRepo
 import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
@@ -638,7 +639,7 @@ class PaykitSdkService @Inject constructor(
                         PubkyPublicKeyFormat.matches(identityStatus.publicKey, expectedIdentity)
                 ) { "Paykit identity changed before proposing the payment request" }
                 val terms = PaymentRequestTerms(
-                    amount = PaymentRequestAmount(proposal.amountValue, "btc"),
+                    amount = PaymentRequestAmount(proposal.amountValue, PaykitIssuerInterop.BITCOIN_ASSET),
                     paymentReference = PaymentReference(proposal.paymentReference),
                     proposalExpiresAt = proposal.proposalExpiresAt,
                     recurrence = null,

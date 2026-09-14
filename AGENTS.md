@@ -186,6 +186,12 @@ suspend fun getData(): Result<Data> = withContext(Dispatchers.IO) {
 - ALWAYS follow Material3 design guidelines for UI components
 - When building from a Figma frame, reuse only scaffolding (sheet host, `SheetTopBar`, buttons, typography); NEVER swap a design-specific illustration/animation for a lookalike. Export the frame's assets via the Figma MCP and read animation timing/easing/direction from prototype reactions (`use_figma` → `node.reactions`)
 - ALWAYS resolve a changed `*Screen.kt` to its Figma frame through `docs/screens-map.md` (`Flow › Frame` on the latest `Bitkit - Handoff vNN` page). When adding or removing a `*Screen.kt`, add or drop its row there (`todo` when the design does not exist yet); `ScreensMapTest` fails otherwise
+- ALWAYS fill the PR `### Design` section:
+  - User-visible UI changes with an existing design: link the relevant Figma frames. Start with `docs/screens-map.md` for mapped screens; link known handoff frames directly for sheets, dialogs, reusable views, and other UI outside the map.
+  - UI changes mapped to `todo` or `n/a`, or other UI changes without an available design, including new features: use `N/A — no design available.`; creating a design is never required.
+  - Changes without user-visible UI changes: use `N/A — no UI changes.`
+  - Genuinely uncertain frame matches: report the uncertainty honestly; never invent links.
+- Code review may make at most one advisory request per PR when an existing-design UI link is omitted or an out-of-map `N/A — no design available.` claim is unverified. Valid mapped `todo`/`n/a` cases and `N/A — no UI changes.` require no request. Missing links never block approval, CI, PR creation, or review readiness.
 - ALWAYS ensure proper error handling in coroutines
 - ALWAYS acknowledge datastore async operations run synchronously in a suspend context
 - NEVER use `runBlocking` in suspend functions
