@@ -80,7 +80,9 @@ camelCase** — the `android-cli` skill's `references/interact.md` documents `re
 `contentDesc`, and a filter written against those names matches nothing.
 
 Prefer `android layout` over screenshots: it names elements by their test tag, and full-resolution
-screenshots can exceed image size limits.
+screenshots can exceed image size limits. It does not see everything, though — toasts never appear
+in it, some tiles carry no text, and an element can be missing from one dump and present in the
+next. `journeys/README.md` lists what needs a screenshot instead.
 
 ## Journeys
 

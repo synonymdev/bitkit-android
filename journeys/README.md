@@ -62,6 +62,19 @@ on. **The JSON keys are hyphenated, not camelCase** — the skill's `references/
 Prefer `android layout` over screenshots: it names elements by their test tag, and full-resolution
 screenshots can exceed image size limits.
 
+**Not everything on screen reaches `android layout`.** Verified while running these journeys:
+
+- **Toasts never appear.** The "Insufficient balance" warning the amount journeys assert on is
+  visible only in a screenshot. Capture one immediately after the rejected keypress — the toast
+  lasts about 1.5s.
+- **Widget gallery tiles carry no text.** The Add Widget sheet lists `WidgetListItem-price`,
+  `WidgetListItem-weather` and so on with empty `text`, so "verify Bitcoin Price and Bitcoin Weather
+  are visible" needs a screenshot. Assert the identifier instead where the journey allows it.
+- **Exposure is not stable between dumps.** `HeaderMenu` and `ProfileButton` were absent from one
+  home-screen dump and present in the next, with no navigation in between. If an element a journey
+  names is missing, dump again before concluding it is gone, then fall back to
+  `android screen capture --annotate` and `android screen resolve` to tap it by coordinate.
+
 **Do not type long strings.** `adb shell input text` silently drops characters — it lost 54 of a
 397-character invoice in testing — and `adb shell cmd clipboard` is not implemented on the emulator
 image. Hand an address or invoice to the app as a URI instead, which also skips the recipient screen:
@@ -69,6 +82,12 @@ image. Hand an address or invoice to the app as a URI instead, which also skips 
 ```bash
 adb shell am start -a android.intent.action.VIEW -d "lightning:<invoice>" to.bitkit.dev
 ```
+
+`am` echoes the intent back with the data redacted — `dat=bitcoin:` with nothing after the scheme.
+That is `Uri.toSafeString()` hiding the rest, not a truncated argument; the full URI is delivered.
+To confirm the app received it, read the app log rather than the `am` output: a good delivery logs
+`Received deeplink`, `Queuing 'deeplink' scan` and `Starting scan from 'deeplink'`, and an invalid
+address then fails with `Failed to decode scan data`.
 
 For short strings that must be typed, enter digit groups and separators separately and verify after —
 dotted strings such as host IPs are where the dropping shows up first.
@@ -107,10 +126,11 @@ fixtures, push notifications) live in each suite's README.
 ## Cross-platform
 
 These journeys are also carried by [`bitkit-ios/journeys`](https://github.com/synonymdev/bitkit-ios/tree/main/journeys),
-which aims to keep the same file names, journey names and `<action>` prose so the two sides stay
-diffable.
-Only the mechanics differ: `android`/`adb` becomes `xcodebuildmcp`, and Compose `testTag`s become
-`accessibilityIdentifier`s. `AGENTS.md` has the command equivalents and the rules for porting.
+which keeps the same file names, journey names and step sequence so the two sides stay diffable.
+The prose is not byte-identical: each side annotates its own identifier vocabulary, so a step reads
+`(testTag "N9")` here and `(id "N9")` on iOS, and a platform sometimes adds a note of its own. Diff
+for the shape of the journey, not for equality. `AGENTS.md` has the command equivalents and the
+rules for porting.
 
 Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 
@@ -123,6 +143,18 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
+
+### Running one on iOS
+
+Two mechanics differ from the Android runner, both hit while checking this corpus:
+
+- **`elementRef`s expire on a timer**, not only when the layout changes. A tap against a ref from a
+  snapshot taken a minute earlier fails with "the runtime UI snapshot for this simulator has
+  expired". Snapshot and tap in the same step.
+- **`snapshot-ui` omits controls that are still tappable.** The receive screen's Copy button is not
+  in its target list, but `wait-for-ui --identifier ReceiveCopyQR --predicate exists` returns it
+  *with a usable ref*. Use that to reach an element the snapshot does not list, rather than
+  concluding it is gone.
 
 ### Identifiers
 
@@ -138,6 +170,10 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | Send max | `SendAmountMax` | *(no button — tap `AvailableAmount`)* |
 | External amount available | — | `ExternalAmountAvailable` |
 | Background payments setting row | `BackgroundPaymentSettings` | `NotificationsSettings` |
+| Send over-max toast | — *(no tag; assert it from a screenshot)* | `SendAmountExceededToast` |
+| Widgets intro screen container | — | `WidgetsOnboarding` |
+| Home suggestion cards | `Suggestion-<id>` | — *(cards expose no identifier)* |
+| Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
 | Payment Request row | `PaymentRequestRow-<id>` | `PaymentRequestRow-<id>-<counterparty>-<receiverPath>-<period>` |
 
 Two of those are unreconciled rather than intentional: the Send screen emitting both
