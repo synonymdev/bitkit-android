@@ -459,6 +459,7 @@ fun ContentView(
         val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
         val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
         val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+        val isPubkyProfileSetupPending by settingsViewModel.isPubkyProfileSetupPending.collectAsStateWithLifecycle()
         val hasSeenContactsIntro by settingsViewModel.hasSeenContactsIntro.collectAsStateWithLifecycle()
         val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
         val hasPubkyContacts by settingsViewModel.hasPubkyContacts.collectAsStateWithLifecycle()
@@ -648,6 +649,7 @@ fun ContentView(
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     var isHomeCalculatorInputActive by remember { mutableStateOf(false) }
+                    val pubkyProfileSetupNavigation = remember { PubkyProfileSetupNavigation() }
 
                     RootNavHost(
                         navController = navController,
@@ -668,6 +670,25 @@ fun ContentView(
 
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
+                    LaunchedEffect(
+                        isPaykitEnabled,
+                        isPubkyProfileSetupPending,
+                        isProfileAuthenticated,
+                        currentSheet,
+                        currentRoute,
+                    ) {
+                        val canNavigate = currentSheet == null &&
+                            currentRoute != Routes.CreateProfile::class.qualifiedName
+                        if (pubkyProfileSetupNavigation.shouldNavigate(
+                                isEnabled = isPaykitEnabled,
+                                isPending = isPubkyProfileSetupPending,
+                                isAuthenticated = isProfileAuthenticated,
+                                canNavigate = canNavigate,
+                            )
+                        ) {
+                            navController.navigateTo(Routes.CreateProfile)
+                        }
+                    }
                     val currentHardwareWalletId = navBackStackEntry
                         ?.takeIf { it.destination.hasRoute<Routes.HardwareWallet>() }
                         ?.toRoute<Routes.HardwareWallet>()
@@ -724,6 +745,26 @@ fun ContentView(
                 modifier = Modifier.align(Alignment.TopEnd)
             )
         }
+    }
+}
+
+internal class PubkyProfileSetupNavigation {
+    private var didResume = false
+
+    fun shouldNavigate(
+        isEnabled: Boolean,
+        isPending: Boolean,
+        isAuthenticated: Boolean,
+        canNavigate: Boolean,
+    ): Boolean {
+        if (!isPending) {
+            didResume = false
+            return false
+        }
+        if (didResume) return false
+        if (!isEnabled || !isAuthenticated || !canNavigate) return false
+        didResume = true
+        return true
     }
 }
 
@@ -1577,7 +1618,7 @@ private fun NavGraphBuilder.shop(
             page = it.toRoute<Routes.ShopWebView>().page,
             title = it.toRoute<Routes.ShopWebView>().title,
             onPaymentIntent = { data ->
-                appViewModel.onScanResult(data)
+                appViewModel.onScanResult(data, allowPubkyAuth = false)
             },
             onBlockedNavigation = {
                 appViewModel.toast(
