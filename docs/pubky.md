@@ -35,12 +35,12 @@ The auth handshake uses a relay-based protocol:
 
 ## Service Layer (`PubkyService`)
 
-Wraps two FFI libraries:
+Delegates Pubky operations to `PaykitSdkService`, which uses:
 
-- **paykit-ffi** (`com.synonym:paykit-android`) — session management and bounded file fetching
-  - `paykitInitialize()`, `paykitImportSession()`, `paykitSignOut()`, `paykitForceSignOut()`, `fetchPubkyFileBounded()`
-- **bitkit-core** (`com.synonym:bitkit-core-android`) — auth relay and profile/contacts fetching
-  - `startPubkyAuth()`, `completePubkyAuth()`, `cancelPubkyAuth()`, `fetchPubkyProfile()`, `fetchPubkyContacts()`
+- **paykit-ffi** (`com.synonym:paykit-android`) — session management, Ring auth, profile/contact resolution, and bounded file fetching
+  - `startSignInAuth()`, `fetchPubkyProfile()`, `fetchPubkyFollows()`, `resolveContactProfile()`, `fetchPubkyFileBounded()`
+- **bitkit-core** (`com.synonym:bitkit-core-android`) — mnemonic-to-seed conversion for receiver noise-key derivation
+  - `mnemonicToSeed()`
 
 All calls are dispatched on `ServiceQueue.CORE` (single-thread executor) to ensure serial access to the underlying Rust state.
 
@@ -78,8 +78,9 @@ Manages auth state, session lifecycle, and profile data. Singleton scoped.
 
 ### Contacts
 
-- `loadContacts()` fetches the authenticated user's contact keys via `fetchPubkyContacts`, then concurrently fetches each contact's profile
-- Contact keys from the FFI may lack the `pubky` prefix; `ensurePubkyPrefix()` normalizes them before passing to `fetchPubkyProfile`
+- `loadContacts()` reads saved Paykit contact records, then concurrently resolves any missing profiles via `resolveContactProfile()`
+- Contact keys from the FFI may lack the `pubky` prefix; `ensurePubkyPrefix()` normalizes them before profile resolution
+- `prepareImport()` discovers followed keys via `fetchPubkyFollows()`, then resolves each profile
 - If a contact profile fetch fails, a `PubkyProfile.placeholder()` is used to ensure the contact still appears in the list with a truncated public key
 - `fetchContactProfile()` fetches a single contact's profile on demand (used by the detail screen)
 
@@ -133,7 +134,7 @@ bodies can still be buffered by the Pubky client before Paykit regains control.
 - `publicKey`, `name`, `bio`, `imageUrl`, `links`, `status`
 - `truncatedPublicKey` — uses `String.ellipsisMiddle()` extension
 - `PubkyProfileLink` — `label` + `url` pair
-- `fromFfi()` — maps from bitkitcore's `PubkyProfile` FFI type
+- `fromPubkyProfile()` and `fromPaykitProfile()` — map Paykit SDK profile types
 - `placeholder()` — creates a stub profile with the truncated public key as the name
 
 ## Home Screen Integration
