@@ -912,20 +912,11 @@ class PaykitSdkService @Inject constructor(
 
     private suspend fun <T> withStateRevisionTracking(block: suspend (PaykitSdk) -> T): T {
         val handle = handle()
-        val previousRevision = runSuspendCatching { handle.backupStateRevision() }.getOrNull()
-        return try {
+        return withPaykitBackupStateTracking(
+            readRevision = { handle.backupStateRevision() },
+            onChange = ::notifyBackupStateChanged,
+        ) {
             block(handle)
-        } finally {
-            withContext(NonCancellable) {
-                notifyBackupStateChangedIfNeeded(previousRevision, handle)
-            }
-        }
-    }
-
-    private suspend fun notifyBackupStateChangedIfNeeded(previousRevision: String?, handle: PaykitSdk) {
-        val nextRevision = runSuspendCatching { handle.backupStateRevision() }.getOrNull()
-        if (previousRevision == null || nextRevision == null || previousRevision != nextRevision) {
-            notifyBackupStateChanged()
         }
     }
 
@@ -986,6 +977,24 @@ class PaykitSdkService @Inject constructor(
 
         fun parseAuthUrl(authUrl: String) =
             parsePubkyAuthUrl(authUrl)
+    }
+}
+
+internal suspend fun <T> withPaykitBackupStateTracking(
+    readRevision: suspend () -> String,
+    onChange: () -> Unit,
+    operation: suspend () -> T,
+): T {
+    val previousRevision = runSuspendCatching { readRevision() }.getOrNull()
+    return try {
+        operation()
+    } finally {
+        withContext(NonCancellable) {
+            val nextRevision = runSuspendCatching { readRevision() }.getOrNull()
+            if (previousRevision == null || nextRevision == null || previousRevision != nextRevision) {
+                onChange()
+            }
+        }
     }
 }
 

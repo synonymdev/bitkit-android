@@ -495,6 +495,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             runCurrent()
             verify(paykitPaymentRequestRepo, never()).refresh()
 
+            val request = paymentRequest()
+            whenever(paykitPaymentRequestRepo.refresh()).doSuspendableAnswer {
+                pendingPaykitPaymentRequests.value = listOf(request)
+                Result.success(Unit)
+            }
             advanceTimeBy(1.seconds.inWholeMilliseconds)
             runCurrent()
             verify(paykitPaymentRequestRepo).refresh()
@@ -502,8 +507,15 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             verify(paykitPaymentProofRepo, never()).reconcile()
             verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), eq(true))
 
-            advanceTimeBy(30.seconds.inWholeMilliseconds)
-            runCurrent()
+            for (delay in listOf(5.seconds, 10.seconds, 15.seconds)) {
+                clearInvocations(paykitPaymentRequestRepo)
+                advanceTimeBy(delay.inWholeMilliseconds - 1)
+                runCurrent()
+                verify(paykitPaymentRequestRepo, never()).refresh()
+                advanceTimeBy(1)
+                runCurrent()
+                verify(paykitPaymentRequestRepo).refresh()
+            }
             verify(privatePaykitRepo).refreshKnownSavedContactEndpoints(any(), any())
             verify(paykitPaymentProofRepo).reconcile()
             verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(true))
