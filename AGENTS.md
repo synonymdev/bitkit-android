@@ -55,9 +55,18 @@ just clean
 ### Agent CLI (android)
 
 Agents can drive a connected emulator or device with the `android` CLI, which wraps the SDK tooling
-and adds a semantic UI dump. It is not provisioned by this repo — install it if it is missing
-(`curl -fsSL https://dl.google.com/android/cli/latest/darwin_arm64/install.sh | bash`), and discover
-arguments with `--help` rather than memorizing them.
+and adds a semantic UI dump. It is not provisioned by this repo — install it if it is missing, from
+`https://dl.google.com/android/cli/latest/<platform>/install.sh` where `<platform>` is one of
+`darwin_arm64`, `darwin_x86_64` or `linux_x86_64`:
+
+```sh
+curl -fsSL https://dl.google.com/android/cli/latest/darwin_arm64/install.sh | bash
+```
+
+On Windows the installer is a `.cmd` instead:
+`curl -fsSL https://dl.google.com/android/cli/latest/windows_x86_64/install.cmd -o "%TEMP%\i.cmd" && "%TEMP%\i.cmd"`.
+
+Discover arguments with `--help` rather than memorizing them.
 
 ```sh
 # Emulators
