@@ -15,7 +15,6 @@ import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -27,7 +26,6 @@ import androidx.navigation.NavController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
-import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import to.bitkit.R
 import to.bitkit.models.PubkyPublicKeyFormat
@@ -36,6 +34,7 @@ import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.WalletState
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.navigateTo
 import to.bitkit.ui.openNotificationSettings
@@ -75,7 +74,7 @@ fun ReceiveSheet(
     val wallet = requireNotNull(walletViewModel)
     val navController = rememberNavController()
     val rootRoute = startRoute.rootRoute()
-    val scope = rememberCoroutineScope()
+    val currencies = LocalCurrencies.current
 
     LaunchedEffect(Unit) { editInvoiceAmountViewModel.clearInput() }
     val cjitSessionState = remember { ReceiveCjitSessionState() }
@@ -119,6 +118,15 @@ fun ReceiveSheet(
     var skipPaymentRequestAmount by remember { mutableStateOf(false) }
     var isEditingPaymentRequestAmount by remember { mutableStateOf(false) }
 
+    fun resetEditInvoiceAmount() {
+        val amountSats = walletState.bip21AmountSats
+        if (amountSats == null || amountSats == 0uL) {
+            editInvoiceAmountViewModel.clearInput()
+        } else {
+            editInvoiceAmountViewModel.setSats(amountSats.toLong(), currencies)
+        }
+    }
+
     LaunchedEffect(Unit) {
         wallet.resetPreActivityMetadataTagsForCurrentInvoice()
         wallet.refreshReceiveState()
@@ -155,11 +163,13 @@ fun ReceiveSheet(
                         onClickEditInvoice = {
                             editInvoiceSourceTab = it
                             invoiceEditState.beginSoftwareEdit(it)
+                            resetEditInvoiceAmount()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         onClickHardwareEditInvoice = {
                             editInvoiceSourceTab = ReceiveTab.TREZOR
                             invoiceEditState.beginHardwareEdit()
+                            resetEditInvoiceAmount()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
                         initialTab = invoiceEditState.initialTab(hardwareWalletId),
@@ -304,6 +314,7 @@ fun ReceiveSheet(
                             entry = entryDetails,
                             onLearnMore = { navController.navigateTo(ReceiveRoute.LiquidityAdditional) },
                             onContinue = { invoice ->
+                                wallet.updateOnchainBip21Amount(entryDetails.receiveAmountSats.toULong())
                                 cjitSessionState.onCjitConfirmed(invoice)
                                 navController.navigateTo(
                                     ReceiveRoute.QR
@@ -382,11 +393,8 @@ fun ReceiveSheet(
                             navController.navigateTo(ReceiveRoute.PaymentRequestRecipient)
                         },
                         navigateReceiveConfirm = { entry ->
-                            scope.launch {
-                                wallet.updateOnchainBip21Amount(entry.receiveAmountSats.toULong())
-                                cjitSessionState.onCjitCreated(entry)
-                                navController.navigateTo(ReceiveRoute.ConfirmIncreaseInbound)
-                            }
+                            cjitSessionState.onCjitCreated(entry)
+                            navController.navigateTo(ReceiveRoute.ConfirmIncreaseInbound)
                         },
                         onchainOnly = invoiceEditState.isHardwareInvoice,
                         updateOnchainInvoice = wallet::setBip21AmountSats,
@@ -437,7 +445,6 @@ internal class ReceiveCjitSessionState {
         private set
 
     fun onCjitCreated(entry: CjitEntryDetails) {
-        cjitInvoice = null
         entryDetails = entry
     }
 

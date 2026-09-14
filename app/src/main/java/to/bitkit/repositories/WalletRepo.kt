@@ -634,6 +634,7 @@ class WalletRepo @Inject constructor(
         runSuspendCatching {
             val normalizedAmount = amountSats?.takeIf { it > 0uL }
             setBip21AmountSats(normalizedAmount)
+            setBolt11("")
             val newBip21 = buildBip21Url(
                 bitcoinAddress = getOnchainAddress(),
                 amountSats = normalizedAmount,

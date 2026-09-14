@@ -67,7 +67,7 @@ class ReceiveInvoiceEditStateTest {
     }
 
     @Test
-    fun `receive CJIT session clears old invoice when fresh CJIT is created`() {
+    fun `receive CJIT session keeps old invoice until fresh CJIT is confirmed`() {
         val state = ReceiveCjitSessionState()
         val first = cjitEntryDetails(invoice = "first")
         val second = cjitEntryDetails(invoice = "second")
@@ -76,7 +76,12 @@ class ReceiveInvoiceEditStateTest {
         state.onCjitConfirmed("first")
         state.onCjitCreated(second)
 
-        assertNull(state.cjitInvoice)
+        assertEquals("first", state.cjitInvoice)
+        assertEquals(second, state.entryDetails)
+
+        state.onCjitConfirmed("second")
+
+        assertEquals("second", state.cjitInvoice)
         assertEquals(second, state.entryDetails)
     }
 

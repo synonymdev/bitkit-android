@@ -519,7 +519,7 @@ class WalletViewModel @Inject constructor(
         }
     }
 
-    suspend fun updateOnchainBip21Amount(amountSats: ULong?) {
+    fun updateOnchainBip21Amount(amountSats: ULong?) = viewModelScope.launch {
         walletRepo.updateOnchainBip21Amount(amountSats).onFailure { error ->
             ToastEventBus.send(
                 type = Toast.ToastType.ERROR,
