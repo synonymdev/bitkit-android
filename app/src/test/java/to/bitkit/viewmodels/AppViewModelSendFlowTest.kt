@@ -2660,7 +2660,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `cold pubky auth deeplink times out while initialization is stalled`() = test {
+    fun `cold pubky auth deeplink timeout releases scan lock`() = test {
         enablePaykitUi()
         advanceUntilIdle()
         sut.setIsAuthenticated(true)
@@ -2668,6 +2668,9 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(context.getString(R.string.profile__auth_error_title)).thenReturn("Authorization failed")
         whenever(context.getString(R.string.profile__auth_error_timeout)).thenReturn("Authorization timed out")
         val authUrl = "pubkyauth://signin_grant?caps=/pub/paykit/v0/:rw"
+        val bolt11 = "lnbcrt1posttimeoutscan"
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
 
         sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, authUrl.toUri()))
         advanceTimeBy(PubkyService.AUTHORIZATION_TIMEOUT.inWholeMilliseconds)
@@ -2682,6 +2685,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 assertEquals("Authorization timed out", it.description)
             }
         )
+
+        sut.onScanResult(bolt11)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
     }
 
     @Test
