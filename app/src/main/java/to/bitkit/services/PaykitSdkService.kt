@@ -370,10 +370,10 @@ class PaykitSdkService @Inject constructor(
         )
     }
 
-    suspend fun fetchFile(uri: String): ByteArray {
+    suspend fun fetchFile(uri: String, maxBytes: ULong): ByteArray {
         isSetup.await()
         return operationMutex.withLock {
-            handle().fetchPubkyFile(uri) ?: throw AppError("Pubky file not found")
+            handle().fetchPubkyFileBounded(uri, maxBytes) ?: throw AppError("Pubky file not found")
         }
     }
 

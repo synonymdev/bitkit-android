@@ -37,10 +37,10 @@ The auth handshake uses a relay-based protocol:
 
 Wraps two FFI libraries:
 
-- **paykit-ffi** (`com.synonym:paykit-android`) — session management
-  - `paykitInitialize()`, `paykitImportSession()`, `paykitSignOut()`, `paykitForceSignOut()`
-- **bitkit-core** (`com.synonym:bitkit-core-android`) — auth relay, profile/contacts fetching, and file fetching
-  - `startPubkyAuth()`, `completePubkyAuth()`, `cancelPubkyAuth()`, `fetchPubkyProfile()`, `fetchPubkyContacts()`, `fetchPubkyFile()`
+- **paykit-ffi** (`com.synonym:paykit-android`) — session management and bounded file fetching
+  - `paykitInitialize()`, `paykitImportSession()`, `paykitSignOut()`, `paykitForceSignOut()`, `fetchPubkyFileBounded()`
+- **bitkit-core** (`com.synonym:bitkit-core-android`) — auth relay and profile/contacts fetching
+  - `startPubkyAuth()`, `completePubkyAuth()`, `cancelPubkyAuth()`, `fetchPubkyProfile()`, `fetchPubkyContacts()`
 
 All calls are dispatched on `ServiceQueue.CORE` (single-thread executor) to ensure serial access to the underlying Rust state.
 
@@ -101,7 +101,7 @@ Composable for loading and displaying images from `pubky://` URIs, backed by Coi
 ### Architecture
 
 - `PubkyImage` is a stateless composable wrapping Coil's `AsyncImage`
-- `PubkyImageFetcher` is a Coil `Fetcher` that handles `pubky://` URIs via `PubkyService.fetchFile()`
+- `PubkyImageFetcher` is a Coil `Fetcher` that handles `pubky://` URIs via Paykit's bounded file fetch
 - `ImageModule` provides a singleton `ImageLoader` with `PubkyImageFetcher.Factory`, memory cache, and disk cache
 
 ### Caching Strategy (Coil)
@@ -115,9 +115,12 @@ Coil manages a two-tier cache automatically:
 
 1. Coil checks memory cache → return if hit
 2. Coil checks disk cache → return if hit
-3. `PubkyImageFetcher.fetch()` calls `PubkyService.fetchFile(uri)`
-4. If response is a JSON file descriptor with a `src` field, follow the indirection and fetch the blob
+3. `PubkyImageFetcher.fetch()` limits the successful response body to 1 MiB
+4. If the response is a JSON file descriptor with a Pubky `src`, follow the indirection with the same limit
 5. Coil decodes and caches the result
+
+The bound is enforced while successful response bodies are read, before the bytes cross the FFI boundary. HTTP error
+bodies can still be buffered by the Pubky client before Paykit regains control.
 
 ### Display States
 
