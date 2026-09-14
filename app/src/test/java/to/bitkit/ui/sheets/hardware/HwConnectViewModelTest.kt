@@ -325,6 +325,33 @@ class HwConnectViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `offers a paired jade that came back under a new bluetooth address`() = test {
+        // A rebooted Jade advertises under a fresh address, so the scanned id matches no stored
+        // entry and only its advertised name identifies it.
+        val readvertised = deviceInfo("ble:56:C4:BF:B3:9E:75", model = "Jade").copy(
+            vendor = HwWalletVendor.BLOCKSTREAM,
+            name = "Jade 8F6B64",
+        )
+        deviceState.value = HwDeviceState(nearbyDevices = persistentListOf())
+        whenever(hwWalletRepo.scan(includeBluetooth = true)).thenReturn(Result.success(listOf(readvertised)))
+        whenever {
+            hwWalletRepo.hasKnownDevice(readvertised.id, advertisedName = "Jade 8F6B64")
+        }.thenReturn(true)
+
+        sut.effects.test {
+            sut.onIntroContinue()
+            assertEquals(HwConnectEffect.NavigateToSearching, awaitItem())
+            assertEquals(
+                HwConnectEffect.NavigateToFound(readvertised.id, "Jade", HwWalletVendor.BLOCKSTREAM),
+                awaitItem(),
+            )
+            cancelAndIgnoreRemainingEvents()
+        }
+
+        assertEquals(readvertised.id, sut.uiState.value.foundDeviceId)
+    }
+
+    @Test
     fun `keeps searching when the only device found is neither new nor paired`() = test {
         deviceState.value = HwDeviceState(nearbyDevices = persistentListOf())
         whenever(hwWalletRepo.scan(includeBluetooth = true))

@@ -344,11 +344,16 @@ class HwWalletRepo @Inject constructor(
     private suspend fun devicesForDeviceId(deviceId: String): List<KnownDevice> =
         hwWalletStore.loadKnownDevices().filter { it.id == deviceId || it.path == deviceId }
 
-    suspend fun hasKnownDevice(deviceId: String, vendor: HwWalletVendor? = null): Boolean = when (vendor) {
+    /** [advertisedName] is what a Bluetooth scan reported, which is how a rebooted Jade is recognised. */
+    suspend fun hasKnownDevice(
+        deviceId: String,
+        vendor: HwWalletVendor? = null,
+        advertisedName: String? = null,
+    ): Boolean = when (vendor) {
         HwWalletVendor.TREZOR -> trezorRepo.hasKnownDevice(deviceId)
         // A USB path is renumbered on every plug, so any paired USB Jade claims a plugged-in one.
         HwWalletVendor.BLOCKSTREAM -> jadeRepo.hasKnownUsbDevice(deviceId)
-        null -> trezorRepo.hasKnownDevice(deviceId) || jadeRepo.hasKnownDevice(deviceId)
+        null -> trezorRepo.hasKnownDevice(deviceId) || jadeRepo.hasKnownDevice(deviceId, advertisedName)
     }
 
     /** Connects and pairs a discovered device, persisting it as a watch-only known device. */

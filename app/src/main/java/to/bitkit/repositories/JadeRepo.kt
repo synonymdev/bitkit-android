@@ -447,9 +447,15 @@ class JadeRepo @Inject constructor(
         }
     }
 
-    suspend fun hasKnownDevice(deviceId: String): Boolean = withContext(ioDispatcher) {
-        knownDevice(deviceId) != null
-    }
+    /**
+     * Whether [deviceId] names a paired Jade. [advertisedName] is the name a Bluetooth scan reported
+     * for it: a rebooted Jade advertises under a fresh address, so matching on the id alone would
+     * treat a device that is already paired as a stranger.
+     */
+    suspend fun hasKnownDevice(deviceId: String, advertisedName: String? = null): Boolean =
+        withContext(ioDispatcher) {
+            knownDevices().any { it.matches(deviceId) || it.advertisesAs(advertisedName) }
+        }
 
     /** Whether [deviceId] names a known USB entry or any USB Jade is paired: USB paths change on replug. */
     suspend fun hasKnownUsbDevice(deviceId: String): Boolean = withContext(ioDispatcher) {
@@ -516,13 +522,26 @@ class JadeRepo @Inject constructor(
         // the OS attach intent.
         val includeBluetooth = path.startsWith(BLE_PATH_PREFIX)
         val scanned = if (jadeService.isConnected()) jadeService.listDevices() else jadeService.scan(includeBluetooth)
-        return scanned.firstOrNull { it.path == path }
-            ?: JadeDeviceInfo(
-                path = path,
-                transport = if (includeBluetooth) JadeTransportKind.BLUETOOTH else JadeTransportKind.SERIAL,
-                name = null,
-                serialNumber = null,
-            )
+        scanned.firstOrNull { it.path == path }?.let { return it }
+        // A Jade advertises under a fresh random address after a reboot or a pairing reset, so a
+        // stored address stops resolving. Its name carries the tail of the efuse MAC, which makes
+        // the same device recognisable in the scan. Dialling the stored address instead would hand
+        // the transport one nothing answers on, and that only fails once the connection times out.
+        if (includeBluetooth) {
+            knownDevice(path)?.let { entry ->
+                scanned.firstOrNull { it.transport == JadeTransportKind.BLUETOOTH && entry.advertisesAs(it.name) }
+                    ?.let {
+                        Logger.info("Resolved Jade '$path' to its new address '${it.path}'", context = TAG)
+                        return it
+                    }
+            }
+        }
+        return JadeDeviceInfo(
+            path = path,
+            transport = if (includeBluetooth) JadeTransportKind.BLUETOOTH else JadeTransportKind.SERIAL,
+            name = null,
+            serialNumber = null,
+        )
     }
 
     private suspend fun findKnownDeviceCandidates(

@@ -61,6 +61,14 @@ class JadeRepoTest : BaseUnitTest() {
         serialNumber = null,
     )
 
+    /** The same Jade as [knownUsb], seen after a reboot gave it a fresh Bluetooth address. */
+    private val readvertisedBle = JadeDeviceInfo(
+        path = "ble:56:C4:BF:B3:9E:75",
+        transport = JadeTransportKind.BLUETOOTH,
+        name = "Jade 8F6B64",
+        serialNumber = null,
+    )
+
     private val knownUsb = KnownDevice(
         id = "jade:serial:$EFUSE_MAC",
         name = "Jade",
@@ -293,6 +301,57 @@ class JadeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `connect dials the address a re-advertised jade is scanned under`() = test {
+        val knownBle = knownUsb.copy(
+            id = "jade:bluetooth:$EFUSE_MAC",
+            path = STALE_BLE_PATH,
+            transportType = TransportType.BLUETOOTH,
+        )
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownBle))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(readvertisedBle))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.READY))
+        val sut = createRepo()
+
+        val connected = sut.connect(STALE_BLE_PATH).getOrThrow()
+
+        assertEquals(readvertisedBle.path, connected.path)
+        verify(jadeService).connect(eq(JadeTransportKind.BLUETOOTH), eq(readvertisedBle.path), any())
+        verify(jadeService, never()).connect(any(), eq(STALE_BLE_PATH), any())
+    }
+
+    @Test
+    fun `connect keeps the requested address when no scanned jade advertises as it`() = test {
+        val knownBle = knownUsb.copy(
+            id = "jade:bluetooth:$EFUSE_MAC",
+            path = STALE_BLE_PATH,
+            transportType = TransportType.BLUETOOTH,
+        )
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownBle))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(readvertisedBle.copy(name = "Jade AAAAAA")))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.READY))
+        val sut = createRepo()
+
+        sut.connect(STALE_BLE_PATH).getOrThrow()
+
+        verify(jadeService).connect(eq(JadeTransportKind.BLUETOOTH), eq(STALE_BLE_PATH), any())
+    }
+
+    @Test
+    fun `a rebooted bluetooth jade is still known under its new address`() = test {
+        val knownBle = knownUsb.copy(
+            id = "jade:bluetooth:$EFUSE_MAC",
+            path = STALE_BLE_PATH,
+            transportType = TransportType.BLUETOOTH,
+        )
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownBle))
+        val sut = createRepo()
+
+        assertTrue(sut.hasKnownDevice(readvertisedBle.path, advertisedName = readvertisedBle.name))
+        assertFalse(sut.hasKnownDevice(readvertisedBle.path))
+        assertFalse(sut.hasKnownDevice(readvertisedBle.path, advertisedName = "Jade AAAAAA"))
+    }
+
+    @Test
     fun `silent auto reconnect never asks for the pin`() = test {
         whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
         whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
@@ -457,6 +516,7 @@ class JadeRepoTest : BaseUnitTest() {
     private companion object {
         const val USB_PATH = "/dev/bus/usb/001/007"
         const val USB_PATH_2 = "/dev/bus/usb/001/008"
+        const val STALE_BLE_PATH = "ble:6B:7A:9B:16:C8:1C"
         const val EFUSE_MAC = "246F288F6B64"
         const val WALLET_ID = "jade:wallet"
         val ALL_ACCOUNT_TYPES = listOf(
