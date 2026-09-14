@@ -119,6 +119,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(jadeRepo.state).thenReturn(jadeState)
         whenever { jadeRepo.scan(any()) }.thenReturn(Result.success(emptyList()))
         whenever(hwWalletStore.data).thenReturn(storeData)
+        whenever { hwWalletStore.loadKnownDevices() }.thenAnswer { storeData.value.knownDevices }
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(trezorRepo.state).thenReturn(trezorState)
         whenever(trezorRepo.watcherEvents).thenReturn(watcherEvents)
@@ -1895,6 +1896,46 @@ class HwWalletRepoTest : BaseUnitTest() {
         runCurrent()
 
         verify(trezorRepo).onAppForegrounded()
+    }
+
+    @Test
+    fun `foreground reconnect loads a saved jade before repository initialization`() = test {
+        val jade = device.copy(vendor = HwWalletVendor.BLOCKSTREAM, label = "Jade")
+        storeData.value = HwWalletData(knownDevices = listOf(jade))
+        val sut = createRepo()
+
+        sut.onAppForegrounded()
+        runCurrent()
+
+        verify(jadeRepo).onAppForegrounded()
+        verify(trezorRepo, never()).onAppForegrounded()
+    }
+
+    @Test
+    fun `foreground reconnect picks the most recently used saved bluetooth vendor`() = test {
+        val jade = device.copy(vendor = HwWalletVendor.BLOCKSTREAM, lastConnectedAt = 20L)
+        val newerUsb = device.copy(transportType = TransportType.USB, lastConnectedAt = 30L)
+        storeData.value = HwWalletData(knownDevices = listOf(device, jade, newerUsb))
+        val sut = createRepo()
+
+        sut.onAppForegrounded()
+        runCurrent()
+
+        verify(jadeRepo).onAppForegrounded()
+        verify(trezorRepo, never()).onAppForegrounded()
+    }
+
+    @Test
+    fun `transport restore loads a saved jade before repository initialization`() = test {
+        val jade = device.copy(vendor = HwWalletVendor.BLOCKSTREAM, transportType = TransportType.USB)
+        storeData.value = HwWalletData(knownDevices = listOf(jade))
+        val sut = createRepo()
+
+        sut.onTransportRestored(TransportType.USB)
+        runCurrent()
+
+        verify(jadeRepo).onTransportRestored(TransportType.USB)
+        verify(trezorRepo, never()).onTransportRestored(TransportType.USB)
     }
 
     @Test

@@ -1,6 +1,7 @@
 package to.bitkit.services
 
 import android.app.PendingIntent
+import android.bluetooth.BluetoothGatt
 import android.content.Context
 import android.hardware.usb.UsbConstants
 import android.hardware.usb.UsbDevice
@@ -22,6 +23,8 @@ import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.LinkedBlockingQueue
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -297,6 +300,53 @@ class JadeTransportTest {
         return connection
     }
 
+    @Test
+    fun `closing pending bluetooth setup releases all waiters after native close`() {
+        val sut = createSut()
+        val gatt = mock<BluetoothGatt>()
+        val waiters = addPendingBleConnection(sut, gatt)
+        whenever(gatt.close()).thenAnswer {
+            waiters.forEach { assertEquals(1L, it.count) }
+        }
+
+        assertTrue(sut.disconnectDevice(BLE_PATH).success)
+
+        verify(gatt).close()
+        waiters.forEach { assertEquals(0L, it.count) }
+        assertFalse(sut.hasOpenBleConnection())
+    }
+
+    @Test
+    fun `native close failure still releases bluetooth setup waiters`() {
+        val sut = createSut()
+        val gatt = mock<BluetoothGatt>()
+        val waiters = addPendingBleConnection(sut, gatt)
+        whenever(gatt.close()).thenThrow(IllegalStateException("close failed"))
+
+        assertFalse(sut.disconnectDevice(BLE_PATH).success)
+
+        waiters.forEach { assertEquals(0L, it.count) }
+        assertTrue(sut.disconnectDevice(BLE_PATH).success)
+        verify(gatt).close()
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun addPendingBleConnection(sut: JadeTransport, gatt: BluetoothGatt): List<CountDownLatch> {
+        val waiters = List(3) { CountDownLatch(1) }
+        val connectionClass = JadeTransport::class.java.declaredClasses.single { it.simpleName == "BleConnection" }
+        val constructor = connectionClass.declaredConstructors.single { it.parameterCount == 11 }
+        constructor.isAccessible = true
+        val connection = constructor.newInstance(
+            gatt, null, LinkedBlockingQueue<ByteArray>(), 23, false, false, 0,
+            waiters[0], waiters[1], waiters[2], BluetoothGatt.GATT_SUCCESS,
+        )
+        val field = JadeTransport::class.java.getDeclaredField("bleConnections")
+        field.isAccessible = true
+        val connections = field.get(sut) as MutableMap<String, Any>
+        connections[BLE_PATH] = connection
+        return waiters
+    }
+
     private fun createSut() = JadeTransport(context = context)
 
     private fun usbDevice(
@@ -357,6 +407,7 @@ class JadeTransportTest {
     }
 
     private companion object {
+        const val BLE_PATH = "ble:AA:BB:CC:DD:EE:FF"
         const val USB_PATH = "/dev/bus/usb/001/002"
     }
 }

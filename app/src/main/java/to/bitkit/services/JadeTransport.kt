@@ -704,16 +704,24 @@ class JadeTransport @Inject constructor(
                     Logger.warn("BLE disconnect timeout, forcing close: '$path'", context = TAG)
                 }
             }
-            bleConnections.remove(path)
+            bleConnections.remove(path, connection)
             connection.isConnected = false
             connection.gatt.close()
-            connection.readQueue.clear()
             Logger.info("Closed BLE device '$path'", context = TAG)
             ok()
         } catch (e: Exception) {
             Logger.error("BLE close failed", e, context = TAG)
             fail(e.message ?: "BLE close failed", null)
         } finally {
+            bleConnections.remove(path, connection)
+            connection.isConnected = false
+            connection.writeStatus = BluetoothGatt.GATT_FAILURE
+            connection.readQueue.clear()
+            releasePendingBleOperations(
+                connectionLatch = connection.connectionLatch,
+                writeLatch = connection.writeLatch,
+                disconnectLatch = connection.disconnectLatch,
+            )
             userInitiatedCloseSet.remove(path)
         }
     }

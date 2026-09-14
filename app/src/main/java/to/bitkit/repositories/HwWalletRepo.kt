@@ -167,10 +167,10 @@ class HwWalletRepo @Inject constructor(
         }
     }
 
-    private fun preferredReconnectVendor(transportType: TransportType): HwWalletVendor {
+    private suspend fun preferredReconnectVendor(transportType: TransportType): HwWalletVendor {
         trezorRepo.state.value.connected?.let { return HwWalletVendor.TREZOR }
         jadeRepo.state.value.connected?.let { return HwWalletVendor.BLOCKSTREAM }
-        return (trezorRepo.state.value.knownDevices + jadeRepo.state.value.knownDevices)
+        return hwWalletStore.loadKnownDevices()
             .filter { it.transportType == transportType }
             .maxByOrNull { it.lastConnectedAt }
             ?.vendor
