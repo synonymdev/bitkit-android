@@ -177,8 +177,8 @@ class PubkyService @Inject constructor(
 
     // region File operations
 
-    suspend fun fetchFile(uri: String): ByteArray = ServiceQueue.CORE.background {
-        paykitSdkService.fetchFile(uri)
+    suspend fun fetchFile(uri: String, maxBytes: ULong): ByteArray = ServiceQueue.CORE.background {
+        paykitSdkService.fetchFile(uri, maxBytes)
     }
 
     // endregion
