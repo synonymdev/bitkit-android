@@ -552,6 +552,7 @@ class WalletRepoTest : BaseUnitTest() {
     @Test
     fun `updateOnchainBip21Amount should update amount and bip21 without lightning invoice`() = test {
         sut.setOnchainAddress(ADDRESS)
+        sut.setBolt11(INVOICE)
         sut.setBip21Description("test")
         whenever(lightningRepo.createInvoice(anyOrNull(), any(), any())).thenReturn(Result.success(INVOICE))
 
@@ -559,6 +560,7 @@ class WalletRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(2000uL, sut.walletState.value.bip21AmountSats)
+        assertEquals("", sut.walletState.value.bolt11)
         assertTrue(sut.walletState.value.bip21.contains(ADDRESS))
         assertTrue(sut.walletState.value.bip21.contains("amount=0.00002"))
         assertTrue(sut.walletState.value.bip21.contains("message=test"))
