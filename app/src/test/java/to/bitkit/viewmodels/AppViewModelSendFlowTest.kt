@@ -56,6 +56,7 @@ import org.mockito.kotlin.check
 import org.mockito.kotlin.clearInvocations
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -469,7 +470,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `payment requests refresh immediately and periodically only while polling is active`() = test {
+    fun `payment requests refresh promptly without repeating maintenance on each poll`() = test {
         isPaykitEnabled.value = true
         pubkyPublicKey.value = testPublicKey
         whenever(paykitPaymentRequestRepo.refresh()).thenReturn(Result.success(Unit))
@@ -488,14 +489,29 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
             verify(paykitPaymentRequestRepo, atLeast(2)).refresh()
             clearInvocations(paykitPaymentRequestRepo)
+            clearInvocations(privatePaykitRepo, paykitPaymentProofRepo)
 
-            advanceTimeBy(59.seconds.inWholeMilliseconds)
+            advanceTimeBy(29.seconds.inWholeMilliseconds)
             runCurrent()
             verify(paykitPaymentRequestRepo, never()).refresh()
 
             advanceTimeBy(1.seconds.inWholeMilliseconds)
             runCurrent()
             verify(paykitPaymentRequestRepo).refresh()
+            verify(privatePaykitRepo, never()).refreshKnownSavedContactEndpoints(any(), any())
+            verify(paykitPaymentProofRepo, never()).reconcile()
+            verify(paykitPaymentRequestRepo, never()).refreshEligibleTargets(any(), eq(true))
+
+            advanceTimeBy(30.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(privatePaykitRepo).refreshKnownSavedContactEndpoints(any(), any())
+            verify(paykitPaymentProofRepo).reconcile()
+            verify(paykitPaymentRequestRepo).refreshEligibleTargets(any(), eq(true))
+
+            advanceTimeBy(120.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(privatePaykitRepo, times(2)).refreshKnownSavedContactEndpoints(any(), any())
+            verify(paykitPaymentProofRepo, times(2)).reconcile()
         } finally {
             sut.stopPaykitPaymentRequestPolling()
         }

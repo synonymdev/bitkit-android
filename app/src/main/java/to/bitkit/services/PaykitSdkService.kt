@@ -69,12 +69,14 @@ import com.synonym.paykit.pubkySecretKeyFromBip39Mnemonic
 import com.synonym.paykit.requiredSessionCapabilities
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import org.lightningdevkit.ldknode.Network
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.env.Env
@@ -908,23 +910,21 @@ class PaykitSdkService @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private suspend fun <T> withStateRevisionTracking(block: suspend (PaykitSdk) -> T): T {
         val handle = handle()
-        val previousRevision = runCatching { handle.stateRevision() }.getOrNull()
+        val previousRevision = runSuspendCatching { handle.backupStateRevision() }.getOrNull()
         return try {
-            block(handle).also {
+            block(handle)
+        } finally {
+            withContext(NonCancellable) {
                 notifyBackupStateChangedIfNeeded(previousRevision, handle)
             }
-        } catch (error: Throwable) {
-            notifyBackupStateChangedIfNeeded(previousRevision, handle)
-            throw error
         }
     }
 
-    private fun notifyBackupStateChangedIfNeeded(previousRevision: String?, handle: PaykitSdk) {
-        val nextRevision = runCatching { handle.stateRevision() }.getOrNull()
-        if (previousRevision != nextRevision) {
+    private suspend fun notifyBackupStateChangedIfNeeded(previousRevision: String?, handle: PaykitSdk) {
+        val nextRevision = runSuspendCatching { handle.backupStateRevision() }.getOrNull()
+        if (previousRevision == null || nextRevision == null || previousRevision != nextRevision) {
             notifyBackupStateChanged()
         }
     }
