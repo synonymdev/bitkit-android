@@ -4,20 +4,26 @@
 
 ### Description
 
-<!-- Extended summary of the changes, can be a list. -->
+<!-- One bullet per change: what changed and why. -->
+
+#### Out of Scope
+
+<!-- One bullet per item this PR deliberately leaves out (`path/or/area: item`); reviewers treat them as your non-goals. `None.` when nothing is left out. Required for feat, fix, and refactor PRs; delete it for version, changelog, or dependency bumps and release PRs; other chore, docs, and test PRs at your discretion. -->
 
 ### Design
 
-<!-- User-visible UI change with an existing design: link the relevant Figma frame(s). Start with docs/screens-map.md for mapped screens; link known handoff frames directly for sheets, dialogs, reusable views, and other UI outside the map. -->
-<!-- UI change mapped to todo or n/a, or other UI change without an available design, including a new feature: N/A — no design available. Creating a design is not required. -->
-<!-- No user-visible UI change: N/A — no UI changes. -->
-<!-- Genuinely uncertain frame match: state that honestly; never invent a link. -->
+<!-- Figma frames for the changed UI (start from docs/screens-map.md). Otherwise `N/A — no UI changes.` or `N/A — no design available.` State an uncertain match; never invent a link. -->
 
 ### Preview
 
-<!-- Insert relevant screenshot / recording -->
+<!-- Screenshot or recording of the changed UI; `N/A` when there is no user-visible change. -->
 
 ### QA Notes
 
-<!-- Add testing instructions for the PR reviewer to validate the changes. -->
-<!-- List the tests you ran, including regression tests if applicable. -->
+#### Manual Tests
+
+<!-- Unchecked, numbered steps for the reviewer: action → expectation. `N/A` when there is nothing to verify by hand. -->
+
+#### Automated Checks
+
+<!-- Coverage added, changed, or removed, by test file name; non-standard commands you ran. `N/A` when nothing changed. -->
