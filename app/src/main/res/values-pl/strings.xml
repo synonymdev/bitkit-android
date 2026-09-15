@@ -297,12 +297,12 @@
     <string name="onboarding__skip_intro">Pomiń wprowadzenie</string>
     <string name="onboarding__skip">Pomiń</string>
     <string name="onboarding__slide0_header">Wolność w\n&lt;accent&gt;twojej kieszeni&lt;/accent&gt;</string>
-    <string name="onboarding__slide0_text">Bitkit przekazuje Ci klucze do zarządzania Twoimi pieniędzmi. Wydawaj teraz lub oszczędzaj na później. Wybór należy do Ciebie.</string>
+    <string name="onboarding__slide0_text">Bitkit przekazuje Ci klucze do kontrolowania Twoich pieniędzy, profilu i kontaktów. Przejmij kontrolę i stań się wolnym.</string>
     <string name="onboarding__slide1_header">Płatności\n&lt;accent&gt;natychmiastowe&lt;/accent&gt;</string>
     <string name="onboarding__slide1_text">Wydawaj bitcoiny szybciej niż kiedykolwiek. Ciesz się natychmiastowymi i tanimi płatnościami z przyjaciółmi, rodziną i sprzedawcami.</string>
     <string name="onboarding__slide1_note">Bitkit nie świadczy obecnie usług Lightning w Twoim kraju, ale nadal możesz łączyć się z innymi węzłami.</string>
     <string name="onboarding__slide3_header">Prywatność nie jest\n&lt;accent&gt;przestępstwem&lt;/accent&gt;</string>
-    <string name="onboarding__slide3_text">Przesuń, aby ukryć saldo, zwiększyć prywatność płatności i zabezpieczyć portfel dzięki funkcjom bezpieczeństwa.</string>
+    <string name="onboarding__slide3_text">Twoje pieniądze, Twoja prywatność. Przesuń, aby ukryć saldo i wydawaj bardziej prywatnie, bez śledzenia danych i bez KYC.</string>
     <string name="onboarding__slide4_header">Twoje klucze,\n&lt;accent&gt;twoje monety&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Utwórzmy twój portfel. Pamiętaj, że Bitkit to oprogramowanie mobilne. &lt;accent&gt;Nie przechowuj w nim wszystkich swoich środków.&lt;/accent&gt;</string>
     <string name="onboarding__new_wallet">Nowy portfel</string>

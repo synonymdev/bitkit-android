@@ -322,7 +322,7 @@
     <string name="onboarding__slide1_note">*Το Bitkit δεν παρέχει προς το παρόν υπηρεσίες Lightning στη χώρα σου, αλλά μπορείς να συνδεθείς σε άλλους κόμβους.</string>
     <string name="onboarding__slide1_text">Ξόδεψε bitcoin πιο γρήγορα από ποτέ. Απόλαυσε άμεσες και φθηνές πληρωμές με φίλους, οικογένεια και εμπόρους.</string>
     <string name="onboarding__slide3_header">Το απόρρητο δεν\n&lt;accent&gt;είναι έγκλημα&lt;/accent&gt;</string>
-    <string name="onboarding__slide3_text">Σύρε για να κρύψεις το υπόλοιπό σου, απόλαυσε πιο ιδιωτικές πληρωμές και προστάτεψε το πορτοφόλι σου ενεργοποιώντας λειτουργίες ασφαλείας.</string>
+    <string name="onboarding__slide3_text">Τα χρήματά σας, η ιδιωτικότητά σας. Σύρετε για να κρύψετε το υπόλοιπό σας και ξοδέψτε πιο ιδιωτικά, χωρίς παρακολούθηση δεδομένων και μηδενικό KYC.</string>
     <string name="onboarding__slide4_header">Τα κλειδιά σου,\n&lt;accent&gt;τα κέρματά σου&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Ας δημιουργήσουμε το πορτοφόλι σου. Να γνωρίζεις ότι το Bitkit είναι λογισμικό κινητού. &lt;accent&gt;Μην αποθηκεύεις όλα τα χρήματά σου στο Bitkit.&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Όροι χρήσης</string>

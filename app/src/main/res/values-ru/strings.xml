@@ -330,12 +330,12 @@
     <string name="onboarding__skip">Пропустить</string>
     <string name="onboarding__skip_intro">Пропустить</string>
     <string name="onboarding__slide0_header">Свобода в\n&lt;accent&gt;вашем кармане&lt;/accent&gt;</string>
-    <string name="onboarding__slide0_text">Bitkit предоставляет вам ключи для управления вашими деньгами. Тратьте сейчас или копите на потом. Выбор за вами.</string>
+    <string name="onboarding__slide0_text">Bitkit даёт вам ключи для управления вашими деньгами, профилем и контактами. Возьмите контроль и станьте безграничными.</string>
     <string name="onboarding__slide1_header">Мгновенные\n&lt;accent&gt;платежи&lt;/accent&gt;</string>
     <string name="onboarding__slide1_note">*Bitkit в настоящее время не предоставляет услуги Lightning в вашей стране, но вы всё ещё можете подключаться к другим нодам.</string>
     <string name="onboarding__slide1_text">Тратьте биткойны быстрее, чем когда-либо. Наслаждайтесь мгновенными и недорогими платежами с друзьями, семьёй и продавцами.</string>
     <string name="onboarding__slide3_header">Конфиденциальность — это\n&lt;accent&gt;не преступление&lt;/accent&gt;</string>
-    <string name="onboarding__slide3_text">Проведите пальцем, чтобы скрыть свой баланс, наслаждайтесь более конфиденциальными платежами и защитите свой кошелёк, включив функции безопасности.</string>
+    <string name="onboarding__slide3_text">Ваши деньги, ваша конфиденциальность. Проведите пальцем, чтобы скрыть баланс и тратить более конфиденциально, без отслеживания данных и KYC.</string>
     <string name="onboarding__slide4_header">Ваши ключи,\n&lt;accent&gt;ваши монеты&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Давайте создадим ваш кошелёк. Пожалуйста, имейте в виду, что Bitkit — это мобильное ПО. &lt;accent&gt;Не храните все свои деньги в Bitkit.&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Условия использования</string>
