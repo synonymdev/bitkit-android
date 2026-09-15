@@ -223,7 +223,7 @@ private val hardwareKeyMap = mapOf(
     Key.Period to KEY_DECIMAL, Key.NumPadDot to KEY_DECIMAL, Key.Comma to KEY_DECIMAL,
 )
 
-private fun mapHardwareKey(key: Key, type: NumberPadType): String? {
+internal fun mapHardwareKey(key: Key, type: NumberPadType): String? {
     val mapped = hardwareKeyMap[key] ?: return null
     if (mapped == KEY_DECIMAL && type != NumberPadType.DECIMAL) return null
     return mapped
