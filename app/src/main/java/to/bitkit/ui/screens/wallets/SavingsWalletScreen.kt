@@ -168,6 +168,7 @@ fun SavingsWalletScreen(
                             modifier = Modifier.testTag("TransferToSpending")
                         )
                     }
+                    item { VerticalSpacer(32.dp) }
                 }
 
                 activityListGroupedItems(
