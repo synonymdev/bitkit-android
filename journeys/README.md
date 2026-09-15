@@ -121,6 +121,7 @@ fixtures, push notifications) live in each suite's README.
 | [notification-permission](notification-permission) | 4 | Background-setup toggles |
 | [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
+| [subscriptions](subscriptions) | 4 | Paykit subscription lifecycle across two wallets, plus the Payments tab |
 | [widgets](widgets) | 2 | Needs no backend — the quickest way to see the loop work; no README |
 
 ## Cross-platform
@@ -142,6 +143,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
+| `subscriptions/*` | not ported yet — added here alongside the Android design pass; the iOS side carries the same screens and should take the same four files |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
@@ -175,6 +177,7 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | Home suggestion cards | `Suggestion-<id>` | — *(cards expose no identifier)* |
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
 | Payment Request row | `PaymentRequestRow-<id>` | `PaymentRequestRow-<id>-<counterparty>-<receiverPath>-<period>` |
+| Subscription row | `SubscriptionRow-<id>` | `SubscriptionRow-<id>-<counterparty>-<receiverPath>` |
 
 Two of those are unreconciled rather than intentional: the Send screen emitting both
 `AvailableAmount` and `available_balance`, and the background-payments row name. Settling either is a

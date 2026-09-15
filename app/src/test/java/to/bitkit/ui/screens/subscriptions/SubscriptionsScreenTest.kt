@@ -6,11 +6,13 @@ import com.synonym.paykit.PaymentRequestLifecycleState
 import org.junit.Test
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionMetadata
 import to.bitkit.repositories.PaykitSubscriptionRecurrence
+import to.bitkit.repositories.isPaidFromSpending
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -96,6 +98,35 @@ class SubscriptionsScreenTest {
     }
 
     @Test
+    fun `spending pays only when lightning is accepted and affordable`() {
+        val amount = 100_000uL
+        val lightningOnly = subscription(PaykitRecurrenceUnit.Month, amountSats = amount)
+        val onchainOnly = lightningOnly.copy(
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
+        )
+        val both = lightningOnly.copy(
+            acceptedPaymentEndpointIdentifiers = listOf(
+                MethodId.P2wpkh.rawValue,
+                MethodId.Bolt11.rawValue,
+            ),
+        )
+
+        assertTrue(lightningOnly.acceptsLightningPayment)
+        assertFalse(onchainOnly.acceptsLightningPayment)
+        // Lightning wins when both are offered, matching payablePreferenceOrder.
+        assertTrue(both.acceptsLightningPayment)
+
+        // Enough spending balance, so the payment leaves it.
+        assertTrue(lightningOnly.isPaidFromSpending(maxSendLightningSats = amount))
+        assertTrue(lightningOnly.isPaidFromSpending(maxSendLightningSats = amount + 1uL))
+        // A wallet that cannot cover the amount over lightning falls back to savings.
+        assertFalse(lightningOnly.isPaidFromSpending(maxSendLightningSats = amount - 1uL))
+        assertFalse(lightningOnly.isPaidFromSpending(maxSendLightningSats = 0uL))
+        // Accepting only on-chain never draws on spending, however large the balance.
+        assertFalse(onchainOnly.isPaidFromSpending(maxSendLightningSats = amount * 10uL))
+    }
+
+    @Test
     fun `terminal open ended subscription omits timing`() {
         val terminal = subscription(PaykitRecurrenceUnit.Week).copy(
             lifecycleState = PaymentRequestLifecycleState.CANCELED,
@@ -103,6 +134,44 @@ class SubscriptionsScreenTest {
 
         assertFalse(terminal.shouldShowTiming(now))
         assertTrue(subscription(PaykitRecurrenceUnit.Week).shouldShowTiming(now))
+    }
+
+    @Test
+    fun `terminal subscription with paid periods expires on its last period end`() {
+        val lastPeriodEnd = Instant.parse("2027-01-08T08:00:00Z")
+        val terminal = subscription(PaykitRecurrenceUnit.Week).copy(
+            lifecycleState = PaymentRequestLifecycleState.CANCELED,
+            paidPeriods = listOf(
+                PaykitBillingPeriod(
+                    startsAt = Instant.parse("2027-01-01T08:00:00Z"),
+                    endsAt = lastPeriodEnd,
+                ),
+                PaykitBillingPeriod(
+                    startsAt = Instant.parse("2026-12-25T08:00:00Z"),
+                    endsAt = Instant.parse("2027-01-01T08:00:00Z"),
+                ),
+            ),
+        )
+
+        assertTrue(terminal.shouldShowTiming(now))
+        assertEquals(lastPeriodEnd, terminal.expiryDate())
+    }
+
+    @Test
+    fun `fixed end date wins over paid periods as the expiry date`() {
+        val endsAt = Instant.parse("2027-03-01T08:00:00Z")
+        val openEnded = subscription(PaykitRecurrenceUnit.Week)
+        val fixedEnd = openEnded.copy(
+            recurrence = openEnded.recurrence.copy(endsAt = endsAt),
+            paidPeriods = listOf(
+                PaykitBillingPeriod(
+                    startsAt = Instant.parse("2027-01-01T08:00:00Z"),
+                    endsAt = Instant.parse("2027-01-08T08:00:00Z"),
+                ),
+            ),
+        )
+
+        assertEquals(endsAt, fixedEnd.expiryDate())
     }
 
     @Test
