@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -48,6 +49,7 @@ import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.rememberDebouncedClick
 import to.bitkit.ui.shared.util.primaryButtonStyle
 import to.bitkit.ui.theme.AppButtonDefaults
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 
@@ -89,6 +91,12 @@ enum class ButtonSize {
         Large -> BorderStroke(2.dp, if (enabled) Colors.Gray4 else Color.Transparent)
         Small -> BorderStroke(1.dp, if (enabled) Colors.White16 else Color.Transparent)
     }
+}
+
+@Composable
+private fun ButtonSize.textStyle(): TextStyle = when (this) {
+    ButtonSize.Small -> AppTextStyles.CaptionB
+    ButtonSize.Large -> MaterialTheme.typography.labelLarge
 }
 
 @Composable
@@ -157,6 +165,7 @@ fun PrimaryButton(
                     text?.let {
                         Text(
                             text = text,
+                            style = size.textStyle(),
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
                         )
@@ -243,6 +252,7 @@ fun SecondaryButton(
                         text?.let {
                             Text(
                                 text = text,
+                                style = size.textStyle(),
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                             )
@@ -299,7 +309,7 @@ fun TertiaryButton(
             text?.let {
                 Text(
                     text = text,
-                    style = MaterialTheme.typography.labelLarge,
+                    style = size.textStyle(),
                     color = contentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
