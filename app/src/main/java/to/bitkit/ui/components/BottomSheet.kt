@@ -53,6 +53,7 @@ fun BottomSheet(
     contentColor: Color = contentColorFor(containerColor),
     tonalElevation: Dp = 0.dp,
     scrimColor: Color = BottomSheetDefaults.ScrimColor,
+    showToastOverlay: Boolean = true,
     dragHandle: @Composable (() -> Unit)? = {
         Box(
             contentAlignment = Alignment.Center,
@@ -92,7 +93,7 @@ fun BottomSheet(
             ) {
                 content()
             }
-            if (app != null) {
+            if (showToastOverlay && app != null) {
                 SheetToastHost(
                     app = app,
                     hazeState = toastHazeState,
