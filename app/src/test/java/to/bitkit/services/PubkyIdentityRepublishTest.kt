@@ -5,6 +5,9 @@ import com.synonym.paykit.PubkySessionBootstrap
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Test
@@ -16,6 +19,7 @@ import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PubkyIdentityRepublishTest {
@@ -94,5 +98,29 @@ class PubkyIdentityRepublishTest {
 
         gate.complete(true)
         first.await()
+    }
+
+    @Test
+    fun `timeout and cancellation release publication for retry`() = runTest {
+        for (cancel in listOf(false, true)) {
+            val bootstrap = mock<PubkySessionBootstrap>()
+            whenever(bootstrap.republishIdentity(any())).doSuspendableAnswer { awaitCancellation() }
+            val service = PaykitSdkService(mock(), mock(), { bootstrap }) { mock() }
+            val start = currentTime
+            val caller = async { service.republishIdentityIfNeeded(publicKey, now = 0) }
+
+            if (cancel) {
+                runCurrent()
+                caller.cancelAndJoin()
+                assertTrue(caller.isCancelled)
+            } else {
+                caller.await()
+                assertEquals(5_000L, currentTime - start)
+            }
+
+            whenever(bootstrap.republishIdentity(any())).thenReturn(true)
+            service.republishIdentityIfNeeded(publicKey, now = 60_000)
+            verify(bootstrap, times(2)).republishIdentity("pubky$publicKey")
+        }
     }
 }
