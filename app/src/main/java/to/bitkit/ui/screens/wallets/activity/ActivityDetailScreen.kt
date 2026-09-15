@@ -81,6 +81,7 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.Title
+import to.bitkit.ui.components.ZigzagDivider
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.ActivityAddTagSheet
@@ -937,36 +938,6 @@ private fun StatusRow(
             modifier = Modifier
                 .padding(start = 4.dp)
                 .then(testTag?.let { Modifier.testTag(it) } ?: Modifier)
-        )
-    }
-}
-
-@Composable
-private fun ZigzagDivider() {
-    Canvas(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(12.dp)
-    ) {
-        val zigzagWidth = 24.dp.toPx()
-        val amplitude = size.height
-        val width = size.width
-        val path = Path()
-
-        path.moveTo(0f, 0f)
-        var x = 0f
-        while (x < width) {
-            path.lineTo(x + zigzagWidth / 2, amplitude)
-            path.lineTo((x + zigzagWidth).coerceAtMost(width), 0f)
-            x += zigzagWidth
-        }
-        path.lineTo(width, amplitude)
-        path.lineTo(0f, amplitude)
-        path.close()
-
-        drawPath(
-            path = path,
-            color = Colors.White10,
         )
     }
 }

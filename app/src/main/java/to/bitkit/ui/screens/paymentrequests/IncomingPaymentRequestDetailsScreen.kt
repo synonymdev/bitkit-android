@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.paykit.PaymentRequestLifecycleState
+import kotlin.time.ExperimentalTime
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -57,7 +58,9 @@ import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TagButton
+import to.bitkit.ui.components.Title
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.ZigzagDivider
 import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
@@ -68,7 +71,6 @@ import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.uiDateText
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
-import kotlin.time.ExperimentalTime
 
 @Composable
 fun IncomingPaymentRequestDetailsScreen(
@@ -202,12 +204,13 @@ private fun IncomingPaymentRequestDetailsContent(
             VerticalSpacer(16.dp)
             Caption13Up(text = stringResource(R.string.wallet__payment_request_note), color = Colors.White64)
             VerticalSpacer(8.dp)
-            BodyMSB(
+            ZigzagDivider()
+            Title(
                 text = request.note ?: stringResource(R.string.wallet__payment_request),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Colors.Gray6, RoundedCornerShape(16.dp))
-                    .padding(16.dp),
+                    .background(Colors.White10)
+                    .padding(24.dp),
             )
         }
 
