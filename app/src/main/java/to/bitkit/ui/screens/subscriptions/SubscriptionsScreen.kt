@@ -901,7 +901,7 @@ private fun SubscriptionMoreInfo(
         SubscriptionProviderCard(subscription, contact)
         VerticalSpacer(24.dp)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.weight(1f)) {
-            subscription.metadata.description?.let { item { BodySSB(it) } }
+            subscription.metadata.description?.let { item { BodyM(it) } }
             items(subscription.metadata.benefits) { benefit ->
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     BodySSB("•")
