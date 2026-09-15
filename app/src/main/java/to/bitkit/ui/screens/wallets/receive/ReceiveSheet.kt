@@ -299,6 +299,7 @@ fun ReceiveSheet(
                             entry = entryDetails,
                             onLearnMore = { navController.navigateTo(ReceiveRoute.Liquidity) },
                             onContinue = { invoice ->
+                                wallet.updateOnchainBip21Amount(entryDetails.receiveAmountSats.toULong())
                                 cjitSessionState.onCjitConfirmed(invoice)
                                 navController.navigateTo(
                                     ReceiveRoute.QR
