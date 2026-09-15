@@ -74,7 +74,10 @@ fun ReceiveConfirmScreen(
     }
 
     val receiveAmountSats = entry.receiveAmountSats - entry.feeSat
-    val receiveAmountFormatted = rememberMoneyText(sats = receiveAmountSats, showSymbol = true) ?: receiveAmountSats.toString()
+    val receiveAmountFormatted = rememberMoneyText(
+        sats = receiveAmountSats,
+        showSymbol = true,
+    ) ?: receiveAmountSats.toString()
 
     val onNotificationSwitchClick = rememberNotificationToggleClick(
         isGranted = notificationsGranted,
