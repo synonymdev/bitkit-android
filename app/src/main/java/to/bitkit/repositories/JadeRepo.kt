@@ -376,12 +376,14 @@ class JadeRepo @Inject constructor(
             if (connected != null && !connected.matches(deviceId)) {
                 return@withContext Result.success(Unit)
             }
+            // The link is closed first: a PIN entry or device call still waiting on it holds the core
+            // queue, and core would only process the disconnect once that call gave up.
             val result = runSuspendCatching {
+                val path = connected?.path ?: connectingPath ?: knownDevice(deviceId)?.path ?: deviceId
                 try {
-                    jadeService.disconnect()
-                } finally {
-                    val path = connected?.path ?: knownDevice(deviceId)?.path ?: deviceId
                     jadeTransport.disconnectDevice(path)
+                } finally {
+                    jadeService.disconnect()
                 }
                 Unit
             }.onFailure {

@@ -68,6 +68,7 @@ class HwSendViewModel @Inject constructor(
     private var pendingBroadcast: PendingHwSendBroadcast? = null
     private var signingWalletId: String? = null
     private var signingJob: Job? = null
+    private var signingAttempt = 0
     private var passphraseJob: Job? = null
 
     fun warmUp(walletId: String) {
@@ -82,6 +83,7 @@ class HwSendViewModel @Inject constructor(
         if (pendingBroadcast?.matches(request) == false) return
         signingWalletId = request.walletId
         _uiState.update { it.copy(isSigning = true) }
+        val attempt = ++signingAttempt
         signingJob = viewModelScope.launch {
             try {
                 runCatching {
@@ -119,8 +121,12 @@ class HwSendViewModel @Inject constructor(
                     handleFailure(it, request.walletId)
                 }
             } finally {
-                _uiState.update { it.copy(isSigning = false) }
-                signingJob = null
+                // A cancelled job can outlive cancel() while a device call returns, and must not
+                // reset the state of a signing attempt started after it.
+                if (signingAttempt == attempt) {
+                    _uiState.update { it.copy(isSigning = false, isConnectingDevice = false) }
+                    signingJob = null
+                }
             }
         }
     }
@@ -177,8 +183,9 @@ class HwSendViewModel @Inject constructor(
 
         signingJob?.cancel()
         signingJob = null
+        signingAttempt++
         pendingBroadcast = null
-        _uiState.update { it.copy(isSigning = false, hasPendingBroadcast = false) }
+        _uiState.update { it.copy(isSigning = false, isConnectingDevice = false, hasPendingBroadcast = false) }
         val walletId = signingWalletId ?: return
         signingWalletId = null
         viewModelScope.launch { hwWalletRepo.disconnectStaleSession(walletId) }
@@ -224,9 +231,17 @@ class HwSendViewModel @Inject constructor(
     }
 
     private suspend fun ensureConnected(walletId: String) {
-        // A Jade reconnect may include entering the PIN on the device, so the budget is per vendor.
-        withTimeout(hwWalletRepo.reconnectTimeout(walletId)) {
-            hwWalletRepo.ensureConnected(walletId).getOrThrow()
+        // Nothing has been sent to the device for signing yet, so the sheet may be left while this
+        // waits; a Jade may sit here for minutes waiting for its PIN.
+        val attempt = signingAttempt
+        _uiState.update { it.copy(isConnectingDevice = true) }
+        try {
+            // A Jade reconnect may include entering the PIN on the device, so the budget is per vendor.
+            withTimeout(hwWalletRepo.reconnectTimeout(walletId)) {
+                hwWalletRepo.ensureConnected(walletId).getOrThrow()
+            }
+        } finally {
+            if (signingAttempt == attempt) _uiState.update { it.copy(isConnectingDevice = false) }
         }
     }
 
@@ -324,11 +339,19 @@ class HwSendViewModel @Inject constructor(
 @Immutable
 data class HwSendUiState(
     val isSigning: Boolean = false,
+    val isConnectingDevice: Boolean = false,
     val hasPendingBroadcast: Boolean = false,
     val isBroadcastUnresolved: Boolean = false,
     val isPassphraseRequired: Boolean = false,
     val isVerifyingPassphrase: Boolean = false,
-)
+) {
+    /**
+     * Whether the sign sheet may be dismissed. Connecting or unlocking can be abandoned, and leaving
+     * cancels it; once the device is asked to sign, or a broadcast may have gone out, it cannot.
+     */
+    val canLeave: Boolean
+        get() = (!isSigning || isConnectingDevice) && !isBroadcastUnresolved
+}
 
 data class HwSendResult(
     val walletId: String,

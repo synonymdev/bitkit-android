@@ -275,6 +275,24 @@ class JadeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `closing a stale session releases the link before core`() = test {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.READY))
+        val sut = createRepo()
+        sut.connectKnownDevice(knownUsb.id).getOrThrow()
+
+        val result = sut.disconnectStaleSession(knownUsb.id)
+
+        assertTrue(result.isSuccess)
+        inOrder(jadeTransport, jadeService) {
+            verify(jadeTransport).disconnectDevice(USB_PATH)
+            verify(jadeService).disconnect()
+        }
+        assertNull(sut.state.value.connected)
+    }
+
+    @Test
     fun `a known bluetooth jade is recognised by name after its address changed`() = test {
         val knownBle = knownUsb.copy(
             id = "jade:bluetooth:$EFUSE_MAC",

@@ -63,7 +63,7 @@ fun HwSendSignScreen(
         tags = sendUiState.selectedTags,
     )
 
-    val onBackRequest: () -> Unit = { if (!uiState.isSigning && !uiState.isBroadcastUnresolved) onBack() }
+    val onBackRequest: () -> Unit = { if (uiState.canLeave) onBack() }
 
     LaunchedEffect(walletId) {
         viewModel.warmUp(walletId)

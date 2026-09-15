@@ -134,11 +134,16 @@ class HwWalletRepo @Inject constructor(
     /** Inbound transactions detected by a running watcher after its initial history sync. */
     val receivedTxs: SharedFlow<HwWalletReceivedTx> = _receivedTxs.asSharedFlow()
 
-    /** Forwards UI-delivered transport events, e.g. the USB attach intent from the OS app picker. */
+    /**
+     * Forwards UI-delivered transport events, e.g. the USB attach intent from the OS app picker. A vendor
+     * with nothing paired has nothing to reconnect, and the Jade USB ids are generic serial bridges, so
+     * such an event must not tear down the session of the other vendor.
+     */
     fun onTransportRestored(transportType: TransportType, vendor: HwWalletVendor? = null) {
         scope.launch {
             sessionMutex.withLock {
                 val target = vendor ?: preferredReconnectVendor(transportType)
+                if (hwWalletStore.loadKnownDevices().none { it.vendor == target }) return@withLock
                 disconnectOtherVendor(target).onFailure {
                     Logger.warn("Failed to prepare '$target' transport restore", it, context = TAG)
                     return@withLock

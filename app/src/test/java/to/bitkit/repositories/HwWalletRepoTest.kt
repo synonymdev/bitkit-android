@@ -1977,6 +1977,40 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `usb attach for a vendor with nothing paired keeps the other vendor session`() = test {
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HARDWARE_WALLET_ID),
+        )
+        val sut = createRepo()
+
+        sut.onTransportRestored(TransportType.USB, HwWalletVendor.BLOCKSTREAM)
+        runCurrent()
+
+        verify(trezorRepo, never()).disconnect()
+        verify(trezorRepo, never()).cancelPairingCode()
+        verify(jadeRepo, never()).onTransportRestored(any())
+    }
+
+    @Test
+    fun `usb attach for a paired jade disconnects the trezor before reconnecting`() = test {
+        val jade = device.copy(id = "jade1", vendor = HwWalletVendor.BLOCKSTREAM, transportType = TransportType.USB)
+        storeData.value = HwWalletData(knownDevices = listOf(device, jade))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HARDWARE_WALLET_ID),
+        )
+        whenever { trezorRepo.disconnect() }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        sut.onTransportRestored(TransportType.USB, HwWalletVendor.BLOCKSTREAM)
+        runCurrent()
+
+        inOrder(trezorRepo, jadeRepo) {
+            verify(trezorRepo).disconnect()
+            verify(jadeRepo).onTransportRestored(TransportType.USB)
+        }
+    }
+
+    @Test
     fun `forwards app foregrounded to the trezor repo`() = test {
         val sut = createRepo()
 

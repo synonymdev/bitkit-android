@@ -48,6 +48,13 @@ class HwReceiveViewModel @Inject constructor(
     private var verifyJob: Job? = null
     private var passphraseJob: Job? = null
 
+    /**
+     * The wallet whose device this sheet engaged, by verifying an address or entering a passphrase.
+     * Only that session is closed on the way out: merely showing the address never opens one, and
+     * dropping a live session there would ask for a passphrase again on the next send.
+     */
+    private var engagedWalletId: String? = null
+
     fun loadAddress(walletId: String) {
         val state = _uiState.value
         if (state.walletId == walletId && (state.address != null || state.isLoadingAddress)) return
@@ -102,6 +109,7 @@ class HwReceiveViewModel @Inject constructor(
         val address = state.address ?: return
         if (state.isVerifyingAddress || verifyJob?.isActive == true) return
 
+        engagedWalletId = walletId
         _uiState.update { it.copy(isVerifyingAddress = true) }
         verifyJob = viewModelScope.launch {
             try {
@@ -130,6 +138,7 @@ class HwReceiveViewModel @Inject constructor(
         val walletId = state.walletId ?: return
         if (passphrase.isEmpty() || !state.isPassphraseRequired || state.isVerifyingPassphrase) return
 
+        engagedWalletId = walletId
         _uiState.update { it.copy(isVerifyingPassphrase = true) }
         passphraseJob = viewModelScope.launch {
             try {
@@ -157,15 +166,13 @@ class HwReceiveViewModel @Inject constructor(
     }
 
     fun dismissPassphrase() {
-        val walletId = _uiState.value.walletId
         passphraseJob?.cancel()
         passphraseJob = null
         _uiState.update { it.copy(isPassphraseRequired = false, isVerifyingPassphrase = false) }
-        disconnect(walletId)
+        disconnectEngaged()
     }
 
     fun cancel() {
-        val walletId = _uiState.value.walletId
         loadJob?.cancel()
         addressUpdatesJob?.cancel()
         verifyJob?.cancel()
@@ -175,19 +182,19 @@ class HwReceiveViewModel @Inject constructor(
         verifyJob = null
         passphraseJob = null
         _uiState.update { HwReceiveUiState() }
-        disconnect(walletId)
+        disconnectEngaged()
     }
 
     private fun invalidateVerification() {
-        val walletId = _uiState.value.walletId
         verifyJob?.cancel()
         passphraseJob?.cancel()
         _uiState.update { it.copy(isPassphraseRequired = false) }
-        disconnect(walletId)
+        disconnectEngaged()
     }
 
-    private fun disconnect(walletId: String?) {
-        walletId ?: return
+    private fun disconnectEngaged() {
+        val walletId = engagedWalletId ?: return
+        engagedWalletId = null
         viewModelScope.launch { hwWalletRepo.disconnectStaleSession(walletId) }
     }
 

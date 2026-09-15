@@ -470,8 +470,7 @@ fun ContentView(
         val isCreatingPaymentRequest by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
         val hwSendViewModel = hiltViewModel<HwSendViewModel>()
         val hwSendUiState by hwSendViewModel.uiState.collectAsStateWithLifecycle()
-        val canDismissSheet = currentSheet !is Sheet.Send ||
-            (!hwSendUiState.isSigning && !hwSendUiState.isBroadcastUnresolved)
+        val canDismissSheet = currentSheet !is Sheet.Send || hwSendUiState.canLeave
         val isAcceptingSubscription by appViewModel.isAcceptingSubscription.collectAsStateWithLifecycle()
         val isRetryingInitialSubscriptionPayment by
             appViewModel.isRetryingInitialSubscriptionPayment.collectAsStateWithLifecycle()
