@@ -1,0 +1,23 @@
+<journey name="Cancel And Delete Subscription">
+  <description>
+    Terminal actions on both sides. The payer cancels an active subscription from its detail screen and
+    the creator deletes one they created. Both confirmations are swipe controls with a brand orange
+    knob; the payer sees the cross illustration and the creator the trash illustration.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app with an active subscription the payer accepted, per review-and-subscribe.xml</action>
+    <action>Open the drawer menu, tap Subscriptions, and tap the active "Journey Sub" row</action>
+    <action>Verify the detail footer shows More Info and Cancel, and that Cancel carries the cross icon</action>
+    <action>Tap Cancel</action>
+    <action>Verify the sheet title reads "Cancel Subscription", the cross illustration is shown, and the swipe control reads "Swipe To Cancel"</action>
+    <action>Swipe the confirm control to the end</action>
+    <action>Verify the sheet dismisses and "Journey Sub" leaves the ACTIVE section</action>
+    <action>Switch to the creator instance and open Subscriptions</action>
+    <action>Tap the "Journey Sub" row in the CREATED section</action>
+    <action>Verify the detail shows SUBSCRIBERS and PAYMENTS cells, that PAYMENTS uses the coins icon, and that the footer Delete button carries the trash icon</action>
+    <action>Tap Delete</action>
+    <action>Verify the sheet title reads "Delete Subscription?", the trash illustration is shown, and the swipe control reads "Swipe To Delete"</action>
+    <action>Swipe the confirm control to the end</action>
+    <action>Verify the sheet dismisses and "Journey Sub" leaves the CREATED section</action>
+  </actions>
+</journey>
