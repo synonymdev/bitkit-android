@@ -20,8 +20,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.ImmutableList
 import to.bitkit.ui.components.CaptionB
@@ -49,32 +51,16 @@ fun <T : TabItem> CustomTabRowWithSpacing(
                 Column(
                     modifier = Modifier.weight(1f)
                 ) {
-                    Box(
-                        contentAlignment = Alignment.Center,
+                    TabLabel(
+                        text = tab.uiText,
+                        color = if (isSelected) Colors.White else Colors.White50,
+                        badgeCount = badgeCount(tab)?.takeIf { it > 0 },
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickableAlpha { onTabChange(tab) }
                             .padding(vertical = 8.dp)
                             .testTag("Tab-${tab.name.lowercase()}")
-                    ) {
-                        CaptionB(
-                            tab.uiText,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            color = if (isSelected) Colors.White else Colors.White50
-                        )
-                        badgeCount(tab)?.takeIf { it > 0 }?.let { count ->
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .size(20.dp)
-                                    .background(Colors.Brand, CircleShape)
-                            ) {
-                                CaptionB(text = count.toString(), color = Colors.White)
-                            }
-                        }
-                    }
+                    )
 
                     val animatedColor by animateColorAsState(
                         targetValue = if (isSelected) selectedColor else Colors.White50,
@@ -97,6 +83,57 @@ fun <T : TabItem> CustomTabRowWithSpacing(
                     Spacer(modifier = Modifier.width(8.dp))
                 }
             }
+        }
+    }
+}
+
+private val TabBadgeSize = 20.dp
+private val TabBadgeGap = 6.dp
+
+/**
+ * Tab label centred in the tab, with the badge sitting just after it.
+ *
+ * The badge is placed relative to the label rather than to the tab edge, so a wide tab does not
+ * strand it far from the text. The label is measured against the width left over once the badge and
+ * gap are reserved on both sides, keeping it centred while truncating before it can run underneath.
+ */
+@Composable
+private fun TabLabel(
+    text: String,
+    color: Color,
+    badgeCount: Int?,
+    modifier: Modifier = Modifier,
+) {
+    Layout(
+        contents = listOf(
+            { CaptionB(text, maxLines = 1, overflow = TextOverflow.Ellipsis, color = color) },
+            {
+                badgeCount?.let { count ->
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(TabBadgeSize)
+                            .background(Colors.Brand, CircleShape)
+                    ) {
+                        CaptionB(text = count.toString(), color = Colors.White)
+                    }
+                }
+            },
+        ),
+        modifier = modifier,
+    ) { (labelMeasurables, badgeMeasurables), constraints ->
+        val badge = badgeMeasurables.firstOrNull()?.measure(Constraints())
+        val reserved = badge?.let { it.width + TabBadgeGap.roundToPx() } ?: 0
+        val label = labelMeasurables.first().measure(
+            constraints.copy(minWidth = 0, maxWidth = (constraints.maxWidth - 2 * reserved).coerceAtLeast(0))
+        )
+        val width = constraints.maxWidth
+        val height = maxOf(label.height, badge?.height ?: 0)
+
+        layout(width, height) {
+            val labelX = (width - label.width) / 2
+            label.place(labelX, (height - label.height) / 2)
+            badge?.place(labelX + label.width + TabBadgeGap.roundToPx(), (height - badge.height) / 2)
         }
     }
 }
