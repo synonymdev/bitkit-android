@@ -1080,7 +1080,10 @@ private fun PaykitSubscription.createdRowSubtitle(now: Instant): String? {
 }
 
 internal fun PaykitSubscription.shouldShowTiming(now: Instant): Boolean =
-    isActive(now) || recurrence.endsAt != null
+    isActive(now) || expiryDate() != null
+
+internal fun PaykitSubscription.expiryDate(): Instant? =
+    recurrence.endsAt ?: paidPeriods.maxOfOrNull { it.endsAt }
 
 @Composable
 private fun PaykitSubscription.statusText(now: Instant): String = when {
@@ -1097,9 +1100,14 @@ private fun PaykitSubscription.timingTitle(now: Instant): String = when {
 }
 
 @Composable
-private fun PaykitSubscription.renewalText(now: Instant): String =
-    (recurrence.endsAt ?: recurrence.nextPeriodAfter(now)?.startsAt)?.formatFullDate()
-        ?: stringResource(R.string.subscriptions__ongoing)
+private fun PaykitSubscription.renewalText(now: Instant): String {
+    val date = if (isActive(now)) {
+        recurrence.endsAt ?: recurrence.nextPeriodAfter(now)?.startsAt
+    } else {
+        expiryDate()
+    }
+    return date?.formatFullDate() ?: stringResource(R.string.subscriptions__ongoing)
+}
 
 @Composable
 private fun rememberSubscriptionNow(subscriptions: ImmutableList<PaykitSubscription>): Instant {
