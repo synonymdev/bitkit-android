@@ -2,12 +2,18 @@ package to.bitkit.usecases
 
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.never
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppDb
@@ -15,11 +21,13 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.models.NodeLifecycleState
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.BlocktankRepo
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.PrivatePaykitAddressReservationRepo
 import to.bitkit.repositories.PrivatePaykitRepo
 import to.bitkit.repositories.PubkyRepo
@@ -29,6 +37,7 @@ import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
 import javax.inject.Provider
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class WipeWalletUseCaseTest : BaseUnitTest() {
@@ -60,6 +69,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     @Before
     fun setUp() {
         whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.success(Unit))
+        whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
@@ -116,12 +126,12 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(backupRepo).setWiping(true)
         inOrder.verify(backupRepo).reset()
         inOrder.verify(lightningRepo).wipeStorage(0)
+        inOrder.verify(keychain).wipe()
         inOrder.verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
         inOrder.verify(pubkyRepo).removeBitkitPaymentEndpoints()
         inOrder.verify(privatePaykitRepo).closeAndClear()
         inOrder.verify(privatePaykitAddressReservationRepo).clear()
         inOrder.verify(pubkyRepo).wipeLocalState()
-        inOrder.verify(keychain).wipe()
         inOrder.verify(coreService).wipeData()
         inOrder.verify(db).clearAllTables()
         inOrder.verify(settingsStore).reset()
@@ -134,6 +144,39 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         assertTrue(onWipeCalled)
         assertTrue(onSetWalletExistsStateCalled)
         inOrder.verify(backupRepo).setWiping(false)
+    }
+
+    @Test
+    fun `invoke should reject a second wipe while one is in flight`() = runTest {
+        val release = CompletableDeferred<Unit>()
+        whenever { lightningRepo.wipeStorage(0) }.doSuspendableAnswer {
+            release.await()
+            Result.success(Unit)
+        }
+        var first: Result<Unit>? = null
+        val job = launch { first = sut.invoke(resetWalletState = {}, onSuccess = {}) }
+        runCurrent()
+
+        val second = sut.invoke(resetWalletState = {}, onSuccess = {})
+
+        assertIs<WipeAlreadyInProgress>(second.exceptionOrNull())
+        release.complete(Unit)
+        job.join()
+        assertTrue(requireNotNull(first).isSuccess)
+        verify(lightningRepo).wipeStorage(0)
+    }
+
+    @Test
+    fun `invoke should restart backup observers when wipe fails while node is running`() = runTest {
+        whenever(lightningRepo.lightningState)
+            .thenReturn(MutableStateFlow(LightningState(nodeLifecycleState = NodeLifecycleState.Running)))
+        whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.failure(RuntimeException("stop failed")))
+
+        val result = sut.invoke(resetWalletState = {}, onSuccess = {})
+
+        assertTrue(result.isFailure)
+        verify(backupRepo).startObservingBackups()
+        verify(keychain, never()).wipe()
     }
 
     @Test

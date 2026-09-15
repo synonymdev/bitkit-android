@@ -1,6 +1,7 @@
 package to.bitkit.usecases
 
 import com.google.firebase.messaging.FirebaseMessaging
+import kotlinx.coroutines.sync.Mutex
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
@@ -18,6 +19,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.WatchOnlyAccountRepo
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Provider
@@ -44,16 +46,20 @@ class WipeWalletUseCase @Inject constructor(
     private val firebaseMessaging: FirebaseMessaging,
     private val migrationService: MigrationService,
 ) {
+    private val wipeMutex = Mutex()
+
     suspend operator fun invoke(
         walletIndex: Int = 0,
         resetWalletState: () -> Unit,
         onSuccess: () -> Unit,
     ): Result<Unit> {
+        if (!wipeMutex.tryLock()) return Result.failure(WipeAlreadyInProgress())
         backupRepo.setWiping(true)
         return try {
             runSuspendCatching {
                 backupRepo.reset()
                 lightningRepo.wipeStorage(walletIndex).getOrThrow()
+                keychain.wipe()
 
                 privatePaykitRepo.get().removePublishedEndpointsForCleanup(TAG)
                 pubkyRepo.removeBitkitPaymentEndpoints()
@@ -61,7 +67,6 @@ class WipeWalletUseCase @Inject constructor(
                 privatePaykitRepo.get().closeAndClear()
                 privatePaykitAddressReservationRepo.clear()
                 pubkyRepo.wipeLocalState()
-                keychain.wipe()
                 firebaseMessaging.deleteToken()
 
                 coreService.wipeData()
@@ -81,9 +86,13 @@ class WipeWalletUseCase @Inject constructor(
                 onSuccess()
             }.onFailure {
                 Logger.error("Failed to wipe wallet", it, context = TAG)
+                if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
+                    backupRepo.startObservingBackups()
+                }
             }
         } finally {
             backupRepo.setWiping(false)
+            wipeMutex.unlock()
         }
     }
 
@@ -91,3 +100,5 @@ class WipeWalletUseCase @Inject constructor(
         private const val TAG = "WipeWalletUseCase"
     }
 }
+
+class WipeAlreadyInProgress : AppError("Wallet wipe already in progress")

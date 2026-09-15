@@ -99,6 +99,7 @@ class WalletViewModel @Inject constructor(
 
     val isShowingMigrationLoading: StateFlow<Boolean> = migrationService.isShowingMigrationLoading
     val isRestoringFromRNRemoteBackup: StateFlow<Boolean> = migrationService.isRestoringFromRNRemoteBackup
+    val isWiping: StateFlow<Boolean> = backupRepo.isWiping
 
     private val _restoreState = MutableStateFlow<RestoreState>(RestoreState.Initial)
     val restoreState: StateFlow<RestoreState> = _restoreState.asStateFlow()
