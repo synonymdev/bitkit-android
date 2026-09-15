@@ -217,9 +217,7 @@ private fun SpendingAmountNodeRunning(
         Row(
             verticalAlignment = Alignment.Bottom,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier
-                .padding(vertical = 8.dp)
-                .testTag("SendAmountNumberPad")
+            modifier = Modifier.testTag("SendAmountNumberPad")
         ) {
             Column {
                 Text13Up(
@@ -254,8 +252,7 @@ private fun SpendingAmountNodeRunning(
             )
         }
 
-        HorizontalDivider()
-        VerticalSpacer(16.dp)
+        HorizontalDivider(modifier = Modifier.padding(top = 12.dp))
 
         NumberPad(
             viewModel = amountInputViewModel,
