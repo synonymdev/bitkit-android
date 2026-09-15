@@ -193,7 +193,7 @@ private fun SpendingAmountNodeRunning(
     ) {
         val amountUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
 
-        VerticalSpacer(minHeight = 16.dp, maxHeight = 32.dp)
+        VerticalSpacer(32.dp)
 
         Display(
             text = stringResource(R.string.lightning__spending_amount__title)
@@ -201,7 +201,7 @@ private fun SpendingAmountNodeRunning(
             modifier = Modifier.fillMaxWidth()
         )
 
-        FillHeight()
+        VerticalSpacer(32.dp)
 
         NumberPadTextField(
             viewModel = amountInputViewModel,
