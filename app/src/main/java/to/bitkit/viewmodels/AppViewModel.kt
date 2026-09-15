@@ -811,9 +811,9 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private suspend fun refreshIncomingPaykitPaymentRequests(): Boolean {
+    private suspend fun refreshIncomingPaykitPaymentRequests(refreshMaintenance: Boolean = true): Boolean {
         if (!isPaykitEnabled.value || pubkyRepo.publicKey.value == null || !walletRepo.walletExists()) return false
-        paykitPaymentProofRepo.reconcile()
+        if (refreshMaintenance) paykitPaymentProofRepo.reconcile()
         val previousRequests = paykitPaymentRequestRepo.pendingRequests.value
         return paykitPaymentRequestRepo.refresh().fold(
             onSuccess = {
@@ -837,11 +837,21 @@ class AppViewModel @Inject constructor(
 
         paykitPaymentRequestPollingJob = viewModelScope.launch {
             var refreshIntervalIndex = 0
+            var maintenanceIntervalIndex = 0
+            var maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS.first()
             while (true) {
-                delay(PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS[refreshIntervalIndex])
-                privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
-                val requestsChanged = refreshIncomingPaykitPaymentRequests()
-                refreshPaymentRequestTargets(force = true)
+                val refreshInterval = PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS[refreshIntervalIndex]
+                delay(refreshInterval)
+                maintenanceDelay -= refreshInterval
+                val refreshMaintenance = maintenanceDelay <= Duration.ZERO
+                if (refreshMaintenance) {
+                    privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
+                    maintenanceIntervalIndex =
+                        (maintenanceIntervalIndex + 1).coerceAtMost(PAYKIT_MAINTENANCE_INTERVALS.lastIndex)
+                    maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS[maintenanceIntervalIndex]
+                }
+                val requestsChanged = refreshIncomingPaykitPaymentRequests(refreshMaintenance)
+                if (refreshMaintenance) refreshPaymentRequestTargets(force = true)
                 refreshIntervalIndex = if (requestsChanged) {
                     0
                 } else {
@@ -1095,7 +1105,7 @@ class AppViewModel @Inject constructor(
                 }
                 return
             } else {
-                PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS.last()
+                PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_INTERVAL
             }
         paymentRequestPresentationRetryAttempts[request.id] =
             (attempt + 1).coerceAtMost(PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS.size)
@@ -5613,9 +5623,11 @@ class AppViewModel @Inject constructor(
         private const val AUTH_CHECK_SPLASH_DELAY_MS = 500L
         private const val ADDRESS_VALIDATION_DEBOUNCE_MS = 1000L
         private const val PAYKIT_CHANNEL_USABILITY_REFRESH_DELAY_MS = 5_000L
-        private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS = listOf(30.seconds, 60.seconds, 120.seconds)
+        private val PAYKIT_PAYMENT_REQUEST_REFRESH_INTERVALS = listOf(5.seconds, 10.seconds, 15.seconds, 30.seconds)
+        private val PAYKIT_MAINTENANCE_INTERVALS = listOf(30.seconds, 60.seconds, 120.seconds)
         private val INITIAL_PAYKIT_SYNC_RETRY_DELAYS = List(14) { 2.seconds }
         private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_DELAYS = List(14) { 2.seconds }
+        private val PAYKIT_PAYMENT_REQUEST_PRESENTATION_RETRY_INTERVAL = 120.seconds
         private val PUBLIC_PAYKIT_SYNC_DEBOUNCE = 1.seconds
         private val PUBLIC_PAYKIT_BOLT11_REFRESH_WINDOW = 30.minutes
         private const val BITKIT_SCHEME = "bitkit"

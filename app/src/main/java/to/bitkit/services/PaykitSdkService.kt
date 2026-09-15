@@ -992,24 +992,13 @@ class PaykitSdkService @Inject constructor(
         _backupStateVersion.update { it + 1 }
     }
 
-    @Suppress("TooGenericExceptionCaught")
     private suspend fun <T> withStateRevisionTracking(block: suspend (PaykitSdk) -> T): T {
         val handle = handle()
-        val previousRevision = runCatching { handle.stateRevision() }.getOrNull()
-        return try {
-            block(handle).also {
-                notifyBackupStateChangedIfNeeded(previousRevision, handle)
-            }
-        } catch (error: Throwable) {
-            notifyBackupStateChangedIfNeeded(previousRevision, handle)
-            throw error
-        }
-    }
-
-    private fun notifyBackupStateChangedIfNeeded(previousRevision: String?, handle: PaykitSdk) {
-        val nextRevision = runCatching { handle.stateRevision() }.getOrNull()
-        if (previousRevision != nextRevision) {
-            notifyBackupStateChanged()
+        return withPaykitBackupStateTracking(
+            readRevision = { handle.backupStateRevision() },
+            onChange = ::notifyBackupStateChanged,
+        ) {
+            block(handle)
         }
     }
 
@@ -1064,6 +1053,24 @@ class PaykitSdkService @Inject constructor(
 
         fun parseAuthUrl(authUrl: String) =
             parsePubkyAuthUrl(authUrl)
+    }
+}
+
+internal suspend fun <T> withPaykitBackupStateTracking(
+    readRevision: suspend () -> String,
+    onChange: () -> Unit,
+    operation: suspend () -> T,
+): T {
+    val previousRevision = runSuspendCatching { readRevision() }.getOrNull()
+    return try {
+        operation()
+    } finally {
+        withContext(NonCancellable) {
+            val nextRevision = runSuspendCatching { readRevision() }.getOrNull()
+            if (previousRevision == null || nextRevision == null || previousRevision != nextRevision) {
+                onChange()
+            }
+        }
     }
 }
 
