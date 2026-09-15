@@ -275,13 +275,13 @@ internal fun SubscriptionsContent(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .onSizeChanged { footerHeight = with(density) { it.height.toDp() } }
-                    .hazeEffect(state = hazeState, style = rememberChromeHazeStyle())
                     .navigationBarsPadding()
             ) {
                 VerticalSpacer(16.dp)
                 SecondaryButton(
                     text = stringResource(R.string.subscriptions__create),
                     onClick = onCreateSubscription,
+                    hazeState = hazeState,
                     modifier = Modifier.padding(horizontal = 16.dp).testTag("SubscriptionCreate")
                 )
                 VerticalSpacer(16.dp)

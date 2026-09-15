@@ -44,9 +44,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.paykit.PaymentRequestLifecycleState
-import dev.chrisbanes.haze.hazeEffect
-import dev.chrisbanes.haze.hazeSource
-import dev.chrisbanes.haze.rememberHazeState
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
@@ -80,7 +77,6 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.SheetTopBar
-import to.bitkit.ui.scaffold.rememberChromeHazeStyle
 import to.bitkit.ui.screens.wallets.activity.components.CircularIcon
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -243,7 +239,6 @@ internal fun PaymentRequestsContent(
     topPadding: Dp = 0.dp,
 ) {
     val sections = paymentRequestSections(requests, pending, Clock.System.now())
-    val hazeState = rememberHazeState()
     val density = LocalDensity.current
     var footerHeight by remember { mutableStateOf(0.dp) }
     // Without a footer nothing else clears the system bars, and a stale measurement must not linger.
@@ -256,11 +251,7 @@ internal fun PaymentRequestsContent(
             .then(if (showsNavigationBar) Modifier.gradientBackground() else Modifier)
             .testTag("PaymentRequestsScreen")
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .hazeSource(hazeState)
-        ) {
+        Column(modifier = Modifier.fillMaxSize()) {
             if (showsNavigationBar) {
                 AppTopBar(
                     titleText = stringResource(R.string.wallet__payment_requests),
@@ -357,7 +348,6 @@ internal fun PaymentRequestsContent(
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
                     .onSizeChanged { footerHeight = with(density) { it.height.toDp() } }
-                    .hazeEffect(state = hazeState, style = rememberChromeHazeStyle())
                     .navigationBarsPadding()
             ) {
                 VerticalSpacer(16.dp)
