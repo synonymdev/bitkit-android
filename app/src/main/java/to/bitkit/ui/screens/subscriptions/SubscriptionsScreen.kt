@@ -423,7 +423,7 @@ fun SubscriptionDetailScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .gradientBackground()
+            .background(Colors.Black)
             .navigationBarsPadding()
     ) {
         AppTopBar(
@@ -638,7 +638,7 @@ fun SubscriptionSheet(appViewModel: AppViewModel, initialRoute: SubscriptionRout
         modifier = Modifier
             .fillMaxWidth()
             .sheetHeight()
-            .gradientBackground()
+            .gradientBackground(startColor = Colors.Gray6, endColor = Colors.Black)
     ) {
         if (subscription == null) {
             Column(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {

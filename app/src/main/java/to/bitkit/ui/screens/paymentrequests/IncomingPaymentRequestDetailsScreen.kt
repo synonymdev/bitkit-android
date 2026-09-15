@@ -33,7 +33,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.paykit.PaymentRequestLifecycleState
-import kotlin.time.ExperimentalTime
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -65,12 +64,12 @@ import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.CircularIcon
-import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.uiDateText
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
+import kotlin.time.ExperimentalTime
 
 @Composable
 fun IncomingPaymentRequestDetailsScreen(
@@ -115,7 +114,7 @@ private fun IncomingPaymentRequestDetailsContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .gradientBackground()
+            .background(Colors.Black)
             .navigationBarsPadding()
             .testTag("PaymentRequestDetailsScreen")
     ) {
