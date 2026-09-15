@@ -951,7 +951,9 @@ private fun SubscriptionCancel(
         )
         FillHeight()
         Image(
-            painter = painterResource(R.drawable.cross),
+            painter = painterResource(
+                if (subscription.isCreatedByUser) R.drawable.subscription_trash else R.drawable.cross
+            ),
             contentDescription = null,
             modifier = Modifier
                 .size(256.dp)
