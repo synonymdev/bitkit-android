@@ -97,6 +97,22 @@ class ReceiveInvoiceEditStateTest {
         assertEquals(entry, state.entryDetails)
     }
 
+    @Test
+    fun `receive CJIT session matches confirmed invoice amount`() {
+        val state = ReceiveCjitSessionState()
+        val entry = cjitEntryDetails(invoice = "fresh")
+
+        state.onCjitCreated(entry)
+
+        assertFalse(state.hasConfirmedInvoiceForAmount(1_000uL))
+
+        state.onCjitConfirmed("fresh")
+
+        assertTrue(state.hasConfirmedInvoiceForAmount(1_000uL))
+        assertFalse(state.hasConfirmedInvoiceForAmount(2_000uL))
+        assertFalse(state.hasConfirmedInvoiceForAmount(null))
+    }
+
     private fun cjitEntryDetails(invoice: String) = CjitEntryDetails(
         networkFeeSat = 1,
         serviceFeeSat = 1,

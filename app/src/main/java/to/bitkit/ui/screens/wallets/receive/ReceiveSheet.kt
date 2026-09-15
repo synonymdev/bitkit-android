@@ -375,8 +375,10 @@ fun ReceiveSheet(
                         sourceTab = editInvoiceSourceTab,
                         onBack = { navController.popBackStack() },
                         updateInvoice = {
-                            cjitSessionState.clear()
-                            wallet.updateBip21Invoice(it)
+                            if (!cjitSessionState.hasConfirmedInvoiceForAmount(it)) {
+                                cjitSessionState.clear()
+                                wallet.updateBip21Invoice(it)
+                            }
                         },
                         onClickAddTag = { navController.navigateTo(ReceiveRoute.AddTag) },
                         onClickTag = wallet::removeTag,
@@ -451,6 +453,10 @@ internal class ReceiveCjitSessionState {
 
     fun onCjitConfirmed(invoice: String) {
         cjitInvoice = invoice
+    }
+
+    fun hasConfirmedInvoiceForAmount(amountSats: ULong?): Boolean {
+        return cjitInvoice != null && entryDetails?.receiveAmountSats?.toULong() == amountSats
     }
 
     fun clear() {
