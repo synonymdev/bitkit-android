@@ -473,7 +473,7 @@ private fun PaykitPaymentRequest.historyPeriod(
 }
 
 @Composable
-private fun paymentRequestDate(request: PaykitPaymentRequest): String = request.createdAt?.let {
+internal fun paymentRequestDate(request: PaykitPaymentRequest): String = request.createdAt?.let {
     uiDateText(it.epochSeconds.toULong(), UiDateStyle.DATE)
 } ?: paymentRequestStatus(request)
 
@@ -516,9 +516,11 @@ private fun paymentRequestStatus(request: PaykitPaymentRequest): String {
 internal fun PaymentRequestCard(
     request: PaykitPaymentRequest,
     contact: PubkyProfile?,
+    title: String? = null,
     compactSubtitle: String? = null,
     isOutgoingPayment: Boolean = false,
     showSignedAmount: Boolean = false,
+    showAmountSymbol: Boolean = true,
     onClick: (() -> Unit)? = null,
     isDismissing: Boolean = false,
     onPay: (() -> Unit)? = null,
@@ -565,7 +567,7 @@ internal fun PaymentRequestCard(
             }
             Column(modifier = Modifier.weight(1f)) {
                 BodyMSB(
-                    text = displayContact.name,
+                    text = title ?: displayContact.name,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -579,6 +581,7 @@ internal fun PaymentRequestCard(
             MoneyCell(
                 sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
                 prefix = amountPrefix,
+                showSymbol = showAmountSymbol,
             )
         }
         if (onPay != null || onDismiss != null) {

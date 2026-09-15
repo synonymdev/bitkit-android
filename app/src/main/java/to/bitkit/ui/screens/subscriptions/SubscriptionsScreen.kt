@@ -100,6 +100,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.scaffold.rememberChromeHazeStyle
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestCard
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestsScreen
+import to.bitkit.ui.screens.paymentrequests.paymentRequestDate
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
 import to.bitkit.ui.screens.wallets.activity.components.TabItem
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -477,10 +478,12 @@ fun SubscriptionDetailScreen(
                             PaymentRequestCard(
                                 request = payment,
                                 contact = contacts.contactFor(subscription),
-                                compactSubtitle = subscription.note?.takeIf(String::isNotBlank)
+                                title = subscription.note?.takeIf(String::isNotBlank)
                                     ?: stringResource(R.string.subscriptions__subscription),
+                                compactSubtitle = paymentRequestDate(payment),
                                 isOutgoingPayment = !subscription.isCreatedByUser,
                                 showSignedAmount = subscription.isCreatedByUser,
+                                showAmountSymbol = false,
                             )
                         }
                     }
