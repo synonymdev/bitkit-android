@@ -71,6 +71,8 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionId
+import to.bitkit.repositories.isPaidFromSpending
+import to.bitkit.ui.LocalBalances
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
@@ -735,6 +737,7 @@ private fun SubscriptionReview(
 ) {
     var loading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val balances = LocalBalances.current
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -786,7 +789,11 @@ private fun SubscriptionReview(
                     }
                 ),
                 // Follow the balance this will be paid from, as the send and transfer screens do.
-                color = if (subscription.prefersLightningPayment) Colors.Purple else Colors.Brand,
+                color = if (subscription.isPaidFromSpending(balances.maxSendLightningSats)) {
+                    Colors.Purple
+                } else {
+                    Colors.Brand
+                },
                 loading = loading,
                 onConfirm = {
                     loading = true
