@@ -148,13 +148,14 @@ private fun IncomingPaymentRequestDetailsContent(
             )?.let {
                 Caption13Up(text = it.removeAccentTags(), color = Colors.White64)
             }
+            // No showSymbol override: the handoff drops the bitcoin symbol from this signed amount
+            // and keeps the fiat one, which is what rememberMoneyText defaults to.
             rememberMoneyText(
                 sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
-                showSymbol = true,
             )?.let {
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Display(
-                        text = "${request.detailsAmountPrefix()}$it".withAccent(accentColor = Colors.White64),
+                        text = "${request.detailsAmountPrefix()} $it".withAccent(accentColor = Colors.White64),
                     )
                     FillWidth()
                     PaymentRequestDetailsIcon(request)
