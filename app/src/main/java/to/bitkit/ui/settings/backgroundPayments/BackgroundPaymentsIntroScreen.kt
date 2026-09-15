@@ -84,7 +84,7 @@ fun BackgroundPaymentsIntroContent(
             text = stringResource(R.string.settings__bg__intro_title).withAccent(accentColor = Colors.Purple),
             color = Colors.White,
         )
-        VerticalSpacer(14.dp)
+        VerticalSpacer(8.dp)
         BodyM(text = stringResource(R.string.settings__bg__intro_desc), color = Colors.White64)
         VerticalSpacer(32.dp)
         Row(

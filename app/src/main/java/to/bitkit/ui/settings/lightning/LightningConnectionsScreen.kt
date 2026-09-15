@@ -404,7 +404,7 @@ private fun EmptyStateContent(modifier: Modifier = Modifier) {
                 .withAccent(accentColor = Colors.Purple),
         )
 
-        VerticalSpacer(14.dp)
+        VerticalSpacer(8.dp)
 
         BodyM(
             text = stringResource(R.string.lightning__conn_onboarding_text),
