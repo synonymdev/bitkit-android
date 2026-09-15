@@ -45,8 +45,9 @@ class VssBackupClientLdk @Inject constructor(
 
     suspend fun setup(walletIndex: Int = 0): Result<Unit> = withContext(ioDispatcher) {
         setupMutex.withLock {
+            val gate = isSetup
             runCatching {
-                if (isSetup.isCompleted && !isSetup.isCancelled) return@runCatching
+                if (gate.isCompleted && !gate.isCancelled) return@runCatching
 
                 val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
                     ?: throw MnemonicNotAvailableException()
@@ -63,12 +64,12 @@ class VssBackupClientLdk @Inject constructor(
                         passphrase = passphrase,
                         lnurlAuthServerUrl = Env.lnurlAuthServerUrl,
                     )
-                    isSetup.complete(Unit)
+                    gate.complete(Unit)
                     Logger.info("VSS LDK client setup", context = TAG)
                 }
             }.onFailure {
-                isSetup.completeExceptionally(it)
-                isSetup = CompletableDeferred()
+                gate.completeExceptionally(it)
+                if (isSetup === gate) isSetup = CompletableDeferred()
                 Logger.error("VSS LDK client setup error", it, context = TAG)
             }
         }

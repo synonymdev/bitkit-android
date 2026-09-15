@@ -37,8 +37,9 @@ class VssBackupClient @Inject constructor(
 
     suspend fun setup(walletIndex: Int = 0): Result<Unit> = withContext(ioDispatcher) {
         setupMutex.withLock {
+            val gate = isSetup
             runCatching {
-                if (isSetup.isCompleted && !isSetup.isCancelled) return@runCatching
+                if (gate.isCompleted && !gate.isCancelled) return@runCatching
 
                 val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)
                     ?: throw MnemonicNotAvailableException()
@@ -62,12 +63,12 @@ class VssBackupClient @Inject constructor(
                         passphrase = passphrase,
                         lnurlAuthServerUrl = lnurlAuthServerUrl,
                     )
-                    isSetup.complete(Unit)
+                    gate.complete(Unit)
                     Logger.info("VSS client setup with server: '$vssUrl'", context = TAG)
                 }
             }.onFailure {
-                isSetup.completeExceptionally(it)
-                isSetup = CompletableDeferred()
+                gate.completeExceptionally(it)
+                if (isSetup === gate) isSetup = CompletableDeferred()
                 Logger.error("VSS client setup error", it, context = TAG)
             }
         }

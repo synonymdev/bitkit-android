@@ -285,7 +285,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     }
 
     @Test
-    fun `invoke should complete the wipe when lightningRepo wipeStorage fails`() = runTest {
+    fun `invoke should fail before wiping local state when LDK storage wipe fails`() = runTest {
         val error = RuntimeException("Lightning wipe failed")
         whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.failure(error))
 
@@ -294,11 +294,12 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             onSuccess = { onSetWalletExistsStateCalled = true },
         )
 
-        assertTrue(result.isSuccess)
-        verify(keychain).wipe()
-        verify(db).clearAllTables()
-        assertTrue(onWipeCalled)
-        assertTrue(onSetWalletExistsStateCalled)
+        assertTrue(result.isFailure)
+        verify(privatePaykitRepo).closeAndClear()
+        verify(keychain, never()).wipe()
+        verify(db, never()).clearAllTables()
+        assertFalse(onWipeCalled)
+        assertFalse(onSetWalletExistsStateCalled)
     }
 
     @Test

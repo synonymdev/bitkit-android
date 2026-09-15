@@ -56,9 +56,10 @@ class WipeWalletUseCase @Inject constructor(
         if (!wipeMutex.tryLock()) return Result.failure(WipeAlreadyInProgress())
         backupRepo.setWiping(true)
         val result = try {
-            stopNode().map {
+            runSuspendCatching {
+                stopNode().getOrThrow()
                 cleanupRemote()
-                wipeLocal(walletIndex, resetWalletState)
+                wipeLocal(walletIndex, resetWalletState).getOrThrow()
                 onSuccess()
             }
         } finally {
@@ -84,8 +85,8 @@ class WipeWalletUseCase @Inject constructor(
         step("close Paykit SDK") { privatePaykitRepo.get().closeAndClear() }
     }
 
-    private suspend fun wipeLocal(walletIndex: Int, resetWalletState: () -> Unit) {
-        step("wipe LDK storage") { lightningRepo.wipeStorage(walletIndex) }
+    private suspend fun wipeLocal(walletIndex: Int, resetWalletState: () -> Unit): Result<Unit> {
+        lightningRepo.wipeStorage(walletIndex).onFailure { return Result.failure(it) }
         step("clear Paykit address reservations") { privatePaykitAddressReservationRepo.clear() }
         step("wipe Pubky local state") { pubkyRepo.wipeLocalState() }
         step("wipe keychain") { keychain.wipe() }
@@ -101,6 +102,7 @@ class WipeWalletUseCase @Inject constructor(
         hwWalletRepo.resetState()
         resetWalletState()
         step("mark migration checked") { migrationService.markMigrationChecked() }
+        return Result.success(Unit)
     }
 
     private suspend fun step(name: String, block: suspend () -> Any?) {
