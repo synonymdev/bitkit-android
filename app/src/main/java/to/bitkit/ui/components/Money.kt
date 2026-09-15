@@ -48,23 +48,42 @@ fun MoneyCell(
     sats: Long,
     modifier: Modifier = Modifier,
     prefix: String = "",
-    showSymbol: Boolean = true,
-    secondaryText: String? = null,
+    showBitcoinSymbol: Boolean = true,
+    fiatReplacement: String? = null,
 ) {
     val currencies = LocalCurrencies.current
+    val primaryUnit = currencies.primaryDisplay
+    val secondaryUnit = primaryUnit.not()
+
+    val primaryMoney = rememberMoneyText(
+        sats = sats,
+        unit = primaryUnit,
+        showSymbol = primaryUnit != PrimaryDisplay.BITCOIN || showBitcoinSymbol,
+    )
+    val secondaryMoney = rememberMoneyText(
+        sats = sats,
+        unit = secondaryUnit,
+        showSymbol = secondaryUnit != PrimaryDisplay.BITCOIN || showBitcoinSymbol,
+    )
+    val primaryIsReplaced = fiatReplacement != null && primaryUnit == PrimaryDisplay.FIAT
+    val primary = if (primaryIsReplaced) fiatReplacement else primaryMoney
+    val secondary = if (fiatReplacement != null && secondaryUnit == PrimaryDisplay.FIAT) {
+        fiatReplacement
+    } else {
+        secondaryMoney
+    }
+
     Column(
         horizontalAlignment = Alignment.End,
         verticalArrangement = Arrangement.spacedBy(2.dp),
         modifier = modifier,
     ) {
-        rememberMoneyText(sats = sats, unit = currencies.primaryDisplay, showSymbol = showSymbol)?.let { text ->
+        primary?.let { text ->
             BodyMSB(
-                text = "$prefix$text".withAccent(accentColor = Colors.White64),
+                text = (if (primaryIsReplaced) text else "$prefix$text").withAccent(accentColor = Colors.White64),
                 modifier = Modifier.testTag("MoneyPrimary"),
             )
         }
-        val secondary = secondaryText
-            ?: rememberMoneyText(sats = sats, unit = currencies.primaryDisplay.not(), showSymbol = true)
         secondary?.let { text ->
             CaptionB(
                 text = text.withAccent(accentColor = Colors.White64),

@@ -436,7 +436,7 @@ private fun ActivePaymentRequestCard(
             contact = contact,
             compactSubtitle = subscriptionNote,
             onClick = { onDetails(request.id) },
-            amountStatus = stringResource(R.string.wallet__payment_request_pending),
+            fiatStatus = stringResource(R.string.wallet__payment_request_pending),
         )
     }
 }
@@ -518,8 +518,8 @@ internal fun PaymentRequestCard(
     compactSubtitle: String? = null,
     isOutgoingPayment: Boolean = false,
     showSignedAmount: Boolean = false,
-    showAmountSymbol: Boolean = true,
-    amountStatus: String? = null,
+    showBitcoinSymbol: Boolean = true,
+    fiatStatus: String? = null,
     onClick: (() -> Unit)? = null,
     isDismissing: Boolean = false,
     onPay: (() -> Unit)? = null,
@@ -580,8 +580,8 @@ internal fun PaymentRequestCard(
             MoneyCell(
                 sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
                 prefix = amountPrefix,
-                showSymbol = showAmountSymbol,
-                secondaryText = amountStatus,
+                showBitcoinSymbol = showBitcoinSymbol,
+                fiatReplacement = fiatStatus,
             )
         }
         if (onPay != null || onDismiss != null) {

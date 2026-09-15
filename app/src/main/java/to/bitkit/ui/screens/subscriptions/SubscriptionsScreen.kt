@@ -482,7 +482,7 @@ fun SubscriptionDetailScreen(
                                 compactSubtitle = paymentRequestDate(payment),
                                 isOutgoingPayment = !subscription.isCreatedByUser,
                                 showSignedAmount = subscription.isCreatedByUser,
-                                showAmountSymbol = false,
+                                showBitcoinSymbol = false,
                             )
                         }
                     }
