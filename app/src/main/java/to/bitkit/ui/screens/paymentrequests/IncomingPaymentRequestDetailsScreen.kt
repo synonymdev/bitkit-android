@@ -33,7 +33,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.paykit.PaymentRequestLifecycleState
-import kotlin.time.ExperimentalTime
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -71,6 +70,7 @@ import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.uiDateText
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
+import kotlin.time.ExperimentalTime
 
 @Composable
 fun IncomingPaymentRequestDetailsScreen(

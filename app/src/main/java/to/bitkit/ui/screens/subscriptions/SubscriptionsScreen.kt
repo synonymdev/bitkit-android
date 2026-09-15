@@ -56,12 +56,6 @@ import com.synonym.paykit.PaymentRequestLifecycleState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
-import java.math.BigDecimal
-import java.math.MathContext
-import java.math.RoundingMode
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
-import kotlin.time.Instant
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -109,6 +103,12 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
+import java.math.BigDecimal
+import java.math.MathContext
+import java.math.RoundingMode
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 @Composable
 fun SubscriptionsScreen(
@@ -289,7 +289,6 @@ internal fun SubscriptionsContent(
         }
     }
 }
-
 
 private fun LazyListScope.subscriptionSection(
     @StringRes titleRes: Int,
