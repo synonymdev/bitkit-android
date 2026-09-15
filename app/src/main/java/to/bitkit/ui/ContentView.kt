@@ -510,6 +510,9 @@ fun ContentView(
                 },
                 sheetContainerColor = when (currentSheet) {
                     is Sheet.Widgets -> Colors.Gray7
+                    // Meet the top of the subscription sheets' own gradient, so the grabber strip
+                    // does not sit a shade darker than the content right below it.
+                    is Sheet.Subscription -> Colors.Gray6
                     else -> DefaultSheetContainerColor
                 },
                 sheets = {
