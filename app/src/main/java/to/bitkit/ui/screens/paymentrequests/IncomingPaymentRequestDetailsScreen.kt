@@ -183,20 +183,23 @@ private fun IncomingPaymentRequestDetailsContent(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier
-                    .fillMaxWidth()
                     .background(Colors.Gray6, RoundedCornerShape(16.dp))
                     .padding(16.dp),
             ) {
                 PubkyContactAvatar(profile = contact, size = 40.dp)
                 BodyMSB(text = contact.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            VerticalSpacer(20.dp)
+            VerticalSpacer(16.dp)
+            HorizontalDivider(color = Colors.White10)
+            VerticalSpacer(16.dp)
             PaymentRequestTags(
                 tags = selectedTags,
                 onRemove = { selectedTags = (selectedTags - it).toImmutableList() },
                 onAdd = { isAddingTag = true },
             )
-            VerticalSpacer(20.dp)
+            VerticalSpacer(16.dp)
+            HorizontalDivider(color = Colors.White10)
+            VerticalSpacer(16.dp)
             Caption13Up(text = stringResource(R.string.wallet__payment_request_note), color = Colors.White64)
             VerticalSpacer(8.dp)
             BodyMSB(
