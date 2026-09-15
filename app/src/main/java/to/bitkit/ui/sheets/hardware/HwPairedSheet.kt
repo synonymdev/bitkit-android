@@ -26,6 +26,7 @@ import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import to.bitkit.R
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
@@ -36,6 +37,7 @@ import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.TextInput
 import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.components.WalletBalanceView
+import to.bitkit.ui.components.pairedHeaderRes
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -56,7 +58,7 @@ fun HwPairedSheet(
 ) {
     HwPairedContent(
         uiState = uiState,
-        header = stringResource(R.string.hardware__paired_header).withAccent(accentColor = Colors.Blue),
+        header = stringResource(uiState.vendor.pairedHeaderRes()).withAccent(accentColor = Colors.Blue),
         text = stringResource(R.string.hardware__paired_text),
         screenTag = "HardwareWalletPairedScreen",
         onLabelChange = onLabelChange,
@@ -140,6 +142,8 @@ internal fun HwPairedContent(
             )
             HwPairedButtons(
                 hazeState = hazeState,
+                // Passphrase (hidden) wallets are a Trezor feature; a Jade has one wallet per device.
+                showPassphrase = uiState.vendor == HwWalletVendor.TREZOR,
                 onPassphrase = onPassphrase,
                 onFinish = onFinish,
                 modifier = Modifier
@@ -154,6 +158,7 @@ internal fun HwPairedContent(
 private fun HwPairedButtons(
     hazeState: HazeState,
     modifier: Modifier = Modifier,
+    showPassphrase: Boolean = true,
     onPassphrase: () -> Unit = {},
     onFinish: () -> Unit = {},
 ) {
@@ -161,14 +166,16 @@ private fun HwPairedButtons(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
         modifier = modifier.fillMaxWidth()
     ) {
-        SecondaryButton(
-            text = stringResource(R.string.hardware__passphrase_button),
-            onClick = onPassphrase,
-            hazeState = hazeState,
-            modifier = Modifier
-                .weight(1f)
-                .testTag("HardwareWalletPairedPassphrase")
-        )
+        if (showPassphrase) {
+            SecondaryButton(
+                text = stringResource(R.string.hardware__passphrase_button),
+                onClick = onPassphrase,
+                hazeState = hazeState,
+                modifier = Modifier
+                    .weight(1f)
+                    .testTag("HardwareWalletPairedPassphrase")
+            )
+        }
         PrimaryButton(
             text = stringResource(R.string.hardware__paired_finish),
             onClick = onFinish,
@@ -189,6 +196,24 @@ private fun Preview() {
                     deviceName = "Trezor Safe 3",
                     balanceSats = 10_562_411uL,
                     labelInput = "Trezor Safe 3",
+                ),
+                modifier = Modifier.sheetHeight()
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewJade() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            HwPairedSheet(
+                uiState = HwConnectUiState(
+                    deviceName = "Jade",
+                    vendor = HwWalletVendor.BLOCKSTREAM,
+                    balanceSats = 10_562_411uL,
+                    labelInput = "Jade",
                 ),
                 modifier = Modifier.sheetHeight()
             )

@@ -199,7 +199,7 @@ private fun ReceiveTab.toReceiveLiquiditySource(): ReceiveLiquiditySource {
         ReceiveTab.SAVINGS -> SAVINGS
         ReceiveTab.AUTO -> AUTO
         ReceiveTab.SPENDING -> SPENDING
-        ReceiveTab.TREZOR -> SAVINGS
+        ReceiveTab.HARDWARE -> SAVINGS
     }
 }
 

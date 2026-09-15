@@ -13,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
@@ -21,6 +22,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.IBtOrder
 import to.bitkit.R
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.safe
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Display
@@ -30,6 +32,7 @@ import to.bitkit.ui.components.HardwareTransferIllustration
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SIGN_VISUAL_TOP_RATIO
 import to.bitkit.ui.components.VerticalSpacer
+import to.bitkit.ui.components.illustrationRes
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -49,6 +52,10 @@ fun SpendingHwSignScreen(
     onAdvancedClick: () -> Unit,
 ) {
     val state by viewModel.spendingUiState.collectAsStateWithLifecycle()
+    val hardwareWallets by viewModel.hardwareWallets.collectAsStateWithLifecycle()
+    val vendor = remember(hardwareWallets, walletId) {
+        hardwareWallets.firstOrNull { it.id == walletId }?.vendor ?: HwWalletVendor.TREZOR
+    }
 
     val order = state.order ?: run {
         onCloseClick()
@@ -70,6 +77,7 @@ fun SpendingHwSignScreen(
         isAdvanced = state.isAdvanced,
         isSigning = state.isSigning,
         hasPendingBroadcast = state.hasPendingHwBroadcast,
+        vendor = vendor,
         onBackClick = onBackClick,
         onLearnMoreClick = onLearnMoreClick,
         onAdvancedClick = onAdvancedClick,
@@ -93,6 +101,7 @@ private fun Content(
     isAdvanced: Boolean = false,
     isSigning: Boolean = false,
     hasPendingBroadcast: Boolean = false,
+    vendor: HwWalletVendor = HwWalletVendor.TREZOR,
     onBackClick: () -> Unit = {},
     onLearnMoreClick: () -> Unit = {},
     onAdvancedClick: () -> Unit = {},
@@ -107,7 +116,7 @@ private fun Content(
         )
         Box(modifier = Modifier.fillMaxSize()) {
             HardwareTransferIllustration(
-                drawableRes = R.drawable.trezor,
+                drawableRes = vendor.illustrationRes(),
                 topRatio = SIGN_VISUAL_TOP_RATIO,
             )
 

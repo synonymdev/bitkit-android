@@ -15,9 +15,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import to.bitkit.R
-import to.bitkit.ext.isTrezorDeviceBusy
-import to.bitkit.ext.isTrezorFirmwareError
-import to.bitkit.ext.isTrezorUserCancellation
+import to.bitkit.ext.isHwDeviceBusy
+import to.bitkit.ext.isHwFirmwareError
+import to.bitkit.ext.isHwUserCancellation
 import to.bitkit.models.HwReceiveAddress
 import to.bitkit.models.Toast
 import to.bitkit.repositories.HwPassphraseMismatchError
@@ -25,6 +25,7 @@ import to.bitkit.repositories.HwPassphraseRequiredError
 import to.bitkit.repositories.HwReceiveAddressMismatchError
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.HwErrorPresenter
 import javax.inject.Inject
 import kotlin.time.Duration.Companion.seconds
 
@@ -46,6 +47,13 @@ class HwReceiveViewModel @Inject constructor(
     private var addressUpdatesJob: Job? = null
     private var verifyJob: Job? = null
     private var passphraseJob: Job? = null
+
+    /**
+     * The wallet whose device this sheet engaged, by verifying an address or entering a passphrase.
+     * Only that session is closed on the way out: merely showing the address never opens one, and
+     * dropping a live session there would ask for a passphrase again on the next send.
+     */
+    private var engagedWalletId: String? = null
 
     fun loadAddress(walletId: String) {
         val state = _uiState.value
@@ -101,6 +109,7 @@ class HwReceiveViewModel @Inject constructor(
         val address = state.address ?: return
         if (state.isVerifyingAddress || verifyJob?.isActive == true) return
 
+        engagedWalletId = walletId
         _uiState.update { it.copy(isVerifyingAddress = true) }
         verifyJob = viewModelScope.launch {
             try {
@@ -109,12 +118,13 @@ class HwReceiveViewModel @Inject constructor(
                     return@launch
                 }
                 runCatching {
-                    withTimeout(VERIFY_TIMEOUT) {
+                    // Verification reconnects first, and a Jade reconnect may wait for its PIN.
+                    withTimeout(VERIFY_TIMEOUT + hwWalletRepo.reconnectTimeout(walletId)) {
                         hwWalletRepo.verifyReceiveAddress(walletId, address).getOrThrow()
                     }
                 }.onFailure {
                     if (it is CancellationException && it !is TimeoutCancellationException) throw it
-                    handleVerifyFailure(it)
+                    handleVerifyFailure(walletId, it)
                 }
             } finally {
                 _uiState.update { it.copy(isVerifyingAddress = false) }
@@ -128,6 +138,7 @@ class HwReceiveViewModel @Inject constructor(
         val walletId = state.walletId ?: return
         if (passphrase.isEmpty() || !state.isPassphraseRequired || state.isVerifyingPassphrase) return
 
+        engagedWalletId = walletId
         _uiState.update { it.copy(isVerifyingPassphrase = true) }
         passphraseJob = viewModelScope.launch {
             try {
@@ -144,7 +155,7 @@ class HwReceiveViewModel @Inject constructor(
                                 description = context.getString(R.string.hardware__passphrase_mismatch),
                             )
                         } else {
-                            handleVerifyFailure(error)
+                            handleVerifyFailure(walletId, error)
                         }
                     }
             } finally {
@@ -158,6 +169,7 @@ class HwReceiveViewModel @Inject constructor(
         passphraseJob?.cancel()
         passphraseJob = null
         _uiState.update { it.copy(isPassphraseRequired = false, isVerifyingPassphrase = false) }
+        disconnectEngaged()
     }
 
     fun cancel() {
@@ -170,25 +182,36 @@ class HwReceiveViewModel @Inject constructor(
         verifyJob = null
         passphraseJob = null
         _uiState.update { HwReceiveUiState() }
+        disconnectEngaged()
     }
 
     private fun invalidateVerification() {
         verifyJob?.cancel()
         passphraseJob?.cancel()
         _uiState.update { it.copy(isPassphraseRequired = false) }
+        disconnectEngaged()
     }
 
-    private suspend fun handleVerifyFailure(error: Throwable) {
+    private fun disconnectEngaged() {
+        val walletId = engagedWalletId ?: return
+        engagedWalletId = null
+        viewModelScope.launch { hwWalletRepo.disconnectStaleSession(walletId) }
+    }
+
+    private suspend fun handleVerifyFailure(walletId: String, error: Throwable) {
+        if (error is TimeoutCancellationException) {
+            hwWalletRepo.disconnectStaleSession(walletId)
+        }
         when {
-            error.isTrezorUserCancellation() -> Unit
+            error.isHwUserCancellation() -> Unit
             generateSequence(error) { it.cause }.any { it is HwPassphraseRequiredError } -> {
                 _uiState.update { it.copy(isPassphraseRequired = true) }
             }
-            error.isTrezorDeviceBusy() -> ToastEventBus.send(
+            error.isHwDeviceBusy() -> ToastEventBus.send(
                 type = Toast.ToastType.INFO,
-                title = context.getString(R.string.hardware__device_busy),
+                title = HwErrorPresenter.userMessage(context, error),
             )
-            error.isTrezorFirmwareError() -> ToastEventBus.send(
+            error.isHwFirmwareError() -> ToastEventBus.send(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.common__error),
                 description = context.getString(R.string.hardware__connect_error),
@@ -203,7 +226,15 @@ class HwReceiveViewModel @Inject constructor(
                 title = context.getString(R.string.common__error),
                 description = context.getString(R.string.hardware__verify_address_error),
             )
-            else -> ToastEventBus.send(error)
+            else -> ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.common__error),
+                description = HwErrorPresenter.userMessage(
+                    context = context,
+                    error = error,
+                    fallback = context.getString(R.string.hardware__connect_error),
+                ),
+            )
         }
     }
 }

@@ -11,7 +11,7 @@ class ReceiveInvoiceEditStateTest {
     fun `hardware wallet receive starts on trezor before editing`() {
         val state = ReceiveInvoiceEditState()
 
-        assertEquals(ReceiveTab.TREZOR, state.initialTab(hardwareWalletId = "trezor-1"))
+        assertEquals(ReceiveTab.HARDWARE, state.initialTab(hardwareWalletId = "trezor-1"))
     }
 
     @Test
@@ -30,7 +30,7 @@ class ReceiveInvoiceEditStateTest {
 
         state.beginHardwareEdit()
 
-        assertEquals(ReceiveTab.TREZOR, state.initialTab(hardwareWalletId = null))
+        assertEquals(ReceiveTab.HARDWARE, state.initialTab(hardwareWalletId = null))
         assertTrue(state.isHardwareInvoice)
     }
 

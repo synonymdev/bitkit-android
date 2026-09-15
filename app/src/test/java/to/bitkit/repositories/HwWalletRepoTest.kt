@@ -5,9 +5,11 @@ import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.AddressInfo
+import com.synonym.bitkitcore.CompletedTransaction
 import com.synonym.bitkitcore.ComposeAccount
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
+import com.synonym.bitkitcore.JadeTransportKind
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
 import com.synonym.bitkitcore.PreActivityMetadata
@@ -47,6 +49,7 @@ import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
 import to.bitkit.models.HwReceiveAddress
 import to.bitkit.models.HwWalletReceivedTx
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.WalletScope
@@ -68,6 +71,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     private companion object {
         const val HARDWARE_WALLET_ID = "hardware-wallet"
         const val HIDDEN_WALLET_ID = "hidden-wallet"
+        const val JADE_WALLET_ID = "jade-wallet"
         val WATCHER_RECEIVE_ADDRESS = AddressInfo(
             address = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8",
             path = "m/84'/1'/0'/0/0",
@@ -76,6 +80,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     private val trezorRepo = mock<TrezorRepo>()
+    private val jadeRepo = mock<JadeRepo>()
     private val activityRepo = mock<ActivityRepo>()
     private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val hwWalletStore = mock<HwWalletStore>()
@@ -84,6 +89,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     private lateinit var storeData: MutableStateFlow<HwWalletData>
     private lateinit var settingsData: MutableStateFlow<SettingsData>
     private lateinit var trezorState: MutableStateFlow<TrezorState>
+    private lateinit var jadeState: MutableStateFlow<JadeRepoState>
     private lateinit var watcherEvents: MutableSharedFlow<Pair<String, WatcherEvent>>
 
     private val device = KnownDevice(
@@ -98,6 +104,16 @@ class HwWalletRepoTest : BaseUnitTest() {
         walletId = HARDWARE_WALLET_ID,
     )
 
+    private val jadeDevice = device.copy(
+        id = "jade1",
+        path = "ble:jade1",
+        label = "Jade",
+        model = "Jade",
+        xpubs = mapOf("nativeSegwit" to "zpubJade"),
+        walletId = JADE_WALLET_ID,
+        vendor = HwWalletVendor.BLOCKSTREAM,
+    )
+
     /** A passphrase wallet of the same physical device: same transport id, own keys and identity. */
     private val hiddenWallet = device.copy(
         xpubs = mapOf("nativeSegwit" to "zpubHidden"),
@@ -110,8 +126,12 @@ class HwWalletRepoTest : BaseUnitTest() {
         storeData = MutableStateFlow(HwWalletData(knownDevices = listOf(device)))
         settingsData = MutableStateFlow(SettingsData())
         trezorState = MutableStateFlow(TrezorState())
+        jadeState = MutableStateFlow(JadeRepoState())
         watcherEvents = MutableSharedFlow(extraBufferCapacity = 8)
+        whenever(jadeRepo.state).thenReturn(jadeState)
+        whenever { jadeRepo.scan(any()) }.thenReturn(Result.success(emptyList()))
         whenever(hwWalletStore.data).thenReturn(storeData)
+        whenever { hwWalletStore.loadKnownDevices() }.thenAnswer { storeData.value.knownDevices }
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(trezorRepo.state).thenReturn(trezorState)
         whenever(trezorRepo.watcherEvents).thenReturn(watcherEvents)
@@ -138,8 +158,17 @@ class HwWalletRepoTest : BaseUnitTest() {
     private fun passphraseCapableFeatures(): TrezorFeatures =
         mock { on { passphraseProtection }.thenReturn(true) }
 
+    private fun connectedJade(id: String = "jade1", walletId: String?) = ConnectedJadeDevice(
+        id = id,
+        path = "ble:$id",
+        transport = JadeTransportKind.BLUETOOTH,
+        versionInfo = mock(),
+        walletId = walletId,
+    )
+
     private fun createRepo() = HwWalletRepo(
         trezorRepo = trezorRepo,
+        jadeRepo = jadeRepo,
         activityRepo = activityRepo,
         preActivityMetadataRepo = preActivityMetadataRepo,
         hwWalletStore = hwWalletStore,
@@ -920,6 +949,27 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `same seed on trezor and jade remains two vendor wallets`() = test {
+        val jade = device.copy(
+            id = "jade1",
+            path = "ble:jade1",
+            model = "Jade",
+            walletId = "jade-wallet",
+            vendor = HwWalletVendor.BLOCKSTREAM,
+        )
+        storeData.value = HwWalletData(knownDevices = listOf(device, jade))
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+
+        val sut = createRepo()
+
+        assertEquals(setOf(HARDWARE_WALLET_ID, "jade-wallet"), sut.wallets.value.map { it.id }.toSet())
+        assertEquals(
+            setOf(HwWalletVendor.TREZOR, HwWalletVendor.BLOCKSTREAM),
+            sut.wallets.value.map { it.vendor }.toSet()
+        )
+    }
+
+    @Test
     fun `connected entry wins identity for a wallet paired over both transports`() = test {
         val bleEntry = device.copy(id = "ble1", lastConnectedAt = 2L, xpubs = mapOf("nativeSegwit" to "zpubNS"))
         val usbEntry = bleEntry.copy(id = "usb1", transportType = TransportType.USB, lastConnectedAt = 1L)
@@ -1232,6 +1282,74 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertTrue(result.exceptionOrNull() is HwPassphraseRequiredError)
         verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
+    }
+
+    @Test
+    fun `signFunding refuses a jade session that belongs to another wallet`() = test {
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = 1_250uL,
+            feeRate = 2.0f,
+            totalSpent = 26_250uL,
+            satsPerVByte = 2uL,
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(jadeDevice))
+        jadeState.value = JadeRepoState(connected = connectedJade(walletId = "other-jade-wallet"))
+        val sut = createRepo()
+
+        val result = sut.signFunding(JADE_WALLET_ID, funding)
+
+        assertTrue(result.exceptionOrNull() is HwWalletMismatchError)
+        verify(jadeRepo, never()).signPsbt(any())
+    }
+
+    @Test
+    fun `signFunding refuses an unresolved jade session of another device`() = test {
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = 1_250uL,
+            feeRate = 2.0f,
+            totalSpent = 26_250uL,
+            satsPerVByte = 2uL,
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(jadeDevice))
+        jadeState.value = JadeRepoState(connected = connectedJade(id = "jade2", walletId = null))
+        val sut = createRepo()
+
+        val result = sut.signFunding(JADE_WALLET_ID, funding)
+
+        assertTrue(result.exceptionOrNull() is HwWalletMismatchError)
+        verify(jadeRepo, never()).signPsbt(any())
+    }
+
+    @Test
+    fun `signFunding signs on the jade holding the requested wallet`() = test {
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = 1_250uL,
+            feeRate = 2.0f,
+            totalSpent = 26_250uL,
+            satsPerVByte = 2uL,
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(jadeDevice))
+        jadeState.value = JadeRepoState(connected = connectedJade(walletId = JADE_WALLET_ID))
+        whenever { jadeRepo.signPsbt("psbt") }
+            .thenReturn(Result.success(CompletedTransaction(serializedTx = "rawtx", txid = "txid")))
+        val sut = createRepo()
+
+        val result = sut.signFunding(JADE_WALLET_ID, funding)
+
+        assertEquals("rawtx", result.getOrThrow().serializedTx)
+        verify(jadeRepo).signPsbt("psbt")
+    }
+
+    @Test
+    fun `activity finishing releases the jade connections`() = test {
+        val sut = createRepo()
+
+        sut.onActivityFinishing()
+
+        verify(jadeRepo).releaseAllConnections()
     }
 
     @Test
@@ -1853,8 +1971,43 @@ class HwWalletRepoTest : BaseUnitTest() {
         val sut = createRepo()
 
         sut.onTransportRestored(TransportType.USB)
+        runCurrent()
 
         verify(trezorRepo).onTransportRestored(TransportType.USB)
+    }
+
+    @Test
+    fun `usb attach for a vendor with nothing paired keeps the other vendor session`() = test {
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HARDWARE_WALLET_ID),
+        )
+        val sut = createRepo()
+
+        sut.onTransportRestored(TransportType.USB, HwWalletVendor.BLOCKSTREAM)
+        runCurrent()
+
+        verify(trezorRepo, never()).disconnect()
+        verify(trezorRepo, never()).cancelPairingCode()
+        verify(jadeRepo, never()).onTransportRestored(any())
+    }
+
+    @Test
+    fun `usb attach for a paired jade disconnects the trezor before reconnecting`() = test {
+        val jade = device.copy(id = "jade1", vendor = HwWalletVendor.BLOCKSTREAM, transportType = TransportType.USB)
+        storeData.value = HwWalletData(knownDevices = listOf(device, jade))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HARDWARE_WALLET_ID),
+        )
+        whenever { trezorRepo.disconnect() }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        sut.onTransportRestored(TransportType.USB, HwWalletVendor.BLOCKSTREAM)
+        runCurrent()
+
+        inOrder(trezorRepo, jadeRepo) {
+            verify(trezorRepo).disconnect()
+            verify(jadeRepo).onTransportRestored(TransportType.USB)
+        }
     }
 
     @Test
@@ -1862,8 +2015,68 @@ class HwWalletRepoTest : BaseUnitTest() {
         val sut = createRepo()
 
         sut.onAppForegrounded()
+        runCurrent()
 
         verify(trezorRepo).onAppForegrounded()
+    }
+
+    @Test
+    fun `foreground reconnect loads a saved jade before repository initialization`() = test {
+        val jade = device.copy(vendor = HwWalletVendor.BLOCKSTREAM, label = "Jade")
+        storeData.value = HwWalletData(knownDevices = listOf(jade))
+        val sut = createRepo()
+
+        sut.onAppForegrounded()
+        runCurrent()
+
+        verify(jadeRepo).onAppForegrounded()
+        verify(trezorRepo, never()).onAppForegrounded()
+    }
+
+    @Test
+    fun `foreground reconnect picks the most recently used saved bluetooth vendor`() = test {
+        val jade = device.copy(vendor = HwWalletVendor.BLOCKSTREAM, lastConnectedAt = 20L)
+        val newerUsb = device.copy(transportType = TransportType.USB, lastConnectedAt = 30L)
+        storeData.value = HwWalletData(knownDevices = listOf(device, jade, newerUsb))
+        val sut = createRepo()
+
+        sut.onAppForegrounded()
+        runCurrent()
+
+        verify(jadeRepo).onAppForegrounded()
+        verify(trezorRepo, never()).onAppForegrounded()
+    }
+
+    @Test
+    fun `transport restore loads a saved jade before repository initialization`() = test {
+        val jade = device.copy(vendor = HwWalletVendor.BLOCKSTREAM, transportType = TransportType.USB)
+        storeData.value = HwWalletData(knownDevices = listOf(jade))
+        val sut = createRepo()
+
+        sut.onTransportRestored(TransportType.USB)
+        runCurrent()
+
+        verify(jadeRepo).onTransportRestored(TransportType.USB)
+        verify(trezorRepo, never()).onTransportRestored(TransportType.USB)
+    }
+
+    @Test
+    fun `foreground reconnect targets the currently connected jade`() = test {
+        jadeState.value = JadeRepoState(
+            connected = ConnectedJadeDevice(
+                id = "jade1",
+                path = "ble:jade1",
+                transport = JadeTransportKind.BLUETOOTH,
+                versionInfo = mock(),
+            )
+        )
+        val sut = createRepo()
+
+        sut.onAppForegrounded()
+        runCurrent()
+
+        verify(jadeRepo).onAppForegrounded()
+        verify(trezorRepo, never()).onAppForegrounded()
     }
 
     @Test
@@ -1923,6 +2136,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 network = any(),
                 accountType = anyOrNull(),
                 coinSelection = any(),
+                fingerprint = anyOrNull(),
             )
         ).thenReturn(
             Result.success(
@@ -2194,6 +2408,26 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scan suppresses bluetooth while a jade session is open`() = test {
+        jadeState.value = JadeRepoState(
+            connected = ConnectedJadeDevice(
+                id = "jade1",
+                path = "ble:jade1",
+                transport = JadeTransportKind.BLUETOOTH,
+                versionInfo = mock(),
+            )
+        )
+        whenever(trezorRepo.scan(includeBluetooth = false)).thenReturn(Result.success(emptyList()))
+        whenever { jadeRepo.scan(includeBluetooth = false) }.thenReturn(Result.success(emptyList()))
+        val sut = createRepo()
+
+        sut.scan(includeBluetooth = true)
+
+        verify(trezorRepo).scan(includeBluetooth = false)
+        verify(jadeRepo).scan(includeBluetooth = false)
+    }
+
+    @Test
     fun `connect delegates to trezorRepo`() = test {
         val features = mock<TrezorFeatures>()
         whenever(trezorRepo.connect("dev1")).thenReturn(Result.success(features))
@@ -2203,6 +2437,28 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         verify(trezorRepo).resetWalletSelection()
         verify(trezorRepo).connect("dev1")
+    }
+
+    @Test
+    fun `connecting a trezor disconnects an active jade first`() = test {
+        jadeState.value = JadeRepoState(
+            connected = ConnectedJadeDevice(
+                id = "jade1",
+                path = "ble:jade1",
+                transport = JadeTransportKind.BLUETOOTH,
+                versionInfo = mock(),
+            )
+        )
+        whenever { jadeRepo.disconnect() }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.connect("dev1") }.thenReturn(Result.success(mock()))
+        val sut = createRepo()
+
+        sut.connect("dev1", HwWalletVendor.TREZOR).getOrThrow()
+
+        inOrder(jadeRepo, trezorRepo) {
+            verify(jadeRepo).disconnect()
+            verify(trezorRepo).connect("dev1")
+        }
     }
 
     @Test
@@ -2250,6 +2506,25 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         verify(hwWalletStore).saveKnownDevices(
             listOf(ble.copy(customLabel = "Shared"), usb.copy(customLabel = "Shared")),
+        )
+    }
+
+    @Test
+    fun `setDeviceLabel does not rename another vendor with the same seed`() = test {
+        val jade = device.copy(
+            id = "jade1",
+            path = "ble:jade1",
+            model = "Jade",
+            walletId = "jade-wallet",
+            vendor = HwWalletVendor.BLOCKSTREAM,
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, jade))
+        val sut = createRepo()
+
+        sut.setDeviceLabel(HARDWARE_WALLET_ID, "Trezor only")
+
+        verify(hwWalletStore).saveKnownDevices(
+            listOf(device.copy(customLabel = "Trezor only"), jade),
         )
     }
 
