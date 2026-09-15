@@ -39,8 +39,8 @@ import to.bitkit.androidServices.LightningNodeService.Companion.ACTION_START_SER
 import to.bitkit.androidServices.LightningNodeService.Companion.CHANNEL_ID_NODE
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.SamRockSetupRequest
+import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PaykitPaymentRequestId
-import to.bitkit.services.JadeTransport
 import to.bitkit.ui.components.AuthCheckView
 import to.bitkit.ui.components.IsOnlineTracker
 import to.bitkit.ui.components.ToastOverlay
@@ -80,7 +80,7 @@ class MainActivity : FragmentActivity() {
     }
 
     @Inject
-    lateinit var jadeTransport: JadeTransport
+    lateinit var hwWalletRepo: HwWalletRepo
 
     private val appViewModel by viewModels<AppViewModel>()
     private val walletViewModel by viewModels<WalletViewModel>()
@@ -295,8 +295,9 @@ class MainActivity : FragmentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         // A Jade left with an open Bluetooth link when the process dies can refuse connections until
-        // it is power-cycled, so release every link when the activity is going away for good.
-        if (isFinishing) jadeTransport.closeAllConnections()
+        // it is power-cycled, so release every link when the activity is going away for good. The
+        // repository clears its session with the transport, off the main thread.
+        if (isFinishing) hwWalletRepo.onActivityFinishing()
         if (!settingsViewModel.notificationsGranted.value) {
             stopForegroundService()
         }

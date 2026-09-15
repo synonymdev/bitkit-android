@@ -484,6 +484,26 @@ class JadeRepo @Inject constructor(
         }
     }
 
+    /**
+     * Releases every Jade link when the app's last activity finishes. A Jade left with an open Bluetooth
+     * link when the process dies can refuse connections until it is power-cycled. The transport is
+     * closed before core is told, since a device call still waiting on the link holds the core queue.
+     * Runs on the repository scope so the teardown outlives the activity and stays off the main thread.
+     */
+    fun releaseAllConnections() {
+        backgroundReleaseJob?.cancel()
+        backgroundReleaseJob = null
+        transportReconnectJob?.cancel()
+        transportReconnectJob = null
+        scope.launch {
+            runCatching { jadeTransport.closeAllConnections() }
+                .onFailure { Logger.warn("Failed to close Jade transport links", it, context = TAG) }
+            runSuspendCatching { jadeService.disconnect() }
+                .onFailure { Logger.warn("Failed to close Jade core session", it, context = TAG) }
+            _state.update { it.copy(connected = null) }
+        }
+    }
+
     fun onAppForegrounded() {
         backgroundReleaseJob?.cancel()
         backgroundReleaseJob = null

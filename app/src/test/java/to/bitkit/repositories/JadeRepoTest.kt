@@ -23,6 +23,7 @@ import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeastOnce
 import org.mockito.kotlin.eq
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -423,6 +424,47 @@ class JadeRepoTest : BaseUnitTest() {
         advanceTimeBy(60.seconds)
 
         verify(jadeService, never()).disconnect()
+    }
+
+    @Test
+    fun `releasing all connections closes transport and core session and clears the cached link`() = test {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.READY))
+        val sut = createRepo()
+        sut.connectKnownDevice(knownUsb.id).getOrThrow()
+
+        sut.releaseAllConnections()
+        advanceUntilIdle()
+
+        inOrder(jadeTransport, jadeService) {
+            verify(jadeTransport).closeAllConnections()
+            verify(jadeService).disconnect()
+        }
+        assertNull(sut.state.value.connected)
+    }
+
+    @Test
+    fun `foreground reconnect runs again after the connections were released`() = test {
+        val knownBle = knownUsb.copy(
+            id = "jade:bluetooth:$EFUSE_MAC",
+            path = "ble:56:C4:BF:B3:9E:75",
+            transportType = TransportType.BLUETOOTH,
+        )
+        val bleDevice = JadeDeviceInfo(knownBle.path, JadeTransportKind.BLUETOOTH, "Jade 8F6B64", null)
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownBle))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(bleDevice))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.READY))
+        val sut = createRepo()
+        sut.connectKnownDevice(knownBle.id).getOrThrow()
+        sut.releaseAllConnections()
+        advanceUntilIdle()
+
+        sut.onAppForegrounded()
+        advanceUntilIdle()
+
+        verify(jadeService, times(2)).connect(any(), any(), any())
+        assertEquals(knownBle.id, sut.state.value.connected?.id)
     }
 
     @Test

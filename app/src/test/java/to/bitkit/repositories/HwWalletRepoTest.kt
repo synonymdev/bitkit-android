@@ -5,6 +5,7 @@ import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.AddressInfo
+import com.synonym.bitkitcore.CompletedTransaction
 import com.synonym.bitkitcore.ComposeAccount
 import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
@@ -70,6 +71,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     private companion object {
         const val HARDWARE_WALLET_ID = "hardware-wallet"
         const val HIDDEN_WALLET_ID = "hidden-wallet"
+        const val JADE_WALLET_ID = "jade-wallet"
         val WATCHER_RECEIVE_ADDRESS = AddressInfo(
             address = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8",
             path = "m/84'/1'/0'/0/0",
@@ -100,6 +102,16 @@ class HwWalletRepoTest : BaseUnitTest() {
         lastConnectedAt = 0L,
         xpubs = mapOf("nativeSegwit" to "zpubNS"),
         walletId = HARDWARE_WALLET_ID,
+    )
+
+    private val jadeDevice = device.copy(
+        id = "jade1",
+        path = "ble:jade1",
+        label = "Jade",
+        model = "Jade",
+        xpubs = mapOf("nativeSegwit" to "zpubJade"),
+        walletId = JADE_WALLET_ID,
+        vendor = HwWalletVendor.BLOCKSTREAM,
     )
 
     /** A passphrase wallet of the same physical device: same transport id, own keys and identity. */
@@ -145,6 +157,14 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     private fun passphraseCapableFeatures(): TrezorFeatures =
         mock { on { passphraseProtection }.thenReturn(true) }
+
+    private fun connectedJade(id: String = "jade1", walletId: String?) = ConnectedJadeDevice(
+        id = id,
+        path = "ble:$id",
+        transport = JadeTransportKind.BLUETOOTH,
+        versionInfo = mock(),
+        walletId = walletId,
+    )
 
     private fun createRepo() = HwWalletRepo(
         trezorRepo = trezorRepo,
@@ -1262,6 +1282,74 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertTrue(result.exceptionOrNull() is HwPassphraseRequiredError)
         verify(trezorRepo, never()).signTxFromPsbt(any(), anyOrNull())
+    }
+
+    @Test
+    fun `signFunding refuses a jade session that belongs to another wallet`() = test {
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = 1_250uL,
+            feeRate = 2.0f,
+            totalSpent = 26_250uL,
+            satsPerVByte = 2uL,
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(jadeDevice))
+        jadeState.value = JadeRepoState(connected = connectedJade(walletId = "other-jade-wallet"))
+        val sut = createRepo()
+
+        val result = sut.signFunding(JADE_WALLET_ID, funding)
+
+        assertTrue(result.exceptionOrNull() is HwWalletMismatchError)
+        verify(jadeRepo, never()).signPsbt(any())
+    }
+
+    @Test
+    fun `signFunding refuses an unresolved jade session of another device`() = test {
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = 1_250uL,
+            feeRate = 2.0f,
+            totalSpent = 26_250uL,
+            satsPerVByte = 2uL,
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(jadeDevice))
+        jadeState.value = JadeRepoState(connected = connectedJade(id = "jade2", walletId = null))
+        val sut = createRepo()
+
+        val result = sut.signFunding(JADE_WALLET_ID, funding)
+
+        assertTrue(result.exceptionOrNull() is HwWalletMismatchError)
+        verify(jadeRepo, never()).signPsbt(any())
+    }
+
+    @Test
+    fun `signFunding signs on the jade holding the requested wallet`() = test {
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = 1_250uL,
+            feeRate = 2.0f,
+            totalSpent = 26_250uL,
+            satsPerVByte = 2uL,
+        )
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(jadeDevice))
+        jadeState.value = JadeRepoState(connected = connectedJade(walletId = JADE_WALLET_ID))
+        whenever { jadeRepo.signPsbt("psbt") }
+            .thenReturn(Result.success(CompletedTransaction(serializedTx = "rawtx", txid = "txid")))
+        val sut = createRepo()
+
+        val result = sut.signFunding(JADE_WALLET_ID, funding)
+
+        assertEquals("rawtx", result.getOrThrow().serializedTx)
+        verify(jadeRepo).signPsbt("psbt")
+    }
+
+    @Test
+    fun `activity finishing releases the jade connections`() = test {
+        val sut = createRepo()
+
+        sut.onActivityFinishing()
+
+        verify(jadeRepo).releaseAllConnections()
     }
 
     @Test

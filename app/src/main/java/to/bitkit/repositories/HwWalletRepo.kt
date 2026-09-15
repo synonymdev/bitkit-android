@@ -209,6 +209,9 @@ class HwWalletRepo @Inject constructor(
     /** The whole app left the foreground; a Jade releases its Bluetooth link after a grace period. */
     fun onAppBackgrounded() = jadeRepo.onAppBackgrounded()
 
+    /** The app's last activity is finishing; every Jade link, core session and cached connection is released. */
+    fun onActivityFinishing() = jadeRepo.releaseAllConnections()
+
     fun warmUpKnownDevice(walletId: String) {
         scope.launch {
             sessionMutex.withLock {
@@ -801,10 +804,7 @@ class HwWalletRepo @Inject constructor(
         runSuspendCatching {
             val serializedTx = when (vendorOf(walletId)) {
                 HwWalletVendor.TREZOR -> signTrezorFunding(walletId, funding)
-                HwWalletVendor.BLOCKSTREAM -> jadeRepo.signPsbt(funding.psbt).getOrElse {
-                    if (it.isHwSessionFailure()) disconnectStaleSession(walletId)
-                    throw it
-                }.serializedTx
+                HwWalletVendor.BLOCKSTREAM -> signJadeFunding(walletId, funding)
             }
             HwFundingSignedTx(
                 serializedTx = serializedTx,
@@ -830,6 +830,29 @@ class HwWalletRepo @Inject constructor(
             }
             throw it
         }.serializedTx
+    }
+
+    private suspend fun signJadeFunding(walletId: String, funding: HwFundingTransaction): String {
+        // A foreground reconnect or transport restore can replace the session between composing and
+        // signing, and a different Jade would be asked to sign inputs it holds no keys for.
+        if (!jadeRepo.state.value.connected.isSessionOf(walletId)) {
+            throw HwWalletMismatchError()
+        }
+        return jadeRepo.signPsbt(funding.psbt).getOrElse {
+            if (it.isHwSessionFailure()) disconnectStaleSession(walletId)
+            throw it
+        }.serializedTx
+    }
+
+    /**
+     * Whether a Jade session may sign for [walletId]. No session passes, since core then reports it as
+     * not connected and the caller reconnects. A session whose accounts could not be read reports no
+     * identity, so its entry id has to belong to [walletId] instead.
+     */
+    private suspend fun ConnectedJadeDevice?.isSessionOf(walletId: String): Boolean = when {
+        this == null -> true
+        this.walletId != null -> this.walletId == walletId
+        else -> devicesForWallet(walletId).any { it.id == id }
     }
 
     /** Broadcasts a signed funding payment without requiring the hardware device. */
@@ -1364,6 +1387,9 @@ class HwPassphraseRequiredError : AppError("Passphrase needed to reopen this wal
 class HwPassphraseMismatchError : AppError("Passphrase opened a different wallet")
 
 class HwReceiveAddressMismatchError(message: String) : AppError(message)
+
+/** The connected device holds another wallet than the one being signed from. */
+class HwWalletMismatchError : AppError("A different hardware wallet is connected")
 
 /** The device has no wallet yet; it has to be created or restored on the device itself. */
 class HwDeviceUninitializedError : AppError("Hardware device is not set up")
