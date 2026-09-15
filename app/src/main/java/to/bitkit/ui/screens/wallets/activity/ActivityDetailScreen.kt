@@ -682,7 +682,7 @@ private fun ActivityDetailContent(
                     enabled = shouldEnable,
                     icon = {
                         Icon(
-                            painter = painterResource(R.drawable.ic_timer_alt),
+                            painter = painterResource(R.drawable.ic_timer_alt_yellow),
                             contentDescription = null,
                             tint = accentColor,
                             modifier = Modifier.size(16.dp)

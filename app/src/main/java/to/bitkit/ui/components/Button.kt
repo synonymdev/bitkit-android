@@ -18,10 +18,12 @@ import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -106,57 +108,59 @@ fun PrimaryButton(
     val contentPadding = PaddingValues(horizontal = size.primaryHorizontalPadding.takeIf { text != null } ?: 0.dp)
     val buttonShape = MaterialTheme.shapes.extraLarge
 
-    Button(
-        onClick = rememberDebouncedClick(onClick = onClick),
-        enabled = enabled && !isLoading,
-        colors = AppButtonDefaults.primaryColors.copy(
-            containerColor = Color.Transparent,
-            disabledContainerColor = Color.Transparent,
-            contentColor = contentColor,
-        ),
-        contentPadding = contentPadding,
-        shape = buttonShape,
-        modifier = modifier
-            .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
-            .requiredHeight(size.height)
-            .primaryButtonStyle(
-                isEnabled = enabled && !isLoading,
-                shape = buttonShape,
-                primaryColor = color,
-                enableGradient = enableGradient,
-                shadowElevation = size.primaryShadowElevation,
-            )
-            .alphaFeedback(enabled = enabled && !isLoading)
-    ) {
-        if (isLoading) {
-            GradientCircularProgressIndicator(
-                strokeWidth = 2.dp,
-                modifier = Modifier.size(size.height / 2)
-            )
-        } else {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(size.primaryGap),
-            ) {
-                if (icon != null) {
-                    Box(
-                        modifier = if (enabled) {
-                            Modifier
-                        } else {
-                            Modifier.graphicsLayer {
-                                colorFilter = ColorFilter.tint(Colors.White32)
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+        Button(
+            onClick = rememberDebouncedClick(onClick = onClick),
+            enabled = enabled && !isLoading,
+            colors = AppButtonDefaults.primaryColors.copy(
+                containerColor = Color.Transparent,
+                disabledContainerColor = Color.Transparent,
+                contentColor = contentColor,
+            ),
+            contentPadding = contentPadding,
+            shape = buttonShape,
+            modifier = modifier
+                .then(if (fullWidth) Modifier.fillMaxWidth() else Modifier)
+                .requiredHeight(size.height)
+                .primaryButtonStyle(
+                    isEnabled = enabled && !isLoading,
+                    shape = buttonShape,
+                    primaryColor = color,
+                    enableGradient = enableGradient,
+                    shadowElevation = size.primaryShadowElevation,
+                )
+                .alphaFeedback(enabled = enabled && !isLoading)
+        ) {
+            if (isLoading) {
+                GradientCircularProgressIndicator(
+                    strokeWidth = 2.dp,
+                    modifier = Modifier.size(size.height / 2)
+                )
+            } else {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(size.primaryGap),
+                ) {
+                    if (icon != null) {
+                        Box(
+                            modifier = if (enabled) {
+                                Modifier
+                            } else {
+                                Modifier.graphicsLayer {
+                                    colorFilter = ColorFilter.tint(Colors.White32)
+                                }
                             }
+                        ) {
+                            icon()
                         }
-                    ) {
-                        icon()
                     }
-                }
-                text?.let {
-                    Text(
-                        text = text,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    text?.let {
+                        Text(
+                            text = text,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
                 }
             }
         }
@@ -205,42 +209,44 @@ fun SecondaryButton(
                 }
             )
     ) {
-        OutlinedButton(
-            onClick = rememberDebouncedClick(onClick = onClick),
-            enabled = enabled && !isLoading,
-            colors = AppButtonDefaults.secondaryColors.copy(contentColor = contentColor),
-            contentPadding = contentPadding,
-            border = border,
-        ) {
-            if (isLoading) {
-                GradientCircularProgressIndicator(
-                    strokeWidth = 2.dp,
-                    modifier = Modifier.size(size.height / 2)
-                )
-            } else {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(size.secondaryGap),
-                ) {
-                    if (icon != null) {
-                        Box(
-                            modifier = if (enabled) {
-                                Modifier
-                            } else {
-                                Modifier.graphicsLayer {
-                                    colorFilter = ColorFilter.tint(Colors.White32)
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+            OutlinedButton(
+                onClick = rememberDebouncedClick(onClick = onClick),
+                enabled = enabled && !isLoading,
+                colors = AppButtonDefaults.secondaryColors.copy(contentColor = contentColor),
+                contentPadding = contentPadding,
+                border = border,
+            ) {
+                if (isLoading) {
+                    GradientCircularProgressIndicator(
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(size.height / 2)
+                    )
+                } else {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(size.secondaryGap),
+                    ) {
+                        if (icon != null) {
+                            Box(
+                                modifier = if (enabled) {
+                                    Modifier
+                                } else {
+                                    Modifier.graphicsLayer {
+                                        colorFilter = ColorFilter.tint(Colors.White32)
+                                    }
                                 }
+                            ) {
+                                icon()
                             }
-                        ) {
-                            icon()
                         }
-                    }
-                    text?.let {
-                        Text(
-                            text = text,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
+                        text?.let {
+                            Text(
+                                text = text,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
                     }
                 }
             }
