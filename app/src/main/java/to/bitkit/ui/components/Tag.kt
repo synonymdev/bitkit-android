@@ -85,12 +85,13 @@ fun AddTagButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val shape = AppShapes.small
     val cornerRadius = 8.dp
     Row(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         modifier = modifier
-            .clip(AppShapes.small)
+            .clip(shape)
             .drawBehind {
                 drawRoundRect(
                     color = Colors.White64,
@@ -104,12 +105,15 @@ fun AddTagButton(
             .clickableAlpha(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
-        BodySSB(text = stringResource(R.string.wallet__tags_add_button), color = Colors.White)
+        BodySSB(
+            text = stringResource(R.string.wallet__tags_add_button),
+            color = Colors.White,
+        )
         Icon(
             painter = painterResource(R.drawable.ic_plus),
             contentDescription = null,
             tint = Colors.White64,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(16.dp)
         )
     }
 }
@@ -124,6 +128,7 @@ private fun Preview() {
             TagButton("Selected With icon close", onClick = {}, isSelected = true, displayIconClose = true)
             TagButton("Not Selected With icon close", onClick = {}, displayIconClose = true)
             TagButton("Icon trash", onClick = {}, displayIconClose = true, icon = painterResource(R.drawable.ic_trash))
+            AddTagButton(onClick = {})
         }
     }
 }

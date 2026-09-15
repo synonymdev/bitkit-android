@@ -34,7 +34,7 @@ fun <T : TabItem> CustomTabRowWithSpacing(
     currentTabIndex: Int,
     onTabChange: (T) -> Unit,
     modifier: Modifier = Modifier,
-    selectedColor: Color = Colors.Brand,
+    selectedColor: Color = Colors.White,
     badgeCount: (T) -> Int? = { null },
 ) {
     Column(modifier = modifier) {

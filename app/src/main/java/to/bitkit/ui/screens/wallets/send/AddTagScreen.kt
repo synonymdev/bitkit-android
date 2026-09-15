@@ -36,6 +36,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
+import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.theme.TRANSITION_SCREEN_MS
@@ -130,6 +131,11 @@ fun AddTagContent(
                 keyboardActions = KeyboardActions(onDone = {
                     onTagConfirmed(uiState.tagInput)
                 }),
+                colors = AppTextFieldDefaults.semiTransparent.copy(
+                    focusedContainerColor = Colors.White06,
+                    unfocusedContainerColor = Colors.White06,
+                    errorContainerColor = Colors.White06,
+                ),
                 modifier = Modifier
                     .focusRequester(focusRequester)
                     .fillMaxWidth()
