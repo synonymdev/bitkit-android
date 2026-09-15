@@ -946,6 +946,10 @@
     <string name="wallet__savings__onboarding">&lt;accent&gt;Envía\nbitcoin&lt;/accent&gt;\na tu\nsaldo de ahorros</string>
     <string name="wallet__spending__title">Gasto</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Envía\nbitcoin&lt;/accent&gt;\na tu\nsaldo de gastos</string>
+    <string name="wallet__balance_hidden_message">Deslice el balance del monedero para mostrarlo de nuevo.</string>
+    <string name="wallet__balance_hidden_title">Saldo del Monedero Oculto</string>
+    <string name="wallet__balance_unit_switched_message">Toca tu saldo del monedero para cambiarlo de nuevo a %1$s.</string>
+    <string name="wallet__balance_unit_switched_title">Cambió a %1$s</string>
     <string name="wallet__boost">Impulso</string>
     <string name="wallet__boost_title">Potenciar Transacción</string>
     <string name="wallet__boost_success_title">Impulsada!</string>
