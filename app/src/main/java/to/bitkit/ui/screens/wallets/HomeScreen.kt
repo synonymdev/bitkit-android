@@ -644,7 +644,6 @@ private fun WalletPage(
             BalanceHeaderView(
                 sats = balances.totalWithHardwareSats.toLong(),
                 showEyeIcon = true,
-                showFirstHideToast = true,
                 testTag = "TotalBalance",
                 modifier = Modifier
                     .fillMaxWidth()

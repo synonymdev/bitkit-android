@@ -132,7 +132,6 @@ fun SavingsWalletScreen(
             item {
                 BalanceHeaderView(
                     sats = balances.totalOnchainSats.toLong(),
-                    showFirstHideToast = true,
                     testTag = "TotalBalance",
                     modifier = Modifier
                         .fillMaxWidth()

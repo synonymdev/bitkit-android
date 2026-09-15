@@ -136,7 +136,6 @@ fun SpendingWalletScreen(
             item {
                 BalanceHeaderView(
                     sats = balances.totalLightningSats.toLong(),
-                    showFirstHideToast = true,
                     testTag = "TotalBalance",
                     modifier = Modifier
                         .fillMaxWidth()
