@@ -620,6 +620,58 @@ class TransferViewModelTest : BaseUnitTest() {
     }
 
     @Test
+    fun `prepareSpendingHwSign loads the named order when the wallet is known`() = test {
+        val order = previewBtOrder()
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(HARDWARE_WALLET_ID, connected = true))))
+        whenever { blocktankRepo.getOrder(eq(order.id), eq(true)) }.thenReturn(Result.success(order))
+
+        val prepared = sut.prepareSpendingHwSign(HARDWARE_WALLET_ID, order.id)
+
+        assertTrue(prepared)
+        assertEquals(order.id, sut.spendingUiState.value.order?.id)
+    }
+
+    @Test
+    fun `prepareSpendingHwSign refuses an unknown wallet`() = test {
+        val order = previewBtOrder()
+        whenever(hwWalletRepo.wallets).thenReturn(MutableStateFlow(persistentListOf()))
+
+        val prepared = sut.prepareSpendingHwSign(HARDWARE_WALLET_ID, order.id)
+
+        assertFalse(prepared)
+        assertNull(sut.spendingUiState.value.order)
+        verify(blocktankRepo, never()).getOrder(any(), any())
+    }
+
+    @Test
+    fun `prepareSpendingHwSign refuses a missing order`() = test {
+        val order = previewBtOrder()
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(HARDWARE_WALLET_ID, connected = true))))
+        whenever { blocktankRepo.getOrder(eq(order.id), eq(true)) }.thenReturn(Result.success(null))
+
+        val prepared = sut.prepareSpendingHwSign(HARDWARE_WALLET_ID, order.id)
+
+        assertFalse(prepared)
+        assertNull(sut.spendingUiState.value.order)
+    }
+
+    @Test
+    fun `prepareSpendingHwSign reuses the in-memory order without fetching`() = test {
+        val order = previewBtOrder()
+        whenever(hwWalletRepo.wallets)
+            .thenReturn(MutableStateFlow(persistentListOf(hwWallet(HARDWARE_WALLET_ID, connected = true))))
+        whenever { blocktankRepo.getOrder(eq(order.id), eq(true)) }.thenReturn(Result.success(order))
+        sut.prepareSpendingHwSign(HARDWARE_WALLET_ID, order.id)
+
+        val prepared = sut.prepareSpendingHwSign(HARDWARE_WALLET_ID, order.id)
+
+        assertTrue(prepared)
+        verify(blocktankRepo, times(1)).getOrder(eq(order.id), eq(true))
+    }
+
+    @Test
     fun `updateHwFundingFeeEstimate ignores superseded estimate`() = test {
         val orderA = previewBtOrder()
         val orderB = previewBtOrder().copy(id = "order-b-id")

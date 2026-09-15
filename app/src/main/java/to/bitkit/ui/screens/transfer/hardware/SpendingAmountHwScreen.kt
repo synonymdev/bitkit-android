@@ -65,7 +65,7 @@ fun SpendingAmountHwScreen(
     viewModel: TransferViewModel,
     isOffline: Boolean,
     onBackClick: () -> Unit = {},
-    onOrderCreated: () -> Unit = {},
+    onOrderCreated: (String) -> Unit = {},
     currencies: CurrencyState = LocalCurrencies.current,
     amountInputViewModel: AmountInputViewModel = hiltViewModel(),
 ) {
@@ -83,7 +83,7 @@ fun SpendingAmountHwScreen(
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
             when (effect) {
-                TransferEffect.OnOrderCreated -> onOrderCreated()
+                is TransferEffect.OnOrderCreated -> onOrderCreated(effect.orderId)
                 is TransferEffect.ToastError -> ToastEventBus.send(
                     type = Toast.ToastType.ERROR,
                     title = effect.title,
