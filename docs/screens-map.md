@@ -121,7 +121,8 @@ Frame names are stable across handoff iterations; node ids are not, so the map l
 
 | Android | Figma |
 | - | - |
-| SubscriptionsScreen.kt | Subscriptions › Subscriptions overview |
+| CreateSubscriptionScreen.kt | Subscriptions › Create Subscription / Choose Subscription Recipient / Sent Subscription Proposal |
+| SubscriptionsScreen.kt | Subscriptions › Subscriptions Intro / Subscriptions overview |
 
 ## ui/screens/transfer
 

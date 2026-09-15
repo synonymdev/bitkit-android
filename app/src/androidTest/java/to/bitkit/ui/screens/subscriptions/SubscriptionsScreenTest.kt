@@ -2,9 +2,12 @@
 
 package to.bitkit.ui.screens.subscriptions
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
@@ -23,6 +26,33 @@ class SubscriptionsScreenTest {
     val composeTestRule = createComposeRule()
 
     @Test
+    fun emptyOverviewOffersCreationWithoutDiscover() {
+        var requestedCreation = false
+        composeTestRule.setContent {
+            AppThemeSurface {
+                SubscriptionsContent(
+                    subscriptions = persistentListOf(),
+                    contacts = persistentListOf(),
+                    acceptedAt = { null },
+                    now = Instant.parse("2027-01-15T08:00:00Z"),
+                    onBack = {},
+                    initialTab = SubscriptionTab.Overview,
+                    pendingPaymentRequestCount = 0,
+                    onSubscription = {},
+                    onCreateSubscription = { requestedCreation = true },
+                    paymentsContent = {},
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithText("At the moment, you don’t have any active subscriptions from any providers.")
+            .assertIsDisplayed()
+        composeTestRule.onAllNodesWithText("Discover").assertCountEquals(0)
+        composeTestRule.onNodeWithTag("SubscriptionCreate").assertIsDisplayed().performClick()
+        assertTrue(requestedCreation)
+    }
+
+    @Test
     fun paymentsTabShowsEligibleOneTimeRequestAction() {
         var requestedPayment = false
         composeTestRule.setContent {
@@ -36,6 +66,7 @@ class SubscriptionsScreenTest {
                     initialTab = SubscriptionTab.Payments,
                     pendingPaymentRequestCount = 0,
                     onSubscription = {},
+                    onCreateSubscription = {},
                     paymentsContent = {
                         PaymentRequestsContent(
                             requests = persistentListOf(),
