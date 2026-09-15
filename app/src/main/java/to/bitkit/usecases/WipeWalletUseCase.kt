@@ -55,45 +55,58 @@ class WipeWalletUseCase @Inject constructor(
     ): Result<Unit> {
         if (!wipeMutex.tryLock()) return Result.failure(WipeAlreadyInProgress())
         backupRepo.setWiping(true)
-        return try {
-            runSuspendCatching {
-                backupRepo.reset()
-                lightningRepo.wipeStorage(walletIndex).getOrThrow()
-                keychain.wipe()
-
-                privatePaykitRepo.get().removePublishedEndpointsForCleanup(TAG)
-                pubkyRepo.removeBitkitPaymentEndpoints()
-                    .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
-                privatePaykitRepo.get().closeAndClear()
-                privatePaykitAddressReservationRepo.clear()
-                pubkyRepo.wipeLocalState()
-                firebaseMessaging.deleteToken()
-
-                coreService.wipeData()
-                db.clearAllTables()
-
-                settingsStore.reset()
-                cacheStore.reset()
-                watchOnlyAccountRepo.clear()
-                widgetsStore.reset()
-
-                blocktankRepo.resetState()
-                activityRepo.resetState()
-                hwWalletRepo.resetState()
-                resetWalletState()
-
-                migrationService.markMigrationChecked()
+        val result = try {
+            stopNode().map {
+                cleanupRemote()
+                wipeLocal(walletIndex, resetWalletState)
                 onSuccess()
-            }.onFailure {
-                Logger.error("Failed to wipe wallet", it, context = TAG)
-                if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
-                    backupRepo.startObservingBackups()
-                }
             }
         } finally {
             backupRepo.setWiping(false)
             wipeMutex.unlock()
         }
+        return result.onFailure {
+            Logger.error("Failed to wipe wallet", it, context = TAG)
+            if (lightningRepo.lightningState.value.nodeLifecycleState.isRunning()) {
+                backupRepo.startObservingBackups()
+            }
+        }
+    }
+
+    private suspend fun stopNode(): Result<Unit> {
+        backupRepo.reset()
+        return lightningRepo.stop()
+    }
+
+    private suspend fun cleanupRemote() {
+        step("remove Paykit published endpoints") { privatePaykitRepo.get().removePublishedEndpointsForCleanup(TAG) }
+        step("remove Bitkit payment endpoints") { pubkyRepo.removeBitkitPaymentEndpoints() }
+        step("close Paykit SDK") { privatePaykitRepo.get().closeAndClear() }
+    }
+
+    private suspend fun wipeLocal(walletIndex: Int, resetWalletState: () -> Unit) {
+        step("wipe LDK storage") { lightningRepo.wipeStorage(walletIndex) }
+        step("clear Paykit address reservations") { privatePaykitAddressReservationRepo.clear() }
+        step("wipe Pubky local state") { pubkyRepo.wipeLocalState() }
+        step("wipe keychain") { keychain.wipe() }
+        step("delete FCM token") { firebaseMessaging.deleteToken() }
+        step("wipe core data") { coreService.wipeData() }
+        step("clear database") { db.clearAllTables() }
+        step("reset settings") { settingsStore.reset() }
+        step("reset cache") { cacheStore.reset() }
+        step("clear watch-only accounts") { watchOnlyAccountRepo.clear() }
+        step("reset widgets") { widgetsStore.reset() }
+        blocktankRepo.resetState()
+        activityRepo.resetState()
+        hwWalletRepo.resetState()
+        resetWalletState()
+        step("mark migration checked") { migrationService.markMigrationChecked() }
+    }
+
+    private suspend fun step(name: String, block: suspend () -> Any?) {
+        runSuspendCatching { block() }
+            .mapCatching { if (it is Result<*>) it.getOrThrow() }
+            .onFailure { Logger.warn("Failed wipe step '$name'", it, context = TAG) }
     }
 
     companion object {
