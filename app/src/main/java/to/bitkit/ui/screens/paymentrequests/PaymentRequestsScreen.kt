@@ -10,8 +10,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -243,6 +246,9 @@ internal fun PaymentRequestsContent(
     val hazeState = rememberHazeState()
     val density = LocalDensity.current
     var footerHeight by remember { mutableStateOf(0.dp) }
+    // Without a footer nothing else clears the system bars, and a stale measurement must not linger.
+    val navigationBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomInset = if (canRequestPayment) footerHeight else navigationBarInset
 
     Box(
         modifier = modifier
@@ -266,7 +272,7 @@ internal fun PaymentRequestsContent(
                 Column(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(top = topPadding, bottom = footerHeight)
+                        .padding(top = topPadding, bottom = bottomInset)
                         .padding(horizontal = 16.dp),
                 ) {
                     FillHeight()
@@ -294,7 +300,7 @@ internal fun PaymentRequestsContent(
                 LazyColumn(
                     contentPadding = PaddingValues(
                         top = topPadding + 24.dp,
-                        bottom = footerHeight + 16.dp,
+                        bottom = bottomInset + 16.dp,
                     ),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                     modifier = Modifier
