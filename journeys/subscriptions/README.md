@@ -28,7 +28,7 @@ and landed in the creator's CREATED section as *Proposal sent*, confirming the r
 
 - Screen root: `SubscriptionsScreen`
 - Tabs: `Tab-overview`, `Tab-payments`
-- Subscription row: `SubscriptionRow-<paymentRequestId>`
+- Subscription row: `SubscriptionRow-<paymentRequestId>` (iOS appends the counterparty and receiver path, as the Payment Request rows do; see the identifier table in [`../README.md`](../README.md))
 - Create entry point: `SubscriptionCreate`
 - Create form: `CreateSubscription`, `SubscriptionName`, `SubscriptionDescription`,
   `SubscriptionIconPicker`, `SubscriptionExpiration`
