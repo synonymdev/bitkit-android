@@ -537,7 +537,7 @@ private fun SubscriptionDetailsGrid(subscription: PaykitSubscription, now: Insta
                 SubscriptionDetailCell(
                     stringResource(R.string.subscriptions__payments),
                     subscription.paidPeriods.size.toString(),
-                    R.drawable.ic_received,
+                    R.drawable.ic_coins,
                     Modifier.weight(1f),
                 )
             }
@@ -601,7 +601,9 @@ private fun SubscriptionDetailFooter(
                 modifier = Modifier.weight(1f),
                 icon = {
                     Icon(
-                        painter = painterResource(R.drawable.ic_x),
+                        painter = painterResource(
+                            if (subscription.isCreatedByUser) R.drawable.ic_trash else R.drawable.ic_x
+                        ),
                         contentDescription = null,
                         modifier = Modifier.size(16.dp)
                     )
