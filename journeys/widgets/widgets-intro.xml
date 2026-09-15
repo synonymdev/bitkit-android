@@ -1,5 +1,10 @@
 <journey name="widgets intro">
-  <description>Precondition: onboarded dev wallet, widgets enabled, widgets intro unseen.</description>
+  <description>
+    Precondition: onboarded dev wallet, widgets enabled, widgets intro unseen, and Bitcoin Weather
+    NOT already in the widget set — re-saving a widget that is already there keeps its original
+    position instead of appending, so the final assertion fails for the wrong reason. Delete it from
+    Add Widget first if present.
+  </description>
   <actions>
     <action>Tap the menu icon</action>
     <action>Tap "Widgets"</action>
