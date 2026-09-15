@@ -128,7 +128,9 @@ private fun TabLabel(
             constraints.copy(minWidth = 0, maxWidth = (constraints.maxWidth - 2 * reserved).coerceAtLeast(0))
         )
         val width = constraints.maxWidth
-        val height = maxOf(label.height, badge?.height ?: 0)
+        // Reserve the badge height even without a badge, so every tab is the same height and the
+        // indicators underneath stay on one line.
+        val height = maxOf(label.height, TabBadgeSize.roundToPx())
 
         layout(width, height) {
             val labelX = (width - label.width) / 2
