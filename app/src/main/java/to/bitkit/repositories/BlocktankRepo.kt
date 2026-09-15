@@ -716,6 +716,7 @@ class BlocktankRepo @Inject constructor(
     companion object {
         private const val TAG = "BlocktankRepo"
         private const val REFUND_ADDRESS_ALLOCATION_LIMIT = 20
+
         private const val DEFAULT_CHANNEL_EXPIRY_WEEKS = 6u
         private const val DEFAULT_SOURCE = "bitkit-android"
         private const val PEER_CONNECTION_DELAY_MS = 2_000L
