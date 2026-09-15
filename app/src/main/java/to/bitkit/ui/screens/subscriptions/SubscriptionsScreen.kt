@@ -781,7 +781,7 @@ private fun SubscriptionReview(
                         R.string.subscriptions__swipe_to_subscribe
                     }
                 ),
-                color = Colors.Purple,
+                color = Colors.Brand,
                 loading = loading,
                 onConfirm = {
                     loading = true
@@ -961,7 +961,7 @@ private fun SubscriptionCancel(
                     R.string.subscriptions__swipe_to_cancel
                 }
             ),
-            color = Colors.Red,
+            color = Colors.Brand,
             loading = loading,
             onConfirm = {
                 loading = true
