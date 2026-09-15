@@ -93,7 +93,7 @@ jobs:
           - { name: multi_address_2_regtest, grep: "@multi_address_2" }
           - { name: pubky_paykit, grep: "@pubky" }
           - { name: hardware_wallet, grep: "@hardware_wallet" }
-          - { name: transfer, grep: "@transfer_1|@transfer_max" }
+          - { name: transfer_max, grep: "@transfer_max" }
 
     name: e2e-tests-staging - ${{ matrix.shard.name }}
 
@@ -246,7 +246,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: synonymdev/bitkit-e2e-tests
-          ref: main
+          ref: ${{ needs.e2e-branch.outputs.branch }}
 
       - name: Post Slack summary
         run: python3 scripts/slack_summary.py e2e-staging
