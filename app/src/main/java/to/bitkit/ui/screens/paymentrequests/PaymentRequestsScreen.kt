@@ -6,6 +6,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -29,14 +30,28 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.paykit.PaymentRequestLifecycleState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
+import java.time.Instant as JavaInstant
+import java.time.ZoneId
+import java.time.temporal.TemporalAdjusters
+import java.time.temporal.WeekFields
+import java.util.Locale
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.ImmutableSet
 import kotlinx.collections.immutable.persistentListOf
@@ -70,6 +85,7 @@ import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.scaffold.rememberChromeHazeStyle
 import to.bitkit.ui.screens.wallets.activity.components.CircularIcon
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -80,14 +96,6 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.uiDateText
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
-import java.time.ZoneId
-import java.time.temporal.TemporalAdjusters
-import java.time.temporal.WeekFields
-import java.util.Locale
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
-import kotlin.time.Instant
-import java.time.Instant as JavaInstant
 
 @Composable
 fun PaymentRequestsSheet(
@@ -188,6 +196,7 @@ fun PaymentRequestsScreen(
     onRequestPayment: () -> Unit,
     onDetails: (PaykitPaymentRequestId) -> Unit,
     showsNavigationBar: Boolean = true,
+    topPadding: Dp = 0.dp,
 ) {
     val pending by appViewModel.pendingPaymentRequests.collectAsStateWithLifecycle()
     val history by appViewModel.paymentRequestHistory.collectAsStateWithLifecycle()
@@ -209,6 +218,7 @@ fun PaymentRequestsScreen(
         onDismiss = appViewModel::dismissIncomingPaymentRequest,
         onDetails = onDetails,
         showsNavigationBar = showsNavigationBar,
+        topPadding = topPadding,
     )
 }
 
@@ -227,114 +237,133 @@ internal fun PaymentRequestsContent(
     onDismiss: suspend (PaykitPaymentRequest) -> Result<Unit>,
     onDetails: (PaykitPaymentRequestId) -> Unit,
     showsNavigationBar: Boolean = true,
+    topPadding: Dp = 0.dp,
 ) {
     val sections = paymentRequestSections(requests, pending, Clock.System.now())
+    val hazeState = rememberHazeState()
+    val density = LocalDensity.current
+    var footerHeight by remember { mutableStateOf(0.dp) }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .then(
-                if (showsNavigationBar) {
-                    Modifier.gradientBackground().navigationBarsPadding()
-                } else {
-                    Modifier
-                }
-            )
+            .then(if (showsNavigationBar) Modifier.gradientBackground() else Modifier)
             .testTag("PaymentRequestsScreen")
     ) {
-        if (showsNavigationBar) {
-            AppTopBar(
-                titleText = stringResource(R.string.wallet__payment_requests),
-                onBackClick = onBack,
-                actions = { DrawerNavIcon() },
-            )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(hazeState)
+        ) {
+            if (showsNavigationBar) {
+                AppTopBar(
+                    titleText = stringResource(R.string.wallet__payment_requests),
+                    onBackClick = onBack,
+                    actions = { DrawerNavIcon() },
+                )
+            }
+            if (requests.isEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(top = topPadding, bottom = footerHeight)
+                        .padding(horizontal = 16.dp),
+                ) {
+                    FillHeight()
+                    Image(
+                        painter = painterResource(R.drawable.restore),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(256.dp)
+                            .align(Alignment.CenterHorizontally)
+                            .testTag("PaymentRequestsEmptyIllustration"),
+                    )
+                    FillHeight()
+                    Display(
+                        text = stringResource(R.string.wallet__payment_requests_empty_headline)
+                            .withAccent(accentColor = Colors.Purple),
+                    )
+                    VerticalSpacer(12.dp)
+                    BodyM(
+                        text = stringResource(R.string.wallet__payment_requests_empty_description),
+                        color = Colors.White64,
+                    )
+                    VerticalSpacer(24.dp)
+                }
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(
+                        top = topPadding + 24.dp,
+                        bottom = footerHeight + 16.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 16.dp),
+                ) {
+                    if (sections.active.isNotEmpty()) {
+                        item {
+                            Caption13Up(
+                                text = stringResource(R.string.wallet__payment_requests_section),
+                                color = Colors.White64,
+                            )
+                        }
+                        items(sections.active, key = { it.lazyListKey }) { request ->
+                            ActivePaymentRequestCard(
+                                request = request,
+                                isIncoming = pending.any { it.id == request.id },
+                                isDismissing = request.id in dismissingRequestIds,
+                                contact = contacts.contactFor(request),
+                                subscriptionNote = subscriptions.nameFor(request),
+                                onPay = onPay,
+                                onDismiss = onDismiss,
+                                onDetails = onDetails,
+                            )
+                        }
+                    }
+                    sections.history.forEach { section ->
+                        item(key = "history-${section.period.name}") {
+                            Caption13Up(
+                                text = paymentRequestHistorySectionTitle(section.period),
+                                color = Colors.White64,
+                            )
+                        }
+                        items(section.requests, key = { it.lazyListKey }) { request ->
+                            PaymentRequestCard(
+                                request = request,
+                                contact = contacts.contactFor(request),
+                                compactSubtitle = subscriptions.nameFor(request)
+                                    ?: request.note?.takeIf(String::isNotBlank)
+                                    ?: paymentRequestDate(request),
+                                showSignedAmount = true,
+                                onClick = { onDetails(request.id) },
+                            )
+                        }
+                    }
+                    item { VerticalSpacer(8.dp) }
+                }
+            }
         }
-        if (requests.isEmpty()) {
+
+        if (canRequestPayment) {
             Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 16.dp),
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .onSizeChanged { footerHeight = with(density) { it.height.toDp() } }
+                    .hazeEffect(state = hazeState, style = rememberChromeHazeStyle())
+                    .navigationBarsPadding()
             ) {
-                FillHeight()
-                Image(
-                    painter = painterResource(R.drawable.restore),
-                    contentDescription = null,
+                VerticalSpacer(16.dp)
+                PrimaryButton(
+                    text = stringResource(R.string.wallet__payment_request_request_payment),
+                    onClick = onRequestPayment,
                     modifier = Modifier
-                        .size(256.dp)
-                        .align(Alignment.CenterHorizontally)
-                        .testTag("PaymentRequestsEmptyIllustration"),
+                        .padding(horizontal = 16.dp)
+                        .testTag("PaymentRequestCreate")
                 )
-                FillHeight()
-                Display(
-                    text = stringResource(R.string.wallet__payment_requests_empty_headline)
-                        .withAccent(accentColor = Colors.Purple),
-                )
-                VerticalSpacer(12.dp)
-                BodyM(
-                    text = stringResource(R.string.wallet__payment_requests_empty_description),
-                    color = Colors.White64,
-                )
-                VerticalSpacer(24.dp)
+                VerticalSpacer(16.dp)
             }
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(top = 24.dp, bottom = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 16.dp),
-            ) {
-                if (sections.active.isNotEmpty()) {
-                    item {
-                        Caption13Up(
-                            text = stringResource(R.string.wallet__payment_requests_section),
-                            color = Colors.White64,
-                        )
-                    }
-                    items(sections.active, key = { it.lazyListKey }) { request ->
-                        ActivePaymentRequestCard(
-                            request = request,
-                            isIncoming = pending.any { it.id == request.id },
-                            isDismissing = request.id in dismissingRequestIds,
-                            contact = contacts.contactFor(request),
-                            subscriptionNote = subscriptions.nameFor(request),
-                            onPay = onPay,
-                            onDismiss = onDismiss,
-                            onDetails = onDetails,
-                        )
-                    }
-                }
-                sections.history.forEach { section ->
-                    item(key = "history-${section.period.name}") {
-                        Caption13Up(
-                            text = paymentRequestHistorySectionTitle(section.period),
-                            color = Colors.White64,
-                        )
-                    }
-                    items(section.requests, key = { it.lazyListKey }) { request ->
-                        PaymentRequestCard(
-                            request = request,
-                            contact = contacts.contactFor(request),
-                            compactSubtitle = subscriptions.nameFor(request)
-                                ?: request.note?.takeIf(String::isNotBlank)
-                                ?: paymentRequestDate(request),
-                            showSignedAmount = true,
-                            onClick = { onDetails(request.id) },
-                        )
-                    }
-                }
-                item { VerticalSpacer(8.dp) }
-            }
-        }
-        if (canRequestPayment) {
-            PrimaryButton(
-                text = stringResource(R.string.wallet__payment_request_request_payment),
-                onClick = onRequestPayment,
-                modifier = Modifier
-                    .padding(horizontal = 16.dp)
-                    .testTag("PaymentRequestCreate"),
-            )
-            VerticalSpacer(16.dp)
         }
     }
 }

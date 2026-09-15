@@ -40,16 +40,28 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.airbnb.lottie.compose.LottieAnimation
 import com.airbnb.lottie.compose.LottieCompositionSpec
 import com.airbnb.lottie.compose.rememberLottieComposition
 import com.synonym.paykit.PaymentRequestLifecycleState
+import dev.chrisbanes.haze.hazeEffect
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
+import java.math.BigDecimal
+import java.math.MathContext
+import java.math.RoundingMode
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
@@ -85,6 +97,7 @@ import to.bitkit.ui.components.rememberMoneyText
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.SheetTopBar
+import to.bitkit.ui.scaffold.rememberChromeHazeStyle
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestCard
 import to.bitkit.ui.screens.paymentrequests.PaymentRequestsScreen
 import to.bitkit.ui.screens.wallets.activity.components.CustomTabRowWithSpacing
@@ -95,12 +108,6 @@ import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.removeAccentTags
 import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.AppViewModel
-import java.math.BigDecimal
-import java.math.MathContext
-import java.math.RoundingMode
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
-import kotlin.time.Instant
 
 @Composable
 fun SubscriptionsScreen(
@@ -133,13 +140,14 @@ fun SubscriptionsScreen(
             }
         },
         onCreateSubscription = onCreateSubscription,
-        paymentsContent = {
+        paymentsContent = { topPadding ->
             PaymentRequestsScreen(
                 appViewModel = appViewModel,
                 onBack = onBack,
                 onRequestPayment = onRequestPayment,
                 onDetails = onPaymentRequestDetails,
                 showsNavigationBar = false,
+                topPadding = topPadding,
             )
         },
     )
@@ -156,7 +164,7 @@ internal fun SubscriptionsContent(
     pendingPaymentRequestCount: Int,
     onSubscription: (PaykitSubscription) -> Unit,
     onCreateSubscription: () -> Unit,
-    paymentsContent: @Composable () -> Unit,
+    paymentsContent: @Composable (topPadding: Dp) -> Unit,
 ) {
     val proposals = subscriptions.filter { it.isPayer && it.isProposalVisible(now) }
     val active = subscriptions.filter { it.isPayer && it.isActive(now) }
@@ -167,84 +175,120 @@ internal fun SubscriptionsContent(
     var selectedTabIndex by rememberSaveable { mutableIntStateOf(initialTab.ordinal) }
     val selectedTab = SubscriptionTab.entries[selectedTabIndex]
 
-    Column(
+    val hazeState = rememberHazeState()
+    val density = LocalDensity.current
+    var headerHeight by remember { mutableStateOf(0.dp) }
+    var footerHeight by remember { mutableStateOf(0.dp) }
+
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(Colors.Black)
-            .navigationBarsPadding()
             .testTag("SubscriptionsScreen")
     ) {
-        AppTopBar(
-            titleText = stringResource(R.string.subscriptions__title),
-            onBackClick = onBack,
-            actions = { DrawerNavIcon() },
-        )
-        SubscriptionTabs(
-            selectedTab = selectedTab,
-            pendingPaymentRequestCount = pendingPaymentRequestCount,
-            onTabChange = { selectedTabIndex = it.ordinal },
-        )
-
-        if (selectedTab == SubscriptionTab.Payments) {
-            Box(Modifier.weight(1f)) {
-                paymentsContent()
-            }
-        } else if (!hasVisibleSubscriptions) {
-            SubscriptionEmptyState(Modifier.weight(1f))
-        } else {
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 32.dp),
-                verticalArrangement = Arrangement.spacedBy(32.dp),
-                modifier = Modifier.weight(1f)
-            ) {
-                item {
-                    SubscriptionMetrics(
-                        monthlyCostSats = subscriptionMonthlyCostSats(subscriptions, now),
-                        activeCount = active.size,
-                        createdCount = created.size,
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .hazeSource(hazeState)
+        ) {
+            if (selectedTab == SubscriptionTab.Payments) {
+                paymentsContent(headerHeight)
+            } else if (!hasVisibleSubscriptions) {
+                SubscriptionEmptyState(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(top = headerHeight, bottom = footerHeight)
+                )
+            } else {
+                LazyColumn(
+                    contentPadding = PaddingValues(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = headerHeight + 32.dp,
+                        bottom = footerHeight + 32.dp,
+                    ),
+                    verticalArrangement = Arrangement.spacedBy(32.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    item {
+                        SubscriptionMetrics(
+                            monthlyCostSats = subscriptionMonthlyCostSats(subscriptions, now),
+                            activeCount = active.size,
+                            createdCount = created.size,
+                        )
+                    }
+                    subscriptionSection(
+                        titleRes = R.string.subscriptions__proposals,
+                        subscriptions = proposals,
+                        contacts = contacts,
+                        now = now,
+                        onSubscription = onSubscription,
+                    )
+                    subscriptionSection(
+                        titleRes = R.string.subscriptions__active,
+                        subscriptions = active,
+                        contacts = contacts,
+                        now = now,
+                        onSubscription = onSubscription,
+                    )
+                    subscriptionSection(
+                        titleRes = R.string.subscriptions__expired,
+                        subscriptions = expired,
+                        contacts = contacts,
+                        now = now,
+                        onSubscription = onSubscription,
+                    )
+                    subscriptionSection(
+                        titleRes = R.string.subscriptions__created,
+                        subscriptions = created,
+                        contacts = contacts,
+                        now = now,
+                        onSubscription = onSubscription,
                     )
                 }
-                subscriptionSection(
-                    titleRes = R.string.subscriptions__proposals,
-                    subscriptions = proposals,
-                    contacts = contacts,
-                    now = now,
-                    onSubscription = onSubscription,
-                )
-                subscriptionSection(
-                    titleRes = R.string.subscriptions__active,
-                    subscriptions = active,
-                    contacts = contacts,
-                    now = now,
-                    onSubscription = onSubscription,
-                )
-                subscriptionSection(
-                    titleRes = R.string.subscriptions__expired,
-                    subscriptions = expired,
-                    contacts = contacts,
-                    now = now,
-                    onSubscription = onSubscription,
-                )
-                subscriptionSection(
-                    titleRes = R.string.subscriptions__created,
-                    subscriptions = created,
-                    contacts = contacts,
-                    now = now,
-                    onSubscription = onSubscription,
-                )
             }
+        }
+
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .onSizeChanged { headerHeight = with(density) { it.height.toDp() } }
+                .hazeEffect(state = hazeState, style = rememberChromeHazeStyle())
+        ) {
+            AppTopBar(
+                titleText = stringResource(R.string.subscriptions__title),
+                onBackClick = onBack,
+                actions = { DrawerNavIcon() },
+            )
+            SubscriptionTabs(
+                selectedTab = selectedTab,
+                pendingPaymentRequestCount = pendingPaymentRequestCount,
+                onTabChange = { selectedTabIndex = it.ordinal },
+            )
         }
 
         if (selectedTab == SubscriptionTab.Overview) {
-            SecondaryButton(
-                text = stringResource(R.string.subscriptions__create),
-                onClick = onCreateSubscription,
-                modifier = Modifier.padding(horizontal = 16.dp).testTag("SubscriptionCreate")
-            )
-            VerticalSpacer(16.dp)
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .onSizeChanged { footerHeight = with(density) { it.height.toDp() } }
+                    .hazeEffect(state = hazeState, style = rememberChromeHazeStyle())
+                    .navigationBarsPadding()
+            ) {
+                VerticalSpacer(16.dp)
+                SecondaryButton(
+                    text = stringResource(R.string.subscriptions__create),
+                    onClick = onCreateSubscription,
+                    modifier = Modifier.padding(horizontal = 16.dp).testTag("SubscriptionCreate")
+                )
+                VerticalSpacer(16.dp)
+            }
         }
     }
 }
+
 
 private fun LazyListScope.subscriptionSection(
     @StringRes titleRes: Int,
