@@ -51,11 +51,13 @@ This document describes how the receive flow decides whether to show a normal Li
   - The CJIT Lightning invoice is an invoice to the LSP and must be shown as Spending-only, not as Auto/unified receive.
   - Editing from a CJIT Lightning invoice QR must replace the previously displayed CJIT invoice before showing the updated receive result,
     because the previous LSP invoice is immutable.
+  - Re-applying an edit at the confirmed CJIT amount keeps the current CJIT invoice and refreshes on-chain metadata such as the note.
+  - Editing from a CJIT Lightning invoice QR to a different amount clears or replaces the current CJIT invoice before showing the updated receive result.
   - The direct additional CJIT path must not regenerate the normal receive invoice before creating CJIT.
   - If editing from Spending and the amount is too large for CJIT, or the maximum cannot be calculated, the edit flow routes to CJIT amount entry.
   - The CJIT amount screen enforces the real maximum receivable amount, calculated from `invoiceSat + defaultLspBalance(invoiceSat) <= maxChannelSizeSat`.
   - If Blocktank rejects additional CJIT because the node is already at its total capacity limit, the app explains that additional spending capacity is unavailable instead of showing the per-channel maximum.
-  - Editing from Savings or Auto returns to the normal QR with Savings/onchain only.
+  - Editing from Savings or Auto returns to the normal QR with Savings/onchain only, except unchanged edits at the confirmed CJIT amount preserve the current CJIT invoice.
 
 - Geo-blocked and liquidity is needed:
   - The flow routes to the CJIT geo-block screen.

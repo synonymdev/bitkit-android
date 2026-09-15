@@ -378,6 +378,8 @@ fun ReceiveSheet(
                             if (!cjitSessionState.hasConfirmedInvoiceForAmount(it)) {
                                 cjitSessionState.clear()
                                 wallet.updateBip21Invoice(it)
+                            } else {
+                                wallet.updateOnchainBip21Amount(it)
                             }
                         },
                         onClickAddTag = { navController.navigateTo(ReceiveRoute.AddTag) },
@@ -446,6 +448,7 @@ internal class ReceiveCjitSessionState {
         private set
     var entryDetails by mutableStateOf<CjitEntryDetails?>(null)
         private set
+    private var confirmedAmountSats by mutableStateOf<ULong?>(null)
 
     fun onCjitCreated(entry: CjitEntryDetails) {
         entryDetails = entry
@@ -453,15 +456,17 @@ internal class ReceiveCjitSessionState {
 
     fun onCjitConfirmed(invoice: String) {
         cjitInvoice = invoice
+        confirmedAmountSats = entryDetails?.receiveAmountSats?.toULong()
     }
 
     fun hasConfirmedInvoiceForAmount(amountSats: ULong?): Boolean {
-        return cjitInvoice != null && entryDetails?.receiveAmountSats?.toULong() == amountSats
+        return cjitInvoice != null && confirmedAmountSats == amountSats
     }
 
     fun clear() {
         cjitInvoice = null
         entryDetails = null
+        confirmedAmountSats = null
     }
 }
 
