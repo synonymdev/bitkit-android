@@ -40,4 +40,34 @@ class ReceiveInvoiceEditStateTest {
 
         assertNull(state.initialTab(hardwareWalletId = null))
     }
+
+    @Test
+    fun `software edit returns to spending tab`() {
+        val state = ReceiveInvoiceEditState()
+
+        state.beginSoftwareEdit(ReceiveTab.SPENDING)
+
+        assertEquals(ReceiveTab.SPENDING, state.initialTab(hardwareWalletId = null))
+        assertFalse(state.isHardwareInvoice)
+    }
+
+    @Test
+    fun `software edit returns to savings tab without hardware wallet`() {
+        val state = ReceiveInvoiceEditState()
+
+        state.beginSoftwareEdit(ReceiveTab.SAVINGS)
+
+        assertEquals(ReceiveTab.SAVINGS, state.initialTab(hardwareWalletId = null))
+    }
+
+    @Test
+    fun `software edit never falls back to auto tab`() {
+        ReceiveTab.entries.forEach { sourceTab ->
+            val state = ReceiveInvoiceEditState()
+
+            state.beginSoftwareEdit(sourceTab)
+
+            assertEquals(sourceTab, state.initialTab(hardwareWalletId = null))
+        }
+    }
 }
