@@ -417,6 +417,29 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `stop tears down a node object left alive by a failed start`() = test {
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.stop()).thenReturn(Unit)
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+
+        val result = sut.stop()
+
+        assertTrue(result.isSuccess)
+        verify(lightningService).stop()
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `stop does not touch the service when nothing is running`() = test {
+        whenever(lightningService.node).thenReturn(null)
+
+        val result = sut.stop()
+
+        assertTrue(result.isSuccess)
+        verify(lightningService, never()).stop()
+    }
+
+    @Test
     fun `stopDebounced does not stop the node before the delay elapses`() = test {
         startNodeForTesting()
 

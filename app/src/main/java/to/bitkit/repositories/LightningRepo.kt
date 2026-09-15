@@ -615,7 +615,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
         lifecycleMutex.withLock {
-            if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
+            if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping() && lightningService.node == null) {
                 clearProbeOutcomes()
                 return@withLock Result.success(Unit)
             }
