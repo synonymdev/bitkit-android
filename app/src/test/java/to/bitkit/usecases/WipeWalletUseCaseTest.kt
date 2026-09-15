@@ -115,6 +115,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         )
         inOrder.verify(backupRepo).setWiping(true)
         inOrder.verify(backupRepo).reset()
+        inOrder.verify(lightningRepo).wipeStorage(0)
         inOrder.verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
         inOrder.verify(pubkyRepo).removeBitkitPaymentEndpoints()
         inOrder.verify(privatePaykitRepo).closeAndClear()
@@ -131,7 +132,6 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(activityRepo).resetState()
         inOrder.verify(hwWalletRepo).resetState()
         assertTrue(onWipeCalled)
-        inOrder.verify(lightningRepo).wipeStorage(0)
         assertTrue(onSetWalletExistsStateCalled)
         inOrder.verify(backupRepo).setWiping(false)
     }

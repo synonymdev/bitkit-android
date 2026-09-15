@@ -53,6 +53,7 @@ class WipeWalletUseCase @Inject constructor(
         return try {
             runSuspendCatching {
                 backupRepo.reset()
+                lightningRepo.wipeStorage(walletIndex).getOrThrow()
 
                 privatePaykitRepo.get().removePublishedEndpointsForCleanup(TAG)
                 pubkyRepo.removeBitkitPaymentEndpoints()
@@ -77,10 +78,7 @@ class WipeWalletUseCase @Inject constructor(
                 resetWalletState()
 
                 migrationService.markMigrationChecked()
-
-                lightningRepo.wipeStorage(walletIndex)
-                    .onSuccess { onSuccess() }
-                    .getOrThrow()
+                onSuccess()
             }.onFailure {
                 Logger.error("Failed to wipe wallet", it, context = TAG)
             }
