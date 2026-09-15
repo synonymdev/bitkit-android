@@ -1108,7 +1108,7 @@ private fun PaykitSubscription.renewalText(now: Instant): String {
     } else {
         expiryDate()
     }
-    return date?.formatFullDate() ?: stringResource(R.string.subscriptions__ongoing)
+    return date?.formatShortDate() ?: stringResource(R.string.subscriptions__ongoing)
 }
 
 @Composable
@@ -1136,9 +1136,6 @@ internal fun nextSubscriptionTransition(
 }
 
 private fun Instant.formatShortDate(): String = dateTimeFormatterOf("MMMM d")
-    .format(java.time.Instant.ofEpochMilli(toEpochMilliseconds()))
-
-private fun Instant.formatFullDate(): String = dateTimeFormatterOf("MMMM d, yyyy")
     .format(java.time.Instant.ofEpochMilli(toEpochMilliseconds()))
 
 internal val PaykitSubscription.displaySats: Long
