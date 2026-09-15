@@ -69,6 +69,7 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppTextFieldDefaults
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.keyboardAsState
@@ -327,6 +328,7 @@ fun EditInvoiceContent(
                             },
                             value = noteText,
                             onValueChange = onTextChanged,
+                            textStyle = AppTextStyles.BodySSB,
                             minLines = 4,
                             keyboardOptions = KeyboardOptions.Default.copy(
                                 imeAction = ImeAction.Done
@@ -350,9 +352,7 @@ fun EditInvoiceContent(
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(bottom = 16.dp)
+                                modifier = Modifier.fillMaxWidth()
                             ) {
                                 tags.forEach { tagText ->
                                     TagButton(
@@ -361,11 +361,11 @@ fun EditInvoiceContent(
                                         onClick = { onClickTag(tagText) },
                                     )
                                 }
+                                AddTagButton(
+                                    onClick = onClickAddTag,
+                                    modifier = Modifier.testTag("TagsAdd")
+                                )
                             }
-                            AddTagButton(
-                                onClick = onClickAddTag,
-                                modifier = Modifier.testTag("TagsAdd")
-                            )
                         }
 
                         FillHeight()
