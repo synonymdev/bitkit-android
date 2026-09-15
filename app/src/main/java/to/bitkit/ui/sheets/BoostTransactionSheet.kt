@@ -27,13 +27,15 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
 import to.bitkit.R
-import to.bitkit.models.BITCOIN_SYMBOL
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
@@ -42,7 +44,7 @@ import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.FillHeight
 import to.bitkit.ui.components.HorizontalSpacer
-import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.SheetSize
 import to.bitkit.ui.components.SwipeToConfirm
 import to.bitkit.ui.components.VerticalSpacer
@@ -102,7 +104,11 @@ fun BoostTransactionSheet(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    BottomSheet(onDismissRequest = onDismiss) {
+    BottomSheet(
+        onDismissRequest = onDismiss,
+        scrimColor = Color.Transparent,
+        showToastOverlay = false,
+    ) {
         BoostTransactionContent(
             uiState = uiState,
             onClickEdit = viewModel::onClickEdit,
@@ -235,8 +241,9 @@ private fun DefaultModeContent(
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     val feeText =
-                        rememberMoneyText(sats = uiState.totalFeeSats.toLong())?.withAccent(defaultColor = Colors.White)
-                            ?.toString().orEmpty()
+                        rememberMoneyText(sats = uiState.totalFeeSats.toLong(), showSymbol = true)
+                            ?.withAccent(defaultColor = Colors.White, accentColor = Colors.White)
+                            ?: AnnotatedString("")
 
                     BodyMSB(
                         text = feeText,
@@ -255,8 +262,9 @@ private fun DefaultModeContent(
 
                 val feeTextSecondary = rememberMoneyText(
                     sats = uiState.totalFeeSats.toLong(),
-                    reversed = true
-                )?.withAccent(defaultColor = Colors.White64)?.toString().orEmpty()
+                    reversed = true,
+                    showSymbol = true,
+                )?.withAccent(defaultColor = Colors.White64, accentColor = Colors.White64) ?: AnnotatedString("")
 
                 BodySSB(
                     text = feeTextSecondary,
@@ -312,11 +320,18 @@ private fun CustomModeContent(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 val rateText =
-                    rememberMoneyText(sats = uiState.feeRate.toLong())?.withAccent(defaultColor = Colors.White)
-                        ?.toString().orEmpty()
+                    rememberMoneyText(
+                        sats = uiState.feeRate.toLong(),
+                        unit = PrimaryDisplay.BITCOIN,
+                        showSymbol = true,
+                    )?.withAccent(defaultColor = Colors.White, accentColor = Colors.White)
+                        ?: AnnotatedString("")
 
                 BodyMSB(
-                    text = "$rateText/vbyte ($BITCOIN_SYMBOL ${uiState.totalFeeSats})",
+                    text = buildAnnotatedString {
+                        append(rateText)
+                        append("/vbyte")
+                    },
                     color = Colors.White,
                     modifier = Modifier.testTag(BoostTransactionTestTags.FEE_RATE_TEXT)
                 )
@@ -326,8 +341,9 @@ private fun CustomModeContent(
                 ) {
                     val feeTextSecondary = rememberMoneyText(
                         sats = uiState.totalFeeSats.toLong(),
-                        reversed = true
-                    )?.withAccent(defaultColor = Colors.White64)?.toString().orEmpty()
+                        reversed = true,
+                        showSymbol = true,
+                    )?.withAccent(defaultColor = Colors.White64, accentColor = Colors.White64) ?: AnnotatedString("")
 
                     BodySSB(
                         text = feeTextSecondary,
@@ -356,7 +372,7 @@ private fun CustomModeContent(
 
         VerticalSpacer(16.dp)
 
-        PrimaryButton(
+        SecondaryButton(
             text = stringResource(R.string.wallet__boost_recomended_button),
             fullWidth = false,
             onClick = onClickUseSuggestedFee,
