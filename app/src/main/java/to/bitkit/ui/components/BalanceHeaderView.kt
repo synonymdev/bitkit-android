@@ -54,6 +54,7 @@ fun BalanceHeaderView(
     showBitcoinSymbol: Boolean = true,
     useSwipeToHide: Boolean = true,
     showEyeIcon: Boolean = false,
+    showFirstHideToast: Boolean = false,
     testTag: String = "",
 ) {
     val isPreview = LocalInspectionMode.current
@@ -112,7 +113,13 @@ fun BalanceHeaderView(
             isSwipeToHideEnabled = allowSwipeToHide,
             showEyeIcon = showEyeIcon,
             onClick = onClick ?: { currency.switchBalanceUnit() },
-            onToggleHideBalance = { settings.toggleHideBalanceFromSwipe() },
+            onToggleHideBalance = {
+                if (showFirstHideToast) {
+                    settings.toggleHideBalanceFromSwipe()
+                } else {
+                    settings.setHideBalance(!hideBalance)
+                }
+            },
             onRevealBalance = { settings.setHideBalance(false) },
             testTag = testTag,
             modifier = modifier,

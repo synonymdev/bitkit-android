@@ -165,6 +165,7 @@ private fun HardwareWalletContent(
             item {
                 BalanceHeaderView(
                     sats = wallet.balanceSats.toLong(),
+                    showFirstHideToast = true,
                     testTag = "TotalBalance",
                     modifier = Modifier.fillMaxWidth()
                 )
