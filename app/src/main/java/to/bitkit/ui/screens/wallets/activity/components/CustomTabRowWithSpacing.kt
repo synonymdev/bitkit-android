@@ -57,25 +57,21 @@ fun <T : TabItem> CustomTabRowWithSpacing(
                             .padding(vertical = 8.dp)
                             .testTag("Tab-${tab.name.lowercase()}")
                     ) {
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            CaptionB(
-                                tab.uiText,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                color = if (isSelected) Colors.White else Colors.White50
-                            )
-                            badgeCount(tab)?.takeIf { it > 0 }?.let { count ->
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .size(20.dp)
-                                        .background(Colors.Brand, CircleShape),
-                                ) {
-                                    CaptionB(text = count.toString(), color = Colors.White)
-                                }
+                        CaptionB(
+                            tab.uiText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = if (isSelected) Colors.White else Colors.White50
+                        )
+                        badgeCount(tab)?.takeIf { it > 0 }?.let { count ->
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .size(20.dp)
+                                    .background(Colors.Brand, CircleShape)
+                            ) {
+                                CaptionB(text = count.toString(), color = Colors.White)
                             }
                         }
                     }
