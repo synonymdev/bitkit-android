@@ -297,12 +297,12 @@
     <string name="onboarding__skip_intro">Sauter intro</string>
     <string name="onboarding__skip">Ignorer</string>
     <string name="onboarding__slide0_header">La liberté dans \n&lt;accent&gt;votre poche&lt;/accent&gt;</string>
-    <string name="onboarding__slide0_text">Bitkit vous donne les clés pour gérer votre argent. Dépensez maintenant ou économisez pour plus tard. C\'est à vous de choisir.</string>
+    <string name="onboarding__slide0_text">Bitkit vous donne les clés pour contrôler votre argent, votre profil et vos contacts. Prenez le contrôle et devenez sans frontières.</string>
     <string name="onboarding__slide1_header">Paiements \n&lt;accent&gt;Instantanés&lt;/accent&gt;</string>
     <string name="onboarding__slide1_text">Dépensez des bitcoins plus rapidement que jamais. Profitez de paiements instantanés et bon marché avec vos amis, votre famille et les commerçants.</string>
     <string name="onboarding__slide1_note">*Bitkit ne fournit pas actuellement de services Lightning dans votre pays, mais vous pouvez toujours vous connecter à d\'autres nœuds.</string>
     <string name="onboarding__slide3_header">La vie privée \n&lt;accent&gt;n\'est pas un crime&lt;/accent&gt;</string>
-    <string name="onboarding__slide3_text">Glissez pour cacher votre solde, profitez de paiements plus confidentiels et protégez votre portefeuille en activant les fonctions de sécurité.</string>
+    <string name="onboarding__slide3_text">Votre argent, votre vie privée. Balayez pour masquer votre solde et dépensez de manière plus privée, sans suivi de données et sans KYC.</string>
     <string name="onboarding__slide4_header">Vos clés, \n&lt;accent&gt;votre argent&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Créez votre portefeuille. Veuillez noter que Bitkit est un logiciel mobile. &lt;accent&gt;Ne stockez pas tout votre argent dans Bitkit.&lt;/accent&gt;</string>
     <string name="onboarding__new_wallet">Créer</string>

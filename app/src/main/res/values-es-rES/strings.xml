@@ -322,7 +322,7 @@
     <string name="onboarding__slide1_note">*Bitkit actualmente no ofrece servicios Lightning en tu país, pero aún puedes conectarte a otros nodos.</string>
     <string name="onboarding__slide1_text">Gasta bitcoin más rápido que nunca. Disfruta de pagos instantáneos y baratos con amigos, familia y comerciantes.</string>
     <string name="onboarding__slide3_header">La privacidad\n&lt;accent&gt;no es un crimen&lt;/accent&gt;</string>
-    <string name="onboarding__slide3_text">Desliza para ocultar tu saldo, disfruta de pagos más privados y protege tu monedero activando funciones de seguridad.</string>
+    <string name="onboarding__slide3_text">Tu dinero, tu privacidad. Desliza para ocultar tu saldo y gasta de forma más privada, sin rastreo de datos y sin KYC.</string>
     <string name="onboarding__slide4_header">Sus claves,\n&lt;accent&gt;sus monedas&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Vamos a crear tu monedero. Ten en cuenta que Bitkit es software móvil. &lt;accent&gt;No guardes todo tu dinero en Bitkit.&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Condiciones de uso</string>

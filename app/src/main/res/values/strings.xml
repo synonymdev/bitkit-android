@@ -483,12 +483,12 @@
     <string name="onboarding__skip">Skip</string>
     <string name="onboarding__skip_intro">Skip Intro</string>
     <string name="onboarding__slide0_header">Freedom in\n&lt;accent&gt;your pocket&lt;/accent&gt;</string>
-    <string name="onboarding__slide0_text">Bitkit hands you the keys to manage your money. Spend now or save for later. The choice is yours.</string>
+    <string name="onboarding__slide0_text">Bitkit hands you the keys to control your money, profile, and contacts. Take charge and become borderless.</string>
     <string name="onboarding__slide1_header">Instant\n&lt;accent&gt;payments&lt;/accent&gt;</string>
     <string name="onboarding__slide1_note">*Bitkit does not currently provide Lightning services in your country, but you can still connect to other nodes.</string>
-    <string name="onboarding__slide1_text">Spend bitcoin faster than ever. Enjoy instant and cheap payments with friends, family, and merchants.</string>
+    <string name="onboarding__slide1_text">Enjoy instant and cheap payments with friends, family, and merchants on the Lightning Network.</string>
     <string name="onboarding__slide3_header">Privacy is\n&lt;accent&gt;not a crime&lt;/accent&gt;</string>
-    <string name="onboarding__slide3_text">Swipe to hide your balance, enjoy more private payments, and protect your wallet by enabling security features.</string>
+    <string name="onboarding__slide3_text">Your money, your privacy. Swipe to hide your balance and spend more privately, with no data tracking and zero KYC.</string>
     <string name="onboarding__slide4_header">Your keys,\n&lt;accent&gt;your coins&lt;/accent&gt;</string>
     <string name="onboarding__slide4_text">Let’s create your wallet. Please be aware that Bitkit is mobile software. &lt;accent&gt;Don’t store all your money in Bitkit.&lt;/accent&gt;</string>
     <string name="onboarding__tos_checkbox">Terms of Use</string>
