@@ -1,10 +1,9 @@
 <journey name="widgets intro">
   <description>
-    Precondition: onboarded dev wallet, widgets enabled, widgets intro unseen.
-
-    A saved widget takes a fixed position in the widget set rather than being appended last —
-    verified identically on Android and iOS against a set that already held other widgets — so this
-    journey asserts only that it is present.
+    Precondition: onboarded dev wallet, widgets enabled, widgets intro unseen, and Bitcoin Weather
+    NOT already in the widget set — re-saving a widget that is already there keeps its original
+    position instead of appending, so the final assertion fails for the wrong reason. Delete it from
+    Add Widget first if present.
   </description>
   <actions>
     <action>Tap the menu icon</action>
@@ -17,6 +16,6 @@
     <action>Verify that the bottom sheet navigates to "Bitcoin Weather" and "Save Widget" is visible</action>
     <action>Tap "Save Widget"</action>
     <action>Verify that the wallet overview widgets section is visible</action>
-    <action>Verify that "Bitcoin Weather" appears in the current widget set</action>
+    <action>Verify that "Bitcoin Weather" appears as the last widget in the current widget set</action>
   </actions>
 </journey>
