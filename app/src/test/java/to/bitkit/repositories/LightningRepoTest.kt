@@ -22,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.runCurrent
 import org.junit.Before
 import org.junit.Test
 import org.lightningdevkit.ldknode.AddressTypeBalance
@@ -869,6 +870,27 @@ class LightningRepoTest : BaseUnitTest() {
         assertTrue(result.isSuccess)
         verify(lightningService).stop()
         verify(lightningService).wipeStorage(0)
+    }
+
+    @Test
+    fun `wipeStorage holds the lifecycle lock so a start cannot rebuild the node mid-wipe`() = test {
+        startNodeForTesting()
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val release = CompletableDeferred<Unit>()
+        whenever(lightningService.wipeStorage(0)).doSuspendableAnswer { release.await() }
+
+        val wipe = launch { sut.wipeStorage(0) }
+        runCurrent()
+        whenever(lightningService.node).thenReturn(null)
+        val start = launch { sut.start() }
+        runCurrent()
+
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        release.complete(Unit)
+        wipe.join()
+        start.join()
+        verify(lightningService).wipeStorage(0)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
     }
 
     @Test
