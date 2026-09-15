@@ -13,6 +13,7 @@
     <action>Tap the amount pencil, enter "5000" on the keypad, and tap Continue</action>
     <action>Verify the amount reads 5,000 sats</action>
     <action>Type "Journey Sub" into the subscription name field (testTag "SubscriptionName")</action>
+    <action>Type a short description into the description field (testTag "SubscriptionDescription"), so the payer's detail screen offers More Info later</action>
     <action>Verify the frequency selector has "Monthly" selected</action>
     <action>Tap Choose Recipient (testTag "SubscriptionChooseRecipient"), now enabled</action>
     <action>Verify the recipient step lists the linked contact under CONTACTS and that Propose Subscription (testTag "SubscriptionPropose") is disabled</action>

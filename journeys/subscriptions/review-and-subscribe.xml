@@ -1,8 +1,10 @@
 <journey name="Review And Subscribe">
   <description>
     Payer side of create-and-propose.xml. The proposed subscription arrives, surfaces under PROPOSALS,
-    and opens the Review and Subscribe sheet where the payer swipes to accept. Run this on the payer
-    instance immediately after the creator sends the proposal.
+    and opens the Review and Subscribe sheet where the payer swipes to accept. Accepting does not
+    return to the list on its own: when the first period is due on acceptance the send flow starts and
+    must be completed, otherwise the Subscribed confirmation opens directly. Both paths end on Close.
+    Run this on the payer instance immediately after the creator sends the proposal.
   </description>
   <actions>
     <action>Launch the E2E Bitkit app with Paykit UI enabled on the payer instance, with the creator saved as a linked contact and a spendable balance above 5,000 sats</action>
@@ -13,8 +15,11 @@
     <action>Verify the Review and Subscribe sheet appears with 5,000 sats and the creator contact card</action>
     <action>Verify the swipe control reads "Swipe To Subscribe and Pay" when the first period is due on acceptance, otherwise "Swipe To Subscribe"</action>
     <action>Swipe the confirm control to the end</action>
+    <action>If the first period was due on acceptance: complete the send flow that opens, then verify the Subscribed confirmation appears</action>
+    <action>If no payment was due: verify the Subscribed confirmation appears directly, with no send flow</action>
+    <action>Tap Close on the Subscribed confirmation</action>
     <action>Verify the sheet dismisses and "Journey Sub" moves from PROPOSALS into the ACTIVE section</action>
     <action>Tap the "Journey Sub" row and verify the detail shows STATUS "Active" and a RENEWS date one month ahead, with no year</action>
-    <action>Verify the PAYMENTS section lists the first payment titled "Journey Sub" with the payment date as its subtitle</action>
+    <action>Only when a payment was made: verify the PAYMENTS section lists it titled "Journey Sub" with the payment date as its subtitle. With no payment yet, the section is absent.</action>
   </actions>
 </journey>
