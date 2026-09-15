@@ -434,11 +434,9 @@ private fun ActivePaymentRequestCard(
         PaymentRequestCard(
             request = request,
             contact = contact,
+            compactSubtitle = subscriptionNote,
             onClick = { onDetails(request.id) },
-            compactSubtitle = stringResource(
-                R.string.wallet__payment_request_waiting_for_recipient,
-                contact?.name ?: PubkyProfile.placeholder(request.counterparty).name,
-            ),
+            amountStatus = stringResource(R.string.wallet__payment_request_pending),
         )
     }
 }
@@ -521,6 +519,7 @@ internal fun PaymentRequestCard(
     isOutgoingPayment: Boolean = false,
     showSignedAmount: Boolean = false,
     showAmountSymbol: Boolean = true,
+    amountStatus: String? = null,
     onClick: (() -> Unit)? = null,
     isDismissing: Boolean = false,
     onPay: (() -> Unit)? = null,
@@ -582,6 +581,7 @@ internal fun PaymentRequestCard(
                 sats = request.amountSats.coerceAtMost(Long.MAX_VALUE.toULong()).toLong(),
                 prefix = amountPrefix,
                 showSymbol = showAmountSymbol,
+                secondaryText = amountStatus,
             )
         }
         if (onPay != null || onDismiss != null) {
