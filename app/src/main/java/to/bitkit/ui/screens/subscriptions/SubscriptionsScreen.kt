@@ -785,7 +785,8 @@ private fun SubscriptionReview(
                         R.string.subscriptions__swipe_to_subscribe
                     }
                 ),
-                color = Colors.Brand,
+                // Follow the balance this will be paid from, as the send and transfer screens do.
+                color = if (subscription.prefersLightningPayment) Colors.Purple else Colors.Brand,
                 loading = loading,
                 onConfirm = {
                     loading = true

@@ -3,19 +3,20 @@
 package to.bitkit.ui.screens.subscriptions
 
 import com.synonym.paykit.PaymentRequestLifecycleState
-import org.junit.Test
-import to.bitkit.R
-import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.repositories.PaykitBillingPeriod
-import to.bitkit.repositories.PaykitRecurrenceUnit
-import to.bitkit.repositories.PaykitSubscription
-import to.bitkit.repositories.PaykitSubscriptionMetadata
-import to.bitkit.repositories.PaykitSubscriptionRecurrence
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
+import org.junit.Test
+import to.bitkit.R
+import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.repositories.MethodId
+import to.bitkit.repositories.PaykitBillingPeriod
+import to.bitkit.repositories.PaykitRecurrenceUnit
+import to.bitkit.repositories.PaykitSubscription
+import to.bitkit.repositories.PaykitSubscriptionMetadata
+import to.bitkit.repositories.PaykitSubscriptionRecurrence
 
 class SubscriptionsScreenTest {
     private val now = Instant.parse("2027-01-15T08:00:00Z")
@@ -93,6 +94,27 @@ class SubscriptionsScreenTest {
             1_200L,
             subscriptionMonthlyCostSats(listOf(paidActive, canceled, proposed), now),
         )
+    }
+
+    @Test
+    fun `lightning endpoints spend the spending balance`() {
+        val lightningOnly = subscription(PaykitRecurrenceUnit.Month)
+        val onchainOnly = lightningOnly.copy(
+            acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
+        )
+        val both = lightningOnly.copy(
+            acceptedPaymentEndpointIdentifiers = listOf(
+                MethodId.P2wpkh.rawValue,
+                MethodId.Bolt11.rawValue,
+            ),
+        )
+        val neither = lightningOnly.copy(acceptedPaymentEndpointIdentifiers = emptyList())
+
+        assertTrue(lightningOnly.prefersLightningPayment)
+        assertFalse(onchainOnly.prefersLightningPayment)
+        // Lightning wins when both are offered, matching payablePreferenceOrder.
+        assertTrue(both.prefersLightningPayment)
+        assertFalse(neither.prefersLightningPayment)
     }
 
     @Test

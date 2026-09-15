@@ -209,6 +209,17 @@ data class PaykitSubscription(
             recurrence.canMaterializePeriods &&
             acceptedPaymentEndpointIdentifiers.isNotEmpty()
 
+    /**
+     * Whether a payment for this subscription is expected to leave the spending balance.
+     *
+     * Lightning wins whenever it is on offer, matching [PublicPaykitRepo.payablePreferenceOrder],
+     * so this agrees with the method the send flow opens with.
+     */
+    val prefersLightningPayment: Boolean
+        get() = acceptedPaymentEndpointIdentifiers
+            .mapNotNull { MethodId.fromRawValue(it) }
+            .any { !it.isOnchain }
+
     fun isActive(now: Instant): Boolean =
         lifecycleState == PaymentRequestLifecycleState.ACTIVE_RECURRING && recurrence.endsAt?.let { it > now } != false
 
