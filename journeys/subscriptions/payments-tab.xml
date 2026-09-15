@@ -7,7 +7,7 @@
   <actions>
     <action>Launch the E2E Bitkit app with Paykit UI enabled, one incoming Payment Request pending, and one outgoing Payment Request awaiting the recipient</action>
     <action>Open the drawer menu and tap Subscriptions</action>
-    <action>Verify the Payments tab (testTag "Tab-payments") shows a badge with the pending incoming count, rendered at the right edge of the tab with the label still centred</action>
+    <action>Verify the Payments tab (testTag "Tab-payments") shows a badge with the pending incoming count, rendered immediately after the label with a 6.dp gap, the label still centred in the tab, and its indicator level with the other tabs</action>
     <action>Tap the Payments tab</action>
     <action>Verify the payment requests list (testTag "PaymentRequestsScreen") appears under the PAYMENT REQUESTS header</action>
     <action>Verify the incoming request card shows Dismiss and Pay actions</action>

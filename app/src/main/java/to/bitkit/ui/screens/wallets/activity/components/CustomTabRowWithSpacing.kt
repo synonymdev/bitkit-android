@@ -133,9 +133,13 @@ private fun TabLabel(
         val height = maxOf(label.height, TabBadgeSize.roundToPx())
 
         layout(width, height) {
+            // placeRelative so the badge follows the label's trailing edge in RTL layouts.
             val labelX = (width - label.width) / 2
-            label.place(labelX, (height - label.height) / 2)
-            badge?.place(labelX + label.width + TabBadgeGap.roundToPx(), (height - badge.height) / 2)
+            label.placeRelative(labelX, (height - label.height) / 2)
+            badge?.placeRelative(
+                labelX + label.width + TabBadgeGap.roundToPx(),
+                (height - badge.height) / 2,
+            )
         }
     }
 }
