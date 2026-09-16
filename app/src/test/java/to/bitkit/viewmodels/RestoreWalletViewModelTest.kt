@@ -269,7 +269,7 @@ class RestoreWalletViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `handlePastedWords should keep full replace when pasting 12 words into later field`() {
+    fun `handlePastedWords should keep full replace when pasting 12 words into later field of empty form`() {
         val words = List(12) { "w${it + 1}" }.joinToString(" ")
 
         viewModel.onChangeWord(5, words)
@@ -278,6 +278,52 @@ class RestoreWalletViewModelTest : BaseUnitTest() {
         assertEquals("w1", state.words[0])
         assertEquals("w12", state.words[11])
         assertEquals("", state.words[12])
+        assertFalse(state.is24Words)
+    }
+
+    @Test
+    fun `handlePastedWords should spread 12 words into field 13 when earlier fields hold words`() {
+        for (i in 0 until 12) {
+            viewModel.onChangeWord(i, "a${i + 1}")
+        }
+        val secondHalf = List(12) { "b${it + 13}" }.joinToString(" ")
+
+        viewModel.onChangeWord(12, secondHalf)
+
+        val state = viewModel.uiState.value
+        assertEquals(List(12) { "a${it + 1}" }, state.words.subList(0, 12))
+        assertEquals(List(12) { "b${it + 13}" }, state.words.subList(12, 24))
+        assertTrue(state.is24Words)
+        assertNull(state.focusedIndex)
+        assertTrue(state.areButtonsEnabled)
+    }
+
+    @Test
+    fun `handlePastedWords should spread 12 words into later field on empty 24 word layout`() {
+        viewModel.onChangeWord(0, List(24) { "a${it + 1}" }.joinToString(" "))
+        for (i in 0 until 24) {
+            viewModel.onChangeWord(i, "")
+        }
+        val secondHalf = List(12) { "b${it + 13}" }.joinToString(" ")
+
+        viewModel.onChangeWord(12, secondHalf)
+
+        val state = viewModel.uiState.value
+        assertTrue(state.words.subList(0, 12).all { it.isEmpty() })
+        assertEquals(List(12) { "b${it + 13}" }, state.words.subList(12, 24))
+        assertTrue(state.is24Words)
+        assertEquals(0, state.focusedIndex)
+    }
+
+    @Test
+    fun `handlePastedWords should full replace 12 words pasted into first field on 24 word layout`() {
+        viewModel.onChangeWord(0, List(24) { "a${it + 1}" }.joinToString(" "))
+
+        viewModel.onChangeWord(0, List(12) { "b${it + 1}" }.joinToString(" "))
+
+        val state = viewModel.uiState.value
+        assertEquals(List(12) { "b${it + 1}" }, state.words.subList(0, 12))
+        assertTrue(state.words.subList(12, 24).all { it.isEmpty() })
         assertFalse(state.is24Words)
     }
 

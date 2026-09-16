@@ -108,9 +108,12 @@ class RestoreWalletViewModel @Inject constructor(
         val pastedWords = pastedText
             .split(separators)
             .filter { it.isNotBlank() }
+        val state = _uiState.value
+        val isFullPhraseTarget = index == 0 || !state.is24Words && state.hasNoWordsExcept(index)
         when (pastedWords.size) {
             0 -> return@launch
-            WORDS_MIN, WORDS_MAX -> replaceAllWords(pastedWords)
+            WORDS_MAX -> replaceAllWords(pastedWords)
+            WORDS_MIN if isFullPhraseTarget -> replaceAllWords(pastedWords)
             else -> spreadWords(index, pastedWords)
         }
         recomputeValidationState()
@@ -208,6 +211,9 @@ class RestoreWalletViewModel @Inject constructor(
 
         _uiState.update { it.copy(suggestions = filtered.toImmutableList()) }
     }
+
+    private fun RestoreWalletUiState.hasNoWordsExcept(index: Int) =
+        words.withIndex().none { it.index != index && it.value.isNotEmpty() }
 
     private suspend fun RestoreWalletUiState.areButtonsEnabled(): Boolean {
         val activeWords = words.subList(0, wordCount)
