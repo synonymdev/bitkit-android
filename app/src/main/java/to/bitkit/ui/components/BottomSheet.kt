@@ -17,6 +17,7 @@ import androidx.compose.material3.SheetValue
 import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -30,6 +31,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.chrisbanes.haze.rememberHazeState
+import to.bitkit.ui.LocalModalToastHostState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
@@ -66,6 +68,15 @@ fun BottomSheet(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     val app = appViewModel
+    val modalToastHostState = LocalModalToastHostState.current
+    val toastHost = remember { Any() }
+
+    DisposableEffect(modalToastHostState, toastHost) {
+        modalToastHostState?.register(toastHost)
+        onDispose { modalToastHostState?.unregister(toastHost) }
+    }
+
+    val isTopToastHost = modalToastHostState?.isTopHost(toastHost) != false
 
     ModalBottomSheet(
         onDismissRequest = onDismissRequest,
@@ -85,7 +96,7 @@ fun BottomSheet(
             Column(modifier = Modifier.fillMaxWidth()) {
                 content()
             }
-            if (app != null) SheetToastPopup(app)
+            if (app != null && isTopToastHost) SheetToastPopup(app)
         }
     }
 }

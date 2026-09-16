@@ -69,6 +69,7 @@ import to.bitkit.ui.Routes.ExternalConnection
 import to.bitkit.ui.components.AuthCheckScreen
 import to.bitkit.ui.components.DefaultSheetContainerColor
 import to.bitkit.ui.components.DrawerMenu
+import to.bitkit.ui.components.ModalToastHostState
 import to.bitkit.ui.components.Sheet
 import to.bitkit.ui.components.SheetHandlePlacement
 import to.bitkit.ui.components.SheetHost
@@ -254,6 +255,7 @@ fun ContentView(
     settingsViewModel: SettingsViewModel,
     backupsViewModel: BackupsViewModel,
     hazeState: HazeState,
+    modalToastHostState: ModalToastHostState,
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
@@ -451,6 +453,7 @@ fun ContentView(
         LocalSettingsViewModel provides settingsViewModel,
         LocalBackupsViewModel provides backupsViewModel,
         LocalDrawerState provides drawerState,
+        LocalModalToastHostState provides modalToastHostState,
         LocalIs24HourFormat provides rememberIs24HourFormat(),
         LocalBalances provides balance,
         LocalCurrencies provides currencies,

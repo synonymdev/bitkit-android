@@ -6,6 +6,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import to.bitkit.models.BalanceState
 import to.bitkit.repositories.CurrencyState
+import to.bitkit.ui.components.ModalToastHostState
 import to.bitkit.viewmodels.ActivityListViewModel
 import to.bitkit.viewmodels.AppViewModel
 import to.bitkit.viewmodels.BackupsViewModel
@@ -22,6 +23,7 @@ val LocalIs24HourFormat = compositionLocalOf { false }
 
 // Statics
 val LocalDrawerState = staticCompositionLocalOf<DrawerState?> { null }
+val LocalModalToastHostState = staticCompositionLocalOf<ModalToastHostState?> { null }
 val LocalAppViewModel = staticCompositionLocalOf<AppViewModel?> { null }
 val LocalWalletViewModel = staticCompositionLocalOf<WalletViewModel?> { null }
 val LocalBlocktankViewModel = staticCompositionLocalOf<BlocktankViewModel?> { null }

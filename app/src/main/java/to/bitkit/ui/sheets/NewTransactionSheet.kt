@@ -34,10 +34,12 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.ui.LocalAppViewModel
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.LocalCurrencyViewModel
+import to.bitkit.ui.LocalModalToastHostState
 import to.bitkit.ui.LocalSettingsViewModel
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheet
 import to.bitkit.ui.components.BottomSheetPreview
+import to.bitkit.ui.components.ModalToastHostState
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -55,6 +57,7 @@ fun NewTransactionSheet(
     appViewModel: AppViewModel,
     currencyViewModel: CurrencyViewModel,
     settingsViewModel: SettingsViewModel,
+    modalToastHostState: ModalToastHostState,
     modifier: Modifier = Modifier,
 ) {
     val currencies by currencyViewModel.uiState.collectAsStateWithLifecycle()
@@ -65,6 +68,7 @@ fun NewTransactionSheet(
         LocalCurrencyViewModel provides currencyViewModel,
         LocalSettingsViewModel provides settingsViewModel,
         LocalCurrencies provides currencies,
+        LocalModalToastHostState provides modalToastHostState,
     ) {
         BottomSheet(
             onDismissRequest = { appViewModel.hideNewTransactionSheet() },
