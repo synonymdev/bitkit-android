@@ -942,8 +942,8 @@ private fun RootNavHost(
                     app = appViewModel,
                     wallet = walletViewModel,
                     transfer = transferViewModel,
-                    onContinueClick = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
-                    onTransferUnavailable = { navController.popBackStack<Routes.TransferRoot>(inclusive = true) },
+                    onContinueClick = { navController.navigateToHome() },
+                    onTransferUnavailable = { navController.navigateToHome() },
                 )
             }
             deepLinkableComposable<Routes.SpendingIntro> {

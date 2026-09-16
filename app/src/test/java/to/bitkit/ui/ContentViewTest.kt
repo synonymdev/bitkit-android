@@ -1,5 +1,13 @@
 package to.bitkit.ui
 
+import android.content.Context
+import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.ComposeNavigator
+import androidx.navigation.compose.composable
+import androidx.navigation.createGraph
+import androidx.navigation.navigation
+import androidx.test.core.app.ApplicationProvider
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -87,5 +95,29 @@ class ContentViewTest {
 
         assertEquals(receiveSheetPresentationKey(sheet), receiveSheetPresentationKey(samePresentation))
         assertFalse(receiveSheetPresentationKey(sheet) == receiveSheetPresentationKey(nextPresentation))
+    }
+
+    @Test
+    fun `savings transfer completion returns home and drops spending from back stack`() {
+        val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+            navigatorProvider.addNavigator(ComposeNavigator())
+            graph = createGraph(startDestination = Routes.Home) {
+                composable<Routes.Home> {}
+                composable<Routes.Spending> {}
+                navigation<Routes.TransferRoot>(startDestination = Routes.SavingsAvailability) {
+                    composable<Routes.SavingsAvailability> {}
+                    composable<Routes.SavingsProgress> {}
+                }
+            }
+        }
+        navController.navigateTo(Routes.Spending)
+        navController.navigateToTransferSavingsAvailability()
+        navController.navigateTo(Routes.SavingsProgress)
+
+        navController.navigateToHome()
+
+        assertTrue(navController.currentDestination?.hasRoute<Routes.Home>() == true)
+        assertFalse(navController.currentBackStack.value.any { it.destination.hasRoute<Routes.Spending>() })
+        assertFalse(navController.currentBackStack.value.any { it.destination.hasRoute<Routes.SavingsProgress>() })
     }
 }
