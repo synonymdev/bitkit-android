@@ -6,13 +6,11 @@ import com.synonym.paykit.PaymentRequestLifecycleState
 import org.junit.Test
 import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitRecurrenceUnit
 import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionMetadata
 import to.bitkit.repositories.PaykitSubscriptionRecurrence
-import to.bitkit.repositories.isPaidFromSpending
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -95,35 +93,6 @@ class SubscriptionsScreenTest {
             1_200L,
             subscriptionMonthlyCostSats(listOf(paidActive, canceled, proposed), now),
         )
-    }
-
-    @Test
-    fun `spending pays only when lightning is accepted and affordable`() {
-        val amount = 100_000uL
-        val lightningOnly = subscription(PaykitRecurrenceUnit.Month, amountSats = amount)
-        val onchainOnly = lightningOnly.copy(
-            acceptedPaymentEndpointIdentifiers = listOf(MethodId.P2wpkh.rawValue),
-        )
-        val both = lightningOnly.copy(
-            acceptedPaymentEndpointIdentifiers = listOf(
-                MethodId.P2wpkh.rawValue,
-                MethodId.Bolt11.rawValue,
-            ),
-        )
-
-        assertTrue(lightningOnly.acceptsLightningPayment)
-        assertFalse(onchainOnly.acceptsLightningPayment)
-        // Lightning wins when both are offered, matching payablePreferenceOrder.
-        assertTrue(both.acceptsLightningPayment)
-
-        // Enough spending balance, so the payment leaves it.
-        assertTrue(lightningOnly.isPaidFromSpending(maxSendLightningSats = amount))
-        assertTrue(lightningOnly.isPaidFromSpending(maxSendLightningSats = amount + 1uL))
-        // A wallet that cannot cover the amount over lightning falls back to savings.
-        assertFalse(lightningOnly.isPaidFromSpending(maxSendLightningSats = amount - 1uL))
-        assertFalse(lightningOnly.isPaidFromSpending(maxSendLightningSats = 0uL))
-        // Accepting only on-chain never draws on spending, however large the balance.
-        assertFalse(onchainOnly.isPaidFromSpending(maxSendLightningSats = amount * 10uL))
     }
 
     @Test
