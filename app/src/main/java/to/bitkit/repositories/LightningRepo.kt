@@ -319,7 +319,7 @@ class LightningRepo @Inject constructor(
         Logger.warn("fetchTrustedPeers error", it, context = TAG)
     }.getOrNull()
 
-    @Suppress("LongMethod", "LongParameterList")
+    @Suppress("LongParameterList")
     suspend fun start(
         walletIndex: Int = 0,
         timeout: Duration? = null,
@@ -329,12 +329,36 @@ class LightningRepo @Inject constructor(
         eventHandler: NodeEventHandler? = null,
         channelMigration: ChannelDataMigration? = null,
         shouldValidateGraph: Boolean = true,
+    ): Result<Unit> = startNode(
+        walletIndex = walletIndex,
+        timeout = timeout,
+        shouldRetry = shouldRetry,
+        customServerUrl = customServerUrl,
+        customRgsServerUrl = customRgsServerUrl,
+        eventHandler = eventHandler,
+        channelMigration = channelMigration,
+        shouldValidateGraph = shouldValidateGraph,
+        shouldRetryYieldToStop = false,
+    )
+
+    @Suppress("LongMethod", "LongParameterList")
+    private suspend fun startNode(
+        walletIndex: Int = 0,
+        timeout: Duration? = null,
+        shouldRetry: Boolean = true,
+        customServerUrl: String? = null,
+        customRgsServerUrl: String? = null,
+        eventHandler: NodeEventHandler? = null,
+        channelMigration: ChannelDataMigration? = null,
+        shouldValidateGraph: Boolean = true,
+        shouldRetryYieldToStop: Boolean = false,
+        shouldCancelPendingStop: Boolean = true,
     ): Result<Unit> = withContext(bgDispatcher) {
         if (_isRecoveryMode.value) {
             return@withContext Result.failure(RecoveryModeError())
         }
 
-        cancelPendingStop()
+        if (shouldCancelPendingStop) cancelPendingStop()
 
         eventHandler?.let { _eventHandlers.add(it) }
 
@@ -446,7 +470,12 @@ class LightningRepo @Inject constructor(
         // Retry OUTSIDE the mutex to avoid deadlock (Kotlin Mutex is non-reentrant)
         if (shouldRetryStart) {
             delay(2.seconds)
-            return@withContext start(
+            // A stop requested after this start began wins over the retry; a foreground start cancels it
+            if (shouldRetryYieldToStop && pendingStopJob.get() != null) {
+                Logger.info("Skipped start retry because a stop was requested", context = TAG)
+                return@withContext result
+            }
+            return@withContext startNode(
                 walletIndex = walletIndex,
                 timeout = timeout,
                 shouldRetry = false,
@@ -454,6 +483,7 @@ class LightningRepo @Inject constructor(
                 customRgsServerUrl = customRgsServerUrl,
                 channelMigration = channelMigration,
                 shouldValidateGraph = shouldValidateGraph,
+                shouldCancelPendingStop = !shouldRetryYieldToStop,
             )
         }
 
@@ -2067,7 +2097,7 @@ class LightningRepo @Inject constructor(
             Logger.error("Failed to stop node during restart", it, context = TAG)
             return@withContext Result.failure(it)
         }
-        start(shouldRetry = false).onFailure {
+        startNode(shouldRetryYieldToStop = true).onFailure {
             Logger.error("Failed to start node during restart", it, context = TAG)
             return@withContext Result.failure(it)
         }.onSuccess {
