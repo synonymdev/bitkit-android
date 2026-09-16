@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
@@ -38,12 +39,14 @@ import to.bitkit.ext.uniqueUtxoKey
 import to.bitkit.models.formatToModernDisplay
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.activityListViewModel
+import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillWidth
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Subtitle
 import to.bitkit.ui.components.TagButton
 import to.bitkit.ui.components.VerticalSpacer
@@ -55,6 +58,7 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppSwitchDefaults
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import to.bitkit.utils.AppError
 
 @Composable
 fun SendCoinSelectionScreen(
@@ -70,9 +74,12 @@ fun SendCoinSelectionScreen(
     val activity = activityListViewModel ?: return
     val onchainActivities by activity.onchainActivities.collectAsStateWithLifecycle()
 
-    LaunchedEffect(requiredAmount, onchainActivities) {
-        viewModel.setOnchainActivities(onchainActivities.orEmpty())
+    LaunchedEffect(requiredAmount, address) {
         viewModel.loadUtxos(requiredAmount, address)
+    }
+
+    LaunchedEffect(onchainActivities) {
+        viewModel.setOnchainActivities(onchainActivities.orEmpty())
     }
 
     Content(
@@ -82,6 +89,7 @@ fun SendCoinSelectionScreen(
         onContinue = { onContinue(uiState.selectedUtxos) },
         onClickUtxo = { viewModel.onToggleUtxo(it) },
         onRenderUtxo = { viewModel.loadTagsForUtxo(it) },
+        onRetry = { viewModel.loadUtxos(requiredAmount, address) },
     )
 }
 
@@ -94,6 +102,7 @@ private fun Content(
     onContinue: () -> Unit = {},
     onClickUtxo: (SpendableUtxo) -> Unit = {},
     onRenderUtxo: (String) -> Unit = {},
+    onRetry: () -> Unit = {},
 ) {
     Column(
         modifier = modifier
@@ -110,6 +119,15 @@ private fun Content(
                 .weight(1f)
                 .padding(horizontal = 16.dp)
         ) {
+            if (uiState.loadError != null && uiState.availableUtxos.isEmpty()) {
+                item {
+                    LoadErrorState(
+                        isLoading = uiState.isLoading,
+                        onRetry = onRetry,
+                    )
+                }
+            }
+
             // Utxo items
             items(uiState.availableUtxos) { utxo ->
                 UtxoRow(
@@ -158,6 +176,33 @@ private fun Content(
             )
             VerticalSpacer(16.dp)
         }
+    }
+}
+
+@Composable
+private fun LoadErrorState(
+    isLoading: Boolean,
+    onRetry: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .fillMaxWidth()
+            .testTag("CoinSelectionLoadError")
+    ) {
+        BodyM(
+            text = stringResource(R.string.wallet__selection_load_error),
+            color = Colors.White64,
+            textAlign = TextAlign.Center,
+        )
+        VerticalSpacer(16.dp)
+        SecondaryButton(
+            text = stringResource(R.string.common__retry),
+            onClick = onRetry,
+            isLoading = isLoading,
+            modifier = Modifier.testTag("CoinSelectionRetry")
+        )
     }
 }
 
@@ -264,6 +309,21 @@ private fun PreviewEmpty() {
                     isSelectionValid = false
                 ),
                 tagsByTxId = persistentMapOf(),
+                modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewLoadError() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                uiState = CoinSelectionUiState(
+                    loadError = AppError("Node is not setup"),
+                ),
                 modifier = Modifier.sheetHeight(),
             )
         }
