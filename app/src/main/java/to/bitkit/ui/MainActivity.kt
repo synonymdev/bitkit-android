@@ -43,8 +43,8 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.ui.components.AuthCheckView
+import to.bitkit.ui.components.BottomSheetOverlayState
 import to.bitkit.ui.components.IsOnlineTracker
-import to.bitkit.ui.components.ModalToastHostState
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.onboarding.CreateWalletWithPassphraseScreen
 import to.bitkit.ui.onboarding.IntroScreen
@@ -126,7 +126,7 @@ class MainActivity : FragmentActivity() {
                 val isShowingMigrationLoading by walletViewModel.isShowingMigrationLoading.collectAsStateWithLifecycle()
                 val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
                 val hazeState = rememberHazeState(blurEnabled = true)
-                val modalToastHostState = remember { ModalToastHostState() }
+                val bottomSheetOverlayState = remember { BottomSheetOverlayState() }
 
                 LaunchedEffect(
                     walletExists,
@@ -166,7 +166,7 @@ class MainActivity : FragmentActivity() {
                         settingsViewModel = settingsViewModel,
                         backupsViewModel = backupsViewModel,
                         hazeState = hazeState,
-                        modalToastHostState = modalToastHostState,
+                        bottomSheetOverlayState = bottomSheetOverlayState,
                         modifier = Modifier.hazeSource(hazeState, zIndex = 0f),
                     )
 
@@ -185,10 +185,7 @@ class MainActivity : FragmentActivity() {
 
                     val showForgotPinSheet by appViewModel.showForgotPinSheet.collectAsStateWithLifecycle()
                     if (showForgotPinSheet) {
-                        CompositionLocalProvider(
-                            LocalAppViewModel provides appViewModel,
-                            LocalModalToastHostState provides modalToastHostState,
-                        ) {
+                        CompositionLocalProvider(LocalBottomSheetOverlayState provides bottomSheetOverlayState) {
                             ForgotPinSheet(
                                 onDismiss = { appViewModel.setShowForgotPin(false) },
                                 onResetClick = { walletViewModel.wipeWallet() },
@@ -206,26 +203,22 @@ class MainActivity : FragmentActivity() {
                     }
                 }
 
-                val currentToast by appViewModel.currentToast.collectAsStateWithLifecycle()
-                if (!modalToastHostState.hasActiveHost) {
-                    ToastOverlay(
-                        toast = currentToast,
-                        hazeState = hazeState,
-                        onDismiss = { appViewModel.hideToast() },
-                        onDragStart = { appViewModel.pauseToast() },
-                        onDragEnd = { appViewModel.resumeToast() }
-                    )
-                }
-
                 val transactionSheetDetails by appViewModel.transactionSheet.collectAsStateWithLifecycle()
                 if (transactionSheetDetails != NewTransactionSheetDetails.EMPTY) {
                     NewTransactionSheet(
                         appViewModel = appViewModel,
-                        currencyViewModel = currencyViewModel,
-                        settingsViewModel = settingsViewModel,
-                        modalToastHostState = modalToastHostState,
+                        bottomSheetOverlayState = bottomSheetOverlayState,
                     )
                 }
+
+                val currentToast by appViewModel.currentToast.collectAsStateWithLifecycle()
+                ToastOverlay(
+                    toast = currentToast,
+                    hazeState = hazeState,
+                    onDismiss = { appViewModel.hideToast() },
+                    onDragStart = { appViewModel.pauseToast() },
+                    onDragEnd = { appViewModel.resumeToast() }
+                )
 
                 SplashScreen(appViewModel.splashVisible)
             }

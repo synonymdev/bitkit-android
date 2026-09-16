@@ -111,23 +111,27 @@ enum class TimedSheetType(val priority: Int) {
 @Composable
 fun SheetHost(
     shouldExpand: Boolean,
+    modifier: Modifier = Modifier,
     onDismiss: () -> Unit = {},
     visibilityKey: Any? = null,
     onVisible: () -> Unit = {},
     dismissEnabled: Boolean = true,
     sheetHandlePlacement: SheetHandlePlacement = SheetHandlePlacement.ScaffoldSlot,
+    sheetDragHandle: @Composable (() -> Unit)? = { SheetDragHandle() },
     sheetContainerColor: Color = DefaultSheetContainerColor,
+    sheetState: SheetState? = null,
     sheets: @Composable ColumnScope.() -> Unit,
     content: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val currentDismissEnabled by rememberUpdatedState(dismissEnabled)
     val currentShouldExpand by rememberUpdatedState(shouldExpand)
+    val resolvedSheetState = rememberSheetHostState(
+        sheetState = sheetState,
+        dismissEnabled = dismissEnabled,
+        shouldExpand = shouldExpand,
+    )
     val scaffoldState = rememberBottomSheetScaffoldState(
-        bottomSheetState = rememberModalBottomSheetState(
-            skipPartiallyExpanded = true,
-            confirmValueChange = { currentDismissEnabled || !currentShouldExpand || it != SheetValue.Hidden },
-        )
+        bottomSheetState = resolvedSheetState,
     )
     var wasSheetVisible by remember { mutableStateOf(false) }
     var visibleKey by remember { mutableStateOf<Any?>(null) }
@@ -156,7 +160,7 @@ fun SheetHost(
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         BottomSheetScaffold(
             scaffoldState = scaffoldState,
             sheetPeekHeight = 0.dp,
@@ -169,7 +173,7 @@ fun SheetHost(
             },
             sheetDragHandle = when (sheetHandlePlacement) {
                 SheetHandlePlacement.ScaffoldSlot -> {
-                    { SheetDragHandle() }
+                    sheetDragHandle
                 }
                 SheetHandlePlacement.ContentOverlay -> null
             },
@@ -183,7 +187,6 @@ fun SheetHost(
                 if (dismissEnabled) {
                     scope.launch {
                         scaffoldState.bottomSheetState.hide()
-                        onDismiss()
                     }
                 }
             }
@@ -191,11 +194,25 @@ fun SheetHost(
             Scrim(scaffoldState.bottomSheetState, enabled = dismissEnabled) {
                 scope.launch {
                     scaffoldState.bottomSheetState.hide()
-                    onDismiss()
                 }
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun rememberSheetHostState(
+    sheetState: SheetState?,
+    dismissEnabled: Boolean,
+    shouldExpand: Boolean,
+): SheetState {
+    val currentDismissEnabled by rememberUpdatedState(dismissEnabled)
+    val currentShouldExpand by rememberUpdatedState(shouldExpand)
+    return sheetState ?: rememberModalBottomSheetState(
+        skipPartiallyExpanded = true,
+        confirmValueChange = { currentDismissEnabled || !currentShouldExpand || it != SheetValue.Hidden },
+    )
 }
 
 @Composable

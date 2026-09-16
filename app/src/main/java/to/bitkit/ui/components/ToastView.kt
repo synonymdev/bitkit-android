@@ -29,9 +29,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -45,13 +43,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
-import androidx.compose.ui.window.PopupProperties
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.hazeEffect
@@ -74,36 +66,6 @@ private const val DRAG_START_THRESHOLD_PX = 5
 private const val TINT_ALPHA = 0.32f
 private const val SHADOW_ALPHA = 0.4f
 private const val ELEVATION_DP = 10
-
-@Stable
-class ModalToastHostState {
-    private val hosts = mutableStateListOf<Any>()
-
-    val hasActiveHost: Boolean
-        get() = hosts.isNotEmpty()
-
-    fun register(host: Any) {
-        if (host !in hosts) hosts += host
-    }
-
-    fun unregister(host: Any) {
-        hosts -= host
-    }
-
-    fun isTopHost(host: Any): Boolean = hosts.lastOrNull() === host
-}
-
-private object ScreenTopCenterPopupPositionProvider : PopupPositionProvider {
-    override fun calculatePosition(
-        anchorBounds: IntRect,
-        windowSize: IntSize,
-        layoutDirection: LayoutDirection,
-        popupContentSize: IntSize,
-    ) = IntOffset(
-        x = (windowSize.width - popupContentSize.width) / 2,
-        y = 0,
-    )
-}
 
 @OptIn(ExperimentalHazeMaterialsApi::class)
 @Composable
@@ -348,33 +310,6 @@ fun ToastOverlay(
             onDismiss = onDismiss,
             onDragStart = onDragStart,
             onDragEnd = onDragEnd
-        )
-    }
-}
-
-@Composable
-fun ToastPopup(
-    toast: Toast?,
-    onDismiss: () -> Unit,
-    hazeState: HazeState = rememberHazeState(blurEnabled = false),
-    onDragStart: () -> Unit = {},
-    onDragEnd: () -> Unit = {},
-) {
-    if (toast == null) return
-
-    Popup(
-        popupPositionProvider = ScreenTopCenterPopupPositionProvider,
-        properties = PopupProperties(
-            focusable = false,
-            clippingEnabled = false,
-        ),
-    ) {
-        ToastView(
-            toast = toast,
-            hazeState = hazeState,
-            onDismiss = onDismiss,
-            onDragStart = onDragStart,
-            onDragEnd = onDragEnd,
         )
     }
 }

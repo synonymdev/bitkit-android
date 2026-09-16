@@ -4,42 +4,63 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.BottomSheetDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.ModalBottomSheetDefaults
-import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.SheetState
 import androidx.compose.material3.SheetValue
-import androidx.compose.material3.contentColorFor
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.chrisbanes.haze.rememberHazeState
-import to.bitkit.ui.LocalModalToastHostState
-import to.bitkit.ui.appViewModel
+import to.bitkit.ui.LocalBottomSheetOverlayState
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
-import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.viewmodels.AppViewModel
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Stable
+class BottomSheetOverlayState {
+    private val sheetEntries = mutableStateListOf<BottomSheetOverlayEntry>()
+
+    internal val entries: List<BottomSheetOverlayEntry>
+        get() = sheetEntries
+
+    internal fun show(entry: BottomSheetOverlayEntry) {
+        val index = sheetEntries.indexOfFirst { it.key === entry.key }
+        if (index >= 0) {
+            sheetEntries[index] = entry
+        } else {
+            sheetEntries += entry
+        }
+    }
+
+    internal fun hide(key: Any) {
+        sheetEntries.removeAll { it.key === key }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+internal data class BottomSheetOverlayEntry(
+    val key: Any,
+    val modifier: Modifier,
+    val sheetState: SheetState,
+    val onDismissRequest: () -> Unit,
+    val content: @Composable ColumnScope.() -> Unit,
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -47,70 +68,62 @@ fun BottomSheet(
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-    sheetMaxWidth: Dp = BottomSheetDefaults.SheetMaxWidth,
-    shape: Shape = AppShapes.sheet,
-    containerColor: Color = Colors.Black,
-    contentColor: Color = contentColorFor(containerColor),
-    tonalElevation: Dp = 0.dp,
-    scrimColor: Color = BottomSheetDefaults.ScrimColor,
-    dragHandle: @Composable (() -> Unit)? = {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(color = Colors.White08)
-        ) {
-            SheetDragHandle()
-        }
-    },
-    contentWindowInsets: @Composable () -> WindowInsets = { BottomSheetDefaults.windowInsets },
-    properties: ModalBottomSheetProperties = ModalBottomSheetDefaults.properties,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val app = appViewModel
-    val modalToastHostState = LocalModalToastHostState.current
-    val toastHost = remember { Any() }
-
-    DisposableEffect(modalToastHostState, toastHost) {
-        modalToastHostState?.register(toastHost)
-        onDispose { modalToastHostState?.unregister(toastHost) }
+    val overlayState = checkNotNull(LocalBottomSheetOverlayState.current) {
+        "BottomSheet must be composed inside BottomSheetOverlayHost"
     }
-
-    val isTopToastHost = modalToastHostState?.isTopHost(toastHost) != false
-
-    ModalBottomSheet(
-        onDismissRequest = onDismissRequest,
+    val sheetKey = remember { Any() }
+    val entry = BottomSheetOverlayEntry(
+        key = sheetKey,
         modifier = modifier.semantics { testTagsAsResourceId = true },
         sheetState = sheetState,
-        sheetMaxWidth = sheetMaxWidth,
-        shape = shape,
-        containerColor = containerColor,
-        contentColor = contentColor,
-        tonalElevation = tonalElevation,
-        scrimColor = scrimColor,
-        dragHandle = dragHandle,
-        contentWindowInsets = contentWindowInsets,
-        properties = properties,
-    ) {
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Column(modifier = Modifier.fillMaxWidth()) {
-                content()
+        onDismissRequest = onDismissRequest,
+        content = content,
+    )
+
+    SideEffect { overlayState.show(entry) }
+    DisposableEffect(overlayState, sheetKey) {
+        onDispose { overlayState.hide(sheetKey) }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BottomSheetOverlayHost(
+    state: BottomSheetOverlayState,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier = modifier.fillMaxSize()) {
+        state.entries.forEach { entry ->
+            key(entry.key) {
+                SheetHost(
+                    shouldExpand = true,
+                    onDismiss = entry.onDismissRequest,
+                    sheetDragHandle = { ModalSheetDragHandle() },
+                    sheetContainerColor = Colors.Black,
+                    sheetState = entry.sheetState,
+                    sheets = {
+                        entry.content(this)
+                    },
+                    content = {},
+                    modifier = entry.modifier,
+                )
             }
-            if (app != null && isTopToastHost) SheetToastPopup(app)
         }
     }
 }
 
 @Composable
-private fun SheetToastPopup(app: AppViewModel) {
-    val currentToast by app.currentToast.collectAsStateWithLifecycle()
-    ToastPopup(
-        toast = currentToast,
-        hazeState = rememberHazeState(blurEnabled = false),
-        onDismiss = app::hideToast,
-        onDragStart = app::pauseToast,
-        onDragEnd = app::resumeToast,
-    )
+private fun ModalSheetDragHandle() {
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(color = Colors.White08)
+    ) {
+        SheetDragHandle()
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -119,8 +132,8 @@ fun BottomSheetPreview(
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    BottomSheet(
-        onDismissRequest = {},
+    SheetHost(
+        shouldExpand = true,
         sheetState = remember {
             SheetState(
                 skipPartiallyExpanded = true,
@@ -129,8 +142,11 @@ fun BottomSheetPreview(
                 velocityThreshold = { 0f },
             )
         },
+        sheetDragHandle = { ModalSheetDragHandle() },
+        sheetContainerColor = Colors.Black,
+        sheets = content,
+        content = {},
         modifier = modifier,
-        content = content,
     )
 }
 
