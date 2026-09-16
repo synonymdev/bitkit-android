@@ -64,7 +64,7 @@ fun TagButton(
             color = textColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            modifier = Modifier
+            modifier = Modifier.weight(1f, fill = false)
         )
 
         if (displayIconClose) {
@@ -124,6 +124,7 @@ private fun Preview() {
             TagButton("Selected With icon close", onClick = {}, isSelected = true, displayIconClose = true)
             TagButton("Not Selected With icon close", onClick = {}, displayIconClose = true)
             TagButton("Icon trash", onClick = {}, displayIconClose = true, icon = painterResource(R.drawable.ic_trash))
+            TagButton("A very long legacy tag that overflows the chip width", onClick = {}, displayIconClose = true)
         }
     }
 }

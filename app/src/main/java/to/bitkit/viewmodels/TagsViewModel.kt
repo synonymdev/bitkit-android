@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import to.bitkit.data.SettingsStore
+import to.bitkit.ext.sanitizeTag
 import javax.inject.Inject
 
 @HiltViewModel
@@ -29,7 +30,7 @@ class TagsViewModel @Inject constructor(
     }
 
     fun onInputUpdated(input: String) {
-        _uiState.update { it.copy(tagInput = input) }
+        _uiState.update { it.copy(tagInput = input.sanitizeTag()) }
     }
 
     fun loadTagSuggestions() {

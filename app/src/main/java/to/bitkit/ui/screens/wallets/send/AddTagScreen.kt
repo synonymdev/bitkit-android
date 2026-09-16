@@ -27,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import to.bitkit.R
+import to.bitkit.ext.sanitizeTag
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
@@ -130,6 +131,7 @@ fun AddTagContent(
                 keyboardActions = KeyboardActions(onDone = {
                     onTagConfirmed(uiState.tagInput)
                 }),
+                inputTransform = String::sanitizeTag,
                 modifier = Modifier
                     .focusRequester(focusRequester)
                     .fillMaxWidth()

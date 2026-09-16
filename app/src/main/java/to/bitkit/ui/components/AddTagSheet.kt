@@ -24,6 +24,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
+import to.bitkit.ext.sanitizeTag
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -110,6 +111,7 @@ private fun TagFormContent(
             placeholder = stringResource(R.string.profile__add_tag_placeholder),
             trailingIcon = { SuggestionsButton(onClick = onShowSuggestions) },
             singleLine = true,
+            inputTransform = String::sanitizeTag,
             modifier = Modifier
                 .fillMaxWidth()
                 .testTag("AddTagInput"),
