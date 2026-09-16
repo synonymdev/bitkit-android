@@ -76,6 +76,9 @@ import to.bitkit.ui.utils.withAccent
 import to.bitkit.viewmodels.RestoreWalletUiState
 import to.bitkit.viewmodels.RestoreWalletViewModel
 
+/** Input containing whitespace is a pasted phrase, which the view model spreads across the word fields. */
+private val WHITESPACE = Regex("\\s")
+
 @Composable
 fun RestoreWalletScreen(
     onBackClick: () -> Unit,
@@ -379,7 +382,7 @@ fun MnemonicInputField(
     OutlinedTextField(
         value = textFieldValue,
         onValueChange = {
-            textFieldValue = it
+            if (!it.text.contains(WHITESPACE)) textFieldValue = it
             onValueChange(it.text)
         },
         textStyle = AppTextStyles.BodySSB,
@@ -405,7 +408,7 @@ fun MnemonicInputField(
             .onPreviewKeyEvent { keyEvent ->
                 if (keyEvent.key == Key.Backspace &&
                     keyEvent.type == KeyEventType.KeyDown &&
-                    value.isEmpty()
+                    textFieldValue.text.isEmpty()
                 ) {
                     onBackspaceInEmpty()
                     true

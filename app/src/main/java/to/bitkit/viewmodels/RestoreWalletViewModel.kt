@@ -48,7 +48,7 @@ class RestoreWalletViewModel @Inject constructor(
 
     fun onChangeWord(index: Int, value: String) {
         if (value.contains(Regex("\\s"))) {
-            handlePastedWords(value)
+            handlePastedWords(index, value)
         } else {
             updateWordValidity(index, value)
             updateSuggestions(value, _uiState.value.focusedIndex)
@@ -103,35 +103,72 @@ class RestoreWalletViewModel @Inject constructor(
 
     fun onScrollComplete() = _uiState.update { it.copy(scrollToFieldIndex = null) }
 
-    private fun handlePastedWords(pastedText: String) = viewModelScope.launch {
+    private fun handlePastedWords(index: Int, pastedText: String) = viewModelScope.launch {
         val separators = Regex("\\s+") // any whitespace chars to account for different sources like password managers
         val pastedWords = pastedText
             .split(separators)
             .filter { it.isNotBlank() }
-        if (pastedWords.size == WORDS_MIN || pastedWords.size == WORDS_MAX) {
-            val invalidIndices = pastedWords.withIndex()
-                .filter { !bip39Service.isValidWord(it.value) }
-                .map { it.index }
-                .toSet()
+        when (pastedWords.size) {
+            0 -> return@launch
+            WORDS_MIN, WORDS_MAX -> replaceAllWords(pastedWords)
+            else -> spreadWords(index, pastedWords)
+        }
+        recomputeValidationState()
+    }
 
-            val newWords = _uiState.value.words.toMutableList().apply {
-                pastedWords.forEachIndexed { index, word -> this[index] = word }
-                for (index in pastedWords.size until WORDS_MAX) {
-                    this[index] = ""
-                }
+    private suspend fun replaceAllWords(pastedWords: List<String>) {
+        val invalidIndices = pastedWords.withIndex()
+            .filter { !bip39Service.isValidWord(it.value) }
+            .map { it.index }
+            .toSet()
+
+        val newWords = _uiState.value.words.toMutableList().apply {
+            pastedWords.forEachIndexed { index, word -> this[index] = word }
+            for (index in pastedWords.size until WORDS_MAX) {
+                this[index] = ""
+            }
+        }
+
+        _uiState.update {
+            it.copy(
+                words = newWords.toImmutableList(),
+                invalidWordIndices = invalidIndices.toImmutableSet(),
+                is24Words = pastedWords.size == WORDS_MAX,
+                shouldDismissKeyboard = invalidIndices.isEmpty(),
+                focusedIndex = null,
+                suggestions = persistentListOf(),
+            )
+        }
+    }
+
+    private suspend fun spreadWords(startIndex: Int, pastedWords: List<String>) {
+        val writtenWords = pastedWords.take(WORDS_MAX - startIndex)
+        val writtenValidity = writtenWords.map { bip39Service.isValidWord(it) }
+        val lastWrittenIndex = startIndex + writtenWords.lastIndex
+
+        _uiState.update { state ->
+            val newWords = state.words.toMutableList()
+            val newInvalidIndices = state.invalidWordIndices.toMutableSet()
+            writtenWords.forEachIndexed { offset, word ->
+                val index = startIndex + offset
+                newWords[index] = word
+                if (writtenValidity[offset]) newInvalidIndices.remove(index) else newInvalidIndices.add(index)
             }
 
-            _uiState.update {
-                it.copy(
-                    words = newWords.toImmutableList(),
-                    invalidWordIndices = invalidIndices.toImmutableSet(),
-                    is24Words = pastedWords.size == WORDS_MAX,
-                    shouldDismissKeyboard = invalidIndices.isEmpty(),
-                    focusedIndex = null,
-                    suggestions = persistentListOf(),
-                )
-            }
-            recomputeValidationState()
+            val is24Words = state.is24Words || lastWrittenIndex >= WORDS_MIN
+            val wordCount = if (is24Words) WORDS_MAX else WORDS_MIN
+            val nextEmptyIndex = (lastWrittenIndex + 1 until wordCount).firstOrNull { newWords[it].isEmpty() }
+                ?: (0 until wordCount).firstOrNull { newWords[it].isEmpty() }
+
+            state.copy(
+                words = newWords.toImmutableList(),
+                invalidWordIndices = newInvalidIndices.toImmutableSet(),
+                is24Words = is24Words,
+                shouldDismissKeyboard = nextEmptyIndex == null && newInvalidIndices.isEmpty(),
+                focusedIndex = nextEmptyIndex,
+                scrollToFieldIndex = nextEmptyIndex ?: lastWrittenIndex,
+                suggestions = persistentListOf(),
+            )
         }
     }
 
