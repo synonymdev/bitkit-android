@@ -43,6 +43,7 @@ import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.ui.components.AuthCheckView
+import to.bitkit.ui.components.BottomSheetOverlayHost
 import to.bitkit.ui.components.BottomSheetOverlayState
 import to.bitkit.ui.components.IsOnlineTracker
 import to.bitkit.ui.components.ToastOverlay
@@ -127,6 +128,7 @@ class MainActivity : FragmentActivity() {
                 val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
                 val hazeState = rememberHazeState(blurEnabled = true)
                 val bottomSheetOverlayState = remember { BottomSheetOverlayState() }
+                val authSheetOverlayState = remember { BottomSheetOverlayState() }
 
                 LaunchedEffect(
                     walletExists,
@@ -185,13 +187,15 @@ class MainActivity : FragmentActivity() {
 
                     val showForgotPinSheet by appViewModel.showForgotPinSheet.collectAsStateWithLifecycle()
                     if (showForgotPinSheet) {
-                        CompositionLocalProvider(LocalBottomSheetOverlayState provides bottomSheetOverlayState) {
+                        CompositionLocalProvider(LocalBottomSheetOverlayState provides authSheetOverlayState) {
                             ForgotPinSheet(
                                 onDismiss = { appViewModel.setShowForgotPin(false) },
                                 onResetClick = { walletViewModel.wipeWallet() },
                             )
                         }
                     }
+
+                    BottomSheetOverlayHost(state = authSheetOverlayState)
 
                     LaunchedEffect(appViewModel) {
                         appViewModel.mainScreenEffect.collect {
