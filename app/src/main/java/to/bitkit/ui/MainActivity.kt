@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -23,6 +24,9 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.IntentCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -148,6 +152,20 @@ class MainActivity : FragmentActivity() {
                 }
 
                 if (isCriticalUpdateRequired) {
+                    val lifecycle = LocalLifecycleOwner.current.lifecycle
+                    DisposableEffect(lifecycle, walletExists, isRecoveryMode, notificationsGranted, keepActive) {
+                        val observer = LifecycleEventObserver { _, event ->
+                            if (event != Lifecycle.Event.ON_STOP) return@LifecycleEventObserver
+                            val keptAliveByService = notificationsGranted &&
+                                keepActive &&
+                                appViewModel.isForegroundServiceRunning()
+                            if (walletExists && !isRecoveryMode && !keptAliveByService) {
+                                walletViewModel.stop()
+                            }
+                        }
+                        lifecycle.addObserver(observer)
+                        onDispose { lifecycle.removeObserver(observer) }
+                    }
                     CriticalUpdateScreen()
                 } else if (isShowingMigrationLoading && !isRecoveryMode) {
                     MigrationLoadingScreen(isVisible = true)
