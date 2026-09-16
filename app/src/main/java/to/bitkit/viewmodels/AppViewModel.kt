@@ -2064,6 +2064,15 @@ class AppViewModel @Inject constructor(
             return
         }
 
+        if (invoice.isOwnInvoice()) {
+            showAddressValidationError(
+                titleRes = R.string.other__pay_self_invoice_title,
+                descriptionRes = R.string.other__pay_self_invoice_description,
+                testTag = "SelfPaymentToast",
+            )
+            return
+        }
+
         if (invoice.amountSatoshis > 0uL) {
             lightningRepo.syncState()
             if (!lightningRepo.canSend(invoice.amountSatoshis)) {
@@ -2167,6 +2176,13 @@ class AppViewModel @Inject constructor(
                         )
                         return@takeIf false
                     }
+                    if (lnInv.isOwnInvoice()) {
+                        Logger.debug(
+                            "Skipped own lightning invoice in unified URI, defaulting to onchain",
+                            context = TAG,
+                        )
+                        return@takeIf false
+                    }
                     lightningRepo.waitForUsableChannels()
                     val canSend = lightningRepo.canSend(lnInv.amountSatoshis.coerceAtLeast(1u))
                     if (!canSend) {
@@ -2186,6 +2202,12 @@ class AppViewModel @Inject constructor(
                     return@takeIf canSend
                 }
         }
+
+    private fun LightningInvoice.isOwnInvoice(): Boolean {
+        val payee = payeeNodeId?.toHex()?.lowercase() ?: return false
+        val nodeId = lightningRepo.getNodeId()?.lowercase() ?: return false
+        return payee == nodeId
+    }
 
     private fun showAddressValidationError(
         @StringRes titleRes: Int,
@@ -3393,7 +3415,7 @@ class AppViewModel @Inject constructor(
         else -> SendFundingSource.Savings
     }
 
-    @Suppress("ReturnCount")
+    @Suppress("LongMethod", "ReturnCount")
     private suspend fun onScanLightning(
         invoice: LightningInvoice,
         scanResult: String,
@@ -3407,6 +3429,11 @@ class AppViewModel @Inject constructor(
                 description = context.getString(R.string.other__scan__error__expired),
                 testTag = "ExpiredLightningToast",
             )
+            return
+        }
+
+        if (invoice.isOwnInvoice()) {
+            rejectOwnInvoiceScan()
             return
         }
 
@@ -3460,6 +3487,17 @@ class AppViewModel @Inject constructor(
         Logger.info("No amount found in invoice, proceeding to enter amount", context = TAG)
 
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
+    }
+
+    private fun rejectOwnInvoiceScan() {
+        toast(
+            type = Toast.ToastType.ERROR,
+            title = context.getString(R.string.other__pay_self_invoice_title),
+            description = context.getString(R.string.other__pay_self_invoice_description),
+            testTag = "SelfPaymentToast",
+        )
+        clearActiveContactPaymentContext(retryIncomingRequest = false)
+        hideSheet()
     }
 
     private suspend fun onScanLnurlPay(data: LnurlPayData, fromMainScanner: Boolean) {
