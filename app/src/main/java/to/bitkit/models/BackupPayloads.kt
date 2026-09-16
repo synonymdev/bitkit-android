@@ -34,6 +34,8 @@ data class MetadataBackupV1(
     val cache: AppCacheData,
     val pubkySession: PubkySessionBackupV1? = null,
     val pubkyContactProfileOverrides: Map<String, PubkyProfileData>? = null,
+    /** User-set hardware wallet names, keyed by wallet id. Null in envelopes written before this field. */
+    val hwWalletNames: Map<String, String>? = null,
 )
 
 @Serializable

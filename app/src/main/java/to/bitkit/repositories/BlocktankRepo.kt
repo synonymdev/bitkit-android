@@ -1,6 +1,7 @@
 package to.bitkit.repositories
 
 import androidx.compose.runtime.Stable
+import com.synonym.bitkitcore.AddressType
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.CJitStateEnum
 import com.synonym.bitkitcore.ChannelLiquidityOptions
@@ -27,6 +28,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -41,6 +43,8 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -49,16 +53,21 @@ import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import to.bitkit.async.ServiceQueue
 import to.bitkit.async.appScope
+import to.bitkit.data.BlocktankRefundAddress
 import to.bitkit.data.CacheStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.calculateRemoteBalance
 import to.bitkit.ext.nowTimestamp
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BlocktankBackupV1
+import to.bitkit.models.CjitQuoteValidator
 import to.bitkit.models.EUR
 import to.bitkit.models.msatCeilOf
+import to.bitkit.models.safe
 import to.bitkit.services.CoreService
 import to.bitkit.services.LightningService
+import to.bitkit.utils.AppError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import java.math.BigDecimal
@@ -82,6 +91,7 @@ class BlocktankRepo @Inject constructor(
     private val lightningRepo: LightningRepo,
 ) {
     private val repoScope = appScope(bgDispatcher, TAG)
+    private val refundAddressMutex = Mutex()
 
     private val _blocktankState = MutableStateFlow(BlocktankState())
     val blocktankState: StateFlow<BlocktankState> = _blocktankState.asStateFlow()
@@ -249,11 +259,18 @@ class BlocktankRepo @Inject constructor(
         amountSats: ULong,
         description: String = "",
     ): Result<IcJitEntry> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
             val nodeId = lightningService.nodeId ?: throw ServiceError.NodeNotStarted()
+            val maxChannelSizeSat = freshMaxChannelSizeSat()
+            if (maxChannelSizeSat != null && amountSats > maxChannelSizeSat) {
+                throw ServiceError.ChannelSizeExceedsMaximum()
+            }
             val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
-            val channelSizeSat = amountSats + lspBalance
+            if (!canFitChannelSize(amountSats, lspBalance)) {
+                throw ServiceError.ChannelSizeExceedsMaximum()
+            }
+            val channelSizeSat = amountSats.safe() + lspBalance.safe()
 
             val cjitEntry = coreService.blocktank.createCjit(
                 channelSizeSat = channelSizeSat,
@@ -263,12 +280,43 @@ class BlocktankRepo @Inject constructor(
                 channelExpiryWeeks = DEFAULT_CHANNEL_EXPIRY_WEEKS,
                 options = CreateCjitOptions(source = DEFAULT_SOURCE, discountCode = null)
             )
+            CjitQuoteValidator.validate(
+                invoiceSat = amountSats,
+                feeSat = cjitEntry.feeSat,
+                channelSizeSat = cjitEntry.channelSizeSat,
+            ).getOrThrow()
 
             repoScope.launch { refreshOrders() }
 
-            return@runCatching cjitEntry
-        }.onFailure {
+            return@runSuspendCatching cjitEntry
+        }.fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { Result.failure(it.toCjitError()) },
+        ).onFailure {
             Logger.error("Failed to create CJIT", it, context = TAG)
+        }
+    }
+
+    suspend fun maxCjitAmountSats(): Result<ULong?> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val maxChannelSizeSat = freshMaxChannelSizeSat() ?: return@runSuspendCatching null
+            var lowerBound = 0uL
+            var upperBound = maxChannelSizeSat
+
+            while (lowerBound < upperBound) {
+                val distance = upperBound.safe() - lowerBound.safe()
+                val step = (distance.safe() + 1uL.safe()) / 2uL
+                val candidate = lowerBound.safe() + step.safe()
+                if (canCreateCjit(candidate, maxChannelSizeSat)) {
+                    lowerBound = candidate
+                } else {
+                    upperBound = candidate - 1uL
+                }
+            }
+
+            lowerBound
+        }.onFailure {
+            Logger.error("Failed to calculate max CJIT amount", it, context = TAG)
         }
     }
 
@@ -277,16 +325,25 @@ class BlocktankRepo @Inject constructor(
         receivingBalanceSats: ULong = spendingBalanceSats * 2u,
         channelExpiryWeeks: UInt = DEFAULT_CHANNEL_EXPIRY_WEEKS,
     ): Result<IBtOrder> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             if (coreService.isGeoBlocked()) throw ServiceError.GeoBlocked()
+            if (lightningService.nodeId == null) throw ServiceError.NodeNotStarted()
 
-            val options = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
+            currentCoroutineContext().ensureActive()
+            val refundAddress = getBlocktankRefundAddress()
+            currentCoroutineContext().ensureActive()
+            val baseOptions = defaultCreateOrderOptions(clientBalanceSat = spendingBalanceSats)
+            val options = baseOptions.copy(refundOnchainAddress = refundAddress)
+            currentCoroutineContext().ensureActive()
 
             Logger.info(
                 "Buying channel with " +
+                    "clientBalanceSat: '$spendingBalanceSats', " +
                     "lspBalanceSat: '$receivingBalanceSats', " +
                     "channelExpiryWeeks: '$channelExpiryWeeks', " +
-                    "options: '$options'",
+                    "zeroConf: '${options.zeroConf}', " +
+                    "zeroReserve: '${options.zeroReserve}', " +
+                    "announceChannel: '${options.announceChannel}'",
                 context = TAG,
             )
 
@@ -298,10 +355,61 @@ class BlocktankRepo @Inject constructor(
 
             repoScope.launch { refreshOrders() }
 
-            return@runCatching order
+            return@runSuspendCatching order
         }.onFailure {
             Logger.error("Failed to create order", it, context = TAG)
         }
+    }
+
+    private suspend fun getBlocktankRefundAddress(): String = refundAddressMutex.withLock {
+        val cached = cacheStore.data.first().blocktankRefundAddress
+        if (cached == null) return@withLock allocateBlocktankRefundAddress()
+
+        if (cached.index !in 0..Int.MAX_VALUE.toLong()) {
+            throw AppError("Invalid cached Blocktank refund address index")
+        }
+        if (cached.address.isBlank()) {
+            throw AppError("Invalid cached Blocktank refund address")
+        }
+
+        val index = cached.index.toInt()
+        val derived = lightningRepo.addressInfoForType(AddressType.P2WPKH, index).getOrThrow()
+        if (derived.index != index || derived.address != cached.address) {
+            throw AppError("Cached Blocktank refund address does not belong to the active wallet")
+        }
+
+        lightningRepo.revealReceiveAddresses(index, AddressType.P2WPKH).getOrThrow()
+        if (!coreService.isAddressUsed(cached.address)) return@withLock cached.address
+
+        allocateBlocktankRefundAddress(afterIndex = index)
+    }
+
+    private suspend fun allocateBlocktankRefundAddress(afterIndex: Int? = null): String {
+        var previousIndex = afterIndex
+        repeat(REFUND_ADDRESS_ALLOCATION_LIMIT) {
+            val derived = lightningRepo.newAddressInfoForType(AddressType.P2WPKH).getOrThrow()
+            val lastIndex = previousIndex
+            val hasInvalidIndex = derived.index !in 0..Int.MAX_VALUE
+            val didNotAdvance = lastIndex != null && derived.index <= lastIndex
+            if (hasInvalidIndex || derived.address.isBlank() || didNotAdvance) {
+                throw AppError("Failed to allocate a valid advancing Blocktank refund address")
+            }
+            previousIndex = derived.index
+
+            if (coreService.isAddressUsed(derived.address)) return@repeat
+
+            cacheStore.update {
+                it.copy(
+                    blocktankRefundAddress = BlocktankRefundAddress(
+                        address = derived.address,
+                        index = derived.index.toLong(),
+                    ),
+                )
+            }
+            return derived.address
+        }
+
+        throw AppError("Failed to allocate an unused Blocktank refund address")
     }
 
     suspend fun estimateOrderFee(
@@ -407,6 +515,30 @@ class BlocktankRepo @Inject constructor(
         )
 
         return@withContext getDefaultLspBalance(params)
+    }
+
+    private suspend fun freshMaxChannelSizeSat(): ULong? {
+        refreshInfo()
+
+        return _blocktankState.value.info?.options?.maxChannelSizeSat?.takeIf { it > 0uL }
+    }
+
+    private suspend fun canCreateCjit(amountSats: ULong, maxChannelSizeSat: ULong): Boolean {
+        if (amountSats > maxChannelSizeSat) return false
+
+        val lspBalance = getDefaultLspBalance(clientBalance = amountSats)
+        val remainingCapacity = maxChannelSizeSat.safe() - amountSats.safe()
+        return lspBalance <= remainingCapacity
+    }
+
+    private fun canFitChannelSize(amountSats: ULong, lspBalance: ULong): Boolean {
+        val maxChannelSizeSat = _blocktankState.value.info?.options?.maxChannelSizeSat?.takeIf { it > 0uL }
+            ?: return true
+
+        if (amountSats > maxChannelSizeSat) return false
+
+        val remainingCapacity = maxChannelSizeSat.safe() - amountSats.safe()
+        return lspBalance <= remainingCapacity
     }
 
     fun calculateLiquidityOptions(clientBalanceSat: ULong): Result<ChannelLiquidityOptions> {
@@ -589,6 +721,7 @@ class BlocktankRepo @Inject constructor(
 
     companion object {
         private const val TAG = "BlocktankRepo"
+        private const val REFUND_ADDRESS_ALLOCATION_LIMIT = 20
         private const val DEFAULT_CHANNEL_EXPIRY_WEEKS = 6u
         private const val DEFAULT_SOURCE = "bitkit-android"
         private const val PEER_CONNECTION_DELAY_MS = 2_000L
@@ -598,6 +731,35 @@ class BlocktankRepo @Inject constructor(
         private val CJIT_REFRESH_TIMEOUT = 5.seconds
         private val CJIT_REFRESH_RETRY_DELAY = 1.seconds
     }
+}
+
+internal fun Throwable.toCjitError(): Throwable {
+    if (this is ServiceError.ChannelSizeExceedsMaximum ||
+        this is ServiceError.CjitQuoteInvalid ||
+        this is ServiceError.NodeCapacityUnavailable
+    ) {
+        return this
+    }
+
+    return when {
+        isNodeCapacityError() -> ServiceError.NodeCapacityUnavailable()
+        isMaxChannelSizeError() -> ServiceError.ChannelSizeExceedsMaximum()
+        else -> this
+    }
+}
+
+private fun Throwable.isNodeCapacityError(): Boolean {
+    return toString().contains("capacity is above our capacity limit", ignoreCase = true)
+}
+
+private fun Throwable.isMaxChannelSizeError(): Boolean {
+    val description = toString()
+    val maximumErrors = listOf(
+        "Channel size is too big",
+        "channelSizeExceedsMaximum",
+        "maxChannelSizeSat",
+    )
+    return maximumErrors.any { description.contains(it, ignoreCase = true) }
 }
 
 @Stable

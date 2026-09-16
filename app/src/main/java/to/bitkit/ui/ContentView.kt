@@ -18,6 +18,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,8 +60,11 @@ import to.bitkit.env.Env
 import to.bitkit.ext.rawId
 import to.bitkit.ext.walletId
 import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.Toast
 import to.bitkit.repositories.ConnectivityState
+import to.bitkit.repositories.PaykitPaymentRequestId
+import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.ui.Routes.ExternalConnection
 import to.bitkit.ui.components.AuthCheckScreen
 import to.bitkit.ui.components.DefaultSheetContainerColor
@@ -91,6 +95,8 @@ import to.bitkit.ui.screens.contacts.ContactsViewModel
 import to.bitkit.ui.screens.contacts.EditContactScreen
 import to.bitkit.ui.screens.contacts.EditContactViewModel
 import to.bitkit.ui.screens.contacts.shouldDiscardPendingImport
+import to.bitkit.ui.screens.paymentrequests.IncomingPaymentRequestDetailsScreen
+import to.bitkit.ui.screens.paymentrequests.PaymentRequestsSheet
 import to.bitkit.ui.screens.profile.CreateProfileScreen
 import to.bitkit.ui.screens.profile.CreateProfileViewModel
 import to.bitkit.ui.screens.profile.EditProfileScreen
@@ -114,6 +120,10 @@ import to.bitkit.ui.screens.settings.VssDebugScreen
 import to.bitkit.ui.screens.shop.ShopIntroScreen
 import to.bitkit.ui.screens.shop.shopDiscover.ShopDiscoverScreen
 import to.bitkit.ui.screens.shop.shopWebView.ShopWebViewScreen
+import to.bitkit.ui.screens.subscriptions.CreateSubscriptionSheet
+import to.bitkit.ui.screens.subscriptions.SubscriptionDetailScreen
+import to.bitkit.ui.screens.subscriptions.SubscriptionSheet
+import to.bitkit.ui.screens.subscriptions.SubscriptionsScreen
 import to.bitkit.ui.screens.transfer.FundingAdvancedScreen
 import to.bitkit.ui.screens.transfer.FundingScreen
 import to.bitkit.ui.screens.transfer.LiquidityScreen
@@ -150,6 +160,7 @@ import to.bitkit.ui.screens.wallets.activity.DateRangeSelectorSheet
 import to.bitkit.ui.screens.wallets.activity.TagSelectorSheet
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.screens.wallets.receive.ReceiveSheet
+import to.bitkit.ui.screens.wallets.send.HwSendViewModel
 import to.bitkit.ui.screens.wallets.suggestion.BuyIntroScreen
 import to.bitkit.ui.screens.widgets.WidgetsIntroScreen
 import to.bitkit.ui.settings.BackupSettingsScreen
@@ -309,6 +320,10 @@ fun ContentView(
 
     LaunchedEffect(Unit) { walletViewModel.handleHideBalanceOnOpen() }
 
+    LaunchedEffect(notificationsGranted) {
+        appViewModel.synchronizeSubscriptionNotifications(notificationsGranted)
+    }
+
     val pendingScreenDeepLink by appViewModel.pendingScreenDeepLink.collectAsStateWithLifecycle()
 
     LaunchedEffect(pendingScreenDeepLink) {
@@ -445,12 +460,21 @@ fun ContentView(
         val hasSeenWidgetsIntro by settingsViewModel.hasSeenWidgetsIntro.collectAsStateWithLifecycle()
         val hasSeenShopIntro by settingsViewModel.hasSeenShopIntro.collectAsStateWithLifecycle()
         val hasSeenProfileIntro by settingsViewModel.hasSeenProfileIntro.collectAsStateWithLifecycle()
+        val isPubkyProfileSetupPending by settingsViewModel.isPubkyProfileSetupPending.collectAsStateWithLifecycle()
         val hasSeenContactsIntro by settingsViewModel.hasSeenContactsIntro.collectAsStateWithLifecycle()
         val isProfileAuthenticated by settingsViewModel.isPubkyAuthenticated.collectAsStateWithLifecycle()
         val hasPubkyContacts by settingsViewModel.hasPubkyContacts.collectAsStateWithLifecycle()
         val isPaykitEnabled by settingsViewModel.isPaykitEnabled.collectAsStateWithLifecycle()
         val showWidgets by settingsViewModel.showWidgets.collectAsStateWithLifecycle()
         val currentSheet by appViewModel.currentSheet.collectAsStateWithLifecycle()
+        val isCreatingPaymentRequest by appViewModel.isCreatingPaymentRequest.collectAsStateWithLifecycle()
+        val hwSendViewModel = hiltViewModel<HwSendViewModel>()
+        val hwSendUiState by hwSendViewModel.uiState.collectAsStateWithLifecycle()
+        val canDismissSheet = currentSheet !is Sheet.Send ||
+            (!hwSendUiState.isSigning && !hwSendUiState.isBroadcastUnresolved)
+        val isAcceptingSubscription by appViewModel.isAcceptingSubscription.collectAsStateWithLifecycle()
+        val isRetryingInitialSubscriptionPayment by
+            appViewModel.isRetryingInitialSubscriptionPayment.collectAsStateWithLifecycle()
         var homeWalletPageRequest by remember { mutableIntStateOf(0) }
         var homeWidgetsPageRequest by remember { mutableIntStateOf(0) }
         val navigateToHomeWallet = {
@@ -474,6 +498,12 @@ fun ContentView(
             SheetHost(
                 shouldExpand = currentSheet != null,
                 onDismiss = { appViewModel.hideSheet() },
+                visibilityKey = currentSheet,
+                onVisible = { appViewModel.onSheetVisible(currentSheet) },
+                dismissEnabled = !isCreatingPaymentRequest &&
+                    !isAcceptingSubscription &&
+                    !isRetryingInitialSubscriptionPayment &&
+                    canDismissSheet,
                 sheetHandlePlacement = when (currentSheet) {
                     is Sheet.Widgets -> SheetHandlePlacement.ContentOverlay
                     else -> SheetHandlePlacement.ScaffoldSlot
@@ -490,22 +520,46 @@ fun ContentView(
                                 appViewModel = appViewModel,
                                 walletViewModel = walletViewModel,
                                 startDestination = sheet.route,
+                                hardwareWalletId = sheet.hardwareWalletId,
+                                hwSendViewModel = hwSendViewModel,
                             )
                         }
 
                         is Sheet.Receive -> {
                             val walletState by walletViewModel.walletState.collectAsStateWithLifecycle()
                             val connectivityState by appViewModel.isOnline.collectAsStateWithLifecycle()
-                            ReceiveSheet(
-                                startRoute = sheet.route,
-                                walletState = walletState,
-                                isOffline = connectivityState != ConnectivityState.CONNECTED,
-                                navigateToExternalConnection = {
-                                    navController.navigateTo(ExternalConnection())
-                                    appViewModel.hideSheet()
-                                },
-                            )
+
+                            key(receiveSheetPresentationKey(sheet)) {
+                                ReceiveSheet(
+                                    appViewModel = appViewModel,
+                                    startRoute = sheet.route,
+                                    hardwareWalletId = sheet.hardwareWalletId,
+                                    walletState = walletState,
+                                    isOffline = connectivityState != ConnectivityState.CONNECTED,
+                                    navigateToExternalConnection = {
+                                        navController.navigateTo(ExternalConnection())
+                                        appViewModel.hideSheet()
+                                    },
+                                )
+                            }
                         }
+
+                        Sheet.PaymentRequests -> PaymentRequestsSheet(
+                            appViewModel = appViewModel,
+                            onNotNow = appViewModel::hideSheet,
+                            onSeeAll = {
+                                appViewModel.hideSheet()
+                                navController.navigateTo(Routes.Subscriptions(showPayments = true))
+                            },
+                            onDetails = {
+                                appViewModel.hideSheet()
+                                navController.navigateTo(it.toRoute())
+                            },
+                        )
+
+                        Sheet.CreateSubscription -> CreateSubscriptionSheet(appViewModel)
+
+                        is Sheet.Subscription -> SubscriptionSheet(appViewModel, sheet.route)
 
                         is Sheet.ActivityDateRangeSelector -> DateRangeSelectorSheet()
                         is Sheet.ActivityTagSelector -> TagSelectorSheet()
@@ -598,6 +652,7 @@ fun ContentView(
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     var isHomeCalculatorInputActive by remember { mutableStateOf(false) }
+                    val pubkyProfileSetupNavigation = remember { PubkyProfileSetupNavigation() }
 
                     RootNavHost(
                         navController = navController,
@@ -618,6 +673,29 @@ fun ContentView(
 
                     val navBackStackEntry by navController.currentBackStackEntryAsState()
                     val currentRoute = navBackStackEntry?.destination?.route
+                    LaunchedEffect(
+                        isPaykitEnabled,
+                        isPubkyProfileSetupPending,
+                        isProfileAuthenticated,
+                        currentSheet,
+                        currentRoute,
+                    ) {
+                        val canNavigate = currentSheet == null &&
+                            currentRoute != Routes.CreateProfile::class.qualifiedName
+                        if (pubkyProfileSetupNavigation.shouldNavigate(
+                                isEnabled = isPaykitEnabled,
+                                isPending = isPubkyProfileSetupPending,
+                                isAuthenticated = isProfileAuthenticated,
+                                canNavigate = canNavigate,
+                            )
+                        ) {
+                            navController.navigateTo(Routes.CreateProfile)
+                        }
+                    }
+                    val currentHardwareWalletId = navBackStackEntry
+                        ?.takeIf { it.destination.hasRoute<Routes.HardwareWallet>() }
+                        ?.toRoute<Routes.HardwareWallet>()
+                        ?.walletId
                     val showTabBar = currentRoute in listOf(
                         Routes.Home::class.qualifiedName,
                         Routes.AllActivity::class.qualifiedName,
@@ -636,8 +714,12 @@ fun ContentView(
                     if (showTabBar) {
                         TabBar(
                             isVisible = !hideTabBarForCalculator,
-                            onSendClick = { appViewModel.showSheet(Sheet.Send()) },
-                            onReceiveClick = { appViewModel.showSheet(Sheet.Receive()) },
+                            onSendClick = {
+                                appViewModel.showSheet(Sheet.Send(hardwareWalletId = currentHardwareWalletId))
+                            },
+                            onReceiveClick = {
+                                appViewModel.showSheet(Sheet.Receive(hardwareWalletId = currentHardwareWalletId))
+                            },
                             onScanClick = { appViewModel.showScannerSheet() },
                         )
                     }
@@ -666,6 +748,26 @@ fun ContentView(
                 modifier = Modifier.align(Alignment.TopEnd)
             )
         }
+    }
+}
+
+internal class PubkyProfileSetupNavigation {
+    private var didResume = false
+
+    fun shouldNavigate(
+        isEnabled: Boolean,
+        isPending: Boolean,
+        isAuthenticated: Boolean,
+        canNavigate: Boolean,
+    ): Boolean {
+        if (!isPending) {
+            didResume = false
+            return false
+        }
+        if (didResume) return false
+        if (!isEnabled || !isAuthenticated || !canNavigate) return false
+        didResume = true
+        return true
     }
 }
 
@@ -711,6 +813,54 @@ private fun RootNavHost(
             activityListViewModel = activityListViewModel,
             navController = navController,
         )
+        composableWithDefaultTransitions<Routes.Subscriptions> { backStackEntry ->
+            PaykitRouteGuard(settingsViewModel, navController) {
+                val route = backStackEntry.toRoute<Routes.Subscriptions>()
+                SubscriptionsScreen(
+                    appViewModel = appViewModel,
+                    onBack = { navController.popBackStack() },
+                    onRequestPayment = {
+                        appViewModel.showSheet(Sheet.Receive(route = ReceiveRoute.PaymentRequestRecipient))
+                    },
+                    onCreateSubscription = appViewModel::showSubscriptionCreator,
+                    onDetails = {
+                        navController.navigateTo(
+                            Routes.SubscriptionDetail(
+                                paymentRequestId = it.paymentRequestId,
+                                counterparty = it.counterparty,
+                                counterpartyReceiverPath = it.counterpartyReceiverPath,
+                            )
+                        )
+                    },
+                    onPaymentRequestDetails = { navController.navigateTo(it.toRoute()) },
+                    showPayments = route.showPayments,
+                )
+            }
+        }
+        composableWithDefaultTransitions<Routes.SubscriptionDetail> { backStackEntry ->
+            PaykitRouteGuard(settingsViewModel, navController) {
+                val route = backStackEntry.toRoute<Routes.SubscriptionDetail>()
+                SubscriptionDetailScreen(
+                    appViewModel = appViewModel,
+                    id = PaykitSubscriptionId(
+                        paymentRequestId = route.paymentRequestId,
+                        counterparty = route.counterparty,
+                        counterpartyReceiverPath = route.counterpartyReceiverPath,
+                    ),
+                    onBack = { navController.popBackStack() },
+                )
+            }
+        }
+        composableWithDefaultTransitions<Routes.PaymentRequestDetails> { backStackEntry ->
+            PaykitRouteGuard(settingsViewModel, navController) {
+                val route = backStackEntry.toRoute<Routes.PaymentRequestDetails>()
+                IncomingPaymentRequestDetailsScreen(
+                    appViewModel = appViewModel,
+                    id = route.toId(),
+                    onBack = { navController.popBackStack() },
+                )
+            }
+        }
         settings(navController, settingsViewModel)
         contacts(navController, settingsViewModel, appViewModel)
         profile(navController, settingsViewModel)
@@ -1240,6 +1390,10 @@ private fun NavGraphBuilder.contacts(
         PaykitRouteGuard(settingsViewModel, navController) {
             val route = backStackEntry.toRoute<Routes.ContactDetail>()
             val viewModel: ContactDetailViewModel = hiltViewModel()
+            val paymentRequestTargets by appViewModel.eligiblePaymentRequestTargets.collectAsStateWithLifecycle()
+            val paymentRequestTarget = paymentRequestTargets.firstOrNull {
+                PubkyPublicKeyFormat.matches(it.publicKey, route.publicKey)
+            }
             ContactDetailScreen(
                 viewModel = viewModel,
                 onBackClick = { navController.popBackStack() },
@@ -1247,6 +1401,19 @@ private fun NavGraphBuilder.contacts(
                     appViewModel.openContactPayment(paymentRequest, publicKey, privatePaymentContext)
                 },
                 onActivityClick = { navController.navigateTo(Routes.ContactActivity(it)) },
+                canRequestPayment = paymentRequestTarget != null,
+                onRequestPayment = {
+                    paymentRequestTarget?.let {
+                        appViewModel.showSheet(
+                            Sheet.Receive(
+                                route = ReceiveRoute.PaymentRequestAmount(
+                                    publicKey = it.publicKey,
+                                    receiverPath = it.receiverPath,
+                                )
+                            )
+                        )
+                    }
+                },
                 showDeleteAction = route.showDeleteAction,
                 onContactDeleted = {
                     navController.navigateTo(Routes.Contacts()) { popUpTo(Routes.Home) }
@@ -1455,7 +1622,7 @@ private fun NavGraphBuilder.shop(
             page = it.toRoute<Routes.ShopWebView>().page,
             title = it.toRoute<Routes.ShopWebView>().title,
             onPaymentIntent = { data ->
-                appViewModel.onScanResult(data)
+                appViewModel.onScanResult(data, allowPubkyAuth = false)
             },
             onBlockedNavigation = {
                 appViewModel.toast(
@@ -1923,6 +2090,8 @@ fun NavController.navigateToTransferSpendingStart(
 internal fun shouldDismissSheetForScreenLink(handled: Boolean, currentSheet: Sheet?): Boolean =
     handled && currentSheet != null
 
+internal fun receiveSheetPresentationKey(sheet: Sheet.Receive): String = sheet.presentationId
+
 internal fun transferEffectDestination(effect: TransferEffect): Routes? = when (effect) {
     TransferEffect.OnHwTxSigned -> Routes.SpendingHwSigned
     TransferEffect.OnSpendingFundingPaid -> Routes.SettingUp
@@ -1972,6 +2141,20 @@ fun NavController.navigateToTagsSettings() = navigateTo(Routes.TagsSettings)
 fun NavController.navigateToLanguageSettings() = navigateTo(Routes.LanguageSettings)
 
 // endregion
+
+private fun PaykitPaymentRequestId.toRoute() = Routes.PaymentRequestDetails(
+    paymentRequestId = paymentRequestId,
+    counterparty = counterparty,
+    counterpartyReceiverPath = counterpartyReceiverPath,
+    billingPeriodStartsAt = billingPeriodStartsAt,
+)
+
+private fun Routes.PaymentRequestDetails.toId() = PaykitPaymentRequestId(
+    paymentRequestId = paymentRequestId,
+    counterparty = counterparty,
+    counterpartyReceiverPath = counterpartyReceiverPath,
+    billingPeriodStartsAt = billingPeriodStartsAt,
+)
 
 @Stable
 sealed interface Routes {
@@ -2292,6 +2475,24 @@ sealed interface Routes {
 
     @Serializable
     data object AllActivity : Routes.DeepLinkable
+
+    @Serializable
+    data class Subscriptions(val showPayments: Boolean = false) : Routes.InternalOnly
+
+    @Serializable
+    data class SubscriptionDetail(
+        val paymentRequestId: String,
+        val counterparty: String,
+        val counterpartyReceiverPath: String,
+    ) : Routes.InternalOnly
+
+    @Serializable
+    data class PaymentRequestDetails(
+        val paymentRequestId: String,
+        val counterparty: String,
+        val counterpartyReceiverPath: String,
+        val billingPeriodStartsAt: String? = null,
+    ) : Routes.InternalOnly
 
     @Serializable
     data object Trezor : Routes.DeepLinkable

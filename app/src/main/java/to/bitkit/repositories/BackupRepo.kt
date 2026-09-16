@@ -31,11 +31,13 @@ import to.bitkit.R
 import to.bitkit.async.appScope
 import to.bitkit.data.AppDb
 import to.bitkit.data.CacheStore
+import to.bitkit.data.HwWalletStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.WatchOnlyAccountStore
 import to.bitkit.data.WidgetsStore
 import to.bitkit.data.backup.VssBackupClient
 import to.bitkit.data.backup.VssBackupClientLdk
+import to.bitkit.data.hwWalletNames
 import to.bitkit.data.resetPin
 import to.bitkit.di.IoDispatcher
 import to.bitkit.di.json
@@ -91,6 +93,7 @@ class BackupRepo @Inject constructor(
     private val widgetsStore: WidgetsStore,
     private val watchOnlyAccountStore: WatchOnlyAccountStore,
     private val watchOnlyAccountRepo: WatchOnlyAccountRepo,
+    private val hwWalletStore: HwWalletStore,
     private val blocktankRepo: BlocktankRepo,
     private val activityRepo: ActivityRepo,
     private val pubkyRepo: PubkyRepo,
@@ -119,6 +122,7 @@ class BackupRepo @Inject constructor(
     val isRestoring: StateFlow<Boolean> = _isRestoring.asStateFlow()
 
     private val _isWiping = MutableStateFlow(false)
+    val isWiping: StateFlow<Boolean> = _isWiping.asStateFlow()
 
     fun reset() {
         stopObservingBackups()
@@ -137,6 +141,10 @@ class BackupRepo @Inject constructor(
 
     fun startObservingBackups() {
         if (isObserving) return
+        if (_isWiping.value) {
+            Logger.debug("Skipped observing backups while wiping", context = TAG)
+            return
+        }
 
         isObserving = true
         Logger.debug("Start observing backup statuses and data store changes", context = TAG)
@@ -297,6 +305,20 @@ class BackupRepo @Inject constructor(
                 }
         }
         dataListenerJobs.add(preActivityMetadataJob)
+
+        // METADATA - Observe hardware wallet names only: the store is also rewritten by every connect,
+        // and reconnect traffic must not re-upload the whole metadata envelope.
+        val hwWalletNamesJob = scope.launch {
+            hwWalletStore.data
+                .map { it.hwWalletNames() }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect {
+                    if (shouldSkipBackup()) return@collect
+                    markBackupRequired(BackupCategory.METADATA)
+                }
+        }
+        dataListenerJobs.add(hwWalletNamesJob)
 
         dataListenerJobs.add(observeBackupChanges(pubkyRepo.backupStateVersion, BackupCategory.METADATA))
         dataListenerJobs.add(observeBackupChanges(privatePaykitRepo.get().backupStateVersion, BackupCategory.WALLET))
@@ -548,6 +570,9 @@ class BackupRepo @Inject constructor(
         val hardwareTagMetadata = activityRepo.getHardwareTagsAsPreActivityMetadata().getOrThrow()
         val tagMetadata = (preActivityMetadata + hardwareTagMetadata)
             .distinctBy { it.walletId to it.paymentId }
+        // Like the tags above, this envelope is the only copy of the names, so a read failure must
+        // propagate and fail the backup rather than upload an empty set over the stored ones.
+        val hwWalletNames = hwWalletStore.backupSnapshot().takeIf { it.isNotEmpty() }
         val cacheData = cacheStore.data.first()
         val pubkySession = pubkyRepo.snapshotSessionBackupState().getOrDefault(null)
         val pubkyContactProfileOverrides = pubkyRepo.snapshotContactProfileOverrides().getOrDefault(null)
@@ -558,6 +583,7 @@ class BackupRepo @Inject constructor(
             cache = cacheData,
             pubkySession = pubkySession,
             pubkyContactProfileOverrides = pubkyContactProfileOverrides,
+            hwWalletNames = hwWalletNames,
         )
 
         json.encodeToString(payload).toByteArray()
@@ -661,7 +687,13 @@ class BackupRepo @Inject constructor(
             .onFailure {
                 Logger.warn("Failed to restore pubky contact profile overrides", it, context = TAG)
             }
+        // App-owned, so it takes no part in the Core field migration above and never sets needsRewrite.
+        // Restored names wait as pending ones until each wallet is paired again. Failing to store them
+        // must not discard the rest of this envelope, which has already been applied by here.
+        runSuspendCatching { hwWalletStore.restoreNames(parsed.hwWalletNames.orEmpty()) }
+            .onFailure { Logger.warn("Failed to restore hardware wallet names", it, context = TAG) }
         Logger.debug("Restored ${parsed.tagMetadata.size} pre-activity metadata", TAG)
+        Logger.debug("Restored ${parsed.hwWalletNames.orEmpty().size} hardware wallet names", TAG)
 
         return RestoredCoreBackup(createdAt = parsed.createdAt, needsRewrite = migration.changed && persisted)
     }

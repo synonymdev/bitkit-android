@@ -12,9 +12,15 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,6 +77,40 @@ fun TagButton(
                     .testTag("Tag-$text-delete")
             )
         }
+    }
+}
+
+@Composable
+fun AddTagButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val cornerRadius = 8.dp
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        modifier = modifier
+            .clip(AppShapes.small)
+            .drawBehind {
+                drawRoundRect(
+                    color = Colors.White64,
+                    style = Stroke(
+                        width = 1.dp.toPx(),
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)),
+                    ),
+                    cornerRadius = CornerRadius(cornerRadius.toPx()),
+                )
+            }
+            .clickableAlpha(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 8.dp)
+    ) {
+        BodySSB(text = stringResource(R.string.wallet__tags_add_button), color = Colors.White)
+        Icon(
+            painter = painterResource(R.drawable.ic_plus),
+            contentDescription = null,
+            tint = Colors.White64,
+            modifier = Modifier.size(16.dp),
+        )
     }
 }
 

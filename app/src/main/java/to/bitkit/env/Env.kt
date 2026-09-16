@@ -24,6 +24,7 @@ internal object Env {
     val isLocalE2eBackend = isE2eTest && e2eBackend == "local"
     const val e2eLocalHost = BuildConfig.E2E_LOCAL_HOST
     const val e2eHomegateUrl = BuildConfig.E2E_HOMEGATE_URL
+    val e2eHomeserverPubky = BuildConfig.E2E_HOMESERVER_PUBKY.takeIf { isLocalE2eBackend && it.isNotBlank() }
     val network = Network.valueOf(BuildConfig.NETWORK)
     val locales = BuildConfig.LOCALES.split(",")
     const val walletSyncIntervalSecs = 10_uL

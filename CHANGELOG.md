@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-08-21
+
+### Changed
+- Bitkit now keeps the Lightning node running a little longer when you briefly leave the app, so quick trips to another app no longer reload the wallet on return. #1146
+
+### Fixed
+- Lightning node teardown now releases native resources deterministically and no longer restarts the node when the app is only briefly backgrounded. #1100
+- Fixed native library compatibility on Android devices using 16 KB memory pages. #1107
+- Lightning node shutdown and peer persistence now complete without native crashes or app hangs. #1122
+- Fixed Pubky authorization links opening Bitkit when the feature is unavailable or no local identity can approve them. #1162
+- Fixed the wallet backup failing repeatedly when Paykit state could not be read. #1092
+- Hardened background task error handling to prevent rare crashes. #1094
+
+### Security
+- Lightning no longer automatically starts from outdated channel monitor data after a storage mismatch. #1155
+- Wallet backups no longer fall back to unauthenticated VSS when LNURL-auth is missing. #1156
+- Shop checkout only accepts Bitrefill payment requests, and payment links wait until the wallet is unlocked. #1158
+- Wallet backups now use VSS 0.5.23, which rejects unauthenticated encryption. #1164
+
 ## [2.4.0] - 2026-07-15
 
 ### Added
@@ -148,7 +167,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - About screen (content merged into Support) #857
 - Standalone General, Security, and Advanced settings screens (merged into tabs) #857
 
-[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/synonymdev/bitkit-android/compare/v2.4.1...HEAD
+[2.4.1]: https://github.com/synonymdev/bitkit-android/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/synonymdev/bitkit-android/compare/v2.3.2...v2.4.0
 [2.3.2]: https://github.com/synonymdev/bitkit-android/compare/v2.3.1...v2.3.2
 [2.3.1]: https://github.com/synonymdev/bitkit-android/compare/v2.3.0...v2.3.1

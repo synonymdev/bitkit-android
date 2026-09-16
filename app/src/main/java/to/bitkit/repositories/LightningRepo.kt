@@ -73,6 +73,7 @@ import to.bitkit.ext.toPeerDetailsList
 import to.bitkit.ext.totalNextOutboundHtlcLimitSats
 import to.bitkit.models.ALL_ADDRESS_TYPE_STRINGS
 import to.bitkit.models.CoinSelectionPreference
+import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
 import to.bitkit.models.ElectrumServer
 import to.bitkit.models.NATIVE_WITNESS_TYPES
 import to.bitkit.models.NodeLifecycleState
@@ -142,6 +143,9 @@ class LightningRepo @Inject constructor(
     private val _eventHandlers = ConcurrentHashMap.newKeySet<NodeEventHandler>()
     private val _isRecoveryMode = MutableStateFlow(false)
     val isRecoveryMode = _isRecoveryMode.asStateFlow()
+
+    @Volatile
+    private var isWiping = false
 
     private val channelCache = ConcurrentHashMap<String, ChannelDetails>()
     private val probeOutcomeCache = ConcurrentHashMap<PaymentId, ProbeOutcome>()
@@ -251,7 +255,7 @@ class LightningRepo @Inject constructor(
         // If node is not in a state that can become running, fail fast
         if (!nodeLifecycleState.canRun()) {
             return@withContext Result.failure(
-                AppError("Cannot execute '$operationName': node is '$nodeLifecycleState' and not starting")
+                NodeNotRunningError(operationName, nodeLifecycleState)
             )
         }
 
@@ -278,8 +282,11 @@ class LightningRepo @Inject constructor(
     }.onFailure {
         // Cancellation is expected during pull-to-refresh, rethrow per Kotlin best practices
         if (it is CancellationException) throw it
-
-        Logger.error("Error executing '$operationName'", it, context = TAG)
+        if (it is PaymentAbortedBeforeSend) {
+            Logger.debug("Aborted '$operationName' before dispatch", context = TAG)
+        } else {
+            Logger.error("Error executing '$operationName'", it, context = TAG)
+        }
     }
 
     private suspend fun setup(
@@ -337,6 +344,7 @@ class LightningRepo @Inject constructor(
         var initialLifecycleState: NodeLifecycleState
 
         val result = lifecycleMutex.withLock {
+            if (isWiping) return@withLock Result.failure(WipeInProgressError())
             initialLifecycleState = _lightningState.value.nodeLifecycleState
             if (initialLifecycleState.isRunningOrStarting()) {
                 return@withLock skipStartForRunningNode(
@@ -570,6 +578,8 @@ class LightningRepo @Inject constructor(
 
     fun setRecoveryMode(enabled: Boolean) = _isRecoveryMode.update { enabled }
 
+    fun setWiping(enabled: Boolean) = run { isWiping = enabled }
+
     suspend fun updateGeoBlockState() = withContext(bgDispatcher) {
         _lightningState.update {
             it.copy(isGeoBlocked = coreService.isGeoBlocked())
@@ -610,30 +620,32 @@ class LightningRepo @Inject constructor(
     fun cancelPendingStop() = synchronized(pendingStopLock) { pendingStopJob.getAndSet(null)?.cancel() }
 
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
-        lifecycleMutex.withLock {
-            if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
-                clearProbeOutcomes()
-                return@withLock Result.success(Unit)
-            }
+        lifecycleMutex.withLock { stopLocked() }
+    }
 
-            runCatching {
-                withContext(NonCancellable) {
-                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
-                    lightningService.stop()
-                    clearProbeOutcomes()
-                    _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
-                }
-            }.onFailure {
-                Logger.error("Node stop error", it, context = TAG)
-                // On failure, check actual node state and update accordingly
-                // If node is still running, revert to Running state to allow retry
-                if (lightningService.node != null && lightningService.status?.isRunning == true) {
-                    Logger.warn("Stop failed but node is still running, reverting to Running state", context = TAG)
-                    _lightningState.update { s -> s.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-                } else {
-                    // Node appears stopped, update state
-                    _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
-                }
+    private suspend fun stopLocked(): Result<Unit> {
+        if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping() && lightningService.node == null) {
+            clearProbeOutcomes()
+            return Result.success(Unit)
+        }
+
+        return runCatching {
+            withContext(NonCancellable) {
+                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
+                lightningService.stop()
+                clearProbeOutcomes()
+                _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+            }
+        }.onFailure {
+            Logger.error("Node stop error", it, context = TAG)
+            // On failure, check actual node state and update accordingly
+            // If node is still running, revert to Running state to allow retry
+            if (lightningService.node != null && lightningService.status?.isRunning == true) {
+                Logger.warn("Stop failed but node is still running, reverting to Running state", context = TAG)
+                _lightningState.update { s -> s.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+            } else {
+                // Node appears stopped, update state
+                _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
             }
         }
     }
@@ -806,17 +818,19 @@ class LightningRepo @Inject constructor(
 
     suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("wipeStorage called, stopping node first", context = TAG)
-        stop().mapCatching {
-            Logger.debug("node stopped, calling wipeStorage", context = TAG)
-            lightningService.wipeStorage(walletIndex)
-            clearProbeOutcomes()
-            _lightningState.update {
-                LightningState(
-                    nodeStatus = it.nodeStatus,
-                    nodeLifecycleState = it.nodeLifecycleState,
-                )
+        lifecycleMutex.withLock {
+            stopLocked().mapCatching {
+                Logger.debug("node stopped, calling wipeStorage", context = TAG)
+                lightningService.wipeStorage(walletIndex)
+                clearProbeOutcomes()
+                _lightningState.update {
+                    LightningState(
+                        nodeStatus = it.nodeStatus,
+                        nodeLifecycleState = it.nodeLifecycleState,
+                    )
+                }
+                setRecoveryMode(false)
             }
-            setRecoveryMode(false)
         }.onFailure {
             Logger.error("wipeStorage error", it, context = TAG)
         }
@@ -944,6 +958,7 @@ class LightningRepo @Inject constructor(
         val previousSettings = settingsStore.data.first()
         val oldSelected = previousSettings.selectedAddressType
         val oldMonitored = previousSettings.addressTypesToMonitor
+        val requiredMonitoredTypes = (monitoredTypes + DEFAULT_ADDRESS_TYPE_STRING).distinct()
         val addressType = selectedType.toAddressType() ?: AddressType.P2WPKH
 
         suspend fun rollback() =
@@ -951,7 +966,7 @@ class LightningRepo @Inject constructor(
 
         runCatching {
             settingsStore.update {
-                it.copy(selectedAddressType = selectedType, addressTypesToMonitor = monitoredTypes)
+                it.copy(selectedAddressType = selectedType, addressTypesToMonitor = requiredMonitoredTypes)
             }
             lightningService.setPrimaryAddressType(addressType)
             syncMonitoredTypesFromNode()
@@ -1008,21 +1023,22 @@ class LightningRepo @Inject constructor(
         settings: SettingsData,
         monitoredTypes: List<String>,
     ): AppError? {
-        if (addressType == settings.selectedAddressType.toAddressType()) {
-            return AppError("Cannot disable monitoring: address type is currently selected")
-        }
-        if (isLastRequiredNativeWitnessWallet(addressType, monitoredTypes)) {
-            return AppError(
+        val configurationError = when {
+            addressType == AddressType.P2WPKH ->
+                AppError("Cannot disable monitoring: Native SegWit is required for Blocktank refunds")
+            addressType == settings.selectedAddressType.toAddressType() ->
+                AppError("Cannot disable monitoring: address type is currently selected")
+            isLastRequiredNativeWitnessWallet(addressType, monitoredTypes) -> AppError(
                 "Cannot disable monitoring: at least one Native SegWit or Taproot wallet required for Lightning"
             )
+            else -> null
         }
+        if (configurationError != null) return configurationError
+
         val balance = getBalanceForAddressType(addressType).getOrElse {
             return AppError("Cannot disable monitoring: failed to verify balance")
         }
-        if (balance > 0uL) {
-            return AppError("Cannot disable monitoring: address type has balance")
-        }
-        return null
+        return if (balance > 0uL) AppError("Cannot disable monitoring: address type has balance") else null
     }
 
     private suspend fun syncMonitoredTypesFromNode() {
@@ -1030,7 +1046,7 @@ class LightningRepo @Inject constructor(
             val nodeMonitored = lightningService.listMonitoredAddressTypes()
             val settings = settingsStore.data.first()
             val selectedType = settings.selectedAddressType.toAddressType() ?: AddressType.P2WPKH
-            val combined = (nodeMonitored + selectedType).distinct()
+            val combined = (nodeMonitored + selectedType + AddressType.P2WPKH).distinct()
             val allOrdered = ALL_ADDRESS_TYPE_STRINGS
             val newMonitored = allOrdered.filter { typeStr ->
                 typeStr.toAddressType() in combined
@@ -1051,6 +1067,7 @@ class LightningRepo @Inject constructor(
         val monitored = settings.addressTypesToMonitor.toMutableList()
 
         val toRemove = monitored.filter { typeStr ->
+            if (typeStr == DEFAULT_ADDRESS_TYPE_STRING) return@filter false
             if (typeStr == settings.selectedAddressType) return@filter false
             val type = typeStr.toAddressType() ?: return@filter false
             val balance = getBalanceForAddressType(type).getOrNull() ?: return@filter false
@@ -1146,12 +1163,12 @@ class LightningRepo @Inject constructor(
 
     suspend fun newAddressInfoForType(addressType: AddressType): Result<AddressDerivationInfo> =
         executeWhenNodeRunning("newAddressInfoForType") {
-            runCatching { lightningService.newAddressInfoForType(addressType) }
+            runSuspendCatching { lightningService.newAddressInfoForType(addressType) }
         }
 
     suspend fun addressInfoForType(addressType: AddressType, receiveIndex: Int): Result<AddressDerivationInfo> =
         executeWhenNodeRunning("addressInfoForType") {
-            runCatching { lightningService.addressInfoForType(addressType, receiveIndex) }
+            runSuspendCatching { lightningService.addressInfoForType(addressType, receiveIndex) }
         }
 
     suspend fun addressInfosForType(
@@ -1166,7 +1183,7 @@ class LightningRepo @Inject constructor(
 
     suspend fun revealReceiveAddresses(toReceiveIndex: Int, forType: AddressType): Result<Unit> =
         executeWhenNodeRunning("revealReceiveAddresses") {
-            runCatching { lightningService.revealReceiveAddresses(toReceiveIndex, forType) }
+            runSuspendCatching { lightningService.revealReceiveAddresses(toReceiveIndex, forType) }
         }
 
     suspend fun createInvoice(
@@ -1257,11 +1274,22 @@ class LightningRepo @Inject constructor(
     suspend fun payInvoice(
         bolt11: String,
         sats: ULong? = null,
+    ): Result<PaymentId> = payInvoice(bolt11, sats, onBeforeSend = { true })
+
+    suspend fun payInvoice(
+        bolt11: String,
+        sats: ULong? = null,
+        onBeforeSend: suspend () -> Boolean,
     ): Result<PaymentId> = executeWhenNodeRunning("payInvoice") {
         waitForUsableChannels()
+        if (!onBeforeSend()) return@executeWhenNodeRunning Result.failure(PaymentAbortedBeforeSend())
         runCatching { lightningService.send(bolt11, sats) }.also {
             syncState()
         }
+    }
+
+    suspend fun listPaymentsOrNull(): List<PaymentDetails>? = withContext(bgDispatcher) {
+        lightningService.listPayments()
     }
 
     suspend fun waitForUsableChannels() = withContext(bgDispatcher) {
@@ -1340,6 +1368,8 @@ class LightningRepo @Inject constructor(
         channelId: String? = null,
         isMaxAmount: Boolean = false,
         tags: List<String> = emptyList(),
+        beforeSendAttempt: suspend () -> Unit = {},
+        onBroadcast: suspend (Txid) -> Unit = {},
     ): Result<Txid> = executeWhenNodeRunning("sendOnChain") {
         require(address.isNotEmpty()) { "Send address cannot be empty" }
 
@@ -1364,7 +1394,9 @@ class LightningRepo @Inject constructor(
 
         Logger.debug("UTXOs selected to spend: $utxosForSend", context = TAG)
 
+        beforeSendAttempt()
         val txId = lightningService.send(address, sats, satsPerVByte, utxosForSend, isMaxAmount)
+        onBroadcast(txId)
 
         val preActivityMetadata = PreActivityMetadata(
             walletId = WalletScope.default,
@@ -1648,7 +1680,13 @@ class LightningRepo @Inject constructor(
 
     fun separateTrustedChannels(channels: List<ChannelDetails>) = lightningService.separateTrustedChannels(channels)
 
+    @Suppress("KotlinConstantConditions")
     suspend fun registerForNotifications(token: String? = null) = executeWhenNodeRunning("registerForNotifications") {
+        if (Env.isE2eTest) {
+            Logger.info("Skipped push registration in E2E build", context = TAG)
+            return@executeWhenNodeRunning Result.success(Unit)
+        }
+
         runCatching {
             val token = token ?: firebaseMessaging.token.await()
             val cachedToken = keychain.loadString(Keychain.Key.PUSH_NOTIFICATION_TOKEN.name)
@@ -2089,12 +2127,17 @@ private data class PaymentRoutingRefreshStatus(
 }
 
 class RecoveryModeError : AppError("App in recovery mode, skipping node start")
+
+class WipeInProgressError : AppError("Wallet wipe in progress, refusing node start")
 class NodeSetupError : AppError("Unknown node setup error")
 class NodeStopTimeoutError : AppError("Timeout waiting for node to stop")
 class NodeConfigNotAppliedError : AppError("Node already running, requested config was not applied")
 class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node to run and execute: '$opName'")
+class NodeNotRunningError(opName: String, state: NodeLifecycleState) :
+    AppError("Cannot execute '$opName': node is '$state' and not starting")
 class GetPaymentsError : AppError("It wasn't possible get the payments")
 class SyncUnhealthyError : AppError("Wallet sync failed before send")
+class PaymentAbortedBeforeSend : AppError("Payment aborted before send")
 class LnurlPayInvoiceMismatchError : AppError("The invoice did not match the requested payment. Payment cancelled.")
 class PaymentRoutingRefreshTimeoutError : AppError("Timeout waiting for payment routing data refresh")
 

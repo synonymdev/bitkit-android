@@ -1,11 +1,18 @@
 package to.bitkit.repositories
 
+import com.synonym.bitkitcore.AccountAddresses
+import com.synonym.bitkitcore.AccountInfoResult
 import com.synonym.bitkitcore.AccountType
 import com.synonym.bitkitcore.Activity
+import com.synonym.bitkitcore.AddressInfo
+import com.synonym.bitkitcore.ComposeAccount
+import com.synonym.bitkitcore.ComposeOutput
 import com.synonym.bitkitcore.ComposeResult
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentType
+import com.synonym.bitkitcore.PreActivityMetadata
 import com.synonym.bitkitcore.TransactionDetails
+import com.synonym.bitkitcore.TrezorAddressResponse
 import com.synonym.bitkitcore.TrezorException
 import com.synonym.bitkitcore.TrezorFeatures
 import com.synonym.bitkitcore.TrezorSignedTx
@@ -30,12 +37,15 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.HwWalletData
 import to.bitkit.data.HwWalletStore
+import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.env.Env
 import to.bitkit.ext.create
+import to.bitkit.models.HwFundingAddressType
 import to.bitkit.models.HwFundingSignedTx
 import to.bitkit.models.HwFundingTransaction
+import to.bitkit.models.HwReceiveAddress
 import to.bitkit.models.HwWalletReceivedTx
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
@@ -47,6 +57,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 
@@ -57,10 +68,16 @@ class HwWalletRepoTest : BaseUnitTest() {
     private companion object {
         const val HARDWARE_WALLET_ID = "hardware-wallet"
         const val HIDDEN_WALLET_ID = "hidden-wallet"
+        val WATCHER_RECEIVE_ADDRESS = AddressInfo(
+            address = "bcrt1qs04g2ka4pr9s3mv73nu32tvfy7r3cxd27wkyu8",
+            path = "m/84'/1'/0'/0/0",
+            transfers = 0u,
+        )
     }
 
     private val trezorRepo = mock<TrezorRepo>()
     private val activityRepo = mock<ActivityRepo>()
+    private val preActivityMetadataRepo = mock<PreActivityMetadataRepo>()
     private val hwWalletStore = mock<HwWalletStore>()
     private val settingsStore = mock<SettingsStore>()
 
@@ -113,6 +130,9 @@ class HwWalletRepoTest : BaseUnitTest() {
         }
         whenever { activityRepo.getWalletIds() }.thenReturn(Result.success(emptySet()))
         whenever { activityRepo.deleteForWallet(any()) }.thenReturn(Result.success(Unit))
+        whenever { activityRepo.getTagMetadataForWallet(any()) }.thenReturn(Result.success(emptyList()))
+        whenever { preActivityMetadataRepo.upsertPreActivityMetadata(any()) }.thenReturn(Result.success(Unit))
+        whenever { hwWalletStore.setPendingName(any(), anyOrNull()) }.thenReturn(Unit)
     }
 
     private fun passphraseCapableFeatures(): TrezorFeatures =
@@ -121,6 +141,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     private fun createRepo() = HwWalletRepo(
         trezorRepo = trezorRepo,
         activityRepo = activityRepo,
+        preActivityMetadataRepo = preActivityMetadataRepo,
         hwWalletStore = hwWalletStore,
         settingsStore = settingsStore,
         ioDispatcher = testDispatcher,
@@ -178,6 +199,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 850_000u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -218,6 +240,38 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertTrue((sut.activities.value.single() as Activity.Onchain).v1.isTransfer)
         verify(activityRepo).persistHwSnapshot(
+            walletId = HARDWARE_WALLET_ID,
+            activities = event.activities,
+            transactionDetails = event.transactionDetails,
+        )
+    }
+
+    @Test
+    fun `unchanged watcher snapshot reevaluates a retained pending send`() = test {
+        val retainedPendingSend = watcherActivity(
+            amount = 100uL,
+            txType = PaymentType.SENT,
+            blockHeight = null,
+            confirmations = 0u,
+        )
+        val event = transactionsChanged(total = 0uL)
+        whenever {
+            activityRepo.persistHwSnapshot(
+                HARDWARE_WALLET_ID,
+                event.activities,
+                event.transactionDetails,
+            )
+        }.thenReturn(
+            Result.success(listOf(retainedPendingSend)),
+            Result.success(emptyList()),
+        )
+        val sut = createRepo()
+
+        watcherEvents.emit("hardware-wallet|nativeSegwit" to event)
+        watcherEvents.emit("hardware-wallet|nativeSegwit" to event)
+
+        assertTrue(sut.activities.value.isEmpty())
+        verify(activityRepo, times(2)).persistHwSnapshot(
             walletId = HARDWARE_WALLET_ID,
             activities = event.activities,
             transactionDetails = event.transactionDetails,
@@ -271,6 +325,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         watcherEvents.emit(
@@ -280,6 +335,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -304,6 +360,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 2u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -325,6 +382,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         watcherEvents.emit(
@@ -335,6 +393,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -366,6 +425,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         watcherEvents.emit(
@@ -378,6 +438,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -403,6 +464,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         watcherEvents.emit(
@@ -415,6 +477,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -443,6 +506,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         val firstTimestamp = (sut.wallets.value.single().activities.single() as Activity.Onchain).v1.timestamp
@@ -455,6 +519,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         val refreshedTimestamp = (sut.wallets.value.single().activities.single() as Activity.Onchain).v1.timestamp
@@ -619,31 +684,23 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         // Baseline: full history delivered on watcher start must not emit.
         watcherEvents.emit(
-            "hardware-wallet|nativeSegwit" to WatcherEvent.TransactionsChanged(
-                balance = walletBalance(total = 100uL),
+            "hardware-wallet|nativeSegwit" to transactionsChanged(
+                total = 100uL,
                 activities = listOf(watcherActivity(amount = 100uL)),
-                transactionDetails = emptyList(),
-                txCount = 1u,
-                blockHeight = 1u,
-                accountType = AccountType.NATIVE_SEGWIT,
-            )
+            ),
         )
         runCurrent()
         assertEquals(0, received.size)
 
         // New inbound tx after the baseline emits once.
         watcherEvents.emit(
-            "hardware-wallet|nativeSegwit" to WatcherEvent.TransactionsChanged(
-                balance = walletBalance(total = 150uL),
+            "hardware-wallet|nativeSegwit" to transactionsChanged(
+                total = 150uL,
                 activities = listOf(
                     watcherActivity(amount = 100uL),
                     watcherActivity(amount = 50uL, txid = "t2"),
                 ),
-                transactionDetails = emptyList(),
-                txCount = 2u,
-                blockHeight = 2u,
-                accountType = AccountType.NATIVE_SEGWIT,
-            )
+            ),
         )
         runCurrent()
         assertEquals(listOf("t1", "t2"), sut.activities.value.map { (it as Activity.Onchain).v1.txId })
@@ -659,17 +716,13 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         // Re-delivering the same set (e.g. confirmation update) must not emit again.
         watcherEvents.emit(
-            "hardware-wallet|nativeSegwit" to WatcherEvent.TransactionsChanged(
-                balance = walletBalance(total = 150uL),
+            "hardware-wallet|nativeSegwit" to transactionsChanged(
+                total = 150uL,
                 activities = listOf(
                     watcherActivity(amount = 100uL),
                     watcherActivity(amount = 50uL, txid = "t2"),
                 ),
-                transactionDetails = emptyList(),
-                txCount = 2u,
-                blockHeight = 3u,
-                accountType = AccountType.NATIVE_SEGWIT,
-            )
+            ),
         )
         runCurrent()
         assertEquals(1, received.size)
@@ -742,6 +795,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         runCurrent()
@@ -752,6 +806,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         runCurrent()
@@ -764,6 +819,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         runCurrent()
@@ -775,6 +831,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.TAPROOT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         runCurrent()
@@ -799,6 +856,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         watcherEvents.emit(
@@ -811,6 +869,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 2u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -847,6 +906,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 1u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -933,7 +993,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         val result = sut.removeDevice("unknown-wallet")
 
         assertTrue(result.isFailure)
-        verify(trezorRepo, never()).forgetDevice(any(), anyOrNull())
+        verify(trezorRepo, never()).forgetDevice(any(), anyOrNull(), anyOrNull())
         verify(activityRepo, never()).deleteForWallet("unknown-wallet")
     }
 
@@ -943,14 +1003,14 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device, hiddenWallet), listOf(device))
         wheneverStartWatcher().thenReturn(Result.success(Unit))
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
-        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
         val sut = createRepo()
         runCurrent()
 
         val result = sut.removeDevice(HIDDEN_WALLET_ID)
 
         assertTrue(result.isSuccess)
-        verify(trezorRepo).forgetDevice("dev1", "zpubHidden")
+        verify(trezorRepo).forgetDevice(eq("dev1"), eq("zpubHidden"), anyOrNull())
         verify(trezorRepo).stopWatcher("$HIDDEN_WALLET_ID|nativeSegwit")
         verify(trezorRepo, never()).stopWatcher("$HARDWARE_WALLET_ID|nativeSegwit")
         verify(activityRepo).deleteForWallet(HIDDEN_WALLET_ID)
@@ -1220,7 +1280,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         var stored = listOf(device, hiddenWallet)
         whenever { hwWalletStore.loadKnownDevices() }.thenAnswer { stored }
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
-        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenAnswer {
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenAnswer {
             stored = stored.filterNot { it.walletId == "stray-wallet" }
             Result.success(Unit)
         }
@@ -1238,8 +1298,45 @@ class HwWalletRepoTest : BaseUnitTest() {
         val result = sut.reconnectWithPassphrase(HIDDEN_WALLET_ID, "wrong")
 
         assertTrue(result.exceptionOrNull() is HwPassphraseMismatchError)
-        verify(trezorRepo).forgetDevice("dev1", "zpubStray")
+        verify(trezorRepo).forgetDevice(eq("dev1"), eq("zpubStray"), anyOrNull())
         verify(trezorRepo).disconnectStaleSession("dev1")
+    }
+
+    @Test
+    fun `reconnectWithPassphrase keeps the backup data of the wallet a wrong passphrase opened`() = test {
+        // The wallet is a real one the user owns, and storing it consumed the name restored for it,
+        // so dropping it here would erase a backed up name a typo was never meant to touch.
+        val strayWallet = device.copy(
+            xpubs = mapOf("nativeSegwit" to "zpubStray"),
+            walletId = "stray-wallet",
+            customLabel = "Hidden Stash",
+            passphraseProtected = true,
+        )
+        val strayTagMetadata = listOf(preActivityMetadata().copy(walletId = "stray-wallet"))
+        var stored = listOf(device, hiddenWallet)
+        whenever { hwWalletStore.loadKnownDevices() }.thenAnswer { stored }
+        whenever { activityRepo.getTagMetadataForWallet("stray-wallet") }
+            .thenReturn(Result.success(strayTagMetadata))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenAnswer {
+            stored = stored.filterNot { it.walletId == "stray-wallet" }
+            Result.success(Unit)
+        }
+        whenever { trezorRepo.connectWithWalletMode("dev1", TrezorWalletMode.PASSPHRASE_HOST, "wrong") }
+            .thenAnswer {
+                stored = stored + strayWallet
+                trezorState.value = TrezorState(
+                    connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = "stray-wallet"),
+                )
+                Result.success(mock<TrezorFeatures>())
+            }
+        val sut = createRepo()
+
+        val result = sut.reconnectWithPassphrase(HIDDEN_WALLET_ID, "wrong")
+
+        assertTrue(result.exceptionOrNull() is HwPassphraseMismatchError)
+        verify(trezorRepo).forgetDevice(any(), anyOrNull(), eq(PendingNameUpdate("stray-wallet", "Hidden Stash")))
+        verify(preActivityMetadataRepo).upsertPreActivityMetadata(strayTagMetadata)
     }
 
     @Test
@@ -1257,6 +1354,126 @@ class HwWalletRepoTest : BaseUnitTest() {
         val account = sut.getFundingAccount(HIDDEN_WALLET_ID).getOrThrow()
         assertEquals("zpubHidden", account.xpub)
         assertEquals(40uL, account.balanceSats)
+    }
+
+    @Test
+    fun `receive address uses synchronized watcher state without account scan`() = test {
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        val sut = createRepo()
+        runCurrent()
+
+        watcherEvents.emit(
+            "$HARDWARE_WALLET_ID|nativeSegwit" to transactionsChanged(total = 0uL),
+        )
+        runCurrent()
+
+        val address = sut.getReceiveAddress(HARDWARE_WALLET_ID).getOrThrow()
+
+        assertEquals(WATCHER_RECEIVE_ADDRESS.address, address.address)
+        assertEquals(WATCHER_RECEIVE_ADDRESS.path, address.path)
+        assertEquals(HwFundingAddressType.NATIVE_SEGWIT, address.addressType)
+        verify(trezorRepo, never()).getAccountInfo(any(), any(), anyOrNull())
+    }
+
+    @Test
+    fun `receive address falls back to the stored account xpub`() = test {
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        whenever { trezorRepo.getAccountInfo(eq("zpubNS"), any(), eq(AccountType.NATIVE_SEGWIT)) }
+            .thenReturn(
+                Result.success(
+                    AccountInfoResult(
+                        account = ComposeAccount(
+                            path = "m/84'/1'/0'",
+                            addresses = AccountAddresses(
+                                used = emptyList(),
+                                unused = listOf(WATCHER_RECEIVE_ADDRESS),
+                                change = emptyList(),
+                            ),
+                            utxo = emptyList(),
+                        ),
+                        balance = 0uL,
+                        utxoCount = 0u,
+                        accountType = AccountType.NATIVE_SEGWIT,
+                        blockHeight = 1u,
+                    )
+                )
+            )
+        val sut = createRepo()
+        runCurrent()
+
+        val address = sut.getReceiveAddress(HARDWARE_WALLET_ID).getOrThrow()
+
+        assertEquals(WATCHER_RECEIVE_ADDRESS.address, address.address)
+        assertEquals(WATCHER_RECEIVE_ADDRESS.path, address.path)
+        assertEquals(HwFundingAddressType.NATIVE_SEGWIT, address.addressType)
+    }
+
+    @Test
+    fun `receive address verification rejects a device mismatch`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HARDWARE_WALLET_ID),
+        )
+        whenever { trezorRepo.ensureConnected("dev1") }.thenReturn(Result.success(mock()))
+        whenever { trezorRepo.getAddress(any(), any(), any(), any()) }.thenReturn(
+            Result.success(
+                TrezorAddressResponse(
+                    address = "bcrt1qdifferent",
+                    path = WATCHER_RECEIVE_ADDRESS.path,
+                )
+            )
+        )
+        val sut = createRepo()
+
+        val result = sut.verifyReceiveAddress(
+            HARDWARE_WALLET_ID,
+            HwReceiveAddress(
+                address = WATCHER_RECEIVE_ADDRESS.address,
+                path = WATCHER_RECEIVE_ADDRESS.path,
+                addressType = HwFundingAddressType.NATIVE_SEGWIT,
+            ),
+        )
+
+        assertTrue(result.exceptionOrNull() is HwReceiveAddressMismatchError)
+    }
+
+    @Test
+    fun `receive address verification reconnects after a session failure`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        trezorState.value = TrezorState(
+            connected = ConnectedTrezorDevice(id = "dev1", features = mock(), walletId = HARDWARE_WALLET_ID),
+        )
+        whenever { trezorRepo.ensureConnected("dev1") }.thenReturn(Result.success(mock()))
+        whenever { trezorRepo.getAddress(any(), any(), any(), any()) }.thenReturn(
+            Result.failure(TrezorException.ProtocolException("THP decryption error: aead::Error")),
+            Result.success(
+                TrezorAddressResponse(
+                    address = WATCHER_RECEIVE_ADDRESS.address,
+                    path = WATCHER_RECEIVE_ADDRESS.path,
+                )
+            ),
+        )
+        whenever { trezorRepo.disconnectStaleSession("dev1") }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.verifyReceiveAddress(
+            HARDWARE_WALLET_ID,
+            HwReceiveAddress(
+                address = WATCHER_RECEIVE_ADDRESS.address,
+                path = WATCHER_RECEIVE_ADDRESS.path,
+                addressType = HwFundingAddressType.NATIVE_SEGWIT,
+            ),
+        )
+
+        assertTrue(result.isSuccess)
+        inOrder(trezorRepo) {
+            verify(trezorRepo).ensureConnected("dev1")
+            verify(trezorRepo).getAddress(any(), any(), any(), any())
+            verify(trezorRepo).disconnectStaleSession("dev1")
+            verify(trezorRepo).ensureConnected("dev1")
+            verify(trezorRepo).getAddress(any(), any(), any(), any())
+        }
     }
 
     @Test
@@ -1278,6 +1495,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
         runCurrent()
@@ -1302,6 +1520,8 @@ class HwWalletRepoTest : BaseUnitTest() {
 
     @Test
     fun `store removal deletes the hardware wallet activity scope`() = test {
+        // Only a wallet with activities left behind is cleaned up, so it must have some to clean.
+        whenever { activityRepo.getWalletIds() }.thenReturn(Result.success(setOf(HARDWARE_WALLET_ID)))
         wheneverStartWatcher().thenReturn(Result.success(Unit))
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
         createRepo()
@@ -1330,6 +1550,33 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `removing a wallet deletes its activities exactly once`() = test {
+        // A second delete would run Core's cascade again and take the tag metadata the removal
+        // deliberately kept. The interleaving that caused this in the field — the cleanup deciding from
+        // a scope set read before it takes the lock — needs real concurrency and is covered by manual
+        // QA; this pins the simpler invariant that the cleanup adds no delete of its own.
+        var persisted = setOf(HARDWARE_WALLET_ID)
+        whenever { activityRepo.getWalletIds() }.thenAnswer { Result.success(persisted) }
+        whenever { activityRepo.deleteForWallet(any()) }.thenAnswer {
+            persisted = emptySet()
+            Result.success(Unit)
+        }
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        wheneverStartWatcher().thenReturn(Result.success(Unit))
+        whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+        runCurrent()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+        storeData.value = HwWalletData(knownDevices = emptyList())
+        runCurrent()
+
+        assertTrue(result.isSuccess)
+        verify(activityRepo, times(1)).deleteForWallet(HARDWARE_WALLET_ID)
+    }
+
+    @Test
     fun `resetState clears store and stops active watchers`() = test {
         storeData.value = HwWalletData(
             knownDevices = listOf(device.copy(xpubs = mapOf("nativeSegwit" to "zpubNS")))
@@ -1345,6 +1592,7 @@ class HwWalletRepoTest : BaseUnitTest() {
                 txCount = 0u,
                 blockHeight = 1u,
                 accountType = AccountType.NATIVE_SEGWIT,
+                nextUnusedExternalAddress = WATCHER_RECEIVE_ADDRESS,
             )
         )
 
@@ -1360,7 +1608,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
         wheneverStartWatcher().thenReturn(Result.success(Unit))
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
-        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
         val sut = createRepo()
         runCurrent()
 
@@ -1369,19 +1617,152 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(true, result.isSuccess)
         verify(trezorRepo).stopWatcher("hardware-wallet|nativeSegwit")
         verify(activityRepo).deleteForWallet(HARDWARE_WALLET_ID)
-        verify(trezorRepo).forgetDevice("dev1", "zpubNS")
+        verify(trezorRepo).forgetDevice(eq("dev1"), eq("zpubNS"), anyOrNull())
+    }
+
+    @Test
+    fun `removeDevice keeping backup data rewrites the tag metadata after deleting the activities`() = test {
+        val named = device.copy(customLabel = "Cold Storage")
+        val tagMetadata = listOf(preActivityMetadata())
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(named), emptyList())
+        whenever { activityRepo.getTagMetadataForWallet(HARDWARE_WALLET_ID) }
+            .thenReturn(Result.success(tagMetadata))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+
+        assertTrue(result.isSuccess)
+        // Core drops the wallet's tag metadata with its activities, so the rewrite must follow the delete.
+        inOrder(activityRepo, preActivityMetadataRepo) {
+            verify(activityRepo).deleteForWallet(HARDWARE_WALLET_ID)
+            verify(preActivityMetadataRepo).upsertPreActivityMetadata(tagMetadata)
+        }
+    }
+
+    @Test
+    fun `removeDevice keeping backup data reports unreadable data without touching the wallet`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        whenever { activityRepo.getTagMetadataForWallet(HARDWARE_WALLET_ID) }
+            .thenReturn(Result.failure(AppError("core unavailable")))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+
+        // Raised before anything is deleted, so the wallet survives and the user keeps the choice.
+        assertTrue(result.exceptionOrNull() is HwBackupDataUnreadableError)
+        verify(activityRepo, never()).deleteForWallet(any())
+        verify(trezorRepo, never()).forgetDevice(any(), anyOrNull(), anyOrNull())
+    }
+
+    @Test
+    fun `removeDevice keeping backup data stores the wallet name before forgetting the device`() = test {
+        val named = device.copy(customLabel = "Cold Storage")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(named), emptyList())
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+
+        assertTrue(result.isSuccess)
+        // Carried by the write that forgets the entry, so the store never publishes a device list
+        // still holding this wallet, which would restart the watcher of the wallet being removed.
+        verify(trezorRepo).forgetDevice(
+            eq("dev1"),
+            eq("zpubNS"),
+            eq(PendingNameUpdate(HARDWARE_WALLET_ID, "Cold Storage")),
+        )
+    }
+
+    @Test
+    fun `removeDevice keeping backup data stores no name for a wallet that was never renamed`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+
+        assertTrue(result.isSuccess)
+        verify(trezorRepo).forgetDevice(any(), anyOrNull(), eq(PendingNameUpdate(HARDWARE_WALLET_ID, null)))
+    }
+
+    @Test
+    fun `removeDevice keeping backup data keeps the tags of a wallet that was never renamed`() = test {
+        // The name and the tags are kept independently: a wallet is far more likely to carry tags than
+        // a name the user bothered to set, and having no name must not cost it its tags.
+        val tagMetadata = listOf(preActivityMetadata())
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        whenever { activityRepo.getTagMetadataForWallet(HARDWARE_WALLET_ID) }
+            .thenReturn(Result.success(tagMetadata))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+
+        assertTrue(result.isSuccess)
+        assertNull(device.customLabel)
+        verify(preActivityMetadataRepo).upsertPreActivityMetadata(tagMetadata)
+        verify(trezorRepo).forgetDevice(any(), anyOrNull(), eq(PendingNameUpdate(HARDWARE_WALLET_ID, null)))
+    }
+
+    @Test
+    fun `removeDevice without keeping backup data drops the name and the tag metadata`() = test {
+        val named = device.copy(customLabel = "Cold Storage")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(named), emptyList())
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = false)
+
+        assertTrue(result.isSuccess)
+        verify(trezorRepo).forgetDevice(any(), anyOrNull(), eq(PendingNameUpdate(HARDWARE_WALLET_ID, null)))
+        verify(activityRepo, never()).getTagMetadataForWallet(any())
+        verify(preActivityMetadataRepo, never()).upsertPreActivityMetadata(any())
+    }
+
+    @Test
+    fun `removeDevice keeps nothing by default`() = test {
+        val named = device.copy(customLabel = "Cold Storage")
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(named), emptyList())
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID)
+
+        assertTrue(result.isSuccess)
+        verify(trezorRepo).forgetDevice(any(), anyOrNull(), eq(PendingNameUpdate(HARDWARE_WALLET_ID, null)))
+        verify(preActivityMetadataRepo, never()).upsertPreActivityMetadata(any())
+    }
+
+    @Test
+    fun `removeDevice still removes the wallet when the tag metadata cannot be rewritten`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
+        whenever { activityRepo.getTagMetadataForWallet(HARDWARE_WALLET_ID) }
+            .thenReturn(Result.success(listOf(preActivityMetadata())))
+        whenever { preActivityMetadataRepo.upsertPreActivityMetadata(any()) }
+            .thenReturn(Result.failure(AppError("core unavailable")))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        val sut = createRepo()
+
+        val result = sut.removeDevice(HARDWARE_WALLET_ID, keepBackupData = true)
+
+        // The activities are already gone and the watchers stopped, so there is nothing to roll back to:
+        // the tags are lost rather than the removal reported as failed.
+        assertTrue(result.isSuccess)
+        verify(trezorRepo).forgetDevice(eq("dev1"), eq("zpubNS"), anyOrNull())
     }
 
     @Test
     fun `removeDevice fails when forget reports credential cleanup failure despite the device being gone`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), emptyList())
-        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.failure(AppError("clear failed")))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }
+            .thenReturn(Result.failure(AppError("clear failed")))
         val sut = createRepo()
 
         val result = sut.removeDevice(HARDWARE_WALLET_ID)
 
         assertEquals(true, result.isFailure)
-        verify(trezorRepo).forgetDevice("dev1", "zpubNS")
+        verify(trezorRepo).forgetDevice(eq("dev1"), eq("zpubNS"), anyOrNull())
     }
 
     @Test
@@ -1396,7 +1777,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals(true, result.isFailure)
         verify(trezorRepo).stopWatcher("hardware-wallet|nativeSegwit")
-        verify(trezorRepo, never()).forgetDevice(any(), anyOrNull())
+        verify(trezorRepo, never()).forgetDevice(any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -1410,7 +1791,7 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertTrue(result.isFailure)
         verify(activityRepo).deleteForWallet(HARDWARE_WALLET_ID)
-        verify(trezorRepo, never()).forgetDevice(any(), anyOrNull())
+        verify(trezorRepo, never()).forgetDevice(any(), anyOrNull(), anyOrNull())
     }
 
     @Test
@@ -1421,21 +1802,21 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(bleEntry, usbEntry), emptyList())
         wheneverStartWatcher().thenReturn(Result.success(Unit))
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
-        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
         val sut = createRepo()
         runCurrent()
 
         sut.removeDevice(HARDWARE_WALLET_ID)
 
         verify(trezorRepo).stopWatcher("hardware-wallet|nativeSegwit")
-        verify(trezorRepo).forgetDevice("ble1", "zpubNS")
-        verify(trezorRepo).forgetDevice("usb1", "zpubNS")
+        verify(trezorRepo).forgetDevice(eq("ble1"), eq("zpubNS"), anyOrNull())
+        verify(trezorRepo).forgetDevice(eq("usb1"), eq("zpubNS"), anyOrNull())
     }
 
     @Test
     fun `removeDevice fails when the device is still present afterwards`() = test {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), listOf(device))
-        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
         val sut = createRepo()
 
         val result = sut.removeDevice(HARDWARE_WALLET_ID)
@@ -1448,7 +1829,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device), listOf(device))
         wheneverStartWatcher().thenReturn(Result.success(Unit))
         whenever { trezorRepo.stopWatcher(any()) }.thenReturn(Result.success(Unit))
-        whenever { trezorRepo.forgetDevice(any(), anyOrNull()) }.thenReturn(Result.success(Unit))
+        whenever { trezorRepo.forgetDevice(any(), anyOrNull(), anyOrNull()) }.thenReturn(Result.success(Unit))
         val sut = createRepo()
         runCurrent()
 
@@ -1529,6 +1910,41 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(1_250uL, result.getOrThrow().miningFeeSats)
         assertEquals(26_250uL, result.getOrThrow().totalSpent)
         assertEquals(2uL, result.getOrThrow().satsPerVByte)
+    }
+
+    @Test
+    fun `maxSpendableFunding subtracts the fee from a send-max compose`() = test {
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        whenever(
+            trezorRepo.composeTransactionOffline(
+                extendedKey = any(),
+                outputs = eq(listOf(ComposeOutput.SendMax(address = "bc1qtest"))),
+                feeRates = eq(listOf(2.0f)),
+                network = any(),
+                accountType = anyOrNull(),
+                coinSelection = any(),
+            )
+        ).thenReturn(
+            Result.success(
+                listOf(
+                    ComposeResult.Success(
+                        psbt = "psbt",
+                        fee = 1_250uL,
+                        feeRate = 2.0f,
+                        totalSpent = 26_250uL,
+                    )
+                )
+            )
+        )
+        val sut = createRepo()
+
+        val result = sut.maxSpendableFunding(
+            walletId = HARDWARE_WALLET_ID,
+            address = "bc1qtest",
+            satsPerVByte = 2uL,
+        )
+
+        assertEquals(25_000uL, result.getOrThrow())
     }
 
     @Test
@@ -1627,7 +2043,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `signFunding disconnects stale session when sign fails`() = test {
+    fun `signFunding disconnects stale session when THP channel fails`() = test {
         val funding = HwFundingTransaction(
             psbt = "psbt",
             miningFeeSats = 1_250uL,
@@ -1636,7 +2052,7 @@ class HwWalletRepoTest : BaseUnitTest() {
             satsPerVByte = 2uL,
         )
         whenever(trezorRepo.signTxFromPsbt("psbt", Env.network.toTrezorCoinType()))
-            .thenReturn(Result.failure(AppError("sign failed")))
+            .thenReturn(Result.failure(TrezorException.ProtocolException("THP decryption error: aead::Error")))
         whenever(trezorRepo.disconnectStaleSession("dev1")).thenReturn(Result.success(Unit))
         whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
         val sut = createRepo()
@@ -1646,6 +2062,26 @@ class HwWalletRepoTest : BaseUnitTest() {
         assertEquals(true, result.isFailure)
         verify(trezorRepo).disconnectStaleSession("dev1")
         verify(trezorRepo, never()).broadcastRawTx(any())
+    }
+
+    @Test
+    fun `signFunding keeps session for non-session signing error`() = test {
+        val funding = HwFundingTransaction(
+            psbt = "psbt",
+            miningFeeSats = 1_250uL,
+            feeRate = 2.0f,
+            totalSpent = 26_250uL,
+            satsPerVByte = 2uL,
+        )
+        whenever(trezorRepo.signTxFromPsbt("psbt", Env.network.toTrezorCoinType()))
+            .thenReturn(Result.failure(AppError("invalid PSBT")))
+        whenever(hwWalletStore.loadKnownDevices()).thenReturn(listOf(device))
+        val sut = createRepo()
+
+        val result = sut.signFunding(HARDWARE_WALLET_ID, funding)
+
+        assertEquals(true, result.isFailure)
+        verify(trezorRepo, never()).disconnectStaleSession(any())
     }
 
     @Test
@@ -1712,6 +2148,7 @@ class HwWalletRepoTest : BaseUnitTest() {
     private fun transactionsChanged(
         total: ULong,
         activities: List<Activity> = emptyList(),
+        receiveAddress: AddressInfo = WATCHER_RECEIVE_ADDRESS,
     ) = WatcherEvent.TransactionsChanged(
         balance = walletBalance(total),
         activities = activities,
@@ -1719,6 +2156,7 @@ class HwWalletRepoTest : BaseUnitTest() {
         txCount = activities.size.toUInt(),
         blockHeight = 1u,
         accountType = AccountType.NATIVE_SEGWIT,
+        nextUnusedExternalAddress = receiveAddress,
     )
 
     @Suppress("LongParameterList")
@@ -1822,6 +2260,20 @@ class HwWalletRepoTest : BaseUnitTest() {
 
         assertEquals("My Cold Wallet", sut.wallets.value.single().name)
     }
+
+    private fun preActivityMetadata() = PreActivityMetadata(
+        walletId = HARDWARE_WALLET_ID,
+        paymentId = "hw-txid",
+        tags = listOf("cold"),
+        paymentHash = null,
+        txId = "hw-txid",
+        address = null,
+        isReceive = false,
+        feeRate = 0uL,
+        isTransfer = false,
+        channelId = null,
+        createdAt = 1uL,
+    )
 
     private suspend fun wheneverStartWatcher() = whenever(
         trezorRepo.startWatcher(

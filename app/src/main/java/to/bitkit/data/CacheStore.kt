@@ -16,6 +16,7 @@ import to.bitkit.models.BackupItemStatus
 import to.bitkit.models.BalanceState
 import to.bitkit.models.FxRate
 import to.bitkit.models.NewTransactionSheetDetails
+import to.bitkit.models.QuickPayLedger
 import to.bitkit.models.WalletScope
 import to.bitkit.utils.Logger
 import javax.inject.Inject
@@ -164,6 +165,8 @@ data class AppCacheData(
     val backgroundReceive: NewTransactionSheetDetails? = null,
     val addressSearchLastUsedReceiveIndexes: Map<String, Int> = mapOf(),
     val addressSearchLastUsedChangeIndexes: Map<String, Int> = mapOf(),
+    val quickPayLedger: QuickPayLedger? = null,
+    val blocktankRefundAddress: BlocktankRefundAddress? = null,
 ) {
     fun isActivityDeleted(activityId: String, walletId: String): Boolean =
         scopedActivityId(walletId, activityId) in deletedActivities ||
@@ -175,3 +178,9 @@ data class AppCacheData(
 
     fun invalidateReceiveOnchainAddress() = copy(bip21 = "", onchainAddress = "")
 }
+
+@Serializable
+data class BlocktankRefundAddress(
+    val address: String,
+    val index: Long,
+)

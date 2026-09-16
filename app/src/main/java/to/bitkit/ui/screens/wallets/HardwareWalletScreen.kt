@@ -49,7 +49,6 @@ import to.bitkit.ui.components.TabBar
 import to.bitkit.ui.components.TertiaryButton
 import to.bitkit.ui.components.TopBarSpacer
 import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.AppAlertDialog
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.screens.wallets.activity.components.activityListGroupedItems
@@ -87,6 +86,8 @@ fun HardwareWalletScreen(
             onConfirmRemove = { viewModel.removeDevice(walletId) },
             onDismissRemoveDialog = viewModel::onDismissRemoveDialog,
             onBackClick = onBackClick,
+            keepBackupData = uiState.keepBackupDataOnRemoval,
+            onKeepBackupDataChange = viewModel::onKeepBackupDataChange,
         )
     }
 }
@@ -101,6 +102,8 @@ private fun HardwareWalletContent(
     onConfirmRemove: () -> Unit,
     onDismissRemoveDialog: () -> Unit,
     onBackClick: () -> Unit,
+    keepBackupData: Boolean = true,
+    onKeepBackupDataChange: (Boolean) -> Unit = {},
 ) {
     val hasFunds = wallet.balanceSats > 0uL
     val hasFundingFunds = wallet.fundingBalanceSats > 0uL
@@ -215,11 +218,10 @@ private fun HardwareWalletContent(
         }
 
         if (showRemoveDialog) {
-            AppAlertDialog(
-                title = stringResource(R.string.hardware__remove_dialog_title, wallet.name),
-                text = stringResource(R.string.hardware__remove_dialog_text),
-                confirmText = stringResource(R.string.common__remove),
-                dismissText = stringResource(R.string.common__cancel),
+            RemoveHwWalletDialog(
+                walletName = wallet.name,
+                keepBackupData = keepBackupData,
+                onKeepBackupDataChange = onKeepBackupDataChange,
                 onConfirm = onConfirmRemove,
                 onDismiss = onDismissRemoveDialog,
             )

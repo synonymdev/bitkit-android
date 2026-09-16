@@ -5,6 +5,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import to.bitkit.ui.components.Sheet
+import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.viewmodels.TransferEffect
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -14,6 +15,28 @@ import kotlin.test.assertTrue
 @Config(sdk = [34])
 @RunWith(RobolectricTestRunner::class)
 class ContentViewTest {
+    @Test
+    fun `pending profile opens once and rearms after completion or cold start`() {
+        val navigation = PubkyProfileSetupNavigation()
+
+        assertTrue(navigation.shouldNavigate(true, true, true, true))
+        assertFalse(navigation.shouldNavigate(true, true, true, false))
+        assertFalse(navigation.shouldNavigate(true, true, true, true))
+        assertFalse(navigation.shouldNavigate(true, false, true, true))
+        assertTrue(navigation.shouldNavigate(true, true, true, true))
+        assertTrue(PubkyProfileSetupNavigation().shouldNavigate(true, true, true, true))
+    }
+
+    @Test
+    fun `pending profile waits for auth feature and sheet gates`() {
+        val navigation = PubkyProfileSetupNavigation()
+
+        assertFalse(navigation.shouldNavigate(false, true, true, true))
+        assertFalse(navigation.shouldNavigate(true, true, false, true))
+        assertFalse(navigation.shouldNavigate(true, true, true, false))
+        assertTrue(navigation.shouldNavigate(true, true, true, true))
+    }
+
     @Test
     fun `spending start route uses intro until seen`() {
         assertEquals(Routes.SpendingIntro, transferSpendingStartRoute(hasSeenSpendingIntro = false))
@@ -54,5 +77,15 @@ class ContentViewTest {
         val result = shouldDismissSheetForScreenLink(handled = true, currentSheet = null)
 
         assertFalse(result)
+    }
+
+    @Test
+    fun `receive presentation key changes only between sheet presentations`() {
+        val sheet = Sheet.Receive()
+        val samePresentation = sheet.copy(route = ReceiveRoute.Amount)
+        val nextPresentation = Sheet.Receive()
+
+        assertEquals(receiveSheetPresentationKey(sheet), receiveSheetPresentationKey(samePresentation))
+        assertFalse(receiveSheetPresentationKey(sheet) == receiveSheetPresentationKey(nextPresentation))
     }
 }

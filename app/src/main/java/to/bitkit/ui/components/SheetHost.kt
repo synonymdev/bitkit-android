@@ -23,14 +23,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import kotlinx.coroutines.launch
 import to.bitkit.models.SamRockSetupRequest
+import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.ui.screens.wallets.receive.ReceiveRoute
 import to.bitkit.ui.shared.modifiers.clickableAlpha
 import to.bitkit.ui.sheets.BackupRoute
@@ -40,6 +43,7 @@ import to.bitkit.ui.sheets.WidgetsRoute
 import to.bitkit.ui.sheets.hardware.HardwareRoute
 import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.Colors
+import java.util.UUID
 
 enum class SheetSize { LARGE, MEDIUM, COMPACT, SMALL, CALENDAR; }
 
@@ -50,10 +54,27 @@ enum class SheetHandlePlacement {
     ContentOverlay,
 }
 
+sealed interface SubscriptionRoute {
+    data class Review(val id: PaykitSubscriptionId) : SubscriptionRoute
+    data class Success(val id: PaykitSubscriptionId) : SubscriptionRoute
+    data class Details(val id: PaykitSubscriptionId) : SubscriptionRoute
+    data class Cancel(val id: PaykitSubscriptionId) : SubscriptionRoute
+}
+
 @Stable
 sealed interface Sheet {
-    data class Send(val route: SendRoute = SendRoute.Recipient) : Sheet
-    data class Receive(val route: ReceiveRoute = ReceiveRoute.QR) : Sheet
+    data class Send(
+        val route: SendRoute = SendRoute.Recipient,
+        val hardwareWalletId: String? = null,
+    ) : Sheet
+    data class Receive(
+        val route: ReceiveRoute = ReceiveRoute.QR,
+        val hardwareWalletId: String? = null,
+        val presentationId: String = UUID.randomUUID().toString(),
+    ) : Sheet
+    data object PaymentRequests : Sheet
+    data object CreateSubscription : Sheet
+    data class Subscription(val route: SubscriptionRoute) : Sheet
     data class Pin(val route: PinRoute = PinRoute.Prompt()) : Sheet
     data object ChangePin : Sheet
     data object DisablePin : Sheet
@@ -91,16 +112,25 @@ enum class TimedSheetType(val priority: Int) {
 fun SheetHost(
     shouldExpand: Boolean,
     onDismiss: () -> Unit = {},
+    visibilityKey: Any? = null,
+    onVisible: () -> Unit = {},
+    dismissEnabled: Boolean = true,
     sheetHandlePlacement: SheetHandlePlacement = SheetHandlePlacement.ScaffoldSlot,
     sheetContainerColor: Color = DefaultSheetContainerColor,
     sheets: @Composable ColumnScope.() -> Unit,
     content: @Composable () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val currentDismissEnabled by rememberUpdatedState(dismissEnabled)
+    val currentShouldExpand by rememberUpdatedState(shouldExpand)
     val scaffoldState = rememberBottomSheetScaffoldState(
-        bottomSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        bottomSheetState = rememberModalBottomSheetState(
+            skipPartiallyExpanded = true,
+            confirmValueChange = { currentDismissEnabled || !currentShouldExpand || it != SheetValue.Hidden },
+        )
     )
     var wasSheetVisible by remember { mutableStateOf(false) }
+    var visibleKey by remember { mutableStateOf<Any?>(null) }
 
     // Automatically expand or hide the bottom sheet based on bool flag
     LaunchedEffect(shouldExpand) {
@@ -111,12 +141,18 @@ fun SheetHost(
         }
     }
 
-    LaunchedEffect(scaffoldState.bottomSheetState.isVisible) {
+    LaunchedEffect(scaffoldState.bottomSheetState.isVisible, visibilityKey) {
         if (scaffoldState.bottomSheetState.isVisible) {
             wasSheetVisible = true
+            if (currentShouldExpand && visibleKey != visibilityKey) {
+                visibleKey = visibilityKey
+                onVisible()
+            }
         } else if (wasSheetVisible) {
+            val dismissedKey = visibleKey
             wasSheetVisible = false
-            onDismiss()
+            visibleKey = null
+            if (dismissedKey == visibilityKey) onDismiss()
         }
     }
 
@@ -144,13 +180,15 @@ fun SheetHost(
 
             // Dismiss on back
             BackHandler(enabled = scaffoldState.bottomSheetState.isVisible) {
-                scope.launch {
-                    scaffoldState.bottomSheetState.hide()
-                    onDismiss()
+                if (dismissEnabled) {
+                    scope.launch {
+                        scaffoldState.bottomSheetState.hide()
+                        onDismiss()
+                    }
                 }
             }
 
-            Scrim(scaffoldState.bottomSheetState) {
+            Scrim(scaffoldState.bottomSheetState, enabled = dismissEnabled) {
                 scope.launch {
                     scaffoldState.bottomSheetState.hide()
                     onDismiss()
@@ -181,6 +219,7 @@ private fun OverlayHandleSheetContent(
 @OptIn(ExperimentalMaterial3Api::class)
 private fun Scrim(
     bottomSheetState: SheetState,
+    enabled: Boolean,
     onClick: () -> Unit,
 ) {
     val isBottomSheetVisible = bottomSheetState.targetValue != SheetValue.Hidden
@@ -190,11 +229,22 @@ private fun Scrim(
         label = "sheetScrimAlpha"
     )
     if (scrimAlpha > 0f || isBottomSheetVisible) {
+        val interactionModifier = if (enabled) {
+            Modifier.clickableAlpha(pressedAlpha = 1f, onClick = onClick)
+        } else {
+            Modifier.pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent().changes.forEach { it.consume() }
+                    }
+                }
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Colors.Black.copy(alpha = scrimAlpha))
-                .clickableAlpha(pressedAlpha = 1f, onClick = onClick)
+                .then(interactionModifier)
         )
     }
 }

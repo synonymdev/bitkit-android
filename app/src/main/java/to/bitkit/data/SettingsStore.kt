@@ -40,6 +40,9 @@ class SettingsStore @Inject constructor(
 
     val data: Flow<SettingsData> = store.data
     val isPaykitEnabled: Flow<Boolean> = localStore.data.map { it[PAYKIT_ENABLED_KEY] ?: false }
+    val isPubkyProfileSetupPending: Flow<Boolean> = localStore.data.map {
+        it[PUBKY_PROFILE_SETUP_PENDING_KEY] ?: false
+    }
 
     @Volatile
     var restoredMonitoredTypesFromBackup: Boolean = false
@@ -47,7 +50,9 @@ class SettingsStore @Inject constructor(
 
     suspend fun restoreFromBackup(payload: SettingsBackupV1) =
         runCatching {
-            val data = payload.settings.resetPin().withDefaultPaykitPaymentMethods()
+            val data = payload.settings.resetPin()
+                .withDefaultPaykitPaymentMethods()
+                .withRequiredNativeSegwitMonitoring()
             store.updateData { data }
 
             val monitored = data.addressTypesToMonitor
@@ -59,11 +64,15 @@ class SettingsStore @Inject constructor(
         }
 
     suspend fun update(transform: (SettingsData) -> SettingsData) {
-        store.updateData(transform)
+        store.updateData { transform(it).withRequiredNativeSegwitMonitoring() }
     }
 
     suspend fun setIsPaykitEnabled(value: Boolean) {
         localStore.edit { it[PAYKIT_ENABLED_KEY] = value }
+    }
+
+    suspend fun setPubkyProfileSetupPending(value: Boolean) {
+        localStore.edit { it[PUBKY_PROFILE_SETUP_PENDING_KEY] = value }
     }
 
     suspend fun addLastUsedTag(newTag: String) {
@@ -98,6 +107,7 @@ class SettingsStore @Inject constructor(
         private const val TAG = "SettingsStore"
         private const val MAX_LAST_USED_TAGS = 10
         private val PAYKIT_ENABLED_KEY = booleanPreferencesKey("paykit_enabled")
+        private val PUBKY_PROFILE_SETUP_PENDING_KEY = booleanPreferencesKey("pubky_profile_setup_pending")
     }
 }
 
@@ -128,6 +138,7 @@ data class SettingsData(
     val bgPaymentsIntroSeen: Boolean = false,
     val isQuickPayEnabled: Boolean = false,
     val quickPayAmount: Int = 5,
+    val quickPayDailyLimitMultiplier: Int = 5,
     val lightningSetupStep: Int = 0,
     val isPinEnabled: Boolean = false,
     val isBiometricEnabled: Boolean = false,
@@ -171,6 +182,10 @@ fun SettingsData.areContactPaymentsEnabled(): Boolean =
 fun SettingsData.withDefaultPaykitPaymentMethods() = copy(
     publicPaykitLightningEnabled = true,
     publicPaykitOnchainEnabled = true,
+)
+
+fun SettingsData.withRequiredNativeSegwitMonitoring() = copy(
+    addressTypesToMonitor = (addressTypesToMonitor + DEFAULT_ADDRESS_TYPE_STRING).distinct(),
 )
 
 fun SettingsData.hasPublicPaykitPublicationState(): Boolean =

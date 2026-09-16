@@ -130,6 +130,9 @@ class SettingsViewModel @Inject constructor(
     val hasSeenProfileIntro = settingsStore.data.map { it.hasSeenProfileIntro }
         .asStateFlow(initialValue = false)
 
+    val isPubkyProfileSetupPending = settingsStore.isPubkyProfileSetupPending
+        .asStateFlow(initialValue = false)
+
     fun setHasSeenProfileIntro(value: Boolean) {
         viewModelScope.launch {
             settingsStore.update { it.copy(hasSeenProfileIntro = value) }
@@ -345,6 +348,15 @@ class SettingsViewModel @Inject constructor(
     fun setQuickPayAmount(value: Int) {
         viewModelScope.launch {
             settingsStore.update { it.copy(quickPayAmount = value) }
+        }
+    }
+
+    val quickPayDailyLimitMultiplier = settingsStore.data.map { it.quickPayDailyLimitMultiplier }
+        .asStateFlow(initialValue = 5)
+
+    fun setQuickPayDailyLimitMultiplier(value: Int) {
+        viewModelScope.launch {
+            settingsStore.update { it.copy(quickPayDailyLimitMultiplier = value) }
         }
     }
 

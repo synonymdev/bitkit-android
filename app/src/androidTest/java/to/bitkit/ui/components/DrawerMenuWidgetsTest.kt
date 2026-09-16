@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -149,6 +150,63 @@ class DrawerMenuWidgetsTest {
         composeTestRule.onNodeWithTag("DrawerWidgets").performClick()
 
         composeTestRule.onNodeWithTag("WidgetsSheetRequested").assertIsDisplayed()
+    }
+
+    @Test
+    fun subscriptionsIsTheOnlyPaykitEntryInDrawerWhenPaykitIsEnabled() {
+        composeTestRule.setContent {
+            val navController = rememberNavController()
+            val drawerState = rememberDrawerState(DrawerValue.Open)
+
+            DrawerMenuTestSurface {
+                NavHost(
+                    navController = navController,
+                    startDestination = Routes.Home,
+                ) {
+                    composable<Routes.Home> {
+                        Text("Home", modifier = Modifier.testTag("HomeRoute"))
+                    }
+                    composable<Routes.Subscriptions> {
+                        Text("Subscriptions", modifier = Modifier.testTag("SubscriptionsRoute"))
+                    }
+                }
+                DrawerMenu(
+                    drawerState = drawerState,
+                    rootNavController = navController,
+                    hasSeenWidgetsIntro = true,
+                    hasSeenShopIntro = true,
+                    onBeforeNavigate = {},
+                    showWidgets = true,
+                    isPaykitEnabled = true,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("DrawerSubscriptions").performClick()
+
+        composeTestRule.onNodeWithTag("SubscriptionsRoute").assertIsDisplayed()
+    }
+
+    @Test
+    fun paykitEntriesAreHiddenFromDrawerWhenPaykitIsDisabled() {
+        composeTestRule.setContent {
+            val navController = rememberNavController()
+            val drawerState = rememberDrawerState(DrawerValue.Open)
+
+            DrawerMenuTestSurface {
+                DrawerMenu(
+                    drawerState = drawerState,
+                    rootNavController = navController,
+                    hasSeenWidgetsIntro = true,
+                    hasSeenShopIntro = true,
+                    onBeforeNavigate = {},
+                    showWidgets = true,
+                    isPaykitEnabled = false,
+                )
+            }
+        }
+
+        composeTestRule.onNodeWithTag("DrawerSubscriptions").assertDoesNotExist()
     }
 }
 
