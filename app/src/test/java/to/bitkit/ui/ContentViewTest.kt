@@ -114,7 +114,7 @@ class ContentViewTest {
         navController.navigateToTransferSavingsAvailability()
         navController.navigateTo(Routes.SavingsProgress)
 
-        navController.navigateToHome()
+        navController.navigateOnSavingsTransferExit()
 
         assertTrue(navController.currentDestination?.hasRoute<Routes.Home>() == true)
         assertFalse(navController.currentBackStack.value.any { it.destination.hasRoute<Routes.Spending>() })

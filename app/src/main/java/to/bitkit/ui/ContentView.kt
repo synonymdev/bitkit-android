@@ -942,8 +942,8 @@ private fun RootNavHost(
                     app = appViewModel,
                     wallet = walletViewModel,
                     transfer = transferViewModel,
-                    onContinueClick = { navController.navigateToHome() },
-                    onTransferUnavailable = { navController.navigateToHome() },
+                    onContinueClick = { navController.navigateOnSavingsTransferExit() },
+                    onTransferUnavailable = { navController.navigateOnSavingsTransferExit() },
                 )
             }
             deepLinkableComposable<Routes.SpendingIntro> {
@@ -2078,6 +2078,8 @@ fun NavController.navigateToDevSettings() = navigateTo(Routes.DevSettings)
 fun NavController.navigateToTransferSavingsIntro() = navigateTo(Routes.SavingsIntro)
 
 fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.SavingsAvailability)
+
+fun NavController.navigateOnSavingsTransferExit() = navigateToHome()
 
 fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean) =
     navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro))
