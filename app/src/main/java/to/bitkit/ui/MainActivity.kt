@@ -53,6 +53,7 @@ import to.bitkit.ui.onboarding.OnboardingSlidesScreen
 import to.bitkit.ui.onboarding.RestoreWalletScreen
 import to.bitkit.ui.onboarding.TermsOfUseScreen
 import to.bitkit.ui.onboarding.WarningMultipleDevicesScreen
+import to.bitkit.ui.screens.CriticalUpdateScreen
 import to.bitkit.ui.screens.MigrationLoadingScreen
 import to.bitkit.ui.screens.SplashScreen
 import to.bitkit.ui.sheets.ForgotPinSheet
@@ -126,6 +127,7 @@ class MainActivity : FragmentActivity() {
                 val walletExists = walletViewModel.walletExists
                 val isShowingMigrationLoading by walletViewModel.isShowingMigrationLoading.collectAsStateWithLifecycle()
                 val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
+                val isCriticalUpdateRequired by appViewModel.isCriticalUpdateRequired.collectAsStateWithLifecycle()
                 val hazeState = rememberHazeState(blurEnabled = true)
                 val bottomSheetOverlayState = remember { BottomSheetOverlayState() }
                 val authSheetOverlayState = remember { BottomSheetOverlayState() }
@@ -145,7 +147,9 @@ class MainActivity : FragmentActivity() {
                     }
                 }
 
-                if (isShowingMigrationLoading && !isRecoveryMode) {
+                if (isCriticalUpdateRequired) {
+                    CriticalUpdateScreen()
+                } else if (isShowingMigrationLoading && !isRecoveryMode) {
                     MigrationLoadingScreen(isVisible = true)
                 } else if (!walletViewModel.walletExists && !isRecoveryMode) {
                     OnboardingNav(
