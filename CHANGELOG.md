@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Send now keeps the funding-source button, fee label, and swipe-to-confirm track stable while switching sources, continuing from amount, or refreshing fees. #1195
 
 ### Fixed
+- Resetting the wallet no longer leaves backups broken after a failed setup, and no longer races an in-flight Lightning start. #1266
 - Receive requests now refresh reliably after a payment is completed. #1086
 - The Show Details button on the Receive screen is now available while the Lightning node is still starting up, so you can view and copy your on-chain address right away. #1090
 - Savings transfers to spending now use a faster on-chain fee rate, reserve mining fees when sizing max transfers, and only drain the wallet when leftover change would be dust or a retry can still fully fund the order. #1091
