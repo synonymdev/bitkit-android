@@ -37,7 +37,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import to.bitkit.ext.bleAddress
+import to.bitkit.ext.blePath
 import to.bitkit.ext.bluetoothManager
+import to.bitkit.ext.isBlePath
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.usbManager
 import to.bitkit.models.TransportType
@@ -314,7 +317,7 @@ class TrezorTransport @Inject constructor(
         TrezorDebugLog.log("OPEN", "openDevice: $path")
         return if (bridgeTransport.isBridgeDevice(path)) {
             bridgeTransport.openDevice(path)
-        } else if (isBleDevice(path)) {
+        } else if (path.isBlePath()) {
             openBleDevice(path)
         } else {
             openUsbDevice(path)
@@ -325,7 +328,7 @@ class TrezorTransport @Inject constructor(
         TrezorDebugLog.log("CLOSE", "closeDevice: $path")
         return if (bridgeTransport.isBridgeDevice(path)) {
             bridgeTransport.closeDevice(path)
-        } else if (isBleDevice(path)) {
+        } else if (path.isBlePath()) {
             closeBleDevice(path)
         } else {
             closeUsbDevice(path)
@@ -336,7 +339,7 @@ class TrezorTransport @Inject constructor(
         TrezorDebugLog.log("DISCONNECT", "disconnectDevice: $path")
         return if (bridgeTransport.isBridgeDevice(path)) {
             bridgeTransport.closeDevice(path)
-        } else if (isBleDevice(path)) {
+        } else if (path.isBlePath()) {
             disconnectBleDevice(path)
         } else {
             closeUsbDevice(path)
@@ -346,7 +349,7 @@ class TrezorTransport @Inject constructor(
     override fun readChunk(path: String): TrezorTransportReadResult {
         return if (bridgeTransport.isBridgeDevice(path)) {
             bridgeTransport.readChunk(path)
-        } else if (isBleDevice(path)) {
+        } else if (path.isBlePath()) {
             readBleChunk(path)
         } else {
             readUsbChunk(path)
@@ -356,7 +359,7 @@ class TrezorTransport @Inject constructor(
     override fun writeChunk(path: String, data: ByteArray): TrezorTransportWriteResult {
         return if (bridgeTransport.isBridgeDevice(path)) {
             bridgeTransport.writeChunk(path, data)
-        } else if (isBleDevice(path)) {
+        } else if (path.isBlePath()) {
             writeBleChunk(path, data)
         } else {
             writeUsbChunk(path, data)
@@ -366,7 +369,7 @@ class TrezorTransport @Inject constructor(
     override fun getChunkSize(path: String): UInt {
         return if (bridgeTransport.isBridgeDevice(path)) {
             USB_CHUNK_SIZE.toUInt()
-        } else if (isBleDevice(path)) {
+        } else if (path.isBlePath()) {
             BLE_CHUNK_SIZE.toUInt()
         } else {
             USB_CHUNK_SIZE.toUInt()
@@ -835,7 +838,7 @@ class TrezorTransport @Inject constructor(
 
         return discoveredBleDevices.values.map { device ->
             NativeDeviceInfo(
-                path = "ble:${device.address}",
+                path = blePath(device.address),
                 transportType = "bluetooth",
                 name = device.name ?: "Trezor",
                 vendorId = null,
@@ -919,7 +922,7 @@ class TrezorTransport @Inject constructor(
             return TrezorTransportWriteResult(success = true, error = "", errorCode = null)
         }
 
-        val address = path.removePrefix("ble:")
+        val address = path.bleAddress()
         // Prefer a handle from a recent scan, but fall back to resolving the
         // address directly so we can reconnect to a known device without a
         // fresh scan — a scan right after a disconnect often finds nothing yet.
@@ -1162,7 +1165,7 @@ class TrezorTransport @Inject constructor(
     @SuppressLint("MissingPermission")
     private val bleGattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
-            val path = "ble:${gatt.device.address}"
+            val path = blePath(gatt.device.address)
             val connection = bleConnections[path]
 
             if (status != BluetoothGatt.GATT_SUCCESS) {
@@ -1198,7 +1201,7 @@ class TrezorTransport @Inject constructor(
         }
 
         override fun onMtuChanged(gatt: BluetoothGatt, mtu: Int, status: Int) {
-            val path = "ble:${gatt.device.address}"
+            val path = blePath(gatt.device.address)
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 Logger.info("MTU changed to '$mtu' for '$path'", context = TAG)
             } else {
@@ -1208,7 +1211,7 @@ class TrezorTransport @Inject constructor(
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
-            val path = "ble:${gatt.device.address}"
+            val path = blePath(gatt.device.address)
             val connection = bleConnections[path] ?: return
 
             if (status != BluetoothGatt.GATT_SUCCESS) {
@@ -1278,7 +1281,7 @@ class TrezorTransport @Inject constructor(
             gatt: BluetoothGatt,
             characteristic: BluetoothGattCharacteristic,
         ) {
-            val path = "ble:${gatt.device.address}"
+            val path = blePath(gatt.device.address)
             val connection = bleConnections[path] ?: return
 
             // Only process notifications from the NOTIFY characteristic
@@ -1301,7 +1304,7 @@ class TrezorTransport @Inject constructor(
             characteristic: BluetoothGattCharacteristic,
             status: Int,
         ) {
-            val path = "ble:${gatt.device.address}"
+            val path = blePath(gatt.device.address)
             val connection = bleConnections[path] ?: return
             connection.writeStatus = status
             if (status != BluetoothGatt.GATT_SUCCESS) {
@@ -1315,7 +1318,7 @@ class TrezorTransport @Inject constructor(
             descriptor: BluetoothGattDescriptor,
             status: Int,
         ) {
-            val path = "ble:${gatt.device.address}"
+            val path = blePath(gatt.device.address)
             val connection = bleConnections[path] ?: return
 
             val charUuid = descriptor.characteristic.uuid
@@ -1368,8 +1371,6 @@ class TrezorTransport @Inject constructor(
         }
         return result
     }
-
-    private fun isBleDevice(path: String): Boolean = path.startsWith("ble:")
 
     private fun isTrezorDevice(device: UsbDevice): Boolean {
         return device.vendorId == TREZOR_VENDOR_ID_1 || device.vendorId == TREZOR_VENDOR_ID_2

@@ -226,6 +226,22 @@ class JadeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `reconnecting a known jade rejects a device reporting no efuse mac`() = test {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        whenever { jadeService.connect(any(), any(), any()) }
+            .thenReturn(versionInfo(JadeState.READY, efuseMac = null))
+        val sut = createRepo()
+
+        val result = sut.connectKnownDevice(knownUsb.id)
+
+        assertTrue(result.isFailure)
+        verify(jadeService, atLeastOnce()).disconnect()
+        verify(jadeService, never()).getAccountExport(any(), any(), any())
+        assertNull(sut.state.value.connected)
+    }
+
+    @Test
     fun `known usb reconnect skips another jade and connects the expected device`() = test {
         val otherUsb = usbDevice.copy(path = USB_PATH)
         val expectedUsb = usbDevice.copy(path = USB_PATH_2)

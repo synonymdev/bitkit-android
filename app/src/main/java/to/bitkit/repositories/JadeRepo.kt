@@ -35,6 +35,7 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.PendingNameUpdate
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.isBlePath
 import to.bitkit.ext.isJadeDeviceBusy
 import to.bitkit.ext.isJadeUserCancellation
 import to.bitkit.ext.nowMs
@@ -552,7 +553,7 @@ class JadeRepo @Inject constructor(
         jadeService.listDevices().firstOrNull { it.path == path }?.let { return it }
         // Core only connects to a device of its last scan, so refresh it for a path handed in by
         // the OS attach intent.
-        val includeBluetooth = path.startsWith(BLE_PATH_PREFIX)
+        val includeBluetooth = path.isBlePath()
         val scanned = if (jadeService.isConnected()) jadeService.listDevices() else jadeService.scan(includeBluetooth)
         scanned.firstOrNull { it.path == path }?.let { return it }
         // A Jade advertises under a fresh random address after a reboot or a pairing reset, so a
@@ -673,9 +674,9 @@ class JadeRepo @Inject constructor(
 
     private fun rejectUnusableDevice(version: JadeVersionInfo, expected: KnownDevice?) {
         if (version.jadeState == JadeState.UNINIT) rejectDevice(HwDeviceUninitializedError())
-        val expectedHardwareId = expected?.jadeDeviceId
-        val hardwareId = version.efuseMac
-        if (expectedHardwareId != null && hardwareId != null && expectedHardwareId != hardwareId) {
+        // A device that reports no efuse MAC cannot prove it is the paired one, so it fails closed.
+        val expectedHardwareId = expected?.jadeDeviceId?.takeIf { it.isNotBlank() }
+        if (expectedHardwareId != null && expectedHardwareId != version.efuseMac) {
             rejectDevice(JadeIdentityMismatchError())
         }
     }
@@ -858,7 +859,7 @@ class JadeRepo @Inject constructor(
         isSetup.await()
     }
 
-    private suspend fun loadKnownDevices(): List<KnownDevice> = runCatching {
+    private suspend fun loadKnownDevices(): List<KnownDevice> = runSuspendCatching {
         val devices = hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM)
         val migrated = devices.withHardwareWalletIds()
         if (migrated != devices) {
@@ -954,8 +955,6 @@ fun ConnectedJadeDevice.toHwConnectedDevice() = HwConnectedDevice(
     passphraseProtection = false,
     isLocked = isLocked,
 )
-
-private const val BLE_PATH_PREFIX = "ble:"
 
 /** A Jade advertises as "Jade" followed by the last six hex digits of its efuse MAC. */
 private const val BLE_NAME_SUFFIX_LENGTH = 6

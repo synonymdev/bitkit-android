@@ -40,6 +40,7 @@ import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.isBlePath
 import to.bitkit.ext.isHwSessionFailure
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.scopedId
@@ -346,7 +347,7 @@ class HwWalletRepo @Inject constructor(
         if (jadeRepo.state.value.connected?.transport == JadeTransportKind.BLUETOOTH) return true
         val trezorId = trezorRepo.state.value.connected?.id ?: return false
         return devicesForDeviceId(trezorId).any { it.transportType == TransportType.BLUETOOTH } ||
-            trezorId.startsWith("ble:")
+            trezorId.isBlePath()
     }
 
     private suspend fun devicesForDeviceId(deviceId: String): List<KnownDevice> =

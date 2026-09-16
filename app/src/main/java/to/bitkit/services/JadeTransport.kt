@@ -34,7 +34,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import to.bitkit.ext.bleAddress
+import to.bitkit.ext.blePath
 import to.bitkit.ext.bluetoothManager
+import to.bitkit.ext.isBlePath
 import to.bitkit.ext.usbManager
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.TransportType
@@ -64,7 +67,6 @@ class JadeTransport @Inject constructor(
     companion object {
         private const val TAG = "JadeTransport"
         private const val ACTION_USB_PERMISSION = "to.bitkit.JADE_USB_PERMISSION"
-        private const val BLE_PATH_PREFIX = "ble:"
 
         /** jade-client-rs `MAX_CHUNK_BYTES`; serial has no MTU so the crate's own serial transport uses it too. */
         const val MAX_CHUNK_SIZE = 509
@@ -316,19 +318,19 @@ class JadeTransport @Inject constructor(
     }
 
     override fun openDevice(path: String): JadeTransportResult =
-        if (isBlePath(path)) openBleDevice(path) else openUsbDevice(path)
+        if (path.isBlePath()) openBleDevice(path) else openUsbDevice(path)
 
     override fun closeDevice(path: String): JadeTransportResult =
-        if (isBlePath(path)) disconnectBleDevice(path) else closeUsbDevice(path)
+        if (path.isBlePath()) disconnectBleDevice(path) else closeUsbDevice(path)
 
     override fun writeChunk(path: String, data: ByteArray): JadeTransportResult =
-        if (isBlePath(path)) writeBleChunk(path, data) else writeUsbChunk(path, data)
+        if (path.isBlePath()) writeBleChunk(path, data) else writeUsbChunk(path, data)
 
     override fun readChunk(path: String, timeoutMs: UInt): JadeTransportReadResult =
-        if (isBlePath(path)) readBleChunk(path, timeoutMs) else readUsbChunk(path, timeoutMs)
+        if (path.isBlePath()) readBleChunk(path, timeoutMs) else readUsbChunk(path, timeoutMs)
 
     override fun getChunkSize(path: String): UInt = when {
-        isBlePath(path) -> chunkSizeForMtu(bleConnections[path]?.mtu ?: DEFAULT_ATT_MTU)
+        path.isBlePath() -> chunkSizeForMtu(bleConnections[path]?.mtu ?: DEFAULT_ATT_MTU)
         else -> MAX_CHUNK_SIZE.toUInt()
     }
 
@@ -656,7 +658,7 @@ class JadeTransport @Inject constructor(
             return ok()
         }
 
-        val address = path.removePrefix(BLE_PATH_PREFIX)
+        val address = path.bleAddress()
         // A scan right after a disconnect often finds nothing yet, so resolve the address directly.
         val device = discoveredBleDevices[address]
             ?: runCatching { bluetoothAdapter?.getRemoteDevice(address) }.getOrNull()
@@ -946,10 +948,6 @@ class JadeTransport @Inject constructor(
             _externalDisconnect.tryEmit(path)
         }
     }
-
-    private fun isBlePath(path: String) = path.startsWith(BLE_PATH_PREFIX)
-
-    private fun blePath(address: String) = "$BLE_PATH_PREFIX$address"
 }
 
 internal enum class UsbDriverKind { CP210X, CDC_ACM }
