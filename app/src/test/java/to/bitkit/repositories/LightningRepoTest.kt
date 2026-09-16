@@ -674,14 +674,21 @@ class LightningRepoTest : BaseUnitTest() {
     @Test
     fun `restartNode skips the start retry when a stop is requested during the failed attempt`() = test {
         stubNodeForRestart()
+        val error = AppError("Feerate estimation update timeout")
+        var attempts = 0
         whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
-            sut.stopDebounced()
-            throw AppError("Feerate estimation update timeout")
+            attempts++
+            if (attempts == 1) {
+                sut.stopDebounced()
+                throw error
+            }
+            Unit
         }
 
         val result = sut.restartNode()
 
-        assertTrue(result.isFailure)
+        val yieldError = assertIs<NodeStartYieldedToStopError>(result.exceptionOrNull())
+        assertEquals(error, yieldError.cause)
         assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
         verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
         verify(lightningService, times(1)).stop()
@@ -691,6 +698,43 @@ class LightningRepoTest : BaseUnitTest() {
         verify(lightningService, times(2)).stop()
         verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
         assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+
+        val foregroundResult = sut.start()
+
+        assertTrue(foregroundResult.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `restartNode retries when a foreground cancels the stop requested during the failed attempt`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) {
+                sut.stopDebounced()
+                throw AppError("Feerate estimation update timeout")
+            }
+            Unit
+        }
+
+        val restart = async { sut.restartNode() }
+        runCurrent()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        sut.cancelPendingStop()
+        testScheduler.advanceTimeBy(START_RETRY_DELAY_MS)
+        runCurrent()
+        val result = restart.await()
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(1)).stop()
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
 
     @Test

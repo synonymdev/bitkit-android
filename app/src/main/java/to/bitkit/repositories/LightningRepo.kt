@@ -473,7 +473,7 @@ class LightningRepo @Inject constructor(
             // A stop requested after this start began wins over the retry; a foreground start cancels it
             if (shouldRetryYieldToStop && pendingStopJob.get() != null) {
                 Logger.info("Skipped start retry because a stop was requested", context = TAG)
-                return@withContext result
+                return@withContext Result.failure(NodeStartYieldedToStopError(result.exceptionOrNull()))
             }
             return@withContext startNode(
                 walletIndex = walletIndex,
@@ -2098,7 +2098,11 @@ class LightningRepo @Inject constructor(
             return@withContext Result.failure(it)
         }
         startNode(shouldRetryYieldToStop = true).onFailure {
-            Logger.error("Failed to start node during restart", it, context = TAG)
+            if (it is NodeStartYieldedToStopError) {
+                Logger.info("Deferred node restart to a requested stop", context = TAG)
+            } else {
+                Logger.error("Failed to start node during restart", it, context = TAG)
+            }
             return@withContext Result.failure(it)
         }.onSuccess {
             Logger.info("Node restarted successfully", context = TAG)
@@ -2183,6 +2187,8 @@ class RecoveryModeError : AppError("App in recovery mode, skipping node start")
 class WipeInProgressError : AppError("Wallet wipe in progress, refusing node start")
 class NodeSetupError : AppError("Unknown node setup error")
 class NodeStopTimeoutError : AppError("Timeout waiting for node to stop")
+class NodeStartYieldedToStopError(cause: Throwable?) :
+    AppError("Node start retry skipped because a stop was requested", cause)
 class NodeConfigNotAppliedError : AppError("Node already running, requested config was not applied")
 class NodeRunTimeoutError(opName: String) : AppError("Timeout waiting for node to run and execute: '$opName'")
 class NodeNotRunningError(opName: String, state: NodeLifecycleState) :
