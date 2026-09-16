@@ -149,9 +149,8 @@ class SendCoinSelectionViewModelTest : BaseUnitTest() {
     }
 
     @Test
-    fun `loadUtxos retries node run timeout and not running errors`() = test {
+    fun `loadUtxos retries node not running error`() = test {
         whenever(lightningRepo.listSpendableOutputs()).thenReturn(
-            Result.failure(NodeRunTimeoutError("listSpendableOutputs")),
             Result.failure(NodeNotRunningError("listSpendableOutputs", NodeLifecycleState.Stopped)),
             Result.success(listOf(LARGE_UTXO)),
         )
@@ -160,9 +159,22 @@ class SendCoinSelectionViewModelTest : BaseUnitTest() {
         sut.loadUtxos(REQUIRED_AMOUNT, ADDRESS)
         advanceUntilIdle()
 
-        verify(lightningRepo, times(3)).listSpendableOutputs()
+        verify(lightningRepo, times(2)).listSpendableOutputs()
         assertEquals(listOf(LARGE_UTXO), sut.uiState.value.availableUtxos)
         assertNull(sut.uiState.value.loadError)
+    }
+
+    @Test
+    fun `loadUtxos does not retry node run timeout error`() = test {
+        val error = NodeRunTimeoutError("listSpendableOutputs")
+        whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.failure(error))
+
+        sut.loadUtxos(REQUIRED_AMOUNT, ADDRESS)
+        advanceUntilIdle()
+
+        verify(lightningRepo, times(1)).listSpendableOutputs()
+        assertEquals(error, sut.uiState.value.loadError)
+        assertFalse(sut.uiState.value.isLoading)
     }
 
     @Test
