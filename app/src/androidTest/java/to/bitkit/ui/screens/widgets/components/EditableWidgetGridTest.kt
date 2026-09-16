@@ -1,5 +1,6 @@
 package to.bitkit.ui.screens.widgets.components
 
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -24,13 +25,15 @@ import to.bitkit.models.WidgetWithPosition
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * Regression pin for #647 — the widget list stays scrollable while reordering.
  *
  * The old edit UI attached `detectDragGesturesAfterLongPress` to the whole card, so a vertical
  * swipe anywhere on a widget was swallowed and the page could not be scrolled. Reordering now
- * belongs to the dedicated drag handle only, so a gesture on the card body must never reorder.
+ * belongs to the dedicated drag handle only, so a gesture on the card body must both leave the
+ * order alone AND reach the scroll container.
  */
 @HiltAndroidTest
 @ComposeUi
@@ -43,6 +46,7 @@ class EditableWidgetGridTest {
     val hiltRule = HiltAndroidRule(this)
 
     private val moves = mutableListOf<Pair<Int, Int>>()
+    private lateinit var scrollState: ScrollState
 
     private val items = listOf(
         WidgetWithPosition(type = WidgetType.PRICE, position = 0),
@@ -59,12 +63,15 @@ class EditableWidgetGridTest {
 
     private fun setContent() {
         composeTestRule.setContent {
+            scrollState = rememberScrollState()
             AppThemeSurface {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(400.dp)
-                        .verticalScroll(rememberScrollState())
+                        // Host is deliberately far shorter than the content below, so the grid
+                        // always overflows and there is real scrolling to observe.
+                        .height(300.dp)
+                        .verticalScroll(scrollState)
                         .testTag("ScrollHost")
                 ) {
                     EditableWidgetGrid(
@@ -76,33 +83,46 @@ class EditableWidgetGridTest {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(200.dp)
+                                .height(400.dp)
                                 .testTag("Card-${widget.type.name}")
                         )
                     }
                 }
             }
         }
+        composeTestRule.waitForIdle()
+        // Guard the premise: without overflow the swipe assertions below prove nothing.
+        assertTrue(scrollState.maxValue > 0, "grid must overflow the host for this test to mean anything")
     }
 
     @Test
-    fun whenSwipingOnCardBody_shouldNotReorderWidgets() {
+    fun whenSwipingOnCardBody_shouldScrollAndNotReorderWidgets() {
         setContent()
+        val before = scrollState.value
 
         composeTestRule.onNodeWithTag("Card-${WidgetType.PRICE.name}").performTouchInput { swipeUp() }
         composeTestRule.waitForIdle()
 
-        assertEquals(emptyList(), moves)
+        assertTrue(
+            scrollState.value > before,
+            "swiping a card body must scroll the page (was $before, now ${scrollState.value})",
+        )
+        assertEquals(emptyList(), moves, "swiping a card body must not reorder widgets")
     }
 
     @Test
-    fun whenSwipingOnScrollHost_shouldNotReorderWidgets() {
+    fun whenSwipingOnScrollHost_shouldScrollAndNotReorderWidgets() {
         setContent()
+        val before = scrollState.value
 
         composeTestRule.onNodeWithTag("ScrollHost").performTouchInput { swipeUp() }
         composeTestRule.waitForIdle()
 
-        assertEquals(emptyList(), moves)
+        assertTrue(
+            scrollState.value > before,
+            "swiping the host must scroll the page (was $before, now ${scrollState.value})",
+        )
+        assertEquals(emptyList(), moves, "swiping the host must not reorder widgets")
     }
 
     @Test
