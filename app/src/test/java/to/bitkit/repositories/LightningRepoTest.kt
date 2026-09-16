@@ -15,6 +15,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +31,7 @@ import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Node
+import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PeerDetails
@@ -77,6 +79,7 @@ import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import to.bitkit.utils.LdkError
 import to.bitkit.utils.UrlValidator
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -399,6 +402,140 @@ class LightningRepoTest : BaseUnitTest() {
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
         verifyBlocking(lightningService) { reconcileWatchOnlyAccounts() }
         verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
+    }
+
+    private suspend fun stubNodeStatus(isRunning: () -> Boolean) {
+        sut.setInitNodeLifecycleState()
+        val status = mock<NodeStatus>()
+        whenever(status.isRunning).thenAnswer { isRunning() }
+        whenever(lightningService.status).thenReturn(status)
+        whenever(lightningService.startEventListener(any())).thenReturn(Result.success(Unit))
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
+    }
+
+    // Regression #845: a cancelled start must not strand lifecycle state at Starting or ErrorStarting
+    @Test
+    fun `start reconciles state to Running and rethrows when cancelled while the node starts`() = test {
+        var nodeRunning = false
+        stubNodeStatus { nodeRunning }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).doSuspendableAnswer {
+            nodeRunning = true
+            awaitCancellation()
+        }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start() }
+        runCurrent()
+        assertEquals(NodeLifecycleState.Starting, sut.lightningState.value.nodeLifecycleState)
+        job.cancelAndJoin()
+
+        assertNull(result)
+        assertTrue(job.isCancelled)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService) { startEventListener(any()) }
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start restores the initial state and rethrows when cancelled before the node runs`() = test {
+        stubNodeStatus { false }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).doSuspendableAnswer { awaitCancellation() }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start(shouldRetry = false) }
+        runCurrent()
+        job.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertNull(result)
+        assertEquals(NodeLifecycleState.Initializing, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start keeps Running and rethrows when cancelled right after the node started`() = test {
+        var nodeRunning = false
+        stubNodeStatus { nodeRunning }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            nodeRunning = true
+            Unit
+        }
+        whenever(coreService.isGeoBlocked()).doSuspendableAnswer { awaitCancellation() }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start() }
+        runCurrent()
+        job.cancelAndJoin()
+
+        assertNull(result)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `start restores the initial state when cancelled during node setup`() = test {
+        stubNodeStatus { false }
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start(shouldRetry = false) }
+        runCurrent()
+        job.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertNull(result)
+        assertEquals(NodeLifecycleState.Initializing, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
+    }
+
+    // Regression #845: a node started by another path between the status check and start must not latch an error
+    @Test
+    fun `start adopts the running node when start throws AlreadyRunning`() = test {
+        var nodeRunning = false
+        stubNodeStatus { nodeRunning }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            nodeRunning = true
+            throw LdkError(NodeException.AlreadyRunning("already running"))
+        }
+
+        val result = sut.start(shouldRetry = false)
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        assertNotNull(sut.getStatus())
+        verifyBlocking(lightningService) { startEventListener(any()) }
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start adopts the running node on AlreadyRunning without retrying`() = test {
+        var nodeRunning = false
+        stubNodeStatus { nodeRunning }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            nodeRunning = true
+            throw LdkError(NodeException.AlreadyRunning("already running"))
+        }
+
+        val result = sut.start()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `getStatus returns null while lifecycle state is not Running even if the node runs`() = test {
+        stubNodeStatus { true }
+
+        assertNull(sut.getStatus())
     }
 
     @Test

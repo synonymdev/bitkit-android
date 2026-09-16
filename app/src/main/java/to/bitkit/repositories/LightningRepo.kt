@@ -295,7 +295,7 @@ class LightningRepo @Inject constructor(
         customRgsServerUrl: String? = null,
         channelMigration: ChannelDataMigration? = null,
     ) = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val trustedPeers = fetchTrustedPeers()
             lightningService.setup(
                 walletIndex,
@@ -309,7 +309,7 @@ class LightningRepo @Inject constructor(
         }
     }
 
-    private suspend fun fetchTrustedPeers(): List<PeerDetails>? = runCatching {
+    private suspend fun fetchTrustedPeers(): List<PeerDetails>? = runSuspendCatching {
         val info = coreService.blocktank.info(refresh = false)
             ?: coreService.blocktank.info(refresh = true)
         info?.nodes?.toPeerDetailsList()?.also {
@@ -379,12 +379,7 @@ class LightningRepo @Inject constructor(
                         .onFailure {
                             Logger.warn("Failed to reconcile Paykit Server accounts during startup", it, context = TAG)
                         }
-                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-                    lightningService.startEventListener(::onEvent).onFailure {
-                        Logger.warn("Failed to start event listener", it, context = TAG)
-                        return@withLock Result.failure(it)
-                    }
-                    return@withLock Result.success(Unit)
+                    return@withLock adoptRunningNode()
                 }
 
                 lightningService.start(timeout, ::onEvent)
@@ -420,10 +415,20 @@ class LightningRepo @Inject constructor(
                 scope.launch { registerForNotifications() }
                 Result.success(Unit)
             }.getOrElse { e ->
+                if (e is CancellationException) {
+                    withContext(NonCancellable) { reconcileCancelledStart(initialLifecycleState) }
+                    throw e
+                }
+
                 val currentState = _lightningState.value.nodeLifecycleState
                 if (currentState.isRunning()) {
                     Logger.warn("Start error but node is $currentState, skipping retry", e, context = TAG)
                     return@withLock Result.success(Unit)
+                }
+
+                if (lightningService.status?.isRunning == true) {
+                    Logger.warn("Start error but LDK node is running, adopting it", e, context = TAG)
+                    return@withLock adoptRunningNode()
                 }
 
                 if (shouldRetry) {
@@ -467,6 +472,23 @@ class LightningRepo @Inject constructor(
         }
 
         result
+    }
+
+    private suspend fun adoptRunningNode(): Result<Unit> {
+        _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+        return lightningService.startEventListener(::onEvent).onFailure {
+            Logger.warn("Failed to start event listener", it, context = TAG)
+        }
+    }
+
+    private suspend fun reconcileCancelledStart(initialLifecycleState: NodeLifecycleState) {
+        if (lightningService.status?.isRunning == true) {
+            Logger.info("Adopted running LDK node after start cancellation", context = TAG)
+            adoptRunningNode()
+            return
+        }
+        Logger.info("Restored lifecycle state '$initialLifecycleState' after start cancellation", context = TAG)
+        _lightningState.update { it.copy(nodeLifecycleState = initialLifecycleState) }
     }
 
     private suspend fun skipStartForRunningNode(
