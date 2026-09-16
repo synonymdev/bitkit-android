@@ -29,8 +29,6 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeSource
 import dev.chrisbanes.haze.rememberHazeState
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.scaffold.SheetTopBar
@@ -53,7 +51,6 @@ fun BottomSheet(
     contentColor: Color = contentColorFor(containerColor),
     tonalElevation: Dp = 0.dp,
     scrimColor: Color = BottomSheetDefaults.ScrimColor,
-    showToastOverlay: Boolean = true,
     dragHandle: @Composable (() -> Unit)? = {
         Box(
             contentAlignment = Alignment.Center,
@@ -68,7 +65,6 @@ fun BottomSheet(
     properties: ModalBottomSheetProperties = ModalBottomSheetDefaults.properties,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    val toastHazeState = rememberHazeState(blurEnabled = true)
     val app = appViewModel
 
     ModalBottomSheet(
@@ -86,38 +82,23 @@ fun BottomSheet(
         properties = properties,
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .hazeSource(toastHazeState, zIndex = 0f)
-            ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 content()
             }
-            if (showToastOverlay && app != null) {
-                SheetToastHost(
-                    app = app,
-                    hazeState = toastHazeState,
-                    modifier = Modifier.matchParentSize()
-                )
-            }
+            if (app != null) SheetToastPopup(app)
         }
     }
 }
 
 @Composable
-private fun SheetToastHost(
-    app: AppViewModel,
-    hazeState: HazeState,
-    modifier: Modifier = Modifier,
-) {
+private fun SheetToastPopup(app: AppViewModel) {
     val currentToast by app.currentToast.collectAsStateWithLifecycle()
-    ToastOverlay(
+    ToastPopup(
         toast = currentToast,
-        onDismiss = { app.hideToast() },
-        hazeState = hazeState,
-        onDragStart = { app.pauseToast() },
-        onDragEnd = { app.resumeToast() },
-        modifier = modifier
+        hazeState = rememberHazeState(blurEnabled = false),
+        onDismiss = app::hideToast,
+        onDragStart = app::pauseToast,
+        onDragEnd = app::resumeToast,
     )
 }
 

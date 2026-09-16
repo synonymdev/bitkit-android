@@ -12,6 +12,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -180,10 +181,12 @@ class MainActivity : FragmentActivity() {
 
                     val showForgotPinSheet by appViewModel.showForgotPinSheet.collectAsStateWithLifecycle()
                     if (showForgotPinSheet) {
-                        ForgotPinSheet(
-                            onDismiss = { appViewModel.setShowForgotPin(false) },
-                            onResetClick = { walletViewModel.wipeWallet() },
-                        )
+                        CompositionLocalProvider(LocalAppViewModel provides appViewModel) {
+                            ForgotPinSheet(
+                                onDismiss = { appViewModel.setShowForgotPin(false) },
+                                onResetClick = { walletViewModel.wipeWallet() },
+                            )
+                        }
                     }
 
                     LaunchedEffect(appViewModel) {

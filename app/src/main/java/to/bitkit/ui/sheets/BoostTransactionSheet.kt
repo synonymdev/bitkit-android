@@ -102,11 +102,7 @@ fun BoostTransactionSheet(
 
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    BottomSheet(
-        onDismissRequest = onDismiss,
-        scrimColor = Color.Transparent,
-        showToastOverlay = false,
-    ) {
+    BottomSheet(onDismissRequest = onDismiss) {
         BoostTransactionContent(
             uiState = uiState,
             onClickEdit = viewModel::onClickEdit,

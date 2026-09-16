@@ -31,6 +31,7 @@ import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
+import to.bitkit.ui.LocalAppViewModel
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.LocalCurrencyViewModel
 import to.bitkit.ui.LocalSettingsViewModel
@@ -60,6 +61,7 @@ fun NewTransactionSheet(
     val details by appViewModel.transactionSheet.collectAsStateWithLifecycle()
 
     CompositionLocalProvider(
+        LocalAppViewModel provides appViewModel,
         LocalCurrencyViewModel provides currencyViewModel,
         LocalSettingsViewModel provides settingsViewModel,
         LocalCurrencies provides currencies,

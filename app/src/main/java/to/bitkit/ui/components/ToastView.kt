@@ -44,6 +44,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import dev.chrisbanes.haze.HazeState
 import dev.chrisbanes.haze.HazeStyle
 import dev.chrisbanes.haze.hazeEffect
@@ -310,6 +312,33 @@ fun ToastOverlay(
             onDismiss = onDismiss,
             onDragStart = onDragStart,
             onDragEnd = onDragEnd
+        )
+    }
+}
+
+@Composable
+fun ToastPopup(
+    toast: Toast?,
+    onDismiss: () -> Unit,
+    hazeState: HazeState = rememberHazeState(blurEnabled = false),
+    onDragStart: () -> Unit = {},
+    onDragEnd: () -> Unit = {},
+) {
+    if (toast == null) return
+
+    Popup(
+        alignment = Alignment.TopCenter,
+        properties = PopupProperties(
+            focusable = false,
+            clippingEnabled = false,
+        ),
+    ) {
+        ToastView(
+            toast = toast,
+            hazeState = hazeState,
+            onDismiss = onDismiss,
+            onDragStart = onDragStart,
+            onDragEnd = onDragEnd,
         )
     }
 }
