@@ -118,6 +118,7 @@ fun SheetHost(
     dismissEnabled: Boolean = true,
     sheetHandlePlacement: SheetHandlePlacement = SheetHandlePlacement.ScaffoldSlot,
     sheetDragHandle: @Composable (() -> Unit)? = { SheetDragHandle() },
+    scaffoldContainerColor: Color = MaterialTheme.colorScheme.surface,
     sheetContainerColor: Color = DefaultSheetContainerColor,
     sheetState: SheetState? = null,
     sheets: @Composable ColumnScope.() -> Unit,
@@ -163,6 +164,7 @@ fun SheetHost(
     Box(modifier = modifier.fillMaxSize()) {
         BottomSheetScaffold(
             scaffoldState = scaffoldState,
+            containerColor = scaffoldContainerColor,
             sheetPeekHeight = 0.dp,
             sheetShape = AppShapes.sheet,
             sheetContent = {

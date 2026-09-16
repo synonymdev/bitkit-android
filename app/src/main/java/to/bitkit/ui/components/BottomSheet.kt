@@ -20,6 +20,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.tooling.preview.Preview
@@ -100,6 +101,7 @@ fun BottomSheetOverlayHost(
                 SheetHost(
                     shouldExpand = true,
                     onDismiss = entry.onDismissRequest,
+                    scaffoldContainerColor = Color.Transparent,
                     sheetDragHandle = { ModalSheetDragHandle() },
                     sheetContainerColor = Colors.Black,
                     sheetState = entry.sheetState,
