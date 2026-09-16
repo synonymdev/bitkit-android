@@ -41,6 +41,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.repositories.WipeInProgressError
 import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.onboarding.LOADING_MS
@@ -99,6 +100,7 @@ class WalletViewModel @Inject constructor(
 
     val isShowingMigrationLoading: StateFlow<Boolean> = migrationService.isShowingMigrationLoading
     val isRestoringFromRNRemoteBackup: StateFlow<Boolean> = migrationService.isRestoringFromRNRemoteBackup
+    val isWiping: StateFlow<Boolean> = backupRepo.isWiping
 
     private val _restoreState = MutableStateFlow<RestoreState>(RestoreState.Initial)
     val restoreState: StateFlow<RestoreState> = _restoreState.asStateFlow()
@@ -340,10 +342,12 @@ class WalletViewModel @Inject constructor(
                 // checkForOrphanedChannelMonitorRecovery()
             }
             .onFailure {
-                Logger.error("Node startup error", it, context = TAG)
-                if (it !is RecoveryModeError) {
-                    ToastEventBus.send(it)
+                if (it is RecoveryModeError || it is WipeInProgressError) {
+                    Logger.debug("Skipped node start: '${it.message}'", context = TAG)
+                    return@onFailure
                 }
+                Logger.error("Node startup error", it, context = TAG)
+                ToastEventBus.send(it)
             }
     }
 

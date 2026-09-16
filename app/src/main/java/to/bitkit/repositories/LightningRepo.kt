@@ -144,6 +144,9 @@ class LightningRepo @Inject constructor(
     private val _isRecoveryMode = MutableStateFlow(false)
     val isRecoveryMode = _isRecoveryMode.asStateFlow()
 
+    @Volatile
+    private var isWiping = false
+
     private val channelCache = ConcurrentHashMap<String, ChannelDetails>()
     private val probeOutcomeCache = ConcurrentHashMap<PaymentId, ProbeOutcome>()
     private val probeOutcomeSignal = MutableSharedFlow<ProbeOutcome>(extraBufferCapacity = 64)
@@ -341,6 +344,7 @@ class LightningRepo @Inject constructor(
         var initialLifecycleState: NodeLifecycleState
 
         val result = lifecycleMutex.withLock {
+            if (isWiping) return@withLock Result.failure(WipeInProgressError())
             initialLifecycleState = _lightningState.value.nodeLifecycleState
             if (initialLifecycleState.isRunningOrStarting()) {
                 return@withLock skipStartForRunningNode(
@@ -574,6 +578,8 @@ class LightningRepo @Inject constructor(
 
     fun setRecoveryMode(enabled: Boolean) = _isRecoveryMode.update { enabled }
 
+    fun setWiping(enabled: Boolean) = run { isWiping = enabled }
+
     suspend fun updateGeoBlockState() = withContext(bgDispatcher) {
         _lightningState.update {
             it.copy(isGeoBlocked = coreService.isGeoBlocked())
@@ -614,30 +620,32 @@ class LightningRepo @Inject constructor(
     fun cancelPendingStop() = synchronized(pendingStopLock) { pendingStopJob.getAndSet(null)?.cancel() }
 
     suspend fun stop(): Result<Unit> = withContext(bgDispatcher) {
-        lifecycleMutex.withLock {
-            if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping()) {
-                clearProbeOutcomes()
-                return@withLock Result.success(Unit)
-            }
+        lifecycleMutex.withLock { stopLocked() }
+    }
 
-            runCatching {
-                withContext(NonCancellable) {
-                    _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
-                    lightningService.stop()
-                    clearProbeOutcomes()
-                    _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
-                }
-            }.onFailure {
-                Logger.error("Node stop error", it, context = TAG)
-                // On failure, check actual node state and update accordingly
-                // If node is still running, revert to Running state to allow retry
-                if (lightningService.node != null && lightningService.status?.isRunning == true) {
-                    Logger.warn("Stop failed but node is still running, reverting to Running state", context = TAG)
-                    _lightningState.update { s -> s.copy(nodeLifecycleState = NodeLifecycleState.Running) }
-                } else {
-                    // Node appears stopped, update state
-                    _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
-                }
+    private suspend fun stopLocked(): Result<Unit> {
+        if (_lightningState.value.nodeLifecycleState.isStoppedOrStopping() && lightningService.node == null) {
+            clearProbeOutcomes()
+            return Result.success(Unit)
+        }
+
+        return runCatching {
+            withContext(NonCancellable) {
+                _lightningState.update { it.copy(nodeLifecycleState = NodeLifecycleState.Stopping) }
+                lightningService.stop()
+                clearProbeOutcomes()
+                _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
+            }
+        }.onFailure {
+            Logger.error("Node stop error", it, context = TAG)
+            // On failure, check actual node state and update accordingly
+            // If node is still running, revert to Running state to allow retry
+            if (lightningService.node != null && lightningService.status?.isRunning == true) {
+                Logger.warn("Stop failed but node is still running, reverting to Running state", context = TAG)
+                _lightningState.update { s -> s.copy(nodeLifecycleState = NodeLifecycleState.Running) }
+            } else {
+                // Node appears stopped, update state
+                _lightningState.update { LightningState(nodeLifecycleState = NodeLifecycleState.Stopped) }
             }
         }
     }
@@ -810,17 +818,19 @@ class LightningRepo @Inject constructor(
 
     suspend fun wipeStorage(walletIndex: Int): Result<Unit> = withContext(bgDispatcher) {
         Logger.debug("wipeStorage called, stopping node first", context = TAG)
-        stop().mapCatching {
-            Logger.debug("node stopped, calling wipeStorage", context = TAG)
-            lightningService.wipeStorage(walletIndex)
-            clearProbeOutcomes()
-            _lightningState.update {
-                LightningState(
-                    nodeStatus = it.nodeStatus,
-                    nodeLifecycleState = it.nodeLifecycleState,
-                )
+        lifecycleMutex.withLock {
+            stopLocked().mapCatching {
+                Logger.debug("node stopped, calling wipeStorage", context = TAG)
+                lightningService.wipeStorage(walletIndex)
+                clearProbeOutcomes()
+                _lightningState.update {
+                    LightningState(
+                        nodeStatus = it.nodeStatus,
+                        nodeLifecycleState = it.nodeLifecycleState,
+                    )
+                }
+                setRecoveryMode(false)
             }
-            setRecoveryMode(false)
         }.onFailure {
             Logger.error("wipeStorage error", it, context = TAG)
         }
@@ -2117,6 +2127,8 @@ private data class PaymentRoutingRefreshStatus(
 }
 
 class RecoveryModeError : AppError("App in recovery mode, skipping node start")
+
+class WipeInProgressError : AppError("Wallet wipe in progress, refusing node start")
 class NodeSetupError : AppError("Unknown node setup error")
 class NodeStopTimeoutError : AppError("Timeout waiting for node to stop")
 class NodeConfigNotAppliedError : AppError("Node already running, requested config was not applied")

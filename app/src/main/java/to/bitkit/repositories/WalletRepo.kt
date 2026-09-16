@@ -45,6 +45,7 @@ import to.bitkit.models.toDerivationPath
 import to.bitkit.services.AddressDerivationInfo
 import to.bitkit.services.CoreService
 import to.bitkit.usecases.DeriveBalanceStateUseCase
+import to.bitkit.usecases.WipeIncomplete
 import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.Bip21Utils
 import to.bitkit.utils.Logger
@@ -477,7 +478,9 @@ class WalletRepo @Inject constructor(
             walletIndex = walletIndex,
             resetWalletState = ::resetState,
             onSuccess = ::setWalletExistsState,
-        )
+        ).onFailure {
+            if (it is WipeIncomplete) setWalletExistsState()
+        }
     }
 
     fun resetState() {
