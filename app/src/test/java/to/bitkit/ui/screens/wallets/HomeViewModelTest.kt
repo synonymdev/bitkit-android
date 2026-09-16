@@ -9,6 +9,7 @@ import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.SettingsData
@@ -102,6 +103,17 @@ class HomeViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(sut.uiState.value.showEmptyState)
+    }
+
+    @Test
+    fun `onPullToRefresh refreshes rates and widgets`() = test {
+        val sut = createViewModel()
+
+        sut.onPullToRefresh()
+        advanceUntilIdle()
+
+        verify(currencyRepo).triggerRefresh()
+        verify(widgetsRepo).refreshEnabledWidgets()
     }
 
     private fun createViewModel() = HomeViewModel(
