@@ -708,7 +708,7 @@ class BackupRepo @Inject constructor(
         )
         val parsed = json.decodeFromString<ActivityBackupV1>(migration.json)
         val persisted = activityRepo.restoreFromBackup(parsed)
-            .onFailure { Logger.warn("Failed to restore activity backup", it, context = TAG) }
+            .onFailure { Logger.warn("Skipped activity backup rewrite after a failed restore", context = TAG) }
             .isSuccess
 
         return RestoredCoreBackup(createdAt = parsed.createdAt, needsRewrite = migration.changed && persisted)

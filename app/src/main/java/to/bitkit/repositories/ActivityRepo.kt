@@ -987,21 +987,23 @@ class ActivityRepo @Inject constructor(
      * Core fails a bulk write as a whole, so applying all three slices together would let a single unusable tag cost
      * the activities and the closed channels too. The overall result still fails when any slice failed, keeping
      * [BackupRepo] from treating a partial restore as authoritative and rewriting a good backup with it.
+     * Observers are notified whenever at least one slice was applied.
      */
     suspend fun restoreFromBackup(payload: ActivityBackupV1): Result<Unit> = withContext(bgDispatcher) {
-        val failures = listOf(
+        val results = listOf(
             "activities" to runSuspendCatching { coreService.activity.upsertList(payload.activities) },
             "activityTags" to runSuspendCatching { coreService.activity.upsertTags(payload.activityTags) },
             "closedChannels" to runSuspendCatching {
                 coreService.activity.upsertClosedChannelList(payload.closedChannels)
             },
-        ).mapNotNull { (slice, result) ->
+        )
+        val failures = results.mapNotNull { (slice, result) ->
             result.exceptionOrNull()?.also {
                 Logger.error("Failed to restore '$slice' activity backup slice", it, context = TAG)
             }
         }
 
-        notifyActivitiesChanged(tagsChanged = true)
+        if (failures.size < results.size) notifyActivitiesChanged(tagsChanged = true)
 
         failures.firstOrNull()?.let { return@withContext Result.failure(it) }
 

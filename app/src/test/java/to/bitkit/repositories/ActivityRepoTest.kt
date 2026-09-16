@@ -950,6 +950,48 @@ class ActivityRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `restoreFromBackup applies remaining slices when the closed channels slice fails`() = test {
+        val failure = RuntimeException("closed channels upsert failed")
+        whenever(coreService.activity.upsertClosedChannelList(any())).thenThrow(failure)
+        val activitiesBefore = sut.activitiesChanged.value
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        verify(coreService.activity).upsertList(listOf(testActivity))
+        verify(coreService.activity).upsertTags(listOf(backupTags))
+        assertEquals(failure, result.exceptionOrNull())
+        assertTrue(sut.activitiesChanged.value > activitiesBefore)
+    }
+
+    @Test
+    fun `restoreFromBackup returns the first failure when several slices fail`() = test {
+        val activitiesFailure = RuntimeException("activities upsert failed")
+        whenever(coreService.activity.upsertList(any())).thenThrow(activitiesFailure)
+        whenever(coreService.activity.upsertTags(any())).thenThrow(RuntimeException("tags upsert failed"))
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
+        assertEquals(activitiesFailure, result.exceptionOrNull())
+    }
+
+    @Test
+    fun `restoreFromBackup does not notify observers when every slice fails`() = test {
+        whenever(coreService.activity.upsertList(any())).thenThrow(RuntimeException("activities upsert failed"))
+        whenever(coreService.activity.upsertTags(any())).thenThrow(RuntimeException("tags upsert failed"))
+        whenever(coreService.activity.upsertClosedChannelList(any()))
+            .thenThrow(RuntimeException("closed channels upsert failed"))
+        val activitiesBefore = sut.activitiesChanged.value
+        val tagsBefore = sut.activityTagsChanged.value
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        assertTrue(result.isFailure)
+        assertEquals(activitiesBefore, sut.activitiesChanged.value)
+        assertEquals(tagsBefore, sut.activityTagsChanged.value)
+    }
+
+    @Test
     fun `restoreFromBackup rethrows cancellation`() = test {
         val cancellation = CancellationException("cancelled")
         whenever(coreService.activity.upsertTags(any())).thenThrow(cancellation)
