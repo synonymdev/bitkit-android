@@ -114,6 +114,16 @@ class JadeRepo @Inject constructor(
     private var isSetup = CompletableDeferred<Unit>()
     private val setupMutex = Mutex()
 
+    /**
+     * Orders an external disconnect notification against the next connect.
+     *
+     * bitkit-core requires `jade_notify_disconnected` to finish before a reconnect for the same
+     * path. A notification still pending when the reconnect completes matches the new session's
+     * path and tears it down. Held only for the notification itself, so a long connect or unlock
+     * never delays one.
+     */
+    private val disconnectNoticeMutex = Mutex()
+
     @Volatile
     private var transportReconnectJob: Job? = null
 
@@ -623,6 +633,7 @@ class JadeRepo @Inject constructor(
         connectingPath = device.path
         var succeeded = false
         try {
+            awaitDisconnectNotice()
             var version = jadeService.connect(
                 device.transport,
                 device.path,
@@ -800,6 +811,9 @@ class JadeRepo @Inject constructor(
         }
     }
 
+    /** Waits out an external disconnect notification, per [disconnectNoticeMutex]. */
+    private suspend fun awaitDisconnectNotice() = disconnectNoticeMutex.withLock { }
+
     private fun isConnectInProgress(): Boolean = _state.value.let { it.isConnecting || it.isAutoReconnecting }
 
     private fun launchTransportReconnect(transportType: TransportType) {
@@ -828,8 +842,10 @@ class JadeRepo @Inject constructor(
             if (connected.path != path) return@onEach
             Logger.warn("External disconnect detected for Jade '${connected.id}'", context = TAG)
             _state.update { it.copy(connected = null, error = "Device disconnected") }
-            runSuspendCatching { jadeService.notifyDisconnected(path) }
-                .onFailure { Logger.warn("Failed to report Jade disconnect", it, context = TAG) }
+            disconnectNoticeMutex.withLock {
+                runSuspendCatching { jadeService.notifyDisconnected(path) }
+                    .onFailure { Logger.warn("Failed to report Jade disconnect", it, context = TAG) }
+            }
         }.launchIn(scope)
     }
 

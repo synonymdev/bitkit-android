@@ -12,8 +12,10 @@ import com.synonym.bitkitcore.JadeNetwork
 import com.synonym.bitkitcore.JadeState
 import com.synonym.bitkitcore.JadeTransportKind
 import com.synonym.bitkitcore.JadeVersionInfo
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
@@ -22,6 +24,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.atLeastOnce
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
@@ -498,6 +501,33 @@ class JadeRepoTest : BaseUnitTest() {
 
         assertNull(sut.state.value.connected)
         verify(jadeService).notifyDisconnected(USB_PATH)
+    }
+
+    @Test
+    fun `a reconnect waits for the disconnect notice to reach core`() = test {
+        // bitkit-core matches a pending jade_notify_disconnected against the connected path, so a
+        // notice still in flight when a reconnect completes tears the new session down instead of
+        // the old one. The repo has to let the notice finish before it connects again.
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        whenever { jadeService.connect(any(), any(), any()) }.thenReturn(versionInfo(JadeState.READY))
+        val sut = createRepo()
+        sut.connectKnownDevice(knownUsb.id).getOrThrow()
+        val notice = CompletableDeferred<Unit>()
+        whenever { jadeService.notifyDisconnected(USB_PATH) }.doSuspendableAnswer { notice.await() }
+
+        externalDisconnect.emit(USB_PATH)
+        advanceUntilIdle()
+        val reconnect = launch { sut.connectKnownDevice(knownUsb.id) }
+        advanceUntilIdle()
+
+        verify(jadeService, times(1)).connect(any(), any(), any())
+
+        notice.complete(Unit)
+        advanceUntilIdle()
+        reconnect.join()
+
+        verify(jadeService, times(2)).connect(any(), any(), any())
     }
 
     @Test
