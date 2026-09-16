@@ -1,8 +1,11 @@
 package to.bitkit.data.backup
 
+import com.synonym.vssclient.VssItem
+import com.synonym.vssclient.vssStore
 import kotlinx.coroutines.runBlocking
 import org.junit.Before
 import org.junit.Test
+import org.mockito.Mockito.mockStatic
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -10,7 +13,9 @@ import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.test.BaseUnitTest
+import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class VssBackupClientTest : BaseUnitTest() {
@@ -50,9 +55,7 @@ class VssBackupClientTest : BaseUnitTest() {
 
     @Test
     fun `setup checks mnemonic before proceeding with vss initialization`() = test {
-        val testMnemonic = "abandon abandon abandon abandon abandon abandon " +
-            "abandon abandon abandon abandon abandon about"
-        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(testMnemonic)
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(TEST_MNEMONIC)
         whenever(vssStoreIdProvider.getVssStoreId(any())).thenReturn("test-store-id")
 
         // Setup will fail on native VSS calls, but we verify we passed the mnemonic check
@@ -69,5 +72,46 @@ class VssBackupClientTest : BaseUnitTest() {
         assertIs<MnemonicNotAvailableException>(sut.setup().exceptionOrNull())
         assertIs<MnemonicNotAvailableException>(sut.setup().exceptionOrNull())
         assertIs<MnemonicNotAvailableException>(sut.setup().exceptionOrNull())
+    }
+
+    @Test
+    fun `setup succeeding after a failure leaves the client usable`() = test {
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(null)
+        assertIs<MnemonicNotAvailableException>(sut.setup().exceptionOrNull())
+
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(TEST_MNEMONIC)
+        whenever(vssStoreIdProvider.getVssStoreId(any())).thenReturn("test-store-id")
+
+        mockStatic(Class.forName(VSS_FFI_CLASS)).use {
+            assertTrue(sut.setup().isSuccess)
+
+            val result = sut.getObject("METADATA")
+
+            assertTrue(result.isSuccess)
+            assertNull(result.getOrNull())
+        }
+    }
+
+    @Test
+    fun `setupWithRetry succeeding after a failure leaves the client usable`() = test {
+        whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name))
+            .thenReturn(null)
+            .thenReturn(TEST_MNEMONIC)
+        whenever(vssStoreIdProvider.getVssStoreId(any())).thenReturn("test-store-id")
+
+        mockStatic(Class.forName(VSS_FFI_CLASS)).use {
+            assertTrue(sut.setupWithRetry(baseDelayMs = 0L) {}.isSuccess)
+
+            val item = VssItem("METADATA", byteArrayOf(), 1L)
+            whenever(vssStore(any(), any())).thenReturn(item)
+
+            assertEquals(item, sut.putObject("METADATA", byteArrayOf()).getOrNull())
+        }
+    }
+
+    companion object {
+        private const val VSS_FFI_CLASS = "com.synonym.vssclient.Vss_rust_client_ffiKt"
+        private const val TEST_MNEMONIC = "abandon abandon abandon abandon abandon abandon " +
+            "abandon abandon abandon abandon abandon about"
     }
 }

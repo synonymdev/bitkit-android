@@ -34,6 +34,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.OnchainService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.usecases.DeriveBalanceStateUseCase
+import to.bitkit.usecases.WipeIncomplete
 import to.bitkit.usecases.WipeWalletUseCase
 import to.bitkit.utils.ServiceError
 import kotlin.test.assertEquals
@@ -844,6 +845,17 @@ class WalletRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         verify(wipeWalletUseCase).invoke(any(), any(), any())
+    }
+
+    @Test
+    fun `wipeWallet re-reads wallet existence when the wipe is incomplete`() = test {
+        whenever(keychain.exists(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn(true)
+        whenever(wipeWalletUseCase.invoke(any(), any(), any())).thenReturn(Result.failure(WipeIncomplete()))
+
+        val result = sut.wipeWallet()
+
+        assertTrue(result.isFailure)
+        assertTrue(sut.walletState.value.walletExists)
     }
 
     @Test

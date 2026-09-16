@@ -122,6 +122,7 @@ class BackupRepo @Inject constructor(
     val isRestoring: StateFlow<Boolean> = _isRestoring.asStateFlow()
 
     private val _isWiping = MutableStateFlow(false)
+    val isWiping: StateFlow<Boolean> = _isWiping.asStateFlow()
 
     fun reset() {
         stopObservingBackups()
@@ -140,6 +141,10 @@ class BackupRepo @Inject constructor(
 
     fun startObservingBackups() {
         if (isObserving) return
+        if (_isWiping.value) {
+            Logger.debug("Skipped observing backups while wiping", context = TAG)
+            return
+        }
 
         isObserving = true
         Logger.debug("Start observing backup statuses and data store changes", context = TAG)
