@@ -89,7 +89,7 @@ class WipeWalletUseCase @Inject constructor(
         lightningRepo.wipeStorage(walletIndex).onFailure { return Result.failure(it) }
         step("clear Paykit address reservations") { privatePaykitAddressReservationRepo.clear() }
         step("wipe Pubky local state") { pubkyRepo.wipeLocalState() }
-        step("wipe keychain") { keychain.wipe() }
+        val keychainWiped = step("wipe keychain") { keychain.wipe() }
         step("delete FCM token") { firebaseMessaging.deleteToken() }
         step("wipe core data") { coreService.wipeData() }
         step("clear database") { db.clearAllTables() }
@@ -102,14 +102,14 @@ class WipeWalletUseCase @Inject constructor(
         hwWalletRepo.resetState()
         resetWalletState()
         step("mark migration checked") { migrationService.markMigrationChecked() }
-        return Result.success(Unit)
+        return if (keychainWiped) Result.success(Unit) else Result.failure(WipeIncomplete())
     }
 
-    private suspend fun step(name: String, block: suspend () -> Any?) {
+    private suspend fun step(name: String, block: suspend () -> Any?): Boolean =
         runSuspendCatching { block() }
             .mapCatching { if (it is Result<*>) it.getOrThrow() }
             .onFailure { Logger.warn("Failed wipe step '$name'", it, context = TAG) }
-    }
+            .isSuccess
 
     companion object {
         private const val TAG = "WipeWalletUseCase"
@@ -117,3 +117,5 @@ class WipeWalletUseCase @Inject constructor(
 }
 
 class WipeAlreadyInProgress : AppError("Wallet wipe already in progress")
+
+class WipeIncomplete : AppError("Wallet wipe did not complete, please reset again")

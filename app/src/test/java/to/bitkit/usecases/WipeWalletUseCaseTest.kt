@@ -206,6 +206,23 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
     }
 
     @Test
+    fun `invoke should fail after wiping the rest when keychain wipe fails`() = runTest {
+        whenever(keychain.wipe()).thenThrow(RuntimeException("keystore write failed"))
+
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertIs<WipeIncomplete>(result.exceptionOrNull())
+        verify(lightningRepo).wipeStorage(0)
+        verify(db).clearAllTables()
+        verify(settingsStore).reset()
+        assertTrue(onWipeCalled)
+        assertFalse(onSetWalletExistsStateCalled)
+    }
+
+    @Test
     fun `invoke should pass walletIndex to lightningRepo wipeStorage`() = runTest {
         val walletIndex = 5
         whenever { lightningRepo.wipeStorage(walletIndex) }.thenReturn(Result.success(Unit))
