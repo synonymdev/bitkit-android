@@ -144,6 +144,9 @@ class LightningRepo @Inject constructor(
     private val _isRecoveryMode = MutableStateFlow(false)
     val isRecoveryMode = _isRecoveryMode.asStateFlow()
 
+    @Volatile
+    private var isWiping = false
+
     private val channelCache = ConcurrentHashMap<String, ChannelDetails>()
     private val probeOutcomeCache = ConcurrentHashMap<PaymentId, ProbeOutcome>()
     private val probeOutcomeSignal = MutableSharedFlow<ProbeOutcome>(extraBufferCapacity = 64)
@@ -341,6 +344,7 @@ class LightningRepo @Inject constructor(
         var initialLifecycleState: NodeLifecycleState
 
         val result = lifecycleMutex.withLock {
+            if (isWiping) return@withLock Result.failure(WipeInProgressError())
             initialLifecycleState = _lightningState.value.nodeLifecycleState
             if (initialLifecycleState.isRunningOrStarting()) {
                 return@withLock skipStartForRunningNode(
@@ -573,6 +577,8 @@ class LightningRepo @Inject constructor(
     }
 
     fun setRecoveryMode(enabled: Boolean) = _isRecoveryMode.update { enabled }
+
+    fun setWiping(enabled: Boolean) = run { isWiping = enabled }
 
     suspend fun updateGeoBlockState() = withContext(bgDispatcher) {
         _lightningState.update {
@@ -2121,6 +2127,8 @@ private data class PaymentRoutingRefreshStatus(
 }
 
 class RecoveryModeError : AppError("App in recovery mode, skipping node start")
+
+class WipeInProgressError : AppError("Wallet wipe in progress, refusing node start")
 class NodeSetupError : AppError("Unknown node setup error")
 class NodeStopTimeoutError : AppError("Timeout waiting for node to stop")
 class NodeConfigNotAppliedError : AppError("Node already running, requested config was not applied")

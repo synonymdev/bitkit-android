@@ -894,6 +894,17 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `start is refused while a wipe is in progress`() = test {
+        sut.setWiping(true)
+
+        val result = sut.start()
+
+        assertIs<WipeInProgressError>(result.exceptionOrNull())
+        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
     fun `connectToTrustedPeers should fail when node is not running`() = test {
         val result = sut.connectToTrustedPeers()
         assertTrue(result.isFailure)

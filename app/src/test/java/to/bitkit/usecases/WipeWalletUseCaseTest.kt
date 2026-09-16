@@ -126,6 +126,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             privatePaykitAddressReservationRepo,
         )
         inOrder.verify(backupRepo).setWiping(true)
+        inOrder.verify(lightningRepo).setWiping(true)
         inOrder.verify(backupRepo).reset()
         inOrder.verify(lightningRepo).stop()
         inOrder.verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
@@ -146,6 +147,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(hwWalletRepo).resetState()
         assertTrue(onWipeCalled)
         assertTrue(onSetWalletExistsStateCalled)
+        inOrder.verify(lightningRepo).setWiping(false)
         inOrder.verify(backupRepo).setWiping(false)
     }
 

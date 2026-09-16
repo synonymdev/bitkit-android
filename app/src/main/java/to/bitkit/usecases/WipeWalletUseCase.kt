@@ -55,6 +55,7 @@ class WipeWalletUseCase @Inject constructor(
     ): Result<Unit> {
         if (!wipeMutex.tryLock()) return Result.failure(WipeAlreadyInProgress())
         backupRepo.setWiping(true)
+        lightningRepo.setWiping(true)
         val result = try {
             runSuspendCatching {
                 stopNode().getOrThrow()
@@ -63,6 +64,7 @@ class WipeWalletUseCase @Inject constructor(
                 onSuccess()
             }
         } finally {
+            lightningRepo.setWiping(false)
             backupRepo.setWiping(false)
             wipeMutex.unlock()
         }
