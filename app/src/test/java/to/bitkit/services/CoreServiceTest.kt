@@ -273,31 +273,19 @@ class CoreServiceTest {
     }
 
     @Test
-    fun `payment update keeps prior message when description is null`() {
-        val result = failedSend(message = "coffee").withPaymentUpdate(
+    fun `payment update keeps prior message when description is a description hash`() {
+        val result = failedSend(message = "lnurl comment").withPaymentUpdate(
             payment = payment(),
-            kind = bolt11(description = null),
+            kind = bolt11(description = "a".repeat(64)),
             state = PaymentState.SUCCEEDED,
             contact = null,
         )
 
-        assertEquals("coffee", result.message)
+        assertEquals("lnurl comment", result.message)
     }
 
     @Test
-    fun `payment update keeps prior message when description is empty`() {
-        val result = failedSend(message = "coffee").withPaymentUpdate(
-            payment = payment(),
-            kind = bolt11(description = ""),
-            state = PaymentState.SUCCEEDED,
-            contact = null,
-        )
-
-        assertEquals("coffee", result.message)
-    }
-
-    @Test
-    fun `payment update replaces message with non-empty description`() {
+    fun `payment update keeps prior message when description differs`() {
         val result = failedSend(message = "coffee").withPaymentUpdate(
             payment = payment(),
             kind = bolt11(description = "tea"),
@@ -305,7 +293,7 @@ class CoreServiceTest {
             contact = null,
         )
 
-        assertEquals("tea", result.message)
+        assertEquals("coffee", result.message)
     }
 
     private fun mergePlan(

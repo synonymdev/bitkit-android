@@ -328,8 +328,8 @@ private fun OnchainActivity.withRecoveredTransfer(recoveredChannelId: String?): 
  * Applies the latest LDK payment details to a stored Lightning activity.
  *
  * A retry of the same invoice reuses the payment hash, so the stored row must take the final
- * attempt's amount, fee and preimage. Missing values keep the stored ones, and an empty
- * description never wipes a stored message.
+ * attempt's amount, fee and preimage. Missing values keep the stored ones. The stored message is
+ * never replaced, because LDK reports a description-hash invoice's hash as its description.
  */
 internal fun LightningActivity.withPaymentUpdate(
     payment: PaymentDetails,
@@ -340,7 +340,6 @@ internal fun LightningActivity.withPaymentUpdate(
     value = payment.amountSats ?: value,
     fee = payment.feePaidMsat?.let { msatFloorOf(it) } ?: fee,
     preimage = kind.preimage ?: preimage,
-    message = kind.description?.takeIf { it.isNotEmpty() } ?: message,
     updatedAt = payment.latestUpdateTimestamp,
     status = state,
     contact = contact,
