@@ -23,6 +23,7 @@ import to.bitkit.models.FIAT_DECIMALS
 import to.bitkit.models.FxRate
 import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.STUB_RATE
+import to.bitkit.models.formatToModernDisplay
 import to.bitkit.repositories.CurrencyRepo
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.services.CurrencyService
@@ -363,6 +364,62 @@ class AmountInputViewModelTest : BaseUnitTest() {
         viewModel.setSats(12345L, currency)
         assertEquals(12345L, viewModel.uiState.value.sats)
         assertEquals("12 345", viewModel.uiState.value.text)
+    }
+
+    @Test
+    fun `setSats in modern bitcoin allows digits up to max amount`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        viewModel.setSats(12_345_678L, currency)
+        assertEquals("12 345 678", viewModel.uiState.value.text)
+
+        viewModel.handleNumberPadInput("9", currency)
+
+        assertEquals(123_456_789L, viewModel.uiState.value.sats)
+        assertEquals("123 456 789", viewModel.uiState.value.text)
+        assertNull(viewModel.uiState.value.errorKey)
+    }
+
+    @Test
+    fun `setSats in modern bitcoin then delete removes a digit on every press`() = test {
+        val currency = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        viewModel.setSats(1_234L, currency)
+        assertEquals("1 234", viewModel.uiState.value.text)
+
+        viewModel.handleNumberPadInput(KEY_DELETE, currency)
+        assertEquals(123L, viewModel.uiState.value.sats)
+        assertEquals("123", viewModel.uiState.value.text)
+
+        viewModel.handleNumberPadInput(KEY_DELETE, currency)
+        assertEquals(12L, viewModel.uiState.value.sats)
+
+        viewModel.handleNumberPadInput(KEY_DELETE, currency)
+        assertEquals(1L, viewModel.uiState.value.sats)
+
+        viewModel.handleNumberPadInput(KEY_DELETE, currency)
+        assertEquals(0L, viewModel.uiState.value.sats)
+        assertEquals("", viewModel.uiState.value.text)
+    }
+
+    @Test
+    fun `switchUnit from fiat to modern bitcoin accepts appended digit`() = test {
+        val fiat = mockCurrency(PrimaryDisplay.FIAT)
+        val modernBtc = mockCurrency(PrimaryDisplay.BITCOIN, BitcoinDisplayUnit.MODERN)
+
+        "11515".forEach { viewModel.handleNumberPadInput(it.toString(), fiat) }
+        val satsBefore = viewModel.uiState.value.sats
+        assertTrue(satsBefore >= 10_000_000L)
+
+        viewModel.switchUnit(fiat)
+        assertEquals(satsBefore, viewModel.uiState.value.sats)
+
+        viewModel.handleNumberPadInput("1", modernBtc)
+
+        val expectedSats = satsBefore * 10 + 1
+        assertEquals(expectedSats, viewModel.uiState.value.sats)
+        assertEquals(expectedSats.formatToModernDisplay(), viewModel.uiState.value.text)
+        assertNull(viewModel.uiState.value.errorKey)
     }
 
     @Test
