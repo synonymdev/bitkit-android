@@ -70,18 +70,27 @@ import com.synonym.paykit.pubkySecretKeyFromBip39Mnemonic
 import com.synonym.paykit.requiredSessionCapabilities
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import org.lightningdevkit.ldknode.Network
+import to.bitkit.async.BaseCoroutineScope
 import to.bitkit.data.keychain.Keychain
+import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
 import to.bitkit.ext.fromHex
+import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toHex
 import to.bitkit.models.PubkyAuthRequestError
@@ -98,6 +107,8 @@ import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.Duration.Companion.seconds
 
 data class PaykitPreparedPrivateContactPayment(
     val resolution: PaykitPrivateContactPaymentResolution,
@@ -158,11 +169,22 @@ internal object PaykitReceiverPaths {
 class PaykitSdkService @Inject constructor(
     @ApplicationContext private val context: Context,
     private val keychain: Keychain,
-) {
+    @IoDispatcher ioDispatcher: CoroutineDispatcher,
+) : BaseCoroutineScope(ioDispatcher, TAG) {
     private val stateStore = PaykitSdkStateBlobStore(keychain)
     private val sessionProvider = PaykitSdkSessionProvider(keychain)
     private val paymentAdapter = PaykitSdkPaymentAdapter()
     private val pubkyClientConfig by lazy { paykitPubkyClientConfig() }
+    private var bootstrapFactory = {
+        PubkySessionBootstrap.withPubkyClientConfig(
+            clientId = BitkitPaykitSdkConfig.clientId,
+            pubkyClient = pubkyClientConfig,
+        )
+    }
+    private val cachedBootstrap by lazy { bootstrapFactory() }
+    private val identityRepublishMutex = Mutex()
+    private var republishPublicKey: String? = null
+    private var nextIdentityRepublishAt = 0L
     private val handleMutex = Mutex()
     private val operationMutex = Mutex()
     private val setupMutex = Mutex()
@@ -182,8 +204,15 @@ class PaykitSdkService @Inject constructor(
         )
     }
 
-    internal constructor(context: Context, keychain: Keychain, sdkFactory: () -> PaykitSdk) : this(context, keychain) {
+    internal constructor(
+        context: Context,
+        keychain: Keychain,
+        bootstrapFactory: (() -> PubkySessionBootstrap)? = null,
+        ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+        sdkFactory: () -> PaykitSdk,
+    ) : this(context, keychain, ioDispatcher) {
         this.sdkFactory = sdkFactory
+        if (bootstrapFactory != null) this.bootstrapFactory = bootstrapFactory
         isSetup.complete(Unit)
     }
 
@@ -198,6 +227,7 @@ class PaykitSdkService @Inject constructor(
 
             try {
                 PaykitAndroid.initializeOrThrow(context)
+                launch { republishIdentityIfNeeded() }
                 operationMutex.withLock {
                     var handle = handle()
                     try {
@@ -228,6 +258,36 @@ class PaykitSdkService @Inject constructor(
                 throw t
             }
         }
+    }
+
+    suspend fun republishIdentityIfNeeded(publicKey: String? = null, now: Long = nowMillis()) {
+        currentCoroutineContext().ensureActive()
+        val publication = launch {
+            if (!identityRepublishMutex.tryLock()) return@launch
+            try {
+                withTimeoutOrNull(IDENTITY_REPUBLISH_TIMEOUT) {
+                    runSuspendCatching {
+                        if (!isSetup.isCompleted) PaykitAndroid.initializeOrThrow(context)
+                        val key = publicKey ?: sessionProvider.loadLocalSecretKey()?.let(::pubkyPublicKeyFromSecret)
+                        val identity = key?.let(PubkyPublicKeyFormat::normalized) ?: return@runSuspendCatching
+                        if (identity == republishPublicKey && now < nextIdentityRepublishAt) return@runSuspendCatching
+
+                        republishPublicKey = identity
+                        nextIdentityRepublishAt = now + IDENTITY_REPUBLISH_RETRY_INTERVAL.inWholeMilliseconds
+                        if (bootstrap().republishIdentity(identity)) {
+                            nextIdentityRepublishAt = now + IDENTITY_REPUBLISH_INTERVAL.inWholeMilliseconds
+                            Logger.debug("Republished Pubky identity", context = TAG)
+                        } else {
+                            Logger.debug("Found no Pubky identity record to republish", context = TAG)
+                        }
+                    }.onFailure { Logger.warn("Failed to republish Pubky identity", it, context = TAG) }
+                } ?: Logger.warn("Timed out republishing Pubky identity", context = TAG)
+            } finally {
+                identityRepublishMutex.unlock()
+            }
+        }
+        withTimeoutOrNull(IDENTITY_REPUBLISH_WAIT_TIMEOUT) { publication.join() }
+            ?: Logger.debug("Continuing while Pubky identity publication is pending", context = TAG)
     }
 
     suspend fun currentPublicKey(): String? {
@@ -956,6 +1016,7 @@ class PaykitSdkService @Inject constructor(
         val handle = handle()
         handle.initialize()
         publishReceiverMarkerIfLiveSessionAvailable(handle)
+        republishIdentityIfNeeded(publicKey = result.publicKey)
     }
 
     private suspend fun clearRegisteredIdentityActivationLocked() = withContext(NonCancellable) {
@@ -1007,10 +1068,7 @@ class PaykitSdkService @Inject constructor(
         sdkFactory().also { sdk = it }
     }
 
-    private fun bootstrap() = PubkySessionBootstrap.withPubkyClientConfig(
-        clientId = BitkitPaykitSdkConfig.clientId,
-        pubkyClient = pubkyClientConfig,
-    )
+    private fun bootstrap() = cachedBootstrap
 
     private fun approvalBootstrap(authUrl: String, approvedClientId: String): PubkySessionBootstrap {
         val requestClientId = parsePubkyAuthUrl(authUrl).clientId.orEmpty()
@@ -1038,6 +1096,18 @@ class PaykitSdkService @Inject constructor(
 
     companion object {
         private const val TAG = "PaykitSdkService"
+
+        /** Minimum delay between successful identity republications. */
+        private val IDENTITY_REPUBLISH_INTERVAL = 30.minutes
+
+        /** Minimum delay before retrying missing records or failed publication. */
+        private val IDENTITY_REPUBLISH_RETRY_INTERVAL = 1.minutes
+
+        /** Maximum duration of an identity publication attempt. */
+        private val IDENTITY_REPUBLISH_TIMEOUT = 30.seconds
+
+        /** Maximum time identity maintenance may delay its caller. */
+        private val IDENTITY_REPUBLISH_WAIT_TIMEOUT = 5.seconds
 
         fun localSecretKey(secretKeyHex: String): PubkyLocalSecretKey =
             PubkyLocalSecretKey(secretKeyHex.fromHex())
