@@ -322,6 +322,20 @@ class DateTimeExtTest : BaseUnitTest() {
     }
 
     @Test
+    fun `toEpochSecondsOrNull returns null for a pre-1970 instant`() {
+        val result = "1969-12-31T23:59:59Z".toEpochSecondsOrNull()
+
+        assertNull(result)
+    }
+
+    @Test
+    fun `toEpochSecondsOrNull parses the epoch start`() {
+        val result = "1970-01-01T00:00:00Z".toEpochSecondsOrNull()
+
+        assertEquals(0uL, result)
+    }
+
+    @Test
     fun `toEpochSecondsOrNull returns null for an empty string`() {
         val result = "".toEpochSecondsOrNull()
 

@@ -58,7 +58,7 @@ fun ULong?.formatToString(pattern: String = DatePattern.DATE_TIME): String? {
 }
 
 fun String.toEpochSecondsOrNull(): ULong? =
-    runCatching { Instant.parse(this).epochSecond.toULong() }.getOrNull()
+    runCatching { Instant.parse(this).epochSecond }.getOrNull()?.takeIf { it >= 0 }?.toULong()
 
 fun Long.toTimeUTC(): String {
     val instant = Instant.ofEpochMilli(this)
@@ -252,7 +252,7 @@ enum class UiDateStyle {
             DATE -> DAY
             DATE_TIME -> "$DAY, $time"
             DATE_TIME_YEAR -> "$DAY_WITH_YEAR, $time"
-            DATE_TIME_YEAR_SHORT -> "$SHORT_DAY_WITH_YEAR, $time"
+            DATE_TIME_YEAR_SHORT -> "${DatePattern.DATE_FORMAT}, $time"
         }
     }
 
@@ -261,7 +261,6 @@ enum class UiDateStyle {
         const val TIME_24H = "HH:mm"
         const val DAY = "MMMM d"
         const val DAY_WITH_YEAR = "MMMM d yyyy"
-        const val SHORT_DAY_WITH_YEAR = "MMM d, yyyy"
     }
 }
 
