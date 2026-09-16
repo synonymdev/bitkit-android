@@ -41,6 +41,7 @@ import to.bitkit.repositories.PubkyRepo
 import to.bitkit.repositories.RecoveryModeError
 import to.bitkit.repositories.SyncSource
 import to.bitkit.repositories.WalletRepo
+import to.bitkit.repositories.WipeInProgressError
 import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.ui.onboarding.LOADING_MS
@@ -99,6 +100,7 @@ class WalletViewModel @Inject constructor(
 
     val isShowingMigrationLoading: StateFlow<Boolean> = migrationService.isShowingMigrationLoading
     val isRestoringFromRNRemoteBackup: StateFlow<Boolean> = migrationService.isRestoringFromRNRemoteBackup
+    val isWiping: StateFlow<Boolean> = backupRepo.isWiping
 
     private val _restoreState = MutableStateFlow<RestoreState>(RestoreState.Initial)
     val restoreState: StateFlow<RestoreState> = _restoreState.asStateFlow()
@@ -340,10 +342,12 @@ class WalletViewModel @Inject constructor(
                 // checkForOrphanedChannelMonitorRecovery()
             }
             .onFailure {
-                Logger.error("Node startup error", it, context = TAG)
-                if (it !is RecoveryModeError) {
-                    ToastEventBus.send(it)
+                if (it is RecoveryModeError || it is WipeInProgressError) {
+                    Logger.debug("Skipped node start: '${it.message}'", context = TAG)
+                    return@onFailure
                 }
+                Logger.error("Node startup error", it, context = TAG)
+                ToastEventBus.send(it)
             }
     }
 
@@ -511,6 +515,16 @@ class WalletViewModel @Inject constructor(
 
     fun updateBip21Invoice(amountSats: ULong? = walletState.value.bip21AmountSats) = viewModelScope.launch {
         walletRepo.updateBip21Invoice(amountSats).onFailure { error ->
+            ToastEventBus.send(
+                type = Toast.ToastType.ERROR,
+                title = context.getString(R.string.wallet__error_invoice_update),
+                description = error.message ?: context.getString(R.string.common__error_body)
+            )
+        }
+    }
+
+    fun updateOnchainBip21Amount(amountSats: ULong?) = viewModelScope.launch {
+        walletRepo.updateOnchainBip21Amount(amountSats).onFailure { error ->
             ToastEventBus.send(
                 type = Toast.ToastType.ERROR,
                 title = context.getString(R.string.wallet__error_invoice_update),

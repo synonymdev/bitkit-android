@@ -135,6 +135,16 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `start observing is skipped while wiping`() = test {
+        sut.setWiping(true)
+
+        sut.startObservingBackups()
+        runCurrent()
+
+        verify(vssBackupClient, never()).setupWithRetry(any(), any(), any())
+    }
+
+    @Test
     fun `full restore should fail when private Paykit reservations fail to restore`() = test {
         stubWalletBackup()
         whenever { privatePaykitAddressReservationRepo.restoreBackup(any()) }
