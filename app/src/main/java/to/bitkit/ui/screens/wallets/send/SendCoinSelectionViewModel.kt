@@ -27,7 +27,6 @@ import to.bitkit.ext.runSuspendCatching
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.NodeNotRunningError
-import to.bitkit.repositories.NodeRunTimeoutError
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import javax.inject.Inject
@@ -109,7 +108,7 @@ class SendCoinSelectionViewModel @Inject constructor(
     }
 
     private fun Throwable.isTransientNodeError(): Boolean = when (this) {
-        is NodeNotRunningError, is NodeRunTimeoutError, is ServiceError.NodeNotSetup -> true
+        is NodeNotRunningError, is ServiceError.NodeNotSetup -> true
         else -> false
     }
 

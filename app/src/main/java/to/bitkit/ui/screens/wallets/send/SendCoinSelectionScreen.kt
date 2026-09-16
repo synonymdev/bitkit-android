@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -45,6 +47,7 @@ import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.FillWidth
+import to.bitkit.ui.components.GradientCircularProgressIndicator
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
 import to.bitkit.ui.components.Subtitle
@@ -119,6 +122,19 @@ private fun Content(
                 .weight(1f)
                 .padding(horizontal = 16.dp)
         ) {
+            if (uiState.isLoading && uiState.loadError == null && uiState.availableUtxos.isEmpty()) {
+                item {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("CoinSelectionLoading")
+                    ) {
+                        GradientCircularProgressIndicator(modifier = Modifier.size(32.dp))
+                    }
+                }
+            }
+
             if (uiState.loadError != null && uiState.availableUtxos.isEmpty()) {
                 item {
                     LoadErrorState(
