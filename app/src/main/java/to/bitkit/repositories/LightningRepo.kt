@@ -1651,6 +1651,10 @@ class LightningRepo @Inject constructor(
     fun getNodeId(): String? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.nodeId else null
 
+    suspend fun awaitNodeId(): String? = executeWhenNodeRunning("awaitNodeId", NODE_ID_WAIT_TIMEOUT) {
+        runCatching { requireNotNull(lightningService.nodeId) { "Node id not available" } }
+    }.getOrNull()
+
     fun getBalances(): BalanceDetails? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.balances else null
 
@@ -2063,6 +2067,10 @@ class LightningRepo @Inject constructor(
         private val BACKGROUND_STOP_DELAY = 5.seconds
         private val CHANNELS_USABLE_TIMEOUT = 15.seconds
         private val NO_USABLE_CHANNELS_FEEDBACK_DELAY = 2_500.milliseconds
+
+        /** Max time to wait for a starting node before its id is treated as unavailable. */
+        private val NODE_ID_WAIT_TIMEOUT = 15.seconds
+
         val SEND_LN_TIMEOUT = 10.seconds
         private val PROBE_TIMEOUT = 60.seconds
         private val PAYMENT_ROUTING_REFRESH_TIMEOUT = 20.seconds

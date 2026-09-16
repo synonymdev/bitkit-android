@@ -727,6 +727,36 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `awaitNodeId should return null without waiting when node cannot run`() = test {
+        whenever(lightningService.nodeId).thenReturn("test_node_id")
+
+        assertNull(sut.awaitNodeId())
+    }
+
+    @Test
+    fun `awaitNodeId should wait for starting node to run`() = test {
+        sut.setInitNodeLifecycleState()
+        val testNodeId = "test_node_id"
+        whenever(lightningService.nodeId).thenReturn(testNodeId)
+
+        val nodeId = async { sut.awaitNodeId() }
+        runCurrent()
+        assertFalse(nodeId.isCompleted)
+
+        startNodeForTesting()
+
+        assertEquals(testNodeId, nodeId.await())
+    }
+
+    @Test
+    fun `awaitNodeId should return null when node does not start in time`() = test {
+        sut.setInitNodeLifecycleState()
+        whenever(lightningService.nodeId).thenReturn("test_node_id")
+
+        assertNull(sut.awaitNodeId())
+    }
+
+    @Test
     fun `getBalances should return null when node is not running`() = test {
         assertNull(sut.getBalances())
     }
