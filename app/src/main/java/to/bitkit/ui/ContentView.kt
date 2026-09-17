@@ -729,7 +729,7 @@ fun ContentView(
                             onReceiveClick = {
                                 appViewModel.showSheet(Sheet.Receive(hardwareWalletId = currentHardwareWalletId))
                             },
-                            onScanClick = { appViewModel.showScannerSheet() },
+                            onScanClick = { appViewModel.showScannerSheet(showBackButton = false) },
                         )
                     }
                 }
