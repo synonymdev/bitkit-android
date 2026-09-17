@@ -28,14 +28,15 @@ and landed in the creator's CREATED section as *Proposal sent*, confirming the r
 
 - Screen root: `SubscriptionsScreen`
 - Tabs: `Tab-overview`, `Tab-payments`
-- Subscription row: `SubscriptionRow-<paymentRequestId>` (iOS appends the counterparty and receiver path, as the Payment Request rows do; see the identifier table in [`../README.md`](../README.md))
+- Subscription row: `SubscriptionRow-<paymentRequestId>`, the same on both platforms
 - Create entry point: `SubscriptionCreate`
 - Create form: `CreateSubscription`, `SubscriptionName`, `SubscriptionDescription`,
   `SubscriptionIconPicker`, `SubscriptionExpiration`
 - Recipient step: `SubscriptionChooseRecipient`, `SubscriptionPropose`
 - Confirmation: `SubscriptionProposalSent`, `SubscriptionConfirmationBody`
 - Payments tab: `PaymentRequestsScreen`, `PaymentRequestCreate`,
-  `PaymentRequestRow-<paymentRequestId>`, `PaymentRequestDetailsScreen`
+  `PaymentRequestRow-<paymentRequestId>` (iOS appends the billing period; see the identifier table in
+  [`../README.md`](../README.md)), `PaymentRequestDetailsScreen`
 
 `android layout` can omit test tags applied to plain `Box` and `Column` containers. Use the raw UI
 Automator hierarchy when a documented container tag is not present in the formatted layout output.
