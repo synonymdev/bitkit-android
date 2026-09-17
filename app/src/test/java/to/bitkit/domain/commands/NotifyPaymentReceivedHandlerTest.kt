@@ -1,6 +1,8 @@
 package to.bitkit.domain.commands
 
 import android.content.Context
+import com.synonym.bitkitcore.OnchainActivity
+import com.synonym.bitkitcore.PaymentType
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
@@ -19,6 +21,7 @@ import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
+import to.bitkit.ext.create
 import to.bitkit.models.ConvertedAmount
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
@@ -360,6 +363,35 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     }
 
     @Test
+    fun `confirmed-only onchain receive does not reapply a confirmation already stored`() = test {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        whenever(activityRepo.getOnchainActivityByTxId(eq("txidStored"), eq(WalletScope.default)))
+            .thenReturn(onchainActivity(txId = "txidStored", confirmed = true))
+        val command = confirmedCommand(txid = "txidStored", details = details, age = Duration.ZERO)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.ShowSheet)
+        verify(activityRepo, never()).handleOnchainTransactionConfirmed(any(), any())
+        verify(activityRepo).shouldShowReceivedSheet("txidStored", 5000uL)
+    }
+
+    @Test
+    fun `confirmed-only onchain receive applies the confirmation when the activity is still unconfirmed`() = test {
+        val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
+        whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
+        whenever(activityRepo.getOnchainActivityByTxId(eq("txidUnconfirmed"), eq(WalletScope.default)))
+            .thenReturn(onchainActivity(txId = "txidUnconfirmed", confirmed = false))
+        val command = confirmedCommand(txid = "txidUnconfirmed", details = details, age = Duration.ZERO)
+
+        val result = sut(command).getOrThrow()
+
+        assertTrue(result is NotifyPaymentReceived.Result.ShowSheet)
+        verify(activityRepo).handleOnchainTransactionConfirmed("txidUnconfirmed", details)
+    }
+
+    @Test
     fun `confirmed-only onchain receive returns ShowNotification when includeNotification is true`() = test {
         val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
@@ -508,6 +540,17 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
             command,
         )
     }
+
+    private fun onchainActivity(txId: String, confirmed: Boolean) = OnchainActivity.create(
+        id = txId,
+        txType = PaymentType.RECEIVED,
+        txId = txId,
+        value = 5000uL,
+        fee = 100uL,
+        address = "bc1test",
+        timestamp = 1_700_000_000uL,
+        confirmed = confirmed,
+    )
 
     private fun confirmedCommand(
         txid: String,

@@ -111,7 +111,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         if (command.isConfirmedOnly) {
             if (command.details.amountSats <= 0) return false
             if (!canShowConfirmedOnly(command)) return false
-            activityRepo.handleOnchainTransactionConfirmed(command.txid, command.details)
+            applyConfirmationIfMissing(command)
         } else {
             activityRepo.handleOnchainTransactionReceived(command.txid, command.details)
             if (command.details.amountSats <= 0) return false
@@ -123,6 +123,14 @@ class NotifyPaymentReceivedHandler @Inject constructor(
             command.details.amountSats.toULong(),
         )
         return shouldShowSheet
+    }
+
+    private suspend fun applyConfirmationIfMissing(command: NotifyPaymentReceived.Command.Onchain) {
+        if (activityRepo.getOnchainActivityByTxId(command.txid)?.confirmed == true) {
+            Logger.debug("Skipping confirmed activity update for '${command.txid}', already applied", context = TAG)
+            return
+        }
+        activityRepo.handleOnchainTransactionConfirmed(command.txid, command.details)
     }
 
     private suspend fun canShowConfirmedOnly(command: NotifyPaymentReceived.Command.Onchain): Boolean {
