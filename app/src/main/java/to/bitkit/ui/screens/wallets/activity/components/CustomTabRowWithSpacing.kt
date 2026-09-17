@@ -90,13 +90,6 @@ fun <T : TabItem> CustomTabRowWithSpacing(
 private val TabBadgeSize = 20.dp
 private val TabBadgeGap = 6.dp
 
-/**
- * Tab label centred in the tab, with the badge sitting just after it.
- *
- * The badge is placed relative to the label rather than to the tab edge, so a wide tab does not
- * strand it far from the text. The label is measured against the width left over once the badge and
- * gap are reserved on both sides, keeping it centred while truncating before it can run underneath.
- */
 @Composable
 private fun TabLabel(
     text: String,
@@ -120,7 +113,7 @@ private fun TabLabel(
                 }
             },
         ),
-        modifier = modifier,
+        modifier = modifier
     ) { (labelMeasurables, badgeMeasurables), constraints ->
         val badge = badgeMeasurables.firstOrNull()?.measure(Constraints())
         val reserved = badge?.let { it.width + TabBadgeGap.roundToPx() } ?: 0
@@ -128,12 +121,9 @@ private fun TabLabel(
             constraints.copy(minWidth = 0, maxWidth = (constraints.maxWidth - 2 * reserved).coerceAtLeast(0))
         )
         val width = constraints.maxWidth
-        // Reserve the badge height even without a badge, so every tab is the same height and the
-        // indicators underneath stay on one line.
         val height = maxOf(label.height, TabBadgeSize.roundToPx())
 
         layout(width, height) {
-            // placeRelative so the badge follows the label's trailing edge in RTL layouts.
             val labelX = (width - label.width) / 2
             label.placeRelative(labelX, (height - label.height) / 2)
             badge?.placeRelative(

@@ -1292,9 +1292,9 @@
     <string name="wallet__payment_request_or_pay_headline"><![CDATA[Request\n<accent>Or Pay ₿</accent>]]></string>
     <string name="wallet__payment_request_paste">Paste</string>
     <string name="wallet__payment_request_pay">Pay</string>
+    <string name="wallet__payment_request_pending">pending</string>
     <string name="wallet__payment_request_queued_description">Your payment request is queued and will send automatically</string>
     <string name="wallet__payment_request_recipient">RECIPIENT</string>
-    <string name="wallet__payment_request_pending">pending</string>
     <string name="wallet__payment_request_recipient_no_match">No matching saved contact with a private connection.</string>
     <string name="wallet__payment_request_recipient_unavailable">Payment requests can only be sent to a saved contact with a private connection.</string>
     <string name="wallet__payment_request_request">Request</string>
