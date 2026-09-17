@@ -928,6 +928,8 @@ class ActivityRepoTest : BaseUnitTest() {
     fun `restoreFromBackup applies remaining slices when the tags slice fails`() = test {
         whenever(coreService.activity.upsertTags(any()))
             .thenThrow(RuntimeException("Failed to insert tag: FOREIGN KEY constraint failed"))
+        val activitiesBefore = sut.activitiesChanged.value
+        val tagsBefore = sut.activityTagsChanged.value
 
         val result = sut.restoreFromBackup(backupPayload())
 
@@ -936,6 +938,9 @@ class ActivityRepoTest : BaseUnitTest() {
         verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
         // Still a failure, so BackupRepo never rewrites a good backup with partial state.
         assertTrue(result.isFailure)
+        assertTrue(sut.activitiesChanged.value > activitiesBefore)
+        // No tag was stored, so the metadata backup must not be marked as changed.
+        assertEquals(tagsBefore, sut.activityTagsChanged.value)
     }
 
     @Test

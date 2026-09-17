@@ -987,15 +987,19 @@ class ActivityRepo @Inject constructor(
      * Core fails a bulk write as a whole, so applying all three slices together would let a single unusable tag cost
      * the activities and the closed channels too. The overall result still fails when any slice failed, keeping
      * [BackupRepo] from treating a partial restore as authoritative and rewriting a good backup with it.
-     * Observers are notified whenever at least one slice was applied.
+     * Observers are notified whenever at least one slice was applied, and the tag signal only fires when the
+     * tags slice itself was applied, so a rejected tags slice cannot mark the metadata backup as changed.
      */
     suspend fun restoreFromBackup(payload: ActivityBackupV1): Result<Unit> = withContext(bgDispatcher) {
+        val activities = runSuspendCatching { coreService.activity.upsertList(payload.activities) }
+        val activityTags = runSuspendCatching { coreService.activity.upsertTags(payload.activityTags) }
+        val closedChannels = runSuspendCatching {
+            coreService.activity.upsertClosedChannelList(payload.closedChannels)
+        }
         val results = listOf(
-            "activities" to runSuspendCatching { coreService.activity.upsertList(payload.activities) },
-            "activityTags" to runSuspendCatching { coreService.activity.upsertTags(payload.activityTags) },
-            "closedChannels" to runSuspendCatching {
-                coreService.activity.upsertClosedChannelList(payload.closedChannels)
-            },
+            "activities" to activities,
+            "activityTags" to activityTags,
+            "closedChannels" to closedChannels,
         )
         val failures = results.mapNotNull { (slice, result) ->
             result.exceptionOrNull()?.also {
@@ -1003,7 +1007,7 @@ class ActivityRepo @Inject constructor(
             }
         }
 
-        if (failures.size < results.size) notifyActivitiesChanged(tagsChanged = true)
+        if (failures.size < results.size) notifyActivitiesChanged(tagsChanged = activityTags.isSuccess)
 
         failures.firstOrNull()?.let { return@withContext Result.failure(it) }
 
