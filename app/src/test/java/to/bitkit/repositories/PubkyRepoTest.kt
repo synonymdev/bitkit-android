@@ -1015,8 +1015,13 @@ class PubkyRepoTest : BaseUnitTest() {
         val httpClient = identityHttpClient()
         sut = createSut(httpClient)
         stubSignupKeys()
+        var storedSecretKeyHex: String? = ""
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("ring-session")
-        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("")
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenAnswer { storedSecretKeyHex }
+        whenever(pubkyService.signUp("secret", "test-homeserver", "test-code")).thenAnswer {
+            storedSecretKeyHex = "secret"
+            Unit
+        }
         whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
 
         val result = sut.createIdentity("Test", "", emptyList(), emptyList(), null)
@@ -1062,7 +1067,12 @@ class PubkyRepoTest : BaseUnitTest() {
         whenever(keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name)).thenReturn("test mnemonic")
         whenever(pubkyService.deriveSecretKey("test mnemonic")).thenReturn("test-secret")
         whenever(pubkyService.publicKeyFromSecret("test-secret")).thenReturn(VALID_SELF_KEY.removePrefix("pubky"))
-        whenever(pubkyService.signUp("test-secret", "test-homeserver", "test-code")).thenReturn(Unit)
+        var storedSecretKeyHex: String? = null
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenAnswer { storedSecretKeyHex }
+        whenever(pubkyService.signUp("test-secret", "test-homeserver", "test-code")).thenAnswer {
+            storedSecretKeyHex = "test-secret"
+            Unit
+        }
         whenever(pubkyService.publishPaykitProfile(any())).thenReturn(mock())
         whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true))
             .thenReturn(createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile()))
@@ -1492,7 +1502,7 @@ class PubkyRepoTest : BaseUnitTest() {
     fun `awaitInitialization shares startup and preserves it when a waiter is cancelled`() = test {
         val imported = CompletableDeferred<String>()
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
-        whenever(pubkyService.importSession("saved_session")).doSuspendableAnswer { imported.await() }
+        whenever(pubkyService.importExternalSession("saved_session")).doSuspendableAnswer { imported.await() }
         val repo = createSut()
         val cancelledWaiter = async { repo.awaitInitialization() }
         val waiter = async { repo.awaitInitialization() }
@@ -1504,14 +1514,14 @@ class PubkyRepoTest : BaseUnitTest() {
         waiter.await()
 
         assertEquals(VALID_SELF_KEY, repo.publicKey.value)
-        verify(pubkyService).importSession("saved_session")
+        verify(pubkyService).importExternalSession("saved_session")
     }
 
     @Test
     fun `awaitInitialization completes before startup profile loading`() = test {
         val profileLoad = CompletableDeferred<Unit>()
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
-        whenever(pubkyService.importSession("saved_session")).thenReturn(VALID_SELF_KEY)
+        whenever(pubkyService.importExternalSession("saved_session")).thenReturn(VALID_SELF_KEY)
         whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
             profileLoad.await()
             createResolution(VALID_SELF_KEY, pubkyProfile = createPubkyProfile())
