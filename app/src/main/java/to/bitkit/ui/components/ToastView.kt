@@ -113,6 +113,7 @@ fun ToastView(
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(
                         onDragEnd = {
+                            // Resume auto-hide when drag ends (if we paused it)
                             dragDistanceY = 0f
                             if (hasPausedAutoHide) {
                                 hasPausedAutoHide = false
@@ -123,6 +124,7 @@ fun ToastView(
                                 if (dragOffsetY.value < -dismissThreshold.toPx()) {
                                     onDismiss()
                                 } else {
+                                    // Snap back to original position
                                     dragOffsetY.animateTo(
                                         targetValue = 0f,
                                         animationSpec = spring(
@@ -159,6 +161,7 @@ fun ToastView(
                             }
 
                             change.consume()
+                            // Pause auto-hide when drag starts (only once)
                             if (!hasPausedAutoHide) {
                                 hasPausedAutoHide = true
                                 onDragStart()
