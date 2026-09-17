@@ -2182,6 +2182,25 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `wipeLocalState should release the quarantine marker once its secret is deleted`() = test {
+        sut.wipeLocalState()
+
+        verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+        verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) }
+    }
+
+    @Test
+    fun `wipeLocalState should keep the quarantine marker when its secret delete fails`() = test {
+        whenever { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+            .thenAnswer { throw TestAppError("Delete failed") }
+
+        sut.wipeLocalState()
+
+        verifyBlocking(keychain) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) }
+    }
+
+    @Test
     fun `loadContacts should use contact label when profile is unavailable`() = test {
         authenticateForTesting()
         val contactKey = "pubkyabc123"

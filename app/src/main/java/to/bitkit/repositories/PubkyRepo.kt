@@ -1809,8 +1809,18 @@ class PubkyRepo @Inject constructor(
     private suspend fun clearLocalState(publicPaykitCleanupPending: Boolean = false) = withContext(ioDispatcher) {
         disableLocalIdentityExport()
         runSuspendCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
-        runSuspendCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
-        runSuspendCatching { keychain.delete(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) }
+        val localSecretResult = runSuspendCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+        // The quarantine marker must never outlive the secret it guards: releasing it while the secret
+        // survives would let a suspect managed secret be signed back in and re-exported to Ring.
+        if (localSecretResult.isSuccess) {
+            runSuspendCatching { keychain.delete(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) }
+        } else {
+            Logger.error(
+                "Kept managed local Pubky secret quarantine after failed secret deletion",
+                localSecretResult.exceptionOrNull(),
+                context = TAG,
+            )
+        }
         runSuspendCatching { clearPublicPaykitSharingState(publicPaykitCleanupPending) }
             .onFailure { Logger.warn("Failed to clear public Paykit sharing state", it, context = TAG) }
         notifyBackupStateChanged()
