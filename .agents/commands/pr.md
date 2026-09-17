@@ -45,6 +45,7 @@ If no base branch argument provided, detect the repo's default branch:
 - Fetch 10 most recent PRs (open or closed) from the extracted repo for writing style reference
 - Run `git log $base..HEAD --oneline` for commit messages
 - Run `git diff $base...HEAD --stat` for understanding scope of changes
+- List the journeys the branch adds or updates: `git diff --name-only --diff-filter=d $base...HEAD -- journeys`
 - Read `docs/screens-map.md` as the starting point for locating relevant Figma frames when the diff has user-visible UI changes
 - **If custom instructions provided:**
   - If instructions reference a specific commit SHA (pattern like `commit [a-f0-9]{7,40}`):
@@ -140,28 +141,31 @@ When the user provides custom instructions after `--`:
 - Always use this structure:
   ```md
   ### QA Notes
+  #### Journeys
   #### Manual Tests
   #### Automated Checks
   ```
+- Under `#### Journeys`, list every journey the branch adds or updates (Step 3), one per line: first word `new` or `updated`, then the bare journey file name in backticks, then a dash and what the journey proves.
+- Reference journeys by bare file name only, never the full path. Only when two listed journeys share the same name, prefix the shortest leading path segment(s) that disambiguate them, the same rule as test files.
+- A PR with a user-visible change adds or updates the journey that proves it, and any journey whose route the diff changes; list them all. Reviewers drive the listed journeys on a device.
+- `N/A — no user-visible behaviour change.` is the only empty value for `#### Journeys`.
+- When the diff changes user-visible behaviour and no journey covers it, stop and report the flows that need a journey.
+- Under `#### Manual Tests`, write a step only when it needs a capability the Capabilities table in `journeys/README.md` does not list, and name that capability in the step. Everything a journey can drive belongs under `#### Journeys`.
 - Keep local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, CI coverage, or similar automated checks out of `#### Manual Tests`; summarize them under `#### Automated Checks` when they add useful context.
-- Use `#### Automated Checks` to summarize automated verification evidence, prioritizing coverage added, modified, or removed, each with the test file name and a short explanation.
+- Use `#### Automated Checks` for a flat list of automated verification evidence, in the keyword order `added`, `updated`, `removed`, `ran`: the keyword, the bare test file name in backticks, then a dash and the behaviour it proves.
 - Reference test files by bare file name only (e.g. `HwWalletRepoTest.kt`), never the full path. Only when two referenced test files share the same name, prefix the shortest leading path segment(s) that disambiguate them (e.g. `repositories/FooTest.kt` vs `viewmodels/FooTest.kt`).
-- For removed automated coverage, state why it was removed.
-- Do not list standard CI or PR bot commands as checkbox items just because they run for every PR. If standard CI coverage is worth mentioning, summarize it in one sentence.
-- List raw commands only when they were run locally, are non-standard, use special flags or environment values, validate workflow behavior, or explain a meaningful verification gap.
+- For a `removed` item, state why the coverage was removed.
+- Use `ran` only for checks CI does not run. Do not list standard CI or PR bot commands just because they run for every PR.
+- List raw commands under `ran` only when they were run locally, are non-standard, use special flags or environment values, validate workflow behavior, or explain a meaningful verification gap.
 - For workflow behavior validation, include `(after merge)` in the automated check item because workflow changes only take effect for PRs opened after the workflow update merges.
-- If no actionable manual validation exists, write `N/A` under `#### Manual Tests`.
+- If no step needs a missing capability, write `N/A` under `#### Manual Tests`.
 - If no automated checks were run and no automated coverage changed, write `N/A` under `#### Automated Checks`.
 - Write manual tests using this template:
   ```md
-  - [ ] **{numbering}.** {optional_condition + →} {screen_action} → {next_screen_action}: expectation
+  - {optional_condition + →} {action} → {expectation} — {missing capability} not in Capabilities
   ```
-- Use a list of unchecked checkboxes for each individual test.
-- Use a numbered prefix for each test, in bold, for example `**1.**`, `**2.**`.
-- Use `regression:` for regression checks, positioned after the numbering.
-- Use sub-lists for variations of the same test.
-- Use letter suffixes in numbering for each variation when a test has a sub-list, for example `**3a.**`, `**3b.**`.
-- Always use `→` to denote navigation, for example `Send → Amount`.
+- Use `regression:` for regression checks, positioned at the start of the action.
+- Always use `→` to denote navigation, for example `Send → Amount`; the last `→` introduces the expectation.
 - Use screen names from code, formatted as separate words without the `Screen` suffix, for example `SendAmountScreen` becomes `Send Amount`.
 - Use short-form wording like `in-sheet` for sheet screens, `nav` for navigation, `back` for back nav, and `LN` for Lightning Network.
 
@@ -175,37 +179,31 @@ Include `### Design` when the PR template contains a `### Design` heading, and a
 Reviewers may make at most one advisory request per PR when an existing-design UI link is omitted or an out-of-map `N/A — no design available.` claim is unverified. Valid mapped `todo`/`n/a` cases and `N/A — no UI changes.` require no request. Missing links never block approval, CI, PR creation, or review readiness.
 
 **For library repos (has `bindings/` directory or `Cargo.toml`):**
-Structure manual QA around integration validation only. Automated checks belong under `#### Automated Checks`.
+These repos have no `journeys/`, so the walkthrough stays under `#### Manual Tests` and needs no capability reason. Structure it around integration validation only. Automated checks belong under `#### Automated Checks`.
 
 Example:
 ```
 ### QA Notes
 #### Manual Tests
-- [ ] **1.** Consumer app → exercise updated binding flow: behavior matches previous release.
-- [ ] **2.** `regression:` Android integration screen → trigger changed API path: no crash or stale data.
+- Consumer app → exercise the updated binding flow → behavior matches the previous release
+- `regression:` Android integration screen → trigger the changed API path → no crash or stale data
 #### Automated Checks
-- Binding tests added: cover updated Android API path in `bindings/android/...`.
-- CI: standard cargo and binding checks run by the PR bot.
+- added `FooBindingTest.kt` — covers the updated Android API path
+- ran `cargo test --all-features` — binding round-trip CI does not build
 ```
 
 Concrete style target:
 ```md
 ### QA Notes
+#### Journeys
+- new `send-amount-over-balance.xml` — error shows before the 15 s timeout
+- updated `lightning-transfer-detail.xml` — Connection opens Channel Detail
 #### Manual Tests
-- [ ] **1.** No usable channels/spending balance → scan LN invoice: error shows immediately, not after 15s.
-- [ ] **2.** Scanner → scan fixed amount LN invoice: Send Confirm or QuickPay opens directly.
-- [ ] **3a.** `regression:` Send → scanner/paste fixed amount LN invoice: in-sheet nav to Confirm or QuickPay.
-  - [ ] **3b.** `regression:` Variable amount LN invoice/LNURL-pay: lands on Amount view.
-- [ ] **4a.** Activity Detail of LN transfer → tap Connection: lands on Channel Detail.
-  - [ ] **4b.** back: returns to Activity Detail.
-- [ ] **5a.** Settings → Lightning Connections → tap channel: still opens Channel Detail.
-  - [ ] **5b.** back: returns to Connections List.
-- [ ] **6.** `regression:` Channel Detail → tap Close Connection: works.
+- Pair a Trezor over BLE → Home shows the hardware wallet card — BLE pairing not in Capabilities
 #### Automated Checks
-- Unit tests added: cover invoice timeout handling in `SendInvoiceTest.kt`.
-- Unit tests modified: update channel navigation assertions in `ChannelDetailTest.kt`.
-- Test coverage removed: delete stale mock-only assertions from `OldFlowTest.kt` because the flow no longer exists.
-- CI: standard compile, unit test, and detekt checks run by the PR bot.
+- added `TransferViewModelTest.kt` — rejects amounts over the spending balance
+- updated `SendFlowTest.kt` — fixed-amount invoice skips the Amount screen
+- removed `OldFlowTest.kt` — flow no longer exists
 ```
 
 **Preview Section (conditional):**
