@@ -23,7 +23,7 @@ class MnemonicWordsGridTest {
             measureWordPx = measureWord,
         )
 
-        assertEquals(17.sp, result)
+        assertEquals(MnemonicFontFit(17.sp, fits = true), result)
     }
 
     @Test
@@ -34,7 +34,7 @@ class MnemonicWordsGridTest {
             measureWordPx = measureWord,
         )
 
-        assertEquals(17.sp, result)
+        assertEquals(MnemonicFontFit(17.sp, fits = true), result)
     }
 
     @Test
@@ -45,7 +45,7 @@ class MnemonicWordsGridTest {
             measureWordPx = measureWord,
         )
 
-        assertEquals(13.5.sp, result)
+        assertEquals(MnemonicFontFit(13.5.sp, fits = true), result)
     }
 
     @Test
@@ -58,18 +58,40 @@ class MnemonicWordsGridTest {
             measureWordPx = measureWord,
         )
 
-        assertEquals(13.sp, result)
+        assertEquals(MnemonicFontFit(13.sp, fits = true), result)
     }
 
     @Test
-    fun `word that never fits falls back to the minimum font size`() {
+    fun `word that never fits falls back to the minimum font size and wrapping`() {
         val result = fitMnemonicFontSize(
             words = listOf("category"),
             wordBudgetPx = { 10 },
             measureWordPx = measureWord,
         )
 
-        assertEquals(12.sp, result)
+        assertEquals(MnemonicFontFit(12.sp, fits = false), result)
+    }
+
+    @Test
+    fun `word that fits exactly at the minimum font size does not wrap`() {
+        val result = fitMnemonicFontSize(
+            words = listOf("category"),
+            wordBudgetPx = { 96 },
+            measureWordPx = measureWord,
+        )
+
+        assertEquals(MnemonicFontFit(12.sp, fits = true), result)
+    }
+
+    @Test
+    fun `word one pixel too wide at the minimum font size wraps`() {
+        val result = fitMnemonicFontSize(
+            words = listOf("cat", "category"),
+            wordBudgetPx = { 95 },
+            measureWordPx = measureWord,
+        )
+
+        assertEquals(MnemonicFontFit(12.sp, fits = false), result)
     }
 
     @Test
