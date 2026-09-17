@@ -483,6 +483,12 @@ class LightningRepo @Inject constructor(
 
     private suspend fun reconcileCancelledStart(initialLifecycleState: NodeLifecycleState) {
         if (lightningService.status?.isRunning == true) {
+            if (_lightningState.value.nodeLifecycleState.isRunning()) {
+                // This start already installed the event listener. Re-arming it would cancel and join
+                // the live listener, aborting an in-flight handler for an event LDK already acknowledged.
+                Logger.info("Kept running LDK node and its event listener after start cancellation", context = TAG)
+                return
+            }
             Logger.info("Adopted running LDK node after start cancellation", context = TAG)
             adoptRunningNode()
             return

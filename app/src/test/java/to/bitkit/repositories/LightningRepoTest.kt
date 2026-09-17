@@ -474,6 +474,7 @@ class LightningRepoTest : BaseUnitTest() {
 
         assertNull(result)
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, never()) { startEventListener(any()) }
     }
 
     @Test
