@@ -16,7 +16,7 @@ class MigrationServiceTest : BaseUnitTest() {
         val orderIds = (1..25).map { "order$it" }
         val requests = mutableListOf<List<String>>()
 
-        val result = fetchOrdersInChunks(orderIds) { ids ->
+        val result = fetchOrdersInChunks(orderIds) { ids, _ ->
             requests += ids
             ids.map { orderId -> mock<IBtOrder> { on { id } doReturn orderId } }
         }
@@ -27,10 +27,23 @@ class MigrationServiceTest : BaseUnitTest() {
     }
 
     @Test
+    fun `fetchOrdersInChunks should refresh active orders only on the first chunk`() = runTest {
+        val orderIds = (1..45).map { "order$it" }
+        val refreshFlags = mutableListOf<Boolean>()
+
+        fetchOrdersInChunks(orderIds) { _, refreshActive ->
+            refreshFlags += refreshActive
+            emptyList()
+        }
+
+        assertEquals(listOf(true, false, false), refreshFlags)
+    }
+
+    @Test
     fun `fetchOrdersInChunks should not fetch when ids are empty`() = runTest {
         val requests = mutableListOf<List<String>>()
 
-        val result = fetchOrdersInChunks(emptyList()) { ids ->
+        val result = fetchOrdersInChunks(emptyList()) { ids, _ ->
             requests += ids
             emptyList()
         }

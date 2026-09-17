@@ -146,6 +146,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(blocktankRepo).resetState()
         inOrder.verify(activityRepo).resetState()
         inOrder.verify(hwWalletRepo).resetState()
+        inOrder.verify(migrationService).setNeedsPostMigrationSync(false)
         inOrder.verify(migrationService).cleanupAfterMigration()
         inOrder.verify(migrationService).markMigrationChecked()
         assertTrue(onWipeCalled)
@@ -334,6 +335,35 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         )
 
         assertTrue(result.isSuccess)
+        verify(migrationService).markMigrationChecked()
+        assertTrue(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke should clear post-migration sync flag even when migration data clear fails`() = runTest {
+        whenever { migrationService.cleanupAfterMigration() }.thenThrow(RuntimeException("clear failed"))
+
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertTrue(result.isSuccess)
+        verify(migrationService).setNeedsPostMigrationSync(false)
+        verify(migrationService).markMigrationChecked()
+    }
+
+    @Test
+    fun `invoke should clear migration data and finish when post-migration sync flag clear fails`() = runTest {
+        whenever { migrationService.setNeedsPostMigrationSync(false) }.thenThrow(RuntimeException("flag failed"))
+
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertTrue(result.isSuccess)
+        verify(migrationService).cleanupAfterMigration()
         verify(migrationService).markMigrationChecked()
         assertTrue(onSetWalletExistsStateCalled)
     }

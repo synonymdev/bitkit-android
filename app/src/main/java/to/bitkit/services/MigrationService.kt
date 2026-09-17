@@ -1411,7 +1411,14 @@ class MigrationService @Inject constructor(
     }
 
     private suspend fun fetchOrdersChunked(orderIds: List<String>): List<IBtOrder> =
-        fetchOrdersInChunks(orderIds) { coreService.blocktank.orders(orderIds = it, filter = null, refresh = true) }
+        fetchOrdersInChunks(orderIds) { chunk, refreshActive ->
+            coreService.blocktank.orders(
+                orderIds = chunk,
+                filter = null,
+                refresh = true,
+                refreshActive = refreshActive,
+            )
+        }
 
     suspend fun cleanupAfterMigration() {
         clearPersistedMigrationData()
@@ -2173,8 +2180,12 @@ data class RNSettings(
 
 internal suspend fun fetchOrdersInChunks(
     orderIds: List<String>,
-    fetch: suspend (List<String>) -> List<IBtOrder>,
-): List<IBtOrder> = orderIds.chunked(MigrationService.BLOCKTANK_ORDER_IDS_CHUNK).flatMap { fetch(it) }
+    fetch: suspend (chunk: List<String>, refreshActive: Boolean) -> List<IBtOrder>,
+): List<IBtOrder> = buildList {
+    orderIds.chunked(MigrationService.BLOCKTANK_ORDER_IDS_CHUNK).forEachIndexed { index, chunk ->
+        addAll(fetch(chunk, index == 0))
+    }
+}
 
 private fun String.normalizeRNAddressType(): String = when (this) {
     "p2tr" -> "taproot"
