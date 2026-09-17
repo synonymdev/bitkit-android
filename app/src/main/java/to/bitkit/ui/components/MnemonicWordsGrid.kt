@@ -5,26 +5,48 @@ import androidx.compose.animation.core.EaseOutQuart
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.toImmutableList
+import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
+import kotlin.math.roundToInt
+
+/** Font size a recovery phrase word starts from before shrinking to fit its row. */
+private val WORD_MAX_FONT_SIZE = AppTextStyles.BodyMSB.fontSize
+
+/** Smallest font size a recovery phrase word shrinks to. */
+private val WORD_MIN_FONT_SIZE = 12.sp
+
+/** Step used when shrinking recovery phrase words to fit. */
+private val WORD_FONT_SIZE_STEP = 0.5.sp
+
+/** Horizontal gap between the two word columns. */
+private val COLUMN_GAP = 32.dp
+
+/** Horizontal gap between a word number and the word. */
+private val LABEL_GAP = 8.dp
 
 @Composable
 fun MnemonicWordsGrid(
@@ -40,12 +62,17 @@ fun MnemonicWordsGrid(
         animationSpec = tween(blurDurationMs, easing = EaseOutQuart),
         label = "blurRadius"
     )
-    Box(
+    BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .blur(radius = blurRadius.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
             .alpha(alpha = 1f - blurRadius * 0.075f)
     ) {
+        val wordFontSize = rememberWordFontSize(
+            actualWords = actualWords,
+            placeholderWords = placeholderWords,
+            constraints = constraints,
+        )
         Crossfade(
             targetState = showMnemonic,
             animationSpec = tween(crossfadeDurationMs),
@@ -55,7 +82,7 @@ fun MnemonicWordsGrid(
             val half = wordsShown.size / 2
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(32.dp),
+                horizontalArrangement = Arrangement.spacedBy(COLUMN_GAP),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -66,6 +93,7 @@ fun MnemonicWordsGrid(
                         WordItem(
                             number = index + 1,
                             word = word,
+                            fontSize = wordFontSize,
                         )
                     }
                 }
@@ -77,6 +105,7 @@ fun MnemonicWordsGrid(
                         WordItem(
                             number = half + index + 1,
                             word = word,
+                            fontSize = wordFontSize,
                         )
                     }
                 }
@@ -86,20 +115,101 @@ fun MnemonicWordsGrid(
 }
 
 @Composable
+private fun rememberWordFontSize(
+    actualWords: List<String>,
+    placeholderWords: List<String>,
+    constraints: Constraints,
+): TextUnit {
+    val textMeasurer = rememberTextMeasurer()
+    val density = LocalDensity.current
+    return remember(actualWords, placeholderWords, constraints.maxWidth, constraints.hasBoundedWidth, density) {
+        if (!constraints.hasBoundedWidth) return@remember WORD_MAX_FONT_SIZE
+        val columnGapPx = with(density) { COLUMN_GAP.roundToPx() }
+        val labelGapPx = with(density) { LABEL_GAP.roundToPx() }
+        val budgetPx: (Int) -> Int = { number ->
+            val labelWidthPx = textMeasurer.measure(
+                text = "$number.",
+                style = AppTextStyles.BodyMSB,
+                maxLines = 1,
+                softWrap = false,
+                density = density,
+            ).size.width
+            mnemonicWordBudgetPx(constraints.maxWidth, columnGapPx, labelWidthPx, labelGapPx)
+        }
+        val measurePx: (String, TextUnit) -> Int = { word, fontSize ->
+            textMeasurer.measure(
+                text = word,
+                style = AppTextStyles.BodyMSB.copy(fontSize = fontSize),
+                maxLines = 1,
+                softWrap = false,
+                density = density,
+            ).size.width
+        }
+        listOf(actualWords, placeholderWords)
+            .map { fitMnemonicFontSize(it, budgetPx, measurePx) }
+            .minBy { it.value }
+    }
+}
+
+/**
+ * Returns the largest font size, stepping down from 17sp to 12sp in 0.5sp steps, at which every word
+ * fits its row, so the whole grid shares one size. Falls back to 12sp when nothing fits.
+ *
+ * [wordBudgetPx] receives the 1-based word number and [measureWordPx] the word and candidate size.
+ */
+internal fun fitMnemonicFontSize(
+    words: List<String>,
+    wordBudgetPx: (Int) -> Int,
+    measureWordPx: (String, TextUnit) -> Int,
+): TextUnit {
+    val budgets = words.indices.map { wordBudgetPx(it + 1) }
+    val steps = ((WORD_MAX_FONT_SIZE.value - WORD_MIN_FONT_SIZE.value) / WORD_FONT_SIZE_STEP.value).roundToInt()
+    for (index in 0..steps) {
+        val fontSize = (WORD_MAX_FONT_SIZE.value - index * WORD_FONT_SIZE_STEP.value).sp
+        val allFit = words.indices.all { measureWordPx(words[it], fontSize) <= budgets[it] }
+        if (allFit) return fontSize
+    }
+    return WORD_MIN_FONT_SIZE
+}
+
+/** Returns the width left for a word in one of the two grid columns after its number label. */
+internal fun mnemonicWordBudgetPx(
+    gridWidthPx: Int,
+    columnGapPx: Int,
+    labelWidthPx: Int,
+    labelGapPx: Int,
+): Int = ((gridWidthPx - columnGapPx) / 2 - labelWidthPx - labelGapPx).coerceAtLeast(0)
+
+@Composable
 private fun WordItem(
     number: Int,
     word: String,
+    fontSize: TextUnit,
 ) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        BodyMSB(text = "$number.", color = Colors.White64)
-        Spacer(modifier = Modifier.width(8.dp))
-        BodyMSB(text = word, color = Colors.White)
+    Row {
+        BodyMSB(
+            text = "$number.",
+            color = Colors.White64,
+            maxLines = 1,
+            modifier = Modifier.alignByBaseline()
+        )
+        HorizontalSpacer(LABEL_GAP)
+        Text(
+            text = word,
+            style = AppTextStyles.BodyMSB.copy(color = Colors.White, fontSize = fontSize),
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Visible,
+            modifier = Modifier
+                .weight(1f)
+                .alignByBaseline()
+        )
     }
 }
 
 private val previewWords = List(8) { "word${it + 1}" }.toImmutableList()
+
+private val previewLongWords = listOf("abstract", "research", "awesome", "category")
 
 @Preview
 @Composable
@@ -119,6 +229,54 @@ private fun PreviewHidden() {
         MnemonicWordsGrid(
             actualWords = previewWords,
             showMnemonic = false,
+        )
+    }
+}
+
+@Preview(widthDp = 375)
+@Composable
+private fun PreviewLongWords12() {
+    AppThemeSurface {
+        MnemonicWordsGrid(
+            actualWords = List(12) { previewLongWords[it % previewLongWords.size] }.toImmutableList(),
+            showMnemonic = true,
+            modifier = Modifier.padding(horizontal = 64.dp)
+        )
+    }
+}
+
+@Preview(widthDp = 375)
+@Composable
+private fun PreviewLongWords24() {
+    AppThemeSurface {
+        MnemonicWordsGrid(
+            actualWords = List(24) { previewLongWords[it % previewLongWords.size] }.toImmutableList(),
+            showMnemonic = true,
+            modifier = Modifier.padding(horizontal = 64.dp)
+        )
+    }
+}
+
+@Preview(widthDp = 375, fontScale = 1.3f)
+@Composable
+private fun PreviewLongWords12FontScale() {
+    AppThemeSurface {
+        MnemonicWordsGrid(
+            actualWords = List(12) { previewLongWords[it % previewLongWords.size] }.toImmutableList(),
+            showMnemonic = true,
+            modifier = Modifier.padding(horizontal = 64.dp)
+        )
+    }
+}
+
+@Preview(widthDp = 375, fontScale = 1.3f)
+@Composable
+private fun PreviewLongWords24FontScale() {
+    AppThemeSurface {
+        MnemonicWordsGrid(
+            actualWords = List(24) { previewLongWords[it % previewLongWords.size] }.toImmutableList(),
+            showMnemonic = true,
+            modifier = Modifier.padding(horizontal = 64.dp)
         )
     }
 }
