@@ -209,7 +209,7 @@ class TransferRepo @Inject constructor(
             val channel = channelId?.let { channels.find { c -> c.channelId == it } }
 
             when {
-                channel != null -> if (channel.isChannelReady) {
+                channel?.isChannelReady == true -> {
                     markSettled(transfer.id)
                     Logger.debug("Channel $channelId ready, settled transfer: ${transfer.id}", context = TAG)
                 }
@@ -229,8 +229,9 @@ class TransferRepo @Inject constructor(
         val orderIds = toSpending.mapNotNull { transfer ->
             val orderId = transfer.lspOrderId ?: return@mapNotNull null
             val channelId = resolveChannelIdForTransfer(transfer, channels)
-            if (channelId != null && (channelId in closedChannelIds || channels.any { it.channelId == channelId })) {
-                return@mapNotNull null
+            if (channelId != null) {
+                val isChannelReady = channels.any { it.channelId == channelId && it.isChannelReady }
+                if (channelId in closedChannelIds || isChannelReady) return@mapNotNull null
             }
             val cached = blocktankRepo.getOrder(orderId, refresh = false).getOrNull()
             if (cached != null && (cached.state2 == BtOrderState2.EXPIRED || cached.hasClosedChannel())) {

@@ -399,6 +399,7 @@ class TransferRepoTest : BaseUnitTest() {
 
     @Test
     fun `syncTransferStates persists resolved channel and marks activity for TO_SPENDING transfer`() = test {
+        setupClockNowMock()
         val transfer = TransferEntity(
             id = ID_TRANSFER,
             type = TransferType.TO_SPENDING,
@@ -431,6 +432,7 @@ class TransferRepoTest : BaseUnitTest() {
         whenever(lightningRepo.getChannels()).thenReturn(listOf(channelDetails))
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(mock()))
         whenever(blocktankRepo.getOrder(ID_ORDER, refresh = false)).thenReturn(Result.success(null))
+        whenever(blocktankRepo.fetchOrders(listOf(ID_ORDER))).thenReturn(Result.success(emptyList()))
         whenever(activityService.getWalletIds())
             .thenReturn(setOf(WalletScope.default, "hardware-wallet"))
         whenever(activityService.getOnchainActivityByTxId(fundingTxo.txid, WalletScope.default))
@@ -1013,19 +1015,87 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `syncTransferStates does not fetch order when channel is in LDK list`() = test {
+    fun `syncTransferStates does not fetch order when channel is ready in LDK list`() = test {
+        setupClockNowMock()
         val transfer = transferEntity(id = ID_TRANSFER, fundingTxId = null, channelId = ID_CHANNEL)
             .copy(lspOrderId = ID_ORDER)
-        val pendingChannel = createChannelDetails().copy(channelId = ID_CHANNEL, isChannelReady = false)
+        val readyChannel = createChannelDetails().copy(channelId = ID_CHANNEL, isChannelReady = true)
 
         whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
-        whenever(lightningRepo.getChannels()).thenReturn(listOf(pendingChannel))
+        whenever(lightningRepo.getChannels()).thenReturn(listOf(readyChannel))
         whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(mock()))
+        whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
 
         val result = sut.syncTransferStates()
 
         assertTrue(result.isSuccess)
         verify(blocktankRepo, never()).fetchOrders(any())
+    }
+
+    @Test
+    fun `syncTransferStates settles TO_SPENDING transfer when listed channel is closing per cached order`() = test {
+        val settledAt = setupClockNowMock()
+        val transfer = transferEntity(id = ID_TRANSFER, fundingTxId = null, channelId = ID_CHANNEL)
+            .copy(lspOrderId = ID_ORDER)
+        val closingChannel = createChannelDetails().copy(channelId = ID_CHANNEL, isChannelReady = false)
+        val order = btOrder(
+            state2 = BtOrderState2.EXECUTED,
+            channel = btChannel(state = BtOpenChannelState.OPEN, closingTxId = "closing-tx-id"),
+        )
+
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(listOf(closingChannel))
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(mock()))
+        whenever(blocktankRepo.getOrder(ID_ORDER, refresh = false)).thenReturn(Result.success(order))
+        whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(blocktankRepo, never()).fetchOrders(any())
+        verify(transferDao).markSettled(eq(ID_TRANSFER), eq(settledAt))
+    }
+
+    @Test
+    fun `syncTransferStates settles TO_SPENDING transfer when fetched order closes its listed channel`() = test {
+        val settledAt = setupClockNowMock()
+        val transfer = transferEntity(id = ID_TRANSFER, fundingTxId = null, channelId = ID_CHANNEL)
+            .copy(lspOrderId = ID_ORDER)
+        val closingChannel = createChannelDetails().copy(channelId = ID_CHANNEL, isChannelReady = false)
+        stubOrderCache(
+            cached = btOrder(state2 = BtOrderState2.EXECUTED, channel = btChannel(state = BtOpenChannelState.OPEN)),
+            fetched = btOrder(state2 = BtOrderState2.EXECUTED, channel = btChannel(state = BtOpenChannelState.CLOSED)),
+        )
+
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(listOf(closingChannel))
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(mock()))
+        whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(blocktankRepo).fetchOrders(listOf(ID_ORDER))
+        verify(transferDao).markSettled(eq(ID_TRANSFER), eq(settledAt))
+    }
+
+    @Test
+    fun `syncTransferStates does not settle TO_SPENDING transfer while listed channel is still opening`() = test {
+        setupClockNowMock()
+        val transfer = transferEntity(id = ID_TRANSFER, fundingTxId = null, channelId = ID_CHANNEL)
+            .copy(lspOrderId = ID_ORDER)
+        val openingChannel = createChannelDetails().copy(channelId = ID_CHANNEL, isChannelReady = false)
+        val order = btOrder(state2 = BtOrderState2.PAID, channel = btChannel(state = BtOpenChannelState.OPENING))
+        stubOrderCache(cached = order, fetched = order)
+
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(transfer)))
+        whenever(lightningRepo.getChannels()).thenReturn(listOf(openingChannel))
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(mock()))
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(blocktankRepo).fetchOrders(listOf(ID_ORDER))
         verify(transferDao, never()).markSettled(any(), any())
     }
 
