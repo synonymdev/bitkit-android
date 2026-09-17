@@ -764,6 +764,9 @@ class ActivityService(
             return
         }
 
+        val pendingMessage = payment.id.takeIf { payment.direction == PaymentDirection.OUTBOUND }
+            ?.let { cacheStore.data.first().pendingLightningMessages[it] }
+
         val existingActivity = getActivityById(walletId = defaultWalletId, activityId = payment.id)
         if (existingActivity is Activity.Lightning) {
             val statusChanging = existingActivity.v1.status != state
@@ -781,9 +784,6 @@ class ActivityService(
             ?.takeIf { it is Activity.Lightning }
             ?.let { (it as Activity.Lightning).v1.contact }
             ?: privatePaykitContactPublicKeyForReceivedInvoicePaymentHash(payment.id, payment.direction)
-
-        val pendingMessage = payment.id.takeIf { payment.direction == PaymentDirection.OUTBOUND }
-            ?.let { cacheStore.data.first().pendingLightningMessages[it] }
 
         val ln = if (existingActivity is Activity.Lightning) {
             existingActivity.v1.withPaymentUpdate(
@@ -820,15 +820,16 @@ class ActivityService(
     /**
      * Applies a pending LNURL-pay comment to the Lightning activity for [paymentHash] if the row exists.
      *
-     * Runs on the Core queue so it cannot interleave with the payment sync writing the same row. The
-     * pending comment is kept when the row does not exist yet, so the payment sync applies it later.
+     * The row is read and written with no suspension point in between, so on the single-threaded Core
+     * queue no payment sync can write the same row from a stale snapshot. The pending comment is kept
+     * when the row does not exist yet, so the payment sync applies it later.
      */
     suspend fun setLightningMessageIfEmpty(paymentHash: String, message: String) = ServiceQueue.CORE.background {
-        val existing = getActivityById(walletId = defaultWalletId, activityId = paymentHash)
-            as? Activity.Lightning ?: return@background
         val description = lightningService.listPayments()
             ?.firstOrNull { it.id == paymentHash }
             ?.let { (it.kind as? PaymentKind.Bolt11)?.description }
+        val existing = getActivityById(walletId = defaultWalletId, activityId = paymentHash)
+            as? Activity.Lightning ?: return@background
         val updated = existing.v1.withPendingMessage(pendingMessage = message, description = description)
         if (updated != existing.v1) {
             updateActivity(activityId = paymentHash, activity = Activity.Lightning(updated))
