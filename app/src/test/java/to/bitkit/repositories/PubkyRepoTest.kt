@@ -320,6 +320,45 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `adopt Ring identity rolls back borrowed reference when cancelled before activation`() = test {
+        val identity = stubRingIdentity()
+        val signInStarted = CompletableDeferred<Unit>()
+        whenever(pubkyService.signInExternal(SHARED_SECRET_KEY)).doSuspendableAnswer {
+            signInStarted.complete(Unit)
+            awaitCancellation()
+        }
+
+        val adoption = async { sut.adoptRingIdentity(identity) }
+        signInStarted.await()
+        adoption.cancelAndJoin()
+
+        assertTrue(adoption.isCancelled)
+        assertNull(sut.publicKey.value)
+        assertNull(pubkyDataFlow.value.externalIdentityRef)
+        assertNull(sharedExportEnabled)
+        verifyBlocking(pubkyService) { clearExternalSessionAccess() }
+    }
+
+    @Test
+    fun `adopt Ring identity keeps adopted identity when cancelled after activation`() = test {
+        val identity = stubRingIdentity()
+        val profileLoadStarted = CompletableDeferred<Unit>()
+        whenever(pubkyService.resolveContactProfile(VALID_SELF_KEY, true)).doSuspendableAnswer {
+            profileLoadStarted.complete(Unit)
+            awaitCancellation()
+        }
+
+        val adoption = async { sut.adoptRingIdentity(identity) }
+        profileLoadStarted.await()
+        adoption.cancelAndJoin()
+
+        assertTrue(adoption.isCancelled)
+        assertEquals(VALID_SELF_KEY, sut.publicKey.value)
+        assertEquals(identity.toExternalRefForTest(), pubkyDataFlow.value.externalIdentityRef)
+        verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
+    }
+
+    @Test
     fun `Ring managed identity reads credential just in time for auth approval`() = test {
         val identity = stubRingIdentity()
         assertTrue(sut.adoptRingIdentity(identity).isSuccess)

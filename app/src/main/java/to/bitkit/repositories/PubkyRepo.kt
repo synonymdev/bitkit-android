@@ -1117,56 +1117,66 @@ class PubkyRepo @Inject constructor(
 
     suspend fun adoptRingIdentity(identity: SharedPubkyIdentity): Result<Unit> =
         identityLifecycleMutex.withLock {
-            var didPersistExternalIdentity = false
-            runSuspendCatching {
-                withContext(ioDispatcher) {
-                    ensureServiceInitialized()
-                    val canonicalIdentity = identity.validatedRingIdentity()
-                    val currentIdentityRef = pubkyStore.data.first().externalIdentityRef?.validated()
-                    val currentPublicKey = _publicKey.value
-                    val isAlreadyActive = currentIdentityRef?.pubky == canonicalIdentity.pubky &&
-                        currentPublicKey?.let(::wirePubky) == canonicalIdentity.pubky
-                    if (isAlreadyActive) {
-                        return@withContext
+            var shouldRollBackAdoption = false
+            try {
+                runSuspendCatching {
+                    withContext(ioDispatcher) {
+                        ensureServiceInitialized()
+                        val canonicalIdentity = identity.validatedRingIdentity()
+                        val currentIdentityRef = pubkyStore.data.first().externalIdentityRef?.validated()
+                        val currentPublicKey = _publicKey.value
+                        val isAlreadyActive = currentIdentityRef?.pubky == canonicalIdentity.pubky &&
+                            currentPublicKey?.let(::wirePubky) == canonicalIdentity.pubky
+                        if (isAlreadyActive) {
+                            return@withContext
+                        }
+                        if (
+                            currentPublicKey != null ||
+                            !keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name).isNullOrBlank()
+                        ) {
+                            throw SharedPubkyError.IdentityConflict
+                        }
+
+                        val credential = sharedPubkyDiscovery.readRingCredential(canonicalIdentity.pubky).getOrThrow()
+                        if (!credential.identity.matches(canonicalIdentity)) throw SharedPubkyError.InvalidResponse
+
+                        disableLocalIdentityExport()
+                        val identityRef = canonicalIdentity.toExternalRef()
+                        pubkyStore.update { it.copy(externalIdentityRef = identityRef) }
+                        shouldRollBackAdoption = true
+                        _authState.update { PubkyAuthState.Authenticating }
+
+                        val publicKey = signInWithExternalCredential(credential)
+
+                        settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
+                        notifyBackupStateChanged()
+                        _publicKey.update { publicKey }
+                        _authState.update { PubkyAuthState.Authenticated }
+                        shouldRollBackAdoption = false
+                        Logger.info("Connected Pubky Ring identity '${redacted(publicKey)}'", context = TAG)
+                        loadProfile()
+                        loadContacts()
                     }
-                    if (
-                        currentPublicKey != null ||
-                        !keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name).isNullOrBlank()
-                    ) {
-                        throw SharedPubkyError.IdentityConflict
-                    }
-
-                    val credential = sharedPubkyDiscovery.readRingCredential(canonicalIdentity.pubky).getOrThrow()
-                    if (!credential.identity.matches(canonicalIdentity)) throw SharedPubkyError.InvalidResponse
-
-                    disableLocalIdentityExport()
-                    val identityRef = canonicalIdentity.toExternalRef()
-                    pubkyStore.update { it.copy(externalIdentityRef = identityRef) }
-                    didPersistExternalIdentity = true
-                    _authState.update { PubkyAuthState.Authenticating }
-
-                    val publicKey = signInWithExternalCredential(credential)
-
-                    settingsStore.update { it.copy(sharesPrivatePaykitEndpoints = false) }
-                    notifyBackupStateChanged()
-                    _publicKey.update { publicKey }
-                    _authState.update { PubkyAuthState.Authenticated }
-                    Logger.info("Connected Pubky Ring identity '${redacted(publicKey)}'", context = TAG)
-                    loadProfile()
-                    loadContacts()
+                }.onFailure {
+                    rollBackAdoptedRingIdentityIfNeeded(shouldRollBackAdoption)
+                    restoreAuthStateAfterAuthFlow()
                 }
-            }.onFailure {
-                if (didPersistExternalIdentity) {
-                    withContext(NonCancellable) {
-                        runSuspendCatching { clearUnavailableExternalIdentityLocked() }
-                            .onFailure {
-                                Logger.error("Failed to roll back Pubky Ring identity connection", it, context = TAG)
-                            }
-                    }
-                }
+            } catch (e: CancellationException) {
+                rollBackAdoptedRingIdentityIfNeeded(shouldRollBackAdoption)
                 restoreAuthStateAfterAuthFlow()
+                throw e
             }
         }
+
+    private suspend fun rollBackAdoptedRingIdentityIfNeeded(shouldRollBack: Boolean) {
+        if (!shouldRollBack) return
+        withContext(NonCancellable) {
+            runSuspendCatching { clearUnavailableExternalIdentityLocked() }
+                .onFailure {
+                    Logger.error("Failed to roll back Pubky Ring identity connection", it, context = TAG)
+                }
+        }
+    }
 
     suspend fun validateExternalIdentitySource(): Boolean = identityLifecycleMutex.withLock {
         validateExternalIdentitySourceLocked()
