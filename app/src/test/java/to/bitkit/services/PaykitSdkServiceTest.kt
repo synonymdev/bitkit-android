@@ -42,6 +42,7 @@ class PaykitSdkServiceTest {
             }
             val bytes = ByteArray(32) { 1 }
             whenever(blocking.load(Keychain.Key.PAYKIT_RECEIVER_NOISE_SECRET_KEY.name)).thenReturn(bytes)
+            whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(bytes.toHex())
             val sdk = mock<PaykitSdk>()
             whenever(sdk.contactRecords()).thenReturn(emptyList())
             val access = mock<PubkySessionAccess>()
