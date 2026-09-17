@@ -862,7 +862,11 @@ class LightningRepo @Inject constructor(
                 Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
                 scope.launch { restartWithPreviousConfig() }
             }.onSuccess {
-                settingsStore.update { it.copy(electrumServer = newServerUrl) }
+                runSuspendCatching { settingsStore.update { it.copy(electrumServer = newServerUrl) } }
+                    .onFailure {
+                        Logger.error("Failed to persist electrum server '$newServerUrl'", it, context = TAG)
+                        return@withContext Result.failure(it)
+                    }
 
                 Logger.info("Successfully changed electrum server", context = TAG)
             }
