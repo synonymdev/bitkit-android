@@ -45,7 +45,7 @@ If no base branch argument provided, detect the repo's default branch:
 - Fetch 10 most recent PRs (open or closed) from the extracted repo for writing style reference
 - Run `git log $base..HEAD --oneline` for commit messages
 - Run `git diff $base...HEAD --stat` for understanding scope of changes
-- List the journeys the branch adds or updates: `git diff --name-only --diff-filter=d $base...HEAD -- journeys`
+- List the journeys the branch adds or updates: `git diff --name-only --diff-filter=d $base...HEAD -- journeys | grep '\.xml$'`
 - Read `docs/screens-map.md` as the starting point for locating relevant Figma frames when the diff has user-visible UI changes
 - **If custom instructions provided:**
   - If instructions reference a specific commit SHA (pattern like `commit [a-f0-9]{7,40}`):
