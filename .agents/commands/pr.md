@@ -145,10 +145,11 @@ When the user provides custom instructions after `--`:
   #### Manual Tests
   #### Automated Checks
   ```
-- Under `#### Journeys`, list every journey the branch adds or updates (Step 3), one per line: first word `new` or `updated`, then the bare journey file name in backticks, then a dash and what the journey proves.
+- Under `#### Journeys`, list every journey the branch adds or updates (Step 3), one per line as an unchecked checkbox (`- [ ] `), then `new` or `updated`, then the bare journey file name in backticks, then a dash and what the journey proves.
 - Reference journeys by bare file name only, never the full path. Only when two listed journeys share the same name, prefix the shortest leading path segment(s) that disambiguate them, the same rule as test files.
 - A PR with a user-visible change adds or updates the journey that proves it, and any journey whose route the diff changes; list them all. Reviewers drive the listed journeys on a device.
 - `N/A — no user-visible behaviour change.` is the only empty value for `#### Journeys`.
+- Leave every checkbox under `#### Journeys` and `#### Manual Tests` unchecked; the reviewer ticks a line after driving it on the PR head.
 - When the diff changes user-visible behaviour and no journey covers it, stop and report the flows that need a journey.
 - Under `#### Manual Tests`, write a step only when it needs a capability the Capabilities table in `journeys/README.md` does not list, and name that capability in the step. Everything a journey can drive belongs under `#### Journeys`.
 - Keep local verification commands, Gradle tasks, detekt, lint, unit tests, build passes, cargo test, cargo clippy, npm test, typecheck, CI coverage, or similar automated checks out of `#### Manual Tests`; summarize them under `#### Automated Checks` when they add useful context.
@@ -162,7 +163,7 @@ When the user provides custom instructions after `--`:
 - If no automated checks were run and no automated coverage changed, write `N/A` under `#### Automated Checks`.
 - Write manual tests using this template:
   ```md
-  - {optional_condition + →} {action} → {expectation} — {missing capability} not in Capabilities
+  - [ ] {optional_condition + →} {action} → {expectation} — {missing capability} not in Capabilities
   ```
 - Use `regression:` for regression checks, positioned at the start of the action.
 - Always use `→` to denote navigation, for example `Send → Amount`; the last `→` introduces the expectation.
@@ -185,8 +186,8 @@ Example:
 ```
 ### QA Notes
 #### Manual Tests
-- Consumer app → exercise the updated binding flow → behavior matches the previous release
-- `regression:` Android integration screen → trigger the changed API path → no crash or stale data
+- [ ] Consumer app → exercise the updated binding flow → behavior matches the previous release
+- [ ] `regression:` Android integration screen → trigger the changed API path → no crash or stale data
 #### Automated Checks
 - added `FooBindingTest.kt` — covers the updated Android API path
 - ran `cargo test --all-features` — binding round-trip CI does not build
@@ -196,10 +197,10 @@ Concrete style target:
 ```md
 ### QA Notes
 #### Journeys
-- new `send-amount-over-balance.xml` — error shows before the 15 s timeout
-- updated `lightning-transfer-detail.xml` — Connection opens Channel Detail
+- [ ] new `send-amount-over-balance.xml` — error shows before the 15 s timeout
+- [ ] updated `lightning-transfer-detail.xml` — Connection opens Channel Detail
 #### Manual Tests
-- Pair a Trezor over BLE → Home shows the hardware wallet card — BLE pairing not in Capabilities
+- [ ] Pair a Trezor over BLE → Home shows the hardware wallet card — BLE pairing not in Capabilities
 #### Automated Checks
 - added `TransferViewModelTest.kt` — rejects amounts over the spending balance
 - updated `SendFlowTest.kt` — fixed-amount invoice skips the Amount screen
