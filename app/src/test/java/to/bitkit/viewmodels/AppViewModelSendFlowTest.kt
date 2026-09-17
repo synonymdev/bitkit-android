@@ -4711,6 +4711,17 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `lockOnBackground requires auth without waiting for a suspension`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+
+        sut.lockOnBackground()
+
+        assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
     fun `lockOnBackground keeps auth when PIN is disabled`() = test {
         settingsData.value = SettingsData(isPinEnabled = false)
         advanceUntilIdle()

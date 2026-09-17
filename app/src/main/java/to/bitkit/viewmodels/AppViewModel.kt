@@ -330,6 +330,11 @@ class AppViewModel @Inject constructor(
     private val _isAuthenticated = MutableStateFlow(false)
     val isAuthenticated = _isAuthenticated.asStateFlow()
 
+    /** Cached so the app can be locked synchronously when the activity stops. */
+    private val isPinEnabled = settingsStore.data
+        .map { it.isPinEnabled }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
+
     private val _pendingScreenDeepLink = MutableStateFlow<Uri?>(null)
     val pendingScreenDeepLink = _pendingScreenDeepLink.asStateFlow()
 
@@ -4837,15 +4842,17 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    /** Requires the PIN again after the app process moves to the background. */
+    /**
+     * Requires the PIN again after the app process moves to the background.
+     *
+     * Runs without suspending so the lock is applied before the activity can resume.
+     */
     fun lockOnBackground() {
-        viewModelScope.launch {
-            if (!settingsStore.data.first().isPinEnabled) return@launch
-            if (!walletRepo.walletExists()) return@launch
-            if (lightningRepo.isRecoveryMode.value) return@launch
-            _isAuthenticated.update { false }
-            Logger.debug("Locked app on background", context = TAG)
-        }
+        if (!isPinEnabled.value) return
+        if (!walletRepo.walletExists()) return
+        if (lightningRepo.isRecoveryMode.value) return
+        _isAuthenticated.update { false }
+        Logger.debug("Locked app on background", context = TAG)
     }
 
     fun validatePin(pin: String): Boolean {
