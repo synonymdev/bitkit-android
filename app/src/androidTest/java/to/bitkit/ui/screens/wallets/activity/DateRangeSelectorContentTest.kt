@@ -1,6 +1,8 @@
 package to.bitkit.ui.screens.wallets.activity
 
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -18,6 +20,7 @@ import to.bitkit.ext.toMonthYearString
 import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @ComposeUi
 class DateRangeSelectorContentTest {
@@ -25,6 +28,9 @@ class DateRangeSelectorContentTest {
         private const val SETTLE_MILLIS = 1_000L
         private const val NEXT_TAPS = 5
         private const val PREV_TAPS = 2
+
+        /** Lowest channel value counted as a drawn day number, which is white on a dark sheet. */
+        private const val DAY_NUMBER_CHANNEL_MIN = 0.8f
         private val INITIAL_DATE = LocalDate(2025, 1, 15)
     }
 
@@ -82,5 +88,19 @@ class DateRangeSelectorContentTest {
             restingLeft,
             composeTestRule.onNodeWithTag("CalendarGrid").getUnclippedBoundsInRoot().left.value,
         )
+        assertGridIsOpaque()
+    }
+
+    private fun assertGridIsOpaque() {
+        val pixels = composeTestRule.onNodeWithTag("CalendarGrid").captureToImage().toPixelMap()
+        val drawsDayNumbers = (0 until pixels.height).any { y ->
+            (0 until pixels.width).any { x ->
+                val pixel = pixels[x, y]
+                pixel.red > DAY_NUMBER_CHANNEL_MIN &&
+                    pixel.green > DAY_NUMBER_CHANNEL_MIN &&
+                    pixel.blue > DAY_NUMBER_CHANNEL_MIN
+            }
+        }
+        assertTrue(drawsDayNumbers, "calendar grid is transparent, no day number pixels were drawn")
     }
 }
