@@ -9,12 +9,12 @@ import android.os.Looper
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -24,9 +24,6 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.IntentCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.fragment.app.FragmentActivity
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -133,7 +130,7 @@ class MainActivity : FragmentActivity() {
                 val hazeState = rememberHazeState(blurEnabled = true)
                 val bottomSheetOverlayState = remember { BottomSheetOverlayState() }
                 val authSheetOverlayState = remember { BottomSheetOverlayState() }
-                val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
+                val isAuthenticated by appViewModel.isAuthenticated.collectAsState()
 
                 LaunchedEffect(
                     walletExists,
@@ -177,18 +174,9 @@ class MainActivity : FragmentActivity() {
                         )
                     }
 
-                    DisposableEffect(appViewModel) {
-                        val processLifecycle = ProcessLifecycleOwner.get().lifecycle
-                        val observer = LifecycleEventObserver { _, event ->
-                            if (event == Lifecycle.Event.ON_STOP) appViewModel.lockOnBackground()
-                        }
-                        processLifecycle.addObserver(observer)
-                        onDispose { processLifecycle.removeObserver(observer) }
-                    }
-
                     AnimatedVisibility(
                         visible = !isAuthenticated,
-                        enter = fadeIn(),
+                        enter = EnterTransition.None,
                         exit = fadeOut(),
                     ) {
                         AuthCheckView(
@@ -311,6 +299,11 @@ class MainActivity : FragmentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         intent.launchKey()?.let { outState.putString(KEY_CONSUMED_LAUNCH_INTENT, it) }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) appViewModel.lockOnBackground()
     }
 
     override fun onDestroy() {
