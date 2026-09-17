@@ -18,6 +18,7 @@ import org.lightningdevkit.ldknode.PendingSweepBalance
 import to.bitkit.data.dao.TransferDao
 import to.bitkit.data.entities.TransferEntity
 import to.bitkit.di.BgDispatcher
+import to.bitkit.env.Env
 import to.bitkit.ext.channelId
 import to.bitkit.ext.latestSpendingTxid
 import to.bitkit.ext.runSuspendCatching
@@ -27,6 +28,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.utils.BlockTimeHelpers
 import to.bitkit.utils.Logger
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.time.Clock
@@ -42,6 +44,8 @@ class TransferRepo @Inject constructor(
     private val transferDao: TransferDao,
     private val clock: Clock,
 ) {
+    private val lastOrdersFetchMs = AtomicLong(0L)
+
     val activeTransfers: Flow<List<TransferEntity>> = transferDao.getActiveTransfers()
 
     val forceCloseRemainingDuration: Flow<String?> = combine(
@@ -165,13 +169,13 @@ class TransferRepo @Inject constructor(
     }
 
     suspend fun syncTransferStates(): Result<Unit> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val activeTransfers = transferDao.getActiveTransfers().first()
-            if (activeTransfers.isEmpty()) return@runCatching
+            if (activeTransfers.isEmpty()) return@runSuspendCatching
 
             val channels = lightningRepo.getChannels() ?: run {
                 Logger.debug("Skipped syncing transfers because channels are unavailable", context = TAG)
-                return@runCatching
+                return@runSuspendCatching
             }
             val balances = lightningRepo.getBalancesAsync().getOrNull()
 
@@ -193,8 +197,11 @@ class TransferRepo @Inject constructor(
         val toSpending = activeTransfers.filter { it.type.isToSpending() }
         if (toSpending.isEmpty()) return
 
-        val orderLookup = OrderLookup(blocktankRepo)
-        var closedChannelIds: Set<String>? = null
+        val hasMissingChannel = toSpending.any { transfer ->
+            transfer.channelId != null && channels.none { it.channelId == transfer.channelId }
+        }
+        val closedChannelIds = if (hasMissingChannel) loadClosedChannelIds() else emptySet()
+        fetchOrdersAwaitingEvidence(toSpending, channels, closedChannelIds)
 
         for (transfer in toSpending) {
             val channelId = resolveChannelIdForTransfer(transfer, channels)
@@ -207,13 +214,39 @@ class TransferRepo @Inject constructor(
                     Logger.debug("Channel $channelId ready, settled transfer: ${transfer.id}", context = TAG)
                 }
 
-                channelId != null -> {
-                    val closedIds = closedChannelIds ?: loadClosedChannelIds().also { closedChannelIds = it }
-                    settleIfChannelClosed(transfer, channelId, closedIds, orderLookup)
-                }
+                channelId != null -> settleIfChannelClosed(transfer, channelId, closedChannelIds)
 
-                transfer.lspOrderId != null -> settleIfOrderEnded(transfer, transfer.lspOrderId, orderLookup)
+                transfer.lspOrderId != null -> settleIfOrderEnded(transfer, transfer.lspOrderId)
             }
+        }
+    }
+
+    private suspend fun fetchOrdersAwaitingEvidence(
+        toSpending: List<TransferEntity>,
+        channels: List<ChannelDetails>,
+        closedChannelIds: Set<String>,
+    ) {
+        val orderIds = toSpending.mapNotNull { transfer ->
+            val orderId = transfer.lspOrderId ?: return@mapNotNull null
+            val channelId = resolveChannelIdForTransfer(transfer, channels)
+            if (channelId != null && (channelId in closedChannelIds || channels.any { it.channelId == channelId })) {
+                return@mapNotNull null
+            }
+            val cached = blocktankRepo.getOrder(orderId, refresh = false).getOrNull()
+            if (cached != null && (cached.state2 == BtOrderState2.EXPIRED || cached.hasClosedChannel())) {
+                return@mapNotNull null
+            }
+            orderId
+        }.distinct()
+        if (orderIds.isEmpty()) return
+
+        val nowMs = clock.now().toEpochMilliseconds()
+        val lastFetchMs = lastOrdersFetchMs.get()
+        if (nowMs - lastFetchMs in 0L until Env.lspOrdersRefreshInterval) return
+        if (!lastOrdersFetchMs.compareAndSet(lastFetchMs, nowMs)) return
+
+        blocktankRepo.fetchOrders(orderIds).onSuccess { fetched ->
+            Logger.debug("Fetched '${fetched.size}' of '${orderIds.size}' orders for active transfers", context = TAG)
         }
     }
 
@@ -221,7 +254,6 @@ class TransferRepo @Inject constructor(
         transfer: TransferEntity,
         channelId: String,
         closedChannelIds: Set<String>,
-        orderLookup: OrderLookup,
     ) {
         if (channelId in closedChannelIds) {
             markSettled(transfer.id)
@@ -233,7 +265,7 @@ class TransferRepo @Inject constructor(
         }
 
         val orderId = transfer.lspOrderId ?: return
-        val order = orderLookup.find(orderId) ?: return
+        val order = blocktankRepo.getOrder(orderId, refresh = false).getOrNull() ?: return
         if (!order.hasClosedChannel()) return
 
         markSettled(transfer.id)
@@ -243,12 +275,8 @@ class TransferRepo @Inject constructor(
         )
     }
 
-    private suspend fun settleIfOrderEnded(
-        transfer: TransferEntity,
-        orderId: String,
-        orderLookup: OrderLookup,
-    ) {
-        val order = orderLookup.find(orderId) ?: return
+    private suspend fun settleIfOrderEnded(transfer: TransferEntity, orderId: String) {
+        val order = blocktankRepo.getOrder(orderId, refresh = false).getOrNull() ?: return
 
         if (order.state2 == BtOrderState2.EXPIRED) {
             markSettled(transfer.id)
@@ -417,15 +445,4 @@ class TransferRepo @Inject constructor(
 private fun IBtOrder.hasClosedChannel(): Boolean {
     val channel = channel ?: return false
     return channel.state == BtOpenChannelState.CLOSED || channel.closingTxId != null || channel.close != null
-}
-
-private class OrderLookup(private val blocktankRepo: BlocktankRepo) {
-    private var hasRefreshed = false
-
-    suspend fun find(orderId: String): IBtOrder? {
-        blocktankRepo.getOrder(orderId, refresh = false).getOrNull()?.let { return it }
-        if (hasRefreshed) return null
-        hasRefreshed = true
-        return blocktankRepo.getOrder(orderId, refresh = true).getOrNull()
-    }
 }

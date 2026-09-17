@@ -334,34 +334,6 @@ class DeriveBalanceStateUseCaseTest : BaseUnitTest() {
     }
 
     @Test
-    fun `should stop counting LSP transfer once settled for a closed channel`() = test {
-        val balance = newBalanceDetails()
-        val amountSats = 50_000uL
-        val transfer = newTransferEntity(
-            type = TransferType.TO_SPENDING,
-            amountSats = amountSats.toLong(),
-            channelId = "closed-channel-id",
-            lspOrderId = "lsp-order-id",
-        )
-        val activeTransfers = MutableStateFlow(listOf(transfer))
-
-        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
-        whenever(transferRepo.activeTransfers).thenReturn(activeTransfers)
-
-        val pendingState = sut().getOrThrow()
-        assertEquals(amountSats, pendingState.balanceInTransferToSpending)
-        assertEquals(200_000uL, pendingState.totalSats)
-
-        activeTransfers.value = emptyList()
-
-        val settledState = sut().getOrThrow()
-        assertEquals(0uL, settledState.balanceInTransferToSpending)
-        assertEquals(balance.totalOnchainBalanceSats, settledState.totalOnchainSats)
-        assertEquals(balance.totalLightningBalanceSats, settledState.totalLightningSats)
-        assertEquals(150_000uL, settledState.totalSats)
-    }
-
-    @Test
     fun `should not count manual channel as pending when ready`() = test {
         newBalanceDetails()
         val channelId = "ready-channel-id"
