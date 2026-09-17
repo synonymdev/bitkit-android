@@ -841,6 +841,7 @@
     <string name="wallet__tags_add_button">Hinzufügen</string>
     <string name="wallet__tags_new">Neuer Tag</string>
     <string name="wallet__tags_new_enter">Neuen Tag eingeben</string>
+    <string name="wallet__tags_no">Noch keine Tags verfügbar</string>
     <string name="wallet__tags_previously">Früher verwendete Tags</string>
     <string name="wallet__tags_filter">Aktivität nach Tags filtern</string>
     <string name="wallet__tags_filter_title">Tag auswählen</string>

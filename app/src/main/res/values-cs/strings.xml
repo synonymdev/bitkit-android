@@ -969,6 +969,7 @@
     <string name="wallet__tags_filter_title">Vyberte popisek</string>
     <string name="wallet__tags_new">Nový tag</string>
     <string name="wallet__tags_new_enter">Vložte nový tag</string>
+    <string name="wallet__tags_no">Zatím nejsou k dispozici žádné popisky</string>
     <string name="wallet__tags_previously">Dříve použité tagy</string>
     <string name="wallet__payment_abandoned">Lightning platba byla zastavena před dokončením.</string>
     <string name="wallet__payment_expired">Platnost této Lightning platby vypršela. Vyžádejte si novou fakturu.</string>

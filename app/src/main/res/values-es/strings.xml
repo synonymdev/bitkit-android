@@ -837,6 +837,7 @@
     <string name="wallet__tags_filter_title">Seleccionar Etiqueta</string>
     <string name="wallet__tags_new">Nueva etiqueta</string>
     <string name="wallet__tags_new_enter">Introduzca una nueva etiqueta</string>
+    <string name="wallet__tags_no">Aún no hay etiquetas disponibles</string>
     <string name="wallet__tags_previously">Etiquetas utilizadas anteriormente</string>
     <string name="wallet__tags_filter">Filtrar la actividad mediante etiquetas</string>
     <string name="wallet__payment_abandoned">El pago Lightning se detuvo antes de completarse.</string>

@@ -1445,6 +1445,7 @@
     <string name="wallet__tags_filter_title">Select Tag</string>
     <string name="wallet__tags_new">New tag</string>
     <string name="wallet__tags_new_enter">Enter a new tag</string>
+    <string name="wallet__tags_no">No tags available yet</string>
     <string name="wallet__tags_previously">Previously used tags</string>
     <string name="wallet__toast_payment_failed_description">Your instant payment failed. Please try again.</string>
     <string name="wallet__toast_payment_failed_title">Payment Failed</string>

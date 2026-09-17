@@ -969,6 +969,7 @@
     <string name="wallet__tags_filter_title">Seleziona Tag</string>
     <string name="wallet__tags_new">Nuovo tag</string>
     <string name="wallet__tags_new_enter">Inserisci un nuovo tag</string>
+    <string name="wallet__tags_no">Non ci sono ancora tag disponibili</string>
     <string name="wallet__tags_previously">Tag usati in precedenza</string>
     <string name="wallet__payment_abandoned">Il pagamento Lightning è stato interrotto prima del completamento.</string>
     <string name="wallet__payment_expired">Questo pagamento Lightning è scaduto. Richiedi una nuova fattura.</string>

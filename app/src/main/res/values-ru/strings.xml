@@ -997,6 +997,7 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__tags_filter_title">Выберите тег</string>
     <string name="wallet__tags_new">Новый тег</string>
     <string name="wallet__tags_new_enter">Введите тег</string>
+    <string name="wallet__tags_no">Тегов пока нет</string>
     <string name="wallet__tags_previously">Ранее использовавшиеся теги</string>
     <string name="wallet__payment_abandoned">Платеж Lightning был остановлен до завершения.</string>
     <string name="wallet__payment_expired">Срок действия этого платежа Lightning истек. Запросите новый счет.</string>

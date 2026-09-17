@@ -969,6 +969,7 @@
     <string name="wallet__tags_filter_title">Επιλογή ετικέτας</string>
     <string name="wallet__tags_new">Νέα ετικέτα</string>
     <string name="wallet__tags_new_enter">Εισάγαγε νέα ετικέτα</string>
+    <string name="wallet__tags_no">Δεν υπάρχουν διαθέσιμες ετικέτες ακόμα</string>
     <string name="wallet__tags_previously">Προηγούμενες ετικέτες</string>
     <string name="wallet__payment_abandoned">Η πληρωμή Lightning σταμάτησε πριν ολοκληρωθεί.</string>
     <string name="wallet__payment_expired">Αυτή η πληρωμή Lightning έληξε. Ζητήστε νέο τιμολόγιο.</string>

@@ -969,6 +969,7 @@
     <string name="wallet__tags_filter_title">Selecciona etiqueta</string>
     <string name="wallet__tags_new">Nova etiqueta</string>
     <string name="wallet__tags_new_enter">Introdueix una nova etiqueta</string>
+    <string name="wallet__tags_no">Cap etiqueta disponible encara</string>
     <string name="wallet__tags_previously">Etiquetes prèviament utilitzades</string>
     <string name="wallet__payment_abandoned">El pagament Lightning s\'ha aturat abans de completar-se.</string>
     <string name="wallet__payment_expired">Aquest pagament Lightning ha caducat. Demana una factura nova.</string>

@@ -969,6 +969,7 @@
     <string name="wallet__tags_filter_title">Tag selecteren</string>
     <string name="wallet__tags_new">Nieuwe tag</string>
     <string name="wallet__tags_new_enter">Voer een nieuwe tag in</string>
+    <string name="wallet__tags_no">Nog geen labels beschikbaar</string>
     <string name="wallet__tags_previously">Eerder gebruikte tags</string>
     <string name="wallet__payment_abandoned">De Lightning-betaling is gestopt voordat deze was voltooid.</string>
     <string name="wallet__payment_expired">Deze Lightning-betaling is verlopen. Vraag een nieuwe factuur aan.</string>

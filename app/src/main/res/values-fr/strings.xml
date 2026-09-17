@@ -837,6 +837,7 @@
     <string name="wallet__tags_add_button">Ajouter</string>
     <string name="wallet__tags_new">Nouvelle étiquette</string>
     <string name="wallet__tags_new_enter">Saisissez une nouvelle étiquette</string>
+    <string name="wallet__tags_no">Aucun tag n\'est encore disponible</string>
     <string name="wallet__tags_previously">Étiquettes précédemment utilisées</string>
     <string name="wallet__tags_filter">Filtrer l\'activité à l\'aide de tags</string>
     <string name="wallet__tags_filter_title">Sélectionnez un Tag</string>

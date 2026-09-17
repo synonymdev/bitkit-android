@@ -803,6 +803,7 @@
     <string name="wallet__tags_add_button">Adicionar</string>
     <string name="wallet__tags_new">Nova Tag</string>
     <string name="wallet__tags_new_enter">Inserir uma nova tag</string>
+    <string name="wallet__tags_no">Ainda não há tags disponíveis</string>
     <string name="wallet__tags_previously">Tags usadas anteriormente</string>
     <string name="wallet__tags_filter">Filtrar atividades usando tags</string>
     <string name="wallet__tags_filter_title">Selecionar Tag</string>
