@@ -324,11 +324,11 @@ class PubkyRepoTest : BaseUnitTest() {
         val identity = stubRingIdentity()
         assertTrue(sut.adoptRingIdentity(identity).isSuccess)
 
-        val result = sut.approveAuth("pubkyauth://signin", "/pub/example/:rw")
+        val result = sut.approveAuth("pubkyauth://signin", "/pub/example/:rw", "paykit.test")
 
         assertTrue(result.isSuccess)
         verifyBlocking(pubkyService) {
-            approveAuth("pubkyauth://signin", "/pub/example/:rw", SHARED_SECRET_KEY)
+            approveAuth("pubkyauth://signin", "/pub/example/:rw", "paykit.test", SHARED_SECRET_KEY)
         }
         verifyBlocking(keychain, never()) {
             upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, SHARED_SECRET_KEY)
@@ -351,7 +351,8 @@ class PubkyRepoTest : BaseUnitTest() {
             verify(pubkyService).clearExternalSessionAccess()
             verify(pubkyStore).reset()
         }
-        verifyBlocking(pubkyService, never()) { forceSignOut() }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
     }
 
     @Test
@@ -426,14 +427,14 @@ class PubkyRepoTest : BaseUnitTest() {
         runCurrent()
 
         assertFalse(restore.isCompleted)
-        verifyBlocking(pubkyService, never()) { clearSessionAccess() }
+        verifyBlocking(pubkyService, never()) { forgetSessionAccess() }
 
         releaseExternalSignIn.complete(Unit)
         advanceUntilIdle()
 
         assertTrue(adoption.await().isSuccess)
         assertTrue(restore.await().isSuccess)
-        verifyBlocking(pubkyService) { clearSessionAccess() }
+        verifyBlocking(pubkyService) { forgetSessionAccess() }
     }
 
     @Test
