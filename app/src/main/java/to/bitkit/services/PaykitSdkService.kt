@@ -1429,7 +1429,13 @@ internal fun clearPubkySessionCredentials(deleteKeychainValue: (String) -> Unit)
     val exportResult = runCatching { deleteKeychainValue(Keychain.Key.PUBKY_SHARED_EXPORT_ENABLED.name) }
     val sessionResult = runCatching { deleteKeychainValue(Keychain.Key.PAYKIT_SESSION.name) }
     val localSecretResult = runCatching { deleteKeychainValue(Keychain.Key.PUBKY_SECRET_KEY.name) }
-    val quarantineResult = runCatching { deleteKeychainValue(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) }
+    // The quarantine marker must never outlive the secret it guards: releasing it while the secret
+    // survives would let a suspect managed secret be signed back in and re-exported to Ring.
+    val quarantineResult = if (localSecretResult.isSuccess) {
+        runCatching { deleteKeychainValue(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) }
+    } else {
+        Result.success(Unit)
+    }
     exportResult.getOrThrow()
     sessionResult.getOrThrow()
     localSecretResult.getOrThrow()

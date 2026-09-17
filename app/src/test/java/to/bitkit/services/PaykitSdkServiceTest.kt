@@ -278,6 +278,27 @@ class PaykitSdkServiceTest {
     }
 
     @Test
+    fun `session teardown keeps the quarantine marker when the local secret delete fails`() {
+        val attemptedKeys = mutableListOf<String>()
+
+        assertFailsWith<AppError> {
+            clearPubkySessionCredentials {
+                attemptedKeys += it
+                if (it == Keychain.Key.PUBKY_SECRET_KEY.name) throw AppError("Delete failed")
+            }
+        }
+
+        assertEquals(
+            listOf(
+                Keychain.Key.PUBKY_SHARED_EXPORT_ENABLED.name,
+                Keychain.Key.PAYKIT_SESSION.name,
+                Keychain.Key.PUBKY_SECRET_KEY.name,
+            ),
+            attemptedKeys,
+        )
+    }
+
+    @Test
     fun `owned session requires and persists its exported local secret`() {
         val secretKeyHex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
 
