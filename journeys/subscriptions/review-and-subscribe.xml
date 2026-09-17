@@ -13,7 +13,7 @@
     <action>Verify a row for "Journey Sub" appears under the PROPOSALS section</action>
     <action>Tap the "Journey Sub" row (testTag "SubscriptionRow-&lt;paymentRequestId&gt;")</action>
     <action>Verify the Review and Subscribe sheet appears with 5,000 sats and the creator contact card</action>
-    <action>Verify the swipe control reads "Swipe To Subscribe and Pay" when the first period is due on acceptance, otherwise "Swipe To Subscribe"</action>
+    <action>Verify the swipe control reads "Swipe To Subscribe &amp; Pay" when the first period is due on acceptance, otherwise "Swipe To Subscribe"</action>
     <action>Swipe the confirm control to the end</action>
     <action>If the first period was due on acceptance: complete the send flow that opens, then verify the Subscribed confirmation appears</action>
     <action>If no payment was due: verify the Subscribed confirmation appears directly, with no send flow</action>

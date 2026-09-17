@@ -143,7 +143,6 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
-| `subscriptions/*` | not ported yet — added here alongside the Android design pass; the iOS side carries the same screens and should take the same four files |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
@@ -176,12 +175,15 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | Widgets intro screen container | — | `WidgetsOnboarding` |
 | Home suggestion cards | `Suggestion-<id>` | — *(cards expose no identifier)* |
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
-| Payment Request row | `PaymentRequestRow-<id>` | `PaymentRequestRow-<id>-<counterparty>-<receiverPath>-<period>` |
-| Subscription row | `SubscriptionRow-<id>` | `SubscriptionRow-<id>-<counterparty>-<receiverPath>` |
+| Payment Request row | `PaymentRequestRow-<id>` | `PaymentRequestRow-<id>-<period>` *(`-one-time` for a one-off)* |
 
 Two of those are unreconciled rather than intentional: the Send screen emitting both
 `AvailableAmount` and `available_balance`, and the background-payments row name. Settling either is a
 code change on one side, not a journey change.
+
+`SubscriptionRow-<id>` matches on both platforms. iOS appends the billing period to
+`PaymentRequestRow` because every recurring payment of one subscription shares the same id, so a
+journey that must run on both platforms matches on the `PaymentRequestRow-<id>` prefix.
 
 One asymmetry worth knowing when comparing: Android builds `Tab-*` from the enum name
 (`CustomTabRowWithSpacing`), so `Tab-all` is stable in any locale, while iOS derives it from the
