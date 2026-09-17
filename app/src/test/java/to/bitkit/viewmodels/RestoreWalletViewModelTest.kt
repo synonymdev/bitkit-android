@@ -1,10 +1,13 @@
 package to.bitkit.viewmodels
 
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import to.bitkit.services.core.Bip39Service
@@ -424,6 +427,26 @@ class RestoreWalletViewModelTest : BaseUnitTest() {
 
         val state = viewModel.uiState.value
         assertEquals("abandon", state.words[0])
+    }
+
+    @Test
+    fun `word typed while a paste validates should not be undone by the paste`() = test {
+        val validation = CompletableDeferred<Unit>()
+        whenever(bip39Service.isValidWord("w1")).doSuspendableAnswer {
+            validation.await()
+            true
+        }
+
+        viewModel.onChangeWord(0, "w1 w2 w3")
+        viewModel.onChangeWord(0, "typed")
+        assertEquals("", viewModel.uiState.value.words[0])
+
+        validation.complete(Unit)
+        advanceUntilIdle()
+
+        val state = viewModel.uiState.value
+        assertEquals("typed", state.words[0])
+        assertEquals(listOf("w2", "w3"), state.words.subList(1, 3))
     }
 
     @Test

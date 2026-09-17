@@ -381,9 +381,15 @@ fun MnemonicInputField(
 
     OutlinedTextField(
         value = textFieldValue,
-        onValueChange = {
-            if (!it.text.contains(WHITESPACE)) textFieldValue = it
-            onValueChange(it.text)
+        onValueChange = { newValue ->
+            when {
+                !newValue.text.contains(WHITESPACE) -> {
+                    textFieldValue = newValue
+                    onValueChange(newValue.text)
+                }
+
+                isPastedInput(previous = textFieldValue, new = newValue) -> onValueChange(newValue.text)
+            }
         },
         textStyle = AppTextStyles.BodySSB,
         prefix = {
@@ -423,6 +429,15 @@ fun MnemonicInputField(
                 onPositionChange(position)
             }
     )
+}
+
+/**
+ * Whitespace reaches a word field from a paste or from a typed space. Typing commits one character at a time,
+ * so only a longer insertion is forwarded as a paste and spread across the fields; a typed space is dropped.
+ */
+internal fun isPastedInput(previous: TextFieldValue, new: TextFieldValue): Boolean {
+    val keptLength = previous.text.length - previous.selection.length
+    return new.text.length - keptLength > 1
 }
 
 @Preview(showSystemUi = true)

@@ -85,6 +85,20 @@ class MnemonicInputFieldTest {
     }
 
     @Test
+    fun whenSpaceTypedAfterWord_shouldNotForwardItAsPaste() {
+        setContent(onValueChange = { it })
+        composeTestRule.onNodeWithTag(FIELD_TAG).performTextInput("abandon")
+        composeTestRule.waitForIdle()
+        changes.clear()
+
+        composeTestRule.onNodeWithTag(FIELD_TAG).performTextInput(" ")
+        composeTestRule.waitForIdle()
+
+        assertEquals(emptyList(), changes)
+        assertEquals("abandon", fieldText())
+    }
+
+    @Test
     fun whenFragmentPastedAndParentStoresFirstWord_shouldShowOnlyThatWord() {
         setContent(onValueChange = { it.trim().split(Regex("\\s+")).first() })
 
