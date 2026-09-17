@@ -2079,7 +2079,16 @@ fun NavController.navigateToTransferSavingsIntro() = navigateTo(Routes.SavingsIn
 
 fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.SavingsAvailability)
 
-fun NavController.navigateOnSavingsTransferExit() = navigateToHome()
+/**
+ * Exits the savings transfer to home. The coop close retry job holds on to this callback for up to
+ * 30 minutes, so it is ignored once the transfer flow is gone from the back stack, the way popping
+ * the transfer graph used to be a no-op there.
+ */
+fun NavController.navigateOnSavingsTransferExit() {
+    val isTransferFlowOpen = currentBackStack.value.any { it.destination.hasRoute<Routes.TransferRoot>() }
+    if (!isTransferFlowOpen) return
+    navigateToHome()
+}
 
 fun NavController.navigateToTransferSpendingStart(hasSeenSpendingIntro: Boolean) =
     navigateTo(transferSpendingStartRoute(hasSeenSpendingIntro))

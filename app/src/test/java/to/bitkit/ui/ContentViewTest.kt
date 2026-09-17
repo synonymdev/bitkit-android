@@ -99,17 +99,7 @@ class ContentViewTest {
 
     @Test
     fun `savings transfer completion returns home and drops spending from back stack`() {
-        val navController = NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
-            navigatorProvider.addNavigator(ComposeNavigator())
-            graph = createGraph(startDestination = Routes.Home) {
-                composable<Routes.Home> {}
-                composable<Routes.Spending> {}
-                navigation<Routes.TransferRoot>(startDestination = Routes.SavingsAvailability) {
-                    composable<Routes.SavingsAvailability> {}
-                    composable<Routes.SavingsProgress> {}
-                }
-            }
-        }
+        val navController = transferNavController()
         navController.navigateTo(Routes.Spending)
         navController.navigateToTransferSavingsAvailability()
         navController.navigateTo(Routes.SavingsProgress)
@@ -120,4 +110,32 @@ class ContentViewTest {
         assertFalse(navController.currentBackStack.value.any { it.destination.hasRoute<Routes.Spending>() })
         assertFalse(navController.currentBackStack.value.any { it.destination.hasRoute<Routes.SavingsProgress>() })
     }
+
+    @Test
+    fun `savings transfer exit does nothing once the transfer flow is gone`() {
+        val navController = transferNavController()
+        navController.navigateTo(Routes.Spending)
+        navController.navigateToTransferSavingsAvailability()
+        navController.navigateTo(Routes.SavingsProgress)
+        navController.navigateOnSavingsTransferExit()
+        navController.navigateTo(Routes.Settings)
+
+        navController.navigateOnSavingsTransferExit()
+
+        assertTrue(navController.currentDestination?.hasRoute<Routes.Settings>() == true)
+    }
+
+    private fun transferNavController(): NavHostController =
+        NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
+            navigatorProvider.addNavigator(ComposeNavigator())
+            graph = createGraph(startDestination = Routes.Home) {
+                composable<Routes.Home> {}
+                composable<Routes.Spending> {}
+                composable<Routes.Settings> {}
+                navigation<Routes.TransferRoot>(startDestination = Routes.SavingsAvailability) {
+                    composable<Routes.SavingsAvailability> {}
+                    composable<Routes.SavingsProgress> {}
+                }
+            }
+        }
 }
