@@ -7,6 +7,7 @@ import coil3.memory.MemoryCache
 import com.synonym.paykit.ContactProfileResolution
 import com.synonym.paykit.ContactProfileSource
 import com.synonym.paykit.ContactRecord
+import com.synonym.paykit.PaykitException
 import com.synonym.paykit.PaykitProfile
 import com.synonym.paykit.PubkyAuthCompanionClaim
 import com.synonym.paykit.PubkySessionBootstrapResult
@@ -1348,9 +1349,11 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `initialize should flag session restoration failure when service startup fails with saved session`() = test {
+    fun `initialize should flag session restoration failure when service startup fails with identity error`() = test {
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
-        whenever(pubkyService.initialize()).thenAnswer { throw TestAppError("Missing capabilities") }
+        whenever(pubkyService.initialize()).thenAnswer {
+            throw AppError(PaykitException.Identity("identity_error", "Missing capabilities"))
+        }
         val repo = createSut()
 
         repo.awaitInitialization()
@@ -1361,6 +1364,21 @@ class PubkyRepoTest : BaseUnitTest() {
         verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
         verifyBlocking(keychain, never()) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
     }
+
+    @Test
+    fun `initialize should not flag session restoration failure when service startup fails with non-identity error`() =
+        test {
+            whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+            whenever(pubkyService.initialize()).thenAnswer {
+                throw AppError(PaykitException.Storage("storage_error", "Corrupted state"))
+            }
+            val repo = createSut()
+
+            repo.awaitInitialization()
+
+            assertFalse(repo.sessionRestorationFailed.value)
+            verify(pubkyService, never()).importSession(any())
+        }
 
     @Test
     fun `initialize should restore saved session with prefixed public key`() = test {
