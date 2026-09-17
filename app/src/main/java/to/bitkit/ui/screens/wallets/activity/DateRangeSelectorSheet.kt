@@ -3,6 +3,7 @@
 package to.bitkit.ui.screens.wallets.activity
 
 import androidx.activity.compose.BackHandler
+import androidx.annotation.VisibleForTesting
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -48,7 +49,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
@@ -119,7 +125,7 @@ fun DateRangeSelectorSheet() {
         app.hideSheet()
     }
 
-    Content(
+    DateRangeSelectorContent(
         initialStartDate = startDate,
         initialEndDate = endDate,
         onClearClick = {
@@ -136,8 +142,9 @@ fun DateRangeSelectorSheet() {
 }
 
 @Suppress("MaxLineLength", "CyclomaticComplexMethod")
+@VisibleForTesting
 @Composable
-private fun Content(
+internal fun DateRangeSelectorContent(
     initialStartDate: Long? = null,
     initialEndDate: Long? = null,
     onClearClick: () -> Unit = {},
@@ -168,56 +175,47 @@ private fun Content(
     val swipeThreshold = with(density) { SWIPE_THRESHOLD_DP.dp.toPx() }
 
     // Animation for month transition
-    var isAnimating by remember { mutableStateOf(false) }
+    var monthAnimationJob by remember { mutableStateOf<Job?>(null) }
     val monthAlpha = remember { Animatable(INITIAL_ALPHA) }
 
+    fun isMonthAnimating() = monthAnimationJob?.isActive == true
+
     fun navigateMonth(direction: Int) {
-        if (isAnimating) return
+        displayedMonth = if (direction > 0) {
+            displayedMonth.plusMonths(NEXT_MONTH)
+        } else {
+            displayedMonth.minusMonths(NEXT_MONTH)
+        }
 
-        scope.launch {
-            isAnimating = true
-
-            // Fade out and slide
-            launch {
-                monthAlpha.animateTo(
-                    targetValue = TRANSPARENT_ALPHA,
-                    animationSpec = tween(durationMillis = FADE_DURATION_MILLIS)
-                )
+        monthAnimationJob?.cancel()
+        monthAnimationJob = scope.launch {
+            val job = coroutineContext.job
+            try {
+                monthAlpha.snapTo(TRANSPARENT_ALPHA)
+                offsetX.snapTo(if (direction > 0) SLIDE_OFFSET_PX else -SLIDE_OFFSET_PX)
+                coroutineScope {
+                    launch {
+                        monthAlpha.animateTo(
+                            targetValue = INITIAL_ALPHA,
+                            animationSpec = tween(durationMillis = FADE_DURATION_MILLIS)
+                        )
+                    }
+                    launch {
+                        offsetX.animateTo(
+                            targetValue = INITIAL_OFFSET,
+                            animationSpec = tween(durationMillis = FADE_DURATION_MILLIS)
+                        )
+                    }
+                }
+            } finally {
+                // A newer navigation owns the animatables, so only reset them when this job is still current
+                if (monthAnimationJob === job) {
+                    withContext(NonCancellable) {
+                        monthAlpha.snapTo(INITIAL_ALPHA)
+                        offsetX.snapTo(INITIAL_OFFSET)
+                    }
+                }
             }
-
-            launch {
-                offsetX.animateTo(
-                    targetValue = if (direction > 0) -SLIDE_OFFSET_PX else SLIDE_OFFSET_PX,
-                    animationSpec = tween(durationMillis = FADE_DURATION_MILLIS)
-                )
-            }
-
-            // Wait for animation to complete
-            offsetX.snapTo(if (direction > 0) SLIDE_OFFSET_PX else -SLIDE_OFFSET_PX)
-
-            // Update month
-            displayedMonth = if (direction > 0) {
-                displayedMonth.plusMonths(NEXT_MONTH)
-            } else {
-                displayedMonth.minusMonths(NEXT_MONTH)
-            }
-
-            // Fade in and slide back
-            launch {
-                monthAlpha.animateTo(
-                    targetValue = INITIAL_ALPHA,
-                    animationSpec = tween(durationMillis = FADE_DURATION_MILLIS)
-                )
-            }
-
-            launch {
-                offsetX.animateTo(
-                    targetValue = INITIAL_OFFSET,
-                    animationSpec = tween(durationMillis = FADE_DURATION_MILLIS)
-                )
-            }
-
-            isAnimating = false
         }
     }
 
@@ -313,7 +311,7 @@ private fun Content(
                                     val direction =
                                         if (dragOffset < 0) NEXT_MONTH else PREVIOUS_MONTH
                                     navigateMonth(direction)
-                                } else {
+                                } else if (!isMonthAnimating()) {
                                     // Spring back to original position
                                     offsetX.animateTo(
                                         targetValue = INITIAL_OFFSET,
@@ -328,18 +326,20 @@ private fun Content(
                         },
                         onDragCancel = {
                             scope.launch {
-                                offsetX.animateTo(
-                                    targetValue = INITIAL_OFFSET,
-                                    animationSpec = spring(
-                                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                                        stiffness = Spring.StiffnessLow
+                                if (!isMonthAnimating()) {
+                                    offsetX.animateTo(
+                                        targetValue = INITIAL_OFFSET,
+                                        animationSpec = spring(
+                                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                                            stiffness = Spring.StiffnessLow
+                                        )
                                     )
-                                )
+                                }
                                 dragOffset = INITIAL_OFFSET
                             }
                         },
                         onHorizontalDrag = { _, dragAmount ->
-                            if (!isAnimating) {
+                            if (!isMonthAnimating()) {
                                 dragOffset += dragAmount
                                 scope.launch {
                                     offsetX.snapTo(offsetX.value + dragAmount)
@@ -401,6 +401,7 @@ private fun Content(
                     .graphicsLayer {
                         alpha = monthAlpha.value
                     }
+                    .testTag("CalendarGrid")
             )
         }
 
@@ -638,7 +639,7 @@ private fun LocalDate.toFormattedString(): String {
 private fun PreviewEmpty() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content()
+            DateRangeSelectorContent()
         }
     }
 }
@@ -648,7 +649,7 @@ private fun PreviewEmpty() {
 private fun PreviewWithSelection() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            DateRangeSelectorContent(
                 initialStartDate = now()
                     .minus(CalendarConstants.DAYS_IN_WEEK.days)
                     .toEpochMilliseconds(),
