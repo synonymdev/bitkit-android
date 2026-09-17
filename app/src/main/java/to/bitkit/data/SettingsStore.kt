@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.Serializable
 import to.bitkit.data.serializers.SettingsSerializer
 import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.CoinSelectionPreference
 import to.bitkit.models.DEFAULT_ADDRESS_TYPE_STRING
@@ -49,8 +50,9 @@ class SettingsStore @Inject constructor(
         private set
 
     suspend fun restoreFromBackup(payload: SettingsBackupV1) =
-        runCatching {
+        runSuspendCatching {
             val data = payload.settings.resetPin()
+                .copy(ignoresSwitchUnitToast = false, ignoresHideBalanceToast = false)
                 .withDefaultPaykitPaymentMethods()
                 .withRequiredNativeSegwitMonitoring()
             store.updateData { data }
@@ -65,6 +67,32 @@ class SettingsStore @Inject constructor(
 
     suspend fun update(transform: (SettingsData) -> SettingsData) {
         store.updateData { transform(it).withRequiredNativeSegwitMonitoring() }
+    }
+
+    suspend fun switchBalanceUnit(): BalanceUnitSwitch? {
+        var firstSwitch: BalanceUnitSwitch? = null
+        store.updateData { settings ->
+            val nextDisplay = settings.primaryDisplay.not()
+            if (!settings.ignoresSwitchUnitToast) {
+                firstSwitch = BalanceUnitSwitch(settings.primaryDisplay, nextDisplay, settings.selectedCurrency)
+            }
+            settings.copy(primaryDisplay = nextDisplay, ignoresSwitchUnitToast = true)
+        }
+        return firstSwitch
+    }
+
+    suspend fun toggleHideBalanceFromSwipe(): Boolean {
+        var firstHide = false
+        store.updateData { settings ->
+            if (!settings.enableSwipeToHideBalance) return@updateData settings
+            val hideBalance = !settings.hideBalance
+            firstHide = hideBalance && !settings.ignoresHideBalanceToast
+            settings.copy(
+                hideBalance = hideBalance,
+                ignoresHideBalanceToast = settings.ignoresHideBalanceToast || firstHide,
+            )
+        }
+        return firstHide
     }
 
     suspend fun setIsPaykitEnabled(value: Boolean) {
@@ -150,6 +178,8 @@ data class SettingsData(
     val enableSwipeToHideBalance: Boolean = true,
     val hideBalance: Boolean = false,
     val hideBalanceOnOpen: Boolean = false,
+    val ignoresSwitchUnitToast: Boolean = false,
+    val ignoresHideBalanceToast: Boolean = false,
     val enableAutoReadClipboard: Boolean = false,
     val enableSendAmountWarning: Boolean = false,
     val backupVerified: Boolean = false,
@@ -168,6 +198,12 @@ data class SettingsData(
     val selectedAddressType: String = DEFAULT_ADDRESS_TYPE_STRING,
     val addressTypesToMonitor: List<String> = listOf(DEFAULT_ADDRESS_TYPE_STRING),
     val pendingRestoreAddressTypePrune: Boolean = false,
+)
+
+data class BalanceUnitSwitch(
+    val previousDisplay: PrimaryDisplay,
+    val newDisplay: PrimaryDisplay,
+    val selectedCurrency: String,
 )
 
 fun SettingsData.resetPin() = this.copy(

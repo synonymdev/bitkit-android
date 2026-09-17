@@ -1214,6 +1214,10 @@
     <string name="wallet__activity_transfer_to_savings">To Savings</string>
     <string name="wallet__activity_transfer_to_spending">To Spending</string>
     <string name="wallet__activity_tx_id">Transaction ID</string>
+    <string name="wallet__balance_hidden_message">Swipe your wallet balance to reveal it again.</string>
+    <string name="wallet__balance_hidden_title">Wallet Balance Hidden</string>
+    <string name="wallet__balance_unit_switched_message">Tap your wallet balance to switch it back to %1$s.</string>
+    <string name="wallet__balance_unit_switched_title">Switched to %1$s</string>
     <string name="wallet__boost">Boost</string>
     <string name="wallet__boost_decrease_fee">Reduce fee</string>
     <string name="wallet__boost_error_msg">Bitkit was unable to boost the transaction.</string>
