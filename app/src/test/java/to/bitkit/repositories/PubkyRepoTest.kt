@@ -1343,7 +1343,23 @@ class PubkyRepoTest : BaseUnitTest() {
         repo.awaitInitialization()
 
         assertNull(repo.publicKey.value)
+        assertFalse(repo.sessionRestorationFailed.value)
         verify(pubkyService, never()).importSession(any())
+    }
+
+    @Test
+    fun `initialize should flag session restoration failure when service startup fails with saved session`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
+        whenever(pubkyService.initialize()).thenAnswer { throw TestAppError("Missing capabilities") }
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertTrue(repo.sessionRestorationFailed.value)
+        assertFalse(repo.isAuthenticated.value)
+        verify(pubkyService, never()).importSession(any())
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
     }
 
     @Test
