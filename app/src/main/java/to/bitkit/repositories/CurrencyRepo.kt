@@ -25,6 +25,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BTC_SCALE
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
@@ -136,27 +137,30 @@ class CurrencyRepo @Inject constructor(
     private suspend fun refresh() {
         if (isRefreshing) return
         isRefreshing = true
-        runCatching {
-            val fetchedRates = currencyService.fetchLatestRates()
-            cacheStore.update { it.copy(cachedRates = fetchedRates) }
-            _currencyState.update {
-                it.copy(
-                    error = null,
-                    hasStaleData = false,
-                    lastSuccessfulRefresh = clock.now().toEpochMilliseconds(),
-                )
-            }
-            Logger.debug("Currency rates refreshed successfully", context = TAG)
-        }.onFailure { e ->
-            Logger.error("Currency rates refresh failed", e, context = TAG)
-            _currencyState.update { it.copy(error = e) }
+        try {
+            runSuspendCatching {
+                val fetchedRates = currencyService.fetchLatestRates()
+                cacheStore.update { it.copy(cachedRates = fetchedRates) }
+                _currencyState.update {
+                    it.copy(
+                        error = null,
+                        hasStaleData = false,
+                        lastSuccessfulRefresh = clock.now().toEpochMilliseconds(),
+                    )
+                }
+                Logger.debug("Currency rates refreshed successfully", context = TAG)
+            }.onFailure { e ->
+                Logger.error("Currency rates refresh failed", e, context = TAG)
+                _currencyState.update { it.copy(error = e) }
 
-            _currencyState.value.lastSuccessfulRefresh?.let { lastUpdatedAt ->
-                val isStale = clock.now().toEpochMilliseconds() - lastUpdatedAt > Env.fxRateStaleThreshold
-                _currencyState.update { it.copy(hasStaleData = isStale) }
+                _currencyState.value.lastSuccessfulRefresh?.let { lastUpdatedAt ->
+                    val isStale = clock.now().toEpochMilliseconds() - lastUpdatedAt > Env.fxRateStaleThreshold
+                    _currencyState.update { it.copy(hasStaleData = isStale) }
+                }
             }
+        } finally {
+            isRefreshing = false
         }
-        isRefreshing = false
     }
 
     suspend fun switchUnit() = withContext(bgDispatcher) {
