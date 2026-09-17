@@ -151,10 +151,9 @@ private fun SettingUpScreen(
                 ProgressSteps(
                     steps = steps,
                     activeStepIndex = lightningSetupStep,
-                    modifier = Modifier
-                        .padding(vertical = 16.dp)
-                        .align(alignment = Alignment.CenterHorizontally)
+                    modifier = Modifier.align(alignment = Alignment.CenterHorizontally)
                 )
+                Spacer(modifier = Modifier.height(16.dp))
             } else {
                 Image(
                     painter = painterResource(id = R.drawable.check),
