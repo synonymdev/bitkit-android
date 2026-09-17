@@ -147,6 +147,9 @@ class LightningRepo @Inject constructor(
     @Volatile
     private var isWiping = false
 
+    @Volatile
+    private var lastKnownNodeId: String? = null
+
     private val channelCache = ConcurrentHashMap<String, ChannelDetails>()
     private val probeOutcomeCache = ConcurrentHashMap<PaymentId, ProbeOutcome>()
     private val probeOutcomeSignal = MutableSharedFlow<ProbeOutcome>(extraBufferCapacity = 64)
@@ -296,6 +299,7 @@ class LightningRepo @Inject constructor(
         channelMigration: ChannelDataMigration? = null,
     ) = withContext(bgDispatcher) {
         runCatching {
+            lastKnownNodeId = null
             val trustedPeers = fetchTrustedPeers()
             lightningService.setup(
                 walletIndex,
@@ -823,6 +827,7 @@ class LightningRepo @Inject constructor(
                 Logger.debug("node stopped, calling wipeStorage", context = TAG)
                 lightningService.wipeStorage(walletIndex)
                 clearProbeOutcomes()
+                lastKnownNodeId = null
                 _lightningState.update {
                     LightningState(
                         nodeStatus = it.nodeStatus,
@@ -1649,11 +1654,22 @@ class LightningRepo @Inject constructor(
     }
 
     fun getNodeId(): String? =
-        if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.nodeId else null
+        if (_lightningState.value.nodeLifecycleState.isRunning()) {
+            lightningService.nodeId?.also { lastKnownNodeId = it }
+        } else {
+            null
+        }
 
-    suspend fun awaitNodeId(): String? = executeWhenNodeRunning("awaitNodeId", NODE_ID_WAIT_TIMEOUT) {
-        runCatching { requireNotNull(lightningService.nodeId) { "Node id not available" } }
-    }.getOrNull()
+    /**
+     * Node id of the current node, falling back to the one observed while it last ran.
+     * The id is cleared on node setup and storage wipe, so it always belongs to the active wallet.
+     */
+    fun getLastKnownNodeId(): String? = getNodeId() ?: lastKnownNodeId
+
+    suspend fun awaitNodeId(): String? = lastKnownNodeId
+        ?: executeWhenNodeRunning("awaitNodeId", NODE_ID_WAIT_TIMEOUT) {
+            runCatching { requireNotNull(lightningService.nodeId) { "Node id not available" } }
+        }.getOrNull()?.also { lastKnownNodeId = it }
 
     fun getBalances(): BalanceDetails? =
         if (_lightningState.value.nodeLifecycleState.isRunning()) lightningService.balances else null

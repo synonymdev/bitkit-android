@@ -757,6 +757,47 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `awaitNodeId should return last known id after node stops`() = test {
+        val testNodeId = "test_node_id"
+        whenever(lightningService.nodeId).thenReturn(testNodeId)
+        startNodeForTesting()
+        assertEquals(testNodeId, sut.awaitNodeId())
+
+        whenever(lightningService.stop()).thenReturn(Unit)
+        sut.stop()
+        whenever(lightningService.nodeId).thenReturn(null)
+
+        assertEquals(testNodeId, sut.awaitNodeId())
+    }
+
+    @Test
+    fun `getLastKnownNodeId should return remembered id while node is not running`() = test {
+        val testNodeId = "test_node_id"
+        whenever(lightningService.nodeId).thenReturn(testNodeId)
+        startNodeForTesting()
+        assertEquals(testNodeId, sut.getNodeId())
+
+        whenever(lightningService.stop()).thenReturn(Unit)
+        sut.stop()
+
+        assertNull(sut.getNodeId())
+        assertEquals(testNodeId, sut.getLastKnownNodeId())
+    }
+
+    @Test
+    fun `getLastKnownNodeId should return null after storage wipe`() = test {
+        whenever(lightningService.nodeId).thenReturn("test_node_id")
+        startNodeForTesting()
+        assertEquals("test_node_id", sut.getNodeId())
+        whenever(lightningService.stop()).thenReturn(Unit)
+
+        assertTrue(sut.wipeStorage(0).isSuccess)
+        whenever(lightningService.nodeId).thenReturn(null)
+
+        assertNull(sut.getLastKnownNodeId())
+    }
+
+    @Test
     fun `getBalances should return null when node is not running`() = test {
         assertNull(sut.getBalances())
     }

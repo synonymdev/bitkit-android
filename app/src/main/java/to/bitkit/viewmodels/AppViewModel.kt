@@ -2216,7 +2216,7 @@ class AppViewModel @Inject constructor(
     }
 
     private suspend fun hasOwnLightningInvoice(params: Map<String, String>?): Boolean =
-        decodeLightningParam(params)?.isPayee(lightningRepo.getNodeId()) == true
+        decodeLightningParam(params)?.isPayee(lightningRepo.getLastKnownNodeId()) == true
 
     private suspend fun decodeLightningParam(params: Map<String, String>?): LightningInvoice? =
         params?.get("lightning")?.let { bolt11 ->
