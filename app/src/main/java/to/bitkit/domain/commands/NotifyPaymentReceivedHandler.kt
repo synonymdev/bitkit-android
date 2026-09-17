@@ -10,14 +10,21 @@ import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.BackupRepo
+import to.bitkit.repositories.LightningRepo
+import to.bitkit.services.MigrationService
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.math.absoluteValue
 
 @Singleton
 class NotifyPaymentReceivedHandler @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
+    private val lightningRepo: LightningRepo,
+    private val backupRepo: BackupRepo,
+    private val migrationService: MigrationService,
     private val receivedNotificationContent: ReceivedNotificationContent,
 ) {
     private val presentationClaimsLock = Any()
@@ -86,7 +93,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
 
     private fun presentationKey(command: NotifyPaymentReceived.Command): String? = when (command) {
         is NotifyPaymentReceived.Command.Lightning -> command.event.paymentId?.let { "lightning:$it" }
-        is NotifyPaymentReceived.Command.Onchain -> "onchain:${command.event.txid}"
+        is NotifyPaymentReceived.Command.Onchain -> "onchain:${command.txid}"
     }
 
     private suspend fun shouldShowLightning(command: NotifyPaymentReceived.Command.Lightning): Boolean {
@@ -96,15 +103,44 @@ class NotifyPaymentReceivedHandler @Inject constructor(
     }
 
     private suspend fun shouldShowOnchain(command: NotifyPaymentReceived.Command.Onchain): Boolean {
-        activityRepo.handleOnchainTransactionReceived(command.event.txid, command.event.details)
-        if (command.event.details.amountSats <= 0) return false
+        if (command.isConfirmedOnly) {
+            if (command.details.amountSats <= 0) return false
+            if (!canShowConfirmedOnly(command)) return false
+            activityRepo.handleOnchainTransactionConfirmed(command.txid, command.details)
+        } else {
+            activityRepo.handleOnchainTransactionReceived(command.txid, command.details)
+            if (command.details.amountSats <= 0) return false
+        }
 
         delay(DELAY_FOR_ACTIVITY_SYNC_MS)
         val shouldShowSheet = retryShouldShowReceivedSheet(
-            command.event.txid,
-            command.event.details.amountSats.toULong(),
+            command.txid,
+            command.details.amountSats.toULong(),
         )
         return shouldShowSheet
+    }
+
+    private suspend fun canShowConfirmedOnly(command: NotifyPaymentReceived.Command.Onchain): Boolean {
+        val blockHeight = command.confirmedBlockHeight ?: return false
+        if (backupRepo.isRestoring.value) {
+            Logger.debug("Skipping confirmed-only receive '${command.txid}' during restore", context = TAG)
+            return false
+        }
+        if (migrationService.isShowingMigrationLoading.value || migrationService.needsPostMigrationSync()) {
+            Logger.debug("Skipping confirmed-only receive '${command.txid}' during migration", context = TAG)
+            return false
+        }
+        val bestBlockHeight = lightningRepo.getStatus()?.currentBestBlock?.height
+        val depth = bestBlockHeight?.let { it.toLong() - blockHeight.toLong() }
+        if (depth == null || depth.absoluteValue > MAX_CONFIRMED_ONLY_BLOCK_DEPTH) {
+            Logger.debug(
+                "Skipping confirmed-only receive '${command.txid}' at height '$blockHeight' " +
+                    "with best block '$bestBlockHeight'",
+                context = TAG,
+            )
+            return false
+        }
+        return true
     }
 
     private suspend fun markAsSeen(command: NotifyPaymentReceived.Command) {
@@ -114,7 +150,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
                 activityRepo.markActivityAsSeen(paymentId)
             }
 
-            is NotifyPaymentReceived.Command.Onchain -> activityRepo.markOnchainActivityAsSeen(command.event.txid)
+            is NotifyPaymentReceived.Command.Onchain -> activityRepo.markOnchainActivityAsSeen(command.txid)
         }
     }
 
@@ -134,11 +170,11 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         direction = NewTransactionSheetDirection.RECEIVED,
         paymentHashOrTxId = when (command) {
             is NotifyPaymentReceived.Command.Lightning -> command.event.paymentHash
-            is NotifyPaymentReceived.Command.Onchain -> command.event.txid
+            is NotifyPaymentReceived.Command.Onchain -> command.txid
         },
         sats = when (command) {
             is NotifyPaymentReceived.Command.Lightning -> msatCeilOf(command.event.amountMsat).toLong()
-            is NotifyPaymentReceived.Command.Onchain -> command.event.details.amountSats
+            is NotifyPaymentReceived.Command.Onchain -> command.details.amountSats
         },
     )
 
@@ -152,5 +188,13 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         private const val DELAY_FOR_ACTIVITY_SYNC_MS = 500L
         private const val RETRY_DELAY_MS = 300L
         private const val MAX_RETRIES = 3
+
+        /**
+         * Max distance in blocks between a confirmed-only transaction and the node's best block for it to
+         * count as a new receive. Older confirmations, such as those replayed by a full wallet scan after a
+         * restore, stay silent. The distance is absolute because an unsynced best block (e.g. genesis on a
+         * fresh node) lags behind the wallet scan and must not let the replay through.
+         */
+        private const val MAX_CONFIRMED_ONLY_BLOCK_DEPTH = 2L
     }
 }

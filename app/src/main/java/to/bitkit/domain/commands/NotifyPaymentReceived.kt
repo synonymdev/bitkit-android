@@ -1,6 +1,7 @@
 package to.bitkit.domain.commands
 
 import org.lightningdevkit.ldknode.Event
+import org.lightningdevkit.ldknode.TransactionDetails
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NotificationDetails
 
@@ -14,10 +15,18 @@ sealed interface NotifyPaymentReceived {
             override val includeNotification: Boolean = false,
         ) : Command
 
+        /**
+         * An incoming onchain transaction. [confirmedBlockHeight] is set when the wallet first saw the
+         * transaction already confirmed, without a prior mempool event.
+         */
         data class Onchain(
-            val event: Event.OnchainTransactionReceived,
+            val txid: String,
+            val details: TransactionDetails,
+            val confirmedBlockHeight: UInt? = null,
             override val includeNotification: Boolean = false,
-        ) : Command
+        ) : Command {
+            val isConfirmedOnly: Boolean get() = confirmedBlockHeight != null
+        }
 
         companion object {
             fun from(event: Event, includeNotification: Boolean = false): Command? =
@@ -28,7 +37,15 @@ sealed interface NotifyPaymentReceived {
                     )
 
                     is Event.OnchainTransactionReceived -> Onchain(
-                        event = event,
+                        txid = event.txid,
+                        details = event.details,
+                        includeNotification = includeNotification,
+                    )
+
+                    is Event.OnchainTransactionConfirmed -> Onchain(
+                        txid = event.txid,
+                        details = event.details,
+                        confirmedBlockHeight = event.blockHeight,
                         includeNotification = includeNotification,
                     )
 
