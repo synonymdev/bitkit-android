@@ -47,6 +47,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
@@ -371,11 +372,10 @@ fun MnemonicInputField(
 ) {
     var textFieldValue by remember { mutableStateOf(TextFieldValue()) }
 
-    // Sync text from parent while preserving selection
+    // Sync text from parent with the cursor at the end, so Backspace edits a pasted or suggested word
     LaunchedEffect(value) {
         if (textFieldValue.text != value) {
-            val selection = textFieldValue.selection
-            textFieldValue = TextFieldValue(value, selection)
+            textFieldValue = TextFieldValue(value, TextRange(value.length))
         }
     }
 

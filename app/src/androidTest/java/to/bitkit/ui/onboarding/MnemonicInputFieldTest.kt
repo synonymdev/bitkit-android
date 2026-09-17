@@ -95,6 +95,19 @@ class MnemonicInputFieldTest {
     }
 
     @Test
+    fun whenFragmentPastedAndParentStoresFirstWord_shouldDeleteFromEndOnBackspace() {
+        setContent(onValueChange = { it.trim().split(Regex("\\s+")).first() })
+        composeTestRule.onNodeWithTag(FIELD_TAG).performTextInput("abandon ability able")
+        composeTestRule.waitForIdle()
+
+        composeTestRule.onNodeWithTag(FIELD_TAG).performKeyInput { pressKey(Key.Backspace) }
+        composeTestRule.waitForIdle()
+
+        assertEquals(0, backspaceInEmptyCount)
+        assertEquals("abando", fieldText())
+    }
+
+    @Test
     fun whenBackspacePressedInFieldWithText_shouldDeleteAndNotCallBackspaceInEmpty() {
         setContent()
         composeTestRule.onNodeWithTag(FIELD_TAG).performTextInput("abandon")
