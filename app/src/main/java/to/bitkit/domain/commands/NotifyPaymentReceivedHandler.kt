@@ -4,6 +4,7 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.di.IoDispatcher
+import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
@@ -11,20 +12,24 @@ import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
-import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.MigrationService
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
-import kotlin.math.absoluteValue
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 @Singleton
 class NotifyPaymentReceivedHandler @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
-    private val lightningRepo: LightningRepo,
     private val backupRepo: BackupRepo,
     private val migrationService: MigrationService,
+    private val clock: Clock,
     private val receivedNotificationContent: ReceivedNotificationContent,
 ) {
     private val presentationClaimsLock = Any()
@@ -121,7 +126,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
     }
 
     private suspend fun canShowConfirmedOnly(command: NotifyPaymentReceived.Command.Onchain): Boolean {
-        val blockHeight = command.confirmedBlockHeight ?: return false
+        val confirmationTime = command.confirmationTime ?: return false
         if (backupRepo.isRestoring.value) {
             Logger.debug("Skipping confirmed-only receive '${command.txid}' during restore", context = TAG)
             return false
@@ -130,12 +135,10 @@ class NotifyPaymentReceivedHandler @Inject constructor(
             Logger.debug("Skipping confirmed-only receive '${command.txid}' during migration", context = TAG)
             return false
         }
-        val bestBlockHeight = lightningRepo.getStatus()?.currentBestBlock?.height
-        val depth = bestBlockHeight?.let { it.toLong() - blockHeight.toLong() }
-        if (depth == null || depth.absoluteValue > MAX_CONFIRMED_ONLY_BLOCK_DEPTH) {
+        val age = nowMillis(clock).milliseconds - confirmationTime.toLong().seconds
+        if (age.absoluteValue > MAX_CONFIRMED_ONLY_AGE) {
             Logger.debug(
-                "Skipping confirmed-only receive '${command.txid}' at height '$blockHeight' " +
-                    "with best block '$bestBlockHeight'",
+                "Skipping confirmed-only receive '${command.txid}' confirmed at '$confirmationTime'",
                 context = TAG,
             )
             return false
@@ -190,11 +193,12 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         private const val MAX_RETRIES = 3
 
         /**
-         * Max distance in blocks between a confirmed-only transaction and the node's best block for it to
+         * Max distance between a confirmed-only transaction's block timestamp and the device clock for it to
          * count as a new receive. Older confirmations, such as those replayed by a full wallet scan after a
-         * restore, stay silent. The distance is absolute because an unsynced best block (e.g. genesis on a
-         * fresh node) lags behind the wallet scan and must not let the replay through.
+         * restore, stay silent. The block timestamp is used instead of the node's best block height, which
+         * only advances with the lightning wallet sync and can lag the onchain sync that emits the event.
+         * The distance is absolute because block timestamps and device clocks can run ahead of each other.
          */
-        private const val MAX_CONFIRMED_ONLY_BLOCK_DEPTH = 2L
+        private val MAX_CONFIRMED_ONLY_AGE = 1.hours
     }
 }

@@ -489,7 +489,7 @@ class LightningNodeServiceTest : BaseUnitTest() {
         val expectedCommand = NotifyPaymentReceived.Command.Onchain(
             txid = "confirmed_txid",
             details = details,
-            confirmedBlockHeight = 100u,
+            confirmationTime = 0uL,
             includeNotification = true,
         )
         verify(notifyPaymentReceivedHandler).invoke(expectedCommand)

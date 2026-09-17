@@ -4301,7 +4301,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         val expectedCommand = NotifyPaymentReceived.Command.Onchain(
             txid = "confirmed-txid",
             details = details,
-            confirmedBlockHeight = 100u,
+            confirmationTime = 0uL,
         )
         inOrder(activityRepo, notifyPaymentReceivedHandler) {
             verify(activityRepo).handleOnchainTransactionConfirmed("confirmed-txid", details)
