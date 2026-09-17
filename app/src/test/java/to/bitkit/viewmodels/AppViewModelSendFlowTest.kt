@@ -4471,6 +4471,61 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `confirmed-only onchain receive shows the sheet after updating the activity`() = test {
+        val sheetDetails = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.ONCHAIN,
+            direction = NewTransactionSheetDirection.RECEIVED,
+            paymentHashOrTxId = "confirmed-txid",
+            sats = 1_000L,
+        )
+        whenever(notifyPaymentReceivedHandler(any()))
+            .thenReturn(Result.success(NotifyPaymentReceived.Result.ShowSheet(sheetDetails)))
+        val details = TransactionDetails(amountSats = 1_000L, inputs = emptyList(), outputs = emptyList())
+
+        emitNodeEvent(
+            Event.OnchainTransactionConfirmed(
+                txid = "confirmed-txid",
+                blockHash = "block-hash",
+                blockHeight = 100u,
+                confirmationTime = 0uL,
+                details = details,
+            ),
+        )
+        advanceUntilIdle()
+
+        val expectedCommand = NotifyPaymentReceived.Command.Onchain(
+            txid = "confirmed-txid",
+            details = details,
+            confirmedBlockHeight = 100u,
+        )
+        inOrder(activityRepo, notifyPaymentReceivedHandler) {
+            verify(activityRepo).handleOnchainTransactionConfirmed("confirmed-txid", details)
+            verify(notifyPaymentReceivedHandler).invoke(expectedCommand)
+            verify(notifyPaymentReceivedHandler).present(eq(expectedCommand), any(), any())
+        }
+        assertEquals(sheetDetails, sut.transactionSheet.value)
+    }
+
+    @Test
+    fun `confirmed-only onchain receive skips the handler during migration`() = test {
+        whenever(migrationService.needsPostMigrationSync()).thenReturn(true)
+
+        emitNodeEvent(
+            Event.OnchainTransactionConfirmed(
+                txid = "confirmed-txid",
+                blockHash = "block-hash",
+                blockHeight = 100u,
+                confirmationTime = 0uL,
+                details = TransactionDetails(amountSats = 1_000L, inputs = emptyList(), outputs = emptyList()),
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(notifyPaymentReceivedHandler, never()).invoke(any())
+        assertEquals(NewTransactionSheetDetails.EMPTY, sut.transactionSheet.value)
+    }
+
+    @Test
     fun `received lightning payment is claimed by the UI while foregrounded`() = test {
         val details = NewTransactionSheetDetails(
             type = NewTransactionSheetType.LIGHTNING,
