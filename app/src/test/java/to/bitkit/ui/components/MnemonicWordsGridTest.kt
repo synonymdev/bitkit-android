@@ -95,6 +95,61 @@ class MnemonicWordsGridTest {
     }
 
     @Test
+    fun `actual words needing a smaller size set the shared size`() {
+        val result = fitSharedMnemonicFontSize(
+            wordLists = listOf(listOf("mushroom"), listOf("secret")),
+            wordBudgetPx = { 110 },
+            measureWordPx = measureWord,
+        )
+
+        assertEquals(MnemonicFontFit(13.5.sp, fits = true), result)
+    }
+
+    @Test
+    fun `placeholders needing a smaller size set the shared size`() {
+        val result = fitSharedMnemonicFontSize(
+            wordLists = listOf(listOf("cat"), listOf("secret")),
+            wordBudgetPx = { 100 },
+            measureWordPx = measureWord,
+        )
+
+        assertEquals(MnemonicFontFit(16.5.sp, fits = true), result)
+    }
+
+    @Test
+    fun `actual word that never fits wraps both reveal states`() {
+        val result = fitSharedMnemonicFontSize(
+            wordLists = listOf(listOf("category"), listOf("secret")),
+            wordBudgetPx = { 80 },
+            measureWordPx = measureWord,
+        )
+
+        assertEquals(MnemonicFontFit(12.sp, fits = false), result)
+    }
+
+    @Test
+    fun `placeholder that never fits wraps both reveal states`() {
+        val result = fitSharedMnemonicFontSize(
+            wordLists = listOf(listOf("cat"), listOf("secret")),
+            wordBudgetPx = { 60 },
+            measureWordPx = measureWord,
+        )
+
+        assertEquals(MnemonicFontFit(12.sp, fits = false), result)
+    }
+
+    @Test
+    fun `no word lists keep the full font size`() {
+        val result = fitSharedMnemonicFontSize(
+            wordLists = emptyList(),
+            wordBudgetPx = { 0 },
+            measureWordPx = measureWord,
+        )
+
+        assertEquals(MnemonicFontFit(17.sp, fits = true), result)
+    }
+
+    @Test
     fun `word budget subtracts the column gap, label and label gap`() {
         assertEquals(78, mnemonicWordBudgetPx(gridWidthPx = 247, columnGapPx = 32, labelWidthPx = 21, labelGapPx = 8))
     }
