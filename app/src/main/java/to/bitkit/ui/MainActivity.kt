@@ -133,6 +133,7 @@ class MainActivity : FragmentActivity() {
                 val hazeState = rememberHazeState(blurEnabled = true)
                 val bottomSheetOverlayState = remember { BottomSheetOverlayState() }
                 val authSheetOverlayState = remember { BottomSheetOverlayState() }
+                val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
 
                 LaunchedEffect(
                     walletExists,
@@ -159,22 +160,22 @@ class MainActivity : FragmentActivity() {
                         walletViewModel = walletViewModel,
                     )
                 } else {
-                    val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
-
                     IsOnlineTracker(appViewModel)
-                    ContentView(
-                        appViewModel = appViewModel,
-                        walletViewModel = walletViewModel,
-                        blocktankViewModel = blocktankViewModel,
-                        currencyViewModel = currencyViewModel,
-                        activityListViewModel = activityListViewModel,
-                        transferViewModel = transferViewModel,
-                        settingsViewModel = settingsViewModel,
-                        backupsViewModel = backupsViewModel,
-                        hazeState = hazeState,
-                        bottomSheetOverlayState = bottomSheetOverlayState,
-                        modifier = Modifier.hazeSource(hazeState, zIndex = 0f),
-                    )
+                    CompositionLocalProvider(LocalIsAppLocked provides !isAuthenticated) {
+                        ContentView(
+                            appViewModel = appViewModel,
+                            walletViewModel = walletViewModel,
+                            blocktankViewModel = blocktankViewModel,
+                            currencyViewModel = currencyViewModel,
+                            activityListViewModel = activityListViewModel,
+                            transferViewModel = transferViewModel,
+                            settingsViewModel = settingsViewModel,
+                            backupsViewModel = backupsViewModel,
+                            hazeState = hazeState,
+                            bottomSheetOverlayState = bottomSheetOverlayState,
+                            modifier = Modifier.hazeSource(hazeState, zIndex = 0f),
+                        )
+                    }
 
                     DisposableEffect(appViewModel) {
                         val processLifecycle = ProcessLifecycleOwner.get().lifecycle
@@ -221,7 +222,7 @@ class MainActivity : FragmentActivity() {
                 }
 
                 val transactionSheetDetails by appViewModel.transactionSheet.collectAsStateWithLifecycle()
-                if (transactionSheetDetails != NewTransactionSheetDetails.EMPTY) {
+                if (isAuthenticated && transactionSheetDetails != NewTransactionSheetDetails.EMPTY) {
                     NewTransactionSheet(
                         appViewModel = appViewModel,
                         bottomSheetOverlayState = bottomSheetOverlayState,

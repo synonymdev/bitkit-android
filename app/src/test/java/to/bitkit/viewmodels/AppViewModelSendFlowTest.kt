@@ -3274,6 +3274,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
             maxSendOnchainSats = 100_000u,
             maxSendLightningSats = 100_000u,
         )
+        sut.setIsAuthenticated(true)
         setUnifiedState(amount = 1000u, payMethod = SendMethod.LIGHTNING)
         sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.VALUE_OVER_100_USD))
         advanceUntilIdle()
@@ -4768,6 +4769,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
         verify(coreService).decode(bolt11)
+    }
+
+    @Test
+    fun `amount warning confirmation is ignored after background lock`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        setUnifiedState(amount = 1000u)
+        sut.lockOnBackground()
+        advanceUntilIdle()
+
+        sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.VALUE_OVER_100_USD))
+        advanceUntilIdle()
+
+        assertTrue(sut.sendUiState.value.confirmedWarnings.isEmpty())
+        assertFalse(sut.sendUiState.value.shouldConfirmPay)
+
+        sut.setIsAuthenticated(true)
+        sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.VALUE_OVER_100_USD))
+        advanceUntilIdle()
+
+        assertEquals(listOf(SanityWarning.VALUE_OVER_100_USD), sut.sendUiState.value.confirmedWarnings)
     }
 
     @Test
@@ -6609,6 +6632,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Test
     fun `amount change clears confirmedWarnings`() = test {
+        sut.setIsAuthenticated(true)
         setUnifiedState(amount = 1000u)
         sut.setSendEvent(SendEvent.ConfirmAmountWarning(SanityWarning.VALUE_OVER_100_USD))
         advanceUntilIdle()

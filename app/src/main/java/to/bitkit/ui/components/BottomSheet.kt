@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import to.bitkit.ui.LocalBottomSheetOverlayState
+import to.bitkit.ui.LocalIsAppLocked
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -72,6 +73,7 @@ fun BottomSheet(
     sheetState: SheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
     content: @Composable ColumnScope.() -> Unit,
 ) {
+    if (LocalIsAppLocked.current) return
     val overlayState = checkNotNull(LocalBottomSheetOverlayState.current) {
         "BottomSheet must be composed inside BottomSheetOverlayHost"
     }

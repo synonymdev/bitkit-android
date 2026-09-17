@@ -4913,6 +4913,7 @@ class AppViewModel @Inject constructor(
     }
 
     private fun onConfirmAmountWarning(warning: SanityWarning) {
+        if (!_isAuthenticated.value) return
         viewModelScope.launch {
             _sendUiState.update {
                 it.copy(
