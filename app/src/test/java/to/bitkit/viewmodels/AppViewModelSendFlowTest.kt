@@ -554,6 +554,43 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `critical update clears an already showing transaction sheet`() = test {
+        val details = NewTransactionSheetDetails(
+            type = NewTransactionSheetType.LIGHTNING,
+            direction = NewTransactionSheetDirection.RECEIVED,
+            paymentHashOrTxId = "payment-hash",
+            sats = 1L,
+        )
+        sut.showTransactionSheet(details)
+        runCurrent()
+        assertEquals(details, sut.transactionSheet.value)
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, true))
+
+        sut.checkCriticalAppUpdate(isDebug = false)
+
+        assertEquals(NewTransactionSheetDetails.EMPTY, sut.transactionSheet.value)
+    }
+
+    @Test
+    fun `transaction sheet is blocked while a critical update is required`() = test {
+        whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, true))
+        sut.checkCriticalAppUpdate(isDebug = false)
+        assertTrue(sut.isCriticalUpdateRequired.value)
+
+        sut.showTransactionSheet(
+            NewTransactionSheetDetails(
+                type = NewTransactionSheetType.ONCHAIN,
+                direction = NewTransactionSheetDirection.RECEIVED,
+                paymentHashOrTxId = "txid",
+                sats = 1L,
+            ),
+        )
+        runCurrent()
+
+        assertEquals(NewTransactionSheetDetails.EMPTY, sut.transactionSheet.value)
+    }
+
+    @Test
     fun `critical update check is skipped in debug builds`() = test {
         whenever(appUpdaterService.getReleaseInfo()).thenReturn(releaseInfo(BuildConfig.VERSION_CODE + 1, true))
         clearInvocations(appUpdaterService)

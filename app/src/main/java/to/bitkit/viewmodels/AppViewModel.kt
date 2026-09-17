@@ -4607,6 +4607,11 @@ class AppViewModel @Inject constructor(
     ) = viewModelScope.launch {
         if (backupRepo.isRestoring.value) return@launch
 
+        if (_isCriticalUpdateRequired.value) {
+            Logger.verbose("Blocked NewTransactionSheet while a critical update is required", context = TAG)
+            return@launch
+        }
+
         if (!_isTransactionSheetEnabled) {
             Logger.verbose("NewTransactionSheet blocked by isNewTransactionSheetEnabled=false", context = TAG)
             return@launch
@@ -5598,6 +5603,7 @@ class AppViewModel @Inject constructor(
         }.onSuccess {
             if (it.isCritical && it.buildNumber > BuildConfig.VERSION_CODE) {
                 _isCriticalUpdateRequired.update { true }
+                hideNewTransactionSheet()
             }
         }.onFailure {
             Logger.warn("Failure fetching new releases", it, context = TAG)
