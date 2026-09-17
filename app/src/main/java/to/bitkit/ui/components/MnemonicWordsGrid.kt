@@ -145,10 +145,10 @@ private fun rememberWordFontFit(
                 density = density,
             ).size.width
         }
-        val fits = listOf(actualWords, placeholderWords).map { fitMnemonicFontSize(it, budgetPx, measurePx) }
-        MnemonicFontFit(
-            fontSize = fits.minBy { it.fontSize.value }.fontSize,
-            fits = fits.all { it.fits },
+        fitSharedMnemonicFontSize(
+            wordLists = listOf(actualWords, placeholderWords),
+            wordBudgetPx = budgetPx,
+            measureWordPx = measurePx,
         )
     }
 }
@@ -161,6 +161,23 @@ internal data class MnemonicFontFit(
     val fontSize: TextUnit,
     val fits: Boolean,
 )
+
+/**
+ * Returns the one size the grid shares across reveal states: the smallest size any of [wordLists]
+ * needs, wrapping when any list still does not fit at that size. Keeps the card height stable when
+ * the phrase is revealed, since the revealed words and the hidden placeholders render at one size.
+ */
+internal fun fitSharedMnemonicFontSize(
+    wordLists: List<List<String>>,
+    wordBudgetPx: (Int) -> Int,
+    measureWordPx: (String, TextUnit) -> Int,
+): MnemonicFontFit {
+    val fits = wordLists.map { fitMnemonicFontSize(it, wordBudgetPx, measureWordPx) }
+    return MnemonicFontFit(
+        fontSize = fits.minByOrNull { it.fontSize.value }?.fontSize ?: WORD_MAX_FONT_SIZE,
+        fits = fits.all { it.fits },
+    )
+}
 
 /**
  * Returns the largest font size, stepping down from 17sp to 12sp in 0.5sp steps, at which every word
