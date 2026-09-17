@@ -1382,6 +1382,7 @@ private fun liveSessionAccess(
 ): PubkySessionAccess {
     if (retainLocalSecret) return access
     return PubkySessionAccess(
+        clientId = access.clientId(),
         sessionSecret = access.exportSessionSecret(),
         localSecretKey = null,
         receiverNoiseSecretKey = access.exportReceiverNoiseSecretKey(),
