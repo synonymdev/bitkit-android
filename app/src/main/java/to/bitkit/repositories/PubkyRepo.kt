@@ -693,6 +693,10 @@ class PubkyRepo @Inject constructor(
                 withContext(ioDispatcher) {
                     settingsStore.setPubkyProfileSetupPending(false)
                     val storedSecretKeyHex = keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)
+                        .takeUnless {
+                            keychain.loadString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) ==
+                                MANAGED_SECRET_QUARANTINED
+                        }
                     val publicKeyZ32 = if (!storedSecretKeyHex.isNullOrEmpty()) {
                         pubkyService.signIn(storedSecretKeyHex)
                         pubkyService.publicKeyFromSecret(storedSecretKeyHex).ensurePubkyPrefix()
@@ -1227,6 +1231,9 @@ class PubkyRepo @Inject constructor(
         runSuspendCatching {
             withContext(ioDispatcher) {
                 require(request.isSignup) { "Not a Pubky signup request" }
+                if (pubkyStore.data.first().externalIdentityRef != null) {
+                    throw SharedPubkyError.IdentityConflict
+                }
                 if (hasIdentity()) throw PubkyAlreadySignedInError
 
                 val (publicKey, secretKeyHex) = deriveKeys().getOrThrow()
@@ -1491,6 +1498,10 @@ class PubkyRepo @Inject constructor(
             Logger.warn("Failed to forget local Pubky session access", it, context = TAG)
         }
         clearLocalState()
+    }
+
+    suspend fun disableSharedIdentityExport(): Result<Unit> = identityLifecycleMutex.withLock {
+        runSuspendCatching { disableLocalIdentityExport() }
     }
 
     // endregion
