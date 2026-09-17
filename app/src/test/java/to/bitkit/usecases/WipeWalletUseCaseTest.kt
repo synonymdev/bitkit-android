@@ -124,6 +124,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
             pubkyRepo,
             privatePaykitRepo,
             privatePaykitAddressReservationRepo,
+            migrationService,
         )
         inOrder.verify(backupRepo).setWiping(true)
         inOrder.verify(lightningRepo).setWiping(true)
@@ -145,6 +146,8 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(blocktankRepo).resetState()
         inOrder.verify(activityRepo).resetState()
         inOrder.verify(hwWalletRepo).resetState()
+        inOrder.verify(migrationService).cleanupAfterMigration()
+        inOrder.verify(migrationService).markMigrationChecked()
         assertTrue(onWipeCalled)
         assertTrue(onSetWalletExistsStateCalled)
         inOrder.verify(lightningRepo).setWiping(false)
@@ -319,6 +322,20 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         verify(db, never()).clearAllTables()
         assertFalse(onWipeCalled)
         assertFalse(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke should mark migration checked when migration data clear fails`() = runTest {
+        whenever { migrationService.cleanupAfterMigration() }.thenThrow(RuntimeException("clear failed"))
+
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertTrue(result.isSuccess)
+        verify(migrationService).markMigrationChecked()
+        assertTrue(onSetWalletExistsStateCalled)
     }
 
     @Test

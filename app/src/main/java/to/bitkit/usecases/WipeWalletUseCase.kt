@@ -103,6 +103,7 @@ class WipeWalletUseCase @Inject constructor(
         activityRepo.resetState()
         hwWalletRepo.resetState()
         resetWalletState()
+        step("clear migration data") { migrationService.cleanupAfterMigration() }
         step("mark migration checked") { migrationService.markMigrationChecked() }
         return if (keychainWiped) Result.success(Unit) else Result.failure(WipeIncomplete())
     }

@@ -10,6 +10,7 @@ import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityTags
 import com.synonym.bitkitcore.BtOrderState2
 import com.synonym.bitkitcore.ClosedChannelDetails
+import com.synonym.bitkitcore.IBtOrder
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
 import com.synonym.bitkitcore.PaymentState
@@ -106,6 +107,9 @@ class MigrationService @Inject constructor(
         private const val MS_PER_SEC = 1000
         private const val GCM_IV_LENGTH = 12
         private const val GCM_TAG_LENGTH = 128
+
+        /** Max Blocktank order IDs fetched per request. */
+        internal const val BLOCKTANK_ORDER_IDS_CHUNK = 20
     }
 
     private val rnMigrationStore = context.rnMigrationDataStore
@@ -1262,11 +1266,7 @@ class MigrationService @Inject constructor(
         }
 
         runCatching {
-            val fetchedOrders = coreService.blocktank.orders(
-                orderIds = orderIds,
-                filter = null,
-                refresh = true,
-            )
+            val fetchedOrders = fetchOrdersChunked(orderIds)
             if (fetchedOrders.isNotEmpty()) {
                 coreService.blocktank.upsertOrderList(fetchedOrders)
                 if (paidOrders.isNotEmpty()) {
@@ -1388,7 +1388,7 @@ class MigrationService @Inject constructor(
 
         val orderIds = transfers.mapNotNull { it.lspOrderId }
         val orders = runCatching {
-            coreService.blocktank.orders(orderIds = orderIds, filter = null, refresh = true)
+            fetchOrdersChunked(orderIds)
         }.onFailure {
             Logger.warn("Cannot cleanup migration transfers: Blocktank unreachable", it, context = TAG)
         }.getOrNull() ?: return
@@ -1409,6 +1409,9 @@ class MigrationService @Inject constructor(
         rnMigrationStore.edit { it[key] = "true" }
         Logger.info("Migration transfer cleanup completed", context = TAG)
     }
+
+    private suspend fun fetchOrdersChunked(orderIds: List<String>): List<IBtOrder> =
+        fetchOrdersInChunks(orderIds) { coreService.blocktank.orders(orderIds = it, filter = null, refresh = true) }
 
     suspend fun cleanupAfterMigration() {
         clearPersistedMigrationData()
@@ -1719,11 +1722,7 @@ class MigrationService @Inject constructor(
             if (orderIds.isNotEmpty()) {
                 Logger.info("Retrying ${orderIds.size} pending Blocktank orders", context = TAG)
                 runCatching {
-                    val fetchedOrders = coreService.blocktank.orders(
-                        orderIds = orderIds,
-                        filter = null,
-                        refresh = true,
-                    )
+                    val fetchedOrders = fetchOrdersChunked(orderIds)
                     if (fetchedOrders.isNotEmpty()) {
                         coreService.blocktank.upsertOrderList(fetchedOrders)
                         Logger.info("Upserted ${fetchedOrders.size} Blocktank orders after retry", context = TAG)
@@ -1759,11 +1758,7 @@ class MigrationService @Inject constructor(
         val orderIds = paidOrders.keys.toList()
 
         runCatching {
-            val fetchedOrders = coreService.blocktank.orders(
-                orderIds = orderIds,
-                filter = null,
-                refresh = true,
-            )
+            val fetchedOrders = fetchOrdersChunked(orderIds)
             if (fetchedOrders.isNotEmpty()) {
                 coreService.blocktank.upsertOrderList(fetchedOrders)
                 createTransfersForPaidOrders(paidOrders, fetchedOrders)
@@ -2175,6 +2170,11 @@ data class RNSettings(
     val selectedAddressType: String? = null,
     val addressTypesToMonitor: List<String>? = null,
 )
+
+internal suspend fun fetchOrdersInChunks(
+    orderIds: List<String>,
+    fetch: suspend (List<String>) -> List<IBtOrder>,
+): List<IBtOrder> = orderIds.chunked(MigrationService.BLOCKTANK_ORDER_IDS_CHUNK).flatMap { fetch(it) }
 
 private fun String.normalizeRNAddressType(): String = when (this) {
     "p2tr" -> "taproot"
