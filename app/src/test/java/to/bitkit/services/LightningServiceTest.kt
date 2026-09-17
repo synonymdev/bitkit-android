@@ -82,6 +82,7 @@ class LightningServiceTest : BaseUnitTest() {
             watchOnlyAccountStore = watchOnlyAccountStore,
             loggerLdk = loggerLdk,
             watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
+            ldkQueue = testDispatcher,
         )
         sut.node = node
     }
@@ -220,7 +221,6 @@ class LightningServiceTest : BaseUnitTest() {
         releaseEvent.complete(event)
         testScheduler.advanceUntilIdle()
 
-        // timeout() polls in real time: teardown finishes on the LDK/IO threads, not virtual time.
         // Without the self-join guard, stop() would deadlock and node.stop() would never run.
         verify(node, timeout(VERIFY_TIMEOUT_MS)).stop()
         verify(node, timeout(VERIFY_TIMEOUT_MS)).destroy()
