@@ -746,7 +746,10 @@ class AppViewModel @Inject constructor(
             isOnline
                 .drop(1)
                 .filter { it == ConnectivityState.CONNECTED }
-                .collect { refreshPrivatePaykitEndpointsIfEnabled("network restored") }
+                .collect {
+                    if (paykitPaymentRequestPollingJob?.isActive == true) pubkyRepo.republishIdentityIfNeeded()
+                    refreshPrivatePaykitEndpointsIfEnabled("network restored")
+                }
         }
     }
 
@@ -837,6 +840,7 @@ class AppViewModel @Inject constructor(
         if (paykitPaymentRequestPollingJob?.isActive == true) return
 
         paykitPaymentRequestPollingJob = viewModelScope.launch {
+            if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
             var refreshIntervalIndex = 0
             var maintenanceIntervalIndex = 0
             var maintenanceDelay = PAYKIT_MAINTENANCE_INTERVALS.first()
@@ -846,6 +850,7 @@ class AppViewModel @Inject constructor(
                 maintenanceDelay -= refreshInterval
                 val refreshMaintenance = maintenanceDelay <= Duration.ZERO
                 if (refreshMaintenance) {
+                    if (isOnline.value == ConnectivityState.CONNECTED) pubkyRepo.republishIdentityIfNeeded()
                     privatePaykitRepo.refreshKnownSavedContactEndpoints("payment request polling")
                     maintenanceIntervalIndex =
                         (maintenanceIntervalIndex + 1).coerceAtMost(PAYKIT_MAINTENANCE_INTERVALS.lastIndex)

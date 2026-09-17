@@ -31,6 +31,9 @@ class PubkyService @Inject constructor(
         paykitSdkService.initialize()
     }
 
+    suspend fun republishIdentityIfNeeded(publicKey: String? = null) =
+        paykitSdkService.republishIdentityIfNeeded(publicKey)
+
     // region Session management
 
     suspend fun importSession(secret: String): String = ServiceQueue.CORE.background {
@@ -144,6 +147,7 @@ class PubkyService @Inject constructor(
         approvedClientId: String,
         secretKeyHex: String,
     ) = ServiceQueue.CORE.background {
+        paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
         paykitSdkService.approveAuth(authUrl, expectedCapabilities, approvedClientId, secretKeyHex)
     }
 
@@ -152,6 +156,7 @@ class PubkyService @Inject constructor(
         secretKeyHex: String,
         timeout: Duration = AUTHORIZATION_TIMEOUT,
     ) = ServiceQueue.CORE.background {
+        paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
         withTimeoutOrNull(timeout) {
             approvePubkyAuth(authUrl, secretKeyHex)
         } ?: throw PubkyRingAuthTimeoutError()
@@ -164,6 +169,7 @@ class PubkyService @Inject constructor(
         secretKeyHex: String,
         claim: PubkyAuthCompanionClaim,
     ) = ServiceQueue.CORE.background {
+        paykitSdkService.republishIdentityIfNeeded(publicKeyFromSecret(secretKeyHex))
         paykitSdkService.approveAuthWithCompanionClaim(
             authUrl = authUrl,
             expectedCapabilities = expectedCapabilities,
