@@ -195,7 +195,10 @@ fun SheetHost(
 
             Scrim(scaffoldState.bottomSheetState, enabled = dismissEnabled) {
                 scope.launch {
+                    val dismissBeforeVisible = !scaffoldState.bottomSheetState.isVisible &&
+                        scaffoldState.bottomSheetState.targetValue != SheetValue.Hidden
                     scaffoldState.bottomSheetState.hide()
+                    if (dismissBeforeVisible) onDismiss()
                 }
             }
         }
