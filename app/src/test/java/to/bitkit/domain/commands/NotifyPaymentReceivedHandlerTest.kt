@@ -5,9 +5,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import org.junit.Before
 import org.junit.Test
-import org.lightningdevkit.ldknode.BestBlock
 import org.lightningdevkit.ldknode.Event
-import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.TransactionDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
@@ -28,7 +26,6 @@ import to.bitkit.models.WalletScope
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.BackupRepo
 import to.bitkit.repositories.CurrencyRepo
-import to.bitkit.repositories.LightningRepo
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
 import java.math.BigDecimal
@@ -36,17 +33,24 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import kotlin.time.Clock
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.minutes
+import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
+@OptIn(ExperimentalTime::class)
 class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     companion object {
-        private const val BEST_BLOCK_HEIGHT = 1_000u
+        private val NOW = Instant.fromEpochSeconds(1_700_000_000L)
     }
 
     private val context: Context = mock()
     private val activityRepo: ActivityRepo = mock()
     private val currencyRepo: CurrencyRepo = mock()
     private val settingsStore: SettingsStore = mock()
-    private val lightningRepo: LightningRepo = mock()
+    private val clock: Clock = mock()
     private val backupRepo: BackupRepo = mock()
     private val migrationService: MigrationService = mock()
     private val isRestoring = MutableStateFlow(false)
@@ -62,7 +66,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         whenever(backupRepo.isRestoring).thenReturn(isRestoring)
         whenever(migrationService.isShowingMigrationLoading).thenReturn(isShowingMigrationLoading)
         whenever { migrationService.needsPostMigrationSync() }.thenReturn(false)
-        givenBestBlockHeight(BEST_BLOCK_HEIGHT)
+        whenever(clock.now()).thenReturn(NOW)
         whenever(currencyRepo.convertSatsToFiat(any(), anyOrNull())).thenReturn(
             Result.success(
                 ConvertedAmount(
@@ -79,9 +83,9 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         sut = NotifyPaymentReceivedHandler(
             ioDispatcher = testDispatcher,
             activityRepo = activityRepo,
-            lightningRepo = lightningRepo,
             backupRepo = backupRepo,
             migrationService = migrationService,
+            clock = clock,
             receivedNotificationContent = ReceivedNotificationContent(
                 context = context,
                 currencyRepo = currencyRepo,
@@ -336,7 +340,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     fun `confirmed-only recent onchain receive returns ShowSheet`() = test {
         val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
-        val command = confirmedCommand(txid = "txidConfirmed", details = details, blockHeight = BEST_BLOCK_HEIGHT)
+        val command = confirmedCommand(txid = "txidConfirmed", details = details, age = Duration.ZERO)
 
         val result = sut(command).getOrThrow()
 
@@ -362,7 +366,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         val command = confirmedCommand(
             txid = "txidConfirmed",
             details = details,
-            blockHeight = BEST_BLOCK_HEIGHT - 2u,
+            age = 59.minutes,
             includeNotification = true,
         )
 
@@ -374,10 +378,10 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `confirmed-only onchain receive ahead of an unsynced best block returns ShowSheet within depth`() = test {
+    fun `confirmed-only onchain receive slightly ahead of the device clock returns ShowSheet`() = test {
         val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
-        val command = confirmedCommand(txid = "txidAhead", details = details, blockHeight = BEST_BLOCK_HEIGHT + 1u)
+        val command = confirmedCommand(txid = "txidAhead", details = details, age = (-5).minutes)
 
         val result = sut(command).getOrThrow()
 
@@ -389,7 +393,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
         val received = NotifyPaymentReceived.Command.Onchain(txid = "txidOnce", details = details)
-        val confirmed = confirmedCommand(txid = "txidOnce", details = details, blockHeight = BEST_BLOCK_HEIGHT)
+        val confirmed = confirmedCommand(txid = "txidOnce", details = details, age = Duration.ZERO)
         var presentationCount = 0
 
         val receivedResult = sut(received).getOrThrow()
@@ -405,10 +409,10 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `confirmed-only onchain receive at an old height returns Skip`() = test {
+    fun `confirmed-only onchain receive confirmed outside the recent window returns Skip`() = test {
         val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
-        val command = confirmedCommand(txid = "txidOld", details = details, blockHeight = BEST_BLOCK_HEIGHT - 3u)
+        val command = confirmedCommand(txid = "txidOld", details = details, age = 61.minutes)
 
         val result = sut(command).getOrThrow()
 
@@ -418,11 +422,10 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `confirmed-only onchain receive far ahead of the best block returns Skip`() = test {
-        givenBestBlockHeight(0u)
+    fun `confirmed-only onchain receive replayed from old history returns Skip`() = test {
         val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
-        val command = confirmedCommand(txid = "txidReplay", details = details, blockHeight = BEST_BLOCK_HEIGHT)
+        val command = confirmedCommand(txid = "txidReplay", details = details, age = (24 * 365).hours)
 
         val result = sut(command).getOrThrow()
 
@@ -431,11 +434,10 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     }
 
     @Test
-    fun `confirmed-only onchain receive returns Skip when the best block is unknown`() = test {
-        whenever(lightningRepo.getStatus()).thenReturn(null)
+    fun `confirmed-only onchain receive far ahead of the device clock returns Skip`() = test {
         val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
-        val command = confirmedCommand(txid = "txidUnknown", details = details, blockHeight = BEST_BLOCK_HEIGHT)
+        val command = confirmedCommand(txid = "txidFuture", details = details, age = (-2).hours)
 
         val result = sut(command).getOrThrow()
 
@@ -447,7 +449,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
     fun `confirmed-only onchain send returns Skip`() = test {
         val details = TransactionDetails(amountSats = -5000L, inputs = emptyList(), outputs = emptyList())
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
-        val command = confirmedCommand(txid = "txidSent", details = details, blockHeight = BEST_BLOCK_HEIGHT)
+        val command = confirmedCommand(txid = "txidSent", details = details, age = Duration.ZERO)
 
         val result = sut(command).getOrThrow()
 
@@ -461,7 +463,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         isRestoring.value = true
         val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
-        val command = confirmedCommand(txid = "txidRestore", details = details, blockHeight = BEST_BLOCK_HEIGHT)
+        val command = confirmedCommand(txid = "txidRestore", details = details, age = Duration.ZERO)
 
         val result = sut(command).getOrThrow()
 
@@ -475,7 +477,7 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         whenever(migrationService.needsPostMigrationSync()).thenReturn(true)
         val details = TransactionDetails(amountSats = 5000L, inputs = emptyList(), outputs = emptyList())
         whenever(activityRepo.shouldShowReceivedSheet(any(), any())).thenReturn(true)
-        val command = confirmedCommand(txid = "txidMigration", details = details, blockHeight = BEST_BLOCK_HEIGHT)
+        val command = confirmedCommand(txid = "txidMigration", details = details, age = Duration.ZERO)
 
         val result = sut(command).getOrThrow()
 
@@ -489,8 +491,8 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
         val event = Event.OnchainTransactionConfirmed(
             txid = "txidMapped",
             blockHash = "blockHash",
-            blockHeight = BEST_BLOCK_HEIGHT,
-            confirmationTime = 0uL,
+            blockHeight = 100u,
+            confirmationTime = 1_700_000_000uL,
             details = details,
         )
 
@@ -500,29 +502,22 @@ class NotifyPaymentReceivedHandlerTest : BaseUnitTest() {
             NotifyPaymentReceived.Command.Onchain(
                 txid = "txidMapped",
                 details = details,
-                confirmedBlockHeight = BEST_BLOCK_HEIGHT,
+                confirmationTime = 1_700_000_000uL,
                 includeNotification = true,
             ),
             command,
         )
     }
 
-    private fun givenBestBlockHeight(height: UInt) {
-        val status = mock<NodeStatus> {
-            on { currentBestBlock } doReturn BestBlock(blockHash = "bestBlockHash", height = height)
-        }
-        whenever(lightningRepo.getStatus()).thenReturn(status)
-    }
-
     private fun confirmedCommand(
         txid: String,
         details: TransactionDetails,
-        blockHeight: UInt,
+        age: Duration,
         includeNotification: Boolean = false,
     ) = NotifyPaymentReceived.Command.Onchain(
         txid = txid,
         details = details,
-        confirmedBlockHeight = blockHeight,
+        confirmationTime = (NOW - age).epochSeconds.toULong(),
         includeNotification = includeNotification,
     )
 }
