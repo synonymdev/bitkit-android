@@ -4837,6 +4837,17 @@ class AppViewModel @Inject constructor(
         }
     }
 
+    /** Requires the PIN again after the app process moves to the background. */
+    fun lockOnBackground() {
+        viewModelScope.launch {
+            if (!settingsStore.data.first().isPinEnabled) return@launch
+            if (!walletRepo.walletExists()) return@launch
+            if (lightningRepo.isRecoveryMode.value) return@launch
+            _isAuthenticated.update { false }
+            Logger.debug("Locked app on background", context = TAG)
+        }
+    }
+
     fun validatePin(pin: String): Boolean {
         val storedPin = keychain.loadString(Keychain.Key.PIN.name)
         val isValid = storedPin == pin

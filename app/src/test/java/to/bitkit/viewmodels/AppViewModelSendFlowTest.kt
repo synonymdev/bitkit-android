@@ -240,6 +240,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val needsPairingCode = MutableStateFlow(false)
     private val pairingCodeRequestId = MutableStateFlow<Long?>(null)
     private val settingsData = MutableStateFlow(SettingsData())
+    private val isRecoveryMode = MutableStateFlow(false)
     private val isPaykitEnabled = MutableStateFlow(false)
     private val walletState = MutableStateFlow(WalletState())
     private val nodeEventUpdates = MutableSharedFlow<NodeEventUpdate>()
@@ -312,6 +313,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever(connectivityRepo.isOnline).thenReturn(connectivityState)
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(mock()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
+        whenever(lightningRepo.isRecoveryMode).thenReturn(isRecoveryMode)
         whenever(lightningRepo.nodeEventUpdates).thenReturn(nodeEventUpdates)
         whenever(lightningRepo.nodeEvents).thenReturn(nodeEventUpdates.map { it.event })
         whenever(hwWalletRepo.receivedTxs).thenReturn(hwReceivedTxs)
@@ -4693,6 +4695,79 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+    }
+
+    @Test
+    fun `lockOnBackground requires auth when PIN is enabled`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+
+        sut.lockOnBackground()
+        advanceUntilIdle()
+
+        assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `lockOnBackground keeps auth when PIN is disabled`() = test {
+        settingsData.value = SettingsData(isPinEnabled = false)
+        advanceUntilIdle()
+        assertTrue(sut.isAuthenticated.value)
+
+        sut.lockOnBackground()
+        advanceUntilIdle()
+
+        assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `lockOnBackground keeps auth when no wallet exists`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        whenever(walletRepo.walletExists()).thenReturn(false)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+
+        sut.lockOnBackground()
+        advanceUntilIdle()
+
+        assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `lockOnBackground keeps auth in recovery mode`() = test {
+        settingsData.value = SettingsData(isPinEnabled = true)
+        isRecoveryMode.value = true
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+
+        sut.lockOnBackground()
+        advanceUntilIdle()
+
+        assertTrue(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `payment deeplink received after background lock flushes after unlock`() = test {
+        val bolt11 = "lnbcrt1backgroundlockdeeplink"
+        settingsData.value = SettingsData(isPinEnabled = true)
+        stubLightningScan(bolt11 = bolt11, amountSats = 500u)
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        sut.lockOnBackground()
+        advanceUntilIdle()
+
+        sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, "lightning:$bolt11".toUri()))
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+        verify(coreService, never()).decode(bolt11)
+
+        sut.setIsAuthenticated(true)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.Send(SendRoute.Confirm), sut.currentSheet.value)
+        verify(coreService).decode(bolt11)
     }
 
     @Test
