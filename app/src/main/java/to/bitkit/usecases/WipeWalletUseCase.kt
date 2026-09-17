@@ -58,6 +58,7 @@ class WipeWalletUseCase @Inject constructor(
         lightningRepo.setWiping(true)
         val result = try {
             runSuspendCatching {
+                step("disable shared Pubky export") { pubkyRepo.disableSharedIdentityExport() }
                 stopNode().getOrThrow()
                 cleanupRemote()
                 wipeLocal(walletIndex, resetWalletState).getOrThrow()
