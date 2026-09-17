@@ -1725,8 +1725,20 @@ class PubkyRepo @Inject constructor(
             )
         }
 
+        // Published endpoints outlive the borrowed identity, so drop them while the session still
+        // works and keep the cleanup pending when that fails.
+        val hadPaykitState = settingsStore.data.first().hasPaykitState()
+        val endpointCleanupResult = if (hadPaykitState) {
+            removeBitkitPaymentEndpoints()
+                .onFailure { Logger.warn("Failed to remove Bitkit payment endpoints", it, context = TAG) }
+        } else {
+            Result.success(Unit)
+        }
+
         pubkyService.clearExternalSessionAccess()
-        clearPublicPaykitSharingState(publicPaykitCleanupPending = false)
+        clearPublicPaykitSharingState(
+            publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPaykitState,
+        )
         clearAuthenticatedRuntimeState()
         pubkyStore.reset()
         notifyBackupStateChanged()

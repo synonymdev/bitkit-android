@@ -395,6 +395,55 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `missing Ring source removes published payment endpoints before dropping the session`() = test {
+        val identity = stubRingIdentity()
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        settingsFlow.value = SettingsData(
+            hasConfirmedPublicPaykitEndpoints = true,
+            sharesPublicPaykitEndpoints = true,
+        )
+        whenever(sharedPubkyDiscovery.discoverRingIdentities()).thenReturn(Result.success(emptyList()))
+        clearInvocations(pubkyService)
+
+        assertFalse(sut.validateExternalIdentitySource())
+
+        inOrder(pubkyService) {
+            verify(pubkyService).removeBitkitPaymentEndpoints()
+            verify(pubkyService).clearExternalSessionAccess()
+        }
+        assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
+        assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+    }
+
+    @Test
+    fun `missing Ring source keeps cleanup pending when endpoint removal fails`() = test {
+        val identity = stubRingIdentity()
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        settingsFlow.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        whenever(sharedPubkyDiscovery.discoverRingIdentities()).thenReturn(Result.success(emptyList()))
+        whenever(pubkyService.removeBitkitPaymentEndpoints()).thenAnswer { throw TestAppError("Cleanup failed") }
+
+        assertFalse(sut.validateExternalIdentitySource())
+
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
+        assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertNull(pubkyDataFlow.value.externalIdentityRef)
+    }
+
+    @Test
+    fun `missing Ring source skips endpoint removal without Paykit state`() = test {
+        val identity = stubRingIdentity()
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        whenever(sharedPubkyDiscovery.discoverRingIdentities()).thenReturn(Result.success(emptyList()))
+        clearInvocations(pubkyService)
+
+        assertFalse(sut.validateExternalIdentitySource())
+
+        verifyBlocking(pubkyService, never()) { removeBitkitPaymentEndpoints() }
+        assertFalse(settingsFlow.value.publicPaykitCleanupPending)
+    }
+
+    @Test
     fun `source cleanup preserves marker when external session cleanup fails`() = test {
         val identity = stubRingIdentity()
         assertTrue(sut.adoptRingIdentity(identity).isSuccess)
