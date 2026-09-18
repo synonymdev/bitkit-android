@@ -121,6 +121,7 @@ fixtures, push notifications) live in each suite's README.
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
 | [home](home) | 1 | Pull to refresh on Home; checks the app log, no README |
+| [node-lifecycle](node-lifecycle) | 1 | Detached LDK restart completes; a cancelled RGS server change reconciles and recovers to Running; reads the app log; no README |
 | [notification-permission](notification-permission) | 4 | Background-setup toggles |
 | [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
@@ -148,6 +149,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
+| `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `backup/show-mnemonic-long-words.xml` | not ported — the long-word fit is an Android-only change (synonymdev/bitkit-android#633); whether iOS wraps long words at larger text sizes is unchecked |
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
