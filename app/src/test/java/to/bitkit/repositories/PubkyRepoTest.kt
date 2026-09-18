@@ -50,10 +50,11 @@ import to.bitkit.data.PubkyStoreData
 import to.bitkit.data.SettingsData
 import to.bitkit.data.SettingsStore
 import to.bitkit.data.keychain.Keychain
-import to.bitkit.data.sharing.ExternalPubkyIdentityRef
+import to.bitkit.data.serializers.PubkyStoreSerializer
 import to.bitkit.data.sharing.SharedPubkyContract
 import to.bitkit.data.sharing.SharedPubkyCredential
 import to.bitkit.data.sharing.SharedPubkyDiscovery
+import to.bitkit.data.sharing.SharedPubkyError
 import to.bitkit.data.sharing.SharedPubkyIdentity
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.PubkyAuthClaim
@@ -297,7 +298,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(result.isSuccess)
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
-        assertEquals(identity.toExternalRefForTest(), pubkyDataFlow.value.externalIdentityRef)
+        assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
         verifyBlocking(pubkyService) { signInExternal(SHARED_SECRET_KEY) }
         verifyBlocking(keychain, never()) {
             upsertString(Keychain.Key.PUBKY_SECRET_KEY.name, SHARED_SECRET_KEY)
@@ -315,6 +316,29 @@ class PubkyRepoTest : BaseUnitTest() {
         assertNull(sut.publicKey.value)
         assertNull(pubkyDataFlow.value.externalIdentityRef)
         verifyBlocking(pubkyService, never()) { signInExternal(SHARED_SECRET_KEY) }
+    }
+
+    @Test
+    fun `adoption preserves strict credential matching and validation order`() = test {
+        val identity = stubRingIdentity()
+        whenever(sharedPubkyDiscovery.readRingCredential(identity.pubky)).thenReturn(
+            Result.success(SharedPubkyCredential(identity.copy(pubky = "invalid"), SHARED_SECRET_KEY)),
+        )
+
+        val malformedKeyResult = sut.adoptRingIdentity(identity)
+
+        assertTrue(malformedKeyResult.exceptionOrNull() is IllegalArgumentException)
+        whenever(sharedPubkyDiscovery.readRingCredential(identity.pubky)).thenReturn(
+            Result.success(
+                SharedPubkyCredential(identity.copy(protocolVersion = 2, pubky = "invalid"), SHARED_SECRET_KEY),
+            ),
+        )
+
+        val wrongVersionResult = sut.adoptRingIdentity(identity)
+
+        assertEquals(SharedPubkyError.InvalidResponse, wrongVersionResult.exceptionOrNull())
+        assertNull(pubkyDataFlow.value.externalIdentityRef)
+        verifyBlocking(pubkyService, never()) { signInExternal(any()) }
     }
 
     @Test
@@ -352,7 +376,7 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(adoption.isCancelled)
         assertEquals(VALID_SELF_KEY, sut.publicKey.value)
-        assertEquals(identity.toExternalRefForTest(), pubkyDataFlow.value.externalIdentityRef)
+        assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
         verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
     }
 
@@ -453,7 +477,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val thrown = runCatching { sut.validateExternalIdentitySource() }.exceptionOrNull()
 
         assertEquals(cleanupError.message, thrown?.message)
-        assertEquals(identity.toExternalRefForTest(), pubkyDataFlow.value.externalIdentityRef)
+        assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
         verify(pubkyStore, never()).reset()
     }
 
@@ -469,7 +493,7 @@ class PubkyRepoTest : BaseUnitTest() {
         val thrown = runCatching { sut.validateExternalIdentitySource() }.exceptionOrNull()
 
         assertEquals(resetError.message, thrown?.message)
-        assertEquals(identity.toExternalRefForTest(), pubkyDataFlow.value.externalIdentityRef)
+        assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
 
         doAnswer {
             pubkyDataFlow.value = PubkyStoreData()
@@ -1341,9 +1365,51 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `invalid persisted reference quarantines conflicting local secret during initialization`() = test {
+        val storedJson = """
+            {
+                "cachedName": "Ring user",
+                "externalIdentityRef": {
+                    "protocolVersion": 1,
+                    "sourcePackage": "app.pubkyring",
+                    "pubky": "invalid"
+                }
+            }
+        """.trimIndent()
+        pubkyDataFlow.value = PubkyStoreSerializer.readFrom(storedJson.byteInputStream())
+        assertNotNull(pubkyDataFlow.value.externalIdentityRef)
+        var quarantineMarker: String? = null
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("borrowed_session")
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("managed_secret")
+        whenever(keychain.loadString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name))
+            .thenAnswer { quarantineMarker }
+        whenever(keychain.upsertString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name, "1"))
+            .thenAnswer {
+                quarantineMarker = "1"
+                Unit
+            }
+        clearInvocations(pubkyService, pubkyStore, keychain)
+
+        sut.initialize()
+
+        assertEquals("1", quarantineMarker)
+        assertNull(pubkyDataFlow.value.externalIdentityRef)
+        assertNull(sut.publicKey.value)
+        inOrder(pubkyService, pubkyStore) {
+            verify(pubkyService).clearExternalSessionAccess()
+            verify(pubkyStore).reset()
+        }
+        verifyBlocking(pubkyService, never()) { importSession(any()) }
+        verifyBlocking(pubkyService, never()) { importExternalSession(any()) }
+        verifyBlocking(pubkyService, never()) { signIn(any()) }
+        verifyBlocking(pubkyService, never()) { signInExternal(any()) }
+        verifyBlocking(keychain, never()) { delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+    }
+
+    @Test
     fun `initialize retries quarantined external cleanup before removing its marker`() = test {
         val identity = stubRingIdentity()
-        pubkyDataFlow.value = PubkyStoreData(externalIdentityRef = identity.toExternalRefForTest())
+        pubkyDataFlow.value = PubkyStoreData(externalIdentityRef = identity)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("borrowed_session")
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn("managed_secret")
         whenever(keychain.loadString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name)).thenReturn("1")
@@ -1364,7 +1430,7 @@ class PubkyRepoTest : BaseUnitTest() {
     @Test
     fun `initialize preserves external marker when source exists but sign in cannot recover`() = test {
         val identity = stubRingIdentity()
-        val identityRef = identity.toExternalRefForTest()
+        val identityRef = identity
         pubkyDataFlow.value = PubkyStoreData(externalIdentityRef = identityRef)
         whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("stale_session")
         whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(null)
@@ -2026,9 +2092,3 @@ private class TestAppError(message: String) : AppError(message)
 
 private fun String.ensurePubkyPrefixForTest(): String =
     if (startsWith("pubky")) this else "pubky$this"
-
-private fun SharedPubkyIdentity.toExternalRefForTest() = ExternalPubkyIdentityRef(
-    protocolVersion = protocolVersion,
-    sourcePackage = sourcePackage,
-    pubky = pubky,
-)

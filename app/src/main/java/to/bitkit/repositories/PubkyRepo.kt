@@ -36,7 +36,6 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.data.hasPaykitState
 import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.paykitDisabled
-import to.bitkit.data.sharing.ExternalPubkyIdentityRef
 import to.bitkit.data.sharing.SharedPubkyContract
 import to.bitkit.data.sharing.SharedPubkyCredential
 import to.bitkit.data.sharing.SharedPubkyDiscovery
@@ -266,7 +265,7 @@ class PubkyRepo @Inject constructor(
     private suspend fun resolveSessionInitialization(
         savedSessionSecret: String?,
         storedSecretKeyHex: String?,
-        externalIdentityRef: ExternalPubkyIdentityRef?,
+        externalIdentityRef: SharedPubkyIdentity?,
     ): InitResult = withContext(ioDispatcher) {
         if (externalIdentityRef != null) {
             return@withContext resolveExternalSession(
@@ -294,7 +293,7 @@ class PubkyRepo @Inject constructor(
 
     private suspend fun resolveExternalSession(
         savedSessionSecret: String?,
-        identityRef: ExternalPubkyIdentityRef,
+        identityRef: SharedPubkyIdentity,
     ): InitResult = withContext(ioDispatcher) {
         val sourceIdentity = sharedPubkyDiscovery.discoverRingIdentities().getOrElse {
             return@withContext InitResult.ExternalSourceUnavailable
@@ -904,7 +903,7 @@ class PubkyRepo @Inject constructor(
                 runSuspendCatching {
                     withContext(ioDispatcher) {
                         ensureServiceInitialized()
-                        val canonicalIdentity = identity.validatedRingIdentity()
+                        val canonicalIdentity = identity.validated()
                         val currentIdentityRef = pubkyStore.data.first().externalIdentityRef?.validated()
                         val currentPublicKey = _publicKey.value
                         val isAlreadyActive = currentIdentityRef?.pubky == canonicalIdentity.pubky &&
@@ -923,8 +922,7 @@ class PubkyRepo @Inject constructor(
                         if (!credential.identity.matches(canonicalIdentity)) throw SharedPubkyError.InvalidResponse
 
                         disableLocalIdentityExport()
-                        val identityRef = canonicalIdentity.toExternalRef()
-                        pubkyStore.update { it.copy(externalIdentityRef = identityRef) }
+                        pubkyStore.update { it.copy(externalIdentityRef = canonicalIdentity) }
                         shouldRollBackAdoption = true
 
                         val publicKey = signInWithExternalCredential(credential)
@@ -1408,7 +1406,7 @@ class PubkyRepo @Inject constructor(
 
     private suspend fun signInWithExternalCredential(credential: SharedPubkyCredential): String =
         withContext(ioDispatcher) {
-            val identity = credential.identity.validatedRingIdentity()
+            val identity = credential.identity.validated()
             val derivedWirePubky = wirePubky(pubkyService.publicKeyFromSecret(credential.secretKeyHex))
             if (derivedWirePubky != identity.pubky) throw SharedPubkyError.InvalidResponse
 
@@ -1638,35 +1636,13 @@ class PubkyRepo @Inject constructor(
     private fun wirePubky(value: String): String =
         SharedPubkyContract.canonicalPubky(value)
 
-    private fun SharedPubkyIdentity.validatedRingIdentity(): SharedPubkyIdentity {
-        if (protocolVersion != SharedPubkyContract.PROTOCOL_VERSION) {
-            throw SharedPubkyError.UnsupportedVersion(protocolVersion)
-        }
-        if (sourcePackage != SharedPubkyContract.RING_SOURCE) {
-            throw SharedPubkyError.UntrustedSource(sourcePackage)
-        }
-        return copy(pubky = SharedPubkyContract.requireWirePubky(pubky))
-    }
-
-    private fun SharedPubkyIdentity.toExternalRef() = ExternalPubkyIdentityRef(
-        protocolVersion = protocolVersion,
-        sourcePackage = sourcePackage,
-        pubky = SharedPubkyContract.requireWirePubky(pubky),
-    )
-
-    private fun SharedPubkyIdentity.matches(identityRef: ExternalPubkyIdentityRef): Boolean =
-        protocolVersion == identityRef.protocolVersion &&
-            sourcePackage == identityRef.sourcePackage &&
-            SharedPubkyContract.requireWirePubky(pubky) ==
-            SharedPubkyContract.requireWirePubky(identityRef.pubky)
-
     private fun SharedPubkyIdentity.matches(other: SharedPubkyIdentity): Boolean =
         protocolVersion == other.protocolVersion &&
             sourcePackage == other.sourcePackage &&
             SharedPubkyContract.requireWirePubky(pubky) ==
             SharedPubkyContract.requireWirePubky(other.pubky)
 
-    private fun SharedPubkyCredential.matches(identityRef: ExternalPubkyIdentityRef): Boolean =
+    private fun SharedPubkyCredential.matches(identityRef: SharedPubkyIdentity): Boolean =
         identity.matches(identityRef)
 
     private fun redacted(publicKey: String): String = PubkyPublicKeyFormat.redacted(publicKey)
