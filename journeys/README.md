@@ -118,6 +118,7 @@ fixtures, push notifications) live in each suite's README.
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
+| [lightning-connections](lightning-connections) | 1 | Connection details date/time format; no README |
 | [notification-permission](notification-permission) | 4 | Background-setup toggles |
 | [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
@@ -141,6 +142,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/usb-reconnect.xml` | `reconnect.xml` — over Bridge, since iOS cannot do WebUSB |
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
+| `lightning-connections/channel-details-time-format.xml` | not ported — `LightningConnectionDetailView.swift` hardcodes `MMM d, yyyy - HH:mm`, so iOS has no 12-hour behaviour to assert |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
