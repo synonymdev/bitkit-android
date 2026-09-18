@@ -32,7 +32,8 @@
     <action>Tap the smallest UTXO row once to deselect it</action>
     <action>Verify TOTAL SELECTED decreased by that UTXO's amount</action>
     <action>Run ./lsp POST /regtest/chain/deposit '{"address":"&lt;savings address&gt;","amountSat":10000}' and then ./lsp POST /regtest/chain/mine '{"count":1}'</action>
-    <action>Wait about 60 seconds without touching the screen, for the wallet to sync the new activity</action>
+    <action>Wait about 60 seconds for the wallet to sync the new activity, without touching the screen apart from the next step</action>
+    <action>The deposit is an ordinary incoming payment, so the Received sheet (testTag "new_transaction_sheet") opens over coin selection; close it with its OK button (testTag "ReceivedTransactionButton"). Do not press Back, which would close the Send sheet and the selection under it</action>
     <action>Verify the coin selection screen still shows the same UTXO rows, the deselected row is still off, and TOTAL SELECTED is unchanged</action>
     <action>Close the Send sheet without continuing</action>
     <action>Open Settings, Advanced, Coin Selection again and restore the method and autopilot mode noted earlier</action>
