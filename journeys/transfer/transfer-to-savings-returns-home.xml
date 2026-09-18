@@ -1,0 +1,28 @@
+<journey name="transfer to savings returns home">
+  <description>
+    Verifies that confirming a Spending to Savings transfer and tapping OK on the success screen
+    lands on the wallet home screen, not on the Spending wallet screen the flow was started from,
+    and that system back from there does not reopen the Spending screen or the transfer flow
+    (synonymdev/bitkit-android#809). iOS resets navigation to home on the same OK.
+
+    Precondition: onboarded dev wallet with an open, usable channel to the LSP and a POSITIVE
+    Spending balance. The transfer closes that channel, so reopen one (Blocktank order through the
+    lsp helper, then mine blocks) afterwards if later work needs a Spending balance. Start on the
+    wallet home screen.
+  </description>
+  <actions>
+    <action>Verify the Spending balance card (testTag "ActivitySpending") shows a positive amount</action>
+    <action>Tap the Spending balance card (testTag "ActivitySpending")</action>
+    <action>Tap "Transfer To Savings" (testTag "TransferToSavings")</action>
+    <action>If the transfer to savings intro appears, tap "Get Started" (testTag "SavingsIntro-button")</action>
+    <action>Tap "Continue" (testTag "AvailabilityContinue") on the funds availability screen</action>
+    <action>On the confirm screen, swipe the "Swipe To Transfer" handle (testTag "GRAB") fully to the right</action>
+    <action>Wait up to 60 seconds for the "Transfer Successful" screen (testTag "TransferSuccess") with the OK button (testTag "TransferSuccess-button")</action>
+    <action>Tap OK (testTag "TransferSuccess-button")</action>
+    <action>Verify the home screen is visible with the Savings and Spending cards (testTags "ActivitySavings" and "ActivitySpending")</action>
+    <action>Verify there is no back button (testTag "NavigationBack") and no "Transfer To Savings" button (testTag "TransferToSavings")</action>
+    <action>Verify the Spending balance card (testTag "ActivitySpending") shows 0</action>
+    <action>Press the system back button once</action>
+    <action>Verify the app is backgrounded to the launcher, and neither the Spending screen nor any transfer screen is shown</action>
+  </actions>
+</journey>
