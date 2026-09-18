@@ -74,7 +74,7 @@ import to.bitkit.ui.components.BodySSB
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.ButtonSize
 import to.bitkit.ui.components.Caption13Up
-import to.bitkit.ui.components.MoneySSB
+import to.bitkit.ui.components.MoneyCaptionM
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.PubkyContactAvatar
 import to.bitkit.ui.components.TagButton
@@ -499,7 +499,7 @@ private fun ActivityDetailContent(
                             if (isHidden) {
                                 BodySSB(text = UiConstants.HIDE_BALANCE_SHORT)
                             } else {
-                                MoneySSB(sats = displayAmount.toLong())
+                                MoneyCaptionM(sats = displayAmount.toLong())
                             }
                         }
                     }
@@ -536,7 +536,7 @@ private fun ActivityDetailContent(
                                 if (isHidden) {
                                     BodySSB(text = UiConstants.HIDE_BALANCE_SHORT)
                                 } else {
-                                    MoneySSB(sats = fee.toLong())
+                                    MoneyCaptionM(sats = fee.toLong())
                                 }
                             }
                         }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -113,10 +114,11 @@ fun NewTransactionSheetView(
             Image(
                 painter = painterResource(R.drawable.check),
                 contentDescription = null,
-                contentScale = ContentScale.FillWidth,
+                contentScale = ContentScale.Fit,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = 32.dp)
+                    .fillMaxWidth(0.8f)
+                    .heightIn(max = 320.dp)
                     .testTag("transaction_sent_image")
                     .align(Alignment.Center)
             )

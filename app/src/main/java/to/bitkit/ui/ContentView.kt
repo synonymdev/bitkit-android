@@ -636,7 +636,12 @@ fun ContentView(
 
                                 TimedSheetType.QUICK_PAY -> {
                                     QuickPayIntroSheet(
+                                        onLater = {
+                                            settingsViewModel.setQuickPayIntroSeen(true)
+                                            appViewModel.dismissTimedSheet()
+                                        },
                                         onContinue = {
+                                            settingsViewModel.setQuickPayIntroSeen(true)
                                             appViewModel.dismissTimedSheet()
                                             navController.navigateTo(Routes.QuickPaySettings)
                                         },
@@ -1676,7 +1681,6 @@ private fun NavGraphBuilder.generalSettingsSubScreens(
         }
         BackgroundPaymentsIntroScreen(
             onBack = { navController.popBackStack() },
-            onLater = { navController.popBackStack() },
             onEnable = {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
