@@ -12,32 +12,6 @@ import kotlin.test.assertNull
 @Config(sdk = [34])
 class PubkyRingAuthCallbackTest {
     @Test
-    fun `addCallbacks adds Ring x-callback params`() {
-        val url = checkNotNull(
-            PubkyRingAuthUrlBuilder.addCallbacks(
-                authUrl = "pubkyauth://auth?relay=https%3A%2F%2Frelay.example",
-                nonce = "12345678-1234-1234-1234-123456789ABC",
-            ),
-        ) { "Auth URL should be valid" }
-        val uri = url.toUri()
-
-        assertEquals("https://relay.example", uri.getQueryParameter("relay"))
-        assertEquals(
-            "bitkit://pubky-auth/success?nonce=12345678-1234-1234-1234-123456789ABC",
-            uri.getQueryParameter("x-success"),
-        )
-        assertEquals(
-            "bitkit://pubky-auth/cancel?nonce=12345678-1234-1234-1234-123456789ABC",
-            uri.getQueryParameter("x-cancel"),
-        )
-        assertEquals(
-            "bitkit://pubky-auth/error?nonce=12345678-1234-1234-1234-123456789ABC",
-            uri.getQueryParameter("x-error"),
-        )
-        assertEquals(PubkyRingAuthUrlBuilder.SOURCE, uri.getQueryParameter("x-source"))
-    }
-
-    @Test
     fun `parse returns success cancel and error callbacks`() {
         assertEquals(
             PubkyRingAuthCallback.Success(nonce = null),
@@ -73,5 +47,10 @@ class PubkyRingAuthCallbackTest {
     fun `parse rejects other deeplinks`() {
         assertNull(PubkyRingAuthCallback.parse("bitkit://wallet/success".toUri()))
         assertNull(PubkyRingAuthCallback.parse("https://pubky-auth/success".toUri()))
+        assertNull(PubkyRingAuthCallback.parse("bitkit://pubky-auth/setup".toUri()))
+        assertNull(PubkyRingAuthCallback.parse("bitkit://pubky-auth/unknown".toUri()))
+        assertNull(PubkyRingAuthCallback.parse("bitkit://pubky-auth/success/".toUri()))
+        assertNull(PubkyRingAuthCallback.parse("BITKIT://pubky-auth/success".toUri()))
+        assertNull(PubkyRingAuthCallback.parse("bitkit://PUBKY-AUTH/success".toUri()))
     }
 }

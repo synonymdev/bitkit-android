@@ -43,7 +43,6 @@ import com.synonym.paykit.PrivateReceivingDetailReservationResponse
 import com.synonym.paykit.PrivateReceivingDetailReservationResponseKind
 import com.synonym.paykit.PrivateStreamCounterpartyIntakeReport
 import com.synonym.paykit.PubkyAuthCompanionClaim
-import com.synonym.paykit.PubkyAuthRequest
 import com.synonym.paykit.PubkyClientConfig
 import com.synonym.paykit.PubkyLocalSecretKey
 import com.synonym.paykit.PubkyProfile
@@ -191,7 +190,6 @@ class PaykitSdkService @Inject constructor(
     private var isSetup = CompletableDeferred<Unit>()
     private var setupFailed = false
     private var sdk: PaykitSdk? = null
-    private var activeAuthRequest: PubkyAuthRequest? = null
     private val _backupStateVersion = MutableStateFlow(0L)
     val backupStateVersion: StateFlow<Long> = _backupStateVersion.asStateFlow()
     private var sdkFactory: () -> PaykitSdk = {
@@ -414,49 +412,6 @@ class PaykitSdkService @Inject constructor(
         }
         notifyBackupStateChanged()
         return result
-    }
-
-    suspend fun startAuth(): String {
-        isSetup.await()
-        return operationMutex.withLock {
-            val request = bootstrap().startSignInAuth(requiredCapabilities())
-            activeAuthRequest = request
-            request.authorizationUrl()
-        }
-    }
-
-    suspend fun completeAuth(): PubkySessionBootstrapResult {
-        isSetup.await()
-        return operationMutex.withLock {
-            val request = requireNotNull(activeAuthRequest) { "No active Pubky auth request" }
-            val previousPublicKey = currentSdkStatePublicKeyLocked()
-            var completed = false
-            try {
-                request.complete(
-                    localSecretKey = null,
-                    receiverNoiseSecretKey = sessionProvider.loadOrDeriveReceiverNoiseSecretKey(),
-                    requiredCapabilities = requiredCapabilities(),
-                ).also {
-                    activateBootstrapResult(
-                        result = it,
-                        previousPublicKey = previousPublicKey,
-                        shouldStoreLocalSecret = false,
-                    )
-                    notifyBackupStateChanged()
-                    completed = true
-                }
-            } finally {
-                activeAuthRequest = null
-                if (!completed) resetRuntime()
-            }
-        }
-    }
-
-    suspend fun cancelAuth() {
-        isSetup.await()
-        operationMutex.withLock {
-            activeAuthRequest = null
-        }
     }
 
     suspend fun approveAuth(
@@ -964,7 +919,6 @@ class PaykitSdkService @Inject constructor(
     suspend fun forgetSessionAccess() {
         isSetup.await()
         operationMutex.withLock {
-            activeAuthRequest = null
             try {
                 withStateRevisionTracking { handle ->
                     handle.forgetSessionAccess()
@@ -991,7 +945,6 @@ class PaykitSdkService @Inject constructor(
             check(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name) == managedSecretKeyHex) {
                 "Managed local Pubky secret changed during external session cleanup"
             }
-            activeAuthRequest = null
             resetRuntime()
             notifyBackupStateChanged()
         }
@@ -1005,7 +958,6 @@ class PaykitSdkService @Inject constructor(
 
     private suspend fun clearStateLocked() {
         keychain.delete(Keychain.Key.PAYKIT_SDK_STATE.name)
-        activeAuthRequest = null
         resetRuntime()
         notifyBackupStateChanged()
     }
