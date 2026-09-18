@@ -207,6 +207,7 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | External amount available | — | `ExternalAmountAvailable` |
 | Background payments setting row | `BackgroundPaymentSettings` | `NotificationsSettings` |
 | Send over-max toast | — *(no tag; assert it from a screenshot)* | `SendAmountExceededToast` |
+| Confirm mnemonic selected slot | `SelectedWord-<n>` | — *(no identifier on `ConfirmWordView` rows)* |
 | Widgets intro screen container | — | `WidgetsOnboarding` |
 | Home suggestion cards | `Suggestion-<id>` | — *(cards expose no identifier)* |
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
