@@ -23,6 +23,9 @@ import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.Colors
 
+/** Width fraction used by intro sheet artwork. */
+const val SHEET_INTRO_IMAGE_WIDTH_FRACTION = 0.8f
+
 @Composable
 @Suppress("LongParameterList")
 fun SheetIntro(
@@ -63,7 +66,7 @@ fun SheetIntro(
                     contentDescription = null,
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
-                        .fillMaxWidth(0.8f)
+                        .fillMaxWidth(SHEET_INTRO_IMAGE_WIDTH_FRACTION)
                         .heightIn(max = 320.dp)
                         .testTag("${testTag}Image")
                 )
