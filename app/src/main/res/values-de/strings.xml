@@ -860,7 +860,6 @@
     <string name="wallet__toast_transaction_unconfirmed_title">Transaktion unbestätigt</string>
     <string name="wallet__toast_transaction_unconfirmed_description">Transaktion wurde durch eine Blockchain-Reorganisation unbestätigt</string>
     <string name="wallet__selection_title">Coin-Auswahl</string>
-    <string name="wallet__selection_auto">Auto</string>
     <string name="wallet__selection_total_required">Gesamterforderlich</string>
     <string name="wallet__selection_total_selected">Gesamtausgewählt</string>
     <string name="wallet__receive_bitcoin">Bitcoin empfangen</string>

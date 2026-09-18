@@ -256,6 +256,9 @@ object Defaults {
      * required to include them in a block would be greater than the value of the transaction itself.
      * */
     const val dustLimit = 546u
+
+    /** Max characters in a user-entered tag. */
+    const val TAG_MAX_LENGTH = 20
 }
 
 object Peers {

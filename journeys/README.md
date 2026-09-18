@@ -117,6 +117,7 @@ journey, and a step it does not is a manual test in the PR body naming the missi
 | Capability | Provided by |
 | --- | --- |
 | On-chain funds and blocks on regtest | `./lsp` deposit and mine against the staging LSP — [Backend preconditions](#backend-preconditions) |
+| Several separate on-chain UTXOs to choose between | three or more `./lsp` deposits, each mined, so manual coin selection has inputs to list — [Backend preconditions](#backend-preconditions) |
 | Lightning channels, CJIT orders and quoted maxima | the same staging LSP the dev flavor targets, plus its node as an external LN peer — [Backend preconditions](#backend-preconditions), [amount-limits](amount-limits/README.md) |
 | A hardware wallet to pair, watch and sign with | the deterministic Trezor emulator from `bitkit-docker` over the Bridge transport, with the USB attach intent injected by `adb`; USB enumeration, permission grants, the OS picker and BLE are not simulated — [hardware-wallet](hardware-wallet/README.md) |
 | Push notifications to a backgrounded or killed app | an FCM push from a CJIT order paid through `./lsp`, read back with `adb shell dumpsys notification` — [cjit-notifications](cjit-notifications/README.md) |
@@ -144,12 +145,15 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/usb-reconnect.xml` | `reconnect.xml` — over Bridge, since iOS cannot do WebUSB |
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
+| `coin-selection/manual-coin-selection.xml` | not ported — iOS has the screen (`SendUtxoSelectionView`) but no accessibility identifiers on it yet |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
+| `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
+| `tags/activity-tag-length-cap.xml` | not ported — iOS has no 20-character cap on tag input |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS

@@ -48,6 +48,7 @@ fun TextInput(
     visualTransformation: VisualTransformation = VisualTransformation.None,
     textStyle: TextStyle = AppTextStyles.BodySSB,
     colors: TextFieldColors = AppTextFieldDefaults.semiTransparent,
+    inputTransform: (String) -> String = { it },
 ) {
     var textFieldValue by remember {
         mutableStateOf(
@@ -78,8 +79,9 @@ fun TextInput(
         textStyle = textStyle,
         value = textFieldValue,
         onValueChange = {
-            textFieldValue = it
-            onValueChange(it.text)
+            val text = inputTransform(it.text)
+            textFieldValue = if (text == it.text) it else it.copy(text = text)
+            onValueChange(text)
         },
         maxLines = maxLines,
         minLines = minLines,
