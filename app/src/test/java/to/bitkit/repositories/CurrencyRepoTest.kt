@@ -1,12 +1,18 @@
 package to.bitkit.repositories
 
 import app.cash.turbine.test
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.launch
 import org.junit.Before
 import org.junit.Test
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.data.AppCacheData
 import to.bitkit.data.CacheStore
@@ -201,6 +207,32 @@ class CurrencyRepoTest : BaseUnitTest() {
             assertTrue(staleState.hasStaleData)
             assertEquals(testRates, staleState.rates)
         }
+    }
+
+    @Test
+    fun `should not record caller cancellation as refresh error`() = test {
+        whenever(cacheStore.update(any())).thenReturn(Unit)
+        whenever(clock.now()).thenReturn(Clock.System.now())
+        val release = CompletableDeferred<Unit>()
+        var isFirstCall = true
+        whenever(currencyService.fetchLatestRates()).doSuspendableAnswer {
+            if (isFirstCall) {
+                isFirstCall = false
+                release.await()
+            }
+            testRates
+        }
+
+        sut = createSut()
+        val job = launch { sut.triggerRefresh() }
+        job.cancelAndJoin()
+
+        assertNull(sut.currencyState.value.error)
+
+        sut.triggerRefresh()
+
+        assertNull(sut.currencyState.value.error)
+        verify(currencyService, times(2)).fetchLatestRates()
     }
 }
 

@@ -226,10 +226,9 @@ class HomeViewModel @Inject constructor(
         }
     }
 
-    fun refreshWidgets() {
-        viewModelScope.launch {
-            widgetsRepo.refreshEnabledWidgets()
-        }
+    fun onPullToRefresh() {
+        viewModelScope.launch { currencyRepo.triggerRefresh() }
+        viewModelScope.launch { widgetsRepo.refreshEnabledWidgets() }
     }
 
     fun moveWidget(fromIndex: Int, toIndex: Int) {

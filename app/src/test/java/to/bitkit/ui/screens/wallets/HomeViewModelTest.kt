@@ -3,12 +3,15 @@ package to.bitkit.ui.screens.wallets
 import android.content.Context
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.collections.immutable.persistentListOf
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
 import org.junit.Test
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
 import to.bitkit.R
 import to.bitkit.data.SettingsData
@@ -102,6 +105,34 @@ class HomeViewModelTest : BaseUnitTest() {
         advanceUntilIdle()
 
         assertFalse(sut.uiState.value.showEmptyState)
+    }
+
+    @Test
+    fun `onPullToRefresh refreshes rates and widgets`() = test {
+        val sut = createViewModel()
+
+        sut.onPullToRefresh()
+        advanceUntilIdle()
+
+        verify(currencyRepo).triggerRefresh()
+        verify(widgetsRepo).refreshEnabledWidgets()
+    }
+
+    @Test
+    fun `onPullToRefresh refreshes widgets while rates refresh is pending`() = test {
+        val release = CompletableDeferred<Unit>()
+        whenever(currencyRepo.triggerRefresh()).doSuspendableAnswer { release.await() }
+        val sut = createViewModel()
+
+        sut.onPullToRefresh()
+        advanceUntilIdle()
+
+        verify(widgetsRepo).refreshEnabledWidgets()
+
+        release.complete(Unit)
+        advanceUntilIdle()
+
+        verify(currencyRepo).triggerRefresh()
     }
 
     private fun createViewModel() = HomeViewModel(
