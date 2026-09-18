@@ -1,0 +1,34 @@
+<journey name="date range rapid month taps">
+  <description>
+    Proves that rapid next/previous month taps in the activity date range sheet count every tap and
+    leave the day grid visible at its resting position once the last transition ends (#631).
+    Precondition: onboarded dev wallet with at least one activity item so "Show All" is on the home
+    screen. Needs no backend. The taps must land inside the 200ms month transition
+    (`FADE_DURATION_MILLIS` in `DateRangeSelectorSheet.kt`): sequential `adb shell input tap` calls
+    take about 300ms each, and parallel ones collide in the input dispatcher ("Inconsistent event
+    ... pointers already down") and drop taps. Push a monkey script instead, one `Tap(x,y)` followed
+    by `UserWait(60)` per tap, and run it with
+    `adb shell monkey -p to.bitkit.dev -f /data/local/tmp/next8.monkey 1`. Swipes that start while a
+    month transition is running are ignored by design; a swipe at rest changes the month. The grid's
+    alpha is not in `android layout`, so confirm visibility from a screenshot. The day cell for
+    today is tagged "Today" rather than "Day-N", so the "Day-1" assertions do not hold on a month
+    whose 1st is today — run this on any other day, or read the first cell as "Today" that once.
+  </description>
+  <actions>
+    <action>Tap "Show All" (testTag "ActivityShowAll") on the home screen</action>
+    <action>Tap the calendar icon (testTag "DatePicker")</action>
+    <action>Verify the "Select Range" sheet shows the current month with "PrevMonth", "NextMonth" and "Day-1" present</action>
+    <action>Tap "NextMonth" 8 times with about 60ms between taps</action>
+    <action>Wait 1 second, then verify the month label is 8 months after the current month</action>
+    <action>Verify "Day-1" is present and its center x matches the weekday column header of that date</action>
+    <action>Take a screenshot and verify every day number of the month is visible</action>
+    <action>Tap "NextMonth" once</action>
+    <action>Wait 1 second, then verify the month label advanced by exactly one month and the day grid is visible</action>
+    <action>Tap "PrevMonth" 8 times with about 60ms between taps</action>
+    <action>Wait 1 second, then verify the month label moved back 8 months, and take a screenshot to verify the day grid is visible</action>
+    <action>Swipe the day grid (testTag "CalendarGrid") from right to left, then within 60ms tap "NextMonth", swipe left to right, tap "PrevMonth", swipe right to left, tap "NextMonth", swipe right to left, and drag the grid 100px</action>
+    <action>Wait 1 second, then verify the month label advanced by exactly 2 months (the first swipe and the taps count; swipes during the transition do not)</action>
+    <action>Take a screenshot and verify the day grid is visible and not shifted sideways</action>
+    <action>Press back and verify the "Select Range" sheet is dismissed</action>
+  </actions>
+</journey>
