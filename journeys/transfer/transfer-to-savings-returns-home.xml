@@ -20,7 +20,7 @@
     <action>Wait up to 60 seconds for the "Transfer Successful" screen (testTag "TransferSuccess") with the OK button (testTag "TransferSuccess-button")</action>
     <action>Tap OK (testTag "TransferSuccess-button")</action>
     <action>Verify the home screen is visible with the Savings and Spending cards (testTags "ActivitySavings" and "ActivitySpending")</action>
-    <action>Verify there is no back button (testTag "NavigationBack") and no "Spending" screen title</action>
+    <action>Verify there is no back button (testTag "NavigationBack") and no "Transfer To Savings" button (testTag "TransferToSavings")</action>
     <action>Verify the Spending balance card (testTag "ActivitySpending") shows 0</action>
     <action>Press the system back button once</action>
     <action>Verify the app is backgrounded to the launcher, and neither the Spending screen nor any transfer screen is shown</action>
