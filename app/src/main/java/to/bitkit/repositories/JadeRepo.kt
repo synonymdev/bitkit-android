@@ -35,7 +35,6 @@ import to.bitkit.data.HwWalletStore
 import to.bitkit.data.PendingNameUpdate
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
-import to.bitkit.ext.isBlePath
 import to.bitkit.ext.isJadeDeviceBusy
 import to.bitkit.ext.isJadeUserCancellation
 import to.bitkit.ext.nowMs
@@ -49,6 +48,7 @@ import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.deriveHardwareWalletId
 import to.bitkit.models.findHardwareWalletId
+import to.bitkit.models.isBlePath
 import to.bitkit.models.isReplacedBy
 import to.bitkit.models.matches
 import to.bitkit.models.toJadeNetwork

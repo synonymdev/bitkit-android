@@ -1,4 +1,4 @@
-package to.bitkit.ext
+package to.bitkit.models
 
 /** Prefix of every Bluetooth hardware wallet device path, shared by both vendors' transports. */
 const val BLE_PATH_PREFIX = "ble:"

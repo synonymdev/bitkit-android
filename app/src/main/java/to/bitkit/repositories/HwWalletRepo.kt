@@ -40,7 +40,6 @@ import to.bitkit.data.PendingNameUpdate
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
-import to.bitkit.ext.isBlePath
 import to.bitkit.ext.isHwSessionFailure
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.scopedId
@@ -61,6 +60,7 @@ import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
 import to.bitkit.models.WalletScope
+import to.bitkit.models.isBlePath
 import to.bitkit.models.safe
 import to.bitkit.models.toAccountType
 import to.bitkit.models.toAddressType

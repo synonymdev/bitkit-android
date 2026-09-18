@@ -34,13 +34,13 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import to.bitkit.ext.bleAddress
-import to.bitkit.ext.blePath
 import to.bitkit.ext.bluetoothManager
-import to.bitkit.ext.isBlePath
 import to.bitkit.ext.usbManager
 import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.TransportType
+import to.bitkit.models.bleAddress
+import to.bitkit.models.blePath
+import to.bitkit.models.isBlePath
 import to.bitkit.ui.utils.HwUsbId
 import to.bitkit.ui.utils.hwUsbId
 import to.bitkit.utils.Logger

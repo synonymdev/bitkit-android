@@ -37,13 +37,13 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import to.bitkit.ext.bleAddress
-import to.bitkit.ext.blePath
 import to.bitkit.ext.bluetoothManager
-import to.bitkit.ext.isBlePath
 import to.bitkit.ext.nowMs
 import to.bitkit.ext.usbManager
 import to.bitkit.models.TransportType
+import to.bitkit.models.bleAddress
+import to.bitkit.models.blePath
+import to.bitkit.models.isBlePath
 import to.bitkit.utils.Logger
 import java.io.File
 import java.util.UUID
