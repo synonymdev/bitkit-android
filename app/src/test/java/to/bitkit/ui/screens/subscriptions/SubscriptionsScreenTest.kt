@@ -106,6 +106,44 @@ class SubscriptionsScreenTest {
     }
 
     @Test
+    fun `terminal subscription with paid periods expires on its last period end`() {
+        val lastPeriodEnd = Instant.parse("2027-01-08T08:00:00Z")
+        val terminal = subscription(PaykitRecurrenceUnit.Week).copy(
+            lifecycleState = PaymentRequestLifecycleState.CANCELED,
+            paidPeriods = listOf(
+                PaykitBillingPeriod(
+                    startsAt = Instant.parse("2027-01-01T08:00:00Z"),
+                    endsAt = lastPeriodEnd,
+                ),
+                PaykitBillingPeriod(
+                    startsAt = Instant.parse("2026-12-25T08:00:00Z"),
+                    endsAt = Instant.parse("2027-01-01T08:00:00Z"),
+                ),
+            ),
+        )
+
+        assertTrue(terminal.shouldShowTiming(now))
+        assertEquals(lastPeriodEnd, terminal.expiryDate())
+    }
+
+    @Test
+    fun `fixed end date wins over paid periods as the expiry date`() {
+        val endsAt = Instant.parse("2027-03-01T08:00:00Z")
+        val openEnded = subscription(PaykitRecurrenceUnit.Week)
+        val fixedEnd = openEnded.copy(
+            recurrence = openEnded.recurrence.copy(endsAt = endsAt),
+            paidPeriods = listOf(
+                PaykitBillingPeriod(
+                    startsAt = Instant.parse("2027-01-01T08:00:00Z"),
+                    endsAt = Instant.parse("2027-01-08T08:00:00Z"),
+                ),
+            ),
+        )
+
+        assertEquals(endsAt, fixedEnd.expiryDate())
+    }
+
+    @Test
     fun `only active open ended subscriptions can be canceled`() {
         val openEnded = subscription(PaykitRecurrenceUnit.Week)
         val fixedEnd = openEnded.copy(
