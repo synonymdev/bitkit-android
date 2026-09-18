@@ -210,6 +210,54 @@ class JadeRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scan offers a usb jade plugged in away from the paired entry's path`() = test {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        val sut = createRepo()
+
+        sut.scan().getOrThrow()
+
+        assertEquals(listOf(usbDevice), sut.state.value.nearbyDevices)
+    }
+
+    @Test
+    fun `scan does not offer a usb jade at the paired entry's path`() = test {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice.copy(path = knownUsb.path)))
+        val sut = createRepo()
+
+        sut.scan().getOrThrow()
+
+        assertTrue(sut.state.value.nearbyDevices.isEmpty())
+    }
+
+    @Test
+    fun `a usb attach at a new path counts as known while a usb jade is paired`() = test {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        val sut = createRepo()
+
+        assertTrue(sut.hasKnownUsbDevice(USB_PATH))
+    }
+
+    @Test
+    fun `pairing a second usb jade keeps the paired one`() = test {
+        whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
+        whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
+        whenever { jadeService.connect(any(), any(), any()) }
+            .thenReturn(versionInfo(JadeState.READY, efuseMac = OTHER_EFUSE_MAC))
+        whenever { jadeService.getAccountExport(any(), any(), any()) }.thenReturn(accountExport(xpub = "zpubOther"))
+        val sut = createRepo()
+        sut.scan()
+
+        val connected = sut.connect(USB_PATH).getOrThrow()
+
+        val captor = argumentCaptor<List<KnownDevice>>()
+        verify(hwWalletStore).saveKnownDevices(captor.capture(), anyOrNull(), eq(HwWalletVendor.BLOCKSTREAM))
+        assertEquals(setOf(knownUsb.id, "jade:serial:$OTHER_EFUSE_MAC"), captor.firstValue.map { it.id }.toSet())
+        assertEquals("jade:serial:$OTHER_EFUSE_MAC", connected.id)
+    }
+
+    @Test
     fun `reconnecting a known jade rejects a different device`() = test {
         whenever { hwWalletStore.loadKnownDevices(HwWalletVendor.BLOCKSTREAM) }.thenReturn(listOf(knownUsb))
         whenever { jadeService.scan(any(), any()) }.thenReturn(listOf(usbDevice))
@@ -611,11 +659,11 @@ class JadeRepoTest : BaseUnitTest() {
         jadeOtaMaxChunk = null,
     )
 
-    private fun accountExport() = JadeAccountExport(
+    private fun accountExport(xpub: String = "zpubNS") = JadeAccountExport(
         masterFingerprint = "deadbeef",
         accountIndex = 0u,
         accounts = listOf(
-            JadeAccount(variant = JadeAddressVariant.WPKH, xpub = "zpubNS", derivationPath = "m/84'/1'/0'"),
+            JadeAccount(variant = JadeAddressVariant.WPKH, xpub = xpub, derivationPath = "m/84'/1'/0'"),
         ),
     )
 
@@ -624,6 +672,7 @@ class JadeRepoTest : BaseUnitTest() {
         const val USB_PATH_2 = "/dev/bus/usb/001/008"
         const val STALE_BLE_PATH = "ble:6B:7A:9B:16:C8:1C"
         const val EFUSE_MAC = "246F288F6B64"
+        const val OTHER_EFUSE_MAC = "246F28A1B2C3"
         const val WALLET_ID = "jade:wallet"
         val ALL_ACCOUNT_TYPES = listOf(
             AccountType.LEGACY,

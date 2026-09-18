@@ -470,7 +470,11 @@ class JadeRepo @Inject constructor(
             knownDevices().any { it.matches(deviceId) || it.advertisesAs(advertisedName) }
         }
 
-    /** Whether [deviceId] names a known USB entry or any USB Jade is paired: USB paths change on replug. */
+    /**
+     * Whether [deviceId] names a known USB entry or any USB Jade is paired: USB paths change on replug,
+     * so an exact match would offer the paired Jade for pairing again every time it is plugged in. A
+     * second USB Jade is paired from Connect Hardware instead, whose scan offers it.
+     */
     suspend fun hasKnownUsbDevice(deviceId: String): Boolean = withContext(ioDispatcher) {
         val known = knownDevices()
         known.any { it.matches(deviceId) } || known.any { it.transportType == TransportType.USB }
@@ -888,9 +892,10 @@ class JadeRepo @Inject constructor(
 
     private fun KnownDevice.isSameDevice(device: JadeDeviceInfo): Boolean = when (device.transport) {
         JadeTransportKind.BLUETOOTH -> path == device.path || advertisesAs(device.name)
-        // A plugged-in Jade cannot be told from a paired one before connecting, so a paired USB Jade
-        // claims every serial device; a second one is added through the Add button, which offers it anyway.
-        JadeTransportKind.SERIAL -> transportType == TransportType.USB
+        // A plugged-in Jade cannot be told from a paired one before connecting, so a paired USB entry
+        // claims only the path it was last connected at. Any other serial device is offered, which is
+        // how a second USB Jade gets paired; pairing a replugged known one again refreshes its entry.
+        JadeTransportKind.SERIAL -> transportType == TransportType.USB && path == device.path
     }
 }
 
