@@ -221,6 +221,8 @@ class LightningServiceTest : BaseUnitTest() {
         releaseEvent.complete(event)
         testScheduler.advanceUntilIdle()
 
+        // timeout() is kept as a guard: the LDK queue is injected here, so teardown completes on
+        // virtual time, but the arguments cost nothing if a future path completes off it.
         // Without the self-join guard, stop() would deadlock and node.stop() would never run.
         verify(node, timeout(VERIFY_TIMEOUT_MS)).stop()
         verify(node, timeout(VERIFY_TIMEOUT_MS)).destroy()
