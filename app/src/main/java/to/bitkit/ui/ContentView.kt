@@ -37,7 +37,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
-import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavOptionsBuilder
@@ -2093,12 +2092,12 @@ fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.Sa
 
 /**
  * Exits the savings transfer to home. The coop close retry job holds on to this callback for up to
- * 30 minutes, so it is ignored once the transfer flow is no longer the destination on screen, the
- * way popping the transfer graph used to be a no-op there.
+ * 30 minutes, so it is ignored unless the savings progress screen that owns it is still on screen.
+ * Matching the whole transfer graph would also pop a transfer to spending the user started since.
  */
 fun NavController.navigateOnSavingsTransferExit() {
-    val isOnTransferFlow = currentDestination?.hierarchy?.any { it.hasRoute<Routes.TransferRoot>() } == true
-    if (!isOnTransferFlow) return
+    val isOnSavingsProgress = currentDestination?.hasRoute<Routes.SavingsProgress>() == true
+    if (!isOnSavingsProgress) return
     navigateToHome()
 }
 

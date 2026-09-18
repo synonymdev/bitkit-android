@@ -136,6 +136,20 @@ class ContentViewTest {
         assertTrue(navController.currentDestination?.hasRoute<Routes.Settings>() == true)
     }
 
+    @Test
+    fun `savings transfer exit leaves a later transfer to spending alone`() {
+        val navController = transferNavController()
+        navController.navigateToTransferSavingsAvailability()
+        navController.navigateTo(Routes.SavingsProgress)
+        navController.navigateOnSavingsTransferExit()
+        navController.navigateTo(Routes.Spending)
+        navController.navigateTo(Routes.SpendingConfirm)
+
+        navController.navigateOnSavingsTransferExit()
+
+        assertTrue(navController.currentDestination?.hasRoute<Routes.SpendingConfirm>() == true)
+    }
+
     private fun transferNavController(): NavHostController =
         NavHostController(ApplicationProvider.getApplicationContext<Context>()).apply {
             navigatorProvider.addNavigator(ComposeNavigator())
@@ -146,6 +160,7 @@ class ContentViewTest {
                 navigation<Routes.TransferRoot>(startDestination = Routes.SavingsAvailability) {
                     composable<Routes.SavingsAvailability> {}
                     composable<Routes.SavingsProgress> {}
+                    composable<Routes.SpendingConfirm> {}
                 }
             }
         }
