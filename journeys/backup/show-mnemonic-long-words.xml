@@ -37,7 +37,7 @@
     <action>Tap "Restore" (testTag "RestoreWallet"), then confirm the multiple-devices warning (testTag "MultipleDevices-button")</action>
     <action>Enter the 12 words of the phrase above one field at a time, tapping each field (testTags "Word-0" through "Word-11") and typing only that one word — never paste or type the whole phrase in one go, adb drops characters from long strings</action>
     <action>Verify no field is marked invalid and no checksum error is shown, then tap "Restore" (testTag "RestoreButton")</action>
-    <action>Wait for the restore to finish and tap "Get Started" (testTag "GetStartedButton"); if the backup restore fails instead, tap "Proceed Without Backup" (testTag "ProceedWithoutBackupButton") and confirm — the phrase has no backup and the on-chain wallet is what this journey needs</action>
+    <action>Wait for the restore to finish and tap "Get Started" (testTag "GetStartedButton"); if the backup restore fails instead, the failure screen offers only "Try Again" (testTag "TryAgainButton") — tap it until "Proceed Without Backup" (testTag "ProceedWithoutBackupButton") also appears, which takes two taps, then tap it and confirm with "Yes, Proceed" (testTag "DialogConfirm") — the phrase has no backup and the on-chain wallet is what this journey needs</action>
     <action>Run adb shell settings put system font_scale 1.3</action>
     <action>Tap the menu icon (testTag "HeaderMenu")</action>
     <action>Tap "Settings" (testTag "DrawerSettings")</action>
