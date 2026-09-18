@@ -4,7 +4,10 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import org.junit.Test
 import org.mockito.Mockito.mockStatic
+import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.spy
+import org.mockito.kotlin.whenever
 import to.bitkit.async.ServiceQueue
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.test.BaseUnitTest
@@ -28,7 +31,8 @@ class PubkyServiceTest : BaseUnitTest() {
                 String::class.java,
                 Continuation::class.java,
             )
-            val sut = PubkyService(mock())
+            val sut = spy(PubkyService(mock()))
+            doReturn("pubky-test").whenever(sut).publicKeyFromSecret("secret")
             var cancelled = false
             mockStatic(binding).use { native ->
                 native.`when`<Any?> { approve.invoke(null, "auth", "secret", null) }.thenAnswer {
@@ -63,13 +67,15 @@ class PubkyServiceTest : BaseUnitTest() {
                 Continuation::class.java,
             )
             val cancellation = CancellationException("cancelled")
+            val sut = spy(PubkyService(mock()))
+            doReturn("pubky-test").whenever(sut).publicKeyFromSecret("secret")
             mockStatic(binding).use { native ->
                 native.`when`<Any?> { approve.invoke(null, "auth", "secret", null) }.thenThrow(cancellation)
 
                 assertEquals(
                     cancellation.javaClass,
                     assertFailsWith<CancellationException> {
-                        PubkyService(mock()).approveRingAuth("auth", "secret", 50.milliseconds)
+                        sut.approveRingAuth("auth", "secret", 50.milliseconds)
                     }.javaClass,
                 )
             }
