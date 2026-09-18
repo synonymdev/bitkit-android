@@ -84,7 +84,7 @@ class SharedPubkyDiscovery @Inject constructor(
         if (secretKeyColumn < 0 || !cursor.moveToFirst()) throw SharedPubkyError.IdentityUnavailable
 
         val identity = cursor.readIdentity(publicColumns)
-        if (identity.pubky != expectedPubky || cursor.moveToNext()) {
+        if (identity.pubky != expectedPubky || cursor.count != 1) {
             throw SharedPubkyError.InvalidResponse
         }
         return runCatching {
