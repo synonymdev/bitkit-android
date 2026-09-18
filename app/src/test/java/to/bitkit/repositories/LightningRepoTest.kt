@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -757,6 +758,31 @@ class LightningRepoTest : BaseUnitTest() {
 
         verify(lightningService, times(2)).stop()
         assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    // Regression #1125: a caller cancelled inside the retry delay must not drop the bounded retry
+    @Test
+    fun `restartNodeDetached completes the start retry after the caller is cancelled`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("Feerate estimation update timeout")
+            Unit
+        }
+
+        val caller = CoroutineScope(testDispatcher)
+        caller.launch { sut.restartNodeDetached() }
+        runCurrent()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+
+        // Back press inside the retry window clears the ViewModel and cancels its scope
+        caller.cancel()
+        testScheduler.advanceTimeBy(START_RETRY_DELAY_MS)
+        runCurrent()
+
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
 
     // Regression: node teardown must complete before the next start rebuilds, never overlap it

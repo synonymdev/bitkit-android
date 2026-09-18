@@ -159,7 +159,7 @@ class LdkDebugViewModel @Inject constructor(
     fun restartNode() {
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true) }
-            lightningRepo.restartNode()
+            lightningRepo.restartNodeDetached()
                 .onSuccess {
                     Logger.info("Node restarted successfully", context = TAG)
                     ToastEventBus.send(

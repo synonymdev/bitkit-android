@@ -19,6 +19,7 @@ import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -2090,6 +2091,17 @@ class LightningRepo @Inject constructor(
         }
     }
     // endregion
+
+    /**
+     * Runs [restartNode] on the repo scope, for the same reason [stopDebounced] does: the node
+     * lifecycle outlives any screen that asks to change it. A caller cancelled mid-restart — a
+     * ViewModel cleared inside the bounded start retry delay — cannot drop the retry and strand the
+     * node Stopped.
+     *
+     * The caller still awaits the [Result], so a live caller keeps reporting the outcome; a cancelled
+     * one only loses the reporting, never the restart.
+     */
+    suspend fun restartNodeDetached(): Result<Unit> = scope.async { restartNode() }.await()
 
     suspend fun restartNode(): Result<Unit> = withContext(bgDispatcher) {
         Logger.info("Restarting node", context = TAG)
