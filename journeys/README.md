@@ -118,6 +118,7 @@ fixtures, push notifications) live in each suite's README.
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
+| [home](home) | 1 | Pull to refresh on Home; checks the app log, no README |
 | [notification-permission](notification-permission) | 4 | Background-setup toggles |
 | [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
@@ -144,6 +145,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
+| `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | `transfer/transfer-to-savings-returns-home.xml` | not ported — iOS already resets navigation to home on the same OK, so the journey has no iOS counterpart yet |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
