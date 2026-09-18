@@ -118,9 +118,11 @@ fixtures, push notifications) live in each suite's README.
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
+| [home](home) | 1 | Pull to refresh on Home; checks the app log, no README |
 | [notification-permission](notification-permission) | 4 | Background-setup toggles |
 | [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
+| [security](security) | 1 | PIN result sheet layout at a long locale and font scale; no README |
 | [send](send) | 1 | Own-invoice guard on the send flow; needs a spending channel and savings; no README |
 | [subscriptions](subscriptions) | 4 | Paykit subscription lifecycle across two wallets, plus the Payments tab |
 | [widgets](widgets) | 2 | Needs no backend — the quickest way to see the loop work; no README |
@@ -145,6 +147,8 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
+| `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
+| `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
