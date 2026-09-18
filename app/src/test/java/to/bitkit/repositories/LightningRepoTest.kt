@@ -81,6 +81,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import to.bitkit.utils.UrlValidator
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -1283,6 +1284,76 @@ class LightningRepoTest : BaseUnitTest() {
         // Success must mean the node was actually rebuilt with the requested server.
         assertTrue(result.isSuccess)
         verify(lightningService).setup(any(), eq(nextUrl), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    // Regression: the caller is a route-scoped ViewModel, so leaving the screen mid-change cancels
+    // the rebuild. start() rethrows the cancellation, so onFailure never ran and nothing restarted
+    // the node, leaving it down until the next ON_START.
+    @Test
+    fun `restartWithElectrumServer recovers the previous config when the caller is cancelled`() = test {
+        startNodeForTesting()
+        val newUrl = "ssl://next.example.com:50002"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        // Hold the rebuild open so the caller can be cancelled while it is in flight.
+        val rebuildStarted = CompletableDeferred<Unit>()
+        whenever { lightningService.setup(any(), eq(newUrl), anyOrNull(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                rebuildStarted.complete(Unit)
+                awaitCancellation()
+            }
+
+        var rethrown = false
+        val change = launch {
+            try {
+                sut.restartWithElectrumServer(newUrl)
+            } catch (e: CancellationException) {
+                rethrown = true
+                throw e
+            }
+        }
+        rebuildStarted.await()
+        change.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(rethrown) // structured concurrency preserved
+        // The detached recovery rebuilt with the previous config and the node is back up.
+        verify(lightningService).setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull())
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        // A cancelled change must never persist the server it failed to apply.
+        verifyBlocking(settingsStore, never()) { update(any()) }
+    }
+
+    @Test
+    fun `restartWithRgsServer recovers the previous config when the caller is cancelled`() = test {
+        startNodeForTesting()
+        val newRgsUrl = "https://next.rgs.example.com/snapshot"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val rebuildStarted = CompletableDeferred<Unit>()
+        whenever { lightningService.setup(any(), anyOrNull(), eq(newRgsUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                rebuildStarted.complete(Unit)
+                awaitCancellation()
+            }
+
+        var rethrown = false
+        val change = launch {
+            try {
+                sut.restartWithRgsServer(newRgsUrl)
+            } catch (e: CancellationException) {
+                rethrown = true
+                throw e
+            }
+        }
+        rebuildStarted.await()
+        change.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(rethrown)
+        verify(lightningService).setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull())
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(settingsStore, never()) { update(any()) }
     }
 
     @Test

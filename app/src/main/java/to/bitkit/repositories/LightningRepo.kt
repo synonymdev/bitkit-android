@@ -874,17 +874,20 @@ class LightningRepo @Inject constructor(
 
         configChangeMutex.withLock {
             waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
-            stop().onFailure {
-                Logger.error("Failed to stop node during electrum server change", it, context = TAG)
-                return@withContext Result.failure(it)
-            }
 
-            Logger.debug("Starting node with new electrum server: '$newServerUrl'", context = TAG)
+            recoverOnCancellation {
+                stop().onFailure {
+                    Logger.error("Failed to stop node during electrum server change", it, context = TAG)
+                    return@withContext Result.failure(it)
+                }
 
-            start(
-                shouldRetry = false,
-                customServerUrl = newServerUrl,
-            ).onFailure {
+                Logger.debug("Starting node with new electrum server: '$newServerUrl'", context = TAG)
+
+                start(
+                    shouldRetry = false,
+                    customServerUrl = newServerUrl,
+                )
+            }.onFailure {
                 // Recover in the background: a wedged node's release can gate the rebuild for tens of
                 // seconds, and the caller must surface this failure now rather than block on recovery.
                 Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
@@ -907,17 +910,20 @@ class LightningRepo @Inject constructor(
 
         configChangeMutex.withLock {
             waitForNodeToStop().onFailure { return@withContext Result.failure(it) }
-            stop().onFailure {
-                Logger.error("Failed to stop node during RGS server change", it, context = TAG)
-                return@withContext Result.failure(it)
-            }
 
-            Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
+            recoverOnCancellation {
+                stop().onFailure {
+                    Logger.error("Failed to stop node during RGS server change", it, context = TAG)
+                    return@withContext Result.failure(it)
+                }
 
-            start(
-                shouldRetry = false,
-                customRgsServerUrl = newRgsUrl,
-            ).onFailure {
+                Logger.debug("Starting node with new RGS server: '$newRgsUrl'", context = TAG)
+
+                start(
+                    shouldRetry = false,
+                    customRgsServerUrl = newRgsUrl,
+                )
+            }.onFailure {
                 // Recover in the background: a wedged node's release can gate the rebuild for tens of
                 // seconds, and the caller must surface this failure now rather than block on recovery.
                 Logger.warn("Failed ldk-node config change, recovering in background…", context = TAG)
@@ -927,6 +933,20 @@ class LightningRepo @Inject constructor(
 
                 Logger.info("Successfully changed RGS server", context = TAG)
             }
+        }
+    }
+
+    private inline fun <T> recoverOnCancellation(block: () -> T): T {
+        try {
+            return block()
+        } catch (e: CancellationException) {
+            // The caller is route-scoped: leaving the screen cancels the change mid-rebuild. stop()
+            // and start() rethrow the cancellation instead of reporting a failure, so the onFailure
+            // recovery never runs and the node would stay down until the next ON_START. Hand the
+            // recovery to the repo scope, which outlives the caller, then preserve the cancellation.
+            Logger.warn("Cancelled ldk-node config change, recovering in background…", context = TAG)
+            scope.launch { restartWithPreviousConfig() }
+            throw e
         }
     }
 
