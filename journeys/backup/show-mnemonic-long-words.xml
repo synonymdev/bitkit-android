@@ -1,0 +1,31 @@
+<journey name="show mnemonic long words">
+  <description>
+    Verifies that every recovery phrase word on the backup screen renders on a single line at a
+    larger system font scale, including words next to the two-digit labels 10., 11. and 12.
+    (synonymdev/bitkit-android#633). The grid shrinks all words to one shared size, from 17sp down
+    to 12sp; only a word that is still too wide at 12sp wraps, which happens at extreme font scales
+    such as 2.0.
+
+    The screen sets FLAG_SECURE, so screenshots and recordings come out black, and the SeedContainer
+    content description holds the phrase. Never print, log, save or quote the words: the word
+    elements carry no testTag, so read rows from the number labels ("1." to "12.") and from the
+    bounds of the word elements, never their text or content-desc.
+
+    Precondition: onboarded dev wallet with a 12-word phrase and no PIN (with a PIN, enter the
+    correct PIN when prompted and never a wrong one). Start on the wallet home screen. Restore
+    font_scale to 1.0 when done.
+  </description>
+  <actions>
+    <action>Run adb shell settings put system font_scale 1.3</action>
+    <action>Tap the menu icon (testTag "HeaderMenu")</action>
+    <action>Tap "Settings" (testTag "DrawerSettings")</action>
+    <action>Tap the Security tab (testTag "Tab-security")</action>
+    <action>Tap "Back up your wallet" (testTag "BackupWallet")</action>
+    <action>Verify the recovery phrase screen shows "Tap To Reveal" (testTag "TapToReveal") inside the reveal overlay (testTag "SeedContainer") covering the words box (testTag "backup_mnemonic_words_box")</action>
+    <action>Tap "Tap To Reveal"</action>
+    <action>Verify the words box lists 12 number labels, "1." to "12.", grouped in 6 rows of 2 with the same vertical center per row</action>
+    <action>Verify the vertical distance between consecutive rows is equal, so no word wraps onto a second line</action>
+    <action>Press back to close the sheet</action>
+    <action>Run adb shell settings put system font_scale 1.0</action>
+  </actions>
+</journey>
