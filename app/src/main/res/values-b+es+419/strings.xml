@@ -829,6 +829,10 @@
     <string name="wallet__activity_transfer_to_savings">A ahorros</string>
     <string name="wallet__activity_transfer_to_spending">A Gastos</string>
     <string name="wallet__activity_tx_id">ID de la transacción</string>
+    <string name="wallet__balance_hidden_message">Desliza tu saldo para verlo nuevamente.</string>
+    <string name="wallet__balance_hidden_title">Saldo de billetera oculto</string>
+    <string name="wallet__balance_unit_switched_message">Toque el saldo de su monedero para cambiarlo de nuevo a %1$s.</string>
+    <string name="wallet__balance_unit_switched_title">Cambiado a %1$s</string>
     <string name="wallet__boost">Impulsar</string>
     <string name="wallet__boost_decrease_fee">Reducir comisión</string>
     <string name="wallet__boost_error_msg">Bitkit no pudo impulsar la transacción.</string>

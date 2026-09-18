@@ -941,6 +941,10 @@
     <string name="wallet__spending__title">Dépenses</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Envoyer \nles bitcoins&lt;/accent&gt;\nsur votre \nsolde Dépenses</string>
     <string name="wallet__details_transfer_subtitle">Transfert entrant : </string>
+    <string name="wallet__balance_hidden_message">Faites glisser votre solde pour l’afficher à nouveau.</string>
+    <string name="wallet__balance_hidden_title">Balance du wallet cachée</string>
+    <string name="wallet__balance_unit_switched_message">Appuyez sur votre solde pour le repasser en %1$s.</string>
+    <string name="wallet__balance_unit_switched_title">Passé en %1$s</string>
     <string name="wallet__boost">Boost</string>
     <string name="wallet__boost_title">Boost Transaction</string>
     <string name="wallet__boost_success_title">Boostée !</string>

@@ -829,6 +829,10 @@
     <string name="wallet__activity_transfer_to_savings">A estalvis</string>
     <string name="wallet__activity_transfer_to_spending">A despesa</string>
     <string name="wallet__activity_tx_id">ID de transacció</string>
+    <string name="wallet__balance_hidden_message">Llisca el saldo de la teva cartera per revelar-lo de nou.</string>
+    <string name="wallet__balance_hidden_title">Saldo de la cartera amagat</string>
+    <string name="wallet__balance_unit_switched_message">Toca el saldo de la teva cartera per tornar-lo a %1$s.</string>
+    <string name="wallet__balance_unit_switched_title">Canviat a %1$s</string>
     <string name="wallet__boost">Impulsar</string>
     <string name="wallet__boost_decrease_fee">Reduir tarifa</string>
     <string name="wallet__boost_error_msg">Bitkit no ha pogut impulsar la transacció.</string>

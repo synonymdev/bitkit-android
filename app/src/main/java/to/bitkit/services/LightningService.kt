@@ -124,15 +124,16 @@ data class AddressDerivationInfo(
 
 @Suppress("LargeClass", "LongParameterList", "TooManyFunctions")
 @Singleton
-class LightningService @Inject constructor(
-    @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
-    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+class LightningService internal constructor(
+    private val bgDispatcher: CoroutineDispatcher,
+    private val ioDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val vssStoreIdProvider: VssStoreIdProvider,
     private val settingsStore: SettingsStore,
     private val watchOnlyAccountStore: WatchOnlyAccountStore,
     private val loggerLdk: LoggerLdk,
     private val watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
+    private val ldkQueue: CoroutineContext,
 ) : BaseCoroutineScope(bgDispatcher, TAG) {
 
     companion object {
@@ -167,6 +168,28 @@ class LightningService @Inject constructor(
             probingDiversityPenaltyMsat = 0uL,
         )
     }
+
+    @Inject
+    constructor(
+        @BgDispatcher bgDispatcher: CoroutineDispatcher,
+        @IoDispatcher ioDispatcher: CoroutineDispatcher,
+        keychain: Keychain,
+        vssStoreIdProvider: VssStoreIdProvider,
+        settingsStore: SettingsStore,
+        watchOnlyAccountStore: WatchOnlyAccountStore,
+        loggerLdk: LoggerLdk,
+        watchOnlyAccountLifecycleCoordinator: WatchOnlyAccountLifecycleCoordinator,
+    ) : this(
+        bgDispatcher = bgDispatcher,
+        ioDispatcher = ioDispatcher,
+        keychain = keychain,
+        vssStoreIdProvider = vssStoreIdProvider,
+        settingsStore = settingsStore,
+        watchOnlyAccountStore = watchOnlyAccountStore,
+        loggerLdk = loggerLdk,
+        watchOnlyAccountLifecycleCoordinator = watchOnlyAccountLifecycleCoordinator,
+        ldkQueue = ServiceQueue.LDK.queueContext,
+    )
 
     @Volatile
     var node: Node? = null
@@ -244,7 +267,7 @@ class LightningService @Inject constructor(
         customRgsServerUrl: String?,
         config: Config,
         channelMigration: ChannelDataMigration? = null,
-    ): Node = ServiceQueue.LDK.background {
+    ): Node = ServiceQueue.LDK.background(ldkQueue) {
         val storedSettings = settingsStore.data.first()
         val settings = storedSettings.withRequiredNativeSegwitMonitoring()
         if (settings != storedSettings) {
@@ -343,7 +366,7 @@ class LightningService @Inject constructor(
 
         Logger.debug("Starting node…", context = TAG)
 
-        ServiceQueue.LDK.background {
+        ServiceQueue.LDK.background(ldkQueue) {
             try {
                 node.start()
             } catch (e: NodeException) {
@@ -393,7 +416,7 @@ class LightningService @Inject constructor(
             }
             val desiredConfigs = enabledOnchainWalletAccountConfigs(walletRecords, currentWalletIndex)
 
-            ServiceQueue.LDK.background {
+            ServiceQueue.LDK.background(ldkQueue) {
                 val trackedAccounts = node.listOnchainWalletAccounts()
                 val managedKeys = (walletRecords + accountsPendingRemoval).mapNotNull { record ->
                     when (record.addressType) {
@@ -453,7 +476,7 @@ class LightningService @Inject constructor(
         }
 
         Logger.debug("Stopping node…", context = TAG)
-        ServiceQueue.LDK.background {
+        ServiceQueue.LDK.background(ldkQueue) {
             runSuspendCatching { node.stop() }
                 .onFailure {
                     if (it !is NodeException.NotRunning) Logger.warn("Node stop error", it, context = TAG)
@@ -598,7 +621,7 @@ class LightningService @Inject constructor(
         reconcileWatchOnlyAccounts(syncAfterReconcile = false)
 
         Logger.verbose("Syncing LDK…", context = TAG)
-        ServiceQueue.LDK.background {
+        ServiceQueue.LDK.background(ldkQueue) {
             node.syncWallets()
         }
 
@@ -611,7 +634,7 @@ class LightningService @Inject constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup()
         val msg = runCatching { message.uByteList }.getOrNull() ?: throw ServiceError.InvalidNodeSigningMessage()
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             node.signMessage(msg)
         }
     }
@@ -619,7 +642,7 @@ class LightningService @Inject constructor(
     suspend fun newAddress(): String {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             node.onchainPayment().newAddress()
         }
     }
@@ -632,7 +655,7 @@ class LightningService @Inject constructor(
     suspend fun newAddressInfoForType(addressType: AddressType): AddressDerivationInfo {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             val addressInfo = node.onchainPayment().newAddressInfoForType(addressType.toLdkAddressType())
             AddressDerivationInfo(address = addressInfo.address, index = addressInfo.index.toInt())
         }
@@ -641,7 +664,7 @@ class LightningService @Inject constructor(
     suspend fun addressInfoForType(addressType: AddressType, receiveIndex: Int): AddressDerivationInfo {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             val addressInfo = node.onchainPayment().addressInfoForTypeAtIndex(
                 addressType.toLdkAddressType(),
                 KeychainKind.EXTERNAL,
@@ -660,7 +683,7 @@ class LightningService @Inject constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup()
         val keychain = if (isChange) KeychainKind.INTERNAL else KeychainKind.EXTERNAL
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             node.onchainPayment()
                 .addressInfosForType(
                     addressType.toLdkAddressType(),
@@ -675,7 +698,7 @@ class LightningService @Inject constructor(
     suspend fun revealReceiveAddresses(toReceiveIndex: Int, forType: AddressType) {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        ServiceQueue.LDK.background {
+        ServiceQueue.LDK.background(ldkQueue) {
             node.onchainPayment().revealReceiveAddressesTo(forType.toLdkAddressType(), toReceiveIndex.toUInt())
         }
     }
@@ -684,7 +707,7 @@ class LightningService @Inject constructor(
     suspend fun connectToTrustedPeers() {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        ServiceQueue.LDK.background {
+        ServiceQueue.LDK.background(ldkQueue) {
             for (peer in trustedPeers) {
                 try {
                     node.connect(peer.nodeId, peer.address, persist = true)
@@ -721,7 +744,7 @@ class LightningService @Inject constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup()
         val uri = peer.uri
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             try {
                 Logger.debug("Connecting peer: $uri", context = TAG)
                 node.connect(peer.nodeId, peer.address, persist = true)
@@ -739,7 +762,7 @@ class LightningService @Inject constructor(
         val node = this.node ?: throw ServiceError.NodeNotSetup()
         val uri = peer.uri
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             try {
                 Logger.debug("Disconnecting peer: $uri", context = TAG)
                 node.disconnect(peer.nodeId)
@@ -774,7 +797,7 @@ class LightningService @Inject constructor(
     ): Result<OpenChannelResult> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             try {
                 val pushToCounterpartyMsat = pushToCounterpartySats?.let { it * 1000u }
                 Logger.debug("Initiating channel open (sats: '$channelAmountSats') with: '${peer.uri}'", context = TAG)
@@ -823,7 +846,7 @@ class LightningService @Inject constructor(
         }
 
         try {
-            ServiceQueue.LDK.background {
+            ServiceQueue.LDK.background(ldkQueue) {
                 Logger.debug("Initiating channel close (force=$force): '$channelId'", context = TAG)
                 if (force) {
                     node.forceCloseChannel(userChannelId, counterpartyNodeId, forceCloseReason.orEmpty())
@@ -891,7 +914,7 @@ class LightningService @Inject constructor(
 
         val message = description
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             val bolt11Invoice: Bolt11Invoice = if (amountMsat != null) {
                 node.bolt11Payment()
                     .receive(
@@ -925,7 +948,7 @@ class LightningService @Inject constructor(
             context = TAG,
         )
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             if (isMaxAmount) {
                 node.onchainPayment().sendAllToAddress(
                     address = address,
@@ -951,7 +974,7 @@ class LightningService @Inject constructor(
         val bolt11Invoice = runCatching { Bolt11Invoice.fromStr(bolt11) }
             .getOrElse { throw LdkError(it as NodeException) }
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             runCatching {
                 when (sats != null) {
                     true -> node.bolt11Payment().sendUsingAmount(bolt11Invoice, sats * 1000u, null)
@@ -966,7 +989,7 @@ class LightningService @Inject constructor(
     suspend fun estimateRoutingFees(bolt11: String): Result<ULong> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             return@background runCatching {
                 val invoice = Bolt11Invoice.fromStr(bolt11)
                 val feesMsat = node.bolt11Payment().estimateRoutingFees(invoice)
@@ -981,7 +1004,7 @@ class LightningService @Inject constructor(
     suspend fun estimateRoutingFeesForAmount(bolt11: String, amountSats: ULong): Result<ULong> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             return@background runCatching {
                 val invoice = Bolt11Invoice.fromStr(bolt11)
                 val amountMsat = amountSats * 1000u
@@ -1008,7 +1031,7 @@ class LightningService @Inject constructor(
             context = TAG
         )
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             runCatching {
                 val handles = node.bolt11Payment().sendProbes(bolt11Invoice, null)
                 Result.success(handles.map { it.paymentId }.toSet())
@@ -1032,7 +1055,7 @@ class LightningService @Inject constructor(
             context = TAG
         )
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             runCatching {
                 val handles = node.bolt11Payment().sendProbesUsingAmount(bolt11Invoice, amountMsat, null)
                 Result.success(handles.map { it.paymentId }.toSet())
@@ -1051,7 +1074,7 @@ class LightningService @Inject constructor(
             context = TAG,
         )
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             runCatching {
                 val handles = node.spontaneousPayment().sendProbes(amountMsat, nodeId)
                 Result.success(handles.map { it.paymentId }.toSet())
@@ -1075,7 +1098,7 @@ class LightningService @Inject constructor(
     suspend fun listSpendableOutputs(): Result<List<SpendableUtxo>> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             return@background runCatching {
                 val result = node.onchainPayment().listSpendableOutputs()
                 Result.success(result)
@@ -1093,7 +1116,7 @@ class LightningService @Inject constructor(
     ): Result<List<SpendableUtxo>> {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             runCatching {
                 val result = node.onchainPayment().selectUtxosWithAlgorithm(
                     targetAmountSats = targetAmountSats,
@@ -1115,7 +1138,7 @@ class LightningService @Inject constructor(
 
         Logger.info("RBF for txid='$txid' using satsPerVByte='$satsPerVByte'", context = TAG)
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             return@background try {
                 node.onchainPayment().bumpFeeByRbf(
                     txid = txid,
@@ -1136,7 +1159,7 @@ class LightningService @Inject constructor(
 
         Logger.info("CPFP for txid='$txid' using satsPerVByte='$satsPerVByte', to address='$toAddress'", context = TAG)
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             return@background try {
                 node.onchainPayment().accelerateByCpfp(
                     txid = txid,
@@ -1156,7 +1179,7 @@ class LightningService @Inject constructor(
 
         Logger.debug("Calculating CPFP fee for parentTxid $parentTxid", context = TAG)
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             return@background try {
                 node.onchainPayment().calculateCpfpFeeRate(
                     parentTxid = parentTxid,
@@ -1176,7 +1199,7 @@ class LightningService @Inject constructor(
     ): ULong {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             return@background runCatching {
                 node.onchainPayment().calculateTotalFee(
                     address = address,
@@ -1209,7 +1232,7 @@ class LightningService @Inject constructor(
     ): ULong {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             node.onchainPayment().calculateSendAllFee(
                 address = address,
                 retainReserves = true,
@@ -1268,7 +1291,7 @@ class LightningService @Inject constructor(
 
     suspend fun getAddressBalance(address: String): ULong {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             runCatching {
                 node.getAddressBalance(addressStr = address)
             }.onFailure {
@@ -1278,31 +1301,31 @@ class LightningService @Inject constructor(
     }
 
     suspend fun getBalanceForAddressType(addressType: AddressType): AddressTypeBalance =
-        ServiceQueue.LDK.background {
+        ServiceQueue.LDK.background(ldkQueue) {
             val n = node ?: throw ServiceError.NodeNotSetup()
             n.getBalanceForAddressType(addressType.toLdkAddressType())
         }
 
-    suspend fun setPrimaryAddressType(addressType: AddressType) = ServiceQueue.LDK.background {
+    suspend fun setPrimaryAddressType(addressType: AddressType) = ServiceQueue.LDK.background(ldkQueue) {
         val n = node ?: throw ServiceError.NodeNotSetup()
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
         n.setPrimaryAddressTypeWithMnemonic(addressType.toLdkAddressType(), mnemonic, passphrase)
     }
 
-    suspend fun addAddressTypeToMonitor(addressType: AddressType) = ServiceQueue.LDK.background {
+    suspend fun addAddressTypeToMonitor(addressType: AddressType) = ServiceQueue.LDK.background(ldkQueue) {
         val n = node ?: throw ServiceError.NodeNotSetup()
         val mnemonic = keychain.loadString(Keychain.Key.BIP39_MNEMONIC.name) ?: throw ServiceError.MnemonicNotFound()
         val passphrase = keychain.loadString(Keychain.Key.BIP39_PASSPHRASE.name)
         n.addAddressTypeToMonitorWithMnemonic(addressType.toLdkAddressType(), mnemonic, passphrase)
     }
 
-    suspend fun removeAddressTypeFromMonitor(addressType: AddressType) = ServiceQueue.LDK.background {
+    suspend fun removeAddressTypeFromMonitor(addressType: AddressType) = ServiceQueue.LDK.background(ldkQueue) {
         val n = node ?: throw ServiceError.NodeNotSetup()
         n.removeAddressTypeFromMonitor(addressType.toLdkAddressType())
     }
 
-    suspend fun listMonitoredAddressTypes(): List<AddressType> = ServiceQueue.LDK.background {
+    suspend fun listMonitoredAddressTypes(): List<AddressType> = ServiceQueue.LDK.background(ldkQueue) {
         val n = node ?: throw ServiceError.NodeNotSetup()
         n.listMonitoredAddressTypes().map { it.toBitkitAddressType() }
     }
@@ -1332,7 +1355,7 @@ class LightningService @Inject constructor(
 
     suspend fun listPayments(): List<PaymentDetails>? {
         val node = this.node ?: return null
-        return ServiceQueue.LDK.background {
+        return ServiceQueue.LDK.background(ldkQueue) {
             node.listPayments()
         }
     }
