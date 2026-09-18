@@ -114,6 +114,7 @@ fixtures, push notifications) live in each suite's README.
 
 | Suite | Journeys | Notes |
 | --- | --- | --- |
+| [activity](activity) | 1 | Date range sheet under rapid month taps; needs no backend, no README |
 | [amount-limits](amount-limits) | 4 | Number pad caps on all four amount screens |
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
@@ -143,6 +144,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `notification-permission/toggle-off-opens-system-settings.xml` | `toggle-off-and-system-settings-route.xml` — iOS does not deep link into system settings, so it asserts the real route in through Settings ▸ Notifications |
 | `hardware-wallet/usb-reconnect.xml` | `reconnect.xml` — over Bridge, since iOS cannot do WebUSB |
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
+| `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
