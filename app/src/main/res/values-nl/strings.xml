@@ -829,6 +829,10 @@
     <string name="wallet__activity_transfer_to_savings">Naar spaargeld</string>
     <string name="wallet__activity_transfer_to_spending">Naar bestedingssaldo</string>
     <string name="wallet__activity_tx_id">Transactie-ID</string>
+    <string name="wallet__balance_hidden_message">Veeg uw saldo om deze weer te onthullen.</string>
+    <string name="wallet__balance_hidden_title">Saldo Wallet Verborgen</string>
+    <string name="wallet__balance_unit_switched_message">Tik op uw saldo om het terug te zetten naar %1$s.</string>
+    <string name="wallet__balance_unit_switched_title">Overgeschakeld naar %1$s</string>
     <string name="wallet__boost">Boost</string>
     <string name="wallet__boost_decrease_fee">Vergoeding verlagen</string>
     <string name="wallet__boost_error_msg">Bitkit kon de transactie niet boosten.</string>
