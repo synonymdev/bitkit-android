@@ -19,6 +19,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.IntentCompat
@@ -131,6 +133,8 @@ class MainActivity : FragmentActivity() {
                 val bottomSheetOverlayState = remember { BottomSheetOverlayState() }
                 val authSheetOverlayState = remember { BottomSheetOverlayState() }
                 val isAuthenticated by appViewModel.isAuthenticated.collectAsState()
+                val focusManager = LocalFocusManager.current
+                val keyboardController = LocalSoftwareKeyboardController.current
 
                 LaunchedEffect(
                     walletExists,
@@ -158,6 +162,12 @@ class MainActivity : FragmentActivity() {
                     )
                 } else {
                     IsOnlineTracker(appViewModel)
+                    LaunchedEffect(isAuthenticated) {
+                        if (!isAuthenticated) {
+                            focusManager.clearFocus(force = true)
+                            keyboardController?.hide()
+                        }
+                    }
                     CompositionLocalProvider(LocalIsAppLocked provides !isAuthenticated) {
                         ContentView(
                             appViewModel = appViewModel,

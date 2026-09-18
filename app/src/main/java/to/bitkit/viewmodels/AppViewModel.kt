@@ -408,7 +408,28 @@ class AppViewModel @Inject constructor(
 
     fun setIsAuthenticated(value: Boolean) {
         _isAuthenticated.value = value
-        if (value) flushDeferredScan()
+        if (!value) return
+
+        markDeferredScanUnlocked()
+
+        val sheet = _currentSheet.value
+        if (sheet != null && hasDeferredScan() && canCloseSheetForDeferredScan(sheet)) {
+            Logger.info("Closing '${sheet::class.simpleName}' to flush scan deferred while locked", context = TAG)
+            hideSheet()
+            return
+        }
+
+        flushDeferredScan()
+    }
+
+    private fun canCloseSheetForDeferredScan(sheet: Sheet) = !isHighPrioritySheet(sheet) && sheet !is Sheet.QrScanner
+
+    private fun markDeferredScanUnlocked() {
+        synchronized(deferredScanLock) {
+            val queued = deferredScan ?: return
+            if (queued.suppressQuickPay) return
+            deferredScan = queued.copy(suppressQuickPay = true)
+        }
     }
 
     val pinAttemptsRemaining = keychain.pinAttemptsRemaining()
@@ -2219,16 +2240,19 @@ class AppViewModel @Inject constructor(
         contactPaymentContext: ContactPaymentContext? = null,
         preserveUntilComplete: Boolean = false,
         allowPubkyAuth: Boolean = isMainScanner,
+        suppressQuickPay: Boolean = false,
     ): Job? {
+        val deferrable = DeferredScan(
+            source = source,
+            data = data,
+            startDelay = startDelay,
+            routePubkyKeys = routePubkyKeys,
+            contactPaymentContext = contactPaymentContext,
+            allowPubkyAuth = allowPubkyAuth,
+            suppressQuickPay = suppressQuickPay,
+        )
         if (!_isAuthenticated.value) {
-            enqueueDeferredScan(
-                source = source,
-                data = data,
-                startDelay = startDelay,
-                routePubkyKeys = routePubkyKeys,
-                contactPaymentContext = contactPaymentContext,
-                allowPubkyAuth = allowPubkyAuth,
-            )
+            enqueueDeferredScan(deferrable)
             return null
         }
 
@@ -2244,7 +2268,7 @@ class AppViewModel @Inject constructor(
         }
 
         if (scheduled?.job?.isActive == true && scheduled.mustComplete) {
-            enqueueDeferredScan(source, data, startDelay, routePubkyKeys, contactPaymentContext, allowPubkyAuth)
+            enqueueDeferredScan(deferrable)
             return null
         }
 
@@ -2252,12 +2276,10 @@ class AppViewModel @Inject constructor(
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             scanMutex.withLock {
                 if (!awaitPubkyDeeplinkInitialization(source, data, allowPubkyAuth)) return@withLock
-                if (deferLockedScan(source, data, startDelay, routePubkyKeys, contactPaymentContext, allowPubkyAuth)) {
-                    return@withLock
-                }
+                if (deferLockedScan(deferrable)) return@withLock
                 prepareContactPaymentContextForScan(normalized, allowPubkyAuth, contactPaymentContext)
                 if (startDelay > Duration.ZERO) delay(startDelay)
-                handleScan(data, routePubkyKeys, contactPaymentContext, allowPubkyAuth)
+                handleScan(data, routePubkyKeys, contactPaymentContext, allowPubkyAuth, suppressQuickPay)
             }
         }
         val nextScheduledScan = ScheduledScan(
@@ -2312,22 +2334,16 @@ class AppViewModel @Inject constructor(
     private suspend fun isPaykitUiEnabledFromSettings() =
         PaykitFeatureFlags.isUiEnabled(settingsStore.isPaykitEnabled.first())
 
-    private fun deferLockedScan(
-        source: ScanSource,
-        data: String,
-        startDelay: Duration,
-        routePubkyKeys: Boolean,
-        contactPaymentContext: ContactPaymentContext?,
-        allowPubkyAuth: Boolean,
-    ): Boolean {
+    private fun deferLockedScan(scan: DeferredScan): Boolean {
         if (_isAuthenticated.value) return false
 
         synchronized(deferredScanLock) {
             if (deferredScan == null) {
-                enqueueDeferredScan(source, data, startDelay, routePubkyKeys, contactPaymentContext, allowPubkyAuth)
+                enqueueDeferredScan(scan)
             } else {
                 Logger.info(
-                    "Skipping '${source.label}' scan because another deferred scan is queued: '${scanLogId(data)}'",
+                    "Skipping '${scan.source.label}' scan because another deferred scan is queued: " +
+                        "'${scanLogId(scan.data)}'",
                     context = TAG,
                 )
             }
@@ -2345,31 +2361,19 @@ class AppViewModel @Inject constructor(
         }
     }
 
-    private fun enqueueDeferredScan(
-        source: ScanSource,
-        data: String,
-        startDelay: Duration,
-        routePubkyKeys: Boolean,
-        contactPaymentContext: ContactPaymentContext?,
-        allowPubkyAuth: Boolean,
-    ) {
-        val scanId = scanLogId(data, contactPaymentContext)
-        val normalized = data.removeLightningSchemes()
+    private fun enqueueDeferredScan(scan: DeferredScan) {
+        val scanId = scanLogId(scan.data, scan.contactPaymentContext)
+        val normalized = scan.data.removeLightningSchemes()
         synchronized(deferredScanLock) {
             val queued = deferredScan
             if (queued?.data?.removeLightningSchemes() == normalized) {
-                if (contactPaymentContext != null) {
-                    deferredScan = DeferredScan(
-                        source = source,
-                        data = data,
-                        startDelay = startDelay,
-                        routePubkyKeys = routePubkyKeys,
-                        contactPaymentContext = contactPaymentContext,
-                        allowPubkyAuth = allowPubkyAuth,
-                    )
+                val suppressQuickPay = scan.suppressQuickPay || queued.suppressQuickPay
+                if (scan.contactPaymentContext != null) {
+                    deferredScan = scan.copy(suppressQuickPay = suppressQuickPay)
                     return
                 }
-                Logger.info("Skipping duplicate queued scan from '${source.label}': '$scanId'", context = TAG)
+                deferredScan = queued.copy(suppressQuickPay = suppressQuickPay)
+                Logger.info("Skipping duplicate queued scan from '${scan.source.label}': '$scanId'", context = TAG)
                 return
             }
             if (queued != null) {
@@ -2379,21 +2383,16 @@ class AppViewModel @Inject constructor(
                     context = TAG,
                 )
             }
-            deferredScan = DeferredScan(
-                source = source,
-                data = data,
-                startDelay = startDelay,
-                routePubkyKeys = routePubkyKeys,
-                contactPaymentContext = contactPaymentContext,
-                allowPubkyAuth = allowPubkyAuth,
-            )
+            deferredScan = scan
         }
-        Logger.info("Queuing '${source.label}' scan for deferred handling: '$scanId'", context = TAG)
+        Logger.info("Queuing '${scan.source.label}' scan for deferred handling: '$scanId'", context = TAG)
     }
+
+    private fun hasDeferredScan() = synchronized(deferredScanLock) { deferredScan != null }
 
     private fun isScanPendingOrActive(): Boolean {
         if (scheduledScan?.job?.isActive == true) return true
-        return synchronized(deferredScanLock) { deferredScan != null }
+        return hasDeferredScan()
     }
 
     private fun isPaymentRequestPresentationBlocked() = isPaymentRequestIdentityActivating ||
@@ -2425,6 +2424,7 @@ class AppViewModel @Inject constructor(
             contactPaymentContext = pending.contactPaymentContext,
             preserveUntilComplete = true,
             allowPubkyAuth = pending.allowPubkyAuth,
+            suppressQuickPay = pending.suppressQuickPay,
         )
     }
 
@@ -2827,6 +2827,7 @@ class AppViewModel @Inject constructor(
         routePubkyKeys: Boolean,
         contactPaymentContext: ContactPaymentContext?,
         allowPubkyAuth: Boolean,
+        suppressQuickPay: Boolean,
     ) = withContext(bgDispatcher) {
         if (rejectPubkyAuthScan(result, allowPubkyAuth, contactPaymentContext)) return@withContext
 
@@ -2924,7 +2925,7 @@ class AppViewModel @Inject constructor(
             .onSuccess { logDecodedScan(it, isPaymentRequest) }
             .getOrNull()
 
-        handleDecodedScan(scan, input, fromMainScanner)
+        handleDecodedScan(scan, input, fromMainScanner, suppressQuickPay)
     }
 
     private fun logDecodedScan(scan: Scanner, isPaymentRequest: Boolean) {
@@ -2940,6 +2941,7 @@ class AppViewModel @Inject constructor(
         scan: Scanner?,
         input: String,
         fromMainScanner: Boolean,
+        suppressQuickPay: Boolean,
     ) {
         if (activeHardwareWalletId != null && scan != null && scan !is Scanner.OnChain) {
             if (activeIncomingPaymentRequest() != null) {
@@ -2960,9 +2962,9 @@ class AppViewModel @Inject constructor(
         }
 
         when (scan) {
-            is Scanner.OnChain -> onScanOnchain(scan.invoice, input, fromMainScanner)
-            is Scanner.Lightning -> onScanLightning(scan.invoice, input, fromMainScanner)
-            is Scanner.LnurlPay -> onScanLnurlPay(scan.data, fromMainScanner)
+            is Scanner.OnChain -> onScanOnchain(scan.invoice, input, fromMainScanner, suppressQuickPay)
+            is Scanner.Lightning -> onScanLightning(scan.invoice, input, fromMainScanner, suppressQuickPay)
+            is Scanner.LnurlPay -> onScanLnurlPay(scan.data, fromMainScanner, suppressQuickPay)
             is Scanner.LnurlWithdraw -> handleNonPaymentScan { onScanLnurlWithdraw(scan.data, fromMainScanner) }
             is Scanner.LnurlAuth -> handleNonPaymentScan { onScanLnurlAuth(scan.data, fromMainScanner) }
             is Scanner.LnurlChannel -> handleNonPaymentScan { onScanLnurlChannel(scan.data) }
@@ -3165,6 +3167,7 @@ class AppViewModel @Inject constructor(
         invoice: OnChainInvoice,
         scanResult: String,
         fromMainScanner: Boolean,
+        suppressQuickPay: Boolean,
     ) {
         val validatedAddress = runCatching { coreService.validateBitcoinAddress(invoice.address) }
             .getOrElse {
@@ -3289,6 +3292,7 @@ class AppViewModel @Inject constructor(
                 amountSats = lnAmountSats,
                 invoice = lnInvoice,
                 fromMainScanner = fromMainScanner,
+                suppressQuickPay = suppressQuickPay,
             )
             if (quickPayHandled) return
 
@@ -3403,6 +3407,7 @@ class AppViewModel @Inject constructor(
         invoice: LightningInvoice,
         scanResult: String,
         fromMainScanner: Boolean,
+        suppressQuickPay: Boolean,
     ) {
         if (invoice.isExpired) {
             if (clearIncomingPaymentRequestTarget()) return
@@ -3426,6 +3431,7 @@ class AppViewModel @Inject constructor(
             amountSats = amount,
             invoice = invoice,
             fromMainScanner = fromMainScanner,
+            suppressQuickPay = suppressQuickPay,
         )
         if (quickPayHandled) return
 
@@ -3467,7 +3473,7 @@ class AppViewModel @Inject constructor(
         navigateToSendRoute(fromMainScanner, SendRoute.Amount, SendEffect.NavigateToAmount)
     }
 
-    private suspend fun onScanLnurlPay(data: LnurlPayData, fromMainScanner: Boolean) {
+    private suspend fun onScanLnurlPay(data: LnurlPayData, fromMainScanner: Boolean, suppressQuickPay: Boolean) {
         Logger.debug("LNURL: $data", context = TAG)
 
         val isFixed = data.isFixedAmount()
@@ -3517,6 +3523,7 @@ class AppViewModel @Inject constructor(
                 amountSats = initialAmount,
                 lnurlPay = data,
                 fromMainScanner = fromMainScanner,
+                suppressQuickPay = suppressQuickPay,
             )
             if (quickPayHandled) return
 
@@ -3658,9 +3665,14 @@ class AppViewModel @Inject constructor(
     private suspend fun handleQuickPayIfApplicable(
         amountSats: ULong,
         fromMainScanner: Boolean,
+        suppressQuickPay: Boolean,
         lnurlPay: LnurlPayData? = null,
         invoice: LightningInvoice? = null,
     ): Boolean {
+        if (suppressQuickPay) {
+            Logger.info("Skipping QuickPay for '$amountSats' sats deferred across the lock", context = TAG)
+            return false
+        }
         if (hasActiveContactPaymentContext()) return false
         val invoiceHash = invoice?.paymentHash?.toHex()?.takeIf { it.isNotBlank() }
         val open = invoiceHash != null && quickPayRepo.hasOpen(invoiceHash)
@@ -5692,6 +5704,7 @@ private data class DeferredScan(
     val routePubkyKeys: Boolean,
     val contactPaymentContext: ContactPaymentContext?,
     val allowPubkyAuth: Boolean,
+    val suppressQuickPay: Boolean,
 )
 
 // region send contract

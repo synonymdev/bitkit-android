@@ -21,7 +21,7 @@ val LocalBalances = compositionLocalOf { BalanceState() }
 val LocalCurrencies = compositionLocalOf { CurrencyState() }
 val LocalIs24HourFormat = compositionLocalOf { false }
 
-/** True while the PIN screen covers the wallet; window-based dialogs and sheets must not render. */
+/** True while the PIN screen covers the wallet; dialogs owning their own window must not render. */
 val LocalIsAppLocked = compositionLocalOf { false }
 
 // Statics
