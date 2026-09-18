@@ -286,7 +286,7 @@ fun HomeScreen(
         onRefresh = {
             activityListViewModel.resync()
             walletViewModel.onPullToRefresh()
-            homeViewModel.refreshWidgets()
+            homeViewModel.onPullToRefresh()
         },
         onRemoveSuggestion = { suggestion ->
             homeViewModel.removeSuggestion(suggestion)

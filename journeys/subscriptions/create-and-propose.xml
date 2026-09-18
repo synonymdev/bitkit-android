@@ -1,0 +1,26 @@
+<journey name="Create And Propose Subscription">
+  <description>
+    Creator side. Builds a subscription from the Subscriptions overview and proposes it to a saved,
+    linked contact, ending on the sent confirmation and the new row in the CREATED section. Requires
+    the two linked Bitkit instances described in README.md.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app with Paykit UI enabled and the payer instance saved as a contact linked on receiver path "bitkit/wallet"</action>
+    <action>Open the drawer menu and tap Subscriptions</action>
+    <action>Verify the Subscriptions screen (testTag "SubscriptionsScreen") appears with the Overview tab (testTag "Tab-overview") selected</action>
+    <action>Tap Create (testTag "SubscriptionCreate")</action>
+    <action>Verify the create sheet (testTag "CreateSubscription") appears with Choose Recipient disabled</action>
+    <action>Tap the amount pencil, enter "5000" on the keypad, and tap Continue</action>
+    <action>Verify the amount reads 5,000 sats</action>
+    <action>Type "Journey Sub" into the subscription name field (testTag "SubscriptionName")</action>
+    <action>Type a short description into the description field (testTag "SubscriptionDescription"), so the payer's detail screen offers More Info later</action>
+    <action>Verify the frequency selector has "Monthly" selected</action>
+    <action>Tap Choose Recipient (testTag "SubscriptionChooseRecipient"), now enabled</action>
+    <action>Verify the recipient step lists the linked contact under CONTACTS and that Propose Subscription (testTag "SubscriptionPropose") is disabled</action>
+    <action>Tap the linked contact row and verify it shows the selected checkmark</action>
+    <action>Tap Propose Subscription (testTag "SubscriptionPropose")</action>
+    <action>Verify the sent confirmation (testTag "SubscriptionProposalSent") shows headline "Sent Proposal", the recipient contact, and the subscription name with 5,000 sats</action>
+    <action>Tap OK</action>
+    <action>Verify a row for "Journey Sub" appears in the CREATED section with subtitle "Proposal sent"</action>
+  </actions>
+</journey>
