@@ -89,6 +89,8 @@ class WipeWalletUseCase @Inject constructor(
 
     private suspend fun wipeLocal(walletIndex: Int, resetWalletState: () -> Unit): Result<Unit> {
         lightningRepo.wipeStorage(walletIndex).onFailure { return Result.failure(it) }
+        step("clear post-migration sync flag") { migrationService.setNeedsPostMigrationSync(false) }
+        step("clear migration data") { migrationService.cleanupAfterMigration() }
         step("clear Paykit address reservations") { privatePaykitAddressReservationRepo.clear() }
         step("wipe Pubky local state") { pubkyRepo.wipeLocalState() }
         val keychainWiped = step("wipe keychain") { keychain.wipe() }

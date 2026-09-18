@@ -461,14 +461,31 @@ class BlocktankRepo @Inject constructor(
         orderId: String,
         refresh: Boolean = false,
     ): Result<IBtOrder?> = withContext(bgDispatcher) {
-        runCatching {
+        runSuspendCatching {
             if (refresh) {
                 refreshOrders().getOrThrow()
             }
             val order = _blocktankState.value.orders.find { it.id == orderId }
-            return@runCatching order
+            return@runSuspendCatching order
         }.onFailure {
             Logger.error("Failed to get order: $orderId", it, context = TAG)
+        }
+    }
+
+    /** Fetches [orderIds] from the LSP, including orders the local cache has never seen, and caches them. */
+    suspend fun fetchOrders(orderIds: List<String>): Result<List<IBtOrder>> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            val fetched = coreService.blocktank.orders(orderIds = orderIds, refresh = true)
+            val fetchedById = fetched.associateBy { it.id }
+            _blocktankState.update { state ->
+                val cachedIds = state.orders.map { it.id }.toSet()
+                val updated = state.orders.map { fetchedById[it.id] ?: it } +
+                    fetched.filterNot { it.id in cachedIds }
+                state.copy(orders = updated.toImmutableList())
+            }
+            fetched
+        }.onFailure {
+            Logger.warn("Failed to fetch orders '$orderIds'", it, context = TAG)
         }
     }
 
