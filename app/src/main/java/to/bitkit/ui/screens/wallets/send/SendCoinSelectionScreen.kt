@@ -85,7 +85,7 @@ fun SendCoinSelectionScreen(
         viewModel.setOnchainActivities(onchainActivities.orEmpty())
     }
 
-    Content(
+    SendCoinSelectionContent(
         uiState = uiState,
         tagsByTxId = tagsByTxId,
         onBack = onBack,
@@ -97,7 +97,7 @@ fun SendCoinSelectionScreen(
 }
 
 @Composable
-private fun Content(
+fun SendCoinSelectionContent(
     uiState: CoinSelectionUiState,
     modifier: Modifier = Modifier,
     tagsByTxId: ImmutableMap<String, ImmutableList<String>> = persistentMapOf(),
@@ -290,7 +290,7 @@ private fun UtxoRow(
 private fun Preview() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendCoinSelectionContent(
                 uiState = CoinSelectionUiState(
                     availableUtxos = listOf(
                         SpendableUtxo(outpoint = OutPoint(txid = "abc123", vout = 0u), valueSats = 50000uL),
@@ -319,7 +319,7 @@ private fun Preview() {
 private fun PreviewEmpty() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendCoinSelectionContent(
                 uiState = CoinSelectionUiState(
                     availableUtxos = persistentListOf(),
                     totalRequiredSat = 1000uL,
@@ -338,7 +338,7 @@ private fun PreviewEmpty() {
 private fun PreviewLoading() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendCoinSelectionContent(
                 uiState = CoinSelectionUiState(
                     isLoading = true,
                 ),
@@ -353,7 +353,7 @@ private fun PreviewLoading() {
 private fun PreviewLoadError() {
     AppThemeSurface {
         BottomSheetPreview {
-            Content(
+            SendCoinSelectionContent(
                 uiState = CoinSelectionUiState(
                     loadError = AppError("Node is not setup"),
                 ),
