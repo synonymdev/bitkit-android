@@ -1,0 +1,26 @@
+<journey name="critical update during onboarding">
+  <description>
+    Proves the mandatory update screen blocks the app before a wallet exists, not only on the home
+    screen (synonymdev/bitkit-android#804). MainActivity shows CriticalUpdateScreen ahead of the
+    migration, onboarding and wallet branches, so nothing else is composed while it is up.
+    Preconditions: a non-debug build, because debug builds skip the release check; the release.json
+    served at Env.RELEASE_URL lists an Android build marked critical with a buildNumber higher than
+    the installed VERSION_CODE; a fresh install with no wallet, so onboarding is what launches. Use a
+    throwaway device or AVD: never wipe a funded wallet to reach onboarding.
+    The screen has no testTags, so the steps assert its visible text. The headline is uppercased and
+    carries a line break, so it reads "UPDATE" then "BITKIT NOW". Toggling the release to
+    non-critical is the negative check: onboarding then stays on the Terms of Use screen.
+  </description>
+  <actions>
+    <action>Launch the app</action>
+    <action>Wait up to 10 seconds for the release check to finish</action>
+    <action>Verify that "Critical Update", the "UPDATE" / "BITKIT NOW" headline and "Update Bitkit" are visible</action>
+    <action>Verify that the Terms of Use screen (tag "TOS") is not visible</action>
+    <action>Press the system back button</action>
+    <action>Verify that the app closed to the launcher instead of revealing onboarding</action>
+    <action>Launch the app again</action>
+    <action>Verify that "Critical Update" is visible again once the release check finishes</action>
+    <action>Tap "Update Bitkit"</action>
+    <action>Verify that the Play Store (or a browser) opens the Bitkit listing</action>
+  </actions>
+</journey>
