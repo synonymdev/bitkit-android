@@ -117,6 +117,7 @@ fixtures, push notifications) live in each suite's README.
 | [activity](activity) | 1 | Date range sheet under rapid month taps; needs no backend, no README |
 | [amount-limits](amount-limits) | 4 | Number pad caps on all four amount screens |
 | [backup-restore](backup-restore) | 1 | VSS restore keeps tags and closed channels; wipes the wallet |
+| [backup](backup) | 1 | Clearing a wrong word on Confirm Recovery Phrase; throwaway wallet only, no README |
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
@@ -154,6 +155,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
+| `backup/confirm-mnemonic-clear-wrong-word.xml` | not ported — `BackupConfirmMnemonic.swift` clears only the last word by its chip, with no red-word tap |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
 | `tags/activity-tag-length-cap.xml` | not ported — iOS has no 20-character cap on tag input |
@@ -186,6 +188,7 @@ and Settings (`Tab-general`, `Tab-security`, `Tab-advanced`, `NavigationBack`, `
 | External amount available | — | `ExternalAmountAvailable` |
 | Background payments setting row | `BackgroundPaymentSettings` | `NotificationsSettings` |
 | Send over-max toast | — *(no tag; assert it from a screenshot)* | `SendAmountExceededToast` |
+| Confirm mnemonic selected slot | `SelectedWord-<n>` | — *(no identifier on `ConfirmWordView` rows)* |
 | Widgets intro screen container | — | `WidgetsOnboarding` |
 | Home suggestion cards | `Suggestion-<id>` | — *(cards expose no identifier)* |
 | Receive QR copy button | `ReceiveCopyQR` | `ReceiveCopyQR` *(absent from `snapshot-ui` targets; see below)* |
