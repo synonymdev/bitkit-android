@@ -798,6 +798,27 @@ class LightningRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `awaitNodeId should return last known id when restart after stop fails`() = test {
+        val testNodeId = "test_node_id"
+        whenever(lightningService.nodeId).thenReturn(testNodeId)
+        startNodeForTesting()
+        assertEquals(testNodeId, sut.awaitNodeId())
+
+        whenever(lightningService.stop()).thenReturn(Unit)
+        sut.stop()
+        whenever(lightningService.nodeId).thenReturn(null)
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenThrow(IllegalStateException("electrum server unreachable"))
+
+        assertTrue(sut.start(shouldRetry = false).isFailure)
+        assertIs<NodeLifecycleState.ErrorStarting>(sut.lightningState.value.nodeLifecycleState)
+
+        assertEquals(testNodeId, sut.awaitNodeId())
+        assertEquals(testNodeId, sut.getLastKnownNodeId())
+    }
+
+    @Test
     fun `getBalances should return null when node is not running`() = test {
         assertNull(sut.getBalances())
     }

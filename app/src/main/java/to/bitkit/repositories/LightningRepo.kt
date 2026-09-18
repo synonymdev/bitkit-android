@@ -299,7 +299,6 @@ class LightningRepo @Inject constructor(
         channelMigration: ChannelDataMigration? = null,
     ) = withContext(bgDispatcher) {
         runCatching {
-            lastKnownNodeId = null
             val trustedPeers = fetchTrustedPeers()
             lightningService.setup(
                 walletIndex,
@@ -825,9 +824,9 @@ class LightningRepo @Inject constructor(
         lifecycleMutex.withLock {
             stopLocked().mapCatching {
                 Logger.debug("node stopped, calling wipeStorage", context = TAG)
+                lastKnownNodeId = null
                 lightningService.wipeStorage(walletIndex)
                 clearProbeOutcomes()
-                lastKnownNodeId = null
                 _lightningState.update {
                     LightningState(
                         nodeStatus = it.nodeStatus,
@@ -1662,7 +1661,8 @@ class LightningRepo @Inject constructor(
 
     /**
      * Node id of the current node, falling back to the one observed while it last ran.
-     * The id is cleared on node setup and storage wipe, so it always belongs to the active wallet.
+     * The id is derived from the wallet mnemonic and only cleared on storage wipe, which is the
+     * single path to another mnemonic, so it always belongs to the active wallet.
      */
     fun getLastKnownNodeId(): String? = getNodeId() ?: lastKnownNodeId
 
