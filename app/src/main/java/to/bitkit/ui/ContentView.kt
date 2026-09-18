@@ -36,6 +36,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.NavController
 import androidx.navigation.NavDestination.Companion.hasRoute
+import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.NavOptionsBuilder
@@ -2081,12 +2082,12 @@ fun NavController.navigateToTransferSavingsAvailability() = navigateTo(Routes.Sa
 
 /**
  * Exits the savings transfer to home. The coop close retry job holds on to this callback for up to
- * 30 minutes, so it is ignored once the transfer flow is gone from the back stack, the way popping
- * the transfer graph used to be a no-op there.
+ * 30 minutes, so it is ignored once the transfer flow is no longer the destination on screen, the
+ * way popping the transfer graph used to be a no-op there.
  */
 fun NavController.navigateOnSavingsTransferExit() {
-    val isTransferFlowOpen = currentBackStack.value.any { it.destination.hasRoute<Routes.TransferRoot>() }
-    if (!isTransferFlowOpen) return
+    val isOnTransferFlow = currentDestination?.hierarchy?.any { it.hasRoute<Routes.TransferRoot>() } == true
+    if (!isOnTransferFlow) return
     navigateToHome()
 }
 

@@ -107,8 +107,19 @@ class ContentViewTest {
         navController.navigateOnSavingsTransferExit()
 
         assertTrue(navController.currentDestination?.hasRoute<Routes.Home>() == true)
-        assertFalse(navController.currentBackStack.value.any { it.destination.hasRoute<Routes.Spending>() })
-        assertFalse(navController.currentBackStack.value.any { it.destination.hasRoute<Routes.SavingsProgress>() })
+        assertNull(navController.previousBackStackEntry)
+    }
+
+    @Test
+    fun `savings transfer exit leaves a screen opened on top of the flow alone`() {
+        val navController = transferNavController()
+        navController.navigateToTransferSavingsAvailability()
+        navController.navigateTo(Routes.SavingsProgress)
+        navController.navigateTo(Routes.Settings)
+
+        navController.navigateOnSavingsTransferExit()
+
+        assertTrue(navController.currentDestination?.hasRoute<Routes.Settings>() == true)
     }
 
     @Test
