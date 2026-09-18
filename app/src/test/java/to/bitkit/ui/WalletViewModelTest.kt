@@ -14,6 +14,7 @@ import org.lightningdevkit.ldknode.PeerDetails
 import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doSuspendableAnswer
+import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
 import org.mockito.kotlin.times
@@ -278,6 +279,40 @@ class WalletViewModelTest : BaseUnitTest() {
 
         sut.onRestoreContinue()
         assertEquals(RestoreState.Settled, sut.restoreState.value)
+    }
+
+    @Test
+    fun `restore should hold ordinary backups from its start until it completes`() = test {
+        whenever(walletRepo.restoreWallet(any(), anyOrNull())).thenReturn(Result.success(Unit))
+        whenever(backupRepo.getLatestBackupTime()).thenReturn(1uL)
+        whenever(backupRepo.performFullRestoreFromLatestBackup()).thenReturn(Result.success(Unit))
+
+        sut.restoreWallet("mnemonic", "passphrase")
+
+        // The node starts and syncs from here, so the gate must already be closed.
+        verify(backupRepo).setRestorePending(true)
+        verify(backupRepo, never()).setRestorePending(false)
+
+        walletState.value = walletState.value.copy(walletExists = true)
+        advanceUntilIdle()
+
+        assertEquals(RestoreState.Completed, sut.restoreState.value)
+        inOrder(backupRepo) {
+            verify(backupRepo).setRestorePending(true)
+            verify(backupRepo).setRestorePending(false)
+        }
+    }
+
+    @Test
+    fun `restore should release ordinary backups when the wallet is never created`() = test {
+        whenever(walletRepo.restoreWallet(any(), anyOrNull()))
+            .thenReturn(Result.failure(Exception("restore failed")))
+
+        sut.restoreWallet("mnemonic", "passphrase")
+        advanceUntilIdle()
+
+        // Nothing reaches the restore itself, so the gate would otherwise hold until it expires.
+        verify(backupRepo).setRestorePending(false)
     }
 
     @Test

@@ -115,6 +115,7 @@ fixtures, push notifications) live in each suite's README.
 | Suite | Journeys | Notes |
 | --- | --- | --- |
 | [amount-limits](amount-limits) | 4 | Number pad caps on all four amount screens |
+| [backup-restore](backup-restore) | 1 | VSS restore keeps tags and closed channels; wipes the wallet |
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
@@ -142,6 +143,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
+| `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
