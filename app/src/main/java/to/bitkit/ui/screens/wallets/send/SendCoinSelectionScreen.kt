@@ -342,7 +342,7 @@ private fun PreviewLoading() {
                 uiState = CoinSelectionUiState(
                     isLoading = true,
                 ),
-                modifier = Modifier.sheetHeight(),
+                modifier = Modifier.sheetHeight()
             )
         }
     }
@@ -357,7 +357,7 @@ private fun PreviewLoadError() {
                 uiState = CoinSelectionUiState(
                     loadError = AppError("Node is not setup"),
                 ),
-                modifier = Modifier.sheetHeight(),
+                modifier = Modifier.sheetHeight()
             )
         }
     }
