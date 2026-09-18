@@ -1,0 +1,31 @@
+<journey name="cancelled node restart">
+  <description>
+    A node start cancelled mid-flight — the LDK Debug screen is left while its Restart is still
+    building the node — must not latch an error state: the node comes back to Running on the next
+    foreground and can still receive a Lightning payment. Precondition: onboarded dev debug build
+    (`to.bitkit.dev`) with dev mode on, a usable Lightning channel with inbound capacity, and the
+    regtest LSP reachable. Building the node takes several seconds on the emulator, which is the
+    window the back press must land in. The lifecycle lines are only in the app log, not in
+    `android layout`; read `files/logs/` through `run-as`, and list the logs again before each grep
+    because they rotate mid-run. Android only: the route runs through the Android LDK Debug screen
+    and its app-log lines.
+  </description>
+  <actions>
+    <action>Run `adb shell "run-as to.bitkit.dev ls -t files/logs/"` and note the newest log file</action>
+    <action>Open the drawer with `HeaderMenu`, tap `DrawerSettings`, tap `Tab-advanced`, tap `DevSettings`, then tap the "LDK" row</action>
+    <action>Verify the "LDK Debug" screen is visible with a "Restart" row</action>
+    <action>Tap "Restart"</action>
+    <action>Wait about 4 seconds, then tap `NavigationBack`</action>
+    <action>Verify the newest log (list the logs again) contains "Restored lifecycle state" or "Adopted running LDK node after start cancellation" or "Kept running LDK node and its event listener after start cancellation" after the "Restarting node" line</action>
+    <action>Verify the same log contains no "Node setup error" and no "Start error" line after "Restarting node"</action>
+    <action>Press the device back button until the wallet overview (tag "TotalBalance") is visible</action>
+    <action>Run `adb shell input keyevent KEYCODE_HOME`, wait 3 seconds, then run `adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity`</action>
+    <action>Verify within 30 seconds that the newest log contains "Node started" and a "Collected node support summary" line with lifecycle='Running'</action>
+    <action>Tap `Receive`, then tap `Tab-spending`</action>
+    <action>Verify the QR image (tag "QRCode") is visible on the Spending tab</action>
+    <action>Press the device back button to close the Receive sheet</action>
+    <action>Run `adb shell "content call --uri content://to.bitkit.dev.devtools --method createInvoice --arg '{\"amount\":1000,\"description\":\"cancelled-restart\"}'"` and pay the returned bolt11 via the lsp skill: ./lsp POST /regtest/channel/pay '{"invoice":"&lt;bolt11&gt;"}'</action>
+    <action>Verify the "Received Instant Bitcoin" sheet (tag "new_transaction_sheet") shows 1 000 sats</action>
+    <action>Tap `ReceivedTransactionButton` to dismiss the sheet</action>
+  </actions>
+</journey>
