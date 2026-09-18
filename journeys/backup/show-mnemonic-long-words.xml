@@ -11,11 +11,33 @@
     elements carry no testTag, so read rows from the number labels ("1." to "12.") and from the
     bounds of the word elements, never their text or content-desc.
 
-    Precondition: onboarded dev wallet with a 12-word phrase and no PIN (with a PIN, enter the
-    correct PIN when prompted and never a wrong one). Start on the wallet home screen. Restore
-    font_scale to 1.0 when done.
+    Precondition: the phrase must be known to contain long words, or the check passes for the wrong
+    reason. A random 12-word phrase has an 8-letter word next to a two-digit label only about one
+    time in eight, and on an unfixed build every other phrase renders on one line anyway. So the
+    journey restores a fixed phrase rather than revealing whatever the device already holds:
+
+      abstract awesome category mushroom mosquito document multiply mechanic marriage mountain
+      awesome mushroom
+
+    That is a public BIP39 test vector, not anyone's wallet. Its checksum is valid, so it restores.
+    It puts 8-letter words in slots 10 and 12, the two-digit positions this journey is about. It is
+    public, so anyone can spend from it: dev flavor (to.bitkit.dev, regtest) only, and never send it
+    funds.
+
+    Restoring replaces the wallet on the device — run this on a throwaway emulator, or on a device
+    whose wallet you are willing to lose. Steps 1-8 do the restore; skip them only if the device
+    already holds this exact phrase. No PIN is set after a fresh restore; if one is set, enter the
+    correct PIN when prompted and never a wrong one. Restore font_scale to 1.0 when done.
   </description>
   <actions>
+    <action>Run adb shell pm clear to.bitkit.dev</action>
+    <action>Run adb shell monkey -p to.bitkit.dev -c android.intent.category.LAUNCHER 1</action>
+    <action>On the terms screen, tap both checkboxes (testTags "Check1" and "Check2"), then tap "Continue" (testTag "Continue")</action>
+    <action>Tap "Skip" (testTag "SkipIntro") to reach the last onboarding slide</action>
+    <action>Tap "Restore" (testTag "RestoreWallet"), then confirm the multiple-devices warning (testTag "MultipleDevices-button")</action>
+    <action>Enter the 12 words of the phrase above one field at a time, tapping each field (testTags "Word-0" through "Word-11") and typing only that one word — never paste or type the whole phrase in one go, adb drops characters from long strings</action>
+    <action>Verify no field is marked invalid and no checksum error is shown, then tap "Restore" (testTag "RestoreButton")</action>
+    <action>Wait for the restore to finish and tap "Get Started" (testTag "GetStartedButton"); if the backup restore fails instead, tap "Proceed Without Backup" (testTag "ProceedWithoutBackupButton") and confirm — the phrase has no backup and the on-chain wallet is what this journey needs</action>
     <action>Run adb shell settings put system font_scale 1.3</action>
     <action>Tap the menu icon (testTag "HeaderMenu")</action>
     <action>Tap "Settings" (testTag "DrawerSettings")</action>
@@ -24,7 +46,8 @@
     <action>Verify the recovery phrase screen shows "Tap To Reveal" (testTag "TapToReveal") inside the reveal overlay (testTag "SeedContainer") covering the words box (testTag "backup_mnemonic_words_box")</action>
     <action>Tap "Tap To Reveal"</action>
     <action>Verify the words box lists 12 number labels, "1." to "12.", grouped in 6 rows of 2 with the same vertical center per row</action>
-    <action>Verify the vertical distance between consecutive rows is equal, so no word wraps onto a second line</action>
+    <action>Verify every word element inside the words box is no taller than the number label beside it. A word element is the element to the right of a number label in the same row; identify it by position and compare bounds heights only, never its text. Labels always render one line at the full size while words shrink, so a word element taller than its label has wrapped onto a second line. This is the check that matters: it catches a wrap in any slot, including 6 and 12</action>
+    <action>Verify the vertical distance between consecutive rows is equal. This is a weaker, secondary check — the two columns lay out independently and the number label sits on the word's first-line baseline, so a wrap in the last slot of a column (6 or 12) shifts nothing below it and leaves every label position unchanged. Do not treat equal pitch on its own as proof that no word wrapped</action>
     <action>Press back to close the sheet</action>
     <action>Run adb shell settings put system font_scale 1.0</action>
   </actions>
