@@ -11,6 +11,7 @@ import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import org.junit.Rule
 import org.junit.Test
@@ -19,6 +20,7 @@ import to.bitkit.test.annotations.ComposeUi
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.viewmodels.AddTagUiState
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 private const val TAG_INPUT = "TagInput"
 private const val ADD_BUTTON = "ActivityTagsSubmit"
@@ -54,12 +56,40 @@ class AddTagContentTest {
     @Test
     fun addButtonConfirmsTheTrimmedTag() {
         var confirmed: String? = null
+        setContentWithFixedInput(tagInput = "coffee shop ", onTagConfirmed = { confirmed = it })
+
+        composeTestRule.onNodeWithTag(ADD_BUTTON).performClick()
+
+        assertEquals("coffee shop", confirmed)
+    }
+
+    @Test
+    fun imeDoneConfirmsTheTrimmedTag() {
+        var confirmed: String? = null
+        setContentWithFixedInput(tagInput = "coffee shop ", onTagConfirmed = { confirmed = it })
+
+        composeTestRule.onNodeWithTag(TAG_INPUT).performImeAction()
+
+        assertEquals("coffee shop", confirmed)
+    }
+
+    @Test
+    fun imeDoneIgnoresAWhitespaceOnlyTag() {
+        var confirmed: String? = null
+        setContentWithFixedInput(tagInput = "   ", onTagConfirmed = { confirmed = it })
+
+        composeTestRule.onNodeWithTag(TAG_INPUT).performImeAction()
+
+        assertNull(confirmed)
+    }
+
+    private fun setContentWithFixedInput(tagInput: String, onTagConfirmed: (String) -> Unit) {
         composeTestRule.setContent {
             AppThemeSurface {
                 AddTagContent(
-                    uiState = AddTagUiState(tagInput = "coffee shop "),
+                    uiState = AddTagUiState(tagInput = tagInput),
                     onTagSelected = {},
-                    onTagConfirmed = { confirmed = it },
+                    onTagConfirmed = onTagConfirmed,
                     onInputUpdated = {},
                     onBack = {},
                     tagInputTestTag = TAG_INPUT,
@@ -68,10 +98,6 @@ class AddTagContentTest {
                 )
             }
         }
-
-        composeTestRule.onNodeWithTag(ADD_BUTTON).performClick()
-
-        assertEquals("coffee shop", confirmed)
     }
 
     private fun setContentWithUnsanitizedState() {

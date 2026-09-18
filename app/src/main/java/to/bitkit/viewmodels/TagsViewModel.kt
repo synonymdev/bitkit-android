@@ -48,4 +48,7 @@ data class AddTagUiState(
 ) {
     /** The tag as it is stored on submit: [tagInput] without the surrounding whitespace. */
     val confirmedTag: String get() = tagInput.trim()
+
+    /** Whether [confirmedTag] is worth storing, so a blank field cannot submit an empty tag. */
+    val canSubmit: Boolean get() = confirmedTag.isNotEmpty()
 }

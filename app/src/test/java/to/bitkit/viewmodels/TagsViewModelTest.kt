@@ -10,6 +10,8 @@ import to.bitkit.data.SettingsStore
 import to.bitkit.env.Defaults
 import to.bitkit.test.BaseUnitTest
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class TagsViewModelTest : BaseUnitTest() {
     private lateinit var sut: TagsViewModel
@@ -72,5 +74,24 @@ class TagsViewModelTest : BaseUnitTest() {
         sut.onInputUpdated("   ")
 
         assertEquals("", sut.uiState.value.confirmedTag)
+    }
+
+    @Test
+    fun `canSubmit is false for an untouched field`() {
+        assertFalse(sut.uiState.value.canSubmit)
+    }
+
+    @Test
+    fun `canSubmit is false for whitespace only input`() {
+        sut.onInputUpdated("   ")
+
+        assertFalse(sut.uiState.value.canSubmit)
+    }
+
+    @Test
+    fun `canSubmit is true once the input holds a tag`() {
+        sut.onInputUpdated(" coffee ")
+
+        assertTrue(sut.uiState.value.canSubmit)
     }
 }
