@@ -7,6 +7,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -15,7 +17,9 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.persistentSetOf
 import org.junit.Rule
 import org.junit.Test
+import to.bitkit.models.PrimaryDisplay
 import to.bitkit.models.PubkyProfile
+import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDeliveryStatus
@@ -25,6 +29,7 @@ import to.bitkit.repositories.PaykitSubscription
 import to.bitkit.repositories.PaykitSubscriptionMetadata
 import to.bitkit.repositories.PaykitSubscriptionRecurrence
 import to.bitkit.test.annotations.ComposeUi
+import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.theme.AppThemeSurface
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -153,10 +158,26 @@ class PaymentRequestsScreenTest {
 
         composeTestRule.onNodeWithTag("PaymentRequestRow-accepted").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestRow-outgoing").assertIsDisplayed()
-        composeTestRule.onNodeWithText("Waiting for", substring = true).assertIsDisplayed()
+        composeTestRule.onNodeWithText("pending").assertIsDisplayed()
         composeTestRule.onNodeWithText("PAYMENT REQUESTS").assertIsDisplayed()
         composeTestRule.onNodeWithText("TODAY").assertIsDisplayed()
         composeTestRule.onNodeWithTag("PaymentRequestCreate").assertIsDisplayed()
+    }
+
+    @Test
+    fun outgoingRequestShowsPendingOnFiatLineWhenBitcoinIsPrimary() {
+        setOutgoingRequestContent(PrimaryDisplay.BITCOIN)
+
+        composeTestRule.onNodeWithTag("MoneyPrimary").assertTextContains("₿", substring = true)
+        composeTestRule.onNodeWithTag("MoneySecondary").assertTextEquals("pending")
+    }
+
+    @Test
+    fun outgoingRequestShowsPendingOnFiatLineWhenFiatIsPrimary() {
+        setOutgoingRequestContent(PrimaryDisplay.FIAT)
+
+        composeTestRule.onNodeWithTag("MoneyPrimary").assertTextEquals("pending")
+        composeTestRule.onNodeWithTag("MoneySecondary").assertTextContains("₿", substring = true)
     }
 
     @Test
@@ -210,6 +231,32 @@ class PaymentRequestsScreenTest {
         composeTestRule.onNodeWithTag("PaymentRequestCreate").assertDoesNotExist()
     }
 
+    private fun setOutgoingRequestContent(primaryDisplay: PrimaryDisplay) {
+        val outgoing = request(id = "outgoing").copy(
+            createdAt = Clock.System.now(),
+            direction = PaykitPaymentRequestDirection.Outgoing,
+            deliveryStatus = PaykitPaymentRequestDeliveryStatus.Sent,
+        )
+
+        composeTestRule.setContent {
+            PaymentRequestsTestSurface(CurrencyState(primaryDisplay = primaryDisplay)) {
+                PaymentRequestsContent(
+                    requests = persistentListOf(outgoing),
+                    pending = persistentListOf(),
+                    contacts = persistentListOf(),
+                    subscriptions = persistentListOf(),
+                    dismissingRequestIds = persistentSetOf(),
+                    canRequestPayment = true,
+                    onBack = {},
+                    onRequestPayment = {},
+                    onPay = {},
+                    onDismiss = { Result.success(Unit) },
+                    onDetails = {},
+                )
+            }
+        }
+    }
+
     private fun request(id: String = "request") = PaykitPaymentRequest(
         paymentRequestId = id,
         counterparty = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg",
@@ -246,9 +293,15 @@ class PaymentRequestsScreenTest {
 }
 
 @Composable
-private fun PaymentRequestsTestSurface(content: @Composable () -> Unit) {
+private fun PaymentRequestsTestSurface(
+    currencies: CurrencyState = CurrencyState(),
+    content: @Composable () -> Unit,
+) {
     AppThemeSurface {
-        CompositionLocalProvider(LocalInspectionMode provides true) {
+        CompositionLocalProvider(
+            LocalInspectionMode provides true,
+            LocalCurrencies provides currencies,
+        ) {
             content()
         }
     }

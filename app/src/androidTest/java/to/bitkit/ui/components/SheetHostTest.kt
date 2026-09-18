@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -29,6 +30,7 @@ import kotlin.test.assertEquals
 
 @HiltAndroidTest
 @ComposeUi
+@OptIn(ExperimentalMaterial3Api::class)
 class SheetHostTest {
     @get:Rule
     val hiltRule = HiltAndroidRule(this)
@@ -119,5 +121,35 @@ class SheetHostTest {
         composeTestRule.waitForIdle()
 
         assertEquals(0, dismissCount)
+    }
+
+    @Test
+    fun scrimDismissesSheetWhileOpening() {
+        composeTestRule.mainClock.autoAdvance = false
+        var dismissCount = 0
+        composeTestRule.setContent {
+            AppThemeSurface {
+                SheetHost(
+                    shouldExpand = true,
+                    onDismiss = { dismissCount++ },
+                    sheets = {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(320.dp)
+                                .testTag("OpeningSheet")
+                        )
+                    },
+                    content = { Box(Modifier.fillMaxSize()) },
+                )
+            }
+        }
+        composeTestRule.mainClock.advanceTimeByFrame()
+
+        composeTestRule.onRoot().performTouchInput { click(Offset(center.x, 50f)) }
+        composeTestRule.mainClock.advanceTimeBy(1_000)
+        composeTestRule.waitForIdle()
+
+        assertEquals(1, dismissCount)
     }
 }
