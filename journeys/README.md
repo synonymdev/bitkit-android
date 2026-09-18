@@ -125,19 +125,6 @@ journey, and a step it does not is a manual test in the PR body naming the missi
 | A Pubky identity and a two-wallet marketplace purchase | the integration fixture runtime: Pubky testnet, Paykit Server, regtest bitcoind and Fulcrum — [pubky-marketplace](pubky-marketplace/README.md) |
 | Deep links, addresses and invoices handed to the app | `adb shell am start -a android.intent.action.VIEW -d "<uri>"`; `bitkit://` screen and sheet routes sit behind the dev-mode gate — [Running a journey](#running-a-journey), [deeplinks](deeplinks) |
 
-## Suites
-
-| Suite | Journeys | Notes |
-| --- | --- | --- |
-| [amount-limits](amount-limits) | 4 | Number pad caps on all four amount screens |
-| [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
-| [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
-| [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
-| [notification-permission](notification-permission) | 4 | Background-setup toggles |
-| [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
-| [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
-| [widgets](widgets) | 2 | Needs no backend — the quickest way to see the loop work; no README |
-
 ## Cross-platform
 
 These journeys are also carried by [`bitkit-ios/journeys`](https://github.com/synonymdev/bitkit-ios/tree/main/journeys),
