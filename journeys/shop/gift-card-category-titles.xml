@@ -1,0 +1,26 @@
+<journey name="gift card category titles">
+  <description>
+    Proves the Shop Discover gift card category rows render their titles from string resources and
+    pass the same localized title to the gift card web view. Precondition: onboarded debug build,
+    dev mode on (the screen deeplink is debug-only and gated on it), device and app locale English,
+    network access to Bitrefill.
+    Category titles fall back to English in a locale whose Transifex strings do not yet carry the
+    other__shop__categories__* keys; "VoIP" is not translatable and stays "VoIP" in every locale.
+    The screen deeplink skips the Shop intro without marking it seen; iOS has no screen router, so a
+    port reaches Shop Discover through the drawer's Shop entry instead.
+  </description>
+  <actions>
+    <action>Run `adb shell am start -W -a android.intent.action.VIEW -d "bitkit://screen/shop-discover" to.bitkit.dev`</action>
+    <action>Verify that the Shop Discover screen is visible with the "Tab-shop" and "Tab-map" tabs and a "GIFT CARD CATEGORIES" header</action>
+    <action>Scroll the category list to the end and verify these 22 rows appear in order: "Apparel", "Automobiles", "Cruises", "Ecommerce", "Electronics", "Entertainment", "Experiences", "Flights", "Food", "Food Delivery", "Games", "Gifts", "Groceries", "Health &amp; Beauty", "Home", "Multi-Brand", "Pets", "Restaurants", "Retail", "Streaming", "Travel", "VoIP"</action>
+    <action>Tap "Food Delivery"</action>
+    <action>Verify that the top bar title reads "Shop Food Delivery"</action>
+    <action>Wait for the web view to load, then take a screenshot and verify the Bitrefill Food Delivery listing is visible</action>
+    <action>Press the device back button</action>
+    <action>Run `adb shell cmd locale set-app-locales to.bitkit.dev --locales de`, then `adb shell am force-stop to.bitkit.dev` and relaunch the app</action>
+    <action>Run `adb shell am start -W -a android.intent.action.VIEW -d "bitkit://screen/shop-discover" to.bitkit.dev`</action>
+    <action>Verify that the app did not crash, the Map tab reads "Karte", and every category row shows either its German translation or its English title</action>
+    <action>Run `adb shell cmd locale set-app-locales to.bitkit.dev --locales ''`, then `adb shell am force-stop to.bitkit.dev` and relaunch the app</action>
+    <action>Verify that the wallet overview is visible in English</action>
+  </actions>
+</journey>
