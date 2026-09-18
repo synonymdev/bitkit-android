@@ -22,8 +22,11 @@ import java.io.InputStream
 import java.io.Writer
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.security.cert.CertPathValidatorException
+import java.security.cert.CertificateException
 import javax.inject.Inject
 import javax.inject.Singleton
+import javax.net.ssl.SSLPeerUnverifiedException
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.SSLSocketFactory
 import kotlin.time.Duration.Companion.seconds
@@ -117,7 +120,7 @@ class ElectrumProbeService @Inject constructor(
             ssl
         }.getOrElse {
             plain.runCatching { close() }
-            throw ElectrumProbeError.ProtocolMismatch(server, it)
+            throw it.toTlsProbeError(server)
         }
     }
 
@@ -216,12 +219,41 @@ private data class RpcResponse(
 
 private fun JsonElement?.isNullOrJsonNull() = this == null || this is JsonNull
 
+/** Depth the handshake failure's cause chain is walked to, enough for JSSE's wrapping and cycle-proof. */
+private const val MAX_CAUSE_DEPTH = 8
+
+// A failed TLS handshake is only evidence of the wrong protocol or port when the peer did not speak
+// TLS at all. A server that presented a certificate Bitkit does not trust — self-signed Fulcrum or
+// electrs on its SSL port — has the protocol right, so it must not be told to check it.
+internal fun Throwable.toTlsProbeError(server: ElectrumServer): ElectrumProbeError =
+    if (isCertificateFailure()) {
+        ElectrumProbeError.UntrustedCertificate(server, this)
+    } else {
+        ElectrumProbeError.ProtocolMismatch(server, this)
+    }
+
+private fun Throwable.isCertificateFailure(): Boolean {
+    var cause: Throwable? = this
+    var depth = 0
+    while (cause != null && depth < MAX_CAUSE_DEPTH) {
+        when (cause) {
+            is CertificateException, is CertPathValidatorException, is SSLPeerUnverifiedException -> return true
+            else -> cause = cause.cause
+        }
+        depth++
+    }
+    return false
+}
+
 sealed class ElectrumProbeError(message: String, cause: Throwable? = null) : AppError(message, cause) {
     class Unreachable(server: ElectrumServer, cause: Throwable) :
         ElectrumProbeError("Could not reach electrum server '$server'", cause)
 
     class ProtocolMismatch(server: ElectrumServer, cause: Throwable) :
         ElectrumProbeError("Failed TLS handshake with electrum server '$server', check the protocol", cause)
+
+    class UntrustedCertificate(server: ElectrumServer, cause: Throwable) :
+        ElectrumProbeError("Rejected untrusted certificate of electrum server '$server'", cause)
 
     class NotElectrum(server: ElectrumServer, cause: Throwable? = null) :
         ElectrumProbeError("Received no electrum response from '$server'", cause)

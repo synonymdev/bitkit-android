@@ -13,10 +13,16 @@ import org.lightningdevkit.ldknode.Network
 import to.bitkit.models.ElectrumProtocol
 import to.bitkit.models.ElectrumServer
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import java.io.BufferedReader
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
+import java.net.SocketTimeoutException
+import java.security.cert.CertPathValidatorException
+import javax.net.ssl.SSLException
+import javax.net.ssl.SSLHandshakeException
+import javax.net.ssl.SSLPeerUnverifiedException
 import kotlin.concurrent.thread
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -208,6 +214,43 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
         assertEquals(1, features.getValue("id").jsonPrimitive.int)
         assertEquals("server.features", features.getValue("method").jsonPrimitive.content)
         assertTrue(features.getValue("params").jsonArray.isEmpty())
+    }
+
+    // A self-signed Fulcrum or electrs on its SSL port fails the handshake with the protocol and the
+    // port already correct, so it must not be reported as a protocol mismatch.
+    @Test
+    fun `toTlsProbeError reports an untrusted certificate chain`() {
+        val handshake = SSLHandshakeException("PKIX path building failed").apply {
+            initCause(AppError("validator failed", CertPathValidatorException("no trusted path")))
+        }
+
+        val error = handshake.toTlsProbeError(serverAt(50002, ElectrumProtocol.SSL))
+
+        assertIs<ElectrumProbeError.UntrustedCertificate>(error)
+    }
+
+    @Test
+    fun `toTlsProbeError reports an unverified peer`() {
+        val error = SSLPeerUnverifiedException("hostname mismatch")
+            .toTlsProbeError(serverAt(50002, ElectrumProtocol.SSL))
+
+        assertIs<ElectrumProbeError.UntrustedCertificate>(error)
+    }
+
+    @Test
+    fun `toTlsProbeError reports a handshake timeout as a protocol mismatch`() {
+        val error = SocketTimeoutException("Read timed out")
+            .toTlsProbeError(serverAt(50002, ElectrumProtocol.SSL))
+
+        assertIs<ElectrumProbeError.ProtocolMismatch>(error)
+    }
+
+    @Test
+    fun `toTlsProbeError reports a non tls reply as a protocol mismatch`() {
+        val error = SSLException("Unsupported or unrecognized SSL message")
+            .toTlsProbeError(serverAt(50002, ElectrumProtocol.SSL))
+
+        assertIs<ElectrumProbeError.ProtocolMismatch>(error)
     }
 
     private fun serverAt(port: Int, protocol: ElectrumProtocol = ElectrumProtocol.TCP) = ElectrumServer(

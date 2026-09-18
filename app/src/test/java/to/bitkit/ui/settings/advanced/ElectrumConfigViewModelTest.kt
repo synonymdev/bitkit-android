@@ -56,6 +56,7 @@ class ElectrumConfigViewModelTest : BaseUnitTest() {
     private val serverErrorDescription = "Bitkit could not establish a connection to Electrum."
     private val serverErrorNetwork = "This server is on a different Bitcoin network."
     private val serverErrorProtocol = "Secure connection failed."
+    private val serverErrorCertificate = "This server's certificate is not trusted."
     private val serverUpdatedTitle = "Electrum Server Updated"
     private val serverUpdatedMessage = "Successfully connected to {host}:{port}"
     private val server = ElectrumServer(host = "example.com", tcp = 50001, ssl = 50002, protocol = ElectrumProtocol.SSL)
@@ -72,6 +73,8 @@ class ElectrumConfigViewModelTest : BaseUnitTest() {
         whenever(context.getString(R.string.settings__es__server_error_description)).thenReturn(serverErrorDescription)
         whenever(context.getString(R.string.settings__es__server_error_network)).thenReturn(serverErrorNetwork)
         whenever(context.getString(R.string.settings__es__server_error_protocol)).thenReturn(serverErrorProtocol)
+        whenever(context.getString(R.string.settings__es__server_error_certificate))
+            .thenReturn(serverErrorCertificate)
         whenever(context.getString(R.string.settings__es__server_updated_title)).thenReturn(serverUpdatedTitle)
         whenever(context.getString(R.string.settings__es__server_updated_message)).thenReturn(serverUpdatedMessage)
         whenever(settingsStore.data).thenReturn(
@@ -150,6 +153,15 @@ class ElectrumConfigViewModelTest : BaseUnitTest() {
         val toast = connectAndCollectToast(Result.failure(error))
 
         assertErrorToast(serverErrorProtocol, toast)
+    }
+
+    @Test
+    fun `connectToServer shows certificate toast on untrusted certificate`() = test {
+        val error = ElectrumProbeError.UntrustedCertificate(server, AppError("PKIX path building failed"))
+
+        val toast = connectAndCollectToast(Result.failure(error))
+
+        assertErrorToast(serverErrorCertificate, toast)
     }
 
     @Test

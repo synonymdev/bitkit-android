@@ -362,5 +362,6 @@ data class ElectrumConfigUiState(
 private fun Throwable.toServerErrorDescriptionRes(): Int = when (this) {
     is ElectrumProbeError.NetworkMismatch -> R.string.settings__es__server_error_network
     is ElectrumProbeError.ProtocolMismatch -> R.string.settings__es__server_error_protocol
+    is ElectrumProbeError.UntrustedCertificate -> R.string.settings__es__server_error_certificate
     else -> R.string.settings__es__server_error_description
 }
