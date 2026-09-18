@@ -4,7 +4,12 @@
     toast before QuickPay or the Confirm screen, and a unified QR carrying an own invoice falls back
     to an on-chain send. Precondition: onboarded dev wallet, node running, a usable spending channel
     and a savings balance. The toast never reaches `android layout`; assert it from a screenshot
-    taken within ~2s of the deep link. Android only for now: `bitkit-ios` has no own-invoice guard.
+    taken within ~2s of the deep link. The unified URI has to be quoted twice: `adb shell` joins its
+    arguments and hands them to the device shell without re-escaping, so quotes written bare on the
+    host are eaten there and the device shell splits the URI at the `&amp;` before `lightning=`,
+    leaving an on-chain-only URI. Wrap the whole remote command in double quotes and the URI in
+    single quotes so one level survives to the device. Android only for now: `bitkit-ios` has no
+    own-invoice guard.
   </description>
   <actions>
     <action>Tap Receive on the home screen (tag "Receive")</action>
@@ -14,8 +19,8 @@
     <action>Run `adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;own invoice&gt;" to.bitkit.dev`</action>
     <action>Verify from a screenshot that an error toast titled "Cannot Pay Own Invoice" is visible (tag "SelfPaymentToast")</action>
     <action>Verify that the wallet overview is still visible and no Send sheet, QuickPay screen or Confirm screen opened</action>
-    <action>Run `adb shell am start -a android.intent.action.VIEW -d '&lt;unified bitcoin: URI&gt;' to.bitkit.dev`, quoting the URI so the shell keeps the `&amp;`</action>
-    <action>Verify that the send amount screen (tag "send_amount_screen") is visible with 1 000 prefilled and the SAVINGS source selected</action>
+    <action>Run `adb shell "am start -a android.intent.action.VIEW -d '&lt;unified bitcoin: URI&gt;' to.bitkit.dev"` — outer double quotes, inner single quotes, so the device shell receives the whole URI as one word (see the description)</action>
+    <action>Verify that the send amount screen (tag "send_amount_screen") is visible with 1 000 prefilled and the SAVINGS source selected; without the guard the `lightning=` param would route this to a Lightning send instead</action>
     <action>Verify that the app log contains "Skipped own lightning invoice in unified URI, defaulting to onchain"</action>
     <action>Tap Continue (tag "ContinueAmount"), then tap Show Details (tag "SendConfirmToggleDetails")</action>
     <action>Verify that the Confirm screen shows FROM Savings and TO the wallet's own on-chain address (tag "ReviewUri"); do not swipe to pay</action>
