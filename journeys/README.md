@@ -116,7 +116,7 @@ fixtures, push notifications) live in each suite's README.
 | --- | --- | --- |
 | [amount-limits](amount-limits) | 4 | Number pad caps on all four amount screens |
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
-| [coin-selection](coin-selection) | 1 | Manual coin selection load on the Send sheet; no README |
+| [coin-selection](coin-selection) | 2 | Manual coin selection: no Auto row, and the load/retry behaviour; needs 3+ on-chain UTXOs; no README |
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
 | [notification-permission](notification-permission) | 4 | Background-setup toggles |
@@ -141,6 +141,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `notification-permission/toggle-off-opens-system-settings.xml` | `toggle-off-and-system-settings-route.xml` — iOS does not deep link into system settings, so it asserts the real route in through Settings ▸ Notifications |
 | `hardware-wallet/usb-reconnect.xml` | `reconnect.xml` — over Bridge, since iOS cannot do WebUSB |
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
+| `coin-selection/manual-coin-selection.xml` | not ported |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
