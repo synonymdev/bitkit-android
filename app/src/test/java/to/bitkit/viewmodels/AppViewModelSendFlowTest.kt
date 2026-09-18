@@ -6494,6 +6494,87 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `LNURL pay comment is saved and applied as the activity note`() = test {
+        val paymentHash = "010203"
+        val bolt11 = "lnbcrt1lnurlcomment"
+        stubLnurlPayment(bolt11 = bolt11, description = null, payResult = Result.success(paymentHash))
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        inOrder(activityRepo, lightningRepo) {
+            verify(activityRepo).savePendingLightningMessage(paymentHash, "thanks")
+            verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = 1_000uL)
+            verify(activityRepo).setLightningMessageIfEmpty(paymentHash, "thanks")
+        }
+        verify(activityRepo, never()).clearPendingLightningMessage(any())
+    }
+
+    @Test
+    fun `LNURL pay comment is applied when the payment is pending`() = test {
+        val paymentHash = "010203"
+        val bolt11 = "lnbcrt1lnurlpending"
+        stubLnurlPayment(
+            bolt11 = bolt11,
+            description = null,
+            payResult = Result.failure(PaymentPendingException(paymentHash)),
+        )
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(activityRepo).savePendingLightningMessage(paymentHash, "thanks")
+        verify(activityRepo).setLightningMessageIfEmpty(paymentHash, "thanks")
+        verify(activityRepo, never()).clearPendingLightningMessage(any())
+    }
+
+    @Test
+    fun `LNURL pay comment does not replace the invoice description`() = test {
+        val paymentHash = "010203"
+        val bolt11 = "lnbcrt1lnurldescription"
+        stubLnurlPayment(bolt11 = bolt11, description = "Invoice description", payResult = Result.success(paymentHash))
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+        emitNodeEvent(
+            Event.PaymentSuccessful(
+                paymentId = "payment_id",
+                paymentHash = paymentHash,
+                paymentPreimage = "preimage",
+                feePaidMsat = 10uL,
+            ),
+        )
+        advanceUntilIdle()
+
+        verify(lightningRepo).payInvoice(bolt11 = bolt11, sats = 1_000uL)
+        verify(activityRepo, never()).savePendingLightningMessage(any(), any())
+        verify(activityRepo, never()).setLightningMessageIfEmpty(any(), any())
+    }
+
+    @Test
+    fun `failed LNURL payment clears the pending comment`() = test {
+        val paymentHash = "010203"
+        val bolt11 = "lnbcrt1lnurlfailed"
+        stubLnurlPayment(bolt11 = bolt11, description = null, payResult = Result.failure(AppError("boom")))
+
+        sut.setSendEvent(SendEvent.PayConfirmed)
+        advanceUntilIdle()
+
+        verify(activityRepo).savePendingLightningMessage(paymentHash, "thanks")
+        verify(activityRepo).clearPendingLightningMessage(paymentHash)
+        verify(activityRepo, never()).setLightningMessageIfEmpty(any(), any())
+    }
+
+    @Test
     fun `channel ready refreshes public Paykit endpoints when sharing enabled`() = test {
         enablePublicPaykitSharing()
         advanceUntilIdle()
@@ -6848,6 +6929,35 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         thresholdSats?.let {
             whenever(currencyRepo.convertFiatToSats(5.0, "USD")).thenReturn(Result.success(it))
         }
+    }
+
+    private suspend fun stubLnurlPayment(bolt11: String, description: String?, payResult: Result<String>) {
+        val data = LnurlPayData(
+            uri = "lnurl1comment",
+            callback = "https://example.com/callback",
+            minSendable = 1_000uL,
+            maxSendable = 100_000_000uL,
+            metadataStr = "[]",
+            commentAllowed = 100u,
+            allowsNostr = false,
+            nostrPubkey = null,
+        )
+        balanceState.value = BalanceState(maxSendLightningSats = 100_000u)
+        whenever { lightningRepo.fetchLnurlInvoice(data, 1_000_000uL, "thanks") }
+            .thenReturn(Result.success(lightningInvoice(bolt11, amountSats = 0uL).copy(description = description)))
+        whenever { lightningRepo.payInvoice(bolt11 = bolt11, sats = 1_000uL) }.thenReturn(payResult)
+        whenever { activityRepo.savePendingLightningMessage(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { activityRepo.setLightningMessageIfEmpty(any(), any()) }.thenReturn(Result.success(Unit))
+        whenever { activityRepo.clearPendingLightningMessage(any()) }.thenReturn(Result.success(Unit))
+        setSendState(
+            SendUiState(
+                address = data.uri,
+                amount = 1_000uL,
+                payMethod = SendMethod.LIGHTNING,
+                lnurl = LnurlParams.LnurlPay(data),
+                comment = "thanks",
+            ),
+        )
     }
 
     private suspend fun stubLightningScan(bolt11: String, amountSats: ULong) {

@@ -19,6 +19,7 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.argThat
 import org.mockito.kotlin.doReturn
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.never
@@ -1373,6 +1374,40 @@ class ActivityRepoTest : BaseUnitTest() {
         verify(coreService.activity, never()).update(eq(activityId), any())
         // Verify pending boost was removed (skipped)
         verify(cacheStore).removeActivityFromPendingBoost(pendingBoost)
+    }
+
+    @Test
+    fun `savePendingLightningMessage stores the message by payment hash`() = test {
+        val result = sut.savePendingLightningMessage("payment-hash", "thanks")
+
+        assertTrue(result.isSuccess)
+        verify(cacheStore).setPendingLightningMessage("payment-hash", "thanks")
+    }
+
+    @Test
+    fun `clearPendingLightningMessage removes the message for the payment hash`() = test {
+        val result = sut.clearPendingLightningMessage("payment-hash")
+
+        assertTrue(result.isSuccess)
+        verify(cacheStore).removePendingLightningMessage("payment-hash")
+    }
+
+    @Test
+    fun `setLightningMessageIfEmpty delegates to the activity service`() = test {
+        val result = sut.setLightningMessageIfEmpty("payment-hash", "thanks")
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity).setLightningMessageIfEmpty("payment-hash", "thanks")
+    }
+
+    @Test
+    fun `setLightningMessageIfEmpty returns failure when the activity service fails`() = test {
+        whenever(coreService.activity.setLightningMessageIfEmpty("payment-hash", "thanks"))
+            .doSuspendableAnswer { throw AppError("db") }
+
+        val result = sut.setLightningMessageIfEmpty("payment-hash", "thanks")
+
+        assertTrue(result.isFailure)
     }
 
     private companion object {

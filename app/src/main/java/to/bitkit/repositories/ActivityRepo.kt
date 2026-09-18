@@ -584,6 +584,42 @@ class ActivityRepo @Inject constructor(
         is Activity.Onchain -> Activity.Onchain(v1.copy(contact = normalizedKey, updatedAt = updatedAt))
     }
 
+    suspend fun savePendingLightningMessage(
+        paymentHash: String,
+        message: String,
+    ): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            cacheStore.setPendingLightningMessage(paymentHash, message)
+        }.onFailure {
+            Logger.error("Failed to save pending message for payment '$paymentHash'", it, context = TAG)
+        }
+    }
+
+    suspend fun clearPendingLightningMessage(paymentHash: String): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            cacheStore.removePendingLightningMessage(paymentHash)
+        }.onFailure {
+            Logger.error("Failed to clear pending message for payment '$paymentHash'", it, context = TAG)
+        }
+    }
+
+    /**
+     * Stores [message] on the Lightning activity for [paymentHash] unless it already holds a note.
+     *
+     * The pending message is kept for the payment sync when the activity does not exist yet.
+     */
+    suspend fun setLightningMessageIfEmpty(
+        paymentHash: String,
+        message: String,
+    ): Result<Unit> = withContext(bgDispatcher) {
+        runSuspendCatching {
+            coreService.activity.setLightningMessageIfEmpty(paymentHash, message)
+            notifyActivitiesChanged()
+        }.onFailure {
+            Logger.error("Failed to set message for payment '$paymentHash'", it, context = TAG)
+        }
+    }
+
     suspend fun getClosedChannels(
         sortDirection: SortDirection = SortDirection.ASC,
     ): Result<List<ClosedChannelDetails>> = withContext(bgDispatcher) {
