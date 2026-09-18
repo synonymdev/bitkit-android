@@ -33,7 +33,7 @@ class AddTagContentTest {
 
     @Test
     fun tagInputStopsAtTheTagMaxLength() {
-        setContentWithUnsanitizedState()
+        setContentStoringRawInput()
 
         composeTestRule.onNodeWithTag(TAG_INPUT)
             .performTextInput("a".repeat(Defaults.TAG_MAX_LENGTH + 5))
@@ -46,7 +46,7 @@ class AddTagContentTest {
 
     @Test
     fun tagInputStripsLineBreaksWhileTyping() {
-        setContentWithUnsanitizedState()
+        setContentStoringRawInput()
 
         composeTestRule.onNodeWithTag(TAG_INPUT).performTextInput("coffee\nshop")
 
@@ -100,7 +100,7 @@ class AddTagContentTest {
         }
     }
 
-    private fun setContentWithUnsanitizedState() {
+    private fun setContentStoringRawInput() {
         composeTestRule.setContent {
             AppThemeSurface {
                 var uiState by remember { mutableStateOf(AddTagUiState()) }
@@ -108,7 +108,6 @@ class AddTagContentTest {
                     uiState = uiState,
                     onTagSelected = {},
                     onTagConfirmed = {},
-                    // Stores the raw text, so only the field's inputTransform can cap or sanitize it
                     onInputUpdated = { uiState = uiState.copy(tagInput = it) },
                     onBack = {},
                     tagInputTestTag = TAG_INPUT,
