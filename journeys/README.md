@@ -4,10 +4,9 @@ A journey is an XML-specified walkthrough of app behaviour, evaluated by an agen
 emulator or device. They are developer-assistance specs: they give an agent a reliable route through
 a flow so it can reproduce a bug, check a change by hand, or show you what a screen does today.
 
-**Journeys are not a QA gate.** Nothing in `.github/workflows` reads `journeys/` — `ui-tests.yml`
-runs the instrumented tests and never touches this directory. They are agent-evaluated and
-non-deterministic, which is why they belong on a manual, developer-triggered run rather than a
-blocking CI gate. An agent runs one on request.
+**Journeys are the QA contract for a PR.** A PR with a user-visible change adds or updates the
+journeys that prove it and lists them in its body, and reviewers drive the listed journeys on a
+device instead of reading a prose walkthrough.
 
 **A journey is not the source of truth.** The `android` CLI ships its own journey documentation
 (`references/journeys.md` in the `android-cli` skill) which says the opposite — "the journey XML is
@@ -110,27 +109,23 @@ Fund a wallet before any amount journey — with a zero balance the caps fall ba
 maximum and the journeys pass for the wrong reason. Per-suite preconditions (Trezor emulator, Pubky
 fixtures, push notifications) live in each suite's README.
 
-## Suites
+## Capabilities
 
-| Suite | Journeys | Notes |
-| --- | --- | --- |
-| [activity](activity) | 1 | Date range sheet under rapid month taps; needs no backend, no README |
-| [amount-limits](amount-limits) | 4 | Number pad caps on all four amount screens |
-| [backup-restore](backup-restore) | 1 | VSS restore keeps tags and closed channels; wipes the wallet |
-| [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
-| [coin-selection](coin-selection) | 1 | Manual coin selection screen; needs 3+ on-chain UTXOs; no README |
-| [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
-| [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
-| [home](home) | 1 | Pull to refresh on Home; checks the app log, no README |
-| [node-lifecycle](node-lifecycle) | 1 | Detached LDK restart completes; a cancelled RGS server change reconciles and recovers to Running; reads the app log; no README |
-| [notification-permission](notification-permission) | 4 | Background-setup toggles |
-| [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
-| [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
-| [security](security) | 1 | PIN result sheet layout at a long locale and font scale; no README |
-| [subscriptions](subscriptions) | 4 | Paykit subscription lifecycle across two wallets, plus the Payments tab |
-| [tags](tags) | 1 | Tag input length cap on an activity; no backend, no README |
-| [transfers](transfers) | 1 | Transfer to Spending settling after the LSP closes the channel; no README |
-| [widgets](widgets) | 2 | Needs no backend — the quickest way to see the loop work; no README |
+This table is the authority for what the journey environment provides: a step it covers belongs in a
+journey, and a step it does not is a manual test in the PR body naming the missing capability.
+
+| Capability | Provided by |
+| --- | --- |
+| On-chain funds and blocks on regtest | `./lsp` deposit and mine against the staging LSP — [Backend preconditions](#backend-preconditions) |
+| Several separate on-chain UTXOs to choose between | three or more `./lsp` deposits, each mined, so manual coin selection has inputs to list — [Backend preconditions](#backend-preconditions) |
+| Lightning channels, CJIT orders and quoted maxima | the same staging LSP the dev flavor targets, plus its node as an external LN peer — [Backend preconditions](#backend-preconditions), [amount-limits](amount-limits/README.md) |
+| A hardware wallet to pair, watch and sign with | the deterministic Trezor emulator from `bitkit-docker` over the Bridge transport, with the USB attach intent injected by `adb`; USB enumeration, permission grants, the OS picker and BLE are not simulated — [hardware-wallet](hardware-wallet/README.md) |
+| Push notifications to a backgrounded or killed app | an FCM push from a CJIT order paid through `./lsp`, read back with `adb shell dumpsys notification` — [cjit-notifications](cjit-notifications/README.md) |
+| The OS notification-permission dialog | an API 33+ target, reset with `adb shell pm revoke to.bitkit.dev android.permission.POST_NOTIFICATIONS` — [notification-permission](notification-permission/README.md) |
+| An incoming Payment Request from a linked issuer | the fixture issuer, saved as a contact and linked on receiver path `bitkit/server` — [payment-requests](payment-requests/README.md) |
+| Two linked Bitkit wallets for a subscription lifecycle | a second Bitkit instance linked to the first, so a proposal can be reviewed and accepted — [subscriptions](subscriptions) |
+| A Pubky identity and a two-wallet marketplace purchase | the integration fixture runtime: Pubky testnet, Paykit Server, regtest bitcoind and Fulcrum — [pubky-marketplace](pubky-marketplace/README.md) |
+| Deep links, addresses and invoices handed to the app | `adb shell am start -a android.intent.action.VIEW -d "<uri>"`; `bitkit://` screen and sheet routes sit behind the dev-mode gate — [Running a journey](#running-a-journey), [deeplinks](deeplinks) |
 
 ## Cross-platform
 

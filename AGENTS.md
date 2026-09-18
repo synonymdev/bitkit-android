@@ -52,9 +52,15 @@ just install
 just clean
 ```
 
+## Prerequisites
+
+- The **`android` CLI and the `android-cli` skill** are required, not recommended: they are how an
+  agent drives a connected emulator or device, so without them the journeys under `journeys/` cannot
+  run and a PR's QA contract cannot be checked. Install the CLI as below.
+
 ### Agent CLI (android)
 
-Agents can drive a connected emulator or device with the `android` CLI, which wraps the SDK tooling
+Agents drive a connected emulator or device with the `android` CLI, which wraps the SDK tooling
 and adds a semantic UI dump. It is not provisioned by this repo — install it if it is missing, from
 `https://dl.google.com/android/cli/latest/<platform>/install.sh` where `<platform>` is one of
 `darwin_arm64`, `darwin_x86_64` or `linux_x86_64`:
@@ -100,10 +106,11 @@ emulator or device — number pad caps, notification permission, widget flows, d
 wallet pairing and transfers. Read [`journeys/README.md`](journeys/README.md) before running or
 writing one; it has the format, the runner commands and the per-suite preconditions.
 
-- Journeys are **developer-assistance specs, not a QA gate**. Nothing in `.github/workflows` reads
-  `journeys/`; `ui-tests.yml` runs the instrumented tests and never touches them. They are
-  agent-evaluated and non-deterministic, so they belong on a manual, developer-triggered run rather
-  than a blocking gate. An agent runs one on request.
+- Journeys are **the QA contract for a PR**. A PR with a user-visible change adds or updates the
+  journeys that prove it and any journey whose route it changes, and lists them under `#### Journeys`
+  in the PR body. Reviewers drive the listed journeys on a device; nothing in `.github/workflows`
+  reads `journeys/`. Write a manual test only for a step that needs a capability the Capabilities
+  table in [`journeys/README.md`](journeys/README.md) does not list.
 - A journey is **not the source of truth** for app behaviour, despite what the `android-cli` skill's
   own `references/journeys.md` says. A journey that disagrees with the app is most likely stale. Say
   what you found and update the journey; escalate only once you have separately confirmed the app is
