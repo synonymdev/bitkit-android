@@ -39,6 +39,7 @@ import to.bitkit.ui.components.BottomSheetOverlayState
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.SHEET_INTRO_IMAGE_WIDTH_FRACTION
 import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
 import to.bitkit.ui.shared.util.gradientBackground
@@ -117,7 +118,7 @@ fun NewTransactionSheetView(
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .padding(horizontal = 32.dp)
-                    .fillMaxWidth(0.8f)
+                    .fillMaxWidth(SHEET_INTRO_IMAGE_WIDTH_FRACTION)
                     .heightIn(max = 320.dp)
                     .testTag("transaction_sent_image")
                     .align(Alignment.Center)
