@@ -33,7 +33,10 @@ class PubkyStoreSerializerTest : BaseUnitTest() {
         PubkyStoreSerializer.writeTo(restored, output)
 
         assertEquals(SharedPubkyIdentity(1, "app.pubkyring", WIRE_PUBKY), restored.externalIdentityRef)
-        assertEquals(json.parseToJsonElement(storedJson), json.parseToJsonElement(output.toByteArray().decodeToString()))
+        assertEquals(
+            json.parseToJsonElement(storedJson),
+            json.parseToJsonElement(output.toByteArray().decodeToString()),
+        )
     }
 
     @Test
