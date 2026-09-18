@@ -348,6 +348,7 @@ internal fun DateRangeSelectorContent(
                         }
                     )
                 }
+                .testTag("CalendarSwipeArea")
         ) {
             CalendarGrid(
                 displayedMonth = displayedMonth,
