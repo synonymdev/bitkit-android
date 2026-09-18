@@ -9,7 +9,11 @@
     ... pointers already down") and drop taps. Push a monkey script instead, one `Tap(x,y)` followed
     by `UserWait(60)` per tap, and run it with
     `adb shell monkey -p to.bitkit.dev -f /data/local/tmp/next8.monkey 1`. Swipes that start while a
-    month transition is running are ignored by design; a swipe at rest changes the month. The grid's
+    month transition is running are ignored only for the part of the gesture that falls inside that
+    transition: once the 200ms job ends, later deltas accumulate and a long swipe still crosses the
+    threshold, so the swipes in the rapid-gesture step must finish inside the transition (use the
+    same monkey script with a small `Drag` step count, not `adb shell input swipe`). A swipe at rest
+    changes the month. The grid's
     alpha is not in `android layout`, so confirm visibility from a screenshot. The day cell for
     today is tagged "Today" rather than "Day-N", so the "Day-1" assertions do not hold on a month
     whose 1st is today — run this on any other day, or read the first cell as "Today" that once.
@@ -26,8 +30,8 @@
     <action>Wait 1 second, then verify the month label advanced by exactly one month and the day grid is visible</action>
     <action>Tap "PrevMonth" 8 times with about 60ms between taps</action>
     <action>Wait 1 second, then verify the month label moved back 8 months, and take a screenshot to verify the day grid is visible</action>
-    <action>Swipe the day grid (testTag "CalendarGrid") from right to left, then within 60ms tap "NextMonth", swipe left to right, tap "PrevMonth", swipe right to left, tap "NextMonth", swipe right to left, and drag the grid 100px</action>
-    <action>Wait 1 second, then verify the month label advanced by exactly 2 months (the first swipe and the taps count; swipes during the transition do not)</action>
+    <action>Using the monkey script so each gesture finishes inside the 200ms transition, swipe the day grid (testTag "CalendarGrid") from right to left, then within 60ms tap "NextMonth", swipe left to right, tap "PrevMonth", swipe right to left, tap "NextMonth", swipe right to left, and drag the grid 100px</action>
+    <action>Wait 1 second, then verify the month label advanced by exactly 2 months (the first swipe and the taps count; the later swipes are dropped because each one ends inside a transition). A swipe that outlasts the transition moves the month, so a slower gesture legitimately gives a different count</action>
     <action>Take a screenshot and verify the day grid is visible and not shifted sideways</action>
     <action>Press back and verify the "Select Range" sheet is dismissed</action>
   </actions>
