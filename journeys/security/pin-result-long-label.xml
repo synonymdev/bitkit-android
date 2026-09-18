@@ -1,0 +1,43 @@
+<journey name="pin result toggle wraps long label">
+  <description>
+    On the "Wallet Secured" result sheet shown after creating a PIN, the "Also require for
+    payments" switch sits to the right of its label and never draws over it when the label is long.
+    Spanish at 1.3x font scale makes the label ("También se requiere para los pagos") wider than the
+    row, so it must wrap onto a second line instead of running under the switch. The row (tag
+    "ToggleBioForPayments") still toggles the PIN-for-payments setting.
+
+    Precondition: onboarded dev wallet with the PIN disabled (Settings ▸ Security ▸ PIN Code shows
+    "Disabled"), no biometrics enrolled on the device, and PIN for payments off. Start on the wallet
+    home screen. The journey enables a PIN you choose and disables it again at the end, so remember
+    it; never enter a wrong PIN more than once.
+
+    With no biometrics enrolled the biometrics step shows the "not available" variant, whose Skip
+    button carries tag "SkipButton"; on a device with biometrics the screen shows a toggle and
+    "ContinueButton" instead and the route differs.
+
+    Assert the overlap from `adb shell uiautomator dump` bounds: the Switch has no node of its own
+    in `android layout`, so compare the label's right edge against the row's. On iOS, compare the
+    label and switch frames from `snapshot-ui` instead.
+  </description>
+  <actions>
+    <action>Run `adb shell cmd locale set-app-locales to.bitkit.dev --locales es`</action>
+    <action>Run `adb shell settings put system font_scale 1.3`</action>
+    <action>Tap the menu button (tag "HeaderMenu") and tap Settings (tag "DrawerSettings")</action>
+    <action>Tap the Security tab (tag "Tab-security")</action>
+    <action>Tap PIN Code (tag "PINCode")</action>
+    <action>Tap Enable PIN (tag "EnablePin")</action>
+    <action>Enter a 4-digit PIN with the number pad (tags "N0"–"N9")</action>
+    <action>Re-enter the same 4-digit PIN to confirm it</action>
+    <action>On the biometrics screen, tap Skip (tag "SkipButton")</action>
+    <action>Verify the result sheet titled "Cartera asegurada" is visible with the row (tag "ToggleBioForPayments") and the OK button (tag "OK")</action>
+    <action>Verify from a screenshot that "También se requiere para los pagos" wraps onto two lines and the switch is fully to its right, inside the sheet's horizontal padding and aligned with the right edge of the OK button</action>
+    <action>Verify from `adb shell uiautomator dump` that the label's right bound is less than the "ToggleBioForPayments" row's right bound minus the switch width</action>
+    <action>Tap the "ToggleBioForPayments" row and verify the switch turns on</action>
+    <action>Tap the "ToggleBioForPayments" row again and verify the switch turns off</action>
+    <action>Tap OK (tag "OK")</action>
+    <action>Tap Disable PIN (tag "DisablePin") and enter the PIN chosen above on the disable sheet (tag "DisablePIN")</action>
+    <action>Verify the PIN Code row (tag "PINCode") shows "Desactivado"</action>
+    <action>Run `adb shell cmd locale set-app-locales to.bitkit.dev --locales ''`</action>
+    <action>Run `adb shell settings put system font_scale 1.0`</action>
+  </actions>
+</journey>
