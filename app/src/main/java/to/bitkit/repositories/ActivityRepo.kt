@@ -457,16 +457,20 @@ class ActivityRepo @Inject constructor(
     }
 
     suspend fun contactActivities(publicKey: String): Result<List<Activity>> = withContext(ioDispatcher) {
-        runCatching {
+        runSuspendCatching {
             val normalizedKey = PubkyPublicKeyFormat.normalized(publicKey) ?: publicKey
-            val txIdsInBoostTxIds = getTxIdsInBoostTxIds()
-            getActivities(
+            val matches = getActivities(
                 walletId = null,
                 filter = ActivityFilter.ALL,
                 sortDirection = SortDirection.DESC,
             ).getOrThrow()
-                .filterNot { it.isReplacedSentTransaction(txIdsInBoostTxIds) }
                 .filter { PubkyPublicKeyFormat.matches(it.contact(), normalizedKey) }
+            val boostTxIdsByWallet = matches.map { it.walletId() }.distinct().associateWith {
+                getTxIdsInBoostTxIds(it)
+            }
+            matches.filterNot {
+                it.isReplacedSentTransaction(boostTxIdsByWallet[it.walletId()].orEmpty())
+            }
         }.onFailure {
             Logger.error("Failed to load contact activities for '$publicKey'", it, context = TAG)
         }
