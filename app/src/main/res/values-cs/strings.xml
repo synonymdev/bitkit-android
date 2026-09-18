@@ -665,13 +665,14 @@
     <string name="settings__general_title">Obecné</string>
     <string name="settings__language_system_default">Systémové nastavení</string>
     <string name="settings__language_title">Jazyk</string>
-    <string name="settings__quickpay__intro__description">Služba Bitkit QuickPay urychluje odbavení tím, že po naskenování QR kódu automaticky zaplatí.</string>
+    <string name="settings__quickpay__intro__description">Bitkit QuickPay urychluje placení automatickou úhradou malých faktur.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Okamžité&lt;/accent&gt;\nplatby</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
     <string name="settings__quickpay__settings__label">Quickpay limit</string>
     <string name="settings__quickpay__settings__note">* Bitkit QuickPay podporuje výhradně platby z vašeho disponibilního zůstatku.</string>
     <string name="settings__quickpay__settings__text">Pokud je tato funkce povolena, budou naskenované faktury nižší než{amount} placeny automaticky bez nutnosti potvrzení nebo zadání kódu PIN*.</string>
     <string name="settings__quickpay__settings__toggle">Povolení služby QuickPay</string>
+    <string name="settings__quickpay__sheet__description">QuickPay urychluje placení automatickou úhradou naskenovaných QR kódů.</string>
     <string name="settings__rgs__button_connect">Připojit</string>
     <string name="settings__rgs__server_url">URL dresa serveru Rapid-Gossip-Sync</string>
     <string name="settings__rgs__update_success_description">Aby se tato změna projevila, může být nutné aplikaci jednou nebo dvakrát restartovat.</string>

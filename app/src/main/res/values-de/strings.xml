@@ -576,11 +576,12 @@
     <string name="settings__widgets__section_reset">Auf Standard zurücksetzen</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Reibungslos&lt;/accent&gt;\nZahlungen</string>
-    <string name="settings__quickpay__intro__description">Bitkit QuickPay beschleunigt den Bezahlvorgang, indem es QR-Codes beim Scannen automatisch bezahlt.</string>
+    <string name="settings__quickpay__intro__description">Bitkit QuickPay beschleunigt den Bezahlvorgang, indem kleine Rechnungen automatisch bezahlt werden.</string>
     <string name="settings__quickpay__settings__toggle">QuickPay aktivieren</string>
     <string name="settings__quickpay__settings__text">Wenn diese Option aktiviert ist, werden gescannte Rechnungen unter ${Betrag} automatisch bezahlt, ohne dass Sie eine Bestätigung oder PIN* benötigen.</string>
     <string name="settings__quickpay__settings__label">Quickpay-Schwelle</string>
     <string name="settings__quickpay__settings__note">* Bitkit QuickPay unterstützt ausschließlich Zahlungen von deinem Guthaben.</string>
+    <string name="settings__quickpay__sheet__description">QuickPay beschleunigt den Bezahlvorgang, indem gescannte QR-Codes automatisch bezahlt werden.</string>
     <string name="settings__bg__title">Hintergrund-Zahlungen</string>
     <string name="settings__bg__intro_title">PASSIV\n&lt;accent&gt;EMPFANGEN&lt;/accent&gt;</string>
     <string name="settings__bg__intro_desc">Aktiviere Benachrichtigungen, um Zahlungen zu empfangen, auch wenn deine Bitkit-App geschlossen ist.</string>
