@@ -2011,9 +2011,10 @@ class BlocktankService(
         orderIds: List<String>? = null,
         filter: BtOrderState2? = null,
         refresh: Boolean = true,
+        refreshActive: Boolean = refresh,
     ): List<IBtOrder> {
         return ServiceQueue.CORE.background {
-            if (refresh) {
+            if (refreshActive) {
                 refreshActiveOrders()
             }
             getOrders(orderIds = orderIds, filter = filter, refresh = refresh)

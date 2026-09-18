@@ -29,10 +29,11 @@ private val Context.appCacheDataStore: DataStore<AppCacheData> by dataStore(
 
 @Suppress("TooManyFunctions")
 @Singleton
-class CacheStore @Inject constructor(
-    @ApplicationContext private val context: Context,
+class CacheStore internal constructor(
+    private val store: DataStore<AppCacheData>,
 ) {
-    private val store = context.appCacheDataStore
+    @Inject
+    constructor(@ApplicationContext context: Context) : this(context.appCacheDataStore)
 
     val data: Flow<AppCacheData> = store.data
     val backupStatuses: Flow<Map<BackupCategory, BackupItemStatus>> = data.map { it.backupStatuses }
