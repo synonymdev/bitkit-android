@@ -1,0 +1,22 @@
+<journey name="paste seed fragment">
+  <description>Proves #896: pasting part of a recovery phrase on Restore wallet spreads the words across the word fields, and every field stays editable with Backspace. Precondition: a throwaway emulator with no wallet (Restore is reachable only from onboarding; never run this on a device holding a wallet you need). The clipboard must hold the BIP39 test words "abandon abandon abandon" before step 6; step 13 copies "abandon abandon abandon abandon abandon abandon abandon abandon about". `adb shell cmd clipboard` is not implemented on the emulator image, so copy the text from another app (for example a note or a Chrome page) first. Use only these public test words. Paste is sent as KEYCODE_PASTE (279) to the focused field.</description>
+  <actions>
+    <action>Launch to.bitkit.dev on a device with no wallet</action>
+    <action>Verify that the terms screen shows "Check1" and "Check2", then tap "Continue" — the two blocks are text, not toggles, and "Continue" is always enabled</action>
+    <action>Tap "SkipIntro"</action>
+    <action>Tap "RestoreWallet"</action>
+    <action>Tap "MultipleDevices-button"</action>
+    <action>Verify that the Restore wallet screen shows word fields "Word-0" to "Word-11", all empty</action>
+    <action>Tap "Word-0" and run `adb shell input keyevent 279`</action>
+    <action>Verify that "Word-0", "Word-1" and "Word-2" each show "abandon", "Word-3" is empty and focused, and "Word-0" does not show the whole pasted text</action>
+    <action>Run `adb shell input keyevent 67`</action>
+    <action>Verify that "Word-2" is focused and still shows "abandon"</action>
+    <action>Run `adb shell input keyevent 67`</action>
+    <action>Verify that "Word-2" shows "abando", so Backspace deletes from the end of the pasted word</action>
+    <action>Run `adb shell input text n`</action>
+    <action>Copy the nine-word test text to the clipboard in the other app, return to Bitkit, tap "Word-3" and run `adb shell input keyevent 279`</action>
+    <action>Verify that "Word-0" to "Word-10" show "abandon", "Word-11" shows "about", no word field is focused and the keyboard is hidden</action>
+    <action>Verify that "RestoreButton" is enabled, and do not tap it</action>
+    <action>Press the device back button</action>
+  </actions>
+</journey>
