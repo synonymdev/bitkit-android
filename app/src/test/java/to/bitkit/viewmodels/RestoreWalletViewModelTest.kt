@@ -474,6 +474,34 @@ class RestoreWalletViewModelTest : BaseUnitTest() {
         assertTrue(state.areButtonsEnabled)
     }
 
+    @Test
+    fun `handlePastedWords should focus invalid field when fragment fills the tail`() = runBlocking {
+        whenever(bip39Service.isValidWord("zzzz")).thenReturn(false)
+        for (i in 0 until 9) {
+            viewModel.onChangeWord(i, "word$i")
+        }
+
+        viewModel.onChangeWord(9, "zzzz ability able")
+
+        val state = viewModel.uiState.value
+        assertEquals(9, state.focusedIndex)
+        assertEquals(9, state.scrollToFieldIndex)
+        assertEquals(setOf(9), state.invalidWordIndices)
+        assertFalse(state.shouldDismissKeyboard)
+    }
+
+    @Test
+    fun `handlePastedWords should focus first invalid field of a full paste`() = runBlocking {
+        whenever(bip39Service.isValidWord("zzzz")).thenReturn(false)
+        val pastedWords = List(12) { if (it == 4) "zzzz" else "w${it + 1}" }.joinToString(" ")
+
+        viewModel.onChangeWord(0, pastedWords)
+
+        val state = viewModel.uiState.value
+        assertEquals(4, state.focusedIndex)
+        assertFalse(state.shouldDismissKeyboard)
+    }
+
     // endregion
 
     // region Focus Management
@@ -532,6 +560,27 @@ class RestoreWalletViewModelTest : BaseUnitTest() {
 
         val state = viewModel.uiState.value
         assertTrue(state.suggestions.isEmpty())
+    }
+
+    @Test
+    fun `updateSuggestions should resolve for field focused after a tail filling paste`() = runBlocking {
+        whenever(bip39Service.isValidWord("zzzz")).thenReturn(false)
+        whenever(bip39Service.getSuggestions("abi", 3u)).thenReturn(listOf("ability", "abandon"))
+        for (i in 0 until 9) {
+            viewModel.onChangeWord(i, "word$i")
+        }
+        viewModel.onChangeWord(9, "zzzz ability able")
+
+        viewModel.onChangeWord(9, "abi")
+
+        assertEquals(listOf("ability", "abandon"), viewModel.uiState.value.suggestions)
+
+        viewModel.onSelectSuggestion("ability")
+
+        val state = viewModel.uiState.value
+        assertEquals("ability", state.words[9])
+        assertTrue(state.suggestions.isEmpty())
+        assertTrue(state.invalidWordIndices.isEmpty())
     }
 
     @Test

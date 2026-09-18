@@ -148,7 +148,7 @@ class RestoreWalletViewModel @Inject constructor(
                 invalidWordIndices = invalidIndices.toImmutableSet(),
                 is24Words = pastedWords.size == WORDS_MAX,
                 shouldDismissKeyboard = invalidIndices.isEmpty(),
-                focusedIndex = null,
+                focusedIndex = invalidIndices.minOrNull(),
                 suggestions = persistentListOf(),
             )
         }
@@ -172,14 +172,15 @@ class RestoreWalletViewModel @Inject constructor(
             val wordCount = if (is24Words) WORDS_MAX else WORDS_MIN
             val nextEmptyIndex = (lastWrittenIndex + 1 until wordCount).firstOrNull { newWords[it].isEmpty() }
                 ?: (0 until wordCount).firstOrNull { newWords[it].isEmpty() }
+            val nextFocusIndex = nextEmptyIndex ?: (0 until wordCount).firstOrNull { it in newInvalidIndices }
 
             state.copy(
                 words = newWords.toImmutableList(),
                 invalidWordIndices = newInvalidIndices.toImmutableSet(),
                 is24Words = is24Words,
-                shouldDismissKeyboard = nextEmptyIndex == null && newInvalidIndices.isEmpty(),
-                focusedIndex = nextEmptyIndex,
-                scrollToFieldIndex = nextEmptyIndex ?: lastWrittenIndex,
+                shouldDismissKeyboard = nextFocusIndex == null && newInvalidIndices.isEmpty(),
+                focusedIndex = nextFocusIndex,
+                scrollToFieldIndex = nextFocusIndex ?: lastWrittenIndex,
                 suggestions = persistentListOf(),
             )
         }
