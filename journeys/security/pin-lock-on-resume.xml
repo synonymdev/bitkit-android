@@ -12,6 +12,14 @@
     is rejected with an insufficient-savings toast instead of opening Send, and with no activity
     there is no row to open for the Add Tag steps. Never enter a wrong PIN more than once;
     exhausting attempts leads to the forgot-PIN wallet reset.
+
+    The payment URI is fired with the Receive sheet left open, because that is the case the fix
+    changes: the deferred scan closes the open sheet on unlock. The Add Tag sheet earlier in the
+    journey is local state inside ActivityDetailScreen and is not a tracked sheet, so it does not
+    exercise it. The second fix, suppressing QuickPay for a scan deferred by the lock, is left out
+    here: it needs a fresh under-threshold lightning invoice per run plus a funded channel and
+    QuickPay enabled, and it asserts the Send confirm screen rather than an observable payment.
+    AppViewModelSendFlowTest.kt covers both paths.
   </description>
   <actions>
     <action>Verify the wallet home screen is visible (testTag "Send")</action>
@@ -29,11 +37,12 @@
     <action>Take a screenshot and verify only the PIN pad is drawn, with no Add Tag sheet above it</action>
     <action>Enter the PIN with the number pad keys</action>
     <action>Verify the Add Tag sheet is visible again (testTag "TagInput"), then press back until the wallet home screen is visible</action>
+    <action>Tap Receive (testTag "Receive") and verify the Receive sheet is visible (testTag "ReceiveScreen")</action>
     <action>Run adb shell input keyevent KEYCODE_HOME and wait 3 seconds</action>
     <action>Run adb shell am start -a android.intent.action.VIEW -d "bitcoin:bcrt1qh6k3khs7qz04a9p5eam6v48nlug9d38x4rgxrn?amount=0.0001" to.bitkit.dev</action>
     <action>Verify the PIN pad is visible and the Send amount screen is not shown</action>
     <action>Enter the PIN with the number pad keys</action>
-    <action>Verify the Send amount screen opens (testTag "SendNumberField") showing 10 000 sats</action>
+    <action>Verify the Send amount screen opens (testTag "SendNumberField") showing 10 000 sats and the Receive sheet (testTag "ReceiveScreen") is gone</action>
     <action>Press back to close the Send sheet and verify the wallet home screen is visible</action>
   </actions>
 </journey>
