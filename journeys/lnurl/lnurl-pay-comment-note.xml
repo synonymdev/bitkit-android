@@ -1,0 +1,48 @@
+<journey name="LNURL Pay Comment Note">
+  <description>
+    Verifies that the comment typed when paying an LNURL-pay request is saved as the Invoice note of
+    the sent Lightning activity, and that it survives an app restart. Requires an LNURL-pay endpoint
+    that returns a description-hash invoice and allows comments (commentAllowed of at least 12), such
+    as the bitkit-docker lnurl-server, reachable from the same Lightning network as the app. The
+    staging regtest backend the dev flavor uses has no such endpoint. Also requires a spending balance
+    of at least 1,000 sats plus routing fees.
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Run adb shell am start -a android.intent.action.VIEW -d "lightning:&lt;lnurl-pay&gt;" to.bitkit.dev with the LNURL-pay string
+    </action>
+    <action>
+      Verify the send amount screen (testTag "SendNumberField") is visible
+    </action>
+    <action>
+      Enter 1000 on the number pad (testTags "N1", "N0", "N0", "N0") and tap Continue (testTag "ContinueAmount")
+    </action>
+    <action>
+      Verify the comment field (testTag "CommentInput") is visible on the confirm screen
+    </action>
+    <action>
+      Type "thanks" into the comment field (testTag "CommentInput")
+    </action>
+    <action>
+      Swipe the pay slider (testTag "GRAB") to the right
+    </action>
+    <action>
+      Verify the payment success screen (testTag "SendSuccess") or the "Payment Pending" screen is visible — the pending screen carries no testTag, so assert it by its title
+    </action>
+    <action>
+      Close the result screen and open the newest activity row (testTag "ActivityShort-0")
+    </action>
+    <action>
+      Verify the Invoice note (testTag "InvoiceNote") shows "thanks" and not the invoice description hash
+    </action>
+    <action>
+      Run adb shell am force-stop to.bitkit.dev, relaunch the app and open the newest activity row (testTag "ActivityShort-0")
+    </action>
+    <action>
+      Verify the Invoice note (testTag "InvoiceNote") still shows "thanks"
+    </action>
+  </actions>
+</journey>
