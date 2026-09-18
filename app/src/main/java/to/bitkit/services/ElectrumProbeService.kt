@@ -41,6 +41,7 @@ import kotlin.time.Duration.Companion.seconds
 @Singleton
 class ElectrumProbeService @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
+    private val sslSocketFactory: SSLSocketFactory,
 ) {
     companion object {
         private const val TAG = "ElectrumProbeService"
@@ -116,8 +117,7 @@ class ElectrumProbeService @Inject constructor(
         // A TLS handshake against a plain-TCP server hangs without a read timeout, which is the
         // misconfiguration that wedges the node's release when it is left to node.start().
         return runCatching {
-            val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
-            val ssl = factory.createSocket(plain, server.host, server.getPort(), true) as SSLSocket
+            val ssl = sslSocketFactory.createSocket(plain, server.host, server.getPort(), true) as SSLSocket
             ssl.soTimeout = CONNECT_TIMEOUT.inWholeMilliseconds.toInt()
             // A raw SSLSocket validates the chain but not the name the certificate was issued for, so
             // a CA-valid certificate for another host probes clean and is only rejected afterwards by

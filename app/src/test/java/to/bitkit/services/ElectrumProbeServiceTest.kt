@@ -38,7 +38,7 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLException
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLPeerUnverifiedException
-import javax.net.ssl.SSLServerSocketFactory
+import javax.net.ssl.SSLSocketFactory
 import javax.net.ssl.TrustManagerFactory
 import javax.security.auth.x500.X500Principal
 import kotlin.concurrent.thread
@@ -60,20 +60,29 @@ private const val RSA_KEY_SIZE = 2048
 private val CERTIFICATE_VALIDITY = 1.days
 private val KEY_PASSWORD = "probe".toCharArray()
 
+/**
+ * The JDK's own JSSE provider, named rather than taken from the head of the provider list.
+ *
+ * Robolectric installs Conscrypt as the JVM's first security provider and never removes it, so every
+ * test class running after one of those would otherwise get Conscrypt here. A Conscrypt server socket
+ * cannot finish a handshake on a current JDK — it reflects into `java.net`, which the module system
+ * refuses — which made these TLS tests depend on which class ran before them.
+ */
+private const val JSSE_PROVIDER = "SunJSSE"
+
 @OptIn(ExperimentalCoroutinesApi::class)
 class ElectrumProbeServiceTest : BaseUnitTest() {
-    private val sut = ElectrumProbeService(ioDispatcher = Dispatchers.IO)
+    private var socketFactory: SSLSocketFactory =
+        SSLContext.getInstance("TLS", JSSE_PROVIDER).apply { init(null, null, null) }.socketFactory
+
+    private val sut get() = ElectrumProbeService(ioDispatcher = Dispatchers.IO, sslSocketFactory = socketFactory)
 
     private var server: ServerSocket? = null
-
-    private var defaultSslContext: SSLContext? = null
 
     @After
     fun tearDown() {
         server?.runCatching { close() }
         server = null
-        defaultSslContext?.let { SSLContext.setDefault(it) }
-        defaultSslContext = null
     }
 
     @Test
@@ -235,7 +244,7 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
 
         val result = sut.probe(serverAt(port, ElectrumProtocol.SSL), network = Network.REGTEST)
 
-        assertTrue(result.isSuccess)
+        assertTrue(result.isSuccess, "probe rejected a matching certificate: '${result.exceptionOrNull()}'")
     }
 
     @Test
@@ -373,16 +382,17 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
     }
 
     /**
-     * Serves electrum over TLS behind a self-signed certificate naming [certificateFor], made the
-     * only certificate the JVM trusts. The chain is therefore valid and only the name can fail, so
-     * what the probe reports is decided by whether it asks JSSE to check the name at all.
+     * Serves electrum over TLS behind a self-signed certificate naming [certificateFor], the only
+     * certificate the probe is given to trust. The chain is therefore valid and only the name can
+     * fail, so what the probe reports is decided by whether it asks JSSE to check the name at all.
      */
     private fun startTlsElectrum(certificateFor: GeneralName, genesisHash: String = REGTEST_GENESIS): Int {
         val keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(RSA_KEY_SIZE) }.generateKeyPair()
         val certificate = selfSignedCertificate(keyPair, certificateFor)
-        trustOnly(certificate)
+        val tls = tlsContext(keyPair, certificate)
+        socketFactory = tls.socketFactory
 
-        val socket = tlsServerFactory(keyPair, certificate)
+        val socket = tls.serverSocketFactory
             .createServerSocket(0, 1, InetAddress.getByName(LOOPBACK))
             .also { server = it }
         thread(isDaemon = true) {
@@ -413,29 +423,25 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
             .generateCertificate(generated.encoded.inputStream()) as X509Certificate
     }
 
-    private fun trustOnly(certificate: X509Certificate) {
-        val store = KeyStore.getInstance("PKCS12").apply {
-            load(null, null)
-            setCertificateEntry("probe", certificate)
-        }
-        val trustManagers = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
-            .apply { init(store) }
-            .trustManagers
-
-        if (defaultSslContext == null) defaultSslContext = SSLContext.getDefault()
-        SSLContext.setDefault(SSLContext.getInstance("TLS").apply { init(null, trustManagers, null) })
-    }
-
-    private fun tlsServerFactory(keyPair: KeyPair, certificate: X509Certificate): SSLServerSocketFactory {
-        val store = KeyStore.getInstance("PKCS12").apply {
+    /** Serves [certificate] to the probe and is the only certificate the probe is told to trust. */
+    private fun tlsContext(keyPair: KeyPair, certificate: X509Certificate): SSLContext {
+        val keyStore = KeyStore.getInstance("PKCS12").apply {
             load(null, null)
             setKeyEntry("probe", keyPair.private, KEY_PASSWORD, arrayOf<Certificate>(certificate))
         }
-        val keyManagers = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
-            .apply { init(store, KEY_PASSWORD) }
+        val keyManagers = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm(), JSSE_PROVIDER)
+            .apply { init(keyStore, KEY_PASSWORD) }
             .keyManagers
 
-        return SSLContext.getInstance("TLS").apply { init(keyManagers, null, null) }.serverSocketFactory
+        val trustStore = KeyStore.getInstance("PKCS12").apply {
+            load(null, null)
+            setCertificateEntry("probe", certificate)
+        }
+        val trustManagers = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm(), JSSE_PROVIDER)
+            .apply { init(trustStore) }
+            .trustManagers
+
+        return SSLContext.getInstance("TLS", JSSE_PROVIDER).apply { init(keyManagers, trustManagers, null) }
     }
 
     /** Accepts the connection but never speaks electrum, like a non-electrum service on the port. */
