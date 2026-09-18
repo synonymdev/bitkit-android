@@ -1,0 +1,57 @@
+<journey name="receive auto tab selection">
+  <description>
+    Verifies that the Receive sheet opens on the Auto tab without sliding to it, that a tab the user
+    picks is not overridden by the Auto tab, and that a leftover invoice amount from an earlier Edit
+    Invoice session does not open the sheet on Savings. Requires a wallet with a usable spending
+    channel so the Auto tab is available once the Lightning node is running. The selected tab is
+    shown only by its underline, which `android layout` does not expose, so tab assertions need a
+    screenshot; the Auto tab's presence can be read from the testTag "Tab-auto".
+  </description>
+  <actions>
+    <action>
+      Launch the Bitkit app and go to the wallet home screen
+    </action>
+    <action>
+      Tap the Receive button (testTag "Receive"), take a screenshot within one second, and verify the
+      Auto tab (testTag "Tab-auto") is selected on the first frame of the sheet
+    </action>
+    <action>
+      Swipe the QR code area from left to right once and verify the Savings tab (testTag
+      "Tab-savings") is selected
+    </action>
+    <action>
+      Wait 3 seconds, take a screenshot and verify the Savings tab is still selected
+    </action>
+    <action>
+      Close the sheet, then run `adb shell am force-stop to.bitkit.dev` and launch the app again
+    </action>
+    <action>
+      As soon as the home screen shows, tap the Receive button and verify the tab row has no Auto tab
+      (testTag "Tab-auto" absent) while the Lightning node starts
+    </action>
+    <action>
+      Tap the Trezor tab (testTag "Tab-trezor") if present, then tap the Savings tab (testTag
+      "Tab-savings")
+    </action>
+    <action>
+      Wait until the Auto tab (testTag "Tab-auto") appears, wait 5 more seconds, take a screenshot and
+      verify the Savings tab is still selected
+    </action>
+    <action>
+      Close the sheet, force-stop and relaunch the app, wait for the node to start, and tap the Receive
+      button without touching the tabs; verify the Savings tab is selected first and that, once the
+      Auto tab appears, the sheet jumps to Auto without a sliding animation (record the screen to
+      check)
+    </action>
+    <action>
+      Tap "Edit" (testTag "SpecifyInvoiceButton"), tap the amount field (testTag
+      "ReceiveNumberPadTextField"), enter an amount above the inbound Lightning capacity (for example
+      N3 N0 N0 N0 in USD), tap Continue (testTag "ReceiveNumberPadSubmit") and then "QR Code" (testTag
+      "ShowQrReceive"); verify the Auto tab (testTag "Tab-auto") is absent
+    </action>
+    <action>
+      Close the sheet, tap the Receive button again and verify the Auto tab (testTag "Tab-auto") is
+      present and selected on the first frame of the sheet
+    </action>
+  </actions>
+</journey>
