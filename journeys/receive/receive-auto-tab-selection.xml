@@ -7,7 +7,10 @@
     shown only by its underline, which `android layout` does not expose, so tab assertions need a
     screenshot; the Auto tab's presence can be read from the testTag "Tab-auto". The underline itself
     crossfades over 200 ms even when the switch is instant, so the two steps that check for an
-    animation read the QR pager out of a screen recording instead of the underline.
+    animation read the QR pager out of a screen recording instead of the underline. Each of those
+    steps first requires the recording to contain the frames it reasons about; a recording that ended
+    before the node started, or before the sheet opened, is a rerun with a longer `--time-limit`, not
+    a pass.
   </description>
   <actions>
     <action>
@@ -46,10 +49,21 @@
       wait for the node, the tab row must still be Savings-first when the sheet opens
     </action>
     <action>
-      Wait until the Auto tab (testTag "Tab-auto") appears, let the recording finish, pull it (`adb
-      pull /sdcard/receive-auto.mp4`), extract frames (`ffmpeg -i receive-auto.mp4 -vf fps=30
-      frames/%03d.png`) and verify that no frame shows the QR pager part-way between the Savings and
-      the Auto page: the sheet jumps to Auto in one frame instead of sliding
+      Wait until the Auto tab (testTag "Tab-auto") appears, and check that it appeared while the
+      recording was still running. The node has to finish `lightningService.start` and load its
+      channels before the Auto tab exists, which on a cold process can outlast the 20 second window;
+      if the Auto tab is still absent when the recording ends, the jump happened off-tape and the run
+      holds no evidence, so repeat the previous step with a longer `--time-limit` rather than reading
+      the empty recording as a pass
+    </action>
+    <action>
+      Let the recording finish, pull it (`adb pull /sdcard/receive-auto.mp4`), extract frames (`ffmpeg
+      -i receive-auto.mp4 -vf fps=30 frames/%03d.png`) and verify first that the recording contains
+      the jump at all: a frame showing the Savings page centred in the QR pager, followed by a later
+      frame showing the Auto page centred. If either frame is missing, the step did not capture the
+      switch and has to be rerun; it is not a pass. Then verify that no frame between those two shows
+      the QR pager part-way between the Savings and the Auto page: the sheet jumps to Auto in one
+      frame instead of sliding
     </action>
     <action>
       Tap "Edit" (testTag "SpecifyInvoiceButton"), tap the amount field (testTag
@@ -63,10 +77,11 @@
     </action>
     <action>
       Let the recording finish, pull it (`adb pull /sdcard/receive-reopen.mp4`), extract frames
-      (`ffmpeg -i receive-reopen.mp4 -vf fps=30 frames/%03d.png`) and verify that the first frame in
-      which the sheet is visible already shows the Auto tab in the tab row with the selected
-      underline, and that no frame shows Savings selected. A sheet that opens on Savings and only
-      then gains the Auto tab means the leftover invoice amount was not cleared
+      (`ffmpeg -i receive-reopen.mp4 -vf fps=30 frames/%03d.png`) and verify that the recording holds
+      frames in which the sheet is visible — if it holds none, rerun the step, it is not a pass — then
+      that the first such frame already shows the Auto tab in the tab row with the selected underline,
+      and that no frame shows Savings selected. A sheet that opens on Savings and only then gains the
+      Auto tab means the leftover invoice amount was not cleared
     </action>
   </actions>
 </journey>
