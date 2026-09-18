@@ -388,7 +388,8 @@ fun MnemonicInputField(
                     onValueChange(newValue.text)
                 }
 
-                isPastedInput(previous = textFieldValue, new = newValue) -> onValueChange(newValue.text)
+                isPastedInput(previous = textFieldValue, new = newValue) ->
+                    onValueChange(insertedText(previous = textFieldValue, new = newValue))
             }
         },
         textStyle = AppTextStyles.BodySSB,
@@ -438,6 +439,18 @@ fun MnemonicInputField(
 internal fun isPastedInput(previous: TextFieldValue, new: TextFieldValue): Boolean {
     val keptLength = previous.text.length - previous.selection.length
     return new.text.length - keptLength > 1
+}
+
+/**
+ * The text a paste actually inserted, without the field content it was dropped next to. A paste into a field that
+ * already holds a word arrives glued to it (`about` + `about ...` reads as `aboutabout ...`), and that merged first
+ * word would then be spread into the fields as if it were pasted.
+ */
+internal fun insertedText(previous: TextFieldValue, new: TextFieldValue): String {
+    val prefixLength = previous.selection.min
+    val suffixLength = previous.text.length - previous.selection.max
+    val end = (new.text.length - suffixLength).coerceAtLeast(prefixLength)
+    return new.text.substring(prefixLength.coerceAtMost(new.text.length), end.coerceAtMost(new.text.length))
 }
 
 @Preview(showSystemUi = true)
