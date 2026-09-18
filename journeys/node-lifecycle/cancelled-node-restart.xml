@@ -19,8 +19,14 @@
     snapshot server reachable, and the regtest LSP reachable. Building the node takes several
     seconds on the emulator, which is the window the back press must land in. The lifecycle lines
     are only in the app log, not in `android layout`; read `files/logs/` through `run-as`, and list
-    the logs again before each grep because they rotate mid-run. Android only: the route runs
-    through the Android LDK Debug and Rapid-Gossip-Sync screens and their app-log lines.
+    the logs again before each grep because they rotate mid-run. The cancellation has two possible
+    log orders and only one of them reconciles: cancelled inside the start, `startNode` reconciles
+    and logs a lifecycle line before `recoverOnCancellation` logs the recovery; cancelled while the
+    stop is still finishing, the stop completes under `NonCancellable` and rethrows before the start
+    begins, so the recovery line is logged on its own. The run waits for the start to begin before
+    pressing Back to aim at the first order, but only the recovery line is asserted unconditionally.
+    Android only: the route runs through the Android LDK Debug and Rapid-Gossip-Sync screens and
+    their app-log lines.
   </description>
   <actions>
     <action>Run `adb shell "run-as to.bitkit.dev ls -t files/logs/"` and note the newest log file</action>
@@ -34,8 +40,9 @@
     <action>Verify the "Rapid-Gossip-Sync" screen is visible and `ConnectedUrl` shows the default snapshot URL with no trailing slash</action>
     <action>Tap the `RGSUrl` field near its right edge, run `adb shell input keyevent KEYCODE_MOVE_END`, then run `adb shell input text "/"`, and verify `RGSUrl` now shows that same URL with one trailing slash</action>
     <action>Run `adb shell input keyevent KEYCODE_ENTER` to dismiss the keyboard, wait about 2 seconds for the debounced validation, and verify `ConnectToHost` is enabled in `android layout` (a disabled button reports no click interaction) before tapping it</action>
-    <action>Wait about 4 seconds, then tap `NavigationBack` while the node is still rebuilding, which cancels the route-scoped change</action>
-    <action>Verify the newest log contains one of "Restored lifecycle state" or "Adopted running LDK node after start cancellation" or "Kept running LDK node and its event listener after start cancellation", followed by "Cancelled ldk-node config change, recovering in background"</action>
+    <action>Poll the newest log until it contains "Starting node with new RGS server", which is written after the stop finished and immediately before the start, then tap `NavigationBack` at once so the cancellation lands in the start phase rather than in the stop</action>
+    <action>Verify the newest log contains "Cancelled ldk-node config change, recovering in background" after that line: this is the only line the cancellation always emits, whichever phase it lands in</action>
+    <action>Verify that the same log also contains one of "Restored lifecycle state" or "Adopted running LDK node after start cancellation" or "Kept running LDK node and its event listener after start cancellation" before that recovery line. This reconcile line is expected because the previous step pressed Back inside the start, but it is not guaranteed: if the back press still landed during the stop, the stop runs to completion under `NonCancellable` and rethrows before the start begins, so recovery is logged with no reconcile line at all. Treat a missing reconcile line as the stop-phase order, not a failure, and note which of the two orders the run produced</action>
     <action>Verify within 60 seconds that the same log then contains "Successfully started node with previous config", with no "Node setup error" and no "Failed starting node with previous config" line after it</action>
     <action>Tap `RGSServer` again and verify `ConnectedUrl` still shows the default snapshot URL with no trailing slash: a cancelled change is never persisted, so the emulator is left as it was found. If it shows the trailing slash the back press landed after the rebuild finished — tap `ResetToDefault`, tap `ConnectToHost`, wait until `ConnectedUrl` drops the slash, then rerun from the step that taps the `RGSUrl` field with an earlier back press</action>
     <action>Press the device back button until the wallet overview (tag "TotalBalance") is visible</action>

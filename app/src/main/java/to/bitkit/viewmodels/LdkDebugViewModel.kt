@@ -168,10 +168,9 @@ class LdkDebugViewModel @Inject constructor(
                     )
                 }
                 .onFailure { e ->
-                    if (e is NodeStartYieldedToStopError) {
-                        Logger.info("Deferred node restart to a requested stop", context = TAG)
-                        return@onFailure
-                    }
+                    // The repo already logs this outcome; the branch only suppresses the error toast.
+                    if (e is NodeStartYieldedToStopError) return@onFailure
+
                     Logger.error("Failed to restart node", e, context = TAG)
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,

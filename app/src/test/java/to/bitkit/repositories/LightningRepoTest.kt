@@ -96,6 +96,8 @@ class LightningRepoTest : BaseUnitTest() {
     companion object {
         private const val NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS = 2_500L
         private const val BACKGROUND_STOP_DELAY_MS = 5_000L
+
+        /** Mirrors the bounded start retry delay `LightningRepo.startNode` waits before its one retry. */
         private const val START_RETRY_DELAY_MS = 2_000L
     }
 
@@ -651,11 +653,11 @@ class LightningRepoTest : BaseUnitTest() {
 
     private suspend fun stubNodeForRestart() {
         whenever(lightningService.node).thenReturn(mock())
-        whenever(lightningService.sync()).thenReturn(Unit)
-        whenever(lightningService.stop()).thenReturn(Unit)
+        whenever { lightningService.sync() }.thenReturn(Unit)
+        whenever { lightningService.stop() }.thenReturn(Unit)
         val blocktank = mock<BlocktankService>()
         whenever(coreService.blocktank).thenReturn(blocktank)
-        whenever(blocktank.info(any())).thenReturn(null)
+        whenever { blocktank.info(any()) }.thenReturn(null)
     }
 
     // Regression #1125: a transient start error must not leave a restart in ErrorStarting
