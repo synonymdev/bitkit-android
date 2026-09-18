@@ -1,10 +1,13 @@
 <journey name="channel details time format">
   <description>
     Proves the Connection details screen follows the device 12/24-hour setting for its dates, and
-    updates while the app stays open. Precondition: onboarded dev wallet, English locale, at least one
-    open Lightning connection bought from Blocktank (so "Created on" and "Opened on" are shown). Before
-    starting, record `adb shell settings get system time_12_24` (null means Automatic) and restore it at
-    the end. Change the format through the system Settings UI, not `settings put`: the app listens for
+    updates while the app stays open. Precondition: onboarded dev wallet, English locale, and at least
+    one open Lightning connection opened with Transfer to Spending, paid from savings. "Created on"
+    comes from the Blocktank order, so any bought connection shows it, but "Opened on" is read from the
+    on-chain transfer that funded the channel, so a CJIT connection — paid over Lightning — never shows
+    it; pick a transfer-funded connection or the "Opened on" steps cannot pass. Before starting, record
+    `adb shell settings get system time_12_24` (null means Automatic) and restore it at the end. Change
+    the format through the system Settings UI, not `settings put`: the app listens for
     ACTION_TIME_CHANGED, which only the Settings app broadcasts. "Order Expiry" shows only while the
     order is unopened and "Closed on" only for a closed connection; check them the same way when present.
   </description>
@@ -15,7 +18,7 @@
     <action>Tap "Settings" (testTag "DrawerSettings")</action>
     <action>Tap the "Advanced" tab (testTag "Tab-advanced")</action>
     <action>Tap "Lightning Connections" (testTag "Channels")</action>
-    <action>Tap the first connection (testTag "Channel")</action>
+    <action>Tap the connection opened with Transfer to Spending (testTag "Channel"; all rows share the tag, so with several connections take the one funded from savings)</action>
     <action>Verify that the "Created on" value reads like "Sep 15, 2026, 2:44 PM", ending in AM or PM with no leading zero on the hour</action>
     <action>Scroll down until "Opened on" is visible</action>
     <action>Verify that the "Opened on" value ends in AM or PM</action>
