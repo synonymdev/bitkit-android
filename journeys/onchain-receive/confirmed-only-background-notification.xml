@@ -13,8 +13,8 @@
     <action>Press back, then send the app to the background: adb shell input keyevent KEYCODE_HOME</action>
     <action>Run in one command: ./lsp POST /regtest/chain/deposit '{"address":"&lt;savings addr&gt;","amountSat":7970}' &amp;&amp; ./lsp POST /regtest/chain/mine '{"count":1}'</action>
     <action>Wait 40s</action>
-    <action>Run: adb shell dumpsys notification --noredact | grep -A3 "pkg=to.bitkit.dev"</action>
-    <action>Verify exactly one notification titled "Payment Received" is posted, with body "Received &lt;amount&gt;" carrying the fiat and BTC amounts in the order set by the primary display setting</action>
+    <action>Run: adb shell dumpsys notification --noredact | grep -E "android\.title=String \(Payment Received\)|android\.text=String \(Received "</action>
+    <action>Verify exactly one "android.title=String (Payment Received)" line is printed, and an "android.text=String (Received &lt;amount&gt;)" line with it carrying the fiat and BTC amounts in the order set by the primary display setting. The foreground-service notification is titled "Bitkit Regtest" on the dev flavour, so it does not match either pattern</action>
     <action>Open the notification shade and tap the "Payment Received" notification</action>
     <action>Verify the app opens with the received sheet (testTag "ReceivedTransaction") showing the deposited amount</action>
     <action>Tap the sheet button (testTag "ReceivedTransactionButton") and verify the home screen shows with no second sheet</action>
