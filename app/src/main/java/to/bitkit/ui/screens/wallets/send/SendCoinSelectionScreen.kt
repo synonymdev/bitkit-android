@@ -127,7 +127,7 @@ private fun Content(
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
-                            .fillMaxWidth()
+                            .fillParentMaxSize()
                             .testTag("CoinSelectionLoading")
                     ) {
                         GradientCircularProgressIndicator(modifier = Modifier.size(32.dp))
@@ -140,6 +140,7 @@ private fun Content(
                     LoadErrorState(
                         isLoading = uiState.isLoading,
                         onRetry = onRetry,
+                        modifier = Modifier.fillParentMaxSize()
                     )
                 }
             }
@@ -203,6 +204,7 @@ private fun LoadErrorState(
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
         modifier = modifier
             .fillMaxWidth()
             .testTag("CoinSelectionLoadError")
@@ -325,6 +327,21 @@ private fun PreviewEmpty() {
                     isSelectionValid = false
                 ),
                 tagsByTxId = persistentMapOf(),
+                modifier = Modifier.sheetHeight(),
+            )
+        }
+    }
+}
+
+@Preview(showSystemUi = true)
+@Composable
+private fun PreviewLoading() {
+    AppThemeSurface {
+        BottomSheetPreview {
+            Content(
+                uiState = CoinSelectionUiState(
+                    isLoading = true,
+                ),
                 modifier = Modifier.sheetHeight(),
             )
         }
