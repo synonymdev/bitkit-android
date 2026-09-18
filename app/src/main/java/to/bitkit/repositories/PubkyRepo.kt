@@ -173,6 +173,10 @@ class PubkyRepo @Inject constructor(
         initializationReady.await()
     }
 
+    suspend fun republishIdentityIfNeeded(): Result<Unit> = withContext(ioDispatcher) {
+        runSuspendCatching { pubkyService.republishIdentityIfNeeded(publicKey.value) }
+    }
+
     suspend fun initialize() = withContext(ioDispatcher) {
         runSuspendCatching {
             ensureServiceInitialized()

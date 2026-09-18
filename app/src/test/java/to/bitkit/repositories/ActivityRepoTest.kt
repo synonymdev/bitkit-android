@@ -90,6 +90,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
     @Suppress("LongParameterList")
     private fun createOnchainActivity(
+        walletId: String = baseOnchainActivity.walletId,
         id: String = baseOnchainActivity.id,
         txId: String = baseOnchainActivity.txId,
         value: ULong = baseOnchainActivity.value,
@@ -111,6 +112,7 @@ class ActivityRepoTest : BaseUnitTest() {
     ): Activity.Onchain {
         return Activity.Onchain(
             v1 = baseOnchainActivity.copy(
+                walletId = walletId,
                 id = id,
                 txId = txId,
                 value = value,
@@ -419,23 +421,7 @@ class ActivityRepoTest : BaseUnitTest() {
         assertNull(result.getOrThrow())
     }
 
-    @Test
-    fun `contactActivities filters replaced sent transaction`() = test {
-        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
-        val replacedTxId = "replaced_tx_id"
-        val replacedActivity = createOnchainActivity(
-            id = "replaced_activity_id",
-            txId = replacedTxId,
-            doesExist = false,
-            contact = contactPublicKey,
-        )
-        val replacementActivity = createOnchainActivity(
-            id = "replacement_activity_id",
-            txId = "replacement_tx_id",
-            boostTxIds = listOf(replacedTxId),
-            contact = contactPublicKey,
-        )
-        whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(setOf(replacedTxId))
+    private suspend fun stubContactActivities(activities: List<Activity>) {
         whenever(
             coreService.activity.get(
                 walletId = null,
@@ -448,11 +434,144 @@ class ActivityRepoTest : BaseUnitTest() {
                 limit = null,
                 sortDirection = SortDirection.DESC,
             )
-        ).thenReturn(listOf(replacedActivity, replacementActivity))
+        ).thenReturn(activities)
+    }
+
+    @Test
+    fun `contactActivities filters replaced sent transaction`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val replacedTxId = "replaced_tx_id"
+        val replacedActivity = createOnchainActivity(
+            walletId = WalletScope.default,
+            id = "replaced_activity_id",
+            txId = replacedTxId,
+            doesExist = false,
+            contact = contactPublicKey,
+        )
+        val replacementActivity = createOnchainActivity(
+            walletId = WalletScope.default,
+            id = "replacement_activity_id",
+            txId = "replacement_tx_id",
+            boostTxIds = listOf(replacedTxId),
+            contact = contactPublicKey,
+        )
+        whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(setOf(replacedTxId))
+        stubContactActivities(listOf(replacedActivity, replacementActivity))
 
         val result = sut.contactActivities(contactPublicKey)
 
         assertEquals(listOf(replacementActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities keeps hardware sent row whose txId is boosted only in default wallet`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val hardwareWalletId = "hardware-wallet"
+        val sharedTxId = "shared_tx_id"
+        val defaultReplacementActivity = createOnchainActivity(
+            walletId = WalletScope.default,
+            id = "default_replacement_id",
+            txId = "default_replacement_tx_id",
+            boostTxIds = listOf(sharedTxId),
+            contact = contactPublicKey,
+        )
+        val hardwareActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "hardware_activity_id",
+            txId = sharedTxId,
+            doesExist = false,
+            contact = contactPublicKey,
+        )
+        whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(setOf(sharedTxId))
+        whenever(coreService.activity.getTxIdsInBoostTxIds(hardwareWalletId)).thenReturn(emptySet())
+        stubContactActivities(listOf(defaultReplacementActivity, hardwareActivity))
+
+        val result = sut.contactActivities(contactPublicKey)
+
+        assertEquals(listOf(defaultReplacementActivity, hardwareActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities returns rows from every wallet with matching contact`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val hardwareWalletId = "hardware-wallet"
+        val defaultActivity = createOnchainActivity(
+            walletId = WalletScope.default,
+            id = "default_activity_id",
+            txId = "default_tx_id",
+            contact = contactPublicKey,
+        )
+        val hardwareActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "hardware_activity_id",
+            txId = "hardware_tx_id",
+            contact = contactPublicKey,
+        )
+        val otherContactActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "other_contact_activity_id",
+            txId = "other_contact_tx_id",
+            contact = "pubky8pinxras7i1dn6qgyqp1xa4ksxnm9yupmbzpf8ec6aqmqhw6t8o",
+        )
+        whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(emptySet())
+        whenever(coreService.activity.getTxIdsInBoostTxIds(hardwareWalletId)).thenReturn(emptySet())
+        stubContactActivities(listOf(defaultActivity, hardwareActivity, otherContactActivity))
+
+        val result = sut.contactActivities(contactPublicKey)
+
+        assertEquals(listOf(defaultActivity, hardwareActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities filters replaced sent row using its own wallet boosts`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val hardwareWalletId = "hardware-wallet"
+        val replacedTxId = "hardware_replaced_tx_id"
+        val replacedActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "hardware_replaced_id",
+            txId = replacedTxId,
+            doesExist = false,
+            contact = contactPublicKey,
+        )
+        val replacementActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "hardware_replacement_id",
+            txId = "hardware_replacement_tx_id",
+            boostTxIds = listOf(replacedTxId),
+            contact = contactPublicKey,
+        )
+        whenever(coreService.activity.getTxIdsInBoostTxIds(hardwareWalletId)).thenReturn(setOf(replacedTxId))
+        stubContactActivities(listOf(replacedActivity, replacementActivity))
+
+        val result = sut.contactActivities(contactPublicKey)
+
+        assertEquals(listOf(replacementActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities rethrows cancellation`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val cancellation = CancellationException("cancelled")
+        whenever(
+            coreService.activity.get(
+                walletId = null,
+                filter = ActivityFilter.ALL,
+                txType = null,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = null,
+                sortDirection = SortDirection.DESC,
+            )
+        ).thenThrow(cancellation)
+
+        val thrown = assertFailsWith<CancellationException> {
+            sut.contactActivities(contactPublicKey)
+        }
+
+        assertEquals(cancellation.message, thrown.message)
     }
 
     @Test
