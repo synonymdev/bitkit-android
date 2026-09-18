@@ -115,7 +115,7 @@ fixtures, push notifications) live in each suite's README.
 | Suite | Journeys | Notes |
 | --- | --- | --- |
 | [amount-limits](amount-limits) | 4 | Number pad caps on all four amount screens |
-| [app-update](app-update) | 1 | Critical update blocks onboarding; needs a non-debug build and a critical release fixture; no README |
+| [app-update](app-update) | 1 | Critical update blocks onboarding; cannot be run from a stock build — needs a non-debug build and a local change to reach a critical release, see the journey's setup; no README |
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
