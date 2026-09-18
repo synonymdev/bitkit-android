@@ -4,15 +4,23 @@
     lifecycle, recovers in the background, and can still receive a Lightning payment. Two routes are
     walked because only one of them still cancels a start. LDK Debug's Restart runs detached on the
     repo scope, so leaving the screen no longer cancels it — the restart completes and this journey
-    asserts that outcome instead of a cancellation. The Electrum Server screen's view model is
+    asserts that outcome instead of a cancellation. The Rapid-Gossip-Sync screen's view model is
     route-scoped, so backing out of a Connect mid-rebuild really does cancel the start; that is the
-    route that exercises the reconcile. Precondition: onboarded dev debug build (`to.bitkit.dev`)
-    with dev mode on, a usable Lightning channel with inbound capacity, the configured Electrum
-    server reachable, and the regtest LSP reachable. Building the node takes several seconds on the
-    emulator, which is the window the back press must land in. The lifecycle lines are only in the
-    app log, not in `android layout`; read `files/logs/` through `run-as`, and list the logs again
-    before each grep because they rotate mid-run. Android only: the route runs through the Android
-    LDK Debug and Electrum Server screens and their app-log lines.
+    route that exercises the reconcile. It is used instead of the Electrum Server screen because a
+    dev emulator is already connected to the default Electrum server: `ResetToDefault` refills the
+    same host/port/protocol, `hasEdited` stays false, the Connect button stays disabled, and no
+    rebuild ever starts. The RGS screen has no such block — appending a trailing slash to the
+    default snapshot URL makes it differ from the stored one, while the validator trims the slash
+    back off before probing, so the server stays the same reachable endpoint and Connect really does
+    rebuild the node with `restartWithRgsServer`, which takes the identical cancel-and-recover path.
+    A cancelled change is never persisted, so the run leaves the emulator on the default URL.
+    Precondition: onboarded dev debug build (`to.bitkit.dev`) with dev mode on, a usable Lightning
+    channel with inbound capacity, the configured Electrum server reachable, the default RGS
+    snapshot server reachable, and the regtest LSP reachable. Building the node takes several
+    seconds on the emulator, which is the window the back press must land in. The lifecycle lines
+    are only in the app log, not in `android layout`; read `files/logs/` through `run-as`, and list
+    the logs again before each grep because they rotate mid-run. Android only: the route runs
+    through the Android LDK Debug and Rapid-Gossip-Sync screens and their app-log lines.
   </description>
   <actions>
     <action>Run `adb shell "run-as to.bitkit.dev ls -t files/logs/"` and note the newest log file</action>
@@ -22,11 +30,14 @@
     <action>Wait about 4 seconds, then tap `NavigationBack`</action>
     <action>Verify within 60 seconds that the newest log (list the logs again) contains "Node restarted successfully" after the "Restarting node" line: the restart is detached, so leaving the screen drops only the toast, never the restart</action>
     <action>Verify the same log contains no "Failed to start node during restart", no "Node setup error" and no "Start error" line after "Restarting node"</action>
-    <action>Press the device back button until the Advanced settings tab is visible, then tap `ElectrumConfig`</action>
-    <action>Verify the "Electrum Server" screen is visible, then tap `ResetToDefault` and tap `ConnectToHost`</action>
+    <action>Press the device back button until the Advanced settings tab is visible, then tap `RGSServer`</action>
+    <action>Verify the "Rapid-Gossip-Sync" screen is visible and `ConnectedUrl` shows the default snapshot URL with no trailing slash</action>
+    <action>Tap the `RGSUrl` field near its right edge, run `adb shell input keyevent KEYCODE_MOVE_END`, then run `adb shell input text "/"`, and verify `RGSUrl` now shows that same URL with one trailing slash</action>
+    <action>Run `adb shell input keyevent KEYCODE_ENTER` to dismiss the keyboard, wait about 2 seconds for the debounced validation, and verify `ConnectToHost` is enabled in `android layout` (a disabled button reports no click interaction) before tapping it</action>
     <action>Wait about 4 seconds, then tap `NavigationBack` while the node is still rebuilding, which cancels the route-scoped change</action>
     <action>Verify the newest log contains one of "Restored lifecycle state" or "Adopted running LDK node after start cancellation" or "Kept running LDK node and its event listener after start cancellation", followed by "Cancelled ldk-node config change, recovering in background"</action>
     <action>Verify within 60 seconds that the same log then contains "Successfully started node with previous config", with no "Node setup error" and no "Failed starting node with previous config" line after it</action>
+    <action>Tap `RGSServer` again and verify `ConnectedUrl` still shows the default snapshot URL with no trailing slash: a cancelled change is never persisted, so the emulator is left as it was found. If it shows the trailing slash the back press landed after the rebuild finished — tap `ResetToDefault`, tap `ConnectToHost`, wait until `ConnectedUrl` drops the slash, then rerun from the step that taps the `RGSUrl` field with an earlier back press</action>
     <action>Press the device back button until the wallet overview (tag "TotalBalance") is visible</action>
     <action>Run `adb shell input keyevent KEYCODE_HOME`, wait 8 seconds so the debounced background stop fires, then run `adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity`</action>
     <action>Verify within 60 seconds that the log lines written after the relaunch contain "Node started" or "LDK node start skipped", and a "Collected node support summary" line with lifecycle='Running'</action>
