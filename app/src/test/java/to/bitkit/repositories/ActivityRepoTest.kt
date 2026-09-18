@@ -535,13 +535,37 @@ class ActivityRepoTest : BaseUnitTest() {
             boostTxIds = listOf(replacedTxId),
             contact = contactPublicKey,
         )
-        whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(emptySet())
         whenever(coreService.activity.getTxIdsInBoostTxIds(hardwareWalletId)).thenReturn(setOf(replacedTxId))
         stubContactActivities(listOf(replacedActivity, replacementActivity))
 
         val result = sut.contactActivities(contactPublicKey)
 
         assertEquals(listOf(replacementActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities rethrows cancellation`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val cancellation = CancellationException("cancelled")
+        whenever(
+            coreService.activity.get(
+                walletId = null,
+                filter = ActivityFilter.ALL,
+                txType = null,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = null,
+                sortDirection = SortDirection.DESC,
+            )
+        ).thenThrow(cancellation)
+
+        val thrown = assertFailsWith<CancellationException> {
+            sut.contactActivities(contactPublicKey)
+        }
+
+        assertEquals(cancellation.message, thrown.message)
     }
 
     @Test
