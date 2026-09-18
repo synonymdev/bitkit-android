@@ -942,6 +942,10 @@
     <string name="wallet__spending__title">Wydatki</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Wyślij\nbitcoin&lt;/accent&gt;\nna Twoje\nsaldo wydatków</string>
     <string name="wallet__details_transfer_subtitle">Transfer przychodzący: </string>
+    <string name="wallet__balance_hidden_message">Przeciągnij saldo portfela, aby je ponownie wyświetlić.</string>
+    <string name="wallet__balance_hidden_title">Ukryte saldo portfela</string>
+    <string name="wallet__balance_unit_switched_message">Dotknij salda portfela, aby przełączyć je z powrotem na %1$s.</string>
+    <string name="wallet__balance_unit_switched_title">Przełączono na %1$s</string>
     <string name="wallet__boost">Przyśpiesz</string>
     <string name="wallet__boost_title">Przyśpiesz transakcję</string>
     <string name="wallet__boost_success_title">Przyśpieszona!</string>

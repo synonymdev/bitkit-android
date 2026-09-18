@@ -846,6 +846,10 @@
     <string name="wallet__activity_transfer_to_savings">В сбережения</string>
     <string name="wallet__activity_transfer_to_spending">В Расходы</string>
     <string name="wallet__activity_tx_id">ID Транзакции</string>
+    <string name="wallet__balance_hidden_message">Смахните ваш баланс кошелька, чтобы снова его показать.</string>
+    <string name="wallet__balance_hidden_title">Баланс Кошелька Скрыт</string>
+    <string name="wallet__balance_unit_switched_message">Нажмите на баланс кошелька, чтобы переключить обратно на %1$s.</string>
+    <string name="wallet__balance_unit_switched_title">Переключено на %1$s</string>
     <string name="wallet__boost">Ускорить</string>
     <string name="wallet__boost_decrease_fee">Уменьшить комиссию</string>
     <string name="wallet__boost_error_msg">Bitkit не удалось ускорить транзакцию.</string>
