@@ -7,13 +7,24 @@
     Precondition: onboarded dev wallet (staging regtest) with a positive on-chain Savings balance and
     a running node connected to the LSP. Start on the wallet home screen. The LSP only opens the
     channel after the order payment has one confirmation, so the transfer stays pending until a block
-    is mined; other staging users can mine that block for you, so do the restart steps promptly.
+    is mined. The dev build mines that block itself: the SettingUp screen auto-mines one block 5 s
+    after it appears on regtest, and leaving the screen cancels it. Tap "Continue Using Bitkit" within
+    those 5 s so the transfer is still pending for the restart steps; the block is then mined by hand
+    later in the journey.
 
     Transfer orders are zero-conf, so on an unmodified build the transfer settles as soon as the
     channel is ready and the closed-channel settle path is not reached on its own. This journey then
     checks that nothing is left behind after the close. Reaching the closed-channel path on a device
     needs a temporary local change that skips the channel-ready settle; it was verified that way for
     issue #614 and is covered by TransferRepoTest.kt.
+
+    On-screen, this journey is a no-regression check: the banner, balance and close-sheet steps pass
+    on master too, because both versions settle the transfer when the zero-conf channel becomes ready.
+    The one thing that tells the two builds apart on a device is the app log. Only the fixed build
+    fetches LSP orders for still-pending transfers, so only it writes "orders for active transfers"
+    while the transfer is pending; master never calls the LSP there. The fixed build may also write
+    "Skipped syncing transfers because channels are unavailable" while the node is starting after the
+    restart, which master does not write either, but that line is not guaranteed on every run.
 
     The close moves the transfer amount back to Savings minus fees, so the wallet ends close to its
     starting balances.
@@ -27,12 +38,13 @@
     <action>Wait until the available amount (testTag "SpendingAmountUnit") shows a positive value</action>
     <action>Tap the "5" key (testTag "N5") enough times to enter an amount the LSP accepts (50000 sats is a safe value), then tap Continue (testTag "SpendingAmountContinue")</action>
     <action>Swipe "Swipe To Transfer" to confirm</action>
-    <action>Tap "Continue Using Bitkit" (testTag "TransferSuccess-button")</action>
-    <action>Verify the purple "TRANSFER IN PROGRESS" banner is visible on the home screen (screenshot; the banner carries no testTag)</action>
+    <action>As soon as the setting up screen (testTag "LightningSettingUp") appears, tap "Continue Using Bitkit" (testTag "TransferSuccess-button") within 5 s, before the screen auto-mines a block; do not dump the layout first</action>
+    <action>Verify the purple "TRANSFER IN PROGRESS" banner is visible on the home screen (screenshot; the banner carries no testTag). If the banner is already gone, the auto-mine won the race: report the run as inconclusive and start over</action>
     <action>Run adb shell am force-stop to.bitkit.dev, then launch the app again</action>
     <action>Wait for the home screen and for the node to start (app log line "Node started")</action>
     <action>Verify the purple "TRANSFER IN PROGRESS" banner is still visible (screenshot)</action>
     <action>Read the order id from the app log: the active TO_SPENDING transfer's "lspOrderId" in the latest "Active transfers at block height" line</action>
+    <action>Verify the app log has a line ending in "orders for active transfers" written after the transfer was created; master never writes it, so its absence means the build under test does not carry the fix</action>
     <action>Run ./lsp POST /regtest/chain/mine '{"count":1}'</action>
     <action>Poll ./lsp GET /channels/&lt;lspOrderId&gt; until channel.state is "open", and note channel.fundingTx.id and channel.fundingTx.vout</action>
     <action>Tap the OK button (testTag "TransferSuccess-button") if the Transfer Successful screen is shown; its label is randomized ("Great!", "Nice!", …)</action>
@@ -41,6 +53,6 @@
     <action>Wait for the "Connection Closed" sheet and tap OK (testTag "ConnectionClosedButton")</action>
     <action>Verify no "TRANSFER IN PROGRESS" banner is visible on the home screen (screenshot)</action>
     <action>Verify the Spending balance (testTag "ActivitySpending") matches the value noted in the first step</action>
-    <action>Verify the app log has a "Settled transfer" line naming the closed channel, and that the latest "Active transfers at block height" line lists no TO_SPENDING transfer</action>
+    <action>Verify the app log has a "ready, settled transfer:" line for the transfer (the build writes "Channel &lt;channelId&gt; ready, settled transfer: &lt;id&gt;", with no quotes around the ids), and that the latest "Active transfers at block height" line lists no TO_SPENDING transfer. The closed-channel settle lines ("Settled transfer '&lt;id&gt;' for closed channel …") only appear on a build that skips the channel-ready settle, so do not expect them here</action>
   </actions>
 </journey>
