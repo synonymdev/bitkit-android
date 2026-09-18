@@ -20,7 +20,16 @@
     1. Confirm the production feed still marks the Android build critical:
        `curl -sL https://github.com/synonymdev/bitkit-android/releases/download/updater/release.json`.
        If `critical` is false there, point `Env.RELEASE_URL` at a fixture you serve yourself instead
-       (`critical: true` and a `buildNumber` above the installed `versionCode`) and skip step 2.
+       and skip step 2. The fixture has to be that feed's whole object with only `buildNumber` and
+       `critical` edited (`critical: true`, `buildNumber` above the installed `versionCode`):
+       `PlatformDetails` (data/dto/AppUpdaterDTO.kt) declares `version`, `notes`, `pub_date` and
+       `url` with no defaults, and the response is decoded with the default strict `Json`
+       (AppUpdaterService.kt:25), so a fixture that drops a field — or adds one — throws,
+       `checkCriticalAppUpdate` takes `onFailure` and only logs a warning (AppViewModel.kt:5608-5610),
+       and the flag stays false. Serve it over HTTPS, e.g. a raw gist or a release asset on a repo of
+       your own: a release build has no `usesCleartextTraffic` (it is set only in
+       app/src/debug/AndroidManifest.xml) and targetSdk 36 blocks plain `http://`, so a local
+       `http://` server is refused the same silent way.
     2. Lower `versionCode` in app/build.gradle.kts below the feed's `buildNumber`, e.g. to 1.
     3. Build non-debug without `E2E`: `just build assembleDevRelease`, then install the APK from
        `app/build/outputs/bitkit/devRelease/`. This needs a release keystore in keystore.properties,
@@ -29,13 +38,15 @@
        throwaway device or AVD: never wipe a funded wallet to reach onboarding.
 
     If the gate does not hold, report the journey as not run rather than failed — Terms of Use at
-    the third action means the fixture is missing, not that the app regressed.
+    the third action means the fixture is missing, not that the app regressed. `adb logcat -s APP:V`
+    tells the two apart: "Failure fetching new releases" means the feed did not decode or was not
+    reachable, so the setup is wrong and the journey is again not run.
     The screen has no testTags, so the steps assert its visible text. The headline is uppercased and
     carries a line break, so it reads "UPDATE" then "BITKIT NOW". Reverting the local change is the
     negative check: onboarding then stays on the Terms of Use screen.
   </description>
   <actions>
-    <action>Verify the setup above is in place: the installed build is non-debug and built without E2E, and the feed at Env.RELEASE_URL lists an Android build with critical true and a buildNumber above the installed versionCode. If not, stop and report the journey as not run</action>
+    <action>Verify the setup above is in place: the installed build is non-debug and built without E2E, and the feed at Env.RELEASE_URL is served over HTTPS and lists a complete Android object with critical true and a buildNumber above the installed versionCode. If not, stop and report the journey as not run</action>
     <action>Launch the app</action>
     <action>Wait up to 10 seconds for the release check to finish</action>
     <action>Verify that "Critical Update", the "UPDATE" / "BITKIT NOW" headline and "Update Bitkit" are visible</action>
