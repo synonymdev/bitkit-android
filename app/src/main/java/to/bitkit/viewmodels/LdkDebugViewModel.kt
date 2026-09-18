@@ -17,6 +17,7 @@ import to.bitkit.di.BgDispatcher
 import to.bitkit.ext.of
 import to.bitkit.models.Toast
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.NodeStartYieldedToStopError
 import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.ui.shared.toast.ToastEventBus
 import to.bitkit.utils.Logger
@@ -158,7 +159,7 @@ class LdkDebugViewModel @Inject constructor(
     fun restartNode() {
         viewModelScope.launch(bgDispatcher) {
             _uiState.update { it.copy(isLoading = true) }
-            lightningRepo.restartNode()
+            lightningRepo.restartNodeDetached()
                 .onSuccess {
                     Logger.info("Node restarted successfully", context = TAG)
                     ToastEventBus.send(
@@ -167,6 +168,10 @@ class LdkDebugViewModel @Inject constructor(
                     )
                 }
                 .onFailure { e ->
+                    if (e is NodeStartYieldedToStopError) {
+                        Logger.info("Deferred node restart to a requested stop", context = TAG)
+                        return@onFailure
+                    }
                     Logger.error("Failed to restart node", e, context = TAG)
                     ToastEventBus.send(
                         type = Toast.ToastType.ERROR,

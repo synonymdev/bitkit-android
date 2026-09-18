@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -95,6 +96,7 @@ class LightningRepoTest : BaseUnitTest() {
     companion object {
         private const val NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS = 2_500L
         private const val BACKGROUND_STOP_DELAY_MS = 5_000L
+        private const val START_RETRY_DELAY_MS = 2_000L
     }
 
     private lateinit var sut: LightningRepo
@@ -623,6 +625,165 @@ class LightningRepoTest : BaseUnitTest() {
         testScheduler.advanceUntilIdle()
 
         verify(lightningService, never()).stop()
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    private suspend fun stubNodeForRestart() {
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.sync()).thenReturn(Unit)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
+    }
+
+    // Regression #1125: a transient start error must not leave a restart in ErrorStarting
+    @Test
+    fun `restartNode retries a transient start failure and ends Running`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("Feerate estimation update timeout")
+            Unit
+        }
+
+        val restart = async { sut.restartNode() }
+        runCurrent()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        testScheduler.advanceTimeBy(START_RETRY_DELAY_MS)
+        runCurrent()
+        val result = restart.await()
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `restartNode ends in ErrorStarting when every bounded start attempt fails`() = test {
+        stubNodeForRestart()
+        val error = AppError("Feerate estimation update timeout")
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer { throw error }
+
+        val result = sut.restartNode()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(error, result.exceptionOrNull())
+        assertEquals(NodeLifecycleState.ErrorStarting(error), sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `restartNode skips the start retry when a stop is requested during the failed attempt`() = test {
+        stubNodeForRestart()
+        val error = AppError("Feerate estimation update timeout")
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) {
+                sut.stopDebounced()
+                throw error
+            }
+            Unit
+        }
+
+        val result = sut.restartNode()
+
+        val yieldError = assertIs<NodeStartYieldedToStopError>(result.exceptionOrNull())
+        assertEquals(error, yieldError.cause)
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        verify(lightningService, times(1)).stop()
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(2)).stop()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+
+        val foregroundResult = sut.start()
+
+        assertTrue(foregroundResult.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `restartNode retries when a foreground cancels the stop requested during the failed attempt`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) {
+                sut.stopDebounced()
+                throw AppError("Feerate estimation update timeout")
+            }
+            Unit
+        }
+
+        val restart = async { sut.restartNode() }
+        runCurrent()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        sut.cancelPendingStop()
+        testScheduler.advanceTimeBy(START_RETRY_DELAY_MS)
+        runCurrent()
+        val result = restart.await()
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(1)).stop()
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `restartNode retry does not cancel a stop requested during the retry`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("Feerate estimation update timeout")
+            sut.stopDebounced()
+            Unit
+        }
+
+        val result = sut.restartNode()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(2)).stop()
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    // Regression #1125: a caller cancelled inside the retry delay must not drop the bounded retry
+    @Test
+    fun `restartNodeDetached completes the start retry after the caller is cancelled`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("Feerate estimation update timeout")
+            Unit
+        }
+
+        val caller = CoroutineScope(testDispatcher)
+        caller.launch { sut.restartNodeDetached() }
+        runCurrent()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+
+        // Back press inside the retry window clears the ViewModel and cancels its scope
+        caller.cancel()
+        testScheduler.advanceTimeBy(START_RETRY_DELAY_MS)
+        runCurrent()
+
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
 
