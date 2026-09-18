@@ -1,0 +1,22 @@
+<journey name="Subscriptions Payments Tab">
+  <description>
+    The Payments tab inside Subscriptions: the pending badge on the tab, an incoming request with its
+    Dismiss and Pay actions, an outgoing request showing pending in place of the fiat amount, and the
+    payment request detail screen. Requires one incoming and one outgoing Paykit Payment Request.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app with Paykit UI enabled, one incoming Payment Request pending, and one outgoing Payment Request awaiting the recipient</action>
+    <action>Open the drawer menu and tap Subscriptions</action>
+    <action>Verify the Payments tab (testTag "Tab-payments") shows a badge with the pending incoming count, rendered immediately after the label with a 6.dp gap, the label still centred in the tab, and its indicator level with the other tabs</action>
+    <action>Tap the Payments tab</action>
+    <action>Verify the payment requests list (testTag "PaymentRequestsScreen") appears under the PAYMENT REQUESTS header</action>
+    <action>Verify the incoming request card shows Dismiss and Pay actions</action>
+    <action>Verify the outgoing request row shows "pending" where the fiat amount sits</action>
+    <action>Tap the incoming request row (testTag "PaymentRequestRow-&lt;paymentRequestId&gt;")</action>
+    <action>Verify the details screen (testTag "PaymentRequestDetailsScreen") shows DATE, TIME, CONTACT, TAGS and NOTE sections</action>
+    <action>Verify the contact card is sized to its content rather than the full width, and that a divider follows the contact and tags sections</action>
+    <action>Verify the note card is drawn with the torn paper top edge</action>
+    <action>Press Android back and verify the list is shown again</action>
+    <action>Verify Request Payment (testTag "PaymentRequestCreate") is visible at the bottom and that list rows scroll underneath it</action>
+  </actions>
+</journey>

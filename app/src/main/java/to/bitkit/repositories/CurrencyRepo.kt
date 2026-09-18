@@ -25,6 +25,7 @@ import to.bitkit.data.CacheStore
 import to.bitkit.data.SettingsStore
 import to.bitkit.di.BgDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.BTC_SCALE
 import to.bitkit.models.BitcoinDisplayUnit
 import to.bitkit.models.ConvertedAmount
@@ -161,6 +162,10 @@ class CurrencyRepo @Inject constructor(
 
     suspend fun switchUnit() = withContext(bgDispatcher) {
         settingsStore.update { it.copy(primaryDisplay = it.primaryDisplay.not()) }
+    }
+
+    suspend fun switchBalanceUnit() = withContext(bgDispatcher) {
+        runSuspendCatching { settingsStore.switchBalanceUnit() }
     }
 
     override suspend fun switchUnit(unit: PrimaryDisplay): PrimaryDisplay = withContext(bgDispatcher) {
