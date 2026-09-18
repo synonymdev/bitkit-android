@@ -15,6 +15,11 @@
     button carries tag "SkipButton"; on a device with biometrics the screen shows a toggle and
     "ContinueButton" instead and the route differs.
 
+    Enabling the PIN pops the PIN Code screen back to Settings ▸ Security while the result sheet is
+    still up, so after OK the runner is on Settings ▸ Security and the cleanup has to re-enter PIN
+    Code before "Disable PIN" exists. Disabling pops back the same way, so the last check reads the
+    PIN Code row on Settings ▸ Security.
+
     Assert the overlap from `adb shell uiautomator dump` bounds: the Switch has no node of its own
     in `android layout`, so compare the label's right edge against the row's. On iOS, compare the
     label and switch frames from `snapshot-ui` instead.
@@ -34,7 +39,8 @@
     <action>Verify from `adb shell uiautomator dump` that the label's right bound is less than the "ToggleBioForPayments" row's right bound minus the switch width</action>
     <action>Tap the "ToggleBioForPayments" row and verify the switch turns on</action>
     <action>Tap the "ToggleBioForPayments" row again and verify the switch turns off</action>
-    <action>Tap OK (tag "OK")</action>
+    <action>Tap OK (tag "OK") and verify the screen underneath is Settings ▸ Security, not PIN Code</action>
+    <action>Tap PIN Code (tag "PINCode")</action>
     <action>Tap Disable PIN (tag "DisablePin") and enter the PIN chosen above on the disable sheet (tag "DisablePIN")</action>
     <action>Verify the PIN Code row (tag "PINCode") shows "Desactivado"</action>
     <action>Run `adb shell cmd locale set-app-locales to.bitkit.dev --locales ''`</action>
