@@ -64,13 +64,22 @@ import to.bitkit.ext.nowMs
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.ext.toTransportType
 import to.bitkit.models.ALL_ADDRESS_TYPES
-import to.bitkit.models.HwWalletId
+import to.bitkit.models.HwConnectedDevice
+import to.bitkit.models.HwDeviceState
+import to.bitkit.models.HwNearbyDevice
+import to.bitkit.models.HwWalletVendor
 import to.bitkit.models.KnownDevice
 import to.bitkit.models.TransportType
+import to.bitkit.models.deriveHardwareWalletId
+import to.bitkit.models.findHardwareWalletId
+import to.bitkit.models.isReplacedBy
+import to.bitkit.models.matches
 import to.bitkit.models.toAccountDerivationPath
 import to.bitkit.models.toCoreNetwork
 import to.bitkit.models.toSettingsString
 import to.bitkit.models.toTrezorCoinType
+import to.bitkit.models.walletKey
+import to.bitkit.models.withHardwareWalletIds
 import to.bitkit.services.TrezorDebugLog
 import to.bitkit.services.TrezorService
 import to.bitkit.services.TrezorTransport
@@ -202,7 +211,7 @@ class TrezorRepo @Inject constructor(
         transportReconnectJob?.cancel()
         transportReconnectJob = null
 
-        val knownDevices = (_state.value.knownDevices + hwWalletStore.loadKnownDevices())
+        val knownDevices = (_state.value.knownDevices + hwWalletStore.loadKnownDevices(HwWalletVendor.TREZOR))
             .distinctBy { it.id }
 
         if (_state.value.connected != null) {
@@ -531,6 +540,7 @@ class TrezorRepo @Inject constructor(
         network: BitkitCoreNetwork,
         accountType: AccountType?,
         coinSelection: CoinSelection,
+        fingerprint: String? = null,
     ): Result<List<ComposeResult>> = withContext(ioDispatcher) {
         runSuspendCatching {
             awaitSetup()
@@ -541,7 +551,7 @@ class TrezorRepo @Inject constructor(
                 network = network,
                 accountType = accountType,
                 coinSelection = coinSelection,
-                fingerprint = null,
+                fingerprint = fingerprint,
             )
         }.onFailure {
             Logger.error("Trezor offline composeTransaction failed", it, context = TAG)
@@ -872,7 +882,7 @@ class TrezorRepo @Inject constructor(
     }
 
     fun deriveWalletId(xpubs: Map<String, String>): String? =
-        deriveHardwareWalletId(xpubs)?.takeIf { it.isNotBlank() }
+        deriveHardwareWalletId(xpubs, HwWalletVendor.TREZOR)?.takeIf { it.isNotBlank() }
 
     private suspend fun connectedFeatures(deviceId: String): TrezorFeatures? {
         val current = _state.value.connected
@@ -1160,7 +1170,7 @@ class TrezorRepo @Inject constructor(
     }
 
     private suspend fun addOrUpdateKnownDevice(deviceInfo: TrezorDeviceInfo, features: TrezorFeatures): KnownDevice {
-        val stored = hwWalletStore.loadKnownDevices()
+        val stored = hwWalletStore.loadKnownDevices(HwWalletVendor.TREZOR)
         val storedEntries = stored.map { it.id to it.walletKey }.toSet()
         val knownDevices = stored + _state.value.knownDevices.filter { (it.id to it.walletKey) !in storedEntries }
         val fetchResult = fetchAccountXpubs()
@@ -1193,7 +1203,7 @@ class TrezorRepo @Inject constructor(
         val identityKey = walletKey(xpubs, deviceInfo.id)
         val named = previous ?: knownDevices.firstOrNull { it.walletKey == identityKey }
         val resolvedWalletId = previous?.walletId?.takeIf { it.isNotBlank() }
-            ?: knownDevices.findHardwareWalletId(xpubs, fallback = deviceInfo.id)
+            ?: knownDevices.findHardwareWalletId(xpubs, fallback = deviceInfo.id, vendor = HwWalletVendor.TREZOR)
         val pendingName = pendingNameFor(resolvedWalletId)
         val customLabel = named?.customLabel ?: pendingName
         val known = KnownDevice(
@@ -1296,10 +1306,10 @@ class TrezorRepo @Inject constructor(
     }
 
     private suspend fun loadKnownDevices(): List<KnownDevice> = runCatching {
-        val devices = hwWalletStore.loadKnownDevices()
+        val devices = hwWalletStore.loadKnownDevices(HwWalletVendor.TREZOR)
         val migrated = devices.withHardwareWalletIds()
         if (migrated != devices) {
-            hwWalletStore.saveKnownDevices(migrated)
+            hwWalletStore.saveKnownDevices(migrated, vendor = HwWalletVendor.TREZOR)
         }
         migrated
     }.onFailure {
@@ -1308,7 +1318,7 @@ class TrezorRepo @Inject constructor(
 
     private suspend fun saveKnownDevices(devices: List<KnownDevice>, pendingName: PendingNameUpdate? = null) {
         runSuspendCatching {
-            hwWalletStore.saveKnownDevices(devices, pendingName)
+            hwWalletStore.saveKnownDevices(devices, pendingName, vendor = HwWalletVendor.TREZOR)
         }.onFailure { Logger.error("Failed to save known devices", it, context = TAG) }
     }
 
@@ -1531,54 +1541,34 @@ data class ConnectedTrezorDevice(
     val walletId: String? = null,
 )
 
-private fun KnownDevice.matches(deviceId: String) = id == deviceId || path == deviceId
+fun TrezorState.toHwDeviceState() = HwDeviceState(
+    isScanning = isScanning,
+    isConnecting = isConnecting,
+    isAutoReconnecting = isAutoReconnecting,
+    knownDevices = knownDevices,
+    nearbyDevices = nearbyDevices.map { it.toHwNearbyDevice() }.toImmutableList(),
+    connected = connected?.toHwConnectedDevice(),
+    error = error,
+)
 
-/**
- * Whether a stored entry gives way to the one just read. That covers the identity it holds and the
- * entry this connect refreshed, since reading a previously rejected address type changes the
- * walletKey and matching on the new key alone would leave the old entry behind as a duplicate.
- * Wallets of a seed the device no longer carries go too: nothing would ever supersede them by key
- * material. An unknown device id proves nothing, so those entries are left alone.
- */
-private fun KnownDevice.isReplacedBy(known: KnownDevice, refreshed: KnownDevice?): Boolean {
-    if (id != known.id) return false
-    if (walletKey == known.walletKey) return true
-    if (refreshed != null && walletKey == refreshed.walletKey) return true
-    return known.trezorDeviceId != null && trezorDeviceId != null && trezorDeviceId != known.trezorDeviceId
-}
+fun TrezorDeviceInfo.toHwNearbyDevice() = HwNearbyDevice(
+    vendor = HwWalletVendor.TREZOR,
+    id = id,
+    path = path,
+    transportType = transportType.toTransportType(),
+    name = name,
+    model = model,
+)
 
-private val KnownDevice.walletKey: String
-    get() = walletKey(xpubs, id)
-
-private fun walletKey(xpubs: Map<String, String>, fallback: String): String =
-    xpubs.values.sorted().joinToString().ifEmpty { fallback }
-
-private fun deriveHardwareWalletId(xpubs: Map<String, String>): String? =
-    if (xpubs.isEmpty()) {
-        null
-    } else {
-        runCatching { HwWalletId.derive(xpubs) }.getOrNull()
-    }
-
-private fun List<KnownDevice>.findHardwareWalletId(xpubs: Map<String, String>, fallback: String): String {
-    val walletKey = walletKey(xpubs, fallback)
-    return firstOrNull { it.walletKey == walletKey }?.walletId?.takeIf { it.isNotBlank() }
-        ?: deriveHardwareWalletId(xpubs).orEmpty()
-}
-
-private fun List<KnownDevice>.withHardwareWalletIds(): List<KnownDevice> {
-    val existingByWallet = filter { it.walletId.isNotBlank() }
-        .associate { it.walletKey to it.walletId }
-    val generatedByWallet = mutableMapOf<String, String>()
-
-    return map {
-        val walletId = existingByWallet[it.walletKey]
-            ?: generatedByWallet.getOrPut(it.walletKey) {
-                deriveHardwareWalletId(it.xpubs).orEmpty()
-            }
-        if (it.walletId == walletId) it else it.copy(walletId = walletId)
-    }
-}
+fun ConnectedTrezorDevice.toHwConnectedDevice() = HwConnectedDevice(
+    vendor = HwWalletVendor.TREZOR,
+    id = id,
+    label = features.label,
+    model = features.model,
+    walletId = walletId,
+    passphraseProtection = features.passphraseProtection == true,
+    isLocked = features.pinProtection == true && features.unlocked == false,
+)
 
 private fun KnownDevice.toDeviceInfo() = TrezorDeviceInfo(
     id = id,

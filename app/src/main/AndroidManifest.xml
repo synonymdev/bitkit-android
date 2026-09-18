@@ -28,12 +28,12 @@
         tools:ignore="ForegroundServicePermission,ForegroundServicesPolicy" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
-    <!-- USB Host support for Trezor hardware wallet -->
+    <!-- USB Host support for hardware wallets (Trezor, Blockstream Jade) -->
     <uses-feature
         android:name="android.hardware.usb.host"
         android:required="false" />
 
-    <!-- Bluetooth permissions for Trezor Safe 7 (Android 12+) -->
+    <!-- Bluetooth permissions for hardware wallets (Trezor Safe 7, Blockstream Jade) on Android 12+ -->
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
     <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
         android:usesPermissionFlags="neverForLocation" />
@@ -150,7 +150,7 @@
                 <data android:scheme="lnurlp" />
             </intent-filter>
 
-            <!-- USB device attached — auto-grants permission when Trezor is plugged in -->
+            <!-- USB device attached — auto-grants permission when a hardware wallet is plugged in -->
             <intent-filter>
                 <action android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED" />
             </intent-filter>

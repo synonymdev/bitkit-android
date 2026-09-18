@@ -140,3 +140,10 @@ balance can be much larger than the displayed AVAILABLE amount because MAX is ca
 Blocktank channel headroom. After signing, decode the funding transaction and compare the
 activity DB row: the on-chain activity fee should be the composed mining fee, while the
 funding output should equal the final Blocktank `order.feeSat`.
+
+## Blockstream Jade
+
+There is no Jade emulator in `bitkit-docker`, so the Jade flows (Connect Hardware over USB or
+Bluetooth, receive-address verification and on-device signing) are covered by unit tests
+(`JadeRepoTest.kt`, `JadeTransportTest.kt`, `HwWalletRepoTest.kt`) and by manual runs against a
+physical Jade. The journeys in this folder stay Trezor-only.
