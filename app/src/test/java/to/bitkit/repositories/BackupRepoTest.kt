@@ -663,6 +663,117 @@ class BackupRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `ordinary activity upload is skipped while a restore is pending`() = test {
+        val activitiesChanged = MutableStateFlow(0L)
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(activitiesChanged)
+        stubBackupStatuses(
+            MutableStateFlow(emptyMap()),
+            CompletableDeferred<Unit>().apply { complete(Unit) },
+        ) {}
+
+        try {
+            // The restore flow announces itself long before it reads the backup.
+            sut.setRestorePending(true)
+            sut.startObservingBackups()
+            runCurrent()
+
+            // Meanwhile the node started and synced the fresh wallet's activities.
+            activitiesChanged.update { 1L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            // Uploading here replaces the stored envelope with the fresh wallet's state before the
+            // restore reads it, which loses the tags and the closed channels it still holds.
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `ordinary activity upload resumes once the restore is no longer pending`() = test {
+        val activitiesChanged = MutableStateFlow(0L)
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(activitiesChanged)
+        stubBackupStatuses(
+            MutableStateFlow(emptyMap()),
+            CompletableDeferred<Unit>().apply { complete(Unit) },
+        ) {}
+
+        try {
+            sut.setRestorePending(true)
+            sut.startObservingBackups()
+            runCurrent()
+
+            activitiesChanged.update { 1L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
+
+            sut.setRestorePending(false)
+            whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(2_000))
+
+            activitiesChanged.update { 2L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.ACTIVITY.name), any()) }
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `pending restore stops gating uploads once it expires`() = test {
+        val activitiesChanged = MutableStateFlow(0L)
+        stubBackupObservers()
+        stubActivityBackupReads()
+        whenever(activityRepo.activitiesChanged).thenReturn(activitiesChanged)
+        stubBackupStatuses(
+            MutableStateFlow(emptyMap()),
+            CompletableDeferred<Unit>().apply { complete(Unit) },
+        ) {}
+
+        try {
+            sut.setRestorePending(true)
+            sut.startObservingBackups()
+            runCurrent()
+
+            // The restore never returns, so nothing ever clears the gate.
+            whenever(clock.now()).thenReturn(Instant.fromEpochMilliseconds(RESTORE_GATE_EXPIRED_AT))
+
+            activitiesChanged.update { 1L }
+            runCurrent()
+            advanceTimeBy(10_000)
+            runCurrent()
+
+            verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.ACTIVITY.name), any()) }
+        } finally {
+            sut.stopObservingBackups()
+        }
+    }
+
+    @Test
+    fun `migration rewrite still uploads while a restore is pending`() = test {
+        stubWalletBackup()
+        stubActivityRestore()
+        sut.setRestorePending(true)
+
+        val result = sut.performFullRestoreFromLatestBackup()
+
+        // The rewrite is the restore's own upload, so the gate must never hold it.
+        assertTrue(result.isSuccess)
+        verifyBlocking(vssBackupClient) { putObject(eq(BackupCategory.ACTIVITY.name), any()) }
+    }
+
+    @Test
     fun `metadata backup fails when pre-activity metadata cannot be read`() = test {
         stubMetadataBackupReads()
         whenever { preActivityMetadataRepo.getAllPreActivityMetadata() }
@@ -734,6 +845,12 @@ class BackupRepoTest : BaseUnitTest() {
         verifyBlocking(activityRepo, never()) { restoreFromBackup(any()) }
         // Nothing was restored, so the stored backup must not be replaced.
         verify(vssBackupClient, never()).putObject(eq(BackupCategory.ACTIVITY.name), any())
+    }
+
+    private fun stubActivityBackupReads() {
+        whenever { activityRepo.getActivities() }.thenReturn(Result.success(emptyList()))
+        whenever { activityRepo.getClosedChannels() }.thenReturn(Result.success(emptyList()))
+        whenever { activityRepo.getAllActivitiesTags() }.thenReturn(Result.success(emptyList()))
     }
 
     private fun stubMetadataBackupReads() {
@@ -946,6 +1063,9 @@ class BackupRepoTest : BaseUnitTest() {
 
     private companion object {
         const val HARDWARE_WALLET_ID = "trezor:abc123"
+
+        /** Past the 10 minute restore gate, counted from the 1 000 ms the clock starts at. */
+        const val RESTORE_GATE_EXPIRED_AT = 700_000L
 
         /** Core-owned slices as written before `walletId` existed. */
         const val LEGACY_ACTIVITIES_JSON = "[]"

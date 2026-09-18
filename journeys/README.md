@@ -116,6 +116,7 @@ fixtures, push notifications) live in each suite's README.
 | --- | --- | --- |
 | [activity](activity) | 1 | Date range sheet under rapid month taps; needs no backend, no README |
 | [amount-limits](amount-limits) | 4 | Number pad caps on all four amount screens |
+| [backup-restore](backup-restore) | 1 | VSS restore keeps tags and closed channels; wipes the wallet |
 | [backup](backup) | 1 | Recovery phrase grid at larger system font scales; no README |
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
@@ -127,6 +128,7 @@ fixtures, push notifications) live in each suite's README.
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
 | [security](security) | 1 | PIN result sheet layout at a long locale and font scale; no README |
 | [subscriptions](subscriptions) | 4 | Paykit subscription lifecycle across two wallets, plus the Payments tab |
+| [tags](tags) | 1 | Tag input length cap on an activity; no backend, no README |
 | [transfers](transfers) | 1 | Transfer to Spending settling after the LSP closes the channel; no README |
 | [widgets](widgets) | 2 | Needs no backend — the quickest way to see the loop work; no README |
 
@@ -153,8 +155,10 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `backup/show-mnemonic-long-words.xml` | not ported — the long-word fit is an Android-only change (synonymdev/bitkit-android#633); whether iOS wraps long words at larger text sizes is unchecked |
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
+| `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
+| `tags/activity-tag-length-cap.xml` | not ported — iOS has no 20-character cap on tag input |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
