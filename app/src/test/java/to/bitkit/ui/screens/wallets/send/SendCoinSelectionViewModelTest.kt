@@ -1,6 +1,7 @@
 package to.bitkit.ui.screens.wallets.send
 
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import org.junit.Before
@@ -11,13 +12,23 @@ import org.mockito.kotlin.any
 import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.times
 import org.mockito.kotlin.verify
 import org.mockito.kotlin.whenever
+import to.bitkit.models.NodeLifecycleState
+import to.bitkit.models.Toast
 import to.bitkit.repositories.ActivityRepo
 import to.bitkit.repositories.LightningRepo
+import to.bitkit.repositories.NodeNotRunningError
+import to.bitkit.repositories.NodeRunTimeoutError
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.ui.shared.toast.ToastEventBus
+import to.bitkit.utils.AppError
+import to.bitkit.utils.ServiceError
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -117,15 +128,157 @@ class SendCoinSelectionViewModelTest : BaseUnitTest() {
         assertFalse(state.isSelectionValid)
     }
 
+    @Test
+    fun `loadUtxos retries when node is not setup and loads utxos on success`() = test {
+        whenever(lightningRepo.listSpendableOutputs()).thenReturn(
+            Result.failure(ServiceError.NodeNotSetup()),
+            Result.success(listOf(SMALL_UTXO, LARGE_UTXO)),
+        )
+        stubFee()
+
+        sut.loadUtxos(REQUIRED_AMOUNT, ADDRESS)
+        advanceUntilIdle()
+
+        val state = sut.uiState.value
+        verify(lightningRepo, times(2)).listSpendableOutputs()
+        assertEquals(listOf(LARGE_UTXO, SMALL_UTXO), state.availableUtxos)
+        assertEquals(listOf(LARGE_UTXO, SMALL_UTXO), state.selectedUtxos)
+        assertNull(state.loadError)
+        assertFalse(state.isLoading)
+        assertTrue(state.isSelectionValid)
+    }
+
+    @Test
+    fun `loadUtxos retries node not running error`() = test {
+        whenever(lightningRepo.listSpendableOutputs()).thenReturn(
+            Result.failure(NodeNotRunningError("listSpendableOutputs", NodeLifecycleState.Stopped)),
+            Result.success(listOf(LARGE_UTXO)),
+        )
+        stubFee()
+
+        sut.loadUtxos(REQUIRED_AMOUNT, ADDRESS)
+        advanceUntilIdle()
+
+        verify(lightningRepo, times(2)).listSpendableOutputs()
+        assertEquals(listOf(LARGE_UTXO), sut.uiState.value.availableUtxos)
+        assertNull(sut.uiState.value.loadError)
+    }
+
+    @Test
+    fun `loadUtxos does not retry node run timeout error`() = test {
+        val error = NodeRunTimeoutError("listSpendableOutputs")
+        whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.failure(error))
+
+        sut.loadUtxos(REQUIRED_AMOUNT, ADDRESS)
+        advanceUntilIdle()
+
+        verify(lightningRepo, times(1)).listSpendableOutputs()
+        assertEquals(error, sut.uiState.value.loadError)
+        assertFalse(sut.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `loadUtxos sets load error after bounded attempts without toast`() = test {
+        val error = ServiceError.NodeNotSetup()
+        whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.failure(error))
+        val toasts = mutableListOf<Toast>()
+        val collectJob = launch { ToastEventBus.events.collect { toasts.add(it) } }
+
+        sut.loadUtxos(REQUIRED_AMOUNT, ADDRESS)
+        advanceUntilIdle()
+
+        val state = sut.uiState.value
+        verify(lightningRepo, times(3)).listSpendableOutputs()
+        assertEquals(error, state.loadError)
+        assertFalse(state.isLoading)
+        assertTrue(state.availableUtxos.isEmpty())
+        assertFalse(state.isSelectionValid)
+        assertTrue(toasts.isEmpty())
+        collectJob.cancel()
+    }
+
+    @Test
+    fun `loadUtxos does not retry non transient list failure`() = test {
+        whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.failure(AppError("wallet failure")))
+
+        sut.loadUtxos(REQUIRED_AMOUNT, ADDRESS)
+        advanceUntilIdle()
+
+        verify(lightningRepo, times(1)).listSpendableOutputs()
+        assertIs<AppError>(sut.uiState.value.loadError)
+    }
+
+    @Test
+    fun `loadUtxos does not retry fee calculation failure`() = test {
+        val error = ServiceError.NodeNotSetup()
+        whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.success(listOf(LARGE_UTXO)))
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.failure(error))
+
+        sut.loadUtxos(REQUIRED_AMOUNT, ADDRESS)
+        advanceUntilIdle()
+
+        verify(lightningRepo, times(1)).listSpendableOutputs()
+        verify(lightningRepo, times(1)).calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+        assertEquals(error, sut.uiState.value.loadError)
+        assertFalse(sut.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `loadUtxos clears load error on successful retry`() = test {
+        whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.failure(AppError("wallet failure")))
+        sut.loadUtxos(REQUIRED_AMOUNT, ADDRESS)
+        advanceUntilIdle()
+
+        loadUtxos(utxos = listOf(LARGE_UTXO))
+
+        val state = sut.uiState.value
+        assertNull(state.loadError)
+        assertEquals(listOf(LARGE_UTXO), state.availableUtxos)
+    }
+
+    @Test
+    fun `loadUtxos keeps load error visible while retry is in progress`() = test {
+        val error = AppError("wallet failure")
+        whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.failure(error))
+        sut.loadUtxos(REQUIRED_AMOUNT, ADDRESS)
+        advanceUntilIdle()
+
+        whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.failure(ServiceError.NodeNotSetup()))
+        sut.loadUtxos(REQUIRED_AMOUNT, ADDRESS)
+
+        val state = sut.uiState.value
+        assertTrue(state.isLoading)
+        assertEquals(error, state.loadError)
+        advanceUntilIdle()
+        assertFalse(sut.uiState.value.isLoading)
+    }
+
+    @Test
+    fun `setOnchainActivities does not reset manual selection`() = test {
+        loadUtxos(utxos = listOf(LARGE_UTXO, SMALL_UTXO))
+        sut.onToggleUtxo(SMALL_UTXO)
+
+        sut.setOnchainActivities(emptyList())
+        advanceUntilIdle()
+
+        assertEquals(listOf(LARGE_UTXO), sut.uiState.value.selectedUtxos)
+        verify(lightningRepo, times(1)).listSpendableOutputs()
+    }
+
     private suspend fun TestScope.loadUtxos(
         utxos: List<SpendableUtxo>,
         requiredAmount: ULong = REQUIRED_AMOUNT,
         fee: ULong = FEE,
     ) {
         whenever(lightningRepo.listSpendableOutputs()).thenReturn(Result.success(utxos))
-        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
-            .thenReturn(Result.success(fee))
+        stubFee(fee)
         sut.loadUtxos(requiredAmount, ADDRESS)
         advanceUntilIdle()
+    }
+
+    private suspend fun stubFee(fee: ULong = FEE) {
+        whenever(lightningRepo.calculateTotalFee(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .thenReturn(Result.success(fee))
     }
 }
