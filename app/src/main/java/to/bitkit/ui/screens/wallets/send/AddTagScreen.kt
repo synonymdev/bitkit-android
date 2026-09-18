@@ -27,6 +27,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.coroutines.delay
 import to.bitkit.R
+import to.bitkit.ext.sanitizeTag
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.Caption13Up
 import to.bitkit.ui.components.PrimaryButton
@@ -128,8 +129,9 @@ fun AddTagContent(
                     imeAction = ImeAction.Done
                 ),
                 keyboardActions = KeyboardActions(onDone = {
-                    onTagConfirmed(uiState.tagInput)
+                    if (uiState.canSubmit) onTagConfirmed(uiState.confirmedTag)
                 }),
+                inputTransform = String::sanitizeTag,
                 modifier = Modifier
                     .focusRequester(focusRequester)
                     .fillMaxWidth()
@@ -140,8 +142,8 @@ fun AddTagContent(
             Spacer(modifier = Modifier.weight(1f))
             PrimaryButton(
                 text = stringResource(R.string.wallet__tags_add_button),
-                onClick = { onTagConfirmed(uiState.tagInput) },
-                enabled = uiState.tagInput.isNotBlank(),
+                onClick = { onTagConfirmed(uiState.confirmedTag) },
+                enabled = uiState.canSubmit,
                 modifier = Modifier
                     .then(addButtonTestTag?.let { Modifier.testTag(it) } ?: Modifier)
             )
