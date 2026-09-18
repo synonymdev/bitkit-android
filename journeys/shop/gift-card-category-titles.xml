@@ -1,11 +1,21 @@
 <journey name="gift card category titles">
   <description>
-    Proves the Shop Discover gift card category rows render their titles from string resources and
-    pass the same localized title to the gift card web view. Precondition: onboarded debug build,
-    dev mode on (the screen deeplink is debug-only and gated on it), device and app locale English,
-    network access to Bitrefill.
-    Category titles fall back to English in a locale whose Transifex strings do not yet carry the
-    other__shop__categories__* keys; "VoIP" is not translatable and stays "VoIP" in every locale.
+    Proves the Shop Discover gift card category rows render all 22 titles in order, survive an app
+    locale change, and pass the title shown on the row to the gift card web view. Precondition:
+    onboarded debug build, dev mode on (the screen deeplink is debug-only and gated on it), device
+    and app locale English, network access to Bitrefill.
+
+    This journey does not yet distinguish resource-backed titles from the hardcoded enum they
+    replace, and a pass is not proof of localization. The English values added in
+    `values/strings.xml:572-593` are the same text the enum carried, and no `values-*` file carries
+    an `other__shop__categories__*` key yet, so every row reads English in every shipped locale
+    either way. A pseudolocale cannot close the gap: `androidResources.localeFilters`
+    (`app/build.gradle.kts:276`) keeps only the 16 shipped locales, so `en-XA` resources are
+    stripped. Once the Transifex pull lands the German strings, replace the German step below with
+    assertions on concrete translated titles ("Food Delivery" and "Health &amp; Beauty" rows plus
+    the web view top bar) and drop the English fallback allowance; that is what makes this journey
+    discriminate. "VoIP" is not translatable and stays "VoIP" in every locale.
+
     The screen deeplink skips the Shop intro without marking it seen; iOS has no screen router, so a
     port reaches Shop Discover through the drawer's Shop entry instead.
   </description>
@@ -19,7 +29,7 @@
     <action>Press the device back button</action>
     <action>Run `adb shell cmd locale set-app-locales to.bitkit.dev --locales de`, then `adb shell am force-stop to.bitkit.dev` and relaunch the app</action>
     <action>Run `adb shell am start -W -a android.intent.action.VIEW -d "bitkit://screen/shop-discover" to.bitkit.dev`</action>
-    <action>Verify that the app did not crash, the Map tab reads "Karte", and every category row shows either its German translation or its English title</action>
+    <action>Verify that the app did not crash, the Map tab reads "Karte", and all 22 category rows are still listed in the same order; until the German strings land they all read their English titles, which is the expected state and not a failure</action>
     <action>Run `adb shell cmd locale set-app-locales to.bitkit.dev --locales ''`, then `adb shell am force-stop to.bitkit.dev` and relaunch the app</action>
     <action>Verify that the wallet overview is visible in English</action>
   </actions>
