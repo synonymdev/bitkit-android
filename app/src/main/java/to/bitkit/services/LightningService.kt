@@ -23,6 +23,7 @@ import org.lightningdevkit.ldknode.BackgroundSyncConfig
 import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.Bolt11Invoice
 import org.lightningdevkit.ldknode.Bolt11InvoiceDescription
+import org.lightningdevkit.ldknode.BroadcastOutcome
 import org.lightningdevkit.ldknode.BuildException
 import org.lightningdevkit.ldknode.Builder
 import org.lightningdevkit.ldknode.ChannelConfig
@@ -72,6 +73,7 @@ import to.bitkit.utils.LdkError
 import to.bitkit.utils.LdkLogWriter
 import to.bitkit.utils.Logger
 import to.bitkit.utils.LoggerLdk
+import to.bitkit.utils.PendingOnchainBroadcastError
 import to.bitkit.utils.ServiceError
 import to.bitkit.utils.jsonLogOf
 import java.io.File
@@ -920,20 +922,23 @@ class LightningService @Inject constructor(
     ): Txid {
         val node = this.node ?: throw ServiceError.NodeNotSetup()
 
-        Logger.info(
-            "Sending $sats sats to $address, satsPerVByte=$satsPerVByte, isMaxAmount = $isMaxAmount",
-            context = TAG,
-        )
-
         return ServiceQueue.LDK.background {
+            val onchainPayment = node.onchainPayment()
+            onchainPayment.listPendingBroadcasts().firstOrNull()?.let {
+                throw PendingOnchainBroadcastError(it.txid)
+            }
+            Logger.info(
+                "Sending '$sats' sats to '$address', satsPerVByte='$satsPerVByte', isMaxAmount='$isMaxAmount'",
+                context = TAG,
+            )
             if (isMaxAmount) {
-                node.onchainPayment().sendAllToAddress(
+                onchainPayment.sendAllToAddress(
                     address = address,
                     retainReserve = true,
                     feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
                 )
             } else {
-                node.onchainPayment().sendToAddress(
+                onchainPayment.sendToAddress(
                     address = address,
                     amountSats = sats,
                     feeRate = FeeRate.fromSatPerVbUnchecked(satsPerVByte),
@@ -1334,6 +1339,20 @@ class LightningService @Inject constructor(
         val node = this.node ?: return null
         return ServiceQueue.LDK.background {
             node.listPayments()
+        }
+    }
+
+    suspend fun getOnchainBroadcastOutcome(txid: Txid): BroadcastOutcome? {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        return ServiceQueue.LDK.background {
+            node.onchainPayment().broadcastOutcome(txid)
+        }
+    }
+
+    suspend fun acknowledgeOnchainBroadcastOutcome(txid: Txid) {
+        val node = this.node ?: throw ServiceError.NodeNotSetup()
+        ServiceQueue.LDK.background {
+            node.onchainPayment().acknowledgeBroadcastOutcome(txid)
         }
     }
     // endregion
