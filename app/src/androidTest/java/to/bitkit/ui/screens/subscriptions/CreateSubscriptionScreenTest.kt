@@ -152,8 +152,8 @@ class CreateSubscriptionScreenTest {
             .performScrollToNode(hasText("You have sent a subscription proposal to"))
         composeTestRule.onNodeWithText("You have sent a subscription proposal to").assertIsDisplayed()
         composeTestRule.onNodeWithTag("SubscriptionConfirmationBody")
-            .performScrollToNode(hasText("Monthly subscription"))
-        composeTestRule.onNodeWithText("Monthly subscription").assertIsDisplayed()
+            .performScrollToNode(hasText("Monthly Subscription"))
+        composeTestRule.onNodeWithText("Monthly Subscription").assertIsDisplayed()
         composeTestRule.onAllNodesWithText("Queued", substring = true, ignoreCase = true).assertCountEquals(0)
         composeTestRule.onNodeWithText("OK").assertIsDisplayed()
     }
