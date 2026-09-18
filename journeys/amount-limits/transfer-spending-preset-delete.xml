@@ -1,0 +1,36 @@
+<journey name="transfer to spending preset amount deletes one digit per press">
+  <description>
+    Verifies that after the "Transfer to Spending" amount is filled by a preset (25% or MAX) or by
+    switching the number pad unit from fiat, every delete press removes exactly one digit and
+    appended digits are accepted. The displayed amount keeps its sats grouping spaces, but the
+    number pad input underneath does not, so no press is spent on a space (synonymdev/bitkit-android#558).
+
+    Precondition: onboarded dev wallet with the display unit set to modern Bitcoin (sats), primary
+    display Bitcoin, a POSITIVE on-chain Savings balance of at least 40 000 sats, and a running node
+    connected to the LSP. Start on the wallet home screen. No funds move: the journey never taps
+    Continue.
+
+    iOS counterpart: the same fix shipped in synonymdev/bitkit-ios#289, but the journey is not
+    ported to the iOS corpus yet.
+  </description>
+  <actions>
+    <action>Tap the Savings balance card (testTag "ActivitySavings") on the home screen</action>
+    <action>Tap "Transfer To Spending" (testTag "TransferToSpending")</action>
+    <action>If the spending intro screen appears, tap "Get Started" (testTag "SpendingIntro-button")</action>
+    <action>Verify the spending amount screen (testTag "SpendingAmount") is visible</action>
+    <action>Wait until the available amount (testTag "SpendingAmountUnit") finishes loading and shows a positive value</action>
+    <action>Tap the 25% button (testTag "SpendingAmountQuarter")</action>
+    <action>Verify the amount in the input field (testTag "SpendingAmountNumberField") shows a grouped value with a space, e.g. "78 777"</action>
+    <action>Tap the delete key (testTag "NRemove") repeatedly until the amount is 0, reading the amount after each press</action>
+    <action>Verify every delete press changed the amount, e.g. "78 777" → "7 877" → "787" → "78" → "7" → "0", with no press leaving the amount unchanged</action>
+    <action>Tap the number pad unit toggle (testTag "SpendingNumberPadUnit") so it shows the fiat currency</action>
+    <action>Tap "1" (testTag "N1") and "0" (testTag "N0")</action>
+    <action>Tap the number pad unit toggle (testTag "SpendingNumberPadUnit") so it shows "BITCOIN"</action>
+    <action>Verify the amount in the input field is a grouped sats value of at least 4 digits</action>
+    <action>Tap "1" (testTag "N1")</action>
+    <action>Verify the amount gained exactly one trailing digit "1" and is not over the available amount</action>
+    <action>Tap the delete key (testTag "NRemove") repeatedly until the amount is 0, reading the amount after each press</action>
+    <action>Verify every delete press changed the amount</action>
+    <action>Tap the back button (testTag "NavigationBack") to leave without transferring</action>
+  </actions>
+</journey>
