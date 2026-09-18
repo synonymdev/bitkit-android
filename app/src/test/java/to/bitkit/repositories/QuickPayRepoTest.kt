@@ -1,8 +1,6 @@
 package to.bitkit.repositories
 
 import android.app.Application
-import android.content.Context
-import androidx.test.core.app.ApplicationProvider
 import app.cash.turbine.test
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
@@ -12,13 +10,11 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
-import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -43,6 +39,7 @@ import to.bitkit.models.QuickPayLedger
 import to.bitkit.models.QuickPayRecordPhase
 import to.bitkit.models.USD
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.test.InMemoryDataStore
 import to.bitkit.utils.AppError
 import to.bitkit.utils.LdkError
 import java.math.BigDecimal
@@ -106,8 +103,7 @@ class QuickPayRepoTest : BaseUnitTest() {
             }
         """.trimIndent()
     }
-    private val context = ApplicationProvider.getApplicationContext<Context>()
-    private val cacheStore = CacheStore(context)
+    private val cacheStore = CacheStore(InMemoryDataStore(AppCacheData()))
     private val settingsStore: SettingsStore = mock()
     private val currencyRepo: CurrencyRepo = mock()
     private val lightningRepo: LightningRepo = mock()
@@ -122,8 +118,7 @@ class QuickPayRepoTest : BaseUnitTest() {
     private lateinit var sut: QuickPayRepo
 
     @Before
-    fun setUp() = runBlocking {
-        cacheStore.reset()
+    fun setUp() {
         paymentRows = null
         whenever(settingsStore.data).thenReturn(settingsData)
         whenever(lightningRepo.lightningState).thenReturn(lightningState)
@@ -144,9 +139,6 @@ class QuickPayRepoTest : BaseUnitTest() {
         }
         sut = repo()
     }
-
-    @After
-    fun tearDown() = runBlocking { cacheStore.reset() }
 
     @Test
     fun `reserveBound on clock rollback keeps existing spend`() = test {

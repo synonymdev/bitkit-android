@@ -40,6 +40,7 @@ import to.bitkit.data.keychain.Keychain
 import to.bitkit.data.paykitDisabled
 import to.bitkit.di.IoDispatcher
 import to.bitkit.env.Env
+import to.bitkit.ext.isPaykitIdentityError
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.HomegateResponse
 import to.bitkit.models.PubkyAuthClaim
@@ -182,6 +183,7 @@ class PubkyRepo @Inject constructor(
             ensureServiceInitialized()
         }.onFailure {
             Logger.error("Failed to initialize paykit", it, context = TAG)
+            if (it.isPaykitIdentityError() && hasSavedSession()) _sessionRestorationFailed.update { true }
         }.getOrNull() ?: return@withContext
 
         initializeMutex.withLock {
@@ -225,6 +227,10 @@ class PubkyRepo @Inject constructor(
             }
         }
     }
+
+    private fun hasSavedSession(): Boolean = runCatching {
+        keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)
+    }.getOrNull()?.isNotBlank() == true
 
     private suspend fun ensureServiceInitialized() = withContext(ioDispatcher) {
         serviceInitializeMutex.withLock {
