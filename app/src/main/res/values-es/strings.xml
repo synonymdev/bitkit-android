@@ -67,6 +67,7 @@
     <string name="common__sat_vbyte">₿ / vbyte</string>
     <string name="common__success">Éxito</string>
     <string name="common__usable">Utilizable</string>
+    <string name="fee__instant__duration">±2 segundos</string>
     <string name="fee__instant__title">Instantáneo</string>
     <string name="fee__fast__title">Rápido</string>
     <string name="fee__fast__description">±10-20 minutos</string>

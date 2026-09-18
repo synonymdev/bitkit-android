@@ -83,6 +83,7 @@
     <string name="fee__fast__duration">±10 минут</string>
     <string name="fee__fast__shortDescription">±10м</string>
     <string name="fee__fast__title">Быстро</string>
+    <string name="fee__instant__duration">±2 секунды</string>
     <string name="fee__instant__title">Мгновенно</string>
     <string name="fee__minimum__description">+2 часа</string>
     <string name="fee__minimum__duration">+2 часа</string>

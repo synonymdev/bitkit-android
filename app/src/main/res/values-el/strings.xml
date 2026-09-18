@@ -75,6 +75,7 @@
     <string name="fee__fast__duration">±10 λεπτά</string>
     <string name="fee__fast__shortDescription">±10 λεπτά</string>
     <string name="fee__fast__title">Γρήγορα</string>
+    <string name="fee__instant__duration">±2 δευτερόλεπτα</string>
     <string name="fee__instant__title">Άμεσα</string>
     <string name="fee__minimum__description">+2 ώρες</string>
     <string name="fee__minimum__duration">+2 ώρες</string>

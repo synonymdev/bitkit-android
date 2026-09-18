@@ -75,6 +75,7 @@
     <string name="fee__fast__duration">±10 minutos</string>
     <string name="fee__fast__shortDescription">±10m</string>
     <string name="fee__fast__title">Rápido</string>
+    <string name="fee__instant__duration">±2 segundos</string>
     <string name="fee__instant__title">Instantáneo</string>
     <string name="fee__minimum__description">+2 horas</string>
     <string name="fee__minimum__duration">+2 horas</string>

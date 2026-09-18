@@ -28,14 +28,13 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.synonym.bitkitcore.Activity
 import to.bitkit.R
-import to.bitkit.models.PrimaryDisplay
+import to.bitkit.models.BITCOIN_SYMBOL
 import to.bitkit.ui.components.BodyMSB
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BodySSB
@@ -315,19 +314,8 @@ private fun CustomModeContent(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                val rateText =
-                    rememberMoneyText(
-                        sats = uiState.feeRate.toLong(),
-                        unit = PrimaryDisplay.BITCOIN,
-                        showSymbol = true,
-                    )?.withAccent(defaultColor = Colors.White, accentColor = Colors.White)
-                        ?: AnnotatedString("")
-
                 BodyMSB(
-                    text = buildAnnotatedString {
-                        append(rateText)
-                        append("/vbyte")
-                    },
+                    text = "$BITCOIN_SYMBOL ${uiState.feeRate}/vbyte",
                     color = Colors.White,
                     modifier = Modifier.testTag(BoostTransactionTestTags.FEE_RATE_TEXT)
                 )

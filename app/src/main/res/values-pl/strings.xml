@@ -67,6 +67,7 @@
     <string name="common__ready">Gotowe</string>
     <string name="common__success">Sukces</string>
     <string name="common__usable">Użyteczne</string>
+    <string name="fee__instant__duration">±2 sekundy</string>
     <string name="fee__instant__title">Natychmiast</string>
     <string name="fee__fast__title">Szybko</string>
     <string name="fee__fast__description">±10-20 minut</string>

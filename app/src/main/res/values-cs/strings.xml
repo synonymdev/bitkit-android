@@ -75,6 +75,7 @@
     <string name="fee__fast__duration">+/- 10 minut</string>
     <string name="fee__fast__shortDescription">+/- 10m</string>
     <string name="fee__fast__title">Rychle</string>
+    <string name="fee__instant__duration">+/- 2 sekundy</string>
     <string name="fee__instant__title">Okamžitě</string>
     <string name="fee__minimum__description">+2 hodiny</string>
     <string name="fee__minimum__duration">+2 hodiny</string>
