@@ -123,6 +123,7 @@ fixtures, push notifications) live in each suite's README.
 | [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
 | [receive](receive) | 1 | Receive sheet tab selection; needs a spending channel, no README |
+| [security](security) | 1 | PIN result sheet layout at a long locale and font scale; no README |
 | [subscriptions](subscriptions) | 4 | Paykit subscription lifecycle across two wallets, plus the Payments tab |
 | [widgets](widgets) | 2 | Needs no backend — the quickest way to see the loop work; no README |
 
@@ -147,6 +148,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | `receive/receive-auto-tab-selection.xml` | not ported — the Auto tab override fix is Android-only so far; iOS parity not checked |
+| `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
