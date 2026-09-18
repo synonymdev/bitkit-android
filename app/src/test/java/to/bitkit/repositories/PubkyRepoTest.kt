@@ -1381,6 +1381,21 @@ class PubkyRepoTest : BaseUnitTest() {
         }
 
     @Test
+    fun `initialize should not flag session restoration failure on identity error without saved session`() = test {
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn(null)
+        whenever(pubkyService.initialize()).thenAnswer {
+            throw AppError(PaykitException.Identity("identity_error", "Missing capabilities"))
+        }
+        val repo = createSut()
+
+        repo.awaitInitialization()
+
+        assertFalse(repo.sessionRestorationFailed.value)
+        assertFalse(repo.isAuthenticated.value)
+        verify(pubkyService, never()).importSession(any())
+    }
+
+    @Test
     fun `initialize should restore saved session with prefixed public key`() = test {
         val session = "saved_session"
         val unprefixedPublicKey = VALID_SELF_KEY.removePrefix("pubky")
