@@ -234,6 +234,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private val toastManager = mock<ToastQueueManager>()
 
     private val balanceState = MutableStateFlow(BalanceState())
+    private val connectivityState = MutableStateFlow(ConnectivityState.CONNECTED)
     private val hwReceivedTxs = MutableSharedFlow<HwWalletReceivedTx>()
     private val hwWallets = MutableStateFlow(persistentListOf<HwWallet>())
     private val needsPairingCode = MutableStateFlow(false)
@@ -308,7 +309,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     private fun stubRepositories() {
         whenever(context.getString(any())).thenReturn("")
         whenever(context.getSystemService(Context.CLIPBOARD_SERVICE)).thenReturn(clipboardManager)
-        whenever(connectivityRepo.isOnline).thenReturn(MutableStateFlow(ConnectivityState.CONNECTED))
+        whenever(connectivityRepo.isOnline).thenReturn(connectivityState)
         whenever(healthRepo.healthState).thenReturn(MutableStateFlow(mock()))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
         whenever(lightningRepo.nodeEventUpdates).thenReturn(nodeEventUpdates)
@@ -345,6 +346,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         whenever { lightningRepo.updateGeoBlockState() }.thenReturn(Unit)
         whenever(pubkyRepo.sessionRestorationFailed).thenReturn(MutableStateFlow(false))
         whenever(pubkyRepo.publicKey).thenReturn(pubkyPublicKey)
+        whenever { pubkyRepo.republishIdentityIfNeeded() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.hasIdentity() }.thenAnswer { pubkyPublicKey.value != null }
         whenever(pubkyRepo.contacts).thenReturn(pubkyContacts)
         whenever { refreshContactPaykitReceivers(any()) }.thenReturn(Result.success(Unit))
@@ -509,6 +511,101 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         sut.onHomeResumed()
 
         verify(hwWalletRepo).onAppForegrounded()
+    }
+
+    @Test
+    fun `foreground polling starts identity republish once and restarts after stopping`() = test {
+        try {
+            sut.startPaykitPaymentRequestPolling()
+            runCurrent()
+            verify(pubkyRepo).republishIdentityIfNeeded()
+
+            sut.startPaykitPaymentRequestPolling()
+            runCurrent()
+            verify(pubkyRepo).republishIdentityIfNeeded()
+
+            sut.stopPaykitPaymentRequestPolling()
+            sut.startPaykitPaymentRequestPolling()
+            runCurrent()
+            verify(pubkyRepo, times(2)).republishIdentityIfNeeded()
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
+    fun `network restoration triggers identity republish while polling`() = test {
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            runCurrent()
+            clearInvocations(pubkyRepo)
+
+            connectivityState.value = ConnectivityState.DISCONNECTED
+            runCurrent()
+            verify(pubkyRepo, never()).republishIdentityIfNeeded()
+
+            connectivityState.value = ConnectivityState.CONNECTED
+            runCurrent()
+            verify(pubkyRepo).republishIdentityIfNeeded()
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
+    fun `identity republish follows maintenance intervals instead of each payment request poll`() = test {
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            runCurrent()
+            for (interval in listOf(30.seconds, 60.seconds, 120.seconds, 120.seconds)) {
+                clearInvocations(pubkyRepo)
+                advanceTimeBy(interval.inWholeMilliseconds - 1)
+                runCurrent()
+                verify(pubkyRepo, never()).republishIdentityIfNeeded()
+
+                advanceTimeBy(1)
+                runCurrent()
+                verify(pubkyRepo).republishIdentityIfNeeded()
+            }
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
+    fun `offline polling skips foreground and maintenance identity republish`() = test {
+        connectivityState.value = ConnectivityState.DISCONNECTED
+        runCurrent()
+
+        sut.startPaykitPaymentRequestPolling()
+        try {
+            runCurrent()
+            verify(pubkyRepo, never()).republishIdentityIfNeeded()
+
+            advanceTimeBy(210.seconds.inWholeMilliseconds)
+            runCurrent()
+            verify(pubkyRepo, never()).republishIdentityIfNeeded()
+        } finally {
+            sut.stopPaykitPaymentRequestPolling()
+        }
+    }
+
+    @Test
+    fun `stopped polling skips reconnect and maintenance identity republish`() = test {
+        sut.startPaykitPaymentRequestPolling()
+        runCurrent()
+        sut.stopPaykitPaymentRequestPolling()
+        clearInvocations(pubkyRepo)
+
+        connectivityState.value = ConnectivityState.DISCONNECTED
+        runCurrent()
+        connectivityState.value = ConnectivityState.CONNECTED
+        runCurrent()
+        verify(pubkyRepo, never()).republishIdentityIfNeeded()
+
+        advanceTimeBy(210.seconds.inWholeMilliseconds)
+        runCurrent()
+        verify(pubkyRepo, never()).republishIdentityIfNeeded()
     }
 
     @Test
