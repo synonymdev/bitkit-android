@@ -6,9 +6,20 @@
     number pad input underneath does not, so no press is spent on a space (synonymdev/bitkit-android#558).
 
     Precondition: onboarded dev wallet with the display unit set to modern Bitcoin (sats), primary
-    display Bitcoin, a POSITIVE on-chain Savings balance of at least 40 000 sats, and a running node
-    connected to the LSP. Start on the wallet home screen. No funds move: the journey never taps
-    Continue.
+    display Bitcoin, a POSITIVE on-chain Savings balance of at least 250 000 sats, LSP limits above
+    that, and a running node connected to the LSP. Start on the wallet home screen. No funds move:
+    the journey never taps Continue.
+
+    Why 250 000: the number pad rejects any sats input above its max
+    (AmountInputViewModel.handleNumberPadInput, the guard comparing the new amount to maxAmount),
+    and that max is `maxAllowedToSend` — the Savings balance less the quoted LSP order fee, also
+    capped by the LSP's own max client balance (TransferViewModel, SpendingAmountScreen's
+    `setMaxAmount`). It is the value shown by "SpendingAmountUnit". Entering 10 fiat units and
+    switching back to sats gives about 10 000 sats at a BTC price near 100 000 fiat units, and the
+    append in the step below makes that about 100 001, so a smaller balance has the digit dropped
+    and the max toast shown instead, which false-fails the step. The guard in the fiat-entry step
+    below keeps that true if the price moves far enough for 10 fiat units to be worth more than a
+    tenth of the max.
 
     iOS counterpart: the same fix shipped in synonymdev/bitkit-ios#289, but the journey is not
     ported to the iOS corpus yet.
@@ -24,11 +35,11 @@
     <action>Tap the delete key (testTag "NRemove") repeatedly until the amount is 0, reading the amount after each press</action>
     <action>Verify every delete press changed the amount, e.g. "78 777" → "7 877" → "787" → "78" → "7" → "0", with no press leaving the amount unchanged</action>
     <action>Tap the number pad unit toggle (testTag "SpendingNumberPadUnit") so it shows the fiat currency</action>
-    <action>Tap "1" (testTag "N1") and "0" (testTag "N0")</action>
+    <action>Tap "1" (testTag "N1") and "0" (testTag "N0") to enter 10 fiat units; if 10 fiat units are worth more than a tenth of the amount shown in "SpendingAmountUnit", tap only "1" (testTag "N1") instead, so the digit appended below still fits under that amount</action>
     <action>Tap the number pad unit toggle (testTag "SpendingNumberPadUnit") so it shows "BITCOIN"</action>
     <action>Verify the amount in the input field is a grouped sats value of at least 4 digits</action>
     <action>Tap "1" (testTag "N1")</action>
-    <action>Verify the amount gained exactly one trailing digit "1" and is not over the available amount</action>
+    <action>Verify the amount gained exactly one trailing digit "1", is not over the amount shown in "SpendingAmountUnit", and that no "Spending Balance Maximum" warning toast appeared</action>
     <action>Tap the delete key (testTag "NRemove") repeatedly until the amount is 0, reading the amount after each press</action>
     <action>Verify every delete press changed the amount</action>
     <action>Tap the back button (testTag "NavigationBack") to leave without transferring</action>
