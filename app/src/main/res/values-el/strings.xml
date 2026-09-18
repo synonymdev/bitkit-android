@@ -829,6 +829,10 @@
     <string name="wallet__activity_transfer_to_savings">Σε αποταμιεύσεις</string>
     <string name="wallet__activity_transfer_to_spending">Σε δαπάνες</string>
     <string name="wallet__activity_tx_id">ID συναλλαγής</string>
+    <string name="wallet__balance_hidden_message">Σύρετε το υπόλοιπο του πορτοφολιού σας για να το αποκαλύψετε ξανά.</string>
+    <string name="wallet__balance_hidden_title">Υπόλοιπο Πορτοφολιού Κρυμμένο</string>
+    <string name="wallet__balance_unit_switched_message">Πατήστε στο υπόλοιπο του πορτοφολιού σας για να το αλλάξετε πίσω σε %1$s.</string>
+    <string name="wallet__balance_unit_switched_title">Αλλαγή σε %1$s</string>
     <string name="wallet__boost">Ενίσχυση</string>
     <string name="wallet__boost_decrease_fee">Μείωση τέλους</string>
     <string name="wallet__boost_error_msg">Το Bitkit δεν μπόρεσε να ενισχύσει τη συναλλαγή.</string>
