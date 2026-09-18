@@ -90,10 +90,10 @@ jobs:
       fail-fast: false
       matrix:
         shard:
-          - { name: multi_address_2_regtest, grep: "@multi_address_2" }
-          - { name: pubky_paykit, grep: "@pubky" }
+          - { name: multi_address, grep: "@multi_address_staging" }
+          - { name: pubky_paykit, grep: "@pubky_staging" }
           - { name: hardware_wallet, grep: "@hardware_wallet" }
-          - { name: transfer_max, grep: "@transfer_max" }
+          - { name: transfer, grep: "@transfer_staging" }
 
     name: e2e-tests-staging - ${{ matrix.shard.name }}
 
