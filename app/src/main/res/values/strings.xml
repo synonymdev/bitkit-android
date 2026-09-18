@@ -1379,7 +1379,6 @@
     <string name="wallet__recipient_scan">Scan QR</string>
     <string name="wallet__savings__onboarding">&lt;accent&gt;Send\nbitcoin&lt;/accent&gt;\nto your\nsavings balance</string>
     <string name="wallet__savings__title">Savings</string>
-    <string name="wallet__selection_auto">Auto</string>
     <string name="wallet__selection_title">Coin Selection</string>
     <string name="wallet__selection_total_required">Total required</string>
     <string name="wallet__selection_total_selected">Total selected</string>

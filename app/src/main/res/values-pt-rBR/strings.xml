@@ -913,7 +913,6 @@
     <string name="wallet__recipient_scan">Escanear QR</string>
     <string name="wallet__savings__onboarding">&lt;accent&gt;Transfira\nbitcoin&lt;/accent&gt;\npara seu\nsaldo de poupança</string>
     <string name="wallet__savings__title">Poupança</string>
-    <string name="wallet__selection_auto">Auto</string>
     <string name="wallet__selection_title">Seleção de Moedas</string>
     <string name="wallet__selection_total_required">Total necessário</string>
     <string name="wallet__selection_total_selected">Total selecionado</string>

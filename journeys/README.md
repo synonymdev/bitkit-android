@@ -118,6 +118,7 @@ fixtures, push notifications) live in each suite's README.
 | [amount-limits](amount-limits) | 4 | Number pad caps on all four amount screens |
 | [backup-restore](backup-restore) | 1 | VSS restore keeps tags and closed channels; wipes the wallet |
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
+| [coin-selection](coin-selection) | 1 | Manual coin selection screen; needs 3+ on-chain UTXOs; no README |
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
 | [home](home) | 1 | Pull to refresh on Home; checks the app log, no README |
@@ -149,6 +150,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/usb-reconnect.xml` | `reconnect.xml` — over Bridge, since iOS cannot do WebUSB |
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
+| `coin-selection/manual-coin-selection.xml` | not ported — iOS has the screen (`SendUtxoSelectionView`) but no accessibility identifiers on it yet |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
