@@ -32,39 +32,3 @@ sealed interface PubkyRingAuthCallback {
     data class Cancel(override val nonce: String?) : PubkyRingAuthCallback
     data class Error(val message: String?, override val nonce: String?) : PubkyRingAuthCallback
 }
-
-sealed interface PubkyRingAuthCallbackHandlingResult {
-    data object Ignored : PubkyRingAuthCallbackHandlingResult
-    data object Handled : PubkyRingAuthCallbackHandlingResult
-    data class TrustedError(val message: String?) : PubkyRingAuthCallbackHandlingResult
-}
-
-object PubkyRingAuthUrlBuilder {
-    const val SUCCESS_CALLBACK = "bitkit://pubky-auth/success"
-    const val CANCEL_CALLBACK = "bitkit://pubky-auth/cancel"
-    const val ERROR_CALLBACK = "bitkit://pubky-auth/error"
-    const val SOURCE = "Bitkit"
-
-    fun addCallbacks(authUrl: String, nonce: String? = null): String? {
-        val uri = Uri.parse(authUrl)
-        if (uri.scheme.isNullOrBlank()) return null
-
-        return uri.buildUpon()
-            .appendQueryParameter("x-success", callbackUrl(SUCCESS_CALLBACK, nonce))
-            .appendQueryParameter("x-cancel", callbackUrl(CANCEL_CALLBACK, nonce))
-            .appendQueryParameter("x-error", callbackUrl(ERROR_CALLBACK, nonce))
-            .appendQueryParameter("x-source", SOURCE)
-            .build()
-            .toString()
-    }
-
-    private fun callbackUrl(baseUrl: String, nonce: String?): String {
-        if (nonce.isNullOrBlank()) return baseUrl
-
-        return Uri.parse(baseUrl)
-            .buildUpon()
-            .appendQueryParameter(NONCE_PARAM, nonce)
-            .build()
-            .toString()
-    }
-}

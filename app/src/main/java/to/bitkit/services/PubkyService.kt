@@ -119,23 +119,6 @@ class PubkyService @Inject constructor(
 
     // endregion
 
-    // region Auth flow (Ring)
-
-    suspend fun startAuth(): String = ServiceQueue.CORE.background {
-        paykitSdkService.startAuth()
-    }
-
-    suspend fun completeAuth(): Unit = ServiceQueue.CORE.background {
-        paykitSdkService.completeAuth()
-        Unit
-    }
-
-    suspend fun cancelAuth() = ServiceQueue.CORE.background {
-        paykitSdkService.cancelAuth()
-    }
-
-    // endregion
-
     // region Auth approval
 
     suspend fun parseAuthUrl(url: String) = ServiceQueue.CORE.background {
