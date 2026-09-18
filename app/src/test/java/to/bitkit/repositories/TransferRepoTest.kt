@@ -816,6 +816,42 @@ class TransferRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `syncTransferStates keeps transfer active and settles to-savings when closed channels fail`() = test {
+        val settledAt = setupClockNowMock()
+        val toSpending = transferEntity(id = ID_TRANSFER, fundingTxId = null, channelId = ID_CHANNEL)
+        val toSavings = TransferEntity(
+            id = "savings-transfer",
+            type = TransferType.TO_SAVINGS,
+            amountSats = 75000L,
+            channelId = "savings-channel",
+            isSettled = false,
+            createdAt = 2000L,
+        )
+        val balances = BalanceDetails(
+            totalOnchainBalanceSats = 75000u,
+            spendableOnchainBalanceSats = 75000u,
+            totalAnchorChannelsReserveSats = 0u,
+            totalLightningBalanceSats = 0u,
+            lightningBalances = emptyList(),
+            pendingBalancesFromChannelClosures = emptyList(),
+        )
+
+        whenever(transferDao.getActiveTransfers()).thenReturn(flowOf(listOf(toSpending, toSavings)))
+        whenever(lightningRepo.getChannels()).thenReturn(emptyList())
+        whenever(lightningRepo.getBalancesAsync()).thenReturn(Result.success(balances))
+        whenever(activityService.closedChannels(SortDirection.DESC))
+            .thenAnswer { throw AppError("Closed channels unavailable") }
+        whenever(transferDao.markSettled(any(), any())).thenReturn(Unit)
+
+        val result = sut.syncTransferStates()
+
+        assertTrue(result.isSuccess)
+        verify(activityService).closedChannels(SortDirection.DESC)
+        verify(transferDao, never()).markSettled(eq(ID_TRANSFER), any())
+        verify(transferDao).markSettled(eq("savings-transfer"), eq(settledAt))
+    }
+
+    @Test
     fun `syncTransferStates settles TO_SPENDING transfer when executed order channel is closed`() = test {
         val settledAt = setupClockNowMock()
         val transfer = transferEntity(id = ID_TRANSFER, fundingTxId = null, channelId = null)
