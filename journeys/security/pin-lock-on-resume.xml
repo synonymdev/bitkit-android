@@ -1,0 +1,39 @@
+<journey name="pin lock on resume">
+  <description>
+    Verifies that with the app PIN enabled, sending Bitkit to the background locks it: returning
+    to the app shows the PIN pad before any wallet content, a sheet left open is hidden while
+    locked and comes back after unlock, a configuration change does not lock, and a payment URI
+    opened while backgrounded waits for the PIN before the Send flow opens. Matches iOS, which
+    clears the PIN verification when the scene enters the background, with no grace period.
+
+    Precondition: onboarded dev wallet with the app PIN enabled (Settings > Security) and a known
+    PIN, biometrics off, unlocked, on the wallet home screen. The wallet needs a savings balance
+    above 10 000 sats and at least one activity item — with an empty balance the last payment URI
+    is rejected with an insufficient-savings toast instead of opening Send, and with no activity
+    there is no row to open for the Add Tag steps. Never enter a wrong PIN more than once;
+    exhausting attempts leads to the forgot-PIN wallet reset.
+  </description>
+  <actions>
+    <action>Verify the wallet home screen is visible (testTag "Send")</action>
+    <action>Run adb shell input keyevent KEYCODE_HOME and wait 3 seconds</action>
+    <action>Run adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity</action>
+    <action>Verify the PIN pad is visible (testTag "PinPad") with the text "Please enter your PIN code" and keys (testTag "N1")</action>
+    <action>Enter the PIN with the number pad keys (testTags "N0" to "N9")</action>
+    <action>Verify the wallet home screen is visible again (testTag "Send")</action>
+    <action>Run adb shell cmd uimode night yes, wait 5 seconds, then run adb shell cmd uimode night no and wait 5 seconds</action>
+    <action>Verify the wallet home screen is visible and the PIN pad is not shown</action>
+    <action>Tap the first activity item on the home screen (testTag "ActivityShort-0"), then tap Tag (testTag "ActivityTag")</action>
+    <action>Verify the Add Tag sheet is visible (testTag "TagInput")</action>
+    <action>Run adb shell input keyevent KEYCODE_HOME and wait 3 seconds</action>
+    <action>Run adb shell am start -n to.bitkit.dev/to.bitkit.ui.MainActivity</action>
+    <action>Take a screenshot and verify only the PIN pad is drawn, with no Add Tag sheet above it</action>
+    <action>Enter the PIN with the number pad keys</action>
+    <action>Verify the Add Tag sheet is visible again (testTag "TagInput"), then press back until the wallet home screen is visible</action>
+    <action>Run adb shell input keyevent KEYCODE_HOME and wait 3 seconds</action>
+    <action>Run adb shell am start -a android.intent.action.VIEW -d "bitcoin:bcrt1qh6k3khs7qz04a9p5eam6v48nlug9d38x4rgxrn?amount=0.0001" to.bitkit.dev</action>
+    <action>Verify the PIN pad is visible and the Send amount screen is not shown</action>
+    <action>Enter the PIN with the number pad keys</action>
+    <action>Verify the Send amount screen opens (testTag "SendNumberField") showing 10 000 sats</action>
+    <action>Press back to close the Send sheet and verify the wallet home screen is visible</action>
+  </actions>
+</journey>
