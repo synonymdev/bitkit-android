@@ -119,6 +119,7 @@ fixtures, push notifications) live in each suite's README.
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
 | [notification-permission](notification-permission) | 4 | Background-setup toggles |
+| [onchain-receive](onchain-receive) | 3 | Received sheet and notification for mempool-first and confirmed-only deposits |
 | [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
 | [widgets](widgets) | 2 | Needs no backend — the quickest way to see the loop work; no README |
@@ -141,6 +142,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/usb-reconnect.xml` | `reconnect.xml` — over Bridge, since iOS cannot do WebUSB |
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
+| `onchain-receive/*` | not ported — bitkit-ios#455 tracks the same confirmed-only bug |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
