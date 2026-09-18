@@ -121,7 +121,6 @@ import to.bitkit.models.PubkyAuthRequest
 import to.bitkit.models.PubkyProfile
 import to.bitkit.models.PubkyPublicKeyFormat
 import to.bitkit.models.PubkyRingAuthCallback
-import to.bitkit.models.PubkyRingAuthCallbackHandlingResult
 import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.models.SendFailureDetails
 import to.bitkit.models.Suggestion
@@ -5476,11 +5475,7 @@ class AppViewModel @Inject constructor(
             return@launch
         }
 
-        PubkyRingAuthCallback.parse(uri)?.let {
-            if (!isPaykitEnabled.value) return@launch
-            handlePubkyRingAuthCallback(it)
-            return@launch
-        }
+        if (PubkyRingAuthCallback.parse(uri) != null) return@launch
 
         if (PubkyAuthRequest.isProtocolUrl(value)) {
             launchScan(
@@ -5550,21 +5545,6 @@ class AppViewModel @Inject constructor(
         return true
     }
 
-    private suspend fun handlePubkyRingAuthCallback(callback: PubkyRingAuthCallback) {
-        when (val result = pubkyRepo.handleAuthCallback(callback)) {
-            is PubkyRingAuthCallbackHandlingResult.TrustedError -> {
-                ToastEventBus.send(
-                    type = Toast.ToastType.ERROR,
-                    title = context.getString(R.string.profile__auth_error_title),
-                    description = result.message ?: context.getString(R.string.other__qr_error_text),
-                )
-            }
-            PubkyRingAuthCallbackHandlingResult.Handled,
-            PubkyRingAuthCallbackHandlingResult.Ignored,
-            -> Unit
-        }
-    }
-
     // TODO Temporary fix while these schemes can't be decoded https://github.com/synonymdev/bitkit-core/issues/70
     private fun String.removeLightningSchemes(): String = LIGHTNING_SCHEME_PATTERNS.fold(this) { acc, regex ->
         acc.replace(regex, "")
@@ -5578,6 +5558,15 @@ class AppViewModel @Inject constructor(
         viewModelScope.launch {
             refreshIncomingPaykitPaymentRequests()
             refreshPaymentRequestTargets(force = true)
+        }
+    }
+
+    fun onAppResumed() {
+        viewModelScope.launch(bgDispatcher) {
+            runSuspendCatching { pubkyRepo.validateExternalIdentitySource() }
+                .onFailure {
+                    Logger.error("Failed to clear unavailable shared Pubky identity", it, context = TAG)
+                }
         }
     }
 

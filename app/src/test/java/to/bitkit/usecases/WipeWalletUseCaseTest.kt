@@ -36,6 +36,7 @@ import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
 import javax.inject.Provider
+import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -72,6 +73,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         whenever { lightningRepo.stop() }.thenReturn(Result.success(Unit))
         whenever { lightningRepo.wipeStorage(0) }.thenReturn(Result.success(Unit))
         whenever(lightningRepo.lightningState).thenReturn(MutableStateFlow(LightningState()))
+        whenever { pubkyRepo.disableSharedIdentityExport() }.thenReturn(Result.success(Unit))
         whenever { pubkyRepo.removeBitkitPaymentEndpoints() }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.thenReturn(Result.success(Unit))
         whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
@@ -127,6 +129,7 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         )
         inOrder.verify(backupRepo).setWiping(true)
         inOrder.verify(lightningRepo).setWiping(true)
+        inOrder.verify(pubkyRepo).disableSharedIdentityExport()
         inOrder.verify(backupRepo).reset()
         inOrder.verify(lightningRepo).stop()
         inOrder.verify(privatePaykitRepo).removePublishedEndpointsForCleanup(any())
@@ -169,6 +172,26 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         job.join()
         assertTrue(requireNotNull(first).isSuccess)
         verify(lightningRepo).stop()
+    }
+
+    @Test
+    fun `invoke should fail before touching anything when shared pubky export cannot be disabled`() = runTest {
+        val error = RuntimeException("export disable failed")
+        whenever { pubkyRepo.disableSharedIdentityExport() }.thenReturn(Result.failure(error))
+
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertEquals(error, result.exceptionOrNull())
+        verify(lightningRepo, never()).stop()
+        verify(pubkyRepo, never()).wipeLocalState()
+        verify(keychain, never()).wipe()
+        verify(db, never()).clearAllTables()
+        assertFalse(onWipeCalled)
+        assertFalse(onSetWalletExistsStateCalled)
+        verify(backupRepo).setWiping(false)
     }
 
     @Test

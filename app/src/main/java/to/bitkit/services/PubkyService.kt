@@ -56,6 +56,10 @@ class PubkyService @Inject constructor(
         paykitSdkService.forgetSessionAccess()
     }
 
+    suspend fun clearExternalSessionAccess() = ServiceQueue.CORE.background {
+        paykitSdkService.clearExternalSessionAccess()
+    }
+
     suspend fun removeBitkitPaymentEndpoints() = ServiceQueue.CORE.background {
         val endpointError = runSuspendCatching {
             val report = paykitSdkService.syncPublicEndpoints(emptyList())
@@ -109,21 +113,8 @@ class PubkyService @Inject constructor(
         Unit
     }
 
-    // endregion
-
-    // region Auth flow (Ring)
-
-    suspend fun startAuth(): String = ServiceQueue.CORE.background {
-        paykitSdkService.startAuth()
-    }
-
-    suspend fun completeAuth(): Unit = ServiceQueue.CORE.background {
-        paykitSdkService.completeAuth()
-        Unit
-    }
-
-    suspend fun cancelAuth() = ServiceQueue.CORE.background {
-        paykitSdkService.cancelAuth()
+    suspend fun signInExternal(secretKeyHex: String): String = ServiceQueue.CORE.background {
+        paykitSdkService.signInExternal(secretKeyHex)
     }
 
     // endregion

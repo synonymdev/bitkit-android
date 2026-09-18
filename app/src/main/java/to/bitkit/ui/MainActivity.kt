@@ -240,6 +240,11 @@ class MainActivity : FragmentActivity() {
         handleLaunchIntent(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        appViewModel.onAppResumed()
+    }
+
     private fun handleLaunchIntent(intent: Intent) {
         if (intent.getBooleanExtra(EXTRA_PAYKIT_SUBSCRIPTION_PAYMENT_DUE, false)) {
             intent.removeExtra(EXTRA_PAYKIT_SUBSCRIPTION_PAYMENT_DUE)

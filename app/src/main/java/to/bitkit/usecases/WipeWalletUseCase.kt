@@ -58,6 +58,9 @@ class WipeWalletUseCase @Inject constructor(
         lightningRepo.setWiping(true)
         val result = try {
             runSuspendCatching {
+                // Fail closed: everything after this widens the window in which the shared mirror stays
+                // readable by Ring, so an unverifiable export-disable must abort the wipe.
+                pubkyRepo.disableSharedIdentityExport().getOrThrow()
                 stopNode().getOrThrow()
                 cleanupRemote()
                 wipeLocal(walletIndex, resetWalletState).getOrThrow()

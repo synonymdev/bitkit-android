@@ -42,6 +42,7 @@ class PaykitSdkServiceTest {
             }
             val bytes = ByteArray(32) { 1 }
             whenever(blocking.load(Keychain.Key.PAYKIT_RECEIVER_NOISE_SECRET_KEY.name)).thenReturn(bytes)
+            whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenReturn(bytes.toHex())
             val sdk = mock<PaykitSdk>()
             whenever(sdk.contactRecords()).thenReturn(emptyList())
             val access = mock<PubkySessionAccess>()
@@ -255,7 +256,7 @@ class PaykitSdkServiceTest {
     }
 
     @Test
-    fun `session teardown attempts both credentials with session first`() {
+    fun `session teardown attempts every credential with shared export disabled first`() {
         val attemptedKeys = mutableListOf<String>()
 
         assertFailsWith<AppError> {
@@ -266,9 +267,81 @@ class PaykitSdkServiceTest {
         }
 
         assertEquals(
-            listOf(Keychain.Key.PAYKIT_SESSION.name, Keychain.Key.PUBKY_SECRET_KEY.name),
+            listOf(
+                Keychain.Key.PUBKY_SHARED_EXPORT_ENABLED.name,
+                Keychain.Key.PAYKIT_SESSION.name,
+                Keychain.Key.PUBKY_SECRET_KEY.name,
+                Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name,
+            ),
             attemptedKeys,
         )
+    }
+
+    @Test
+    fun `session teardown keeps the quarantine marker when the local secret delete fails`() {
+        val attemptedKeys = mutableListOf<String>()
+
+        assertFailsWith<AppError> {
+            clearPubkySessionCredentials {
+                attemptedKeys += it
+                if (it == Keychain.Key.PUBKY_SECRET_KEY.name) throw AppError("Delete failed")
+            }
+        }
+
+        assertEquals(
+            listOf(
+                Keychain.Key.PUBKY_SHARED_EXPORT_ENABLED.name,
+                Keychain.Key.PAYKIT_SESSION.name,
+                Keychain.Key.PUBKY_SECRET_KEY.name,
+            ),
+            attemptedKeys,
+        )
+    }
+
+    @Test
+    fun `owned session requires and persists its exported local secret`() {
+        val secretKeyHex = "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+
+        assertEquals(
+            secretKeyHex,
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = true,
+                exportedLocalSecretKeyHex = secretKeyHex,
+                existingManagedSecretKeyHex = null,
+            ),
+        )
+        assertFailsWith<IllegalArgumentException> {
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = true,
+                exportedLocalSecretKeyHex = null,
+                existingManagedSecretKeyHex = null,
+            )
+        }
+        assertFailsWith<IllegalStateException> {
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = true,
+                exportedLocalSecretKeyHex = secretKeyHex,
+                existingManagedSecretKeyHex = "different-secret",
+            )
+        }
+    }
+
+    @Test
+    fun `external session refuses to replace a managed local secret`() {
+        assertNull(
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = false,
+                exportedLocalSecretKeyHex = null,
+                existingManagedSecretKeyHex = null,
+            ),
+        )
+        assertFailsWith<IllegalStateException> {
+            managedSecretForSessionPersistence(
+                shouldStoreLocalSecret = false,
+                exportedLocalSecretKeyHex = null,
+                existingManagedSecretKeyHex = "managed-secret",
+            )
+        }
     }
 
     private fun keyStore(

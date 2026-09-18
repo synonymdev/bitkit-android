@@ -2202,6 +2202,16 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `onAppResumed validates an external Pubky identity source`() = test {
+        whenever(pubkyRepo.validateExternalIdentitySource()).thenReturn(true)
+
+        sut.onAppResumed()
+        advanceUntilIdle()
+
+        verify(pubkyRepo).validateExternalIdentitySource()
+    }
+
+    @Test
     fun `hardware received tx details navigate directly to hardware activity`() = test {
         val txId = "hardware-tx"
 
@@ -2735,13 +2745,48 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
-    fun `pubky ring callback deeplink is ignored when Paykit UI is disabled`() = test {
-        val intent = Intent(Intent.ACTION_VIEW, "bitkit://pubky-auth/success".toUri())
-
-        sut.handleDeeplinkIntent(intent)
+    fun `legacy Ring callbacks are consumed without changing payment state or showing errors`() = test {
         advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+        val paymentState = SendUiState(address = "existing-payment", amount = 1_000u)
+        setSendState(paymentState)
+        clearInvocations(coreService, pubkyRepo, toastManager)
 
-        verify(pubkyRepo, never()).handleAuthCallback(any())
+        for (enabled in listOf(false, true)) {
+            isPaykitEnabled.value = enabled
+            advanceUntilIdle()
+            for (path in listOf("success", "cancel", "error")) {
+                for (query in listOf("", "?nonce=old-attempt&errorMessage=Denied", "?nonce")) {
+                    val callback = "bitkit://pubky-auth/$path$query"
+                    sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, callback.toUri()))
+                    advanceUntilIdle()
+
+                    assertEquals(paymentState, sut.sendUiState.value, callback)
+                    assertNull(sut.currentSheet.value, callback)
+                }
+            }
+        }
+
+        verify(coreService, never()).decode(any())
+        verify(pubkyRepo, never()).hasSecretKey()
+        verify(pubkyRepo, never()).hasIdentity()
+        verify(toastManager, never()).enqueue(any())
+    }
+
+    @Test
+    fun `unrecognized Ring callback paths still reach the scanner`() = test {
+        advanceUntilIdle()
+        sut.setIsAuthenticated(true)
+
+        for (path in listOf("setup", "unknown", "success/")) {
+            val deeplink = "bitkit://pubky-auth/$path"
+            whenever(coreService.decode(deeplink)).thenThrow(IllegalStateException("Unsupported URI"))
+
+            sut.handleDeeplinkIntent(Intent(Intent.ACTION_VIEW, deeplink.toUri()))
+            advanceUntilIdle()
+
+            verify(coreService).decode(deeplink)
+        }
     }
 
     @Test
