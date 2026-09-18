@@ -122,6 +122,7 @@ journey, and a step it does not is a manual test in the PR body naming the missi
 | Push notifications to a backgrounded or killed app | an FCM push from a CJIT order paid through `./lsp`, read back with `adb shell dumpsys notification` — [cjit-notifications](cjit-notifications/README.md) |
 | The OS notification-permission dialog | an API 33+ target, reset with `adb shell pm revoke to.bitkit.dev android.permission.POST_NOTIFICATIONS` — [notification-permission](notification-permission/README.md) |
 | An incoming Payment Request from a linked issuer | the fixture issuer, saved as a contact and linked on receiver path `bitkit/server` — [payment-requests](payment-requests/README.md) |
+| Two linked Bitkit wallets for a subscription lifecycle | a second Bitkit instance linked to the first, so a proposal can be reviewed and accepted — [subscriptions](subscriptions) |
 | A Pubky identity and a two-wallet marketplace purchase | the integration fixture runtime: Pubky testnet, Paykit Server, regtest bitcoind and Fulcrum — [pubky-marketplace](pubky-marketplace/README.md) |
 | Deep links, addresses and invoices handed to the app | `adb shell am start -a android.intent.action.VIEW -d "<uri>"`; `bitkit://` screen and sheet routes sit behind the dev-mode gate — [Running a journey](#running-a-journey), [deeplinks](deeplinks) |
 
@@ -142,9 +143,13 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `notification-permission/toggle-off-opens-system-settings.xml` | `toggle-off-and-system-settings-route.xml` — iOS does not deep link into system settings, so it asserts the real route in through Settings ▸ Notifications |
 | `hardware-wallet/usb-reconnect.xml` | `reconnect.xml` — over Bridge, since iOS cannot do WebUSB |
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
+| `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
+| `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
+| `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
+| `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
