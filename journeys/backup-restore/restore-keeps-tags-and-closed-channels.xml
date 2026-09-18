@@ -1,0 +1,45 @@
+<journey name="restore keeps activity tags and closed channels">
+  <description>
+    A wallet restored from its recovery phrase must come back with its activity tags and its closed
+    Lightning connections, not only its activities. The backup envelope carries three Core-owned
+    slices — activities, activity tags and closed channels — and the restore applies each of them
+    independently, so one rejected record can no longer discard the rest.
+
+    It also covers the upload gate the restore depends on: from the moment the restore flow starts,
+    ordinary activity uploads are held, so the fresh wallet's own state cannot replace the stored
+    envelope before the restore reads it. Running this twice on the same wallet is the sharper check,
+    because the second restore is where the ungated upload used to win the race.
+
+    Precondition: a dev (regtest) build, onboarded with a NEW wallet, and the staging LSP reachable
+    through the `lsp` helper at the repo root for funding and mining (see ../README.md). The journey
+    wipes the wallet half way through, so do not run it against a wallet whose funds matter.
+  </description>
+  <actions>
+    <action>Launch the Bitkit app and go to the wallet home screen</action>
+    <action>Open the menu, navigate to Settings, then the "Security" tab (testTag "Tab-security"), then tap "Back Up Your Money" (testTag "BackupWallet")</action>
+    <action>Continue past the intro (testTag "BackupIntroViewContinue"), tap to reveal the phrase (testTag "TapToReveal") and record every word of the seed container (testTag "SeedContainer") — the rest of the journey depends on them</action>
+    <action>Leave the backup flow and return to the wallet home screen</action>
+    <action>Tap the Receive button (testTag "Receive"), tap "Show Details" (testTag "ShowDetails") and copy the on-chain savings address (testTag "ReceiveCopyQR")</action>
+    <action>Run `./lsp POST /regtest/chain/deposit '{"address":"&lt;savings address&gt;","amountSat":500000}'` then `./lsp POST /regtest/chain/mine '{"count":3}'`, and wait for the 500 000 sat receive to appear on Home</action>
+    <action>Tap the received activity row (testTag "ActivityShort-0") and verify its detail screen opens</action>
+    <action>Tap "Tag" (testTag "ActivityTag"), enter the tag restoretag in the tag input (testTag "AddTagInput") and save it (testTag "AddTagSave")</action>
+    <action>Verify the tag restoretag is listed on the activity detail screen (testTag "ActivityTags"), then go back to Home</action>
+    <action>Tap the SAVINGS balance tile (testTag "ActivitySavings"), then "Transfer To Spending" (testTag "TransferToSpending")</action>
+    <action>Pass any first-run intros on the way: transfer intro (testTag "TransferIntro-button"), the transfer funding option (testTag "FundTransfer") and the spending intro (testTag "SpendingIntro-button")</action>
+    <action>On the spending amount screen (testTag "SpendingAmount") enter 100 000 on the number pad ("N1" then "N0" five times) and tap Continue (testTag "SpendingAmountContinue")</action>
+    <action>Wait for the Blocktank order to be quoted, then confirm the transfer by swiping the confirm handle (testTag "GRAB")</action>
+    <action>Wait for the channel to open and leave the flow through its final button (testTag "TransferSuccess-button")</action>
+    <action>Open Settings, then the "Advanced" tab (testTag "Tab-advanced"), then "Lightning Connections" (testTag "Channels")</action>
+    <action>Tap the open connection (testTag "Channel"), tap "Close Connection" (testTag "CloseConnection") and confirm (testTag "CloseConnectionButton")</action>
+    <action>Verify the connection has left the open list, and that it is listed under "Show Closed &amp; Failed" (testTag "ChannelsClosed")</action>
+    <action>Open Settings, then the "Security" tab, then "Data Backups" (testTag "BackupSettings"), and wait on the list (testTag "BackupScrollView") until the "Transaction Log" row reports a recent backup — that row carries no testTag, so read its text</action>
+    <action>Open Settings, then the "Security" tab, then "Reset And Restore" (testTag "ResetAndRestore"), tap "Reset Wallet" (testTag "restore_reset_button") and confirm in the dialog (testTag "restore_reset_dialog")</action>
+    <action>On the onboarding screen tap "Restore" (testTag "RestoreWallet"), enter the recorded words into the word inputs (testTag "Word-0" onwards) and tap Restore (testTag "RestoreButton")</action>
+    <action>Wait for the restore to finish and tap "Get Started" (testTag "GetStartedButton")</action>
+    <action>Verify Home lists the restored activities, including the 500 000 sat receive</action>
+    <action>Tap the received activity row (testTag "ActivityShort-0") and verify it still shows the tag restoretag (testTag "ActivityTags")</action>
+    <action>Open Settings, then the "Advanced" tab, then "Lightning Connections", tap "Show Closed &amp; Failed" (testTag "ChannelsClosed") and verify the closed connection is listed</action>
+    <action>Read the app log and verify the restore applied all three slices, as `Restored 3 activities, 1 activity tags, 1 closed channels`, and that no `Backup succeeded for: 'ACTIVITY'` line sits between the reset and `Full restore starting`</action>
+    <action>Repeat the reset and the restore once more from the same recovery phrase, and verify the tag and the closed connection are still there — the second restore is the one the ungated upload used to lose</action>
+  </actions>
+</journey>
