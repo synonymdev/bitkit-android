@@ -119,7 +119,7 @@ fixtures, push notifications) live in each suite's README.
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
 | [home](home) | 1 | Pull to refresh on Home; checks the app log, no README |
-| [node-lifecycle](node-lifecycle) | 1 | Cancelled LDK restart recovers to Running; reads the app log; no README |
+| [node-lifecycle](node-lifecycle) | 1 | Detached LDK restart completes; a cancelled Electrum change reconciles and recovers to Running; reads the app log; no README |
 | [notification-permission](notification-permission) | 4 | Background-setup toggles |
 | [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
@@ -144,7 +144,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/usb-reconnect.xml` | `reconnect.xml` — over Bridge, since iOS cannot do WebUSB |
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
-| `node-lifecycle/cancelled-node-restart.xml` | not ported — the route runs through Android's LDK Debug screen and asserts on Android app-log lines |
+| `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Electrum Server screens and assert on Android app-log lines |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
