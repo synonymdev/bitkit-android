@@ -143,7 +143,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `notification-permission/toggle-off-opens-system-settings.xml` | `toggle-off-and-system-settings-route.xml` — iOS does not deep link into system settings, so it asserts the real route in through Settings ▸ Notifications |
 | `hardware-wallet/usb-reconnect.xml` | `reconnect.xml` — over Bridge, since iOS cannot do WebUSB |
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
-| `coin-selection/manual-coin-selection.xml` | not ported |
+| `coin-selection/manual-coin-selection.xml` | not ported — iOS has the screen (`SendUtxoSelectionView`) but no accessibility identifiers on it yet |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `coin-selection/manual-coin-selection-load.xml` | not ported — iOS has `SendUtxoSelectionView` but no load error, retry or identifiers to assert on |
