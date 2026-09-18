@@ -982,7 +982,7 @@ private fun RootNavHost(
                     viewModel = transferViewModel,
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.navigateTo(Routes.SpendingConfirm) },
+                    onQuoteReady = { navController.navigateTo(Routes.SpendingConfirm) },
                     toastException = { appViewModel.toast(it) },
                     toast = { title, description ->
                         appViewModel.toast(
@@ -1001,7 +1001,7 @@ private fun RootNavHost(
                     viewModel = transferViewModel,
                     isOffline = connectivityState != ConnectivityState.CONNECTED,
                     onBackClick = { navController.popBackStack() },
-                    onOrderCreated = { navController.navigateTo(Routes.SpendingHwSign(walletId)) },
+                    onQuoteReady = { navController.navigateTo(Routes.SpendingHwSign(walletId)) },
                 )
             }
             composableWithDefaultTransitions<Routes.SpendingHwSign> { entry ->
@@ -1037,8 +1037,7 @@ private fun RootNavHost(
                 SpendingAdvancedScreen(
                     viewModel = transferViewModel,
                     onBackClick = { navController.popBackStack() },
-                    // Pops back to whoever opened Advanced: SpendingConfirm or SpendingHwSign.
-                    onOrderCreated = { navController.popBackStack() },
+                    onQuoteReady = { navController.popBackStack() },
                 )
             }
             deepLinkableComposable<Routes.TransferLiquidity> {
