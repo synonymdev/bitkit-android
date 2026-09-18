@@ -123,7 +123,7 @@ fixtures, push notifications) live in each suite's README.
 | [notification-permission](notification-permission) | 4 | Background-setup toggles |
 | [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
-| [security](security) | 1 | PIN result sheet layout at a long locale and font scale; no README |
+| [security](security) | 2 | PIN lock when the app returns from the background; PIN result sheet layout at a long locale and font scale; no README |
 | [subscriptions](subscriptions) | 4 | Paykit subscription lifecycle across two wallets, plus the Payments tab |
 | [transfers](transfers) | 1 | Transfer to Spending settling after the LSP closes the channel; no README |
 | [widgets](widgets) | 2 | Needs no backend — the quickest way to see the loop work; no README |
@@ -150,6 +150,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
+| `security/pin-lock-on-resume.xml` | not ported yet — iOS already clears the PIN verification on entering the background, so the journey applies; it lands with the iOS side of synonymdev/bitkit-android#1298 |
 | `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 

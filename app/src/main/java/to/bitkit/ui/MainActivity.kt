@@ -9,15 +9,18 @@ import android.os.Looper
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.testTagsAsResourceId
 import androidx.core.content.IntentCompat
@@ -129,6 +132,9 @@ class MainActivity : FragmentActivity() {
                 val hazeState = rememberHazeState(blurEnabled = true)
                 val bottomSheetOverlayState = remember { BottomSheetOverlayState() }
                 val authSheetOverlayState = remember { BottomSheetOverlayState() }
+                val isAuthenticated by appViewModel.isAuthenticated.collectAsState()
+                val focusManager = LocalFocusManager.current
+                val keyboardController = LocalSoftwareKeyboardController.current
 
                 LaunchedEffect(
                     walletExists,
@@ -155,26 +161,32 @@ class MainActivity : FragmentActivity() {
                         walletViewModel = walletViewModel,
                     )
                 } else {
-                    val isAuthenticated by appViewModel.isAuthenticated.collectAsStateWithLifecycle()
-
                     IsOnlineTracker(appViewModel)
-                    ContentView(
-                        appViewModel = appViewModel,
-                        walletViewModel = walletViewModel,
-                        blocktankViewModel = blocktankViewModel,
-                        currencyViewModel = currencyViewModel,
-                        activityListViewModel = activityListViewModel,
-                        transferViewModel = transferViewModel,
-                        settingsViewModel = settingsViewModel,
-                        backupsViewModel = backupsViewModel,
-                        hazeState = hazeState,
-                        bottomSheetOverlayState = bottomSheetOverlayState,
-                        modifier = Modifier.hazeSource(hazeState, zIndex = 0f),
-                    )
+                    LaunchedEffect(isAuthenticated) {
+                        if (!isAuthenticated) {
+                            focusManager.clearFocus(force = true)
+                            keyboardController?.hide()
+                        }
+                    }
+                    CompositionLocalProvider(LocalIsAppLocked provides !isAuthenticated) {
+                        ContentView(
+                            appViewModel = appViewModel,
+                            walletViewModel = walletViewModel,
+                            blocktankViewModel = blocktankViewModel,
+                            currencyViewModel = currencyViewModel,
+                            activityListViewModel = activityListViewModel,
+                            transferViewModel = transferViewModel,
+                            settingsViewModel = settingsViewModel,
+                            backupsViewModel = backupsViewModel,
+                            hazeState = hazeState,
+                            bottomSheetOverlayState = bottomSheetOverlayState,
+                            modifier = Modifier.hazeSource(hazeState, zIndex = 0f),
+                        )
+                    }
 
                     AnimatedVisibility(
                         visible = !isAuthenticated,
-                        enter = fadeIn(),
+                        enter = EnterTransition.None,
                         exit = fadeOut(),
                     ) {
                         AuthCheckView(
@@ -208,7 +220,7 @@ class MainActivity : FragmentActivity() {
                 }
 
                 val transactionSheetDetails by appViewModel.transactionSheet.collectAsStateWithLifecycle()
-                if (transactionSheetDetails != NewTransactionSheetDetails.EMPTY) {
+                if (isAuthenticated && transactionSheetDetails != NewTransactionSheetDetails.EMPTY) {
                     NewTransactionSheet(
                         appViewModel = appViewModel,
                         bottomSheetOverlayState = bottomSheetOverlayState,
@@ -297,6 +309,11 @@ class MainActivity : FragmentActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         intent.launchKey()?.let { outState.putString(KEY_CONSUMED_LAUNCH_INTENT, it) }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (!isChangingConfigurations) appViewModel.lockOnBackground()
     }
 
     override fun onDestroy() {
