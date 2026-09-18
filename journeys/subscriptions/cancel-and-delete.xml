@@ -1,0 +1,30 @@
+<journey name="Cancel And Delete Subscription">
+  <description>
+    Terminal actions on both sides. The payer cancels an active subscription from its detail screen and
+    the creator deletes a still-pending proposal. Both confirmations are swipe controls with a brand
+    orange knob; the payer sees the cross illustration and the creator the trash illustration.
+
+    Deletion needs its own subscription rather than the one just cancelled: the creator's Delete button
+    is gated on the subscription still being proposed or active, so a cancellation reaching the creator
+    removes it. A proposal with no paid periods also leaves CREATED once deleted, whereas one that has
+    taken a payment stays there to retain its history.
+  </description>
+  <actions>
+    <action>Launch the E2E Bitkit app with an active subscription the payer accepted, per review-and-subscribe.xml</action>
+    <action>Have the creator send a second proposal, "Journey Sub Two", and leave it unaccepted so it stays pending with no paid periods</action>
+    <action>On the payer instance, open the drawer menu, tap Subscriptions, and tap the active "Journey Sub" row</action>
+    <action>Verify the detail footer shows Cancel carrying the cross icon, alongside More Info when the subscription has a description</action>
+    <action>Tap Cancel</action>
+    <action>Verify the sheet title reads "Cancel Subscription", the cross illustration is shown, and the swipe control reads "Swipe To Cancel"</action>
+    <action>Swipe the confirm control to the end</action>
+    <action>Verify the sheet dismisses and "Journey Sub" leaves the ACTIVE section</action>
+    <action>Switch to the creator instance and open Subscriptions</action>
+    <action>Verify "Journey Sub" is still listed under CREATED, because its paid periods are retained as history</action>
+    <action>Tap the pending "Journey Sub Two" row in the CREATED section</action>
+    <action>Verify the detail shows SUBSCRIBERS and PAYMENTS cells, that PAYMENTS uses the coins icon, and that the footer Delete button carries the trash icon</action>
+    <action>Tap Delete</action>
+    <action>Verify the sheet title reads "Delete Subscription?", the trash illustration is shown, and the swipe control reads "Swipe To Delete"</action>
+    <action>Swipe the confirm control to the end</action>
+    <action>Verify the sheet dismisses and "Journey Sub Two", having taken no payment, leaves the CREATED section</action>
+  </actions>
+</journey>

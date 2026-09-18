@@ -31,11 +31,10 @@ import to.bitkit.R
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
-import to.bitkit.ui.LocalCurrencies
-import to.bitkit.ui.LocalCurrencyViewModel
-import to.bitkit.ui.LocalSettingsViewModel
+import to.bitkit.ui.LocalBottomSheetOverlayState
 import to.bitkit.ui.components.BalanceHeaderView
 import to.bitkit.ui.components.BottomSheet
+import to.bitkit.ui.components.BottomSheetOverlayState
 import to.bitkit.ui.components.BottomSheetPreview
 import to.bitkit.ui.components.PrimaryButton
 import to.bitkit.ui.components.SecondaryButton
@@ -45,25 +44,17 @@ import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.utils.localizedRandom
 import to.bitkit.viewmodels.AppViewModel
-import to.bitkit.viewmodels.CurrencyViewModel
-import to.bitkit.viewmodels.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun NewTransactionSheet(
     appViewModel: AppViewModel,
-    currencyViewModel: CurrencyViewModel,
-    settingsViewModel: SettingsViewModel,
+    bottomSheetOverlayState: BottomSheetOverlayState,
     modifier: Modifier = Modifier,
 ) {
-    val currencies by currencyViewModel.uiState.collectAsStateWithLifecycle()
     val details by appViewModel.transactionSheet.collectAsStateWithLifecycle()
 
-    CompositionLocalProvider(
-        LocalCurrencyViewModel provides currencyViewModel,
-        LocalSettingsViewModel provides settingsViewModel,
-        LocalCurrencies provides currencies,
-    ) {
+    CompositionLocalProvider(LocalBottomSheetOverlayState provides bottomSheetOverlayState) {
         BottomSheet(
             onDismissRequest = { appViewModel.hideNewTransactionSheet() },
         ) {
