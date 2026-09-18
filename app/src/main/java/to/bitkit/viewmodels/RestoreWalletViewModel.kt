@@ -30,7 +30,9 @@ class RestoreWalletViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(RestoreWalletUiState())
     val uiState: StateFlow<RestoreWalletUiState> = _uiState.asStateFlow()
 
-    /** Word edits validate off the main thread, so they are serialized to keep an older edit from undoing a newer one. */
+    /**
+     * Word edits validate off the main thread, so they are serialized to keep an older edit from undoing a newer one.
+     */
     private val wordEditMutex = Mutex()
 
     init {
@@ -110,7 +112,8 @@ class RestoreWalletViewModel @Inject constructor(
 
     private fun handlePastedWords(index: Int, pastedText: String) = viewModelScope.launch {
         wordEditMutex.withLock {
-            val separators = Regex("\\s+") // any whitespace chars to account for different sources like password managers
+            // any whitespace chars to account for different sources like password managers
+            val separators = Regex("\\s+")
             val pastedWords = pastedText
                 .split(separators)
                 .filter { it.isNotBlank() }
