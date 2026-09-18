@@ -4,20 +4,32 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import to.bitkit.di.IoDispatcher
+import to.bitkit.ext.nowMillis
 import to.bitkit.ext.runSuspendCatching
 import to.bitkit.models.NewTransactionSheetDetails
 import to.bitkit.models.NewTransactionSheetDirection
 import to.bitkit.models.NewTransactionSheetType
 import to.bitkit.models.msatCeilOf
 import to.bitkit.repositories.ActivityRepo
+import to.bitkit.repositories.BackupRepo
+import to.bitkit.services.MigrationService
 import to.bitkit.utils.Logger
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.hours
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 @Singleton
 class NotifyPaymentReceivedHandler @Inject constructor(
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
     private val activityRepo: ActivityRepo,
+    private val backupRepo: BackupRepo,
+    private val migrationService: MigrationService,
+    private val clock: Clock,
     private val receivedNotificationContent: ReceivedNotificationContent,
 ) {
     private val presentationClaimsLock = Any()
@@ -86,7 +98,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
 
     private fun presentationKey(command: NotifyPaymentReceived.Command): String? = when (command) {
         is NotifyPaymentReceived.Command.Lightning -> command.event.paymentId?.let { "lightning:$it" }
-        is NotifyPaymentReceived.Command.Onchain -> "onchain:${command.event.txid}"
+        is NotifyPaymentReceived.Command.Onchain -> "onchain:${command.txid}"
     }
 
     private suspend fun shouldShowLightning(command: NotifyPaymentReceived.Command.Lightning): Boolean {
@@ -96,15 +108,50 @@ class NotifyPaymentReceivedHandler @Inject constructor(
     }
 
     private suspend fun shouldShowOnchain(command: NotifyPaymentReceived.Command.Onchain): Boolean {
-        activityRepo.handleOnchainTransactionReceived(command.event.txid, command.event.details)
-        if (command.event.details.amountSats <= 0) return false
+        if (command.isConfirmedOnly) {
+            if (command.details.amountSats <= 0) return false
+            if (!canShowConfirmedOnly(command)) return false
+            applyConfirmationIfMissing(command)
+        } else {
+            activityRepo.handleOnchainTransactionReceived(command.txid, command.details)
+            if (command.details.amountSats <= 0) return false
+        }
 
         delay(DELAY_FOR_ACTIVITY_SYNC_MS)
         val shouldShowSheet = retryShouldShowReceivedSheet(
-            command.event.txid,
-            command.event.details.amountSats.toULong(),
+            command.txid,
+            command.details.amountSats.toULong(),
         )
         return shouldShowSheet
+    }
+
+    private suspend fun applyConfirmationIfMissing(command: NotifyPaymentReceived.Command.Onchain) {
+        if (activityRepo.getOnchainActivityByTxId(command.txid)?.confirmed == true) {
+            Logger.debug("Skipping confirmed activity update for '${command.txid}', already applied", context = TAG)
+            return
+        }
+        activityRepo.handleOnchainTransactionConfirmed(command.txid, command.details)
+    }
+
+    private suspend fun canShowConfirmedOnly(command: NotifyPaymentReceived.Command.Onchain): Boolean {
+        val confirmationTime = command.confirmationTime ?: return false
+        if (backupRepo.isRestoring.value) {
+            Logger.debug("Skipping confirmed-only receive '${command.txid}' during restore", context = TAG)
+            return false
+        }
+        if (migrationService.isShowingMigrationLoading.value || migrationService.needsPostMigrationSync()) {
+            Logger.debug("Skipping confirmed-only receive '${command.txid}' during migration", context = TAG)
+            return false
+        }
+        val age = nowMillis(clock).milliseconds - confirmationTime.toLong().seconds
+        if (age.absoluteValue > MAX_CONFIRMED_ONLY_AGE) {
+            Logger.debug(
+                "Skipping confirmed-only receive '${command.txid}' confirmed at '$confirmationTime'",
+                context = TAG,
+            )
+            return false
+        }
+        return true
     }
 
     private suspend fun markAsSeen(command: NotifyPaymentReceived.Command) {
@@ -114,7 +161,7 @@ class NotifyPaymentReceivedHandler @Inject constructor(
                 activityRepo.markActivityAsSeen(paymentId)
             }
 
-            is NotifyPaymentReceived.Command.Onchain -> activityRepo.markOnchainActivityAsSeen(command.event.txid)
+            is NotifyPaymentReceived.Command.Onchain -> activityRepo.markOnchainActivityAsSeen(command.txid)
         }
     }
 
@@ -134,11 +181,11 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         direction = NewTransactionSheetDirection.RECEIVED,
         paymentHashOrTxId = when (command) {
             is NotifyPaymentReceived.Command.Lightning -> command.event.paymentHash
-            is NotifyPaymentReceived.Command.Onchain -> command.event.txid
+            is NotifyPaymentReceived.Command.Onchain -> command.txid
         },
         sats = when (command) {
             is NotifyPaymentReceived.Command.Lightning -> msatCeilOf(command.event.amountMsat).toLong()
-            is NotifyPaymentReceived.Command.Onchain -> command.event.details.amountSats
+            is NotifyPaymentReceived.Command.Onchain -> command.details.amountSats
         },
     )
 
@@ -152,5 +199,14 @@ class NotifyPaymentReceivedHandler @Inject constructor(
         private const val DELAY_FOR_ACTIVITY_SYNC_MS = 500L
         private const val RETRY_DELAY_MS = 300L
         private const val MAX_RETRIES = 3
+
+        /**
+         * Max distance between a confirmed-only transaction's block timestamp and the device clock for it to
+         * count as a new receive. Older confirmations, such as those replayed by a full wallet scan after a
+         * restore, stay silent. The block timestamp is used instead of the node's best block height, which
+         * only advances with the lightning wallet sync and can lag the onchain sync that emits the event.
+         * The distance is absolute because block timestamps and device clocks can run ahead of each other.
+         */
+        private val MAX_CONFIRMED_ONLY_AGE = 1.hours
     }
 }

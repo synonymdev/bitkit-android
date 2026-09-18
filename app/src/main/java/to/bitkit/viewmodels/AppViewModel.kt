@@ -1577,6 +1577,7 @@ class AppViewModel @Inject constructor(
 
     private suspend fun handleOnchainTransactionConfirmed(event: Event.OnchainTransactionConfirmed) {
         activityRepo.handleOnchainTransactionConfirmed(event.txid, event.details)
+        notifyPaymentReceived(event)
     }
 
     private suspend fun handleOnchainTransactionEvicted(event: Event.OnchainTransactionEvicted) {
