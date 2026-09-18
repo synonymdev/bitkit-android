@@ -12,8 +12,10 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
@@ -42,6 +44,8 @@ import to.bitkit.models.SamRockSetupRequest
 import to.bitkit.repositories.HwWalletRepo
 import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.ui.components.AuthCheckView
+import to.bitkit.ui.components.BottomSheetOverlayHost
+import to.bitkit.ui.components.BottomSheetOverlayState
 import to.bitkit.ui.components.IsOnlineTracker
 import to.bitkit.ui.components.ToastOverlay
 import to.bitkit.ui.components.modelNameRes
@@ -125,6 +129,8 @@ class MainActivity : FragmentActivity() {
                 val isShowingMigrationLoading by walletViewModel.isShowingMigrationLoading.collectAsStateWithLifecycle()
                 val restoreState by walletViewModel.restoreState.collectAsStateWithLifecycle()
                 val hazeState = rememberHazeState(blurEnabled = true)
+                val bottomSheetOverlayState = remember { BottomSheetOverlayState() }
+                val authSheetOverlayState = remember { BottomSheetOverlayState() }
 
                 LaunchedEffect(
                     walletExists,
@@ -164,6 +170,7 @@ class MainActivity : FragmentActivity() {
                         settingsViewModel = settingsViewModel,
                         backupsViewModel = backupsViewModel,
                         hazeState = hazeState,
+                        bottomSheetOverlayState = bottomSheetOverlayState,
                         modifier = Modifier.hazeSource(hazeState, zIndex = 0f),
                     )
 
@@ -182,11 +189,15 @@ class MainActivity : FragmentActivity() {
 
                     val showForgotPinSheet by appViewModel.showForgotPinSheet.collectAsStateWithLifecycle()
                     if (showForgotPinSheet) {
-                        ForgotPinSheet(
-                            onDismiss = { appViewModel.setShowForgotPin(false) },
-                            onResetClick = { walletViewModel.wipeWallet() },
-                        )
+                        CompositionLocalProvider(LocalBottomSheetOverlayState provides authSheetOverlayState) {
+                            ForgotPinSheet(
+                                onDismiss = { appViewModel.setShowForgotPin(false) },
+                                onResetClick = { walletViewModel.wipeWallet() },
+                            )
+                        }
                     }
+
+                    BottomSheetOverlayHost(state = authSheetOverlayState)
 
                     LaunchedEffect(appViewModel) {
                         appViewModel.mainScreenEffect.collect {
@@ -198,6 +209,14 @@ class MainActivity : FragmentActivity() {
                     }
                 }
 
+                val transactionSheetDetails by appViewModel.transactionSheet.collectAsStateWithLifecycle()
+                if (transactionSheetDetails != NewTransactionSheetDetails.EMPTY) {
+                    NewTransactionSheet(
+                        appViewModel = appViewModel,
+                        bottomSheetOverlayState = bottomSheetOverlayState,
+                    )
+                }
+
                 val currentToast by appViewModel.currentToast.collectAsStateWithLifecycle()
                 ToastOverlay(
                     toast = currentToast,
@@ -206,15 +225,6 @@ class MainActivity : FragmentActivity() {
                     onDragStart = { appViewModel.pauseToast() },
                     onDragEnd = { appViewModel.resumeToast() }
                 )
-
-                val transactionSheetDetails by appViewModel.transactionSheet.collectAsStateWithLifecycle()
-                if (transactionSheetDetails != NewTransactionSheetDetails.EMPTY) {
-                    NewTransactionSheet(
-                        appViewModel = appViewModel,
-                        currencyViewModel = currencyViewModel,
-                        settingsViewModel = settingsViewModel,
-                    )
-                }
 
                 SplashScreen(appViewModel.splashVisible)
             }

@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -46,6 +47,7 @@ internal fun SubscriptionRow(
             .background(Colors.Gray6)
             .clickableAlpha(onClick = onClick)
             .padding(16.dp)
+            .testTag("SubscriptionRow-${subscription.paymentRequestId}")
     ) {
         SubscriptionAvatar(subscription = subscription, contact = contact, size = 40.dp)
         Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {

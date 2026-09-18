@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.DrawerState
 import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -67,6 +68,8 @@ import to.bitkit.repositories.PaykitPaymentRequestId
 import to.bitkit.repositories.PaykitSubscriptionId
 import to.bitkit.ui.Routes.ExternalConnection
 import to.bitkit.ui.components.AuthCheckScreen
+import to.bitkit.ui.components.BottomSheetOverlayHost
+import to.bitkit.ui.components.BottomSheetOverlayState
 import to.bitkit.ui.components.DefaultSheetContainerColor
 import to.bitkit.ui.components.DrawerMenu
 import to.bitkit.ui.components.Sheet
@@ -243,6 +246,7 @@ import to.bitkit.viewmodels.TransferViewModel
 import to.bitkit.viewmodels.WalletViewModel
 
 @Suppress("CyclomaticComplexMethod")
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ContentView(
     appViewModel: AppViewModel,
@@ -254,6 +258,7 @@ fun ContentView(
     settingsViewModel: SettingsViewModel,
     backupsViewModel: BackupsViewModel,
     hazeState: HazeState,
+    bottomSheetOverlayState: BottomSheetOverlayState,
     modifier: Modifier = Modifier,
 ) {
     val navController = rememberNavController()
@@ -451,6 +456,7 @@ fun ContentView(
         LocalSettingsViewModel provides settingsViewModel,
         LocalBackupsViewModel provides backupsViewModel,
         LocalDrawerState provides drawerState,
+        LocalBottomSheetOverlayState provides bottomSheetOverlayState,
         LocalIs24HourFormat provides rememberIs24HourFormat(),
         LocalBalances provides balance,
         LocalCurrencies provides currencies,
@@ -509,6 +515,9 @@ fun ContentView(
                 },
                 sheetContainerColor = when (currentSheet) {
                     is Sheet.Widgets -> Colors.Gray7
+                    // Meet the top of the subscription sheets' own gradient, so the grabber strip
+                    // does not sit a shade darker than the content right below it.
+                    is Sheet.Subscription -> Colors.Gray6
                     else -> DefaultSheetContainerColor
                 },
                 sheets = {
@@ -746,6 +755,8 @@ fun ContentView(
                 onOpenWidgetsSheet = { appViewModel.showSheet(Sheet.Widgets()) },
                 modifier = Modifier.align(Alignment.TopEnd)
             )
+
+            BottomSheetOverlayHost(state = bottomSheetOverlayState)
         }
     }
 }
