@@ -38,10 +38,10 @@ import to.bitkit.repositories.WalletState
 import to.bitkit.services.BoltzService
 import to.bitkit.services.MigrationService
 import to.bitkit.test.BaseUnitTest
+import to.bitkit.utils.AppError
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.WalletViewModel
 import kotlin.test.assertEquals
-import to.bitkit.utils.AppError
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WalletViewModelTest : BaseUnitTest() {
