@@ -78,7 +78,7 @@ fun AddTagSheet(
                 onShowSuggestions = { showSuggestions = true },
                 onSave = {
                     dismissKeyboard()
-                    onSave(tag)
+                    onSave(tag.trim())
                 },
                 isSaveEnabled = tag.isNotBlank(),
             )

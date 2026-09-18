@@ -44,5 +44,8 @@ class TagsViewModel @Inject constructor(
 @Immutable
 data class AddTagUiState(
     val tagsSuggestions: ImmutableList<String> = persistentListOf(),
-    val tagInput: String = ""
-)
+    val tagInput: String = "",
+) {
+    /** The tag as it is stored on submit: [tagInput] without the surrounding whitespace. */
+    val confirmedTag: String get() = tagInput.trim()
+}

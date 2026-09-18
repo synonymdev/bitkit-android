@@ -42,4 +42,35 @@ class TagsViewModelTest : BaseUnitTest() {
 
         assertEquals("Coffee", sut.uiState.value.tagInput)
     }
+
+    // A trim per keystroke would stop the space between two words from ever landing
+    @Test
+    fun `onInputUpdated keeps the space typed between two words`() {
+        sut.onInputUpdated("coffee ")
+
+        assertEquals("coffee ", sut.uiState.value.tagInput)
+        assertEquals("coffee", sut.uiState.value.confirmedTag)
+    }
+
+    @Test
+    fun `confirmedTag drops the space the sanitizer leaves for a trailing line break`() {
+        sut.onInputUpdated("coffee\nshop\n")
+
+        assertEquals("coffee shop ", sut.uiState.value.tagInput)
+        assertEquals("coffee shop", sut.uiState.value.confirmedTag)
+    }
+
+    @Test
+    fun `confirmedTag drops the leading space of a tag pasted after a line break`() {
+        sut.onInputUpdated("\ncoffee shop")
+
+        assertEquals("coffee shop", sut.uiState.value.confirmedTag)
+    }
+
+    @Test
+    fun `confirmedTag stays empty for whitespace only input`() {
+        sut.onInputUpdated("   ")
+
+        assertEquals("", sut.uiState.value.confirmedTag)
+    }
 }

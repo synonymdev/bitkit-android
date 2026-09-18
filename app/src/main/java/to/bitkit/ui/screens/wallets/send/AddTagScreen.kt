@@ -129,7 +129,7 @@ fun AddTagContent(
                     imeAction = ImeAction.Done
                 ),
                 keyboardActions = KeyboardActions(onDone = {
-                    onTagConfirmed(uiState.tagInput)
+                    onTagConfirmed(uiState.confirmedTag)
                 }),
                 inputTransform = String::sanitizeTag,
                 modifier = Modifier
@@ -142,7 +142,7 @@ fun AddTagContent(
             Spacer(modifier = Modifier.weight(1f))
             PrimaryButton(
                 text = stringResource(R.string.wallet__tags_add_button),
-                onClick = { onTagConfirmed(uiState.tagInput) },
+                onClick = { onTagConfirmed(uiState.confirmedTag) },
                 enabled = uiState.tagInput.isNotBlank(),
                 modifier = Modifier
                     .then(addButtonTestTag?.let { Modifier.testTag(it) } ?: Modifier)
