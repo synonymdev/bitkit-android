@@ -125,6 +125,7 @@ fixtures, push notifications) live in each suite's README.
 | [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
 | [security](security) | 1 | PIN result sheet layout at a long locale and font scale; no README |
+| [settings](settings) | 1 | Electrum server error toasts; no README |
 | [subscriptions](subscriptions) | 4 | Paykit subscription lifecycle across two wallets, plus the Payments tab |
 | [transfers](transfers) | 1 | Transfer to Spending settling after the LSP closes the channel; no README |
 | [widgets](widgets) | 2 | Needs no backend — the quickest way to see the loop work; no README |
@@ -149,6 +150,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
+| `settings/electrum-server-error-toasts.xml` | not ported — iOS still shows one generic message for every manual Electrum connect failure |
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
