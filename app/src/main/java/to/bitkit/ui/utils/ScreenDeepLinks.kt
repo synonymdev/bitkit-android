@@ -38,6 +38,19 @@ object ScreenDeepLinks {
     fun isScreenDeepLink(uri: Uri): Boolean =
         uri.scheme?.lowercase() == SCHEME && uri.host?.lowercase() == HOST
 
+    fun spendingHwSignLink(uri: Uri): SpendingHwSignLink? {
+        if (!isScreenDeepLink(uri)) return null
+        val segments = uri.pathSegments.orEmpty()
+        val screenId = kebabId(Routes.SpendingHwSign::class)
+        if (segments.size != 3 || screenId == null || !segments[0].equals(screenId, ignoreCase = true)) {
+            return null
+        }
+        val walletId = segments[1]
+        val orderId = segments[2]
+        if (walletId.isBlank() || orderId.isBlank()) return null
+        return SpendingHwSignLink(walletId = walletId, orderId = orderId)
+    }
+
     fun detachScreenUri(intent: Intent): Boolean {
         val uri = intent.data ?: return false
         if (!isScreenDeepLink(uri)) return false
@@ -46,3 +59,8 @@ object ScreenDeepLinks {
         return true
     }
 }
+
+data class SpendingHwSignLink(
+    val walletId: String,
+    val orderId: String,
+)

@@ -82,7 +82,7 @@ fun SpendingAmountScreen(
     LaunchedEffect(Unit) {
         viewModel.transferEffects.collect { effect ->
             when (effect) {
-                TransferEffect.OnOrderCreated -> onOrderCreated()
+                is TransferEffect.OnOrderCreated -> onOrderCreated()
                 is TransferEffect.ToastError -> toast(effect.title, effect.description)
                 is TransferEffect.ToastException -> toastException(effect.e)
                 else -> Unit
