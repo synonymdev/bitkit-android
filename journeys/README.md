@@ -117,6 +117,7 @@ fixtures, push notifications) live in each suite's README.
 | [activity](activity) | 1 | Date range sheet under rapid month taps; needs no backend, no README |
 | [amount-limits](amount-limits) | 5 | Number pad caps on all four amount screens, plus preset/unit-switch delete |
 | [app-update](app-update) | 1 | Critical update blocks onboarding; cannot be run from a stock build — needs a non-debug build and a local change to reach a critical release, see the journey's setup; no README |
+| [backup](backup) | 1 | Clearing a wrong word on Confirm Recovery Phrase; throwaway wallet only, no README |
 | [backup-restore](backup-restore) | 1 | VSS restore keeps tags and closed channels; wipes the wallet |
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
 | [coin-selection](coin-selection) | 1 | Manual coin selection screen; needs 3+ on-chain UTXOs; no README |
@@ -176,6 +177,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `tags/activity-tag-length-cap.xml` | not ported — iOS has no 20-character cap on tag input |
 | `transfer/transfer-to-savings-returns-home.xml` | not ported — iOS already resets navigation to home on the same OK, so the journey has no iOS counterpart yet |
 | `lnurl/lnurl-pay-comment-note.xml` | not ported — bitkit-ios has not been checked for keeping the LNURL-pay comment on the activity |
+| `backup/confirm-mnemonic-clear-wrong-word.xml` | not ported — `BackupConfirmMnemonic.swift` clears only the last word by its chip, with no red-word tap |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
