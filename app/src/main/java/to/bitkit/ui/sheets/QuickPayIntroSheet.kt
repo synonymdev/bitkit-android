@@ -30,7 +30,7 @@ fun QuickPayIntroSheet(
         onCancel = onLater,
         testTag = "QuickpayIntro",
         cancelTestTag = "QuickpayIntro-later",
-        continueTestTag = "QuickpayIntro-learnMore",
+        continueTestTag = "QuickpayIntro-button",
         modifier = modifier
             .sheetHeight(isModal = true)
     )
