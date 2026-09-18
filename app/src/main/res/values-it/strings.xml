@@ -829,6 +829,10 @@
     <string name="wallet__activity_transfer_to_savings">Ai Risparmi</string>
     <string name="wallet__activity_transfer_to_spending">A Saldo Spendibile</string>
     <string name="wallet__activity_tx_id">ID Transazione</string>
+    <string name="wallet__balance_hidden_message">Scorri il saldo del tuo portafoglio per rivelarlo di nuovo.</string>
+    <string name="wallet__balance_hidden_title">Saldo del portafoglio nascosto</string>
+    <string name="wallet__balance_unit_switched_message">Tocca il saldo del tuo portafoglio per ripristinarlo %1$s.</string>
+    <string name="wallet__balance_unit_switched_title">Passato a %1$s</string>
     <string name="wallet__boost">Potenzia</string>
     <string name="wallet__boost_decrease_fee">Riduci commissione</string>
     <string name="wallet__boost_error_msg">Bitkit non è stato in grado di potenziare la transazione.</string>

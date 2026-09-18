@@ -829,6 +829,10 @@
     <string name="wallet__activity_transfer_to_savings">Do úspor</string>
     <string name="wallet__activity_transfer_to_spending">Do útrat</string>
     <string name="wallet__activity_tx_id">ID transakce</string>
+    <string name="wallet__balance_hidden_message">Přejeďte prstem po zůstatku v peněžence a znovu jej odkryjte.</string>
+    <string name="wallet__balance_hidden_title">Skrytý zůstatek peněženky</string>
+    <string name="wallet__balance_unit_switched_message">Klepnutím na zůstatek v peněžence jej přepnete zpět na %1$s.</string>
+    <string name="wallet__balance_unit_switched_title">Přepnuto na %1$s</string>
     <string name="wallet__boost">Posílit</string>
     <string name="wallet__boost_decrease_fee">Snížit poplatek</string>
     <string name="wallet__boost_error_msg">Bitkit se nepodařilo posílit transakci.</string>

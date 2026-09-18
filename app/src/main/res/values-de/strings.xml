@@ -951,6 +951,10 @@
     <string name="wallet__spending__title">AusgabenKonto</string>
     <string name="wallet__spending__onboarding">&lt;accent&gt;Sende\nBitcoin&lt;/accent&gt;\nauf dein\nAusgabenkonto</string>
     <string name="wallet__details_transfer_subtitle">Eingehender Transfer:</string>
+    <string name="wallet__balance_hidden_message">Streiche über dein Wallet-Guthaben, um es erneut anzuzeigen.</string>
+    <string name="wallet__balance_hidden_title">Wallet-Guthaben versteckt</string>
+    <string name="wallet__balance_unit_switched_message">Tippe auf dein Wallet-Guthaben, um es zurück zu %1$s zu wechseln.</string>
+    <string name="wallet__balance_unit_switched_title">Gewechselt zu %1$s</string>
     <string name="wallet__boost">Beschleunigen</string>
     <string name="wallet__boost_title">Transaktion beschleunigen</string>
     <string name="wallet__boost_success_title">Beschleunigt!</string>
