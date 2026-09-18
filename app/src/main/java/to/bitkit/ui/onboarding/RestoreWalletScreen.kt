@@ -152,7 +152,7 @@ private fun Content(
         }
     }
 
-    LaunchedEffect(uiState.focusedIndex) {
+    LaunchedEffect(uiState.focusedIndex, uiState.wordCount) {
         uiState.focusedIndex?.let { index ->
             focusRequesters[index].requestFocus()
         }
