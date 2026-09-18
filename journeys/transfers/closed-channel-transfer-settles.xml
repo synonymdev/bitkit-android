@@ -1,0 +1,46 @@
+<journey name="transfer to spending banner clears when the lsp closes the channel">
+  <description>
+    Covers issue #614. A pending Transfer to Spending keeps its "TRANSFER IN PROGRESS" banner across
+    an app restart while the node starts, and a transfer whose channel the LSP later closes does not
+    leave a banner behind or inflate the Spending balance.
+
+    Precondition: onboarded dev wallet (staging regtest) with a positive on-chain Savings balance and
+    a running node connected to the LSP. Start on the wallet home screen. The LSP only opens the
+    channel after the order payment has one confirmation, so the transfer stays pending until a block
+    is mined; other staging users can mine that block for you, so do the restart steps promptly.
+
+    Transfer orders are zero-conf, so on an unmodified build the transfer settles as soon as the
+    channel is ready and the closed-channel settle path is not reached on its own. This journey then
+    checks that nothing is left behind after the close. Reaching the closed-channel path on a device
+    needs a temporary local change that skips the channel-ready settle; it was verified that way for
+    issue #614 and is covered by TransferRepoTest.kt.
+
+    The close moves the transfer amount back to Savings minus fees, so the wallet ends close to its
+    starting balances.
+  </description>
+  <actions>
+    <action>Note the Spending balance shown on the home screen (testTag "ActivitySpending")</action>
+    <action>Tap the Savings balance card (testTag "ActivitySavings")</action>
+    <action>Tap "Transfer To Spending" (testTag "TransferToSpending")</action>
+    <action>If the spending intro screen appears, tap its button (testTag "SpendingIntro-button")</action>
+    <action>Verify the spending amount screen (testTag "SpendingAmount") is visible</action>
+    <action>Wait until the available amount (testTag "SpendingAmountUnit") shows a positive value</action>
+    <action>Tap the "5" key (testTag "N5") enough times to enter an amount the LSP accepts (50000 sats is a safe value), then tap Continue (testTag "SpendingAmountContinue")</action>
+    <action>Swipe "Swipe To Transfer" to confirm</action>
+    <action>Tap "Continue Using Bitkit" (testTag "TransferSuccess-button")</action>
+    <action>Verify the purple "TRANSFER IN PROGRESS" banner is visible on the home screen (screenshot; the banner carries no testTag)</action>
+    <action>Run adb shell am force-stop to.bitkit.dev, then launch the app again</action>
+    <action>Wait for the home screen and for the node to start (app log line "Node started")</action>
+    <action>Verify the purple "TRANSFER IN PROGRESS" banner is still visible (screenshot)</action>
+    <action>Read the order id from the app log: the active TO_SPENDING transfer's "lspOrderId" in the latest "Active transfers at block height" line</action>
+    <action>Run ./lsp POST /regtest/chain/mine '{"count":1}'</action>
+    <action>Poll ./lsp GET /channels/&lt;lspOrderId&gt; until channel.state is "open", and note channel.fundingTx.id and channel.fundingTx.vout</action>
+    <action>Tap the OK button (testTag "TransferSuccess-button") if the Transfer Successful screen is shown; its label is randomized ("Great!", "Nice!", …)</action>
+    <action>Run ./lsp POST /regtest/channel/close '{"fundingTxId":"&lt;fundingTx.id&gt;","vout":&lt;fundingTx.vout&gt;,"forceCloseAfterSec":0}'</action>
+    <action>Run ./lsp POST /regtest/chain/mine '{"count":3}'</action>
+    <action>Wait for the "Connection Closed" sheet and tap OK (testTag "ConnectionClosedButton")</action>
+    <action>Verify no "TRANSFER IN PROGRESS" banner is visible on the home screen (screenshot)</action>
+    <action>Verify the Spending balance (testTag "ActivitySpending") matches the value noted in the first step</action>
+    <action>Verify the app log has a "Settled transfer" line naming the closed channel, and that the latest "Active transfers at block height" line lists no TO_SPENDING transfer</action>
+  </actions>
+</journey>
