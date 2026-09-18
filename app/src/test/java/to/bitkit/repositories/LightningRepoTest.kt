@@ -15,6 +15,8 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +32,7 @@ import org.lightningdevkit.ldknode.BalanceDetails
 import org.lightningdevkit.ldknode.ChannelDetails
 import org.lightningdevkit.ldknode.Event
 import org.lightningdevkit.ldknode.Node
+import org.lightningdevkit.ldknode.NodeException
 import org.lightningdevkit.ldknode.NodeStatus
 import org.lightningdevkit.ldknode.PaymentDetails
 import org.lightningdevkit.ldknode.PeerDetails
@@ -77,7 +80,9 @@ import to.bitkit.services.NetworkGraphInfo
 import to.bitkit.services.NodeEventHandler
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
+import to.bitkit.utils.LdkError
 import to.bitkit.utils.UrlValidator
+import kotlin.coroutines.cancellation.CancellationException
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
@@ -91,6 +96,9 @@ class LightningRepoTest : BaseUnitTest() {
     companion object {
         private const val NO_USABLE_CHANNELS_FEEDBACK_DELAY_MS = 2_500L
         private const val BACKGROUND_STOP_DELAY_MS = 5_000L
+
+        /** Mirrors the bounded start retry delay `LightningRepo.startNode` waits before its one retry. */
+        private const val START_RETRY_DELAY_MS = 2_000L
     }
 
     private lateinit var sut: LightningRepo
@@ -401,6 +409,162 @@ class LightningRepoTest : BaseUnitTest() {
         verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
     }
 
+    private suspend fun stubNodeStatus(isRunning: () -> Boolean) {
+        sut.setInitNodeLifecycleState()
+        val status = mock<NodeStatus>()
+        whenever(status.isRunning).thenAnswer { isRunning() }
+        whenever(lightningService.status).thenReturn(status)
+        whenever(lightningService.startEventListener(any())).thenReturn(Result.success(Unit))
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever(blocktank.info(any())).thenReturn(null)
+    }
+
+    // Regression #845: a cancelled start must not strand lifecycle state at Starting or ErrorStarting
+    @Test
+    fun `start reconciles state to Running and rethrows when cancelled while the node starts`() = test {
+        var nodeRunning = false
+        stubNodeStatus { nodeRunning }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).doSuspendableAnswer {
+            nodeRunning = true
+            awaitCancellation()
+        }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start() }
+        runCurrent()
+        assertEquals(NodeLifecycleState.Starting, sut.lightningState.value.nodeLifecycleState)
+        job.cancelAndJoin()
+
+        assertNull(result)
+        assertTrue(job.isCancelled)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService) { startEventListener(any()) }
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start restores the initial state and rethrows when cancelled before the node runs`() = test {
+        stubNodeStatus { false }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).doSuspendableAnswer { awaitCancellation() }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start(shouldRetry = false) }
+        runCurrent()
+        job.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertNull(result)
+        assertEquals(NodeLifecycleState.Initializing, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start keeps Running and rethrows when cancelled right after the node started`() = test {
+        var nodeRunning = false
+        stubNodeStatus { nodeRunning }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            nodeRunning = true
+            Unit
+        }
+        whenever(coreService.isGeoBlocked()).doSuspendableAnswer { awaitCancellation() }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start() }
+        runCurrent()
+        job.cancelAndJoin()
+
+        assertNull(result)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, never()) { startEventListener(any()) }
+    }
+
+    @Test
+    fun `start restores the initial state when cancelled during node setup`() = test {
+        stubNodeStatus { false }
+        whenever(lightningService.setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()))
+            .doSuspendableAnswer { awaitCancellation() }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start(shouldRetry = false) }
+        runCurrent()
+        job.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertNull(result)
+        assertEquals(NodeLifecycleState.Initializing, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start restores the initial state when cancelled while trusted peers are fetched`() = test {
+        stubNodeStatus { false }
+        val blocktank = coreService.blocktank
+        whenever(blocktank.info(any())).doSuspendableAnswer { awaitCancellation() }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start(shouldRetry = false) }
+        runCurrent()
+        job.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertNull(result)
+        assertEquals(NodeLifecycleState.Initializing, sut.lightningState.value.nodeLifecycleState)
+        // The cancellation must unwind out of the trusted peers fetch instead of starting a node
+        verifyBlocking(lightningService, never()) {
+            setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+        }
+        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
+    }
+
+    // Regression #845: a node started by another path between the status check and start must not latch an error
+    @Test
+    fun `start adopts the running node when start throws AlreadyRunning`() = test {
+        var nodeRunning = false
+        stubNodeStatus { nodeRunning }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            nodeRunning = true
+            throw LdkError(NodeException.AlreadyRunning("already running"))
+        }
+
+        val result = sut.start(shouldRetry = false)
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        assertNotNull(sut.getStatus())
+        verifyBlocking(lightningService) { startEventListener(any()) }
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `start adopts the running node on AlreadyRunning without retrying`() = test {
+        var nodeRunning = false
+        stubNodeStatus { nodeRunning }
+        whenever(lightningService.node).thenReturn(mock())
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            nodeRunning = true
+            throw LdkError(NodeException.AlreadyRunning("already running"))
+        }
+
+        val result = sut.start()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `getStatus returns null while lifecycle state is not Running even if the node runs`() = test {
+        stubNodeStatus { true }
+
+        assertNull(sut.getStatus())
+    }
+
     @Test
     fun `stop should transition to stopped state`() = test {
         startNodeForTesting()
@@ -484,6 +648,165 @@ class LightningRepoTest : BaseUnitTest() {
         testScheduler.advanceUntilIdle()
 
         verify(lightningService, never()).stop()
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    private suspend fun stubNodeForRestart() {
+        whenever(lightningService.node).thenReturn(mock())
+        whenever { lightningService.sync() }.thenReturn(Unit)
+        whenever { lightningService.stop() }.thenReturn(Unit)
+        val blocktank = mock<BlocktankService>()
+        whenever(coreService.blocktank).thenReturn(blocktank)
+        whenever { blocktank.info(any()) }.thenReturn(null)
+    }
+
+    // Regression #1125: a transient start error must not leave a restart in ErrorStarting
+    @Test
+    fun `restartNode retries a transient start failure and ends Running`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("Feerate estimation update timeout")
+            Unit
+        }
+
+        val restart = async { sut.restartNode() }
+        runCurrent()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        testScheduler.advanceTimeBy(START_RETRY_DELAY_MS)
+        runCurrent()
+        val result = restart.await()
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `restartNode ends in ErrorStarting when every bounded start attempt fails`() = test {
+        stubNodeForRestart()
+        val error = AppError("Feerate estimation update timeout")
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer { throw error }
+
+        val result = sut.restartNode()
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(error, result.exceptionOrNull())
+        assertEquals(NodeLifecycleState.ErrorStarting(error), sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `restartNode skips the start retry when a stop is requested during the failed attempt`() = test {
+        stubNodeForRestart()
+        val error = AppError("Feerate estimation update timeout")
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) {
+                sut.stopDebounced()
+                throw error
+            }
+            Unit
+        }
+
+        val result = sut.restartNode()
+
+        val yieldError = assertIs<NodeStartYieldedToStopError>(result.exceptionOrNull())
+        assertEquals(error, yieldError.cause)
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        verify(lightningService, times(1)).stop()
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(2)).stop()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+
+        val foregroundResult = sut.start()
+
+        assertTrue(foregroundResult.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+    }
+
+    @Test
+    fun `restartNode retries when a foreground cancels the stop requested during the failed attempt`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) {
+                sut.stopDebounced()
+                throw AppError("Feerate estimation update timeout")
+            }
+            Unit
+        }
+
+        val restart = async { sut.restartNode() }
+        runCurrent()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+        sut.cancelPendingStop()
+        testScheduler.advanceTimeBy(START_RETRY_DELAY_MS)
+        runCurrent()
+        val result = restart.await()
+
+        assertTrue(result.isSuccess)
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(1)).stop()
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    @Test
+    fun `restartNode retry does not cancel a stop requested during the retry`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("Feerate estimation update timeout")
+            sut.stopDebounced()
+            Unit
+        }
+
+        val result = sut.restartNode()
+
+        assertTrue(result.isSuccess)
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
+
+        testScheduler.advanceUntilIdle()
+
+        verify(lightningService, times(2)).stop()
+        assertEquals(NodeLifecycleState.Stopped, sut.lightningState.value.nodeLifecycleState)
+    }
+
+    // Regression #1125: a caller cancelled inside the retry delay must not drop the bounded retry
+    @Test
+    fun `restartNodeDetached completes the start retry after the caller is cancelled`() = test {
+        stubNodeForRestart()
+        var attempts = 0
+        whenever(lightningService.start(anyOrNull(), any())).thenAnswer {
+            attempts++
+            if (attempts == 1) throw AppError("Feerate estimation update timeout")
+            Unit
+        }
+
+        val caller = CoroutineScope(testDispatcher)
+        caller.launch { sut.restartNodeDetached() }
+        runCurrent()
+        verifyBlocking(lightningService, times(1)) { start(anyOrNull(), any()) }
+
+        // Back press inside the retry window clears the ViewModel and cancels its scope
+        caller.cancel()
+        testScheduler.advanceTimeBy(START_RETRY_DELAY_MS)
+        runCurrent()
+
+        verifyBlocking(lightningService, times(2)) { start(anyOrNull(), any()) }
         assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
     }
 
@@ -1161,6 +1484,76 @@ class LightningRepoTest : BaseUnitTest() {
         // Success must mean the node was actually rebuilt with the requested server.
         assertTrue(result.isSuccess)
         verify(lightningService).setup(any(), eq(nextUrl), anyOrNull(), anyOrNull(), anyOrNull())
+    }
+
+    // Regression: the caller is a route-scoped ViewModel, so leaving the screen mid-change cancels
+    // the rebuild. start() rethrows the cancellation, so onFailure never ran and nothing restarted
+    // the node, leaving it down until the next ON_START.
+    @Test
+    fun `restartWithElectrumServer recovers the previous config when the caller is cancelled`() = test {
+        startNodeForTesting()
+        val newUrl = "ssl://next.example.com:50002"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        // Hold the rebuild open so the caller can be cancelled while it is in flight.
+        val rebuildStarted = CompletableDeferred<Unit>()
+        whenever { lightningService.setup(any(), eq(newUrl), anyOrNull(), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                rebuildStarted.complete(Unit)
+                awaitCancellation()
+            }
+
+        var rethrown = false
+        val change = launch {
+            try {
+                sut.restartWithElectrumServer(newUrl)
+            } catch (e: CancellationException) {
+                rethrown = true
+                throw e
+            }
+        }
+        rebuildStarted.await()
+        change.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(rethrown) // structured concurrency preserved
+        // The detached recovery rebuilt with the previous config and the node is back up.
+        verify(lightningService).setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull())
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        // A cancelled change must never persist the server it failed to apply.
+        verifyBlocking(settingsStore, never()) { update(any()) }
+    }
+
+    @Test
+    fun `restartWithRgsServer recovers the previous config when the caller is cancelled`() = test {
+        startNodeForTesting()
+        val newRgsUrl = "https://next.rgs.example.com/snapshot"
+        whenever(lightningService.node).thenReturn(null)
+        whenever(lightningService.stop()).thenReturn(Unit)
+        val rebuildStarted = CompletableDeferred<Unit>()
+        whenever { lightningService.setup(any(), anyOrNull(), eq(newRgsUrl), anyOrNull(), anyOrNull()) }
+            .doSuspendableAnswer {
+                rebuildStarted.complete(Unit)
+                awaitCancellation()
+            }
+
+        var rethrown = false
+        val change = launch {
+            try {
+                sut.restartWithRgsServer(newRgsUrl)
+            } catch (e: CancellationException) {
+                rethrown = true
+                throw e
+            }
+        }
+        rebuildStarted.await()
+        change.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertTrue(rethrown)
+        verify(lightningService).setup(any(), isNull(), isNull(), anyOrNull(), anyOrNull())
+        assertEquals(NodeLifecycleState.Running, sut.lightningState.value.nodeLifecycleState)
+        verifyBlocking(settingsStore, never()) { update(any()) }
     }
 
     @Test
