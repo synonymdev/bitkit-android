@@ -121,6 +121,7 @@ fixtures, push notifications) live in each suite's README.
 | [notification-permission](notification-permission) | 4 | Background-setup toggles |
 | [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
+| [tags](tags) | 1 | Tag input length cap on an activity; no backend, no README |
 | [widgets](widgets) | 2 | Needs no backend — the quickest way to see the loop work; no README |
 
 ## Cross-platform
@@ -142,6 +143,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
+| `tags/activity-tag-length-cap.xml` | not ported — iOS has no 20-character cap on tag input |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS
