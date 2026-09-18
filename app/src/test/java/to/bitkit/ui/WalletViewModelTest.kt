@@ -41,6 +41,7 @@ import to.bitkit.test.BaseUnitTest
 import to.bitkit.viewmodels.RestoreState
 import to.bitkit.viewmodels.WalletViewModel
 import kotlin.test.assertEquals
+import to.bitkit.utils.AppError
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class WalletViewModelTest : BaseUnitTest() {
@@ -306,7 +307,7 @@ class WalletViewModelTest : BaseUnitTest() {
     @Test
     fun `restore should release ordinary backups when the wallet is never created`() = test {
         whenever(walletRepo.restoreWallet(any(), anyOrNull()))
-            .thenReturn(Result.failure(Exception("restore failed")))
+            .thenReturn(Result.failure(AppError("restore failed")))
 
         sut.restoreWallet("mnemonic", "passphrase")
         advanceUntilIdle()
