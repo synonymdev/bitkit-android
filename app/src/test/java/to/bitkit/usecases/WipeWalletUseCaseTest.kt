@@ -134,6 +134,8 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(pubkyRepo).removeBitkitPaymentEndpoints()
         inOrder.verify(privatePaykitRepo).closeAndClear()
         inOrder.verify(lightningRepo).wipeStorage(0)
+        inOrder.verify(migrationService).setNeedsPostMigrationSync(false)
+        inOrder.verify(migrationService).cleanupAfterMigration()
         inOrder.verify(privatePaykitAddressReservationRepo).clear()
         inOrder.verify(pubkyRepo).wipeLocalState()
         inOrder.verify(keychain).wipe()
@@ -146,8 +148,6 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         inOrder.verify(blocktankRepo).resetState()
         inOrder.verify(activityRepo).resetState()
         inOrder.verify(hwWalletRepo).resetState()
-        inOrder.verify(migrationService).setNeedsPostMigrationSync(false)
-        inOrder.verify(migrationService).cleanupAfterMigration()
         inOrder.verify(migrationService).markMigrationChecked()
         assertTrue(onWipeCalled)
         assertTrue(onSetWalletExistsStateCalled)
@@ -323,6 +323,20 @@ class WipeWalletUseCaseTest : BaseUnitTest() {
         verify(db, never()).clearAllTables()
         assertFalse(onWipeCalled)
         assertFalse(onSetWalletExistsStateCalled)
+    }
+
+    @Test
+    fun `invoke should clear migration data before wiping the keychain`() = runTest {
+        val result = sut.invoke(
+            resetWalletState = { onWipeCalled = true },
+            onSuccess = { onSetWalletExistsStateCalled = true },
+        )
+
+        assertTrue(result.isSuccess)
+        val inOrder = inOrder(migrationService, keychain)
+        inOrder.verify(migrationService).setNeedsPostMigrationSync(false)
+        inOrder.verify(migrationService).cleanupAfterMigration()
+        inOrder.verify(keychain).wipe()
     }
 
     @Test
