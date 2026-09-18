@@ -7,29 +7,58 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.bouncycastle.asn1.x509.Extension
+import org.bouncycastle.asn1.x509.GeneralName
+import org.bouncycastle.asn1.x509.GeneralNames
+import org.bouncycastle.x509.X509V3CertificateGenerator
 import org.junit.After
 import org.junit.Test
 import org.lightningdevkit.ldknode.Network
+import to.bitkit.ext.nowMillis
 import to.bitkit.models.ElectrumProtocol
 import to.bitkit.models.ElectrumServer
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.utils.AppError
 import java.io.BufferedReader
+import java.math.BigInteger
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketTimeoutException
+import java.security.KeyPair
+import java.security.KeyPairGenerator
+import java.security.KeyStore
 import java.security.cert.CertPathValidatorException
+import java.security.cert.Certificate
+import java.security.cert.CertificateFactory
+import java.security.cert.X509Certificate
+import java.util.Date
+import javax.net.ssl.KeyManagerFactory
+import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLException
 import javax.net.ssl.SSLHandshakeException
 import javax.net.ssl.SSLPeerUnverifiedException
+import javax.net.ssl.SSLServerSocketFactory
+import javax.net.ssl.TrustManagerFactory
+import javax.security.auth.x500.X500Principal
 import kotlin.concurrent.thread
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.days
 
 private const val REGTEST_GENESIS = "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206"
 private const val MAINNET_GENESIS = "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
+
+private const val VERSION_REPLY = """{"id":0,"jsonrpc":"2.0","result":["fake-electrs","1.4"]}"""
+
+private fun featuresReplyWith(genesisHash: String) =
+    """{"id":1,"jsonrpc":"2.0","result":{"genesis_hash":"$genesisHash"}}"""
+
+private const val LOOPBACK = "127.0.0.1"
+private const val RSA_KEY_SIZE = 2048
+private val CERTIFICATE_VALIDITY = 1.days
+private val KEY_PASSWORD = "probe".toCharArray()
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class ElectrumProbeServiceTest : BaseUnitTest() {
@@ -37,10 +66,14 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
 
     private var server: ServerSocket? = null
 
+    private var defaultSslContext: SSLContext? = null
+
     @After
     fun tearDown() {
         server?.runCatching { close() }
         server = null
+        defaultSslContext?.let { SSLContext.setDefault(it) }
+        defaultSslContext = null
     }
 
     @Test
@@ -181,6 +214,30 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
         assertIs<ElectrumProbeError.ProtocolMismatch>(result.exceptionOrNull())
     }
 
+    // Regression: TLS to a host named by an IP or an alias, answered by a server whose certificate
+    // chain is valid but was issued for another name. A raw SSLSocket checks the chain and not the
+    // name, so this probed clean and only the node's own electrum client rejected it — after the
+    // node restart the probe exists to avoid.
+    @Test
+    fun `probe rejects a certificate issued for another host`() = test {
+        val port = startTlsElectrum(certificateFor = GeneralName(GeneralName.dNSName, "wrong.example"))
+
+        val result = sut.probe(serverAt(port, ElectrumProtocol.SSL), network = Network.REGTEST)
+
+        assertIs<ElectrumProbeError.UntrustedCertificate>(result.exceptionOrNull())
+    }
+
+    // The other half of the pair: verifying the name must not reject a certificate that does name
+    // the host, otherwise the probe would refuse servers the node itself accepts.
+    @Test
+    fun `probe accepts a certificate issued for the host it connected to`() = test {
+        val port = startTlsElectrum(certificateFor = GeneralName(GeneralName.iPAddress, LOOPBACK))
+
+        val result = sut.probe(serverAt(port, ElectrumProtocol.SSL), network = Network.REGTEST)
+
+        assertTrue(result.isSuccess)
+    }
+
     @Test
     fun `probe reports the requested server in its error`() = test {
         val port = startSilentServer()
@@ -254,7 +311,7 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
     }
 
     private fun serverAt(port: Int, protocol: ElectrumProtocol = ElectrumProtocol.TCP) = ElectrumServer(
-        host = "127.0.0.1",
+        host = LOOPBACK,
         tcp = port,
         ssl = port,
         protocol = protocol,
@@ -266,12 +323,12 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
      */
     private fun startFakeElectrum(
         genesisHash: String? = null,
-        versionReply: String = """{"id":0,"jsonrpc":"2.0","result":["fake-electrs","1.4"]}""",
+        versionReply: String = VERSION_REPLY,
         featuresReply: String = genesisHash
-            ?.let { """{"id":1,"jsonrpc":"2.0","result":{"genesis_hash":"$it"}}""" }
+            ?.let { featuresReplyWith(it) }
             ?: """{"id":1,"error":{"code":-32601,"message":"unknown method"}}""",
     ): Int {
-        val socket = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).also { server = it }
+        val socket = ServerSocket(0, 1, InetAddress.getByName(LOOPBACK)).also { server = it }
         thread(isDaemon = true) {
             runCatching {
                 socket.accept().use { client -> serveElectrum(client, versionReply, featuresReply) }
@@ -299,7 +356,7 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
     }
 
     private fun startOversizedLineServer(): Int {
-        val socket = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).also { server = it }
+        val socket = ServerSocket(0, 1, InetAddress.getByName(LOOPBACK)).also { server = it }
         thread(isDaemon = true) {
             runCatching {
                 socket.accept().use { client ->
@@ -315,9 +372,75 @@ class ElectrumProbeServiceTest : BaseUnitTest() {
         return socket.localPort
     }
 
+    /**
+     * Serves electrum over TLS behind a self-signed certificate naming [certificateFor], made the
+     * only certificate the JVM trusts. The chain is therefore valid and only the name can fail, so
+     * what the probe reports is decided by whether it asks JSSE to check the name at all.
+     */
+    private fun startTlsElectrum(certificateFor: GeneralName, genesisHash: String = REGTEST_GENESIS): Int {
+        val keyPair = KeyPairGenerator.getInstance("RSA").apply { initialize(RSA_KEY_SIZE) }.generateKeyPair()
+        val certificate = selfSignedCertificate(keyPair, certificateFor)
+        trustOnly(certificate)
+
+        val socket = tlsServerFactory(keyPair, certificate)
+            .createServerSocket(0, 1, InetAddress.getByName(LOOPBACK))
+            .also { server = it }
+        thread(isDaemon = true) {
+            runCatching {
+                socket.accept().use { client ->
+                    serveElectrum(client, VERSION_REPLY, featuresReplyWith(genesisHash))
+                }
+            }
+        }
+        return socket.localPort
+    }
+
+    @Suppress("DEPRECATION") // bcprov carries no other certificate generator, and bcpkix is not a dependency
+    private fun selfSignedCertificate(keyPair: KeyPair, name: GeneralName): X509Certificate {
+        val generated = X509V3CertificateGenerator().apply {
+            setSerialNumber(BigInteger.ONE)
+            setIssuerDN(X500Principal("CN=electrum-probe-test"))
+            setSubjectDN(X500Principal("CN=electrum-probe-test"))
+            setNotBefore(Date(nowMillis() - CERTIFICATE_VALIDITY.inWholeMilliseconds))
+            setNotAfter(Date(nowMillis() + CERTIFICATE_VALIDITY.inWholeMilliseconds))
+            setPublicKey(keyPair.public)
+            setSignatureAlgorithm("SHA256withRSA")
+            addExtension(Extension.subjectAlternativeName, false, GeneralNames(name))
+        }.generate(keyPair.private)
+
+        // Re-read through the platform factory so the certificate exposes a usable public key.
+        return CertificateFactory.getInstance("X.509")
+            .generateCertificate(generated.encoded.inputStream()) as X509Certificate
+    }
+
+    private fun trustOnly(certificate: X509Certificate) {
+        val store = KeyStore.getInstance("PKCS12").apply {
+            load(null, null)
+            setCertificateEntry("probe", certificate)
+        }
+        val trustManagers = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm())
+            .apply { init(store) }
+            .trustManagers
+
+        if (defaultSslContext == null) defaultSslContext = SSLContext.getDefault()
+        SSLContext.setDefault(SSLContext.getInstance("TLS").apply { init(null, trustManagers, null) })
+    }
+
+    private fun tlsServerFactory(keyPair: KeyPair, certificate: X509Certificate): SSLServerSocketFactory {
+        val store = KeyStore.getInstance("PKCS12").apply {
+            load(null, null)
+            setKeyEntry("probe", keyPair.private, KEY_PASSWORD, arrayOf<Certificate>(certificate))
+        }
+        val keyManagers = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm())
+            .apply { init(store, KEY_PASSWORD) }
+            .keyManagers
+
+        return SSLContext.getInstance("TLS").apply { init(keyManagers, null, null) }.serverSocketFactory
+    }
+
     /** Accepts the connection but never speaks electrum, like a non-electrum service on the port. */
     private fun startSilentServer(): Int {
-        val socket = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).also { server = it }
+        val socket = ServerSocket(0, 1, InetAddress.getByName(LOOPBACK)).also { server = it }
         thread(isDaemon = true) {
             runCatching { socket.accept().use { it.getInputStream().read() } }
         }

@@ -62,6 +62,9 @@ class ElectrumProbeService @Inject constructor(
 
         /** JSON-RPC id of the `server.features` request. */
         private const val FEATURES_REQUEST_ID = 1
+
+        /** JSSE endpoint identification that checks the certificate's name, not only its chain. */
+        private const val HOSTNAME_VERIFICATION = "HTTPS"
     }
 
     // Deliberately not the injected Json: that one sets prettyPrint, and electrum is line-delimited,
@@ -116,6 +119,10 @@ class ElectrumProbeService @Inject constructor(
             val factory = SSLSocketFactory.getDefault() as SSLSocketFactory
             val ssl = factory.createSocket(plain, server.host, server.getPort(), true) as SSLSocket
             ssl.soTimeout = CONNECT_TIMEOUT.inWholeMilliseconds.toInt()
+            // A raw SSLSocket validates the chain but not the name the certificate was issued for, so
+            // a CA-valid certificate for another host probes clean and is only rejected afterwards by
+            // the node's own electrum client — after the restart this probe exists to avoid.
+            ssl.sslParameters = ssl.sslParameters.apply { endpointIdentificationAlgorithm = HOSTNAME_VERIFICATION }
             ssl.startHandshake()
             ssl
         }.getOrElse {
