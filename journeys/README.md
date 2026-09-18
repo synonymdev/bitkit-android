@@ -120,11 +120,13 @@ fixtures, push notifications) live in each suite's README.
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
 | [hardware-wallet](hardware-wallet) | 17 | Trezor over USB; needs the Trezor emulator |
 | [home](home) | 1 | Pull to refresh on Home; checks the app log, no README |
+| [node-lifecycle](node-lifecycle) | 1 | Detached LDK restart completes; a cancelled RGS server change reconciles and recovers to Running; reads the app log; no README |
 | [notification-permission](notification-permission) | 4 | Background-setup toggles |
 | [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
 | [security](security) | 1 | PIN result sheet layout at a long locale and font scale; no README |
 | [subscriptions](subscriptions) | 4 | Paykit subscription lifecycle across two wallets, plus the Payments tab |
+| [tags](tags) | 1 | Tag input length cap on an activity; no backend, no README |
 | [transfer](transfer) | 1 | Spending to Savings exit route; needs an open channel and closes it; no README |
 | [transfers](transfers) | 1 | Transfer to Spending settling after the LSP closes the channel; no README |
 | [widgets](widgets) | 2 | Needs no backend — the quickest way to see the loop work; no README |
@@ -148,10 +150,12 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `hardware-wallet/receive-onchain.xml`, `hardware-wallet/send-onchain.xml` | not ported |
 | `activity/date-range-rapid-month-taps.xml` | not ported — iOS has no activity journey suite, and the rapid month tap behaviour was not checked there |
 | `payment-requests/requested-resolution-failure.xml` | not ported |
+| `node-lifecycle/cancelled-node-restart.xml` | not ported — the routes run through Android's LDK Debug and Rapid-Gossip-Sync screens and assert on Android app-log lines |
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `home/pull-to-refresh-rates.xml` | not ported — iOS does not refresh exchange rates on pull to refresh |
 | `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
+| `tags/activity-tag-length-cap.xml` | not ported — iOS has no 20-character cap on tag input |
 | `transfer/transfer-to-savings-returns-home.xml` | not ported — iOS already resets navigation to home on the same OK, so the journey has no iOS counterpart yet |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
