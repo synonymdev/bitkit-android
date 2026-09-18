@@ -497,6 +497,27 @@ class LightningRepoTest : BaseUnitTest() {
         verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
     }
 
+    @Test
+    fun `start restores the initial state when cancelled while trusted peers are fetched`() = test {
+        stubNodeStatus { false }
+        val blocktank = coreService.blocktank
+        whenever(blocktank.info(any())).doSuspendableAnswer { awaitCancellation() }
+        var result: Result<Unit>? = null
+
+        val job = launch { result = sut.start(shouldRetry = false) }
+        runCurrent()
+        job.cancelAndJoin()
+        testScheduler.advanceUntilIdle()
+
+        assertNull(result)
+        assertEquals(NodeLifecycleState.Initializing, sut.lightningState.value.nodeLifecycleState)
+        // The cancellation must unwind out of the trusted peers fetch instead of starting a node
+        verifyBlocking(lightningService, never()) {
+            setup(any(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull())
+        }
+        verifyBlocking(lightningService, never()) { start(anyOrNull(), any()) }
+    }
+
     // Regression #845: a node started by another path between the status check and start must not latch an error
     @Test
     fun `start adopts the running node when start throws AlreadyRunning`() = test {
