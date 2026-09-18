@@ -67,26 +67,13 @@ object SharedPubkyContract {
     }
 }
 
+@Serializable
 data class SharedPubkyIdentity(
     val protocolVersion: Int,
     val sourcePackage: String,
     val pubky: String,
-)
-
-class SharedPubkyCredential(
-    val identity: SharedPubkyIdentity,
-    secretKeyHex: String,
 ) {
-    val secretKeyHex = SharedPubkyContract.canonicalSecretKeyHex(secretKeyHex)
-}
-
-@Serializable
-data class ExternalPubkyIdentityRef(
-    val protocolVersion: Int,
-    val sourcePackage: String,
-    val pubky: String,
-) {
-    fun validated(): ExternalPubkyIdentityRef {
+    fun validated(): SharedPubkyIdentity {
         if (protocolVersion != SharedPubkyContract.PROTOCOL_VERSION) {
             throw SharedPubkyError.UnsupportedVersion(protocolVersion)
         }
@@ -95,6 +82,13 @@ data class ExternalPubkyIdentityRef(
         }
         return copy(pubky = SharedPubkyContract.requireWirePubky(pubky))
     }
+}
+
+class SharedPubkyCredential(
+    val identity: SharedPubkyIdentity,
+    secretKeyHex: String,
+) {
+    val secretKeyHex = SharedPubkyContract.canonicalSecretKeyHex(secretKeyHex)
 }
 
 sealed class SharedPubkyError(message: String, cause: Throwable? = null) : AppError(message, cause) {

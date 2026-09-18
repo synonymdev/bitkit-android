@@ -58,8 +58,28 @@ class PubkyChoiceViewModelTest : BaseUnitTest() {
 
         assertFalse(sut.uiState.value.isDiscovering)
         assertEquals(1, sut.uiState.value.identities.size)
+        assertEquals(identity, sut.uiState.value.identities.single().identity)
         assertEquals(WIRE_PUBKY, sut.uiState.value.identities.single().pubky)
         assertEquals(profile, sut.uiState.value.identities.single().profile)
+    }
+
+    @Test
+    fun `discovery sorts by profile name then shared identity key`() = test {
+        val first = ringIdentity().copy(pubky = "1${WIRE_PUBKY.drop(1)}")
+        val second = ringIdentity()
+        val third = ringIdentity().copy(pubky = "5${WIRE_PUBKY.drop(1)}")
+        whenever(pubkyRepo.discoverRingIdentities()).thenReturn(Result.success(listOf(third, first, second)))
+        for ((identity, name) in listOf(first to "Zeta", second to "Alpha", third to "alpha")) {
+            val publicKey = SharedPubkyContract.toBitkitPubky(identity.pubky)
+            whenever(pubkyRepo.fetchRemoteProfile(publicKey))
+                .thenReturn(Result.success(PubkyProfile.forDisplay(publicKey, name, null)))
+        }
+
+        val sut = createSut()
+        advanceUntilIdle()
+
+        assertEquals(listOf(second, third, first), sut.uiState.value.identities.map { it.identity })
+        assertEquals(listOf(second.pubky, third.pubky, first.pubky), sut.uiState.value.identities.map { it.pubky })
     }
 
     @Test

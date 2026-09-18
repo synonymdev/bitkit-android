@@ -65,17 +65,40 @@ class SharedPubkyContractTest {
     @Test
     fun `external reference rejects unsupported sources and versions`() {
         assertFailsWith<SharedPubkyError.UnsupportedVersion> {
-            ExternalPubkyIdentityRef(
+            SharedPubkyIdentity(
                 protocolVersion = 2,
                 sourcePackage = SharedPubkyContract.RING_SOURCE,
                 pubky = WIRE_PUBKY,
             ).validated()
         }
         assertFailsWith<SharedPubkyError.UntrustedSource> {
-            ExternalPubkyIdentityRef(
+            SharedPubkyIdentity(
                 protocolVersion = SharedPubkyContract.PROTOCOL_VERSION,
                 sourcePackage = "other.app",
                 pubky = WIRE_PUBKY,
+            ).validated()
+        }
+    }
+
+    @Test
+    fun `identity validates version then source then strict wire key`() {
+        val invalidIdentity = SharedPubkyIdentity(2, "other.app", "invalid")
+
+        assertFailsWith<SharedPubkyError.UnsupportedVersion> { invalidIdentity.validated() }
+        assertFailsWith<SharedPubkyError.UntrustedSource> {
+            invalidIdentity.copy(protocolVersion = SharedPubkyContract.PROTOCOL_VERSION).validated()
+        }
+        assertFailsWith<IllegalArgumentException> {
+            invalidIdentity.copy(
+                protocolVersion = SharedPubkyContract.PROTOCOL_VERSION,
+                sourcePackage = SharedPubkyContract.RING_SOURCE,
+            ).validated()
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SharedPubkyIdentity(
+                protocolVersion = SharedPubkyContract.PROTOCOL_VERSION,
+                sourcePackage = SharedPubkyContract.RING_SOURCE,
+                pubky = "pubky$WIRE_PUBKY",
             ).validated()
         }
     }

@@ -36,6 +36,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.collections.immutable.persistentListOf
 import to.bitkit.R
 import to.bitkit.data.sharing.SharedPubkyContract
+import to.bitkit.data.sharing.SharedPubkyIdentity
 import to.bitkit.models.PubkyProfile
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyMSB
@@ -312,9 +313,11 @@ private fun Preview() {
             uiState = PubkyChoiceUiState(
                 identities = persistentListOf(
                     SharedPubkyChoice(
-                        protocolVersion = SharedPubkyContract.PROTOCOL_VERSION,
-                        sourcePackage = SharedPubkyContract.RING_SOURCE,
-                        pubky = pubky,
+                        identity = SharedPubkyIdentity(
+                            protocolVersion = SharedPubkyContract.PROTOCOL_VERSION,
+                            sourcePackage = SharedPubkyContract.RING_SOURCE,
+                            pubky = pubky,
+                        ),
                         profile = PubkyProfile.forDisplay(
                             publicKey = SharedPubkyContract.toBitkitPubky(pubky),
                             name = "Satoshi Nakamoto",

@@ -60,9 +60,7 @@ class PubkyChoiceViewModel @Inject constructor(
                                     .getOrNull()
                                     ?: PubkyProfile.placeholder(bitkitPubky)
                                 SharedPubkyChoice(
-                                    protocolVersion = identity.protocolVersion,
-                                    sourcePackage = identity.sourcePackage,
-                                    pubky = identity.pubky,
+                                    identity = identity,
                                     profile = profile,
                                 )
                             }
@@ -84,7 +82,7 @@ class PubkyChoiceViewModel @Inject constructor(
         _uiState.update { it.copy(selectedPubky = choice.pubky) }
 
         viewModelScope.launch {
-            pubkyRepo.adoptRingIdentity(choice.toIdentity())
+            pubkyRepo.adoptRingIdentity(choice.identity)
                 .onSuccess {
                     pubkyRepo.prepareImport()
                         .onSuccess {
@@ -126,16 +124,10 @@ data class PubkyChoiceUiState(
 
 @Stable
 data class SharedPubkyChoice(
-    val protocolVersion: Int,
-    val sourcePackage: String,
-    val pubky: String,
+    val identity: SharedPubkyIdentity,
     val profile: PubkyProfile,
 ) {
-    fun toIdentity() = SharedPubkyIdentity(
-        protocolVersion = protocolVersion,
-        sourcePackage = sourcePackage,
-        pubky = pubky,
-    )
+    val pubky: String get() = identity.pubky
 }
 
 sealed interface PubkyChoiceEffect {
