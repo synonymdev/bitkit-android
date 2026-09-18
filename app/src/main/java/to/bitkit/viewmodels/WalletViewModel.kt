@@ -219,6 +219,7 @@ class WalletViewModel @Inject constructor(
             Logger.error("Restore from backup failed", it, context = TAG)
         }
         _restoreState.update { RestoreState.Completed }
+        backupRepo.setRestorePending(false)
     }
 
     private suspend fun restoreFromMostRecentBackup() {
@@ -560,11 +561,16 @@ class WalletViewModel @Inject constructor(
     suspend fun restoreWallet(mnemonic: String, bip39Passphrase: String?) {
         setInitNodeLifecycleState()
         _restoreState.update { RestoreState.InProgress.Wallet }
+        // The node starts and syncs long before the backup is read, so ordinary uploads are held from
+        // here rather than from the restore itself, which would upload over the backup it has not read.
+        backupRepo.setRestorePending(true)
 
         walletRepo.restoreWallet(
             mnemonic = mnemonic,
             bip39Passphrase = bip39Passphrase,
         ).onFailure {
+            // Nothing reaches restoreFromBackup when the wallet was never created, so release here.
+            backupRepo.setRestorePending(false)
             ToastEventBus.send(it)
         }
     }

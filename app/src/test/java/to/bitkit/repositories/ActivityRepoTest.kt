@@ -3,6 +3,7 @@ package to.bitkit.repositories
 import com.synonym.bitkitcore.Activity
 import com.synonym.bitkitcore.ActivityFilter
 import com.synonym.bitkitcore.ActivityTags
+import com.synonym.bitkitcore.ClosedChannelDetails
 import com.synonym.bitkitcore.IcJitEntry
 import com.synonym.bitkitcore.LightningActivity
 import com.synonym.bitkitcore.OnchainActivity
@@ -31,6 +32,7 @@ import to.bitkit.data.dto.PendingBoostActivity
 import to.bitkit.ext.create
 import to.bitkit.ext.createChannelDetails
 import to.bitkit.ext.mock
+import to.bitkit.models.ActivityBackupV1
 import to.bitkit.models.WalletScope
 import to.bitkit.services.CoreService
 import to.bitkit.services.HwSnapshotResult
@@ -70,6 +72,10 @@ class ActivityRepoTest : BaseUnitTest() {
         on { v1 } doReturn testActivityV1
     }
 
+    private val backupTags by lazy { ActivityTags(WalletScope.default, "activity1", listOf("daily")) }
+
+    private val backupClosedChannel = mock<ClosedChannelDetails>()
+
     private val baseOnchainActivity = OnchainActivity.create(
         walletId = "wallet0",
         id = "base_activity_id",
@@ -84,6 +90,7 @@ class ActivityRepoTest : BaseUnitTest() {
 
     @Suppress("LongParameterList")
     private fun createOnchainActivity(
+        walletId: String = baseOnchainActivity.walletId,
         id: String = baseOnchainActivity.id,
         txId: String = baseOnchainActivity.txId,
         value: ULong = baseOnchainActivity.value,
@@ -105,6 +112,7 @@ class ActivityRepoTest : BaseUnitTest() {
     ): Activity.Onchain {
         return Activity.Onchain(
             v1 = baseOnchainActivity.copy(
+                walletId = walletId,
                 id = id,
                 txId = txId,
                 value = value,
@@ -413,23 +421,7 @@ class ActivityRepoTest : BaseUnitTest() {
         assertNull(result.getOrThrow())
     }
 
-    @Test
-    fun `contactActivities filters replaced sent transaction`() = test {
-        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
-        val replacedTxId = "replaced_tx_id"
-        val replacedActivity = createOnchainActivity(
-            id = "replaced_activity_id",
-            txId = replacedTxId,
-            doesExist = false,
-            contact = contactPublicKey,
-        )
-        val replacementActivity = createOnchainActivity(
-            id = "replacement_activity_id",
-            txId = "replacement_tx_id",
-            boostTxIds = listOf(replacedTxId),
-            contact = contactPublicKey,
-        )
-        whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(setOf(replacedTxId))
+    private suspend fun stubContactActivities(activities: List<Activity>) {
         whenever(
             coreService.activity.get(
                 walletId = null,
@@ -442,11 +434,144 @@ class ActivityRepoTest : BaseUnitTest() {
                 limit = null,
                 sortDirection = SortDirection.DESC,
             )
-        ).thenReturn(listOf(replacedActivity, replacementActivity))
+        ).thenReturn(activities)
+    }
+
+    @Test
+    fun `contactActivities filters replaced sent transaction`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val replacedTxId = "replaced_tx_id"
+        val replacedActivity = createOnchainActivity(
+            walletId = WalletScope.default,
+            id = "replaced_activity_id",
+            txId = replacedTxId,
+            doesExist = false,
+            contact = contactPublicKey,
+        )
+        val replacementActivity = createOnchainActivity(
+            walletId = WalletScope.default,
+            id = "replacement_activity_id",
+            txId = "replacement_tx_id",
+            boostTxIds = listOf(replacedTxId),
+            contact = contactPublicKey,
+        )
+        whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(setOf(replacedTxId))
+        stubContactActivities(listOf(replacedActivity, replacementActivity))
 
         val result = sut.contactActivities(contactPublicKey)
 
         assertEquals(listOf(replacementActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities keeps hardware sent row whose txId is boosted only in default wallet`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val hardwareWalletId = "hardware-wallet"
+        val sharedTxId = "shared_tx_id"
+        val defaultReplacementActivity = createOnchainActivity(
+            walletId = WalletScope.default,
+            id = "default_replacement_id",
+            txId = "default_replacement_tx_id",
+            boostTxIds = listOf(sharedTxId),
+            contact = contactPublicKey,
+        )
+        val hardwareActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "hardware_activity_id",
+            txId = sharedTxId,
+            doesExist = false,
+            contact = contactPublicKey,
+        )
+        whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(setOf(sharedTxId))
+        whenever(coreService.activity.getTxIdsInBoostTxIds(hardwareWalletId)).thenReturn(emptySet())
+        stubContactActivities(listOf(defaultReplacementActivity, hardwareActivity))
+
+        val result = sut.contactActivities(contactPublicKey)
+
+        assertEquals(listOf(defaultReplacementActivity, hardwareActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities returns rows from every wallet with matching contact`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val hardwareWalletId = "hardware-wallet"
+        val defaultActivity = createOnchainActivity(
+            walletId = WalletScope.default,
+            id = "default_activity_id",
+            txId = "default_tx_id",
+            contact = contactPublicKey,
+        )
+        val hardwareActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "hardware_activity_id",
+            txId = "hardware_tx_id",
+            contact = contactPublicKey,
+        )
+        val otherContactActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "other_contact_activity_id",
+            txId = "other_contact_tx_id",
+            contact = "pubky8pinxras7i1dn6qgyqp1xa4ksxnm9yupmbzpf8ec6aqmqhw6t8o",
+        )
+        whenever(coreService.activity.getTxIdsInBoostTxIds(WalletScope.default)).thenReturn(emptySet())
+        whenever(coreService.activity.getTxIdsInBoostTxIds(hardwareWalletId)).thenReturn(emptySet())
+        stubContactActivities(listOf(defaultActivity, hardwareActivity, otherContactActivity))
+
+        val result = sut.contactActivities(contactPublicKey)
+
+        assertEquals(listOf(defaultActivity, hardwareActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities filters replaced sent row using its own wallet boosts`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val hardwareWalletId = "hardware-wallet"
+        val replacedTxId = "hardware_replaced_tx_id"
+        val replacedActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "hardware_replaced_id",
+            txId = replacedTxId,
+            doesExist = false,
+            contact = contactPublicKey,
+        )
+        val replacementActivity = createOnchainActivity(
+            walletId = hardwareWalletId,
+            id = "hardware_replacement_id",
+            txId = "hardware_replacement_tx_id",
+            boostTxIds = listOf(replacedTxId),
+            contact = contactPublicKey,
+        )
+        whenever(coreService.activity.getTxIdsInBoostTxIds(hardwareWalletId)).thenReturn(setOf(replacedTxId))
+        stubContactActivities(listOf(replacedActivity, replacementActivity))
+
+        val result = sut.contactActivities(contactPublicKey)
+
+        assertEquals(listOf(replacementActivity), result.getOrThrow())
+    }
+
+    @Test
+    fun `contactActivities rethrows cancellation`() = test {
+        val contactPublicKey = "pubky3rsduhcxpw74snwyct86m38c63j3pq8x4ycqikxg64roik8yw5xg"
+        val cancellation = CancellationException("cancelled")
+        whenever(
+            coreService.activity.get(
+                walletId = null,
+                filter = ActivityFilter.ALL,
+                txType = null,
+                tags = null,
+                search = null,
+                minDate = null,
+                maxDate = null,
+                limit = null,
+                sortDirection = SortDirection.DESC,
+            )
+        ).thenThrow(cancellation)
+
+        val thrown = assertFailsWith<CancellationException> {
+            sut.contactActivities(contactPublicKey)
+        }
+
+        assertEquals(cancellation.message, thrown.message)
     }
 
     @Test
@@ -904,6 +1029,110 @@ class ActivityRepoTest : BaseUnitTest() {
 
         assertEquals(listOf("hw-txid"), result.map { it.paymentId })
     }
+
+    @Test
+    fun `restoreFromBackup applies every slice and signals tag changes`() = test {
+        val tagsBefore = sut.activityTagsChanged.value
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        assertTrue(result.isSuccess)
+        verify(coreService.activity).upsertList(listOf(testActivity))
+        verify(coreService.activity).upsertTags(listOf(backupTags))
+        verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
+        assertTrue(sut.activityTagsChanged.value > tagsBefore)
+    }
+
+    @Test
+    fun `restoreFromBackup applies remaining slices when the tags slice fails`() = test {
+        whenever(coreService.activity.upsertTags(any()))
+            .thenThrow(RuntimeException("Failed to insert tag: FOREIGN KEY constraint failed"))
+        val activitiesBefore = sut.activitiesChanged.value
+        val tagsBefore = sut.activityTagsChanged.value
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        // One unusable tag must not cost the activities or the closed channels.
+        verify(coreService.activity).upsertList(listOf(testActivity))
+        verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
+        // Still a failure, so BackupRepo never rewrites a good backup with partial state.
+        assertTrue(result.isFailure)
+        assertTrue(sut.activitiesChanged.value > activitiesBefore)
+        // No tag was stored, so the metadata backup must not be marked as changed.
+        assertEquals(tagsBefore, sut.activityTagsChanged.value)
+    }
+
+    @Test
+    fun `restoreFromBackup applies remaining slices when the activities slice fails`() = test {
+        whenever(coreService.activity.upsertList(any())).thenThrow(RuntimeException("upsert failed"))
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        verify(coreService.activity).upsertTags(listOf(backupTags))
+        verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
+        assertTrue(result.isFailure)
+    }
+
+    @Test
+    fun `restoreFromBackup applies remaining slices when the closed channels slice fails`() = test {
+        val failure = RuntimeException("closed channels upsert failed")
+        whenever(coreService.activity.upsertClosedChannelList(any())).thenThrow(failure)
+        val activitiesBefore = sut.activitiesChanged.value
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        verify(coreService.activity).upsertList(listOf(testActivity))
+        verify(coreService.activity).upsertTags(listOf(backupTags))
+        assertEquals(failure, result.exceptionOrNull())
+        assertTrue(sut.activitiesChanged.value > activitiesBefore)
+    }
+
+    @Test
+    fun `restoreFromBackup returns the first failure when several slices fail`() = test {
+        val activitiesFailure = RuntimeException("activities upsert failed")
+        whenever(coreService.activity.upsertList(any())).thenThrow(activitiesFailure)
+        whenever(coreService.activity.upsertTags(any())).thenThrow(RuntimeException("tags upsert failed"))
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        verify(coreService.activity).upsertClosedChannelList(listOf(backupClosedChannel))
+        assertEquals(activitiesFailure, result.exceptionOrNull())
+    }
+
+    @Test
+    fun `restoreFromBackup does not notify observers when every slice fails`() = test {
+        whenever(coreService.activity.upsertList(any())).thenThrow(RuntimeException("activities upsert failed"))
+        whenever(coreService.activity.upsertTags(any())).thenThrow(RuntimeException("tags upsert failed"))
+        whenever(coreService.activity.upsertClosedChannelList(any()))
+            .thenThrow(RuntimeException("closed channels upsert failed"))
+        val activitiesBefore = sut.activitiesChanged.value
+        val tagsBefore = sut.activityTagsChanged.value
+
+        val result = sut.restoreFromBackup(backupPayload())
+
+        assertTrue(result.isFailure)
+        assertEquals(activitiesBefore, sut.activitiesChanged.value)
+        assertEquals(tagsBefore, sut.activityTagsChanged.value)
+    }
+
+    @Test
+    fun `restoreFromBackup rethrows cancellation`() = test {
+        val cancellation = CancellationException("cancelled")
+        whenever(coreService.activity.upsertTags(any())).thenThrow(cancellation)
+
+        val thrown = assertFailsWith<CancellationException> {
+            sut.restoreFromBackup(backupPayload())
+        }
+
+        assertEquals(cancellation.message, thrown.message)
+    }
+
+    private fun backupPayload() = ActivityBackupV1(
+        createdAt = 1234567890L,
+        activities = listOf(testActivity),
+        activityTags = listOf(backupTags),
+        closedChannels = listOf(backupClosedChannel),
+    )
 
     private suspend fun stubHardwareTagLookup(activity: Activity.Onchain) {
         whenever { coreService.activity.getAllActivitiesTags() }
