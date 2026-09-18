@@ -126,6 +126,7 @@ fixtures, push notifications) live in each suite's README.
 | [lnurl](lnurl) | 1 | LNURL-pay comment kept as the activity note; needs an LNURL-pay endpoint that allows comments; no README |
 | [node-lifecycle](node-lifecycle) | 1 | Detached LDK restart completes; a cancelled RGS server change reconciles and recovers to Running; reads the app log; no README |
 | [notification-permission](notification-permission) | 4 | Background-setup toggles |
+| [onchain-receive](onchain-receive) | 3 | Received sheet and notification for mempool-first and confirmed-only deposits |
 | [payment-requests](payment-requests) | 2 | Requires a linked fixture issuer; rejected shapes are unit fixtures |
 | [pubky-marketplace](pubky-marketplace) | 1 | Two-wallet Paykit marketplace payment; integration fixture required |
 | [receive](receive) | 1 | Receive sheet tab selection; needs a spending channel, no README |
@@ -165,6 +166,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `send/own-invoice-guard.xml` | not ported — iOS has no own-invoice guard |
 | `settings/electrum-server-error-toasts.xml` | not ported — iOS still shows one generic message for every manual Electrum connect failure |
 | `transfers/closed-channel-transfer-settles.xml` | not ported — the closed-channel and order-closure settle rules are an iOS follow-up |
+| `onchain-receive/*` | not ported — bitkit-ios#455 tracks the same confirmed-only bug |
 | `deeplinks/*` | not ported — iOS registers the `bitkit` scheme but has no screen or sheet router |
 | `backup-restore/restore-keeps-tags-and-closed-channels.xml` | not ported yet — iOS already gates uploads across the whole restore (`AppScene.restoreFromMostRecentBackup` sets `BackupService.setRestoring(true)` before the timestamp probe), but still applies the three activity slices in one block (`BackupService.performFullRestoreFromLatestBackup`), which is the half this journey pins; port it with the iOS slice fix |
 | `shop/gift-card-category-titles.xml` | not ported — iOS still hardcodes the category names, and its route in has no screen deeplink |
