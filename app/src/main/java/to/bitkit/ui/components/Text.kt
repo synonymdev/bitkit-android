@@ -415,25 +415,6 @@ fun Caption(
 
 @Composable
 fun CaptionM(
-    text: String,
-    modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.primary,
-    textAlign: TextAlign = TextAlign.Start,
-    maxLines: Int = Int.MAX_VALUE,
-    overflow: TextOverflow = if (maxLines == 1) TextOverflow.Ellipsis else TextOverflow.Clip,
-) {
-    CaptionM(
-        text = AnnotatedString(text),
-        modifier = modifier,
-        color = color,
-        textAlign = textAlign,
-        maxLines = maxLines,
-        overflow = overflow,
-    )
-}
-
-@Composable
-fun CaptionM(
     text: AnnotatedString,
     modifier: Modifier = Modifier,
     color: Color = MaterialTheme.colorScheme.primary,
@@ -447,9 +428,9 @@ fun CaptionM(
             color = color,
             textAlign = textAlign,
         ),
-        modifier = modifier,
         maxLines = maxLines,
         overflow = overflow,
+        modifier = modifier
     )
 }
 

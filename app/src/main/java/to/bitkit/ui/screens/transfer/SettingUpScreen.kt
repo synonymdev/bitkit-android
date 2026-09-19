@@ -30,6 +30,7 @@ import to.bitkit.ui.appViewModel
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.Display
 import to.bitkit.ui.components.PrimaryButton
+import to.bitkit.ui.components.VerticalSpacer
 import to.bitkit.ui.scaffold.AppTopBar
 import to.bitkit.ui.scaffold.DrawerNavIcon
 import to.bitkit.ui.scaffold.ScreenColumn
@@ -141,7 +142,7 @@ private fun SettingUpScreen(
                     smallCircleRes = R.drawable.ln_sync_small,
                     modifier = Modifier.weight(1f)
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                VerticalSpacer(16.dp)
                 val steps = persistentListOf(
                     stringResource(R.string.lightning__setting_up_step1),
                     stringResource(R.string.lightning__setting_up_step2),

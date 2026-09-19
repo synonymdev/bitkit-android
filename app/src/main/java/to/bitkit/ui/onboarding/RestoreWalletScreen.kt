@@ -386,7 +386,7 @@ fun MnemonicInputField(
             onValueChange(it.text)
         },
         textStyle = AppTextStyles.BodySSB.copy(
-            fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Normal
+            fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Normal,
         ),
         prefix = {
             Text(

@@ -72,7 +72,6 @@ import to.bitkit.ui.theme.AppTextFieldDefaults
 import to.bitkit.ui.theme.AppTextStyles
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
-import to.bitkit.ui.utils.keyboardAsState
 import to.bitkit.utils.Logger
 import to.bitkit.utils.ServiceError
 import to.bitkit.viewmodels.AmountInputViewModel
@@ -104,7 +103,6 @@ fun EditInvoiceScreen(
     val context = LocalContext.current
     val blocktankVM = blocktankViewModel ?: return
     var keyboardVisible by remember { mutableStateOf(false) }
-    var isSoftKeyboardVisible by keyboardAsState()
     var isCreatingCjit by remember { mutableStateOf(false) }
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentReceiveSats by rememberUpdatedState(amountInputUiState.sats.toULong())
@@ -180,7 +178,6 @@ fun EditInvoiceScreen(
         isLoading = isLoading || isCreatingCjit,
         onClickAddTag = onClickAddTag,
         onClickTag = onClickTag,
-        isSoftKeyboardVisible = isSoftKeyboardVisible,
         showPaymentRequestButton = showPaymentRequestButton,
         onClickPaymentRequest = {
             onClickPaymentRequest(amountInputUiState.sats.toULong(), walletUiState.bip21Description)
@@ -203,7 +200,6 @@ private fun ReceiveTab.toReceiveLiquiditySource(): ReceiveLiquiditySource {
 fun EditInvoiceContent(
     amountInputViewModel: AmountInputViewModel,
     noteText: String,
-    isSoftKeyboardVisible: Boolean,
     onchainOnly: Boolean = false,
     keyboardVisible: Boolean,
     tags: ImmutableList<String>,
@@ -418,7 +414,6 @@ private fun Preview() {
                 tags = persistentListOf(),
                 onClickAddTag = {},
                 onClickTag = {},
-                isSoftKeyboardVisible = false,
                 modifier = Modifier.sheetHeight(),
             )
         }
@@ -442,7 +437,6 @@ private fun PreviewWithTags() {
                 tags = persistentListOf("Team", "Dinner", "Home", "Work"),
                 onClickAddTag = {},
                 onClickTag = {},
-                isSoftKeyboardVisible = false,
                 modifier = Modifier.sheetHeight(),
             )
         }
@@ -466,7 +460,6 @@ private fun PreviewWithKeyboard() {
                 tags = persistentListOf("Team", "Dinner", "Home"),
                 onClickAddTag = {},
                 onClickTag = {},
-                isSoftKeyboardVisible = false,
                 modifier = Modifier.sheetHeight(),
             )
         }
@@ -490,7 +483,6 @@ private fun PreviewSmallScreen() {
                 tags = persistentListOf("Team", "Dinner", "Home"),
                 onClickAddTag = {},
                 onClickTag = {},
-                isSoftKeyboardVisible = false,
                 modifier = Modifier.sheetHeight(),
             )
         }
