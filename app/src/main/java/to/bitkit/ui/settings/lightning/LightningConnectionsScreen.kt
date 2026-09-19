@@ -1,5 +1,6 @@
 package to.bitkit.ui.settings.lightning
 
+import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -15,8 +16,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -32,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -286,20 +284,20 @@ private fun LightningBalancesSection(localBalance: ULong, remoteBalance: ULong) 
         BalanceColumn(
             label = stringResource(R.string.lightning__spending_label),
             balance = localBalance,
-            icon = Icons.Default.ArrowUpward,
+            icon = R.drawable.ic_sent,
             color = Colors.Purple,
         )
         BalanceColumn(
             label = stringResource(R.string.lightning__receiving_label),
             balance = remoteBalance,
-            icon = Icons.Default.ArrowDownward,
+            icon = R.drawable.ic_received,
             color = Colors.White,
         )
     }
 }
 
 @Composable
-private fun BalanceColumn(label: String, balance: ULong, icon: ImageVector, color: Color) {
+private fun BalanceColumn(label: String, balance: ULong, @DrawableRes icon: Int, color: Color) {
     Column {
         Caption13Up(text = label, color = Colors.White64)
         VerticalSpacer(8.dp)
@@ -307,7 +305,7 @@ private fun BalanceColumn(label: String, balance: ULong, icon: ImageVector, colo
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
-                imageVector = icon,
+                painter = painterResource(icon),
                 contentDescription = null,
                 tint = color,
                 modifier = Modifier.size(22.dp)
@@ -404,7 +402,7 @@ private fun EmptyStateContent(modifier: Modifier = Modifier) {
                 .withAccent(accentColor = Colors.Purple),
         )
 
-        VerticalSpacer(14.dp)
+        VerticalSpacer(8.dp)
 
         BodyM(
             text = stringResource(R.string.lightning__conn_onboarding_text),

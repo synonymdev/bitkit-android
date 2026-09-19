@@ -123,7 +123,9 @@ fun ActivityListGrouped(
                                     isHardware = item.scopedId() in hardwareIds,
                                     contact = if (showContactAvatar) contactForActivity(item, contacts) else null,
                                 )
-                                VerticalSpacer(16.dp)
+                                if (index < groupedItems.lastIndex) {
+                                    VerticalSpacer(16.dp)
+                                }
                             }
                         }
                     }
@@ -133,9 +135,7 @@ fun ActivityListGrouped(
                         TertiaryButton(
                             text = stringResource(R.string.wallet__activity_show_all),
                             onClick = onAllActivityButtonClick,
-                            modifier = Modifier
-                                .wrapContentWidth()
-                                .padding(top = 8.dp)
+                            modifier = Modifier.wrapContentWidth()
                         )
                     }
                 }
@@ -219,7 +219,9 @@ fun LazyListScope.activityListGroupedItems(
                             testTag = "Activity-$index",
                             isHardware = item.scopedId() in hardwareIds,
                         )
-                        VerticalSpacer(16.dp)
+                        if (index < groupedItems.lastIndex) {
+                            VerticalSpacer(16.dp)
+                        }
                     }
                 }
             }
@@ -229,9 +231,7 @@ fun LazyListScope.activityListGroupedItems(
                 TertiaryButton(
                     text = stringResource(R.string.wallet__activity_show_all),
                     onClick = onAllActivityButtonClick,
-                    modifier = Modifier
-                        .wrapContentWidth()
-                        .padding(top = 8.dp)
+                    modifier = Modifier.wrapContentWidth()
                 )
             }
         }

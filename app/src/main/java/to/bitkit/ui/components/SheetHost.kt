@@ -92,7 +92,10 @@ sealed interface Sheet {
         val isConnecting: Boolean = false,
         val errorText: String? = null,
     ) : Sheet
-    data class QrScanner(val isPubkyScan: Boolean = false) : Sheet
+    data class QrScanner(
+        val isPubkyScan: Boolean = false,
+        val showBackButton: Boolean = true,
+    ) : Sheet
     data class PubkyAuth(val authUrl: String) : Sheet
 
     data class TimedSheet(val type: TimedSheetType) : Sheet
