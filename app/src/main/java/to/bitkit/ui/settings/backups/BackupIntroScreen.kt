@@ -1,34 +1,15 @@
 package to.bitkit.ui.settings.backups
 
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
 import to.bitkit.R
-import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BottomSheetPreview
-import to.bitkit.ui.components.Display
-import to.bitkit.ui.components.PrimaryButton
-import to.bitkit.ui.components.SecondaryButton
+import to.bitkit.ui.components.SheetIntro
 import to.bitkit.ui.components.SheetSize
-import to.bitkit.ui.components.VerticalSpacer
-import to.bitkit.ui.scaffold.SheetTopBar
 import to.bitkit.ui.shared.modifiers.sheetHeight
-import to.bitkit.ui.shared.util.gradientBackground
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
@@ -40,71 +21,23 @@ fun BackupIntroScreen(
     onConfirm: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    Column(
+    SheetIntro(
+        navTitle = stringResource(R.string.security__backup_wallet),
+        title = stringResource(R.string.security__backup_title).withAccent(accentColor = Colors.Blue),
+        description = AnnotatedString(
+            when (hasFunds) {
+                true -> stringResource(R.string.security__backup_funds)
+                else -> stringResource(R.string.security__backup_funds_no)
+            },
+        ),
+        image = R.drawable.safe,
+        continueText = stringResource(R.string.security__backup_button),
+        onContinue = onConfirm,
+        cancelText = stringResource(R.string.common__later),
+        onCancel = onClose,
+        testTag = "BackupIntroView",
         modifier = modifier
-            .fillMaxSize()
-            .gradientBackground()
-            .navigationBarsPadding()
-            .testTag("BackupIntroView")
-    ) {
-        SheetTopBar(stringResource(R.string.security__backup_wallet))
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(horizontal = 32.dp),
-        ) {
-            Image(
-                painter = painterResource(R.drawable.safe),
-                contentDescription = null,
-                contentScale = ContentScale.Fit,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .heightIn(max = 320.dp)
-                    .testTag("BackupIntroViewImage")
-            )
-            Display(
-                text = stringResource(R.string.security__backup_title).withAccent(accentColor = Colors.Blue),
-                color = Colors.White,
-                modifier = Modifier
-                    .testTag("BackupIntroViewTitle")
-            )
-            VerticalSpacer(8.dp)
-            BodyM(
-                text = when (hasFunds) {
-                    true -> stringResource(R.string.security__backup_funds)
-                    else -> stringResource(R.string.security__backup_funds_no)
-                },
-                color = Colors.White64,
-                modifier = Modifier
-                    .testTag("BackupIntroViewDescription")
-            )
-            VerticalSpacer(32.dp)
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("BackupIntroViewButtons")
-            ) {
-                SecondaryButton(
-                    text = stringResource(R.string.common__later),
-                    fullWidth = false,
-                    onClick = onClose,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("BackupIntroViewCancel")
-                )
-                PrimaryButton(
-                    text = stringResource(R.string.security__backup_button),
-                    fullWidth = false,
-                    onClick = onConfirm,
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("BackupIntroViewContinue")
-                )
-            }
-            VerticalSpacer(16.dp)
-        }
-    }
+    )
 }
 
 @Preview(showSystemUi = true)
