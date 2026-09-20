@@ -43,6 +43,7 @@ class EditInvoiceVMTest : BaseUnitTest() {
     fun setUp() = runBlocking {
         whenever(blocktankRepo.blocktankState).thenReturn(MutableStateFlow(BlocktankState(minCjitSats = 5_000)))
         whenever(walletRepo.inboundLiquiditySats()).thenReturn(1_000u)
+        whenever(offlineReceiveRepo.showInvoice(any())).thenReturn(Result.success(Unit))
         sut = EditInvoiceVM(walletRepo, blocktankRepo, offlineReceiveRepo)
     }
 
@@ -267,5 +268,19 @@ class EditInvoiceVMTest : BaseUnitTest() {
         }
         verify(offlineReceiveRepo, never()).prepareInvoice(any())
         verify(offlineReceiveRepo, never()).canReceive(1_000uL)
+    }
+
+    @Test
+    fun `settled or unsaved invoice cannot be reopened from editor cache`() = test {
+        val prepared = PreparedOfflineInvoice("ffor", 1_000uL, "Dinner", Long.MAX_VALUE, "hash")
+        val error = OfflineReceiveUnavailable()
+        whenever(offlineReceiveRepo.showInvoice(prepared)).thenReturn(Result.failure(error))
+        sut.refreshOfflineReceive(ReceiveLiquiditySource.SPENDING, 1_000uL, initialInvoice = prepared)
+
+        sut.editInvoiceEffect.test {
+            sut.onClickContinue(ReceiveLiquiditySource.SPENDING, 1_000uL, false, "Dinner")
+            assertEquals(EditInvoiceScreenEffects.OfflineInvoiceFailed(error), awaitItem())
+        }
+        verify(offlineReceiveRepo, never()).prepareInvoice(any())
     }
 }

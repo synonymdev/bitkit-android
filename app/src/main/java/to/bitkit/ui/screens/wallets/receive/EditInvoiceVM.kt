@@ -139,7 +139,7 @@ class EditInvoiceVM @Inject constructor(
                     it.amountSats == amountSats && it.description == description && it.expiresAtMillis > nowMillis()
                 }
                 if (existing != null) {
-                    _editInvoiceEffect.emit(EditInvoiceScreenEffects.OfflineInvoicePrepared(existing))
+                    showOfflineInvoice(existing, revision)
                     return@launch
                 }
                 val request = offlineRequest?.takeIf { it.amountSats == amountSats && it.description == description }
@@ -148,7 +148,7 @@ class EditInvoiceVM @Inject constructor(
                 offlineReceiveRepo.prepareInvoice(request).onSuccess {
                     if (revision == eligibilityRevision) {
                         preparedInvoice = it
-                        _editInvoiceEffect.emit(EditInvoiceScreenEffects.OfflineInvoicePrepared(it))
+                        showOfflineInvoice(it, revision)
                     }
                 }.onFailure {
                     if (revision == eligibilityRevision) {
@@ -159,6 +159,16 @@ class EditInvoiceVM @Inject constructor(
                 _isLoading.update { false }
             }
         }
+    }
+
+    private suspend fun showOfflineInvoice(invoice: PreparedOfflineInvoice, revision: Long) {
+        val result = offlineReceiveRepo.showInvoice(invoice)
+        if (revision != eligibilityRevision) return
+        val effect = result.fold(
+            onSuccess = { EditInvoiceScreenEffects.OfflineInvoicePrepared(invoice) },
+            onFailure = { EditInvoiceScreenEffects.OfflineInvoiceFailed(it) },
+        )
+        _editInvoiceEffect.emit(effect)
     }
 
     private suspend fun maxCjitAmountSats(

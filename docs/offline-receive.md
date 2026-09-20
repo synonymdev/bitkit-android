@@ -6,6 +6,8 @@ The receive editor offers **Receive Offline** on Auto and Spending only after th
 
 A prepared invoice belongs to the current receive session. Its amount, description, and invoice take precedence over ordinary wallet refreshes, and it remains displayable after the local node stops. Reopening an unchanged, unexpired invoice reuses the prepared invoice. Expiry is checked when the screen resumes and every foreground second; it removes the Lightning QR and copy surface and asks the user to edit the invoice. An ordinary invoice is never substituted when offline preparation fails or a prepared invoice expires. Starting a new receive session resets the selection.
 
+Before QR exposure, the app saves the selected tags as pre-activity metadata for the prepared payment hash. The existing confirmed `PaymentReceived` path consumes that metadata when recording income, invalidates the matching prepared session, and closes its receive sheet. Unrelated payments, invoice preparation, and claimable but unpaid events do not settle the session. The repository subscribes before preparation starts and checks native inbound payment history before registering a returned invoice, including retries whose payment event arrived before the reply. A concurrent confirmed event forces a fresh history check. Session memory holds only the current prepared invoice and metadata snapshot, and clears on dismissal or wallet reset.
+
 ## Required native adapter
 
 `OfflineReceiveService` is an app boundary, not an assertion that these APIs exist in LDK. Before replacing the unavailable binding, the adapter must provide:
@@ -15,10 +17,10 @@ A prepared invoice belongs to the current receive session. Its amount, descripti
 - A valid invoice for the requested amount and description, with the actual invoice expiry supplied as an absolute timestamp in milliseconds. The app parses BOLT 11 with signature validation and checks network, exact millisatoshis, payment hash, description, and expiry against the prepared metadata before showing a QR.
 - Durable idempotency for the supplied request ID. Retries of unchanged invoice parameters retain that ID and must recover an existing activation or safely resume it. The app permits reconciliation retries after a reservation reduces available liquidity; fresh operations still require an eligibility check.
 - Durable recovery after app termination or caller cancellation, including reservations created by a request whose UI has since been dismissed or changed.
-- Settlement reconciliation and ordinary payment events for the prepared payment hash, with idempotent activity accounting and removal of settled invoices from the receive session.
+- Settlement reconciliation and ordinary confirmed payment events for the prepared payment hash, with native inbound payment history available for retry checks and idempotent activity accounting.
 - Backup and restore behavior for claim material, recovery deadlines, and invoice metadata. The in-memory UI session is not a recovery store.
 
-The current draft does not connect payment notifications or tag metadata to a prepared invoice, restore a prepared invoice into a new receive session, or provide a claim recovery screen. These are activation prerequisites alongside the native implementation. Production support must remain unavailable until those paths and cross-implementation offline settlement are verified.
+The current draft does not restore a prepared invoice into a new receive session or provide a claim recovery screen. These are activation prerequisites alongside the native implementation. Production support must remain unavailable until those paths and cross-implementation offline settlement are verified.
 
 The native and settlement work is tracked in [ldk-node #117](https://github.com/synonymdev/ldk-node/issues/117). A provider fake verifies UI and repository behavior; it is not evidence of Lightning settlement. No native dependency version is changed by this draft.
 
@@ -28,4 +30,4 @@ The existing screen map identifies Edit Invoice as `Send (Contact) (Lightning) >
 
 ## Verification
 
-`OfflineReceiveRepoTest.kt` covers exact amount and liquidity limits, stopped nodes, unavailable providers, preparation revalidation, and invalid responses. `EditInvoiceVMTest.kt` covers selection reset, stale asynchronous replies, awaited preparation, and failure without ordinary invoice fallback. `ReceiveInvoiceUtilsTest.kt` covers QR behavior after node shutdown and protection from ordinary wallet refreshes. `EditInvoiceContentTest.kt` covers the checkbox callback.
+`OfflineReceiveRepoTest.kt` covers exact amount and liquidity limits, stopped nodes, unavailable providers, preparation revalidation, invalid responses, metadata persistence, confirmed settlement, unpaid events, wallet reset, and payment-before-registration races. `EditInvoiceVMTest.kt` covers selection reset, stale asynchronous replies, awaited preparation, blocked reuse of settled invoices, and failure without ordinary invoice fallback. `ReceiveInvoiceUtilsTest.kt` covers QR behavior after node shutdown and protection from ordinary wallet refreshes. `EditInvoiceContentTest.kt` covers the checkbox callback.

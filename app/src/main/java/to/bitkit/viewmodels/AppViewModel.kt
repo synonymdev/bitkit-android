@@ -151,6 +151,7 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LnurlPayInvoiceMismatchError
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
+import to.bitkit.repositories.OfflineReceiveRepo
 import to.bitkit.repositories.PaykitOnchainPaymentProofResolution
 import to.bitkit.repositories.PaykitPaymentProofKind
 import to.bitkit.repositories.PaykitPaymentProofRepo
@@ -234,6 +235,7 @@ class AppViewModel @Inject constructor(
     @BgDispatcher private val bgDispatcher: CoroutineDispatcher,
     private val keychain: Keychain,
     private val lightningRepo: LightningRepo,
+    private val offlineReceiveRepo: OfflineReceiveRepo,
     private val pendingPaymentRepo: PendingPaymentRepo,
     private val walletRepo: WalletRepo,
     private val hwWalletRepo: HwWalletRepo,
@@ -338,6 +340,7 @@ class AppViewModel @Inject constructor(
 
     private val _currentSheet: MutableStateFlow<Sheet?> = MutableStateFlow(null)
     val currentSheet = _currentSheet.asStateFlow()
+    val offlineReceiveSession = offlineReceiveRepo.session
     val pendingPaymentRequests = paykitPaymentRequestRepo.pendingRequests
     val paymentRequestHistory = paykitPaymentRequestRepo.paymentRequestHistory
     val eligiblePaymentRequestTargets = paykitPaymentRequestRepo.eligibleTargets
@@ -1310,7 +1313,11 @@ class AppViewModel @Inject constructor(
 
         val receiveSheetToClose = receiveSheetContext?.takeIf { context ->
             val matchesSettledRequest = when (event) {
-                is Event.PaymentReceived -> update.settledReceiveInvoice?.bolt11 == context.bolt11
+                is Event.PaymentReceived -> {
+                    val offline = offlineReceiveSession.value
+                    offline.invoice == null && !offline.isSettled &&
+                        update.settledReceiveInvoice?.bolt11 == context.bolt11
+                }
                 is Event.OnchainTransactionReceived -> update.settledReceiveAddress?.address == context.onchainAddress
                 else -> false
             }
@@ -1691,7 +1698,8 @@ class AppViewModel @Inject constructor(
         receiveSheetToClose: ReceiveSheetContext?,
     ) {
         event.paymentHash.let { paymentHash ->
-            closeSettledReceiveSheet(receiveSheetToClose)
+            val offline = offlineReceiveSession.value
+            if (offline.invoice == null && !offline.isSettled) closeSettledReceiveSheet(receiveSheetToClose)
             activityRepo.notifyPaymentActivityChanged()
             privatePaykitRepo.contactPublicKeyForPrivateInvoicePaymentHash(paymentHash)?.let { publicKey ->
                 activityRepo.setContact(
@@ -4709,6 +4717,7 @@ class AppViewModel @Inject constructor(
     }
 
     fun showSheet(sheetType: Sheet) {
+        if (_currentSheet.value is Sheet.Receive || sheetType is Sheet.Receive) clearOfflineReceiveSession()
         val previousJob = sheetTransitionJob
         val nextJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             receiveSheetContext = null
@@ -4737,7 +4746,14 @@ class AppViewModel @Inject constructor(
 
     fun hideSheet() = hideSheet(shouldFlushDeferredScan = true)
 
+    fun clearOfflineReceiveSession() = offlineReceiveRepo.clearSession()
+
+    fun closeSettledOfflineReceiveSheet(sheet: Sheet.Receive?) {
+        if (sheet != null && _currentSheet.value === sheet && offlineReceiveSession.value.isSettled) hideSheet()
+    }
+
     private fun hideSheet(shouldFlushDeferredScan: Boolean) {
+        if (_currentSheet.value is Sheet.Receive) clearOfflineReceiveSession()
         if (
             shouldFlushDeferredScan &&
             _currentSheet.value == null &&
