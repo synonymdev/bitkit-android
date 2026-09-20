@@ -80,7 +80,6 @@ fun SendCoinSelectionScreen(
         tagsByTxId = tagsByTxId,
         onBack = onBack,
         onContinue = { onContinue(uiState.selectedUtxos) },
-        onClickAuto = { viewModel.onToggleAuto() },
         onClickUtxo = { viewModel.onToggleUtxo(it) },
         onRenderUtxo = { viewModel.loadTagsForUtxo(it) },
     )
@@ -93,7 +92,6 @@ private fun Content(
     tagsByTxId: ImmutableMap<String, ImmutableList<String>> = persistentMapOf(),
     onBack: () -> Unit = {},
     onContinue: () -> Unit = {},
-    onClickAuto: () -> Unit = {},
     onClickUtxo: (SpendableUtxo) -> Unit = {},
     onRenderUtxo: (String) -> Unit = {},
 ) {
@@ -112,27 +110,6 @@ private fun Content(
                 .weight(1f)
                 .padding(horizontal = 16.dp)
         ) {
-            // Auto item
-            item {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(72.dp)
-                        .clickableAlpha { onClickAuto() }
-                        .testTag("auto_select_row")
-                ) {
-                    BodyMSB(text = stringResource(R.string.wallet__selection_auto))
-                    Switch(
-                        checked = uiState.autoSelectCoinsOn,
-                        onCheckedChange = null, // handled by parent
-                        colors = AppSwitchDefaults.colors,
-                    )
-                }
-                HorizontalDivider()
-            }
-
             // Utxo items
             items(uiState.availableUtxos) { utxo ->
                 UtxoRow(
@@ -260,7 +237,6 @@ private fun Preview() {
                     selectedUtxos = listOf(
                         SpendableUtxo(outpoint = OutPoint(txid = "abc123", vout = 0u), valueSats = 50000uL),
                     ).toImmutableList(),
-                    autoSelectCoinsOn = false,
                     totalRequiredSat = 30000uL,
                     totalSelectedSat = 50000uL,
                     isSelectionValid = true,
@@ -277,13 +253,12 @@ private fun Preview() {
 
 @Preview(showSystemUi = true)
 @Composable
-private fun PreviewAuto() {
+private fun PreviewEmpty() {
     AppThemeSurface {
         BottomSheetPreview {
             Content(
                 uiState = CoinSelectionUiState(
                     availableUtxos = persistentListOf(),
-                    autoSelectCoinsOn = true,
                     totalRequiredSat = 1000uL,
                     totalSelectedSat = 0uL,
                     isSelectionValid = false

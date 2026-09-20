@@ -1,0 +1,35 @@
+<journey name="manual coin selection has no auto row">
+  <description>
+    Verifies the manual coin selection screen lists only the wallet's UTXOs, with no "Auto" row, and
+    that Continue follows TOTAL SELECTED against TOTAL REQUIRED (synonymdev/bitkit-android#894).
+
+    Precondition: onboarded dev wallet with at least 3 on-chain Savings UTXOs, one of them smaller
+    than the 10 000 sat send plus fee and together covering it. Fund through `./lsp` with 2-3 small
+    deposits to a Savings address and mine a block. Start on the wallet home screen. The send uses
+    your own Savings address (Settings > Advanced > Address Viewer); nothing is broadcast.
+
+    The screen reloads UTXOs and reselects all of them whenever the on-chain activity list emits,
+    which on regtest happens about every 10s after a wallet sync. A deselection that springs back on
+    within that window is that reload, not a failed tap; do the toggle steps back to back.
+
+    Tapping the amount on the amount screen swaps the primary display unit. Do not tap it.
+  </description>
+  <actions>
+    <action>Open Settings, then the "Advanced" tab (testTag "Tab-advanced"), then "Coin Selection" (testTag "CoinSelectPreference")</action>
+    <action>Tap "Manual" (testTag "manual_button") and go back to the home screen</action>
+    <action>Run `adb shell am start -a android.intent.action.VIEW -d "bitcoin:&lt;own savings address&gt;?amount=0.0001" to.bitkit.dev`</action>
+    <action>Verify the amount screen shows 10 000 sats and tap Continue (testTag "ContinueAmount")</action>
+    <action>Verify the coin selection screen (testTag "coin_selection_screen") is visible</action>
+    <action>Verify there is no element with testTag "auto_select_row" and no row labelled "Auto"</action>
+    <action>Verify one row per UTXO (testTag prefix "utxo_row_") is listed, largest value first, and every switch is on (screenshot)</action>
+    <action>Verify TOTAL SELECTED equals the sum of all listed UTXOs and is at least TOTAL REQUIRED</action>
+    <action>Tap UTXO rows from the top until TOTAL SELECTED is below TOTAL REQUIRED</action>
+    <action>Verify Continue (testTag "continue_button") is disabled</action>
+    <action>Tap the last deselected UTXO row again so TOTAL SELECTED is at least TOTAL REQUIRED</action>
+    <action>Verify Continue (testTag "continue_button") is enabled</action>
+    <action>Tap Continue (testTag "continue_button")</action>
+    <action>Verify the Confirm screen (testTag "ReviewAmount") shows 10 000 sats</action>
+    <action>Go back until the send sheet closes, without swiping to pay</action>
+    <action>Open Settings, then the "Advanced" tab, then "Coin Selection", and tap "Autopilot" (testTag "autopilot_button") to restore the default</action>
+  </actions>
+</journey>

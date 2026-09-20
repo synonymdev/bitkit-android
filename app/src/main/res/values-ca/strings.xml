@@ -913,7 +913,6 @@
     <string name="wallet__recipient_scan">Escaneja QR</string>
     <string name="wallet__savings__onboarding">&lt;accent&gt;Envia\nbitcoin&lt;/accent&gt;\nal teu\nsaldo d\'estalvis</string>
     <string name="wallet__savings__title">Estalvis</string>
-    <string name="wallet__selection_auto">Auto</string>
     <string name="wallet__selection_title">Selecció de monedes</string>
     <string name="wallet__selection_total_required">Total requerit</string>
     <string name="wallet__selection_total_selected">Total seleccionat</string>
