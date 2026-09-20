@@ -4732,6 +4732,8 @@ class AppViewModel @Inject constructor(
                     onchainAddress = walletRepo.getOnchainAddress(),
                 )
             }
+            // A stale amount above inbound liquidity would hide the Auto tab until the receive state refreshes
+            if (sheetType is Sheet.Receive) walletRepo.setBip21AmountSats(null)
             _currentSheet.update { sheetType }
         }
         sheetTransitionJob = nextJob
