@@ -859,7 +859,6 @@
     <string name="wallet__transfer_to_spending">Transférer vers les Dépenses</string>
     <string name="wallet__withdraw_error">Votre retrait a échoué. Veuillez scanner le QR code à nouveau ou contacter le support.</string>
     <string name="wallet__selection_title">Sélection des UTXOs</string>
-    <string name="wallet__selection_auto">Auto</string>
     <string name="wallet__selection_total_required">Total requis</string>
     <string name="wallet__selection_total_selected">Total sélectionné</string>
     <string name="wallet__receive_bitcoin">Recevoir des bitcoins</string>

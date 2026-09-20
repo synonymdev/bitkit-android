@@ -814,7 +814,6 @@
     <string name="wallet__payment_unknown_required_features">Esta fatura Lightning usa funcionalidades que o Bitkit ainda não suporta.</string>
     <string name="wallet__toast_payment_failed_description">Seu pagamento instantâneo falhou. Por favor, tente novamente.</string>
     <string name="wallet__selection_title">Seleção de Moedas</string>
-    <string name="wallet__selection_auto">Auto</string>
     <string name="wallet__selection_total_required">Total necessário</string>
     <string name="wallet__selection_total_selected">Total selecionado</string>
     <string name="wallet__receive_bitcoin">Receber Bitcoin</string>

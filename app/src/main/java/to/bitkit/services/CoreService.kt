@@ -324,6 +324,27 @@ private fun OnchainActivity.withRecoveredTransfer(recoveredChannelId: String?): 
         else -> copy(isTransfer = true, channelId = channelId ?: recoveredChannelId)
     }
 
+/**
+ * Applies the latest LDK payment details to a stored Lightning activity.
+ *
+ * A retry of the same invoice reuses the payment hash, so the stored row must take the final
+ * attempt's amount, fee and preimage. Missing values keep the stored ones. The stored message is
+ * never replaced, because LDK reports a description-hash invoice's hash as its description.
+ */
+internal fun LightningActivity.withPaymentUpdate(
+    payment: PaymentDetails,
+    kind: PaymentKind.Bolt11,
+    state: PaymentState,
+    contact: String?,
+): LightningActivity = copy(
+    value = payment.amountSats ?: value,
+    fee = payment.feePaidMsat?.let { msatFloorOf(it) } ?: fee,
+    preimage = kind.preimage ?: preimage,
+    updatedAt = payment.latestUpdateTimestamp,
+    status = state,
+    contact = contact,
+)
+
 @Suppress("LargeClass", "TooManyFunctions")
 class ActivityService(
     @Suppress("unused") private val coreService: CoreService, // used to ensure CoreService inits first
@@ -746,9 +767,10 @@ class ActivityService(
             ?: privatePaykitContactPublicKeyForReceivedInvoicePaymentHash(payment.id, payment.direction)
 
         val ln = if (existingActivity is Activity.Lightning) {
-            existingActivity.v1.copy(
-                updatedAt = payment.latestUpdateTimestamp,
-                status = state,
+            existingActivity.v1.withPaymentUpdate(
+                payment = payment,
+                kind = kind,
+                state = state,
                 contact = contact,
             )
         } else {
