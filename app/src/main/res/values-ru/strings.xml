@@ -940,7 +940,6 @@ Bitkit должен увеличить приёмную ёмкость ваше�
     <string name="wallet__recipient_scan">Сканировать QR</string>
     <string name="wallet__savings__onboarding">&lt;accent&gt;Отправьте\nбиткоин&lt;/accent&gt;\nна ваш\nбаланс сбережений</string>
     <string name="wallet__savings__title">Сбережения</string>
-    <string name="wallet__selection_auto">Авто</string>
     <string name="wallet__selection_title">Управление монетами</string>
     <string name="wallet__selection_total_required">Всего требуется</string>
     <string name="wallet__selection_total_selected">Всего выбрано</string>

@@ -855,7 +855,6 @@
     <string name="wallet__toast_transaction_unconfirmed_description">La transacción dejó de estar confirmada debido a una reorganización de la blockchain</string>
     <string name="wallet__toast_transaction_unconfirmed_title">Transacción Sin Confirmar</string>
     <string name="wallet__selection_title">Selección de monedas</string>
-    <string name="wallet__selection_auto">Automático</string>
     <string name="wallet__selection_total_required">Total necesario</string>
     <string name="wallet__selection_total_selected">Total seleccionado</string>
     <string name="wallet__receive_bitcoin">Recibir Bitcoin</string>

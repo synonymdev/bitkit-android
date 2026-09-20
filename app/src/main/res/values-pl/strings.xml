@@ -859,7 +859,6 @@
     <string name="wallet__transfer_to_spending">Prześlij na saldo wydatków</string>
     <string name="wallet__withdraw_error">Twoja wypłata nie powiodła się. Proszę ponownie zeskanować kod QR lub skontaktować się z pomocą techniczną.</string>
     <string name="wallet__selection_title">Wybór monet /Coin Selection/</string>
-    <string name="wallet__selection_auto">Auto</string>
     <string name="wallet__selection_total_required">Wymagana kwota</string>
     <string name="wallet__selection_total_selected">Łącznie wybrano</string>
     <string name="wallet__receive_bitcoin">Otrzymaj Bitcoiny</string>

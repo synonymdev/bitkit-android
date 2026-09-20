@@ -571,6 +571,28 @@
     <string name="other__scan_err_decoding">Decoding Error</string>
     <string name="other__scan_err_interpret_title">Unable To Interpret Provided Data</string>
     <string name="other__share_qr">Share QR Code Via</string>
+    <string name="other__shop__categories__apparel">Apparel</string>
+    <string name="other__shop__categories__automobiles">Automobiles</string>
+    <string name="other__shop__categories__cruises">Cruises</string>
+    <string name="other__shop__categories__ecommerce">Ecommerce</string>
+    <string name="other__shop__categories__electronics">Electronics</string>
+    <string name="other__shop__categories__entertainment">Entertainment</string>
+    <string name="other__shop__categories__experiences">Experiences</string>
+    <string name="other__shop__categories__flights">Flights</string>
+    <string name="other__shop__categories__food">Food</string>
+    <string name="other__shop__categories__food_delivery">Food Delivery</string>
+    <string name="other__shop__categories__games">Games</string>
+    <string name="other__shop__categories__gifts">Gifts</string>
+    <string name="other__shop__categories__groceries">Groceries</string>
+    <string name="other__shop__categories__health_and_beauty">Health &amp; Beauty</string>
+    <string name="other__shop__categories__home">Home</string>
+    <string name="other__shop__categories__multi_brand">Multi-Brand</string>
+    <string name="other__shop__categories__pets">Pets</string>
+    <string name="other__shop__categories__restaurants">Restaurants</string>
+    <string name="other__shop__categories__retail">Retail</string>
+    <string name="other__shop__categories__streaming">Streaming</string>
+    <string name="other__shop__categories__travel">Travel</string>
+    <string name="other__shop__categories__voip" translatable="false">VoIP</string>
     <string name="other__shop__discover__esims__description">Go borderless</string>
     <string name="other__shop__discover__esims__title">ESims</string>
     <string name="other__shop__discover__gift_cards__description">Shop with Bitcoin</string>
@@ -1381,7 +1403,6 @@
     <string name="wallet__recipient_scan">Scan QR</string>
     <string name="wallet__savings__onboarding">&lt;accent&gt;Send\nbitcoin&lt;/accent&gt;\nto your\nsavings balance</string>
     <string name="wallet__savings__title">Savings</string>
-    <string name="wallet__selection_auto">Auto</string>
     <string name="wallet__selection_title">Coin Selection</string>
     <string name="wallet__selection_total_required">Total required</string>
     <string name="wallet__selection_total_selected">Total selected</string>

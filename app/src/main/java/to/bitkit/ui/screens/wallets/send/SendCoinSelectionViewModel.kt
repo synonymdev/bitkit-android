@@ -66,7 +66,6 @@ class SendCoinSelectionViewModel @Inject constructor(
                 state.copy(
                     availableUtxos = sortedUtxos.toImmutableList(),
                     selectedUtxos = sortedUtxos.toImmutableList(),
-                    autoSelectCoinsOn = true,
                     totalRequiredSat = totalRequired,
                     totalSelectedSat = totalSelected,
                     isSelectionValid = validateCoinSelection(totalSelected, totalRequired),
@@ -101,27 +100,6 @@ class SendCoinSelectionViewModel @Inject constructor(
         }
     }
 
-    fun onToggleAuto() {
-        val currentState = _uiState.value
-        if (currentState.autoSelectCoinsOn) {
-            _uiState.update {
-                it.copy(autoSelectCoinsOn = false)
-            }
-        } else {
-            _uiState.update { state ->
-                val allSelected = state.availableUtxos
-                val newTotalSat = allSelected.sumOf { it.valueSats }
-
-                state.copy(
-                    autoSelectCoinsOn = true,
-                    selectedUtxos = allSelected.toImmutableList(),
-                    totalSelectedSat = newTotalSat,
-                    isSelectionValid = validateCoinSelection(newTotalSat, state.totalRequiredSat)
-                )
-            }
-        }
-    }
-
     fun onToggleUtxo(utxo: SpendableUtxo) {
         _uiState.update { state ->
             val isSelected = state.selectedUtxos.any { it.outpoint == utxo.outpoint }
@@ -136,7 +114,6 @@ class SendCoinSelectionViewModel @Inject constructor(
             state.copy(
                 selectedUtxos = newSelection.toImmutableList(),
                 totalSelectedSat = newTotal,
-                autoSelectCoinsOn = false,
                 isSelectionValid = validateCoinSelection(newTotal, state.totalRequiredSat)
             )
         }
@@ -168,7 +145,6 @@ class SendCoinSelectionViewModel @Inject constructor(
 data class CoinSelectionUiState(
     val availableUtxos: ImmutableList<SpendableUtxo> = persistentListOf(),
     val selectedUtxos: ImmutableList<SpendableUtxo> = persistentListOf(),
-    val autoSelectCoinsOn: Boolean = true,
     val totalRequiredSat: ULong = 0u,
     val totalSelectedSat: ULong = 0u,
     val isSelectionValid: Boolean = false,
