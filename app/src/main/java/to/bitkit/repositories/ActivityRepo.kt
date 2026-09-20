@@ -1022,19 +1022,41 @@ class ActivityRepo @Inject constructor(
         }
     }
 
+    /**
+     * Applies each slice of the backup envelope on its own so one rejected record cannot discard the others.
+     * Core fails a bulk write as a whole, so applying all three slices together would let a single unusable tag cost
+     * the activities and the closed channels too. The overall result still fails when any slice failed, keeping
+     * [BackupRepo] from treating a partial restore as authoritative and rewriting a good backup with it.
+     * Observers are notified whenever at least one slice was applied, and the tag signal only fires when the
+     * tags slice itself was applied, so a rejected tags slice cannot mark the metadata backup as changed.
+     */
     suspend fun restoreFromBackup(payload: ActivityBackupV1): Result<Unit> = withContext(bgDispatcher) {
-        runCatching {
-            coreService.activity.upsertList(payload.activities)
-            coreService.activity.upsertTags(payload.activityTags)
+        val activities = runSuspendCatching { coreService.activity.upsertList(payload.activities) }
+        val activityTags = runSuspendCatching { coreService.activity.upsertTags(payload.activityTags) }
+        val closedChannels = runSuspendCatching {
             coreService.activity.upsertClosedChannelList(payload.closedChannels)
-        }.onSuccess {
-            Logger.debug(
-                "Restored ${payload.activities.size} activities, ${payload.activityTags.size} activity tags, " +
-                    "${payload.closedChannels.size} closed channels",
-                context = TAG,
-            )
-            notifyActivitiesChanged(tagsChanged = true)
         }
+        val results = listOf(
+            "activities" to activities,
+            "activityTags" to activityTags,
+            "closedChannels" to closedChannels,
+        )
+        val failures = results.mapNotNull { (slice, result) ->
+            result.exceptionOrNull()?.also {
+                Logger.error("Failed to restore '$slice' activity backup slice", it, context = TAG)
+            }
+        }
+
+        if (failures.size < results.size) notifyActivitiesChanged(tagsChanged = activityTags.isSuccess)
+
+        failures.firstOrNull()?.let { return@withContext Result.failure(it) }
+
+        Logger.debug(
+            "Restored ${payload.activities.size} activities, ${payload.activityTags.size} activity tags, " +
+                "${payload.closedChannels.size} closed channels",
+            context = TAG,
+        )
+        return@withContext Result.success(Unit)
     }
 
     suspend fun markAllUnseenActivitiesAsSeen(): Result<Unit> = withContext(bgDispatcher) {
