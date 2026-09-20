@@ -4139,6 +4139,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `showSheet clears stale receive amount before presenting the receive sheet`() = test {
+        var sheetWhenCleared: Sheet? = Sheet.Send()
+        whenever(walletRepo.setBip21AmountSats(null)).thenAnswer { sheetWhenCleared = sut.currentSheet.value }
+
+        val sheet = Sheet.Receive()
+        sut.showSheet(sheet)
+        advanceUntilIdle()
+
+        verify(walletRepo).setBip21AmountSats(null)
+        assertNull(sheetWhenCleared)
+        assertEquals(sheet, sut.currentSheet.value)
+    }
+
+    @Test
+    fun `showSheet keeps receive amount when presenting another sheet`() = test {
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+
+        verify(walletRepo, never()).setBip21AmountSats(anyOrNull())
+    }
+
+    @Test
     fun `received lightning payment closes the active receive sheet after wallet invoice is cleared`() = test {
         walletState.value = WalletState(bolt11 = "settled-invoice")
         sut.showSheet(Sheet.Receive())
