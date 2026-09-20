@@ -1386,6 +1386,8 @@
     <string name="wallet__receive_liquidity__text">Your Spending Balance uses the Lightning Network to make your payments cheaper, faster, and more private.\n\nThis works like internet access, but you pay for liquidity &amp; routing instead of bandwidth.\n\nThis setup includes some one-time costs.</string>
     <string name="wallet__receive_liquidity__text_additional">Your Spending Balance uses the Lightning Network to make your payments cheaper, faster, and more private.\n\nThis works like internet access, but you pay for liquidity &amp; routing instead of bandwidth.\n\nBitkit needs to increase the receiving capacity of your spending balance to process this payment.</string>
     <string name="wallet__receive_note_placeholder">Optional note to payer</string>
+    <string name="wallet__receive_offline">Receive Offline</string>
+    <string name="wallet__receive_offline_expired">This offline invoice has expired. Edit the invoice to create a new one.</string>
     <string name="wallet__receive_onboarding_description">Enjoy instant and cheap bitcoin payments on the Lightning Network.</string>
     <string name="wallet__receive_onboarding_title">Receive on &lt;accent&gt;spending balance&lt;/accent&gt;</string>
     <string name="wallet__receive_show_details">Show Details</string>

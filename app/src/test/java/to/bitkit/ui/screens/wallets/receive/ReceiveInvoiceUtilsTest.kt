@@ -1,9 +1,60 @@
 package to.bitkit.ui.screens.wallets.receive
 
 import org.junit.Test
+import to.bitkit.repositories.WalletState
+import to.bitkit.services.PreparedOfflineInvoice
 import kotlin.test.assertEquals
 
 class ReceiveInvoiceUtilsTest {
+
+    @Test
+    fun `prepared offline invoice remains available when node stops and liquidity is reserved`() {
+        val invoice = getInvoiceForTab(
+            tab = ReceiveTab.SPENDING,
+            bip21 = "bitcoin:address?lightning=ffor",
+            bolt11 = "ffor",
+            cjitInvoice = null,
+            isNodeRunning = false,
+            canCreateLightningInvoice = false,
+            onchainAddress = "address",
+            isOfflineInvoice = true,
+        )
+
+        assertEquals("ffor", invoice)
+    }
+
+    @Test
+    fun `ordinary invoice is not presented as available offline`() {
+        val invoice = getInvoiceForTab(
+            tab = ReceiveTab.SPENDING,
+            bip21 = "bitcoin:address?lightning=regular",
+            bolt11 = "regular",
+            cjitInvoice = null,
+            isNodeRunning = false,
+            onchainAddress = "address",
+        )
+
+        assertEquals("", invoice)
+    }
+
+    @Test
+    fun `ordinary wallet refresh cannot replace prepared offline invoice details`() {
+        val refreshedWallet = WalletState(
+            bolt11 = "regular",
+            bip21 = "bitcoin:address?lightning=regular",
+            bip21AmountSats = 20uL,
+            bip21Description = "Ordinary invoice",
+            onchainAddress = "address",
+        )
+        val prepared = PreparedOfflineInvoice("ffor", 1_000uL, "Dinner", Long.MAX_VALUE, "hash")
+
+        val displayed = refreshedWallet.withOfflineInvoice(prepared)
+
+        assertEquals("ffor", displayed.bolt11)
+        assertEquals(1_000uL, displayed.bip21AmountSats)
+        assertEquals("Dinner", displayed.bip21Description)
+        assertEquals("bitcoin:address?amount=0.00001&message=Dinner&lightning=ffor", displayed.bip21)
+    }
 
     @Test
     fun `getInvoiceForTab TREZOR returns only the hardware address`() {

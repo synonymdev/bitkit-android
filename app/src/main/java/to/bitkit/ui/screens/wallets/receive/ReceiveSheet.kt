@@ -34,6 +34,7 @@ import to.bitkit.repositories.PaykitPaymentRequest
 import to.bitkit.repositories.PaykitPaymentRequestDraft
 import to.bitkit.repositories.PaykitPaymentRequestTarget
 import to.bitkit.repositories.WalletState
+import to.bitkit.services.PreparedOfflineInvoice
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.components.ConnectionIssuesView
 import to.bitkit.ui.navigateTo
@@ -79,9 +80,11 @@ fun ReceiveSheet(
     LaunchedEffect(Unit) { editInvoiceAmountViewModel.clearInput() }
     val cjitSessionState = remember { ReceiveCjitSessionState() }
     val invoiceEditState = remember { ReceiveInvoiceEditState() }
+    var offlineInvoice by remember { mutableStateOf<PreparedOfflineInvoice?>(null) }
 
     LaunchedEffect(startRoute) {
         cjitSessionState.clear()
+        offlineInvoice = null
         navController.navigateToReceiveStart(startRoute)
     }
     var editInvoiceSourceTab by remember { mutableStateOf(ReceiveTab.SAVINGS) }
@@ -119,7 +122,7 @@ fun ReceiveSheet(
     var isEditingPaymentRequestAmount by remember { mutableStateOf(false) }
 
     fun resetEditInvoiceAmount() {
-        val amountSats = walletState.bip21AmountSats
+        val amountSats = offlineInvoice?.amountSats ?: walletState.bip21AmountSats
         if (amountSats == null || amountSats == 0uL) {
             editInvoiceAmountViewModel.clearInput()
         } else {
@@ -150,7 +153,8 @@ fun ReceiveSheet(
                 composableWithDefaultTransitions<ReceiveRoute.QR> {
                     ReceiveQrScreen(
                         cjitInvoice = cjitSessionState.cjitInvoice,
-                        walletState = walletState,
+                        walletState = offlineInvoice?.let(walletState::withOfflineInvoice) ?: walletState,
+                        offlineInvoice = offlineInvoice,
                         lightningState = lightningState,
                         onClickReceiveCjit = {
                             if (lightningState.isGeoBlocked) {
@@ -163,6 +167,7 @@ fun ReceiveSheet(
                         onClickEditInvoice = {
                             editInvoiceSourceTab = it
                             invoiceEditState.beginSoftwareEdit(it)
+                            offlineInvoice?.let { invoice -> wallet.updateBip21Description(invoice.description) }
                             resetEditInvoiceAmount()
                             navController.navigateTo(ReceiveRoute.EditInvoice)
                         },
@@ -299,6 +304,7 @@ fun ReceiveSheet(
                             entry = entryDetails,
                             onLearnMore = { navController.navigateTo(ReceiveRoute.Liquidity) },
                             onContinue = { invoice ->
+                                offlineInvoice = null
                                 wallet.updateOnchainBip21Amount(entryDetails.receiveAmountSats.toULong())
                                 cjitSessionState.onCjitConfirmed(invoice)
                                 navController.navigateTo(
@@ -315,6 +321,7 @@ fun ReceiveSheet(
                             entry = entryDetails,
                             onLearnMore = { navController.navigateTo(ReceiveRoute.LiquidityAdditional) },
                             onContinue = { invoice ->
+                                offlineInvoice = null
                                 wallet.updateOnchainBip21Amount(entryDetails.receiveAmountSats.toULong())
                                 cjitSessionState.onCjitConfirmed(invoice)
                                 navController.navigateTo(
@@ -375,12 +382,18 @@ fun ReceiveSheet(
                         sourceTab = editInvoiceSourceTab,
                         onBack = { navController.popBackStack() },
                         updateInvoice = {
+                            offlineInvoice = null
                             if (!cjitSessionState.hasConfirmedInvoiceForAmount(it)) {
                                 cjitSessionState.clear()
                                 wallet.updateBip21Invoice(it)
                             } else {
                                 wallet.updateOnchainBip21Amount(it)
                             }
+                        },
+                        offlineInvoice = offlineInvoice,
+                        onOfflineInvoicePrepared = {
+                            cjitSessionState.clear()
+                            offlineInvoice = it
                         },
                         onClickAddTag = { navController.navigateTo(ReceiveRoute.AddTag) },
                         onClickTag = wallet::removeTag,
@@ -402,7 +415,10 @@ fun ReceiveSheet(
                             navController.navigateTo(ReceiveRoute.ConfirmIncreaseInbound)
                         },
                         onchainOnly = invoiceEditState.isHardwareInvoice,
-                        updateOnchainInvoice = wallet::setBip21AmountSats,
+                        updateOnchainInvoice = {
+                            offlineInvoice = null
+                            wallet.setBip21AmountSats(it)
+                        },
                         navigateCjitAmount = {
                             isAdditionalLiquidityAmountEntry = true
                             navController.navigateTo(ReceiveRoute.Amount)
@@ -433,7 +449,7 @@ fun ReceiveSheet(
         )
 
         AnimatedVisibility(
-            visible = isOffline,
+            visible = isOffline && offlineInvoice == null,
             enter = fadeIn(),
             exit = fadeOut(),
         ) {

@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +37,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
@@ -54,6 +57,7 @@ import to.bitkit.models.ReceiveLiquiditySource.SPENDING
 import to.bitkit.repositories.CurrencyState
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletState
+import to.bitkit.services.PreparedOfflineInvoice
 import to.bitkit.ui.LocalCurrencies
 import to.bitkit.ui.appViewModel
 import to.bitkit.ui.blocktankViewModel
@@ -81,7 +85,7 @@ import to.bitkit.utils.ServiceError
 import to.bitkit.viewmodels.AmountInputViewModel
 import to.bitkit.viewmodels.previewAmountInputViewModel
 
-@Suppress("ViewModelForwarding")
+@Suppress("ViewModelForwarding", "CyclomaticComplexMethod")
 @Composable
 fun EditInvoiceScreen(
     amountInputViewModel: AmountInputViewModel,
@@ -102,6 +106,8 @@ fun EditInvoiceScreen(
     navigateGeoBlock: () -> Unit,
     currencies: CurrencyState = LocalCurrencies.current,
     editInvoiceVM: EditInvoiceVM = hiltViewModel(),
+    offlineInvoice: PreparedOfflineInvoice? = null,
+    onOfflineInvoicePrepared: (PreparedOfflineInvoice) -> Unit = {},
 ) {
     val app = appViewModel ?: return
     val context = LocalContext.current
@@ -112,12 +118,35 @@ fun EditInvoiceScreen(
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
     val currentReceiveSats by rememberUpdatedState(amountInputUiState.sats.toULong())
     val isLoading by editInvoiceVM.isLoading.collectAsStateWithLifecycle()
+    val offlineReceive by editInvoiceVM.offlineReceive.collectAsStateWithLifecycle()
+
+    LaunchedEffect(
+        currentReceiveSats,
+        sourceTab,
+        onchainOnly,
+        lightningState.channels,
+        lightningState.nodeLifecycleState,
+    ) {
+        editInvoiceVM.refreshOfflineReceive(
+            source = if (onchainOnly) SAVINGS else sourceTab.toReceiveLiquiditySource(),
+            amountSats = currentReceiveSats,
+            initialInvoice = offlineInvoice,
+        )
+    }
 
     LaunchedEffect(onchainOnly) {
         if (onchainOnly) return@LaunchedEffect
         editInvoiceVM.editInvoiceEffect.collect { effect ->
             val receiveSats = currentReceiveSats
             when (effect) {
+                is EditInvoiceVM.EditInvoiceScreenEffects.OfflineInvoicePrepared -> {
+                    onOfflineInvoicePrepared(effect.invoice)
+                    onBack()
+                }
+                is EditInvoiceVM.EditInvoiceScreenEffects.OfflineInvoiceFailed -> {
+                    Logger.error("Failed to prepare offline invoice", effect.error, context = "EditInvoiceScreen")
+                    app.toast(effect.error)
+                }
                 is EditInvoiceVM.EditInvoiceScreenEffects.ApplyReceiveLiquidityAction -> {
                     when (val action = effect.action) {
                         ReceiveAdditionalLiquidityAction.None -> {
@@ -162,7 +191,9 @@ fun EditInvoiceScreen(
         onTextChanged = onDescriptionUpdate,
         keyboardVisible = keyboardVisible,
         onClickBalance = {
-            if (keyboardVisible) {
+            if (isLoading) {
+                Unit
+            } else if (keyboardVisible) {
                 amountInputViewModel.switchUnit(currencies)
             } else {
                 keyboardVisible = true
@@ -174,6 +205,7 @@ fun EditInvoiceScreen(
                 source = sourceTab.toReceiveLiquiditySource(),
                 amountSats = amountInputUiState.sats.toULong(),
                 isGeoBlocked = lightningState.isGeoBlocked,
+                description = walletUiState.bip21Description,
             )
         },
         onContinueOnchain = { amountSats ->
@@ -189,6 +221,8 @@ fun EditInvoiceScreen(
             onClickPaymentRequest(amountInputUiState.sats.toULong(), walletUiState.bip21Description)
         },
         onchainOnly = onchainOnly,
+        offlineReceive = offlineReceive,
+        onClickReceiveOffline = editInvoiceVM::selectOfflineReceive,
     )
 }
 
@@ -223,6 +257,8 @@ fun EditInvoiceContent(
     onClickPaymentRequest: () -> Unit = {},
     isLoading: Boolean = false,
     currencies: CurrencyState = LocalCurrencies.current,
+    offlineReceive: OfflineReceiveUiState = OfflineReceiveUiState(),
+    onClickReceiveOffline: (Boolean) -> Unit = {},
 ) {
     val amountInputUiState by amountInputViewModel.uiState.collectAsStateWithLifecycle()
 
@@ -335,7 +371,23 @@ fun EditInvoiceContent(
                     exit = fadeOut(animationSpec = tween())
                 ) {
                     Column {
-                        VerticalSpacer(44.dp)
+                        if (!onchainOnly && (offlineReceive.isAvailable || offlineReceive.isSelected)) {
+                            val offlineLabel = stringResource(R.string.wallet__receive_offline)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(
+                                    checked = offlineReceive.isSelected,
+                                    onCheckedChange = onClickReceiveOffline,
+                                    enabled = !isLoading && !offlineReceive.isChecking,
+                                    modifier = Modifier
+                                        .testTag("ReceiveOffline")
+                                        .semantics { contentDescription = offlineLabel }
+                                )
+                                BodySSB(text = offlineLabel)
+                            }
+                            VerticalSpacer(12.dp)
+                        } else {
+                            VerticalSpacer(44.dp)
+                        }
                         Caption13Up(text = stringResource(R.string.wallet__note), color = Colors.White64)
                         VerticalSpacer(16.dp)
 
@@ -347,6 +399,7 @@ fun EditInvoiceContent(
                                 )
                             },
                             value = noteText,
+                            enabled = !isLoading,
                             onValueChange = onTextChanged,
                             minLines = 4,
                             keyboardOptions = KeyboardOptions.Default.copy(
@@ -375,13 +428,14 @@ fun EditInvoiceContent(
                                     TagButton(
                                         text = tagText,
                                         displayIconClose = true,
-                                        onClick = { onClickTag(tagText) },
+                                        onClick = if (isLoading) null else { { onClickTag(tagText) } },
                                     )
                                 }
                             }
                             PrimaryButton(
                                 text = stringResource(R.string.wallet__tags_add),
                                 size = ButtonSize.Small,
+                                enabled = !isLoading,
                                 onClick = { onClickAddTag() },
                                 icon = {
                                     Icon(
@@ -401,7 +455,7 @@ fun EditInvoiceContent(
                             SecondaryButton(
                                 text = stringResource(R.string.wallet__payment_request_send),
                                 onClick = onClickPaymentRequest,
-                                enabled = amountInputUiState.sats > 0,
+                                enabled = !isLoading && !offlineReceive.isSelected && amountInputUiState.sats > 0,
                                 modifier = Modifier.testTag("PaymentRequestSendButton"),
                             )
                             VerticalSpacer(12.dp)
@@ -417,6 +471,7 @@ fun EditInvoiceContent(
                                 }
                             },
                             isLoading = isLoading,
+                            enabled = !offlineReceive.isChecking,
                             modifier = Modifier.testTag("ShowQrReceive")
                         )
 
