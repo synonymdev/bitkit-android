@@ -132,6 +132,7 @@ fixtures, push notifications) live in each suite's README.
 | [shop](shop) | 1 | Shop Discover category titles and web view handoff; needs Bitrefill reachable; no README |
 | [subscriptions](subscriptions) | 4 | Paykit subscription lifecycle across two wallets, plus the Payments tab |
 | [tags](tags) | 1 | Tag input length cap on an activity; no backend, no README |
+| [transfer](transfer) | 1 | Spending to Savings exit route; needs an open channel and closes it; no README |
 | [transfers](transfers) | 1 | Transfer to Spending settling after the LSP closes the channel; no README |
 | [widgets](widgets) | 2 | Needs no backend — the quickest way to see the loop work; no README |
 
@@ -165,6 +166,7 @@ Known differences in the corpus, as of the iOS port (synonymdev/bitkit-ios#691):
 | `receive/receive-auto-tab-selection.xml` | not ported — the Auto tab override fix is Android-only so far; iOS parity not checked |
 | `security/pin-result-long-label.xml` | not ported — the toggle exists on the iOS security success screen, but the overlap check is a follow-up |
 | `tags/activity-tag-length-cap.xml` | not ported — iOS has no 20-character cap on tag input |
+| `transfer/transfer-to-savings-returns-home.xml` | not ported — iOS already resets navigation to home on the same OK, so the journey has no iOS counterpart yet |
 | — | `hardware-wallet/transfer-to-spending-over-max.xml` exists only on iOS |
 
 ### Running one on iOS

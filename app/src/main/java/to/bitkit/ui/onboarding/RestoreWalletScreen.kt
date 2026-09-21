@@ -198,6 +198,7 @@ private fun Content(
                             MnemonicInputField(
                                 label = "${index + 1}.",
                                 value = uiState.words[index],
+                                isFocused = uiState.focusedIndex == index,
                                 isError = index in uiState.invalidWordIndices && uiState.focusedIndex != index,
                                 onValueChange = { onChangeWord(index, it) },
                                 onFocusChange = { focused -> onChangeWordFocus(index, focused) },
@@ -217,6 +218,7 @@ private fun Content(
                             MnemonicInputField(
                                 label = "${index + 1}.",
                                 value = uiState.words[index],
+                                isFocused = uiState.focusedIndex == index,
                                 isError = index in uiState.invalidWordIndices && uiState.focusedIndex != index,
                                 onValueChange = { onChangeWord(index, it) },
                                 onFocusChange = { focused -> onChangeWordFocus(index, focused) },
@@ -363,6 +365,7 @@ fun MnemonicInputField(
     label: String,
     isError: Boolean = false,
     value: String,
+    isFocused: Boolean,
     onValueChange: (String) -> Unit,
     onFocusChange: (Boolean) -> Unit,
     onPositionChange: (Int) -> Unit,
@@ -392,7 +395,9 @@ fun MnemonicInputField(
                     onValueChange(insertedText(previous = textFieldValue, new = newValue))
             }
         },
-        textStyle = AppTextStyles.BodySSB,
+        textStyle = AppTextStyles.BodySSB.copy(
+            fontWeight = if (isFocused) FontWeight.SemiBold else FontWeight.Normal,
+        ),
         prefix = {
             Text(
                 text = label,

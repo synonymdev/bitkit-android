@@ -11,6 +11,7 @@ import to.bitkit.ui.theme.Colors
 enum class FeeRate(
     @StringRes val title: Int,
     @StringRes val description: Int,
+    @StringRes val duration: Int,
     @StringRes val shortDescription: Int,
     @DrawableRes val icon: Int,
     val color: Color,
@@ -18,6 +19,7 @@ enum class FeeRate(
     INSTANT(
         title = R.string.fee__instant__title,
         description = R.string.fee__instant__description,
+        duration = R.string.fee__instant__duration,
         shortDescription = R.string.fee__instant__shortDescription,
         color = Colors.Purple,
         icon = R.drawable.ic_speed_fast,
@@ -25,6 +27,7 @@ enum class FeeRate(
     FAST(
         title = R.string.fee__fast__title,
         description = R.string.fee__fast__description,
+        duration = R.string.fee__fast__duration,
         shortDescription = R.string.fee__fast__shortDescription,
         color = Colors.Brand,
         icon = R.drawable.ic_speed_fast,
@@ -32,6 +35,7 @@ enum class FeeRate(
     NORMAL(
         title = R.string.fee__normal__title,
         description = R.string.fee__normal__description,
+        duration = R.string.fee__normal__duration,
         shortDescription = R.string.fee__normal__shortDescription,
         color = Colors.Brand,
         icon = R.drawable.ic_speed_normal,
@@ -39,6 +43,7 @@ enum class FeeRate(
     SLOW(
         title = R.string.fee__slow__title,
         description = R.string.fee__slow__description,
+        duration = R.string.fee__slow__duration,
         shortDescription = R.string.fee__slow__shortDescription,
         color = Colors.Brand,
         icon = R.drawable.ic_speed_slow,
@@ -46,6 +51,7 @@ enum class FeeRate(
     MINIMUM(
         title = R.string.fee__minimum__title,
         description = R.string.fee__minimum__description,
+        duration = R.string.fee__minimum__duration,
         shortDescription = R.string.fee__minimum__shortDescription,
         color = Colors.Brand,
         icon = R.drawable.ic_speed_slow,
@@ -53,6 +59,7 @@ enum class FeeRate(
     CUSTOM(
         title = R.string.fee__custom__title,
         description = R.string.fee__custom__description,
+        duration = R.string.fee__custom__duration,
         shortDescription = R.string.fee__custom__shortDescription,
         color = Colors.White64,
         icon = R.drawable.ic_settings,

@@ -16,7 +16,11 @@ fun QrScanningSheet(
 ) {
     Content(
         isPubkyScan = sheet.isPubkyScan,
-        onBack = { appViewModel.hideScannerSheet() },
+        onBack = if (sheet.showBackButton) {
+            { appViewModel.hideScannerSheet() }
+        } else {
+            null
+        },
         onScanSuccess = { appViewModel.onScannerSheetResult(it) },
     )
 }
@@ -24,7 +28,7 @@ fun QrScanningSheet(
 @Composable
 private fun Content(
     isPubkyScan: Boolean,
-    onBack: () -> Unit,
+    onBack: (() -> Unit)?,
     onScanSuccess: (String) -> Unit,
 ) {
     Column(

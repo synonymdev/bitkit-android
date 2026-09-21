@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.requiredHeight
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -36,7 +34,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -67,7 +64,7 @@ fun SwipeToConfirm(
     modifier: Modifier = Modifier,
     text: String = stringResource(R.string.other__swipe),
     color: Color = Colors.Brand,
-    icon: ImageVector = Icons.AutoMirrored.Default.ArrowForward,
+    @DrawableRes icon: Int = R.drawable.ic_arrow_right,
     @DrawableRes endIcon: Int = R.drawable.ic_check,
     endIconTint: Color = Colors.Black,
     enabled: Boolean = true,
@@ -184,7 +181,7 @@ fun SwipeToConfirm(
                             .alpha(1f - (panX.value / (maxPanX / 2)) - loadingOpacity.value)
                     ) {
                         Icon(
-                            imageVector = icon,
+                            painter = painterResource(icon),
                             contentDescription = null,
                             tint = Color.Black,
                         )
