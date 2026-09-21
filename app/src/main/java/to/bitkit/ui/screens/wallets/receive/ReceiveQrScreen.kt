@@ -50,19 +50,25 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Devices.NEXUS_5
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import org.lightningdevkit.ldknode.ChannelDetails
 import to.bitkit.R
 import to.bitkit.ext.calculateRemoteBalance
+import to.bitkit.ext.nowMillis
 import to.bitkit.ext.setClipboardText
 import to.bitkit.models.NodeLifecycleState
 import to.bitkit.models.ReceiveLiquidityDecision
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.WalletState
+import to.bitkit.services.PreparedOfflineInvoice
 import to.bitkit.ui.components.BodyM
 import to.bitkit.ui.components.BodyS
 import to.bitkit.ui.components.BottomSheetPreview
@@ -87,6 +93,7 @@ import to.bitkit.ui.theme.AppShapes
 import to.bitkit.ui.theme.AppThemeSurface
 import to.bitkit.ui.theme.Colors
 import to.bitkit.ui.utils.withAccent
+import kotlin.time.Duration.Companion.seconds
 
 @Suppress("CyclomaticComplexMethod")
 @OptIn(FlowPreview::class)
@@ -107,8 +114,23 @@ fun ReceiveQrScreen(
     onVerifyHardwareAddress: () -> Unit = {},
     showPaymentRequestContacts: Boolean = false,
     onClickPaymentRequestContacts: () -> Unit = {},
+    offlineInvoice: PreparedOfflineInvoice? = null,
 ) {
     SetMaxBrightness()
+
+    var offlineInvoiceExpired by remember(offlineInvoice) {
+        mutableStateOf(offlineInvoice?.let { it.expiresAtMillis <= nowMillis() } ?: false)
+    }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(offlineInvoice, lifecycle) {
+        val invoice = offlineInvoice ?: return@LaunchedEffect
+        lifecycle.repeatOnLifecycle(Lifecycle.State.RESUMED) {
+            while (!offlineInvoiceExpired) {
+                offlineInvoiceExpired = invoice.expiresAtMillis <= nowMillis()
+                if (!offlineInvoiceExpired) delay(1.seconds)
+            }
+        }
+    }
 
     val haptic = LocalHapticFeedback.current
     val hasReadyChannels = lightningState.channels.any { it.isChannelReady }
@@ -119,8 +141,9 @@ fun ReceiveQrScreen(
         hasReadyChannels,
         readyInboundLiquiditySats,
         walletState.bip21AmountSats,
+        offlineInvoice,
     ) {
-        ReceiveLiquidityDecision.canCreateLightningInvoice(
+        offlineInvoice != null || ReceiveLiquidityDecision.canCreateLightningInvoice(
             hasReadyChannels = hasReadyChannels,
             inboundCapacitySats = readyInboundLiquiditySats,
             invoiceAmountSats = walletState.bip21AmountSats,
@@ -155,12 +178,17 @@ fun ReceiveQrScreen(
         hardwareReceiveState.address,
         walletState.bip21AmountSats,
         walletState.bip21Description,
+        offlineInvoice,
+        offlineInvoiceExpired,
     ) {
         visibleTabs.associateWith { tab ->
+            if (offlineInvoiceExpired && tab in listOf(ReceiveTab.AUTO, ReceiveTab.SPENDING)) {
+                return@associateWith ""
+            }
             getInvoiceForTab(
                 tab = tab,
                 bip21 = walletState.bip21,
-                bolt11 = walletState.bolt11,
+                bolt11 = walletState.bolt11.takeUnless { offlineInvoiceExpired }.orEmpty(),
                 cjitInvoice = cjitInvoice,
                 isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
                 canCreateLightningInvoice = canCreateLightningInvoice,
@@ -168,6 +196,7 @@ fun ReceiveQrScreen(
                 hardwareAddress = hardwareReceiveState.address?.address.orEmpty(),
                 hardwareAmountSats = walletState.bip21AmountSats,
                 hardwareMessage = walletState.bip21Description,
+                isOfflineInvoice = offlineInvoice != null && !offlineInvoiceExpired,
             )
         }
     }
@@ -347,6 +376,19 @@ fun ReceiveQrScreen(
                             .fillParentMaxHeight()
                     ) {
                         when {
+                            offlineInvoiceExpired && tab in listOf(ReceiveTab.AUTO, ReceiveTab.SPENDING) -> {
+                                Column {
+                                    BodyM(
+                                        text = stringResource(R.string.wallet__receive_offline_expired),
+                                        modifier = Modifier.testTag("ReceiveOfflineExpired")
+                                    )
+                                    VerticalSpacer(16.dp)
+                                    PrimaryButton(
+                                        text = stringResource(R.string.wallet__receive_specify),
+                                        onClick = { onClickEditInvoice(tab) },
+                                    )
+                                }
+                            }
                             showingCjitOnboarding && tab == ReceiveTab.SPENDING -> {
                                 CjitOnBoardingView(
                                     modifier = Modifier.weight(1f)
@@ -367,7 +409,8 @@ fun ReceiveQrScreen(
                                     tab = tab,
                                     walletState = walletState,
                                     cjitInvoice = cjitInvoice,
-                                    isNodeRunning = lightningState.nodeLifecycleState.isRunning(),
+                                    isNodeRunning = offlineInvoice != null ||
+                                        lightningState.nodeLifecycleState.isRunning(),
                                     onClickEditInvoice = { onClickEditInvoice(tab) },
                                     onClickHardwareEditInvoice = onClickHardwareEditInvoice,
                                     hardwareAddress = hardwareReceiveState.address?.address,

@@ -1,6 +1,8 @@
 package to.bitkit.ui.screens.wallets.receive
 
 import to.bitkit.R
+import to.bitkit.repositories.WalletState
+import to.bitkit.services.PreparedOfflineInvoice
 import to.bitkit.utils.Bip21Utils
 
 /**
@@ -25,6 +27,7 @@ fun getInvoiceForTab(
     hardwareAddress: String = "",
     hardwareAmountSats: ULong? = null,
     hardwareMessage: String = "",
+    isOfflineInvoice: Boolean = false,
 ): String {
     return when (tab) {
         ReceiveTab.SAVINGS -> {
@@ -33,14 +36,16 @@ fun getInvoiceForTab(
         }
 
         ReceiveTab.AUTO -> {
-            bip21.takeIf { isNodeRunning && canCreateLightningInvoice && containsLightningParameter(bip21) }
+            bip21.takeIf {
+                (isOfflineInvoice || isNodeRunning && canCreateLightningInvoice) && containsLightningParameter(bip21)
+            }
                 ?: removeLightningFromBip21(bip21, onchainAddress)
         }
 
         ReceiveTab.SPENDING -> {
             // Lightning only: prefer CJIT > bolt11, empty when node is not running
             cjitInvoice?.takeIf { it.isNotEmpty() && isNodeRunning }
-                ?: bolt11.takeIf { isNodeRunning && canCreateLightningInvoice }.orEmpty()
+                ?: bolt11.takeIf { isOfflineInvoice || isNodeRunning && canCreateLightningInvoice }.orEmpty()
         }
 
         ReceiveTab.TREZOR -> hardwareAddress.takeIf(String::isNotBlank)?.let { address ->
@@ -52,6 +57,18 @@ fun getInvoiceForTab(
         }.orEmpty()
     }
 }
+
+internal fun WalletState.withOfflineInvoice(invoice: PreparedOfflineInvoice): WalletState = copy(
+    bolt11 = invoice.bolt11,
+    bip21AmountSats = invoice.amountSats,
+    bip21Description = invoice.description,
+    bip21 = Bip21Utils.buildBip21Url(
+        bitcoinAddress = onchainAddress,
+        amountSats = invoice.amountSats,
+        message = invoice.description,
+        lightningInvoice = invoice.bolt11,
+    ),
+)
 
 /**
  * Returns the appropriate text to copy to clipboard for the savings tab.

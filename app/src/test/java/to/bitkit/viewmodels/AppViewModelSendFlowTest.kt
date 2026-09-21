@@ -115,6 +115,8 @@ import to.bitkit.repositories.LightningRepo
 import to.bitkit.repositories.LightningState
 import to.bitkit.repositories.MethodId
 import to.bitkit.repositories.NodeEventUpdate
+import to.bitkit.repositories.OfflineReceiveRepo
+import to.bitkit.repositories.OfflineReceiveSession
 import to.bitkit.repositories.PaykitBillingPeriod
 import to.bitkit.repositories.PaykitOnchainPaymentProofResolution
 import to.bitkit.repositories.PaykitPaymentProofKind
@@ -157,6 +159,7 @@ import to.bitkit.services.AppUpdaterService
 import to.bitkit.services.CoreService
 import to.bitkit.services.MigrationService
 import to.bitkit.services.NodeServiceFgState
+import to.bitkit.services.PreparedOfflineInvoice
 import to.bitkit.services.PubkyService
 import to.bitkit.test.BaseUnitTest
 import to.bitkit.ui.Routes
@@ -197,6 +200,8 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     private val context = mock<Context>()
     private val lightningRepo = mock<LightningRepo>()
+    private val offlineReceiveRepo = mock<OfflineReceiveRepo>()
+    private val offlineSession = MutableStateFlow(OfflineReceiveSession())
     private val walletRepo = mock<WalletRepo>()
     private val hwWalletRepo = mock<HwWalletRepo>()
     private val settingsStore = mock<SettingsStore>()
@@ -307,6 +312,11 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
 
     @Suppress("LongMethod")
     private fun stubRepositories() {
+        whenever(offlineReceiveRepo.session).thenReturn(offlineSession)
+        whenever(offlineReceiveRepo.clearSession()).thenAnswer {
+            offlineSession.value = OfflineReceiveSession()
+            Unit
+        }
         whenever(context.getString(any())).thenReturn("")
         whenever(context.getSystemService(Context.CLIPBOARD_SERVICE)).thenReturn(clipboardManager)
         whenever(connectivityRepo.isOnline).thenReturn(connectivityState)
@@ -450,6 +460,7 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         bgDispatcher = testDispatcher,
         keychain = keychain,
         lightningRepo = lightningRepo,
+        offlineReceiveRepo = offlineReceiveRepo,
         pendingPaymentRepo = pendingPaymentRepo,
         walletRepo = walletRepo,
         hwWalletRepo = hwWalletRepo,
@@ -4201,6 +4212,53 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
         assertEquals(sheet, sut.currentSheet.value)
         verify(activityRepo).notifyPaymentActivityChanged()
         verify(activityRepo, never()).handlePaymentEvent("unrelated-payment-hash")
+    }
+
+    @Test
+    fun `ordinary invoice settlement does not dismiss a displayed offline invoice`() = test {
+        walletState.value = WalletState(bolt11 = "ordinary-invoice")
+        val sheet = Sheet.Receive()
+        sut.showSheet(sheet)
+        advanceUntilIdle()
+        offlineSession.value = OfflineReceiveSession(
+            invoice = PreparedOfflineInvoice("offline", 1uL, "", Long.MAX_VALUE, "offline-hash")
+        )
+
+        emitNodeEvent(
+            Event.PaymentReceived("ordinary-hash", "ordinary-hash", 1_000uL, emptyList()),
+            settledReceiveInvoice = SettledReceiveInvoice("ordinary-invoice"),
+        )
+        advanceUntilIdle()
+
+        assertTrue(sut.currentSheet.value === sheet)
+    }
+
+    @Test
+    fun `settled offline invoice dismisses only its original receive sheet`() = test {
+        val sheet = Sheet.Receive()
+        sut.showSheet(sheet)
+        advanceUntilIdle()
+        offlineSession.value = OfflineReceiveSession(isSettled = true)
+
+        sut.closeSettledOfflineReceiveSheet(sheet)
+
+        assertNull(sut.currentSheet.value)
+        assertEquals(OfflineReceiveSession(), offlineSession.value)
+    }
+
+    @Test
+    fun `delayed offline settlement cannot dismiss a replacement sheet`() = test {
+        val previous = Sheet.Receive()
+        sut.showSheet(previous)
+        advanceUntilIdle()
+        val replacement = Sheet.Receive()
+        sut.showSheet(replacement)
+        advanceUntilIdle()
+        offlineSession.value = OfflineReceiveSession(isSettled = true)
+
+        sut.closeSettledOfflineReceiveSheet(previous)
+
+        assertTrue(sut.currentSheet.value === replacement)
     }
 
     @Test

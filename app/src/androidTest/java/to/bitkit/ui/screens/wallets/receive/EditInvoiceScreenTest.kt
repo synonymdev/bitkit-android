@@ -66,5 +66,6 @@ class EditInvoiceScreenTest {
         }
 
         composeTestRule.onNodeWithTag("PaymentRequestSendButton").assertDoesNotExist()
+        composeTestRule.onNodeWithTag("ReceiveOffline").assertDoesNotExist()
     }
 }
