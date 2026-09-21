@@ -5,6 +5,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.snapping.SnapPosition
 import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
+import androidx.compose.foundation.interaction.DragInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -191,6 +192,7 @@ fun ReceiveQrScreen(
     }
     var hasAppliedInitialTab by remember { mutableStateOf(false) }
     var appliedInitialTab by remember { mutableStateOf<ReceiveTab?>(null) }
+    var hasUserSelectedTab by remember { mutableStateOf(false) }
 
     LaunchedEffect(visibleTabs, initialTab) {
         val requestedTab = initialTab?.takeIf { it in visibleTabs }
@@ -230,16 +232,26 @@ fun ReceiveQrScreen(
             }
     }
 
-    // Auto-switch to AUTO tab when it becomes available for the first time
-    LaunchedEffect(canCreateLightningInvoice, cjitInvoice) {
-        val shouldAutoSwitch = initialTab == null && canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()
-        if (shouldAutoSwitch && visibleTabs.contains(ReceiveTab.AUTO)) {
-            val autoIndex = visibleTabs.indexOf(ReceiveTab.AUTO)
-            if (autoIndex != -1) {
-                lazyListState.animateScrollToItem(autoIndex)
-                selectedTab = ReceiveTab.AUTO
-            }
+    LaunchedEffect(lazyListState) {
+        lazyListState.interactionSource.interactions.collect {
+            if (it is DragInteraction.Start) hasUserSelectedTab = true
         }
+    }
+
+    // Jump to AUTO tab without animation when it becomes available before the user picks a tab
+    LaunchedEffect(canCreateLightningInvoice, cjitInvoice) {
+        val shouldAutoSwitch = shouldAutoSwitchToAuto(
+            selectedTab = selectedTab,
+            hasUserSelectedTab = hasUserSelectedTab,
+            canCreateLightningInvoice = canCreateLightningInvoice,
+            cjitInvoice = cjitInvoice,
+            initialTab = initialTab,
+        )
+        if (!shouldAutoSwitch) return@LaunchedEffect
+        val autoIndex = visibleTabs.indexOf(ReceiveTab.AUTO)
+        if (autoIndex == -1 || lazyListState.firstVisibleItemIndex == autoIndex) return@LaunchedEffect
+        lazyListState.scrollToItem(autoIndex)
+        selectedTab = ReceiveTab.AUTO
     }
 
     // Auto-switch to Spending tab when CJIT is not null
@@ -300,13 +312,13 @@ fun ReceiveQrScreen(
             CustomTabRowWithSpacing(
                 tabs = visibleTabs,
                 currentTabIndex = visibleTabs.indexOf(selectedTab),
-                selectedColor = Colors.White,
                 labelOverrides = remember(hardwareTabLabel) {
                     hardwareTabLabel?.let { persistentMapOf(ReceiveTab.HARDWARE to it) } ?: persistentMapOf()
                 },
                 onTabChange = { tab ->
                     haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                     val newIndex = visibleTabs.indexOf(tab)
+                    hasUserSelectedTab = true
                     selectedTab = tab
                     showDetails = false
                     scope.launch {
@@ -482,6 +494,18 @@ fun ReceiveQrScreen(
 
 private fun List<ReceiveTab>.defaultReceiveTab(): ReceiveTab {
     return if (contains(ReceiveTab.AUTO)) ReceiveTab.AUTO else ReceiveTab.SAVINGS
+}
+
+internal fun shouldAutoSwitchToAuto(
+    selectedTab: ReceiveTab,
+    hasUserSelectedTab: Boolean,
+    canCreateLightningInvoice: Boolean,
+    cjitInvoice: String?,
+    initialTab: ReceiveTab?,
+): Boolean {
+    if (initialTab != null || hasUserSelectedTab) return false
+    if (selectedTab == ReceiveTab.AUTO) return false
+    return canCreateLightningInvoice && cjitInvoice.isNullOrEmpty()
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

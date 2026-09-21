@@ -63,6 +63,7 @@ import javax.inject.Inject
 import javax.inject.Provider
 import javax.inject.Singleton
 import kotlin.time.Clock
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.ExperimentalTime
 
@@ -124,6 +125,8 @@ class BackupRepo @Inject constructor(
     private val _isWiping = MutableStateFlow(false)
     val isWiping: StateFlow<Boolean> = _isWiping.asStateFlow()
 
+    private val restorePendingUntil = MutableStateFlow(0L)
+
     fun reset() {
         stopObservingBackups()
         vssBackupClient.reset()
@@ -131,8 +134,25 @@ class BackupRepo @Inject constructor(
     }
 
     fun setWiping(isWiping: Boolean) = _isWiping.update { isWiping }
+
+    /**
+     * Holds ordinary uploads from the moment a restore is announced, closing the window between the
+     * restore flow starting and [performFullRestoreFromLatestBackup] raising [_isRestoring]: the node
+     * starts and syncs while the backup is still being read, and the resulting activity upload would
+     * replace the stored envelope with the fresh wallet's state before it is read.
+     *
+     * The gate cannot suppress uploads indefinitely: it expires after [RESTORE_PENDING_TIMEOUT_MS], it is
+     * held in memory only so a process death clears it, and it never blocks an explicit
+     * [triggerBackup], including the migration rewrite a restore ends with.
+     */
+    fun setRestorePending(isPending: Boolean) {
+        restorePendingUntil.update { if (isPending) currentTimeMillis() + RESTORE_PENDING_TIMEOUT_MS else 0L }
+        Logger.debug("Set restore pending to '$isPending'", context = TAG)
+    }
+
     private fun currentTimeMillis(): Long = nowMillis(clock)
-    private fun shouldSkipBackup(): Boolean = _isRestoring.value || _isWiping.value
+    private fun isRestorePending(): Boolean = currentTimeMillis() < restorePendingUntil.value
+    private fun shouldSkipBackup(): Boolean = _isRestoring.value || _isWiping.value || isRestorePending()
     private fun BackupItemStatus.shouldBackup(category: BackupCategory) =
         this.isRequired &&
             !this.running &&
@@ -708,7 +728,7 @@ class BackupRepo @Inject constructor(
         )
         val parsed = json.decodeFromString<ActivityBackupV1>(migration.json)
         val persisted = activityRepo.restoreFromBackup(parsed)
-            .onFailure { Logger.warn("Failed to restore activity backup", it, context = TAG) }
+            .onFailure { Logger.warn("Skipped activity backup rewrite after a failed restore", context = TAG) }
             .isSuccess
 
         return RestoredCoreBackup(createdAt = parsed.createdAt, needsRewrite = migration.changed && persisted)
@@ -864,6 +884,12 @@ class BackupRepo @Inject constructor(
         private const val FAILED_BACKUP_NOTIFICATION_INTERVAL = 10 * 60 * 1000L // 10 minutes
         private const val SYNC_STATUS_DEBOUNCE = 500L // 500ms debounce for sync status updates
         private val VSS_TIMESTAMP_TIMEOUT = 60.seconds
+
+        /**
+         * How long a pending restore gates ordinary uploads for. Longer than any restore in practice,
+         * short enough that a restore that never returns cannot hold the gate for the session.
+         */
+        private val RESTORE_PENDING_TIMEOUT_MS = 10.minutes.inWholeMilliseconds
     }
 }
 

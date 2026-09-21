@@ -38,7 +38,7 @@ fun <T : TabItem> CustomTabRowWithSpacing(
     currentTabIndex: Int,
     onTabChange: (T) -> Unit,
     modifier: Modifier = Modifier,
-    selectedColor: Color = Colors.Brand,
+    selectedColor: Color = Colors.White,
     /** Labels that replace a tab's own text, for tabs whose name depends on runtime data. */
     labelOverrides: ImmutableMap<T, String> = persistentMapOf(),
     badgeCount: (T) -> Int? = { null },

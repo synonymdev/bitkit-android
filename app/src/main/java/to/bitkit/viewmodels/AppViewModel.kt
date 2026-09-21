@@ -4638,10 +4638,16 @@ class AppViewModel @Inject constructor(
 
     fun showScannerSheet(
         isPubkyScan: Boolean = false,
+        showBackButton: Boolean = true,
         onResult: ((String) -> Unit)? = null,
     ) {
         scanResultHandler = onResult
-        showSheet(Sheet.QrScanner(isPubkyScan = isPubkyScan))
+        showSheet(
+            Sheet.QrScanner(
+                isPubkyScan = isPubkyScan,
+                showBackButton = showBackButton,
+            )
+        )
     }
 
     fun onScannerSheetResult(data: String) {
@@ -4732,6 +4738,8 @@ class AppViewModel @Inject constructor(
                     onchainAddress = walletRepo.getOnchainAddress(),
                 )
             }
+            // A stale amount above inbound liquidity would hide the Auto tab until the receive state refreshes
+            if (sheetType is Sheet.Receive) walletRepo.setBip21AmountSats(null)
             _currentSheet.update { sheetType }
         }
         sheetTransitionJob = nextJob

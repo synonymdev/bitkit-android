@@ -2607,6 +2607,27 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `scanner sheet shows back button by default`() = test {
+        sut.showScannerSheet()
+        advanceUntilIdle()
+
+        assertEquals(Sheet.QrScanner(showBackButton = true), sut.currentSheet.value)
+
+        sut.hideScannerSheet()
+        advanceUntilIdle()
+
+        assertNull(sut.currentSheet.value)
+    }
+
+    @Test
+    fun `scanner sheet can hide back button for tab bar entry`() = test {
+        sut.showScannerSheet(showBackButton = false)
+        advanceUntilIdle()
+
+        assertEquals(Sheet.QrScanner(showBackButton = false), sut.currentSheet.value)
+    }
+
+    @Test
     fun `canSwitchWallet is false when amount equals dust limit`() = test {
         balanceState.value = BalanceState(
             maxSendOnchainSats = 100_000u,
@@ -4133,6 +4154,28 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
                 awaitItem(),
             )
         }
+    }
+
+    @Test
+    fun `showSheet clears stale receive amount before presenting the receive sheet`() = test {
+        var sheetWhenCleared: Sheet? = Sheet.Send()
+        whenever(walletRepo.setBip21AmountSats(null)).thenAnswer { sheetWhenCleared = sut.currentSheet.value }
+
+        val sheet = Sheet.Receive()
+        sut.showSheet(sheet)
+        advanceUntilIdle()
+
+        verify(walletRepo).setBip21AmountSats(null)
+        assertNull(sheetWhenCleared)
+        assertEquals(sheet, sut.currentSheet.value)
+    }
+
+    @Test
+    fun `showSheet keeps receive amount when presenting another sheet`() = test {
+        sut.showSheet(Sheet.Send())
+        advanceUntilIdle()
+
+        verify(walletRepo, never()).setBip21AmountSats(anyOrNull())
     }
 
     @Test

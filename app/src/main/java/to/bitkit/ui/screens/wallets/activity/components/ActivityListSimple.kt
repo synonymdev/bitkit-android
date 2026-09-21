@@ -2,7 +2,6 @@ package to.bitkit.ui.screens.wallets.activity.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -63,7 +62,6 @@ fun ActivityListSimple(
             onClick = onAllActivityClick,
             modifier = Modifier
                 .wrapContentWidth()
-                .padding(top = 16.dp)
                 .testTag("ActivityShowAll")
         )
     }

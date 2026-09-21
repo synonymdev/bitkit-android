@@ -15,6 +15,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import to.bitkit.services.core.Bip39Service
 import javax.inject.Inject
 
@@ -28,12 +30,17 @@ class RestoreWalletViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(RestoreWalletUiState())
     val uiState: StateFlow<RestoreWalletUiState> = _uiState.asStateFlow()
 
+    /**
+     * Word edits validate off the main thread, so they are serialized to keep an older edit from undoing a newer one.
+     */
+    private val wordEditMutex = Mutex()
+
     init {
         _uiState.update { it.copy(focusedIndex = 0) }
-        recomputeValidationState()
+        viewModelScope.launch { recomputeValidationState() }
     }
 
-    private fun recomputeValidationState() = viewModelScope.launch {
+    private suspend fun recomputeValidationState() {
         val currentState = _uiState.value
         val checksumError = currentState.isChecksumErrorVisible()
         val buttonsEnabled = currentState.areButtonsEnabled()
@@ -48,7 +55,7 @@ class RestoreWalletViewModel @Inject constructor(
 
     fun onChangeWord(index: Int, value: String) {
         if (value.contains(Regex("\\s"))) {
-            handlePastedWords(value)
+            handlePastedWords(index, value)
         } else {
             updateWordValidity(index, value)
             updateSuggestions(value, _uiState.value.focusedIndex)
@@ -103,57 +110,105 @@ class RestoreWalletViewModel @Inject constructor(
 
     fun onScrollComplete() = _uiState.update { it.copy(scrollToFieldIndex = null) }
 
-    private fun handlePastedWords(pastedText: String) = viewModelScope.launch {
-        val separators = Regex("\\s+") // any whitespace chars to account for different sources like password managers
-        val pastedWords = pastedText
-            .split(separators)
-            .filter { it.isNotBlank() }
-        if (pastedWords.size == WORDS_MIN || pastedWords.size == WORDS_MAX) {
-            val invalidIndices = pastedWords.withIndex()
-                .filter { !bip39Service.isValidWord(it.value) }
-                .map { it.index }
-                .toSet()
+    private fun handlePastedWords(index: Int, pastedText: String) = viewModelScope.launch {
+        wordEditMutex.withLock {
+            // any whitespace chars to account for different sources like password managers
+            val separators = Regex("\\s+")
+            val pastedWords = pastedText
+                .split(separators)
+                .filter { it.isNotBlank() }
+            val state = _uiState.value
+            val isFullPhraseTarget = index == 0 || !state.is24Words && state.hasNoWordsExcept(index)
+            when (pastedWords.size) {
+                0 -> return@launch
+                WORDS_MAX -> replaceAllWords(pastedWords)
+                WORDS_MIN if isFullPhraseTarget -> replaceAllWords(pastedWords)
+                else -> spreadWords(index, pastedWords)
+            }
+            recomputeValidationState()
+        }
+    }
 
-            val newWords = _uiState.value.words.toMutableList().apply {
+    private suspend fun replaceAllWords(pastedWords: List<String>) {
+        val invalidIndices = pastedWords.withIndex()
+            .filter { !bip39Service.isValidWord(it.value) }
+            .map { it.index }
+            .toSet()
+
+        _uiState.update { state ->
+            val newWords = state.words.toMutableList().apply {
                 pastedWords.forEachIndexed { index, word -> this[index] = word }
                 for (index in pastedWords.size until WORDS_MAX) {
                     this[index] = ""
                 }
             }
 
-            _uiState.update {
-                it.copy(
-                    words = newWords.toImmutableList(),
-                    invalidWordIndices = invalidIndices.toImmutableSet(),
-                    is24Words = pastedWords.size == WORDS_MAX,
-                    shouldDismissKeyboard = invalidIndices.isEmpty(),
-                    focusedIndex = null,
-                    suggestions = persistentListOf(),
-                )
+            state.copy(
+                words = newWords.toImmutableList(),
+                invalidWordIndices = invalidIndices.toImmutableSet(),
+                is24Words = pastedWords.size == WORDS_MAX,
+                shouldDismissKeyboard = invalidIndices.isEmpty(),
+                focusedIndex = invalidIndices.minOrNull(),
+                suggestions = persistentListOf(),
+            )
+        }
+    }
+
+    private suspend fun spreadWords(startIndex: Int, pastedWords: List<String>) {
+        val writtenWords = pastedWords.take(WORDS_MAX - startIndex)
+        val writtenValidity = writtenWords.map { bip39Service.isValidWord(it) }
+        val lastWrittenIndex = startIndex + writtenWords.lastIndex
+
+        _uiState.update { state ->
+            val newWords = state.words.toMutableList()
+            val newInvalidIndices = state.invalidWordIndices.toMutableSet()
+            writtenWords.forEachIndexed { offset, word ->
+                val index = startIndex + offset
+                newWords[index] = word
+                if (writtenValidity[offset]) newInvalidIndices.remove(index) else newInvalidIndices.add(index)
             }
-            recomputeValidationState()
+
+            val is24Words = state.is24Words || lastWrittenIndex >= WORDS_MIN
+            val wordCount = if (is24Words) WORDS_MAX else WORDS_MIN
+            val nextEmptyIndex = (lastWrittenIndex + 1 until wordCount).firstOrNull { newWords[it].isEmpty() }
+                ?: (0 until wordCount).firstOrNull { newWords[it].isEmpty() }
+            val nextFocusIndex = nextEmptyIndex ?: (0 until wordCount).firstOrNull { it in newInvalidIndices }
+
+            state.copy(
+                words = newWords.toImmutableList(),
+                invalidWordIndices = newInvalidIndices.toImmutableSet(),
+                is24Words = is24Words,
+                shouldDismissKeyboard = nextFocusIndex == null && newInvalidIndices.isEmpty(),
+                focusedIndex = nextFocusIndex,
+                scrollToFieldIndex = nextFocusIndex ?: lastWrittenIndex,
+                suggestions = persistentListOf(),
+            )
         }
     }
 
     private fun updateWordValidity(index: Int, value: String) = viewModelScope.launch {
-        val newWords = _uiState.value.words.toMutableList().apply {
-            this[index] = value
-        }
+        wordEditMutex.withLock {
+            val isValid = bip39Service.isValidWord(value)
 
-        val newInvalidIndices = _uiState.value.invalidWordIndices.toMutableSet()
-        if (!bip39Service.isValidWord(value) && value.isNotEmpty()) {
-            newInvalidIndices.add(index)
-        } else {
-            newInvalidIndices.remove(index)
-        }
+            _uiState.update { state ->
+                val newWords = state.words.toMutableList().apply {
+                    this[index] = value
+                }
 
-        _uiState.update {
-            it.copy(
-                words = newWords.toImmutableList(),
-                invalidWordIndices = newInvalidIndices.toImmutableSet(),
-            )
+                val newInvalidIndices = state.invalidWordIndices.toMutableSet()
+                if (!isValid && value.isNotEmpty()) {
+                    newInvalidIndices.add(index)
+                } else {
+                    newInvalidIndices.remove(index)
+                }
+
+                state.copy(
+                    words = newWords.toImmutableList(),
+                    invalidWordIndices = newInvalidIndices.toImmutableSet(),
+                )
+            }
+            recomputeValidationState()
         }
-        recomputeValidationState()
     }
 
     private fun updateSuggestions(input: String, index: Int?) = viewModelScope.launch {
@@ -171,6 +226,9 @@ class RestoreWalletViewModel @Inject constructor(
 
         _uiState.update { it.copy(suggestions = filtered.toImmutableList()) }
     }
+
+    private fun RestoreWalletUiState.hasNoWordsExcept(index: Int) =
+        words.withIndex().none { it.index != index && it.value.isNotEmpty() }
 
     private suspend fun RestoreWalletUiState.areButtonsEnabled(): Boolean {
         val activeWords = words.subList(0, wordCount)
