@@ -116,17 +116,43 @@ jobs:
     name: e2e-tests-local - ${{ matrix.shard.name }}
 
     steps:
+      # Soft-fallback to main if determine's companion is gone at clone time.
+      # Hard-fail when workflow_dispatch e2e_branch is a missing custom ref
+      # (set and neither empty, main, nor default-feature-branch).
       - name: Show selected E2E branch
+        id: e2e-ref
         env:
-          E2E_BRANCH: ${{ needs.e2e-branch.outputs.branch }}
-        run: echo $E2E_BRANCH
+          SELECTED: ${{ needs.e2e-branch.outputs.branch }}
+          CUSTOM_INPUT: ${{ github.event.inputs.e2e_branch }}
+        run: |
+          set -euo pipefail
+          SELECTED="${SELECTED:-}"
+          CUSTOM_INPUT="${CUSTOM_INPUT:-}"
+          REPO_URL="https://github.com/synonymdev/bitkit-e2e-tests.git"
+
+          if [ -z "$SELECTED" ] || [ "$SELECTED" = "main" ]; then
+            REF="main"
+          elif git ls-remote --exit-code "$REPO_URL" "refs/heads/$SELECTED" >/dev/null; then
+            REF="$SELECTED"
+          else
+            if [ -n "$CUSTOM_INPUT" ] && [ "$CUSTOM_INPUT" != "main" ] && [ "$CUSTOM_INPUT" != "default-feature-branch" ]; then
+              echo "::error title=E2E branch missing::Custom e2e branch '$SELECTED' does not exist in synonymdev/bitkit-e2e-tests."
+              exit 1
+            fi
+            echo "::warning title=E2E branch missing::Selected e2e branch '$SELECTED' no longer exists; falling back to main."
+            REF="main"
+          fi
+
+          echo "Selected e2e branch: ${SELECTED:-<empty>}"
+          echo "Effective e2e branch: $REF"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
 
       - name: Clone E2E tests
         uses: actions/checkout@v7
         with:
           repository: synonymdev/bitkit-e2e-tests
           path: bitkit-e2e-tests
-          ref: ${{ needs.e2e-branch.outputs.branch }}
+          ref: ${{ steps.e2e-ref.outputs.ref }}
 
       - name: Enable KVM
         run: |
