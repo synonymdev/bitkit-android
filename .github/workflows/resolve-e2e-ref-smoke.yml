@@ -4,29 +4,37 @@ on:
   workflow_dispatch:
     inputs:
       e2e_branch:
-        description: "E2E branch input (main | default-feature-branch | custom)"
+        description: "E2E branch input"
         required: false
         default: "default-feature-branch"
         type: string
       pre_resolve_sleep_seconds:
-        description: "Sleep before resolve job (race simulation)"
+        description: "Sleep before resolve"
         required: false
         default: "0"
         type: string
+  push:
+    branches:
+      - 'cursor/e2e-clone-missing-branch-fallback-d3b1'
+    paths:
+      - '.github/workflows/resolve-e2e-ref-smoke.yml'
+  pull_request:
+    paths:
+      - '.github/workflows/resolve-e2e-ref-smoke.yml'
 
 jobs:
   determine:
     uses: synonymdev/bitkit-e2e-tests/.github/workflows/determine-e2e-branch.yml@main
     with:
-      app_branch: ${{ github.ref_name }}
-      e2e_branch_input: ${{ inputs.e2e_branch }}
+      app_branch: ${{ github.head_ref || github.ref_name }}
+      e2e_branch_input: ${{ inputs.e2e_branch || 'default-feature-branch' }}
 
   resolve:
     needs: determine
     runs-on: ubuntu-latest
     steps:
       - name: Optional pre-resolve sleep
-        if: inputs.pre_resolve_sleep_seconds != '0'
+        if: ${{ (inputs.pre_resolve_sleep_seconds || '0') != '0' }}
         run: |
           echo "Sleeping ${{ inputs.pre_resolve_sleep_seconds }}s before resolve..."
           sleep "${{ inputs.pre_resolve_sleep_seconds }}"
@@ -36,7 +44,7 @@ jobs:
         uses: synonymdev/bitkit-e2e-tests/.github/actions/resolve-e2e-ref@ci/resolve-e2e-ref
         with:
           selected: ${{ needs.determine.outputs.branch }}
-          e2e_branch_input: ${{ inputs.e2e_branch }}
+          e2e_branch_input: ${{ inputs.e2e_branch || 'default-feature-branch' }}
 
       - name: Checkout e2e tests
         uses: actions/checkout@v4
