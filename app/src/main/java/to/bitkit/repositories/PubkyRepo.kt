@@ -1297,6 +1297,14 @@ class PubkyRepo @Inject constructor(
 
     suspend fun signOut(): Result<Unit> = identityLifecycleMutex.withLock {
         withContext(NonCancellable + ioDispatcher) {
+            if (pubkyStore.data.first().privatePaykitStateCleanupPending) {
+                return@withContext runSuspendCatching {
+                    retryPendingPrivatePaykitStateCleanupLocked()
+                }.onFailure {
+                    Logger.warn("Failed to finish pending private Paykit cleanup", it, context = TAG)
+                }
+            }
+
             runSuspendCatching { disableLocalIdentityExport() }
                 .onFailure { Logger.error("Failed to disable shared Pubky export", it, context = TAG) }
                 .exceptionOrNull()
@@ -1553,13 +1561,28 @@ class PubkyRepo @Inject constructor(
         // Published endpoints outlive the borrowed identity, so drop them while the session still
         // works and keep the cleanup pending when that fails.
         val privatePaykit = privatePaykitRepo.get()
+        val hadPaykitState = settingsStore.data.first().hasPaykitState()
         pubkyStore.update { it.copy(privatePaykitStateCleanupPending = true) }
+        withContext(NonCancellable) {
+            clearPublicPaykitSharingState(publicPaykitCleanupPending = hadPaykitState)
+            clearAuthenticatedRuntimeState()
+            resetPubkyMetadataPreservingPrivatePaykitCleanupMarker()
+            notifyBackupStateChanged()
+        }
         val privateEndpointCleanupResult = runSuspendCatching {
             privatePaykit.removePublishedEndpointsForCleanup(TAG)
         }.getOrElse {
             Logger.warn("Failed to remove private Paykit endpoints", it, context = TAG)
             Result.failure(it)
         }
+        if (privateEndpointCleanupResult.isFailure) return@withContext
+
+        finishUnavailableExternalIdentityTeardown(privatePaykit)
+    }
+
+    private suspend fun finishUnavailableExternalIdentityTeardown(
+        privatePaykit: PrivatePaykitRepo,
+    ): Result<Unit> {
         val hadPaykitState = settingsStore.data.first().hasPaykitState()
         val endpointCleanupResult = if (hadPaykitState) {
             removeBitkitPaymentEndpoints()
@@ -1568,31 +1591,29 @@ class PubkyRepo @Inject constructor(
             Result.success(Unit)
         }
 
-        withContext(NonCancellable) {
+        return withContext(NonCancellable) {
+            val privateStateCleanupResult = runSuspendCatching { privatePaykit.closeAndClear() }
+                .getOrElse { Result.failure(it) }
+                .onFailure { Logger.warn("Failed to clear private Paykit state", it, context = TAG) }
+            if (privateStateCleanupResult.isFailure) return@withContext privateStateCleanupResult
+
             pubkyService.clearExternalSessionAccess()
-            val privateStateCleanupResult = if (privateEndpointCleanupResult.isSuccess) {
-                runSuspendCatching { privatePaykit.closeAndClear() }
-                    .getOrElse { Result.failure(it) }
-                    .onFailure { Logger.warn("Failed to clear private Paykit state", it, context = TAG) }
-            } else {
-                null
-            }
             clearPublicPaykitSharingState(
                 publicPaykitCleanupPending = endpointCleanupResult.isFailure && hadPaykitState,
             )
             clearAuthenticatedRuntimeState()
-            if (privateStateCleanupResult?.isSuccess == true) {
-                pubkyStore.update { it.copy(privatePaykitStateCleanupPending = false) }
-            }
+            pubkyStore.update { it.copy(privatePaykitStateCleanupPending = false) }
             resetPubkyMetadataPreservingPrivatePaykitCleanupMarker()
             notifyBackupStateChanged()
+            Result.success(Unit)
         }
     }
 
     private suspend fun retryPendingPrivatePaykitStateCleanupLocked() {
         if (!pubkyStore.data.first().privatePaykitStateCleanupPending) return
-        privatePaykitRepo.get().closeAndClear().getOrThrow()
-        pubkyStore.update { it.copy(privatePaykitStateCleanupPending = false) }
+        val privatePaykit = privatePaykitRepo.get()
+        privatePaykit.removePublishedEndpointsForCleanup(TAG).getOrThrow()
+        finishUnavailableExternalIdentityTeardown(privatePaykit).getOrThrow()
     }
 
     private suspend fun managedSecretKeyFor(publicKey: String): String? = withContext(ioDispatcher) {

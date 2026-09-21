@@ -35,9 +35,7 @@ import org.junit.Test
 import org.mockito.Mockito.clearInvocations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.atLeastOnce
-import org.mockito.kotlin.doAnswer
 import org.mockito.kotlin.doSuspendableAnswer
-import org.mockito.kotlin.doThrow
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.inOrder
 import org.mockito.kotlin.mock
@@ -497,8 +495,8 @@ class PubkyRepoTest : BaseUnitTest() {
         inOrder(privatePaykitRepo, pubkyService) {
             verify(privatePaykitRepo).removePublishedEndpointsForCleanup("PubkyRepo")
             verify(pubkyService).removeBitkitPaymentEndpoints()
-            verify(pubkyService).clearExternalSessionAccess()
             verify(privatePaykitRepo).closeAndClear()
+            verify(pubkyService).clearExternalSessionAccess()
         }
         assertFalse(settingsFlow.value.sharesPublicPaykitEndpoints)
         assertFalse(settingsFlow.value.publicPaykitCleanupPending)
@@ -520,7 +518,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `missing Ring source preserves private cleanup state when private endpoint removal fails`() = test {
+    fun `missing Ring source preserves its session when private endpoint removal fails`() = test {
         val identity = stubRingIdentity()
         assertTrue(sut.adoptRingIdentity(identity).isSuccess)
         settingsFlow.value = SettingsData(sharesPrivatePaykitEndpoints = true)
@@ -531,17 +529,31 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertFalse(sut.validateExternalIdentitySource())
 
-        inOrder(privatePaykitRepo, pubkyService, pubkyStore) {
-            verify(privatePaykitRepo).removePublishedEndpointsForCleanup("PubkyRepo")
-            verify(pubkyService).removeBitkitPaymentEndpoints()
-            verify(pubkyService).clearExternalSessionAccess()
-            verify(pubkyStore).update(any())
-        }
+        verifyBlocking(privatePaykitRepo) { removePublishedEndpointsForCleanup("PubkyRepo") }
         verifyBlocking(privatePaykitRepo, never()) { closeAndClear() }
+        verifyBlocking(pubkyService, never()) { removeBitkitPaymentEndpoints() }
+        verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
         verify(pubkyStore, never()).reset()
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
+        assertTrue(settingsFlow.value.publicPaykitCleanupPending)
         assertTrue(pubkyDataFlow.value.privatePaykitStateCleanupPending)
         assertNull(pubkyDataFlow.value.externalIdentityRef)
+        assertNull(sut.publicKey.value)
+
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.thenReturn(Result.success(Unit))
+        clearInvocations(privatePaykitRepo, pubkyService, sharedPubkyDiscovery)
+
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+
+        inOrder(privatePaykitRepo, pubkyService, sharedPubkyDiscovery) {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup("PubkyRepo")
+            verify(pubkyService).removeBitkitPaymentEndpoints()
+            verify(privatePaykitRepo).closeAndClear()
+            verify(pubkyService).clearExternalSessionAccess()
+            verify(sharedPubkyDiscovery).readRingCredential(identity.pubky)
+        }
+        assertFalse(pubkyDataFlow.value.privatePaykitStateCleanupPending)
+        assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
     }
 
     @Test
@@ -557,15 +569,18 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertTrue(pubkyDataFlow.value.privatePaykitStateCleanupPending)
         assertNull(pubkyDataFlow.value.externalIdentityRef)
+        verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
         verifyBlocking(pubkyStore, never()) { reset() }
 
         whenever { privatePaykitRepo.closeAndClear() }.thenReturn(Result.success(Unit))
-        clearInvocations(privatePaykitRepo, sharedPubkyDiscovery)
+        clearInvocations(privatePaykitRepo, pubkyService, sharedPubkyDiscovery)
 
         assertTrue(sut.adoptRingIdentity(identity).isSuccess)
 
-        inOrder(privatePaykitRepo, sharedPubkyDiscovery) {
+        inOrder(privatePaykitRepo, pubkyService, sharedPubkyDiscovery) {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup("PubkyRepo")
             verify(privatePaykitRepo).closeAndClear()
+            verify(pubkyService).clearExternalSessionAccess()
             verify(sharedPubkyDiscovery).readRingCredential(identity.pubky)
         }
         assertFalse(pubkyDataFlow.value.privatePaykitStateCleanupPending)
@@ -591,11 +606,31 @@ class PubkyRepoTest : BaseUnitTest() {
 
             assertTrue(result.isFailure, "$name must fail while private state cleanup is pending")
             assertTrue(pubkyDataFlow.value.privatePaykitStateCleanupPending)
-            verifyBlocking(privatePaykitRepo) { closeAndClear() }
+            inOrder(privatePaykitRepo) {
+                verify(privatePaykitRepo).removePublishedEndpointsForCleanup("PubkyRepo")
+                verify(privatePaykitRepo).closeAndClear()
+            }
             verify(pubkyService, never()).registerIdentity(any(), any(), any())
             verifyBlocking(pubkyService, never()) { importExternalSession(any()) }
             verifyBlocking(pubkyService, never()) { signIn(any()) }
         }
+    }
+
+    @Test
+    fun `pending private endpoint cleanup failure preserves state and blocks identity replacement`() = test {
+        val identity = stubRingIdentity()
+        pubkyDataFlow.value = PubkyStoreData(privatePaykitStateCleanupPending = true)
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
+            .thenReturn(Result.failure(TestAppError("Private endpoint cleanup failed")))
+        clearInvocations(privatePaykitRepo, sharedPubkyDiscovery)
+
+        val result = sut.adoptRingIdentity(identity)
+
+        assertTrue(result.isFailure)
+        assertTrue(pubkyDataFlow.value.privatePaykitStateCleanupPending)
+        verifyBlocking(privatePaykitRepo) { removePublishedEndpointsForCleanup("PubkyRepo") }
+        verifyBlocking(privatePaykitRepo, never()) { closeAndClear() }
+        verifyBlocking(sharedPubkyDiscovery, never()) { readRingCredential(any()) }
     }
 
     @Test
@@ -613,10 +648,14 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `initialize retries durable private state cleanup before restoring another session`() = test {
+    fun `initialize removes a retained cleanup session before resolving another session`() = test {
+        var savedSession: String? = "saved_session"
         pubkyDataFlow.value = PubkyStoreData(privatePaykitStateCleanupPending = true)
-        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenReturn("saved_session")
-        whenever(pubkyService.importExternalSession("saved_session")).thenReturn(VALID_SELF_KEY)
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { savedSession }
+        whenever { pubkyService.clearExternalSessionAccess() }.thenAnswer {
+            savedSession = null
+            Unit
+        }
         whenever { privatePaykitRepo.closeAndClear() }
             .thenReturn(Result.failure(TestAppError("Private state cleanup failed")))
         clearInvocations(privatePaykitRepo, pubkyService)
@@ -634,15 +673,17 @@ class PubkyRepoTest : BaseUnitTest() {
         repo.initialize()
 
         inOrder(privatePaykitRepo, pubkyService) {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup("PubkyRepo")
             verify(privatePaykitRepo).closeAndClear()
-            verify(pubkyService).importExternalSession("saved_session")
+            verify(pubkyService).clearExternalSessionAccess()
         }
-        assertEquals(VALID_SELF_KEY, repo.publicKey.value)
+        verifyBlocking(pubkyService, never()) { importExternalSession(any()) }
+        assertNull(repo.publicKey.value)
         assertFalse(pubkyDataFlow.value.privatePaykitStateCleanupPending)
     }
 
     @Test
-    fun `thrown private endpoint cleanup failure still disconnects without clearing private state`() = test {
+    fun `thrown private endpoint cleanup failure quarantines identity without clearing its session`() = test {
         val identity = stubRingIdentity()
         assertTrue(sut.adoptRingIdentity(identity).isSuccess)
         whenever(sharedPubkyDiscovery.discoverRingIdentities()).thenReturn(Result.success(emptyList()))
@@ -653,13 +694,14 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(sut.validateExternalIdentitySource())
 
         verifyBlocking(privatePaykitRepo, never()) { closeAndClear() }
-        verifyBlocking(pubkyService) { clearExternalSessionAccess() }
+        verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
         assertTrue(pubkyDataFlow.value.privatePaykitStateCleanupPending)
         assertNull(pubkyDataFlow.value.externalIdentityRef)
+        assertNull(sut.publicKey.value)
     }
 
     @Test
-    fun `thrown private state cleanup failure still disconnects and preserves retry marker`() = test {
+    fun `thrown private state cleanup failure preserves session and retry marker`() = test {
         val identity = stubRingIdentity()
         assertTrue(sut.adoptRingIdentity(identity).isSuccess)
         whenever(sharedPubkyDiscovery.discoverRingIdentities()).thenReturn(Result.success(emptyList()))
@@ -669,38 +711,63 @@ class PubkyRepoTest : BaseUnitTest() {
 
         assertFalse(sut.validateExternalIdentitySource())
 
-        verifyBlocking(pubkyService) { clearExternalSessionAccess() }
+        verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
         assertTrue(pubkyDataFlow.value.privatePaykitStateCleanupPending)
         assertNull(pubkyDataFlow.value.externalIdentityRef)
     }
 
     @Test
-    fun `cancellation after external session deletion completes local teardown`() = test {
+    fun `cancellation after remote cleanup completes local teardown`() = test {
         val identity = stubRingIdentity()
         assertTrue(sut.adoptRingIdentity(identity).isSuccess)
-        val sessionCleared = CompletableDeferred<Unit>()
+        val privateCleanupStarted = CompletableDeferred<Unit>()
         val resumePrivateCleanup = CompletableDeferred<Unit>()
         whenever(sharedPubkyDiscovery.discoverRingIdentities()).thenReturn(Result.success(emptyList()))
-        whenever { pubkyService.clearExternalSessionAccess() }.thenAnswer {
-            sessionCleared.complete(Unit)
-        }
         whenever { privatePaykitRepo.closeAndClear() }.doSuspendableAnswer {
+            privateCleanupStarted.complete(Unit)
             resumePrivateCleanup.await()
             Result.success(Unit)
         }
 
         val validation = async { sut.validateExternalIdentitySource() }
         runCurrent()
-        assertTrue(sessionCleared.isCompleted)
+        assertTrue(privateCleanupStarted.isCompleted)
+        assertNull(pubkyDataFlow.value.externalIdentityRef)
+        verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
 
         validation.cancel()
         runCurrent()
-        assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
 
         resumePrivateCleanup.complete(Unit)
         advanceUntilIdle()
 
         assertTrue(validation.isCancelled)
+        verifyBlocking(pubkyService) { clearExternalSessionAccess() }
+        assertNull(pubkyDataFlow.value.externalIdentityRef)
+        assertNull(sut.publicKey.value)
+        assertFalse(sut.isAuthenticated.value)
+    }
+
+    @Test
+    fun `cancellation during remote cleanup quarantines identity and preserves its session`() = test {
+        val identity = stubRingIdentity()
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        val cleanupStarted = CompletableDeferred<Unit>()
+        whenever(sharedPubkyDiscovery.discoverRingIdentities()).thenReturn(Result.success(emptyList()))
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.doSuspendableAnswer {
+            cleanupStarted.complete(Unit)
+            awaitCancellation()
+        }
+
+        val validation = async { sut.validateExternalIdentitySource() }
+        runCurrent()
+        assertTrue(cleanupStarted.isCompleted)
+
+        validation.cancelAndJoin()
+
+        verifyBlocking(privatePaykitRepo, never()) { closeAndClear() }
+        verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
+        assertTrue(pubkyDataFlow.value.privatePaykitStateCleanupPending)
         assertNull(pubkyDataFlow.value.externalIdentityRef)
         assertNull(sut.publicKey.value)
         assertFalse(sut.isAuthenticated.value)
@@ -720,7 +787,7 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
-    fun `source cleanup preserves marker when external session cleanup fails`() = test {
+    fun `source cleanup remains quarantined when external session cleanup fails`() = test {
         val identity = stubRingIdentity()
         assertTrue(sut.adoptRingIdentity(identity).isSuccess)
         val cleanupError = RuntimeException("cleanup failed")
@@ -731,32 +798,9 @@ class PubkyRepoTest : BaseUnitTest() {
         val thrown = runCatching { sut.validateExternalIdentitySource() }.exceptionOrNull()
 
         assertEquals(cleanupError.message, thrown?.message)
-        assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
-        verify(pubkyStore, never()).reset()
-    }
-
-    @Test
-    fun `source cleanup keeps marker after reset failure and succeeds on retry`() = test {
-        val identity = stubRingIdentity()
-        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
-        val resetError = RuntimeException("reset failed")
-        whenever(sharedPubkyDiscovery.discoverRingIdentities()).thenReturn(Result.success(emptyList()))
-        doThrow(resetError).whenever(pubkyStore).reset()
-        clearInvocations(pubkyService, pubkyStore)
-
-        val thrown = runCatching { sut.validateExternalIdentitySource() }.exceptionOrNull()
-
-        assertEquals(resetError.message, thrown?.message)
-        assertEquals(identity, pubkyDataFlow.value.externalIdentityRef)
-
-        doAnswer {
-            pubkyDataFlow.value = PubkyStoreData()
-            Unit
-        }.whenever(pubkyStore).reset()
-        assertFalse(sut.validateExternalIdentitySource())
         assertNull(pubkyDataFlow.value.externalIdentityRef)
-        verifyBlocking(pubkyService, times(2)) { clearExternalSessionAccess() }
-        verifyBlocking(pubkyStore, times(2)) { reset() }
+        assertTrue(pubkyDataFlow.value.privatePaykitStateCleanupPending)
+        verify(pubkyStore, never()).reset()
     }
 
     @Test
@@ -1434,6 +1478,44 @@ class PubkyRepoTest : BaseUnitTest() {
         assertFalse(settingsFlow.value.sharesPrivatePaykitEndpoints)
         verifyBlocking(pubkyService) { signOut() }
         verifyBlocking(keychain, atLeastOnce()) { delete(Keychain.Key.PAYKIT_SESSION.name) }
+    }
+
+    @Test
+    fun `signOut retries pending source cleanup without revoking the borrowed session`() = test {
+        val identity = stubRingIdentity()
+        assertTrue(sut.adoptRingIdentity(identity).isSuccess)
+        settingsFlow.value = SettingsData(sharesPrivatePaykitEndpoints = true)
+        whenever(sharedPubkyDiscovery.discoverRingIdentities()).thenReturn(Result.success(emptyList()))
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }
+            .thenReturn(Result.failure(TestAppError("Private cleanup failed")))
+
+        assertFalse(sut.validateExternalIdentitySource())
+        assertTrue(pubkyDataFlow.value.privatePaykitStateCleanupPending)
+        clearInvocations(privatePaykitRepo, pubkyService)
+
+        val failedSignOut = sut.signOut()
+
+        assertTrue(failedSignOut.isFailure)
+        verifyBlocking(privatePaykitRepo) { removePublishedEndpointsForCleanup("PubkyRepo") }
+        verifyBlocking(privatePaykitRepo, never()) { closeAndClear() }
+        verifyBlocking(pubkyService, never()) { clearExternalSessionAccess() }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        assertTrue(pubkyDataFlow.value.privatePaykitStateCleanupPending)
+
+        whenever { privatePaykitRepo.removePublishedEndpointsForCleanup(any()) }.thenReturn(Result.success(Unit))
+        clearInvocations(privatePaykitRepo, pubkyService)
+
+        val completedSignOut = sut.signOut()
+
+        assertTrue(completedSignOut.isSuccess)
+        inOrder(privatePaykitRepo, pubkyService) {
+            verify(privatePaykitRepo).removePublishedEndpointsForCleanup("PubkyRepo")
+            verify(pubkyService).removeBitkitPaymentEndpoints()
+            verify(privatePaykitRepo).closeAndClear()
+            verify(pubkyService).clearExternalSessionAccess()
+        }
+        verifyBlocking(pubkyService, never()) { signOut() }
+        assertFalse(pubkyDataFlow.value.privatePaykitStateCleanupPending)
     }
 
     @Test
