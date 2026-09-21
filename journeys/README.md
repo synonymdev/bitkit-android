@@ -115,9 +115,8 @@ fixtures, push notifications) live in each suite's README.
 | Suite | Journeys | Notes |
 | --- | --- | --- |
 | [activity](activity) | 1 | Date range sheet under rapid month taps; needs no backend, no README |
-| [amount-limits](amount-limits) | 4 | Number pad caps on all four amount screens |
-| [backup-restore](backup-restore) | 1 | VSS restore keeps tags and closed channels; wipes the wallet |
 | [amount-limits](amount-limits) | 5 | Number pad caps on all four amount screens, plus preset/unit-switch delete |
+| [backup-restore](backup-restore) | 1 | VSS restore keeps tags and closed channels; wipes the wallet |
 | [cjit-notifications](cjit-notifications) | 3 | CJIT channel-ready notifications; needs FCM push |
 | [coin-selection](coin-selection) | 1 | Manual coin selection screen; needs 3+ on-chain UTXOs; no README |
 | [deeplinks](deeplinks) | 2 | `bitkit://screen/…` and sheet routing behind the dev-mode gate; no README |
