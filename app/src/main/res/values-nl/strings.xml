@@ -665,13 +665,14 @@
     <string name="settings__general_title">Algemeen</string>
     <string name="settings__language_system_default">Systeeminstellingen</string>
     <string name="settings__language_title">Taal</string>
-    <string name="settings__quickpay__intro__description">Bitkit QuickPay maakt afrekenen sneller door QR-codes automatisch te betalen wanneer ze worden gescand.</string>
+    <string name="settings__quickpay__intro__description">Bitkit QuickPay maakt afrekenen sneller door kleine facturen automatisch te betalen.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Wrijvingsloze&lt;/accent&gt;\nbetalingen</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
     <string name="settings__quickpay__settings__label">QuickPay-drempel</string>
     <string name="settings__quickpay__settings__note">* Bitkit QuickPay ondersteunt uitsluitend betalingen vanaf je bestedingssaldo.</string>
     <string name="settings__quickpay__settings__text">Indien ingeschakeld, worden gescande facturen onder ${amount} automatisch betaald zonder bevestiging of pincode*.</string>
     <string name="settings__quickpay__settings__toggle">QuickPay inschakelen</string>
+    <string name="settings__quickpay__sheet__description">QuickPay maakt afrekenen sneller door gescande QR-codes automatisch te betalen.</string>
     <string name="settings__rgs__button_connect">Verbinden</string>
     <string name="settings__rgs__server_url">Rapid-Gossip-Sync Server URL</string>
     <string name="settings__rgs__update_success_description">Mogelijk moet je de app een of twee keer herstarten voordat deze wijziging van kracht wordt.</string>

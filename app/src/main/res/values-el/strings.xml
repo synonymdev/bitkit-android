@@ -665,13 +665,14 @@
     <string name="settings__general_title">Γενικά</string>
     <string name="settings__language_system_default">Ρυθμίσεις συστήματος</string>
     <string name="settings__language_title">Γλώσσα</string>
-    <string name="settings__quickpay__intro__description">Το Bitkit QuickPay κάνει την ολοκλήρωση αγοράς πιο γρήγορη πληρώνοντας αυτόματα κωδικούς QR κατά τη σάρωση.</string>
+    <string name="settings__quickpay__intro__description">Το Bitkit QuickPay κάνει την ολοκλήρωση αγοράς πιο γρήγορη πληρώνοντας αυτόματα μικρά τιμολόγια.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Απρόσκοπτες&lt;/accent&gt;\nπληρωμές</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
     <string name="settings__quickpay__settings__label">Όριο Quickpay</string>
     <string name="settings__quickpay__settings__note">* Το Bitkit QuickPay υποστηρίζει αποκλειστικά πληρωμές από το υπόλοιπο δαπανών.</string>
     <string name="settings__quickpay__settings__text">Αν είναι ενεργοποιημένο, τα σαρωμένα τιμολόγια κάτω από ${amount} θα πληρώνονται αυτόματα χωρίς επιβεβαίωση ή PIN*.</string>
     <string name="settings__quickpay__settings__toggle">Ενεργοποίηση QuickPay</string>
+    <string name="settings__quickpay__sheet__description">Το QuickPay κάνει την ολοκλήρωση αγοράς πιο γρήγορη πληρώνοντας αυτόματα σαρωμένους κωδικούς QR.</string>
     <string name="settings__rgs__button_connect">Σύνδεση</string>
     <string name="settings__rgs__server_url">URL διακομιστή Rapid-Gossip-Sync</string>
     <string name="settings__rgs__update_success_description">Μπορεί να χρειαστεί να επανεκκινήσεις την εφαρμογή μία ή δύο φορές για να εφαρμοστεί αυτή η αλλαγή.</string>

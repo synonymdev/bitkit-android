@@ -665,13 +665,14 @@
     <string name="settings__general_title">عام</string>
     <string name="settings__language_system_default">إعدادات النظام</string>
     <string name="settings__language_title">اللغة</string>
-    <string name="settings__quickpay__intro__description">يجعل Bitkit QuickPay الدفع أسرع بالدفع التلقائي لرموز QR عند مسحها.</string>
+    <string name="settings__quickpay__intro__description">يجعل Bitkit QuickPay الدفع أسرع من خلال دفع الفواتير الصغيرة تلقائيًا.</string>
     <string name="settings__quickpay__intro__title">مدفوعات\n&lt;accent&gt;سلسة&lt;/accent&gt;</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
     <string name="settings__quickpay__settings__label">حد QuickPay</string>
     <string name="settings__quickpay__settings__note">* يدعم Bitkit QuickPay المدفوعات من رصيد الإنفاق فقط.</string>
     <string name="settings__quickpay__settings__text">إذا تم التفعيل، سيتم دفع الفواتير الممسوحة التي تقل عن ${amount} تلقائيًا دون الحاجة إلى تأكيدك أو رمز PIN*.</string>
     <string name="settings__quickpay__settings__toggle">تفعيل QuickPay</string>
+    <string name="settings__quickpay__sheet__description">يجعل QuickPay الدفع أسرع من خلال الدفع تلقائيًا لرموز QR الممسوحة ضوئيًا.</string>
     <string name="settings__rgs__button_connect">اتصال</string>
     <string name="settings__rgs__server_url">عنوان URL لخادم Rapid-Gossip-Sync</string>
     <string name="settings__rgs__update_success_description">قد تحتاج إلى إعادة تشغيل التطبيق مرة أو مرتين لتفعيل هذا التغيير.</string>

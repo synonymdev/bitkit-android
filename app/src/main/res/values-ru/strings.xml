@@ -680,7 +680,7 @@
     <string name="settings__general_title">Основные</string>
     <string name="settings__language_system_default">Системные настройки</string>
     <string name="settings__language_title">Язык</string>
-    <string name="settings__quickpay__intro__description">Bitkit QuickPay ускоряет оплату, автоматически оплачивая QR-коды при сканировании.</string>
+    <string name="settings__quickpay__intro__description">Bitkit QuickPay ускоряет оплату, автоматически оплачивая небольшие счета.</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Платежи&lt;/accent&gt;
 без трения</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
@@ -688,6 +688,7 @@
     <string name="settings__quickpay__settings__note">* Bitkit QuickPay поддерживает только платежи с вашего баланса расходов.</string>
     <string name="settings__quickpay__settings__text">Если включено, отсканированные счета ниже \${amount} будут оплачиваться автоматически без подтверждения или PIN-кода*.</string>
     <string name="settings__quickpay__settings__toggle">Включить QuickPay</string>
+    <string name="settings__quickpay__sheet__description">QuickPay ускоряет оплату, автоматически оплачивая отсканированные QR-коды.</string>
     <string name="settings__rgs__button_connect">Подключиться</string>
     <string name="settings__rgs__server_url">URL Сервера Rapid-Gossip-Sync</string>
     <string name="settings__rgs__update_success_description">Возможно, вам потребуется перезапустить приложение один или два раза, чтобы изменения вступили в силу.</string>

@@ -574,11 +574,12 @@
     <string name="settings__widgets__section_reset">Przywróć domyślne</string>
     <string name="settings__quickpay__nav_title">QuickPay</string>
     <string name="settings__quickpay__intro__title">&lt;accent&gt;Bezproblemowe&lt;/accent&gt;\npłatności</string>
-    <string name="settings__quickpay__intro__description">Bitkit QuickPay przyspiesza płatności, automatycznie opłacając zeskanowane kody QR.</string>
+    <string name="settings__quickpay__intro__description">Bitkit QuickPay przyspiesza płatności, automatycznie opłacając niewielkie faktury.</string>
     <string name="settings__quickpay__settings__toggle">Włącz QuickPay</string>
     <string name="settings__quickpay__settings__text">Jeśli ta opcja jest włączona, zeskanowane faktury poniżej ${amount} zostaną opłacone automatycznie, bez konieczności potwierdzenia lub podania PIN-u*.</string>
     <string name="settings__quickpay__settings__label">Próg QuickPay</string>
     <string name="settings__quickpay__settings__note">* Bitkit QuickPay obsługuje wyłącznie płatności z Twojego salda wydatków.</string>
+    <string name="settings__quickpay__sheet__description">QuickPay przyspiesza płatności, automatycznie opłacając zeskanowane kody QR.</string>
     <string name="settings__security__swipe_balance_to_hide">Przesuń saldo, aby ukryć</string>
     <string name="settings__security__hide_balance_on_open">Ukryj saldo po otwarciu</string>
     <string name="settings__security__clipboard">Odczytaj schowek dla wygody użytkowania</string>
