@@ -4523,6 +4523,19 @@ class AppViewModelSendFlowTest : BaseUnitTest() {
     }
 
     @Test
+    fun `first onchain sync after restore keeps the pending flag when marking activities seen fails`() = test {
+        settingsData.value = SettingsData(pendingRestoreActivitySeen = true)
+        whenever { activityRepo.markAllUnseenActivitiesAsSeen() }
+            .thenReturn(Result.failure(AppError("mark seen failed")))
+
+        emitNodeEvent(Event.SyncCompleted(syncType = SyncType.ONCHAIN_WALLET, syncedBlockHeight = 100u))
+        advanceUntilIdle()
+
+        verify(activityRepo).markAllUnseenActivitiesAsSeen()
+        assertTrue(settingsData.value.pendingRestoreActivitySeen)
+    }
+
+    @Test
     fun `lightning sync after restore keeps the pending flag and activities untouched`() = test {
         settingsData.value = SettingsData(pendingRestoreActivitySeen = true)
 

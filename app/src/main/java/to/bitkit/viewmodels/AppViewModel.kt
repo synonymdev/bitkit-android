@@ -1460,8 +1460,9 @@ class AppViewModel @Inject constructor(
     private suspend fun completePendingRestoreActivitySeen() {
         if (!settingsStore.data.first().pendingRestoreActivitySeen) return
         Logger.info("Marking activities replayed by the first sync after restore as seen", context = TAG)
-        activityRepo.markAllUnseenActivitiesAsSeen()
-        settingsStore.update { it.copy(pendingRestoreActivitySeen = false) }
+        activityRepo.markAllUnseenActivitiesAsSeen().onSuccess {
+            settingsStore.update { settings -> settings.copy(pendingRestoreActivitySeen = false) }
+        }
     }
 
     private suspend fun completeRNRemoteBackupRestore() {
