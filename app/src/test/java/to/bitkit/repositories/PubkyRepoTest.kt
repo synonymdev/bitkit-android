@@ -2070,6 +2070,53 @@ class PubkyRepoTest : BaseUnitTest() {
     }
 
     @Test
+    fun `external restore releases stale managed secret quarantine before restart`() = test {
+        sut.awaitInitialization()
+        var sessionSecret: String? = "old_session"
+        var managedSecret: String? = "old_secret"
+        var quarantineMarker: String? = "1"
+        whenever(keychain.loadString(Keychain.Key.PAYKIT_SESSION.name)).thenAnswer { sessionSecret }
+        whenever(keychain.loadString(Keychain.Key.PUBKY_SECRET_KEY.name)).thenAnswer { managedSecret }
+        whenever(keychain.loadString(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name))
+            .thenAnswer { quarantineMarker }
+        whenever { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }.thenAnswer {
+            sessionSecret = null
+            Unit
+        }
+        whenever { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }.thenAnswer {
+            managedSecret = null
+            Unit
+        }
+        whenever { keychain.delete(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name) }.thenAnswer {
+            quarantineMarker = null
+            Unit
+        }
+        whenever { pubkyService.forgetSessionAccess() }.thenAnswer { throw TestAppError("Forget failed") }
+        whenever { pubkyService.importExternalSession("external_session") }.thenAnswer {
+            sessionSecret = "external_session"
+            VALID_SELF_KEY
+        }
+        clearInvocations(pubkyService, keychain)
+
+        val result = sut.restoreSessionBackupState(
+            PubkySessionBackupV1(
+                kind = PubkySessionBackupKind.ExternalSession,
+                sessionSecret = "external_session",
+            ),
+        )
+
+        assertTrue(result.isSuccess)
+        assertNull(managedSecret)
+        assertNull(quarantineMarker)
+
+        val restoredRepo = createSut()
+        restoredRepo.awaitInitialization()
+
+        assertEquals(VALID_SELF_KEY, restoredRepo.publicKey.value)
+        verifyBlocking(pubkyService, times(2)) { importExternalSession("external_session") }
+    }
+
+    @Test
     fun `restore without backup clears credentials when forgetting current session fails`() = test {
         authenticateForTesting(publicKey = VALID_SELF_KEY)
         whenever(pubkyService.forgetSessionAccess()).thenAnswer { throw TestAppError("Forget failed") }

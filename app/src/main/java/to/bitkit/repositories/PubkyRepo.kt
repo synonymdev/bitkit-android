@@ -1201,7 +1201,12 @@ class PubkyRepo @Inject constructor(
                     }
                 clearAuthenticatedState()
                 runSuspendCatching { keychain.delete(Keychain.Key.PAYKIT_SESSION.name) }
-                runSuspendCatching { keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name) }
+                val localSecretResult = runSuspendCatching {
+                    keychain.delete(Keychain.Key.PUBKY_SECRET_KEY.name)
+                }
+                if (localSecretResult.isSuccess) {
+                    keychain.delete(Keychain.Key.PUBKY_MANAGED_SECRET_QUARANTINED.name)
+                }
 
                 when (backup?.kind) {
                     null -> Unit
